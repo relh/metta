@@ -32,7 +32,12 @@ where = ["src"]
 include = ["cogames", "cogames.*"]
 
 [tool.setuptools.package-data]
-cogames = ["py.typed"]
+cogames = [
+  "py.typed",
+  "maps/*.map",
+  "maps/**/*.map",
+  "assets/**/*",
+]
 
 [tool.setuptools_scm]
 tag_regex = "^cogames-v(?P<version>\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?)$"
