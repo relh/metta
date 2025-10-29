@@ -35,6 +35,13 @@ var
   atlasSize: Uniform[Vec2]
   atlas: Uniform[Sampler2D]
 
+proc minVec2(value: Vec2, upper: float32): Vec2 =
+  ## Element-wise minimum clamp helper until vmath upstream adds overloads.
+  vec2(
+    min(value.x, upper),
+    min(value.y, upper),
+  )
+
 proc pixelatorVert*(vertexPos: UVec2, uv: UVec4, fragmentUv: var Vec2) =
   # Compute the corner of the quad based on the vertex ID.
   # 0:(0,0), 1:(1,0), 2:(0,1), 3:(1,1)
@@ -54,7 +61,7 @@ proc pixelatorFrag*(fragmentUv: Vec2, FragColor: var Vec4) =
   # Compute the texture coordinates of the pixel.
   let pixCoord = fragmentUv * atlasSize
   # Compute the AA pixel coordinates.
-  let pixAA = floor(pixCoord) + min(fract(pixCoord) / fwidth(pixCoord), 1.0) - 0.5
+  let pixAA = floor(pixCoord) + minVec2(fract(pixCoord) / fwidth(pixCoord), 1.0'f32) - vec2(0.5'f32)
   FragColor = texture(atlas, pixAA / atlasSize)
 
 proc generatePixelAtlas*(

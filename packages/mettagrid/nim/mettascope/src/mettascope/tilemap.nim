@@ -36,6 +36,13 @@ var
   zoomThreshold: Uniform[float32]
   tint: Uniform[Vec4]
 
+proc clampVec2(value: Vec2, low, high: float32): Vec2 =
+  ## Element-wise clamp helper for Vec2 values.
+  vec2(
+    clamp(value.x, low, high),
+    clamp(value.y, low, high),
+  )
+
 proc tileMapVert*(aPos: Vec2, vertexUv: Vec2, fragmentUv: var Vec2) =
   gl_Position = mvp * vec4(
     aPos.x * mapSize.x - 0.5,
@@ -68,11 +75,10 @@ proc tileMapFrag*(fragmentUv: Vec2, fragColor: var Vec4) =
       # Anti-aliasing the nearest snap in the tile space.
       fw = max(fwidth(contTexel), vec2(1e-5))
       fracPart = fract(localTexel)
-      blend = clamp(fracPart / fw, 0.0, 1.0)
-      localAA = floor(localTexel) + blend + 0.5
-
+      blend = clampVec2(fracPart / fw, 0.0'f32, 1.0'f32)
+      localAA = floor(localTexel) + blend + vec2(0.5'f32)
       # Clamp to the valid texel range.
-      localClamped = clamp(localAA, 0.5, tileSize - 0.5)
+      localClamped = clampVec2(localAA, 0.5'f32, tileSize.float32 - 0.5'f32)
 
       # Convert to per layer UVs. Flip Y coordinate to match texture array layout.
       layerUV = vec2(localClamped.x / tileSize, (tileSize - localClamped.y) / tileSize)
