@@ -14,6 +14,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
+from alo.rollout import SingleEpisodeJob
+from alo.scoring import compute_average_scores_per_agent
+
 # pyright: reportArgumentType=false
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
 from metta.app_backend.clients.stats_client import StatsClient
@@ -287,17 +290,25 @@ class CommissionerBase(ABC):
         updated = 0
         for match, episode_id in matches_needing_scores:
             episode_scores = scores_by_episode.get(episode_id, {})
+            sorted_players = sorted(match.players, key=lambda x: x.policy_index)
+            policy_version_ids: list[UUID] = []
+            for mp in sorted_players:
+                if mp.policy_index >= len(policy_version_ids):
+                    policy_version_ids.append(mp.pool_player.policy_version_id)
+            per_agent_scores = compute_average_scores_per_agent(
+                episode_scores,
+                assignments=match.assignments or [],
+                policy_version_ids=policy_version_ids,
+            )
             for mp in match.players:
                 if mp.score is not None:
                     continue
                 pv_id = mp.pool_player.policy_version_id
-                if pv_id in episode_scores:
-                    total_reward = episode_scores[pv_id]
-                    agent_count = match.assignments.count(mp.policy_index) if match.assignments else 1
-                    mp.score = total_reward / max(agent_count, 1)
+                if pv_id in per_agent_scores:
+                    total_reward = episode_scores.get(pv_id, 0.0)
+                    mp.score = per_agent_scores[pv_id]
                     logger.info(
-                        f"Score calc: match={match.id}, pv={pv_id}, "
-                        f"total_reward={total_reward}, agent_count={agent_count}, score={mp.score}"
+                        f"Score calc: match={match.id}, pv={pv_id}, total_reward={total_reward}, score={mp.score}"
                     )
                     updated += 1
 
@@ -482,15 +493,14 @@ class CommissionerBase(ABC):
             match_id = match.id
             span.set_attribute("match.id", str(match_id))
 
-            # Same shape as SingleEpisodeJob. Not importing it here to avoid dependency on metta.sim for now
-            job_spec = dict(
+            job_spec = SingleEpisodeJob(
                 policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
                 assignments=request.assignments,
-                env=request.env.model_dump(),
+                env=request.env,
                 replay_uri=f"{SOFTMAX_S3_REPLAYS_PREFIX}/{match_id}.json.z",
                 seed=request.seed,
                 episode_tags=request.episode_tags,
-            )
+            ).model_dump()
 
             stats_client = StatsClient(settings.STATS_SERVER_URI, machine_token=settings.MACHINE_TOKEN)
             try:

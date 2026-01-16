@@ -9,6 +9,7 @@
 # - Packages not listed here won't be scanned, so contracts can't check their imports
 # - The "metta" parent namespace is NOT listed to avoid "shared descendants" errors
 root_packages =
+    alo
     metta.tools
     metta.gridworks
     metta.setup
@@ -72,6 +73,7 @@ source_modules =
 forbidden_modules =
     metta
     cogames
+    alo
     cortex
     gitta
     codebot
@@ -79,7 +81,7 @@ forbidden_modules =
 
 
 [importlinter:contract:app-backend-independence]
-name = app_backend can only import metta.common
+name = app_backend can import metta.common or alo
 type = forbidden
 source_modules =
     metta.app_backend

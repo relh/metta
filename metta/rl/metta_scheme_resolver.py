@@ -5,6 +5,7 @@ import os
 import uuid
 from pathlib import Path
 
+from alo.policy import parse_policy_identifier
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.metta_repo import PolicyVersionWithName
 from metta.common.util.constants import PROD_STATS_SERVER_URI
@@ -31,23 +32,6 @@ def _is_uuid(s: str) -> bool:
         return True
     except ValueError as e:
         raise ValueError(f"Invalid policy version ID: {s}") from e
-
-
-def _parse_policy_identifier(path: str) -> tuple[str, int | None]:
-    """Parse a policy identifier into (name, version).
-
-    Supports:
-    - policy-name -> (policy-name, None) meaning latest
-    - policy-name:latest -> (policy-name, None) meaning latest
-    - policy-name:vX -> (policy-name, X) meaning specific version
-    """
-    if path.endswith(":latest"):
-        return path[:-7], None
-    if ":v" in path:
-        run_name, suffix = path.rsplit(":v", 1)
-        if run_name and suffix.isdigit():
-            return (run_name, int(suffix))
-    return path, None
 
 
 class MettaSchemeResolver(SchemeResolver):
@@ -95,7 +79,7 @@ class MettaSchemeResolver(SchemeResolver):
         if _is_uuid(path_parts[1]):
             policy_version = stats_client.get_policy_version(uuid.UUID(path_parts[1]))
         else:
-            name, version = _parse_policy_identifier(path_parts[1])
+            name, version = parse_policy_identifier(path_parts[1])
             response = stats_client.get_policy_versions(name_exact=name, version=version, limit=1)
             if not response.entries:
                 version_str = f":v{version}" if version is not None else ""
@@ -114,7 +98,7 @@ class MettaSchemeResolver(SchemeResolver):
                 f"Expected metta://policy/<policy_version_id> or metta://policy/<policy_name>"
             )
         if not _is_uuid(path_parts[1]):
-            name, version = _parse_policy_identifier(path_parts[1])
+            name, version = parse_policy_identifier(path_parts[1])
             checkpoint_root = Path(guess_data_dir()).expanduser().resolve() / name / "checkpoints"
             if checkpoint_root.exists():
                 candidate = checkpoint_root if version is None else checkpoint_root / f"{name}:v{version}"

@@ -7,32 +7,38 @@ import tempfile
 import uuid
 from uuid import UUID
 
-from pydantic import BaseModel
-
+from alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestUpdate
 from metta.common.auth.auth_config_reader_writer import observatory_auth_config
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.rl.metta_scheme_resolver import MettaSchemeResolver
 from metta.sim.handle_results import write_single_episode_to_observatory
-from metta.sim.pure_single_episode_runner import PureSingleEpisodeJob, PureSingleEpisodeResult
-from mettagrid import MettaGridConfig
+from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
 from mettagrid.util.file import copy_data, read
-from mettagrid.util.uri_resolvers.schemes import parse_uri
-
-
-class SingleEpisodeJob(BaseModel):
-    policy_uris: list[str]
-    assignments: list[int]
-    env: MettaGridConfig
-    results_uri: str | None = None
-    replay_uri: str | None = None
-    seed: int = 0
-    max_action_time_ms: int = 10000
-    episode_tags: dict[str, str] = {}
-
+from mettagrid.util.uri_resolvers.schemes import parse_uri, resolve_uri
 
 logger = logging.getLogger(__name__)
+
+
+def _localize_policy_uris(policy_uris: list[str]) -> list[str]:
+    local_uris: list[str] = []
+    for uri in policy_uris:
+        resolved = resolve_uri(uri)
+        if resolved.scheme == "file":
+            if resolved.local_path is None or not resolved.local_path.exists():
+                raise FileNotFoundError(f"Policy path does not exist: {uri}")
+            local_uris.append(resolved.local_path.as_uri())
+            continue
+        if resolved.scheme == "s3":
+            local_path = download_policy_spec_from_s3_as_zip(
+                resolved.canonical,
+                remove_downloaded_copy_on_exit=True,
+            )
+            local_uris.append(local_path.as_uri())
+            continue
+        raise ValueError(f"Unsupported policy URI for sandboxed run: {uri}")
+    return local_uris
 
 
 def main():
@@ -54,11 +60,12 @@ def main():
 
         local_results_uri = "file://results.json"
         local_replay_uri = "file://replay.json.z" if job.replay_uri else None
+        local_policy_uris = _localize_policy_uris(job.policy_uris)
 
         with tempfile.NamedTemporaryFile(delete=True) as temp_file:
             pure_job_spec = {
                 "job": PureSingleEpisodeJob(
-                    policy_uris=job.policy_uris,
+                    policy_uris=local_policy_uris,
                     assignments=job.assignments,
                     env=job.env,
                     results_uri=local_results_uri,
@@ -67,7 +74,7 @@ def main():
                     max_action_time_ms=job.max_action_time_ms,
                 ).model_dump(),
                 "device": "cpu",
-                "allow_network": True,
+                "allow_network": False,
             }
             temp_file.write(json.dumps(pure_job_spec).encode("utf-8"))
             temp_file.flush()
@@ -75,7 +82,7 @@ def main():
                 [
                     sys.executable,
                     "-m",
-                    "metta.sim.pure_single_episode_runner",
+                    "alo.pure_single_episode_runner",
                     temp_file.name,
                 ],
                 capture_output=True,
@@ -83,13 +90,12 @@ def main():
             )
             if result.returncode != 0:
                 if result.returncode < 0:
-                    # Killed by signal (e.g., OOMKilled sends SIGKILL=-9)
                     signal_num = -result.returncode
                     raise RuntimeError(f"Killed by signal {signal_num}")
                 error_output = result.stderr or result.stdout or "No output"
                 if len(error_output) > 200000:
                     error_output = error_output[:200000] + "\n... (truncated)"
-                raise RuntimeError(f"pure_single_episode_runner failed (exit {result.returncode}):\n{error_output}")
+                raise RuntimeError(f"alo.pure_single_episode_runner failed (exit {result.returncode}):\n{error_output}")
 
         for src, dest, content_type in [
             (local_replay_uri, job.replay_uri, "application/x-compress"),

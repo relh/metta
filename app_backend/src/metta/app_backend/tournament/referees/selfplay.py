@@ -1,21 +1,12 @@
 from collections import defaultdict
 from uuid import UUID
 
-from cogames.cogs_vs_clips.missions import Machina1OpenWorldSharedRewardsMission, MettaGridConfig
 from metta.app_backend.models.tournament import MatchStatus, PoolPlayer
-from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase, ScorerInterface
-from metta.app_backend.tournament.scorers.weighted import WeightedScorer
+from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
 
 NUM_AGENTS = 4
 MAX_FAILED_ATTEMPTS = 3
-
-
-def _make_env(seed: int) -> MettaGridConfig:
-    mission = Machina1OpenWorldSharedRewardsMission.model_copy(deep=True)
-    mission.num_cogs = NUM_AGENTS
-    env = mission.make_env()
-    env.game.map_builder.seed = seed  # type: ignore
-    return env
 
 
 class SelfPlayReferee(RefereeBase):
@@ -26,7 +17,6 @@ class SelfPlayReferee(RefereeBase):
     Retries failed matches up to MAX_FAILED_ATTEMPTS times.
     """
 
-    scorer: ScorerInterface = WeightedScorer()
     matches_per_player: int = 2
     description: str = "Self-play matches on Machina 1 Open World"
 
@@ -72,7 +62,7 @@ class SelfPlayReferee(RefereeBase):
                     MatchRequest(
                         pool_player_ids=[pp_id],
                         assignments=[0, 0, 0, 0],
-                        env=_make_env(seed + completed + match_i),
+                        env=make_shared_rewards_env(seed + completed + match_i, NUM_AGENTS),
                         seed=seed,
                         episode_tags={"match_type": "self_play"},
                     )

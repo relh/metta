@@ -4,6 +4,8 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlmodel import select
 
+from alo.scoring import compute_weighted_scores
+
 # pyright: reportArgumentType=false
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
 from mettagrid.config.mettagrid_config import MettaGridConfig
@@ -33,18 +35,7 @@ class ScoredMatchData(BaseModel):
     episode_tags: dict[str, str] = {}
 
 
-class ScorerInterface(ABC):
-    @abstractmethod
-    def compute_scores(
-        self,
-        policy_version_ids: list[UUID],
-        matches: list[ScoredMatchData],
-    ) -> dict[UUID, float]:
-        pass
-
-
 class RefereeBase(ABC):
-    scorer: ScorerInterface
     description: str = ""
 
     @abstractmethod
@@ -108,6 +99,6 @@ class RefereeBase(ABC):
         if not scored_matches:
             return []
 
-        scores = self.scorer.compute_scores(list(all_policy_ids), scored_matches)
+        scores = compute_weighted_scores(list(all_policy_ids), scored_matches)
         results = [(pv, score, match_counts.get(pv, 0)) for pv, score in scores.items()]
         return sorted(results, key=lambda x: x[1], reverse=True)

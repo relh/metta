@@ -2,20 +2,11 @@ from collections import defaultdict
 from typing import Tuple
 from uuid import UUID
 
-from cogames.cogs_vs_clips.missions import Machina1OpenWorldSharedRewardsMission, MettaGridConfig
 from metta.app_backend.models.tournament import PoolPlayer
-from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase, ScorerInterface
-from metta.app_backend.tournament.scorers.weighted import WeightedScorer
+from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
 
 NUM_AGENTS = 4
-
-
-def _make_env(seed: int) -> MettaGridConfig:
-    mission = Machina1OpenWorldSharedRewardsMission.model_copy(deep=True)
-    mission.num_cogs = NUM_AGENTS
-    env = mission.make_env()
-    env.game.map_builder.seed = seed  # type: ignore
-    return env
 
 
 MATCH_CONFIGURATIONS: list[list[int]] = [
@@ -34,7 +25,6 @@ class PairingReferee(RefereeBase):
     Multiple configurations enable value-over-replacement calculation via participation-weighted scoring.
     """
 
-    scorer: ScorerInterface = WeightedScorer()
     matches_per_config: int = 5
     description: str = (
         "Pairwise matchups on Machina 1 Open World with varied agent splits (1+3, 3+1, 2+2) "
@@ -79,7 +69,7 @@ class PairingReferee(RefereeBase):
             MatchRequest(
                 pool_player_ids=[pp1, pp2],
                 assignments=config,
-                env=_make_env(seed + map_seed_offset),
+                env=make_shared_rewards_env(seed + map_seed_offset, NUM_AGENTS),
                 episode_tags={
                     "match_type": "pairing",
                     "assignments": str(config),

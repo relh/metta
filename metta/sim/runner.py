@@ -3,13 +3,14 @@ import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Callable, Sequence
 
+import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
 
+from alo.rollout import run_multi_episode_rollout
+from alo.scoring import allocate_counts, validate_proportions
 from mettagrid import MettaGridConfig
-from mettagrid.policy.loader import initialize_or_load_policy
-from mettagrid.policy.policy import MultiAgentPolicy, PolicySpec
-from mettagrid.policy.policy_env_interface import PolicyEnvInterface
-from mettagrid.simulator.multi_episode.rollout import MultiEpisodeRolloutResult, multi_episode_rollout
+from mettagrid.policy.policy import PolicySpec
+from mettagrid.simulator.multi_episode.rollout import MultiEpisodeRolloutResult
 
 
 def _run_single_simulation(
@@ -22,22 +23,20 @@ def _run_single_simulation(
     sim_cfg = SimulationRunConfig.model_validate(simulation)
     policy_specs = [PolicySpec.model_validate(spec) for spec in policy_data]
 
-    env_interface = PolicyEnvInterface.from_mg_cfg(sim_cfg.env)
-    multi_agent_policies: list[MultiAgentPolicy] = [
-        initialize_or_load_policy(env_interface, spec, device_override) for spec in policy_specs
-    ]
-
-    if replay_dir:
-        os.makedirs(replay_dir, exist_ok=True)
-
-    rollout_result = multi_episode_rollout(
+    proportions = list(sim_cfg.proportions) if sim_cfg.proportions is not None else [1.0] * len(policy_specs)
+    counts = allocate_counts(sim_cfg.env.game.num_agents, proportions)
+    assignments = np.repeat(np.arange(len(counts), dtype=int), counts)
+    max_action_time_ms = sim_cfg.max_action_time_ms or 10000
+    rollout_result, _replay_paths = run_multi_episode_rollout(
+        policy_specs=policy_specs,
+        assignments=assignments,
         env_cfg=sim_cfg.env,
-        policies=multi_agent_policies,
         episodes=sim_cfg.num_episodes,
         seed=seed,
-        proportions=sim_cfg.proportions,
-        save_replay=replay_dir,
-        max_action_time_ms=sim_cfg.max_action_time_ms,
+        max_action_time_ms=max_action_time_ms,
+        replay_dir=replay_dir,
+        create_replay_dir=True,
+        device=device_override,
     )
 
     return SimulationRunResult(run=sim_cfg, results=rollout_result)
@@ -73,6 +72,8 @@ def run_simulations(
 ) -> list[SimulationRunResult]:
     if not policy_specs:
         raise ValueError("At least one policy spec is required")
+    for simulation in simulations:
+        validate_proportions(simulation.proportions, len(policy_specs))
 
     # Sequential path for max_workers unset or 1
     if not max_workers or max_workers <= 1 or len(simulations) <= 1:
