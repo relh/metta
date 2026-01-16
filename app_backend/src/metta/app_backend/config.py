@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     LOGIN_SERVICE_URL: str = "https://softmax.com"
     RUN_MIGRATIONS: bool = Field(default=False, description="Run migrations on startup")
+    SMART_PLUGS_ENABLED: bool = Field(default=False, description="Enable smart plug control routes")
+    SMART_PLUGS_ALLOW_WRITE: bool = Field(default=False, description="Allow on/off actions for smart plugs")
+    SMART_PLUGS_CONFIG_PATH: str | None = None
 
 
 settings = Settings()

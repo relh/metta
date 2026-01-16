@@ -11,6 +11,7 @@ import { PoliciesPage } from './PoliciesPage'
 import { PolicyPage } from './PolicyPage'
 import { PolicyVersionPage } from './PolicyVersionPage'
 import { SeasonsPage } from './Seasons/index'
+import { SmartPlugsPage } from './SmartPlugs'
 import { SQLQuery } from './SQLQuery'
 import { TopMenu } from './TopMenu'
 
@@ -43,6 +44,7 @@ function App() {
             <Route path="/tournament/:seasonName" element={<SeasonsPage />} />
             <Route path="/episodes/:episodeId" element={<EpisodeDetailPage />} />
             <Route path="/sql-query" element={<SQLQuery />} />
+            <Route path="/infra/smart-plugs" element={<SmartPlugsPage />} />
           </Routes>
         </div>
       </div>

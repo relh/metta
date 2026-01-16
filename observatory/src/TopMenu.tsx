@@ -44,6 +44,9 @@ export const TopMenu: FC = () => {
           <MenuLink to="/sql-query" isActive={location.pathname === '/sql-query'}>
             SQL Query
           </MenuLink>
+          <MenuLink to="/infra/smart-plugs" isActive={location.pathname.startsWith('/infra/smart-plugs')}>
+            Smart Plugs
+          </MenuLink>
         </div>
       </div>
       <div className="flex items-center">

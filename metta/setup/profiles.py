@@ -97,6 +97,7 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "githooks": {"enabled": True},
             "observatory-key": {"enabled": True, "expected_connection": "@stem.ai"},
             "aws": {"enabled": True, "expected_connection": METTA_AWS_ACCOUNT_ID},
+            "smart-plugs": {"enabled": True},
             "wandb": {"enabled": True, "expected_connection": METTA_WANDB_ENTITY},
             "skypilot": {"enabled": True, "expected_connection": METTA_SKYPILOT_URL},
             "tailscale": {"enabled": False, "expected_connection": "@stem.ai"},

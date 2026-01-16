@@ -346,6 +346,15 @@ export type PolicyVersionsResponse = {
   total_count: number
 }
 
+export type SmartPlugStatus = {
+  key: string
+  label: string
+  alias?: string | null
+  online?: boolean | null
+  is_on?: boolean | null
+  apower?: number | null
+}
+
 export class Repo {
   constructor(private baseUrl: string = 'http://localhost:8000') {}
 
@@ -441,6 +450,14 @@ export class Repo {
   // User methods
   async whoami(): Promise<{ user_email: string }> {
     return this.apiCall<{ user_email: string }>('/whoami')
+  }
+
+  async getSmartPlugStatus(): Promise<{ refreshed_at: string; items: SmartPlugStatus[] }> {
+    return this.apiCall<{ refreshed_at: string; items: SmartPlugStatus[] }>('/infra/smart-plugs/status')
+  }
+
+  async setSmartPlugPower(request: { key: string; on: boolean; toggle_after?: number | null }): Promise<void> {
+    await this.apiCallWithBody<unknown>('/infra/smart-plugs/power', request)
   }
 
   // SQL query methods
