@@ -39,6 +39,14 @@ class ScoredMatchLike(Protocol):
     policy_scores: dict[UUID, float]
 
 
+class Scorer(Protocol):
+    def compute_scores(
+        self,
+        policy_version_ids: Sequence[UUID],
+        matches: Sequence[ScoredMatchLike],
+    ) -> dict[UUID, float]: ...
+
+
 def _count_policy_agents(
     assignments: Sequence[int],
     policy_version_ids: Sequence[UUID],
@@ -83,6 +91,15 @@ def compute_weighted_scores(
             weight_totals[pv] += weight
 
     return {pv: weighted_sums[pv] / weight_totals[pv] if weight_totals[pv] > 0 else 0.0 for pv in policy_version_ids}
+
+
+class WeightedScorer:
+    def compute_scores(
+        self,
+        policy_version_ids: Sequence[UUID],
+        matches: Sequence[ScoredMatchLike],
+    ) -> dict[UUID, float]:
+        return compute_weighted_scores(policy_version_ids, matches)
 
 
 def compute_average_scores_per_agent(

@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 from sqlmodel import select
 
-from alo.scoring import compute_weighted_scores
+from alo.scoring import Scorer, WeightedScorer
 
 # pyright: reportArgumentType=false
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
@@ -37,6 +37,7 @@ class ScoredMatchData(BaseModel):
 
 class RefereeBase(ABC):
     description: str = ""
+    scorer: Scorer = WeightedScorer()
 
     @abstractmethod
     def get_matches_to_schedule(
@@ -99,6 +100,6 @@ class RefereeBase(ABC):
         if not scored_matches:
             return []
 
-        scores = compute_weighted_scores(list(all_policy_ids), scored_matches)
+        scores = self.scorer.compute_scores(list(all_policy_ids), scored_matches)
         results = [(pv, score, match_counts.get(pv, 0)) for pv, score in scores.items()]
         return sorted(results, key=lambda x: x[1], reverse=True)
