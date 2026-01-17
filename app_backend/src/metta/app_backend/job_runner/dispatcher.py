@@ -90,6 +90,36 @@ def create_episode_job(job: JobRequest) -> str:
         else None
     )
 
+    affinity = (
+        client.V1Affinity(
+            node_affinity=client.V1NodeAffinity(
+                preferred_during_scheduling_ignored_during_execution=[
+                    client.V1PreferredSchedulingTerm(
+                        weight=100,
+                        preference=client.V1NodeSelectorTerm(
+                            match_expressions=[
+                                client.V1NodeSelectorRequirement(
+                                    key="node.kubernetes.io/instance-type",
+                                    operator="In",
+                                    values=[
+                                        "c5.xlarge",
+                                        "c5.2xlarge",
+                                        "c6i.xlarge",
+                                        "c6i.2xlarge",
+                                        "c7i.xlarge",
+                                        "c7i.2xlarge",
+                                    ],
+                                )
+                            ]
+                        ),
+                    )
+                ]
+            )
+        )
+        if not cfg.LOCAL_DEV
+        else None
+    )
+
     k8s_job = client.V1Job(
         metadata=client.V1ObjectMeta(
             name=job_name,
@@ -99,8 +129,8 @@ def create_episode_job(job: JobRequest) -> str:
         spec=client.V1JobSpec(
             # No retries for now
             backoff_limit=0,
-            # Kill job if it runs longer than 1 hour
-            active_deadline_seconds=3600,
+            # Kill job if it runs longer than 2 hours
+            active_deadline_seconds=7200,
             # Auto-delete job 1 hour after completion (backup; watcher deletes immediately)
             # Longer TTL gives watcher time to catch up if it restarts
             ttl_seconds_after_finished=3600,
@@ -117,6 +147,7 @@ def create_episode_job(job: JobRequest) -> str:
                     volumes=volumes,
                     tolerations=tolerations,
                     node_selector=node_selector,
+                    affinity=affinity,
                     containers=[
                         client.V1Container(
                             name="worker",

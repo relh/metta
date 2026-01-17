@@ -1,7 +1,7 @@
 import functools
 import logging
 import time
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 from uuid import UUID
 
 from kubernetes import (
@@ -226,11 +226,34 @@ def _is_container_running(pod: client.V1Pod) -> bool:
 
 
 def _get_pod_error(pod: client.V1Pod) -> str:
-    if pod.status and pod.status.container_statuses:
-        for cs in pod.status.container_statuses:
-            if cs.state and cs.state.terminated and cs.state.terminated.reason:
-                return cs.state.terminated.reason
+    job_error = _get_job_failure_reason(pod)
+    if job_error:
+        return job_error
+    if pod.status:
+        if pod.status.reason:
+            return pod.status.reason
+        if pod.status.container_statuses:
+            for cs in pod.status.container_statuses:
+                if cs.state and cs.state.terminated and cs.state.terminated.reason:
+                    return cs.state.terminated.reason
     return (pod.status.message if pod.status else None) or "Pod failed"
+
+
+def _get_job_failure_reason(pod: client.V1Pod) -> str | None:
+    """Get failure reason from the parent Job's conditions (e.g., DeadlineExceeded, BackoffLimitExceeded)."""
+    job_name = _get_job_name_for_pod(pod)
+    if not job_name:
+        return None
+    try:
+        _, batch_v1 = _get_k8s_clients()
+        job = cast(client.V1Job, batch_v1.read_namespaced_job(name=job_name, namespace=JOB_NAMESPACE))
+        if job.status and job.status.conditions:
+            for cond in job.status.conditions:
+                if cond.type == "Failed" and cond.reason:
+                    return cond.reason
+    except Exception:
+        pass
+    return None
 
 
 def _get_job_name_for_pod(pod: client.V1Pod) -> str | None:
