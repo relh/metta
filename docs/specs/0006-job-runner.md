@@ -1,6 +1,6 @@
 # Job Runner
 
-> **Status:** Draft **Author:** Rhys, Nishad **Created:** 2026-01-15
+> **Status:** Draft **Author:** Rhys, Nishad **Created:** 2026-01-15 **Updated:** 2026-01-16
 
 ## Summary
 
@@ -14,7 +14,7 @@ Recently, we moved to a Job running system like so:
 
 - Client submits job request to Observatory Backend
   - Postgres. See current (job params, status, timestamps, results)
-  - EKS Cluster → k8s job. Not fargate yet so that it’s easier to test locally
+  - EKS Cluster → k8s job. Not fargate yet so that it's easier to test locally
 - Job runs
   - single_episode_runner is the entrypoint; it fetches job spec from observatory via provided id, spawns the "pure" (no
     side effect) runner
@@ -33,67 +33,130 @@ The job runner also has access to a long-lived observatory token.
 
 The python socket disabling is only to catch accidental regressions; sidestepping it is possible.
 
-## Solution
-
 ## Goals
 
-Run tournament evaluation jobs in a dedicated AWS account and k8s cluster separate from the primary infrastructure. Use
-a hot pool of pre-warmed pods with possible per-job teardown. Jobs don't submit their own results or pull their inputs
-from observatory.
+- Run evaluation jobs in a dedicated AWS account separate from primary infrastructure
+- Jobs don't submit their own results or pull inputs from Observatory
+- Hot pool of pre-warmed nodes with per-job pod teardown (~5-10s startup target, one node per pod)
 
 ## Non-goals
 
-- Policies may be able to tamper with the integrity of the games in which they're playing, each other, k8s cluster
-- Therefore we won't get airtight attribution of which policies eat up too much memory or cause crashes
-- There may still be ways for policies to interact with the internet
-- We don't yet support running policies as distinct docker images, and don't support submission in that format yet
-- This spec is not committing to performance targets (dollars or time per episode)
+- Airtight policy isolation (policies may tamper with games, each other, or cluster)
+- Attribution of which policies cause OOMs or crashes
+- Complete network isolation (policies may still reach the internet)
+- Running policies as distinct docker images
+- Performance targets (dollars or time per episode)
 
-### Isolation boundary: AWS account
+## Solution
 
-| Component                  | Location        |
-| -------------------------- | --------------- |
-| Observatory Backend        | Primary account |
-| Postgres                   | Primary account |
-| Job Watcher                | Primary account |
-| Episode Runner pods in VPC | Eval account    |
-| K8s cluster                | Eval account    |
-| User Policy Code           | Eval account    |
+### Architecture Overview
 
-### Hot pool
+```
+Primary Account                                    Eval Account
+┌────────────────────────────────────────────┐    ┌──────────────────────────┐
+│                                            │    │                          │
+│  Observatory ──creates job──► Dispatcher ───────► EKS Cluster              │
+│       │                           │        │    │    │                     │
+│       │                           │        │    │    ▼                     │
+│       │                           │        │    │  Job Pod                 │
+│       │                           │        │    │    │ reads spec (S3)     │
+│       │                           ▼        │    │    │ runs episode        │
+│       │                    ┌──────────┐    │    │    │                     │
+│       │                    │ S3       │◄───────────(presigned GET/PUT)     │
+│       │                    │ policies/│    │    │    │                     │
+│       │                    │ specs/   │    │    │    │                     │
+│       │                    │ results/ │    │    │    │                     │
+│       │                    └────┬─────┘    │    │                          │
+│       │                         │          │    │                          │
+│       │         watches pods    │          │    │                          │
+│       │              │          │          │    │                          │
+│       ▼              ▼          ▼          │    └──────────────────────────┘
+│  Watcher (reads results, updates Observatory)
+│                                            │
+└────────────────────────────────────────────┘
+```
 
-Pre-warmed nodes + per-job teardown. Each job gets a fresh pod, ~5-10s startup target. Don't want to incur EC2 startup
-time per job. We want to ensure that one node runs exactly one pod; right now, it does so by accident, and also doesn't
-tear down.
+### Component Responsibilities
 
-## Job inputs and outputs
+**Dispatcher** (primary account, part of Observatory)
 
-In addition to what it's already specifying in its k8s job, observatory gives a presigned s3 uri in its k8s job spec to
-each of the policies, and one for results.json and replay file.
+- Creates k8s jobs in eval cluster via cross-account kubeconfig
+- Generates presigned S3 URIs for job spec, results, replay, and policy files
+- Writes job spec to S3
+- No longer passes `MACHINE_TOKEN` to jobs
 
-This is because the new episode runner shouldn't be able to interact with observatory directly.
+**single_episode_runner** (eval account, in job pod)
+
+- Reads job spec from presigned GET URL (env var `JOB_SPEC_URI`)
+- Downloads policies from presigned GET URLs
+- Runs pure episode runner
+- Writes results/replay to presigned PUT URLs
+- No Observatory access, no AWS credentials, no network to primary account
+
+**Watcher** (primary account)
+
+- Watches k8s pod events in eval cluster via cross-account kubeconfig
+- On job completion: reads results from S3, updates Observatory
+- On job failure: records error reason (OOMKilled, etc.), updates Observatory
+- Deletes completed k8s jobs
+
+### Cross-Account Access
+
+**K8s API access** (Dispatcher and Watcher → Eval EKS):
+
+- Kubeconfig with exec credential plugin (`aws eks get-token` with cross-account role assumption)
+- Same pattern works locally and in prod
+
+**S3 access**:
+
+- All inputs and outputs live in primary account S3 bucket
+- Dispatcher generates presigned GET URLs for job spec and policy files
+- Dispatcher generates presigned PUT URLs for results and replay files
+- Job pods have no AWS credentials; all S3 access via presigned URLs
+- Watcher reads results directly (no cross-account access needed)
+
+**Container images**:
+
+- CI pushes episode-runner image to both primary and eval ECR
+- Eval cluster pulls from eval ECR (no cross-account pull)
+
+### Job Lifecycle
+
+1. **Job Creation** (primary account)
+   - Observatory creates job row in Postgres (status=pending)
+   - Dispatcher generates presigned S3 URIs
+   - Dispatcher writes job spec to S3
+   - Dispatcher creates k8s job in eval cluster with env vars: `JOB_SPEC_URI`, `RESULTS_URI`, `REPLAY_URI`
+   - Job status → dispatched
+
+2. **Job Execution** (eval account)
+   - Pod starts, reads spec from `JOB_SPEC_URI`
+   - Downloads policies from presigned URIs
+   - Runs episode (network-isolated from Observatory)
+   - Writes results to `RESULTS_URI`, replay to `REPLAY_URI`
+   - Exits
+
+3. **Event Handling** (primary account)
+   - Watcher sees pod phase change
+   - On completion: fetches results from S3, writes to Observatory, marks job completed
+   - On failure: records error from k8s event, marks job failed
+   - Deletes k8s job
+
+### v1 Simplifications
+
+- Watcher handles both event watching and result processing (no SQS queue)
+- Single eval cluster
+
+### Future Enhancements
+
+- Split Watcher → Watcher + SQS + Processor (for multi-cluster, decoupled scaling)
+- Multi-cluster support (all clusters push to same SQS, single processor)
+- Kata containers for process isolation (game runner + policy server split)
+- Fargate instead of warm EC2 pool (if job runtime decreases enough)
+- Batch stepping across games for GPU utilization (post-launch)
 
 ## Open Questions
 
 1. Hot pool sizing strategy?
-2. Should Watcher be the one to upload episode-job results from output presigned URIs to observatory, or should it spawn
-   a k8s job in a different context to do the same (where the job is specified by observatory in the k8s job spec)?
-3. Should we have Watcher consume from a queue instead of processing k8s events live?
-4. Figure out how much space we need for a 100m subho model and limit to that (for 8 agents all loaded into memory
-   together)
-5. Any complexity in Observatory or Watcher getting access to Eval account's EKS?
-6. How is Eval account getting the image on which to run? Can we set up perms such that it pulls from primary account's
-   ECR (or preferably have primary acc push to its ECR)?
-7. What are clean ways to manage terraform across multiple AWS accounts?
-
-### Future: process isolation via Kata containers
-
-- Currently policies run in same process as game. Could split into game runner + policy server (user code in Kata
-  container, communicates via protobuf-defined interface). There's progress on this already but it's not needed for
-  launch.
-- Possible that fargate, which automatically handles teardown, would be preferable to keeping a warm ec2 node pool. In
-  practice we experienced that it took a few minutes to start up each job. In the current state of things, where jobs
-  take ten(s) of minutes, that's not a big deal. But we aim to bring job runtime down.
-- One thing that'd likely bring down cost per episode dramatically, at the cost of allowing within-policy gossip across
-  agents and episodes, is making use of policies' batch step by asking for actions across many games at once. This would
-  also require GPU machines. To consider post-launch.
+2. Memory limits for models (100m params × 8 agents)?
+3. Terraform multi-account management patterns?
