@@ -438,9 +438,9 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         policy_versions = await stats_repo.get_user_policy_versions(user.id)
         return MyPolicyVersionsResponse(entries=policy_versions)
 
-    @router.post("/episodes/query", response_model=EpisodeQueryResponse)
+    @router.post("/episodes/query")
     @timed_http_handler
-    async def query_episodes(request: EpisodeQueryRequest, user: CheckUser) -> EpisodeQueryResponse:
+    async def query_episodes(request: EpisodeQueryRequest) -> EpisodeQueryResponse:
         episodes = await stats_repo.get_episodes(
             primary_policy_version_ids=request.primary_policy_version_ids,
             episode_ids=request.episode_ids,
