@@ -607,31 +607,32 @@ class MettaRepo:
     # Stats queries
     async def upsert_policy(self, name: str, user_id: str, attributes: dict[str, Any]) -> uuid.UUID:
         async with self.connect() as con:
+            existing = await con.execute(
+                "SELECT id, user_id FROM policies WHERE name = %s",
+                (name,),
+            )
+            row = await existing.fetchone()
+            if row is not None:
+                existing_id, existing_user_id = row[0], row[1]
+                if existing_user_id != user_id:
+                    raise ValueError(
+                        f"Policy name '{name}' is already taken by user '{existing_user_id}'. "
+                        "Please choose a different name."
+                    )
+                return existing_id
+
             result = await con.execute(
                 """
                 INSERT INTO policies (name, user_id, attributes)
                 VALUES (%s, %s, %s)
-                ON CONFLICT (user_id, name) DO NOTHING
                 RETURNING id
                 """,
                 (name, user_id, Jsonb(attributes)),
             )
             row = await result.fetchone()
-            if row is not None:
-                return row[0]
-            else:
-                # Policy already exists, get the id
-                result = await con.execute(
-                    """
-                    SELECT id FROM policies WHERE user_id = %s AND name = %s
-                    """,
-                    (user_id, name),
-                )
-                row = await result.fetchone()
-                if row is not None:
-                    return row[0]
-                else:
-                    raise ValueError(f"Policy {name} not found")
+            if row is None:
+                raise ValueError(f"Failed to create policy {name}")
+            return row[0]
 
     async def get_latest_policy_version(self, policy_id: uuid.UUID) -> int | None:
         async with self.connect() as con:

@@ -227,4 +227,12 @@ MIGRATIONS = [
             """ALTER TABLE pool_players ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP""",
         ],
     ),
+    SqlMigration(
+        version=6,
+        description="Change policies unique constraint from (user_id, name) to (name)",
+        sql_statements=[
+            """ALTER TABLE policies DROP CONSTRAINT policies_user_id_name_key""",
+            """ALTER TABLE policies ADD CONSTRAINT policies_name_key UNIQUE (name)""",
+        ],
+    ),
 ]

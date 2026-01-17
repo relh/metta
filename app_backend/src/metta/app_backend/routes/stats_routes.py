@@ -120,7 +120,10 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
 
     async def _create_policy_version_from_s3_key(name: str, user_id: str, s3_key: str) -> PolicyVersionResponse:
         s3_path = f"s3://{OBSERVATORY_S3_BUCKET}/{s3_key}"
-        policy_id = await stats_repo.upsert_policy(name=name, user_id=user_id, attributes={})
+        try:
+            policy_id = await stats_repo.upsert_policy(name=name, user_id=user_id, attributes={})
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
         policy_version_id = await stats_repo.create_policy_version(
             policy_id=policy_id,
             s3_path=s3_path,
@@ -141,7 +144,10 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         else:
             user_id = user.id
 
-        policy_id = await stats_repo.upsert_policy(name=policy.name, user_id=user_id, attributes=policy.attributes)
+        try:
+            policy_id = await stats_repo.upsert_policy(name=policy.name, user_id=user_id, attributes=policy.attributes)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
         return UUIDResponse(id=policy_id)
 
     @router.post("/policies/{policy_id_str}/versions")
