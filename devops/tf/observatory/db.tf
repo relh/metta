@@ -67,6 +67,8 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids = [aws_security_group.db.id]
   publicly_accessible    = false # stays inside the VPC
 
+  backup_retention_period = 7
+
   db_name  = "metta"
   username = "metta"
   password = random_password.db.result
