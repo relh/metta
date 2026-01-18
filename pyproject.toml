@@ -85,6 +85,9 @@ description = "Metta AI framework"
 readme = "README.md"
 license = { text = "MIT" }
 
+[project.optional-dependencies]
+tribal-village = ["tribal-village"]
+
 [dependency-groups]
 testing = [
   "gcovr>=8.3",
@@ -168,3 +171,4 @@ metta-common = { workspace = true }
 pufferlib-core = { workspace = true }
 softmax = { workspace = true }
 metta-pr-similarity-mcp = { workspace = true }
+tribal-village = { git = "https://github.com/Metta-AI/tribal-village.git" }
