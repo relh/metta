@@ -6,6 +6,7 @@ import { PropsWithChildren } from 'react'
 
 import { AppProvider } from '@/AppContext'
 import { getAuthToken } from '@/auth/server'
+import { config } from '@/config'
 import { getRepo } from '@/lib/repo/server'
 
 import { TopMenu } from '../TopMenu'
@@ -41,7 +42,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
     <html lang="en">
       <body className="overflow-y-scroll">
         <NuqsAdapter>
-          <AppProvider token={token}>
+          <AppProvider token={token} apiBaseUrl={config.apiBaseUrl}>
             <div className="min-h-screen font-sans flex flex-col">
               <TopMenu currentUser={currentUser} />
 

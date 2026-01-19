@@ -206,16 +206,16 @@ def frontend(
     env = _base_env()
 
     if backend == "local":
-        env["NEXT_PUBLIC_API_URL"] = LOCAL_BACKEND_URL
+        env["OBSERVATORY_API_URL"] = LOCAL_BACKEND_URL
         info(f"Connecting to local backend at {LOCAL_BACKEND_URL}")
     else:
-        env["NEXT_PUBLIC_API_URL"] = PROD_STATS_SERVER_URI
-        if token := get_machine_token(env["NEXT_PUBLIC_API_URL"]):
-            env["NEXT_PUBLIC_AUTH_TOKEN"] = token
+        env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
+        if token := get_machine_token(env["OBSERVATORY_API_URL"]):
+            env["DEV_AUTH_TOKEN"] = token
         info("Connecting to prod backend")
 
     info("Starting Observatory frontend")
-    info(f"API URL: {env.get('NEXT_PUBLIC_API_URL')}")
+    info(f"API URL: {env.get('OBSERVATORY_API_URL')}")
 
     subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "observatory")
 

@@ -24,9 +24,9 @@ spec:
               cpu: "2000m"
               memory: "4Gi"
           env:
-          - name: NEXT_PUBLIC_API_URL
+          - name: OBSERVATORY_API_URL
             value: "{{ .Values.apiUrl }}"
-          - name: NEXT_PUBLIC_URL
+          - name: SITE_URL
             value: "https://{{ .Values.host }}"
           ports:
             - containerPort: 3000

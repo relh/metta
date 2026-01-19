@@ -1,7 +1,6 @@
 'use client'
 import { createContext, FC, PropsWithChildren } from 'react'
 
-import { config } from './config'
 import { Repo } from './lib/repo'
 
 export const AppContext = createContext<{
@@ -10,8 +9,12 @@ export const AppContext = createContext<{
   repo: new Repo(),
 })
 
-export const AppProvider: FC<PropsWithChildren<{ token: string | null }>> = ({ children, token }) => {
-  const repo = new Repo(config.apiBaseUrl, token)
+export const AppProvider: FC<PropsWithChildren<{ token: string | null; apiBaseUrl: string }>> = ({
+  children,
+  token,
+  apiBaseUrl,
+}) => {
+  const repo = new Repo(apiBaseUrl, token)
 
   return <AppContext value={{ repo }}>{children}</AppContext>
 }
