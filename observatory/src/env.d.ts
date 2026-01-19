@@ -1,9 +1,7 @@
-/// <reference types="vite/client" />
-
-interface ImportMetaEnv {
-  readonly VITE_EVAL_DB_URI: string
+declare global {
+  var cookieStore: {
+    get: (name: string) => Promise<{ value: string } | null>
+  }
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv
-}
+export {}

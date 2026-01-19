@@ -2,14 +2,11 @@ import clsx from 'clsx'
 import { FC } from 'react'
 
 export const Spinner: FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
+  const sizeClass = clsx(size === 'sm' && 'h-3 w-3', size === 'md' && 'h-4 w-4', size === 'lg' && 'h-6 w-6')
+
   return (
     <svg
-      className={clsx(
-        'animate-spin text-gray-400',
-        size === 'sm' && 'h-3 w-3',
-        size === 'md' && 'h-4 w-4',
-        size === 'lg' && 'h-6 w-6'
-      )}
+      className={clsx('animate-spin-delayed text-gray-400', sizeClass)}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"

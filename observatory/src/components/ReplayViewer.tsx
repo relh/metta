@@ -4,7 +4,7 @@ import { METTASCOPE_REPLAY_URL_PREFIX } from '../constants'
 import { A } from './A'
 import { SmallHeader } from './SmallHeader'
 
-export const normalizeReplayUrl = (replayUrl: string | null | undefined): string | null => {
+export function normalizeReplayUrl(replayUrl: string | null | undefined): string | null {
   if (!replayUrl) return null
   if (replayUrl.startsWith(METTASCOPE_REPLAY_URL_PREFIX)) {
     return replayUrl

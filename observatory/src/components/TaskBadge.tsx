@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { FC } from 'react'
 
-import { EvalTask, TaskAttempt, TaskStatus } from '../repo'
+import { EvalTask, TaskAttempt, TaskStatus } from '../lib/repo'
 import { Tooltip } from './Tooltip'
 
 function getStatusColor(status: TaskStatus) {

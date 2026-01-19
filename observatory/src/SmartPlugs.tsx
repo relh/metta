@@ -1,7 +1,8 @@
 import { FC, useContext, useEffect, useState } from 'react'
 
 import { AppContext } from './AppContext'
-import { SmartPlugStatus } from './repo'
+import { Button } from './components/Button'
+import { SmartPlugStatus } from './lib/repo'
 
 export const SmartPlugsPage: FC = () => {
   const { repo } = useContext(AppContext)
@@ -56,9 +57,7 @@ export const SmartPlugsPage: FC = () => {
       <div className="p-6">
         <h2 className="text-xl font-semibold mb-2">Smart Plugs</h2>
         <div className="text-red-600 mb-4">{error}</div>
-        <button className="px-3 py-2 rounded bg-blue-600 text-white" onClick={refresh}>
-          Retry
-        </button>
+        <Button onClick={refresh}>Retry</Button>
       </div>
     )
   }

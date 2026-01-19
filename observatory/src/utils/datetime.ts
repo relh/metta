@@ -1,4 +1,4 @@
-export const parseDatetime = (value: string | null): Date | null => {
+export function parseDatetime(value: string | null): Date | null {
   if (!value) {
     return null
   }
@@ -11,7 +11,7 @@ export const parseDatetime = (value: string | null): Date | null => {
   return date
 }
 
-export const formatDate = (value: string | null): string => {
+export function formatDate(value: string | null): string {
   const date = parseDatetime(value)
   if (!date) {
     return '—'
@@ -24,7 +24,7 @@ export const formatDate = (value: string | null): string => {
   })
 }
 
-export const formatRelativeTime = (value: string | null): string => {
+export function formatRelativeTime(value: string | null): string {
   const date = parseDatetime(value)
   if (!date) {
     return '—'
@@ -48,7 +48,7 @@ export const formatRelativeTime = (value: string | null): string => {
   return `${diffYears}y ago`
 }
 
-export const formatDurationBetween = (from: string | null, to: string | null): string | null => {
+export function formatDurationBetween(from: string | null, to: string | null): string | null {
   const fromDate = parseDatetime(from)
   const toDate = parseDatetime(to)
   if (!fromDate || !toDate) return null

@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { FC } from 'react'
 
-import { EvalTask, TaskAttempt } from '../repo'
+import { EvalTask, TaskAttempt } from '../lib/repo'
 import { formatDate, formatDurationBetween } from '../utils/datetime'
 
 const getTimeDiffColor = (from: string | null, to: string | null): string => {

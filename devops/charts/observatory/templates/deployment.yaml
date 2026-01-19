@@ -18,16 +18,21 @@ spec:
           imagePullPolicy: Always
           resources:
             requests:
-              memory: "128Mi"
-            limits:
+              cpu: "1000m"
               memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          env:
+          - name: NEXT_PUBLIC_API_URL
+            value: "{{ .Values.apiUrl }}"
           ports:
-            - containerPort: 80
+            - containerPort: 3000
           livenessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 3000
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 3000

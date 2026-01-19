@@ -1,10 +1,13 @@
-import { FC, Ref, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
+'use client'
+import { FC, use, useCallback, useEffect, useRef, useState } from 'react'
+
+import { AppContext } from '@/AppContext'
 
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { Spinner } from '../components/Spinner'
 import { Table, TH } from '../components/Table'
-import { PaginatedEvalTasksResponse, PublicPolicyVersionRow, Repo, TaskFilters } from '../repo'
+import { PaginatedEvalTasksResponse, PublicPolicyVersionRow, TaskFilters } from '../lib/repo'
 import { TaskRow } from './TaskRow'
 
 const pageSize = 50
@@ -17,10 +20,6 @@ export function parsePolicyVersionId(command: string): string | null {
     return match[1]
   }
   return null
-}
-
-export type TasksTableHandle = {
-  loadTasks: (page: number) => void
 }
 
 const FilterInput: FC<{
@@ -50,12 +49,12 @@ const StatusDropdown: FC<{ value: string; onChange: (value: string) => void }> =
 }
 
 export const TasksTable: FC<{
-  repo: Repo
-  setError: (error: string) => void
-  ref?: Ref<TasksTableHandle>
   initialFilters?: TaskFilters
   hideFilters?: boolean
-}> = ({ repo, setError, ref, initialFilters, hideFilters }) => {
+}> = ({ initialFilters, hideFilters }) => {
+  const { repo } = use(AppContext)
+
+  const [error, setError] = useState<string | null>(null)
   const [tasksResponse, setTasksResponse] = useState<PaginatedEvalTasksResponse | undefined>()
   const currentPage = tasksResponse?.page || 1
   const [filters, setFilters] = useState<TaskFilters>(initialFilters || {})
@@ -106,10 +105,6 @@ export const TasksTable: FC<{
     [repo, setError, filters]
   )
 
-  useImperativeHandle(ref, () => ({
-    loadTasks,
-  }))
-
   // Initial load and filter changes (with 300ms debounce for filter changes)
   useEffect(() => {
     if (isInitialMount.current) {
@@ -138,6 +133,9 @@ export const TasksTable: FC<{
 
   return (
     <div>
+      {error && (
+        <div className="px-4 py-3 mb-5 text-sm bg-red-50 border border-red-400 text-red-800 rounded">{error}</div>
+      )}
       <div className="overflow-x-auto">
         <Table>
           <Table.Header>
@@ -173,7 +171,6 @@ export const TasksTable: FC<{
               <TaskRow
                 key={task.id}
                 task={task}
-                repo={repo}
                 policyInfoMap={policyInfoMap}
                 attemptedPolicyIds={attemptedPolicyIds.current}
               />

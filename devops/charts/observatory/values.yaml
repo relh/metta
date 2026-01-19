@@ -1,5 +1,7 @@
 host: observatory.softmax-research.net
 
+apiUrl: https://api.observatory.softmax-research.net
+
 image:
   registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
   name: metta-app-frontend

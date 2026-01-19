@@ -1,10 +1,10 @@
 import css from '@eslint/css'
 import eslint from '@eslint/js'
-import tseslint from 'typescript-eslint'
 import { globalIgnores } from 'eslint/config'
+import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  globalIgnores(['dist', '.vite', 'node_modules']),
+  globalIgnores(['dist', '.next', 'next-env.d.ts', 'node_modules']),
   {
     name: 'eslint',
     files: ['**/*.ts'],
@@ -16,7 +16,7 @@ export default tseslint.config(
     extends: tseslint.configs.recommended,
   },
   {
-    files: ['style.css'], // no point in linting index.css, it's auto-generated
+    files: ['style.css'],
     plugins: { css },
     language: 'css/css',
     extends: [css.configs.recommended],

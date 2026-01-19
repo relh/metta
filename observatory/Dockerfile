@@ -3,7 +3,7 @@
 
 # Building this image requires the entire metta repo to be used as a build context, due to the global `pnpm-lock.yaml` file.
 
-# ================================ Base image - pnpm and turbo ================================
+# ================================ Base image - pnpm and turbo ==========================
 FROM node:24-bookworm-slim AS base
 
 # Set working directory
@@ -17,7 +17,7 @@ COPY package.json ./
 RUN corepack enable pnpm
 RUN pnpm install -g turbo
 
-# ================================ Prepare pruned source with turbo ================================
+# ================================ Prepare pruned source with turbo =====================
 FROM base AS pruned-source
 WORKDIR /metta
 COPY . .
@@ -25,7 +25,7 @@ COPY . .
 # /metta/out will contain only the relevant files
 RUN turbo prune @softmax/observatory --docker
 
-# =============================== Build from pruned source ================================
+# =============================== Build from pruned source ==============================
 FROM base AS builder
 WORKDIR /metta
 
@@ -40,17 +40,24 @@ WORKDIR /metta/observatory
 
 RUN pnpm run build
 
-# ================================ Serve the static app with Nginx ================================
-FROM nginx:alpine
+# ================================ Serve the Next.js app ================================
+FROM base AS runtime
 
-# Copy the build output from the previous stage to Nginx's html directory
-COPY --from=builder /metta/observatory/dist /usr/share/nginx/html
+WORKDIR /app
+ENV NODE_ENV=production
 
-# Copy a custom Nginx configuration file (optional but recommended)
-# For example, handle single-page app routing
-COPY observatory/nginx.conf /etc/nginx/conf.d/default.conf
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
 
-EXPOSE 80
+COPY --from=builder /metta/observatory/public ./observatory/public
+COPY --from=builder --chown=nextjs:nodejs /metta/observatory/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /metta/observatory/.next/static ./observatory/.next/static
 
-# Start Nginx in the foreground
-CMD ["nginx", "-g", "daemon off;"]
+USER nextjs
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# Start the Next.js server
+CMD ["node", "observatory/server.js"]

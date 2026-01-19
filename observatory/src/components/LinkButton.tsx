@@ -1,18 +1,25 @@
+'use client'
 import clsx from 'clsx'
-import { FC } from 'react'
-import { Link } from 'react-router-dom'
+import Link from 'next/link'
+import { FC, ReactNode } from 'react'
 
 import { getButtonClassName } from './Button'
 
 export const LinkButton: FC<{
-  to: string
-  children: React.ReactNode
+  href: string
+  children: ReactNode
   theme?: 'primary' | 'secondary' | 'tertiary'
   type?: 'button' | 'submit'
   size?: 'sm' | 'md'
-}> = ({ to, children, theme = 'secondary', type = 'button', size = 'md' }) => {
+  disabled?: boolean
+}> = ({ href, children, theme = 'secondary', type = 'button', size = 'md', disabled = false }) => {
   return (
-    <Link to={to} className={clsx(getButtonClassName(size, theme), 'no-underline')} type={type}>
+    <Link
+      href={disabled ? '#' : href}
+      onClick={disabled ? (e) => e.preventDefault() : undefined}
+      className={clsx(getButtonClassName(size, theme, disabled), 'no-underline')}
+      type={type}
+    >
       {children}
     </Link>
   )

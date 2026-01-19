@@ -1,12 +1,14 @@
 import clsx from 'clsx'
-import { FC, Fragment, useState } from 'react'
+import { FC, Fragment, use, useState } from 'react'
+
+import { AppContext } from '@/AppContext'
 
 import { A } from '../components/A'
 import { Spinner } from '../components/Spinner'
 import { StyledLink } from '../components/StyledLink'
 import { Table, TD, TH, TR } from '../components/Table'
 import { TaskBadge } from '../components/TaskBadge'
-import { EvalTask, PublicPolicyVersionRow, Repo, TaskAttempt } from '../repo'
+import { EvalTask, PublicPolicyVersionRow, TaskAttempt } from '../lib/repo'
 import { formatDate, formatDurationBetween } from '../utils/datetime'
 import { TaskAttemptTimeline } from './TaskAttemptTimeline'
 import { parsePolicyVersionId } from './TasksTable'
@@ -17,7 +19,7 @@ type DatadogLogsParams = {
   finished_at: string | null
 }
 
-const getDatadogLogsUrl = (params: DatadogLogsParams): string | null => {
+function getDatadogLogsUrl(params: DatadogLogsParams): string | null {
   if (!params.assignee || !params.assigned_at) {
     return null
   }
@@ -50,12 +52,11 @@ const getDatadogLogsUrl = (params: DatadogLogsParams): string | null => {
 
 type TaskRowProps = {
   task: EvalTask
-  repo: Repo
   policyInfoMap: Record<string, PublicPolicyVersionRow>
   attemptedPolicyIds: Set<string>
 }
 
-const parseRecipe = (command: string): string | null => {
+function parseRecipe(command: string): string | null {
   const match = command.match(/run\.py\s+(\S+)/)
   if (match) {
     return match[1].replace(/^recipes\.(experiment|prod)\./, '')
@@ -63,7 +64,8 @@ const parseRecipe = (command: string): string | null => {
   return null
 }
 
-export const TaskRow: FC<TaskRowProps> = ({ task, repo, policyInfoMap, attemptedPolicyIds }) => {
+export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicyIds }) => {
+  const { repo } = use(AppContext)
   const [isExpanded, setIsExpanded] = useState(false)
 
   // UI state
@@ -102,7 +104,7 @@ export const TaskRow: FC<TaskRowProps> = ({ task, repo, policyInfoMap, attempted
             {isExpanded ? '▾' : isLoadingAttempts ? <Spinner size="sm" /> : '▸'}
           </span>
           {policyInfo ? (
-            <StyledLink to={`/policies/versions/${policyVersionId}`}>
+            <StyledLink href={`/policies/versions/${policyVersionId}`}>
               {policyInfo.name}:v{policyInfo.version}
             </StyledLink>
           ) : policyVersionId && !hasAttemptedPolicy ? (

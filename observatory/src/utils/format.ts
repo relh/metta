@@ -3,7 +3,7 @@ export type PolicyVersionInfo = {
   version: number
 }
 
-export const formatPolicyVersion = (policy: PolicyVersionInfo | null | undefined, fallback?: string): string => {
+export function formatPolicyVersion(policy: PolicyVersionInfo | null | undefined, fallback?: string): string {
   if (!policy) {
     return fallback ?? 'Unknown policy'
   }
