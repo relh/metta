@@ -20,7 +20,7 @@ on:
 
 jobs:
   build-and-push-image:
-    runs-on: ubuntu-4core
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     permissions:
       id-token: write

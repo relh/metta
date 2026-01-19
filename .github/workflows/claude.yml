@@ -24,7 +24,7 @@ env:
 jobs:
   claude-response:
     if: contains(github.event.comment.body, '@claude')
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     # Put user-controlled fields in env so shell uses $VAR (no YAML string injection)
     env:
       COMMENT_BODY: ${{ github.event.comment.body }}
