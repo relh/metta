@@ -26,6 +26,8 @@ spec:
           env:
           - name: NEXT_PUBLIC_API_URL
             value: "{{ .Values.apiUrl }}"
+          - name: NEXT_PUBLIC_URL
+            value: "https://{{ .Values.host }}"
           ports:
             - containerPort: 3000
           livenessProbe:

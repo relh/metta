@@ -17,7 +17,7 @@ export function proxy(request: NextRequest) {
 
   if (!token) {
     const authUrl = new URL(`${appConfig.authServerUrl}/tokens/cli`)
-    authUrl.searchParams.set('callback', `${request.nextUrl.origin}/auth/callback`)
+    authUrl.searchParams.set('callback', `${appConfig.siteUrl}/auth/callback`)
     return NextResponse.redirect(authUrl)
   }
 
