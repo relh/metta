@@ -1,6 +1,6 @@
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
-from .curriculum import Curriculum, CurriculumConfig, CurriculumTask
+from .curriculum import Curriculum, CurriculumConfig
 from .curriculum_env import CurriculumEnv
 from .learning_progress_algorithm import LearningProgressAlgorithm, LearningProgressConfig
 from .prioritized_regret_algorithm import PrioritizedRegretAlgorithm, PrioritizedRegretConfig
@@ -20,9 +20,12 @@ from .task_generator import (
     TaskGeneratorSet,
 )
 from .task_tracker import TaskTracker
+from .types import CurriculumAlgorithm, CurriculumAlgorithmConfig, CurriculumTask
 
 __all__ = [
     "Curriculum",
+    "CurriculumAlgorithm",
+    "CurriculumAlgorithmConfig",
     "CurriculumConfig",
     "CurriculumTask",
     "LearningProgressAlgorithm",
