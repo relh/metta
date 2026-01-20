@@ -48,6 +48,22 @@ def _write_summary(runner: Runner, state_dir: Path) -> None:
     # Discord summary (file)
     state_dir.mkdir(parents=True, exist_ok=True)
     lines = [f"**Jobs**: {header}", "", "```", *table, "```"]
+
+    # Add failure details
+    if failed:
+        lines.append("")
+        lines.append("**Failure Details:**")
+        for job in failed:
+            job_short_name = job.name.split(".")[-1]
+            if job.acceptance_failures:
+                lines.append(f"- `{job_short_name}`: acceptance criteria not met")
+                for failure in job.acceptance_failures:
+                    lines.append(f"  - {failure}")
+            elif job.error:
+                lines.append(f"- `{job_short_name}`: {job.error}")
+            else:
+                lines.append(f"- `{job_short_name}`: unknown error")
+
     gh_server = os.environ.get("GITHUB_SERVER_URL")
     gh_repo = os.environ.get("GITHUB_REPOSITORY")
     gh_run_id = os.environ.get("GITHUB_RUN_ID")
@@ -84,6 +100,11 @@ def _print_failed_logs(runner: Runner, tail_lines: int = 50) -> None:
     print("=" * 60)
     for job in failed:
         print(f"\n--- {job.name} ---")
+        if job.acceptance_failures:
+            print("Acceptance criteria failures:")
+            for failure in job.acceptance_failures:
+                print(f"  - {failure}")
+            print()
         if job.logs_path and Path(job.logs_path).exists():
             lines = Path(job.logs_path).read_text().splitlines()
             for line in lines[-tail_lines:]:

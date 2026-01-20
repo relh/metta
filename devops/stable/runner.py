@@ -58,6 +58,7 @@ class Job(BaseModel):
     metrics: dict[str, float] = Field(default_factory=dict)
     acceptance_passed: bool | None = None
     criterion_results: dict[str, bool] = Field(default_factory=dict)
+    acceptance_failures: list[str] = Field(default_factory=list)
     error: str | None = None
 
     @property
@@ -105,11 +106,13 @@ class _AcceptanceEvaluator:
             job.error = "Acceptance criteria not met"
 
     def _passes_acceptance(self, job: Job) -> bool:
+        failures: list[str] = []
         for c in job.acceptance:
             actual = job.metrics.get(c.metric)
             if actual is None:
                 job.criterion_results[c.metric] = False
-                return False
+                failures.append(f"{c.metric}: missing (required {c.operator} {c.threshold})")
+                continue
 
             passed = False
             if c.operator == "in":
@@ -133,7 +136,11 @@ class _AcceptanceEvaluator:
 
             job.criterion_results[c.metric] = passed
             if not passed:
-                return False
+                failures.append(f"{c.metric}: {actual:.4g} (required {c.operator} {c.threshold})")
+
+        if failures:
+            job.acceptance_failures = failures
+            return False
         return True
 
 
