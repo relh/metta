@@ -1,7 +1,4 @@
 name: "Build Policy Evaluator Docker Image"
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
 
 on:
   push:
@@ -15,36 +12,14 @@ on:
 
 jobs:
   build-and-push-image:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 20 # up from default of 10 minutes
     permissions:
       id-token: write
       contents: read
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Build Docker image
-        id: build-image
-        uses: ./.github/actions/docker-build
-        with:
-          image_name: metta-policy-evaluator
-          dockerfile: ./devops/docker/Dockerfile.policy_evaluator
-          aws_role: ${{ vars.AWS_ROLE }}
-
-      - name: Configure EKS
-        if: github.ref == 'refs/heads/main'
-        uses: ./.github/actions/eks-configure
-
-      - name: Deploy with Helm
-        if: github.ref == 'refs/heads/main'
-        uses: ./.github/actions/helm-deploy
-        with:
-          namespace: orchestrator
-          release: orchestrator
-          chart: ./devops/charts/orchestrator
-          image_tag: ${{ steps.build-image.outputs.tag }}
-          dependency_build: true
+    uses: ./.github/workflows/_build-and-deploy.yml
+    with:
+      image_name: metta-policy-evaluator
+      dockerfile: ./devops/docker/Dockerfile.policy_evaluator
+      namespace: orchestrator
+      release: orchestrator
+      chart: ./devops/charts/orchestrator

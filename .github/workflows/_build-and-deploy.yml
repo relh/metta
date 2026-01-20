@@ -1,0 +1,73 @@
+name: Build Image and Deploy with Helm
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+# Reusable workflow to build and deploy a Docker image to EKS using Helm
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        required: true
+        type: string
+      dockerfile:
+        required: true
+        type: string
+      tag_suffix:
+        required: false
+        type: string
+        default: ""
+      namespace:
+        required: true
+        type: string
+      release:
+        required: true
+        type: string
+      chart:
+        required: true
+        type: string
+      runs_on:
+        required: false
+        type: string
+        default: blacksmith-4vcpu-ubuntu-2404
+      pre_deploy_command:
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build-and-deploy:
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Build Docker image
+        id: build-image
+        uses: ./.github/actions/docker-build
+        with:
+          image_name: ${{ inputs.image_name }}
+          dockerfile: ${{ inputs.dockerfile }}
+          suffix: ${{ inputs.tag_suffix }}
+          aws_role: ${{ vars.AWS_ROLE }}
+
+      - name: Configure EKS
+        if: github.ref == 'refs/heads/main'
+        uses: ./.github/actions/eks-configure
+
+      # useful for home deployment
+      - name: Pre-deploy command
+        if: github.ref == 'refs/heads/main' && inputs.pre_deploy_command != ''
+        run: ${{ inputs.pre_deploy_command }}
+
+      - name: Deploy with Helm
+        if: github.ref == 'refs/heads/main'
+        uses: ./.github/actions/helm-deploy
+        with:
+          namespace: ${{ inputs.namespace }}
+          release: ${{ inputs.release }}
+          chart: ${{ inputs.chart }}
+          image_tag: ${{ steps.build-image.outputs.tag }}

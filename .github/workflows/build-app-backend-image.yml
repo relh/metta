@@ -1,7 +1,4 @@
 name: "Build Observatory Backend Docker Image"
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
 
 on:
   push:
@@ -10,45 +7,18 @@ on:
     paths:
       - "app_backend/**"
       - ".github/workflows/build-app-backend-image.yml"
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: "Branch to build from (defaults to current branch)"
-        required: false
-        type: string
-        default: ""
+  workflow_dispatch: {}
 
 jobs:
-  build-and-push-image:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 20
+  build-and-deploy:
     permissions:
       id-token: write
       contents: read
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Build Docker image
-        id: build-image
-        uses: ./.github/actions/docker-build
-        with:
-          image_name: metta-app-backend
-          dockerfile: ./app_backend/Dockerfile
-          aws_role: ${{ vars.AWS_ROLE }}
-
-      - name: Configure EKS
-        if: github.ref == 'refs/heads/main'
-        uses: ./.github/actions/eks-configure
-
-      - name: Deploy with Helm
-        if: github.ref == 'refs/heads/main'
-        uses: ./.github/actions/helm-deploy
-        with:
-          namespace: observatory
-          release: observatory-backend
-          chart: ./devops/charts/observatory-backend
-          image_tag: ${{ steps.build-image.outputs.tag }}
+    uses: ./.github/workflows/_build-and-deploy.yml
+    with:
+      image_name: metta-app-backend
+      dockerfile: ./app_backend/Dockerfile
+      namespace: observatory
+      release: observatory-backend
+      chart: ./devops/charts/observatory-backend
