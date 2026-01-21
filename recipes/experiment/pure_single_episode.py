@@ -27,18 +27,51 @@ class PureSingleEpisodeTool(Tool):
         return 0
 
 
-def run_example(policy_uri: str, results_uri: str, replay_uri: str) -> PureSingleEpisodeTool:
+def run_example(
+    policy_uris: list[str] | str,
+    results_uri: str,
+    replay_uri: str,
+    assignments: list[int] | None = None,
+) -> PureSingleEpisodeTool:
     """
     ./tools/run.py recipes.experiment.pure_single_episode.run_example \
-        policy_uri=metta://policy/relh.machina1_bc_dinky_sliced.hc.1209.12-neginf:v3 \
+        policy_uris=metta://policy/dinky:v15 \
+        results_uri=file://./results.json \
+        replay_uri=file://./replay.json.z
+
+    # Multiple policies with round-robin assignment:
+    ./tools/run.py recipes.experiment.pure_single_episode.run_example \
+        policy_uris='["metta://policy/dinky:v15", "metta://policy/other:v1"]' \
+        results_uri=file://./results.json \
+        replay_uri=file://./replay.json.z
+
+    # Explicit assignments (agent 0,1 use policy 0; agent 2,3 use policy 1):
+    ./tools/run.py recipes.experiment.pure_single_episode.run_example \
+        policy_uris='["metta://policy/a:v1", "metta://policy/b:v1"]' \
+        assignments='[0, 0, 1, 1]' \
         results_uri=file://./results.json \
         replay_uri=file://./replay.json.z
     """
-    env = Machina1OpenWorldSharedRewardsMission.model_copy(deep=True).make_env()
+    # Normalize single policy to list
+    if isinstance(policy_uris, str):
+        policy_uris = [policy_uris]
+
+    # Determine num_agents: from assignments if provided, else one per policy
+    if assignments is not None:
+        num_agents = len(assignments)
+    else:
+        num_agents = len(policy_uris)
+        assignments = list(range(num_agents))  # agent i uses policy i
+
+    # Set num_cogs before make_env so SharedRewardsVariant uses the correct agent count
+    mission = Machina1OpenWorldSharedRewardsMission.model_copy(deep=True)
+    mission.num_cogs = num_agents
+    env = mission.make_env()
+
     return PureSingleEpisodeTool(
         job=PureSingleEpisodeJob(
-            policy_uris=[policy_uri],
-            assignments=[0] * env.game.num_agents,
+            policy_uris=policy_uris,
+            assignments=assignments,
             env=env,
             results_uri=results_uri,
             replay_uri=replay_uri,
