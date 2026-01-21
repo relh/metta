@@ -106,9 +106,6 @@ recipes/experiment/scratchpad/
 # Cursor MCP configuration (may contain credentials)
 .cursor-mcp/
 
-# TODO - remove after troubleshooting stability and re-add to keys in .github/workflows/checks.yml
-mettagrid/MODULE.bazel.lock
-
 # Stable Release System
 devops/stable/state/
 devops/stable/release-notes/
