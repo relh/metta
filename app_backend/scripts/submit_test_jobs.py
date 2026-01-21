@@ -2,7 +2,8 @@
 import argparse
 import uuid
 
-from alo.rollout import SingleEpisodeJob
+from metta_alo.rollout import SingleEpisodeJob
+
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestCreate, JobType
 from metta.common.util.constants import SOFTMAX_S3_REPLAYS_PREFIX

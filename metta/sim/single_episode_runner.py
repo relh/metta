@@ -7,7 +7,8 @@ import tempfile
 import uuid
 from uuid import UUID
 
-from alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
+from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
+
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestUpdate
 from metta.common.auth.auth_config_reader_writer import observatory_auth_config

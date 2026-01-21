@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
+from metta_alo.scoring import Scorer, WeightedScorer
 from pydantic import BaseModel
 from sqlmodel import select
-
-from alo.scoring import Scorer, WeightedScorer
 
 # pyright: reportArgumentType=false
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer

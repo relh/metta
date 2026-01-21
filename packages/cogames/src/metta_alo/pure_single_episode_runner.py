@@ -62,7 +62,7 @@ class PureSingleEpisodeResult(BaseModel):
 
 
 if __name__ == "__main__":
-    from alo.rollout import run_sandboxed_episode
+    from metta_alo.rollout import run_sandboxed_episode
 
     with open(sys.argv[1]) as f:
         args = json.load(f)

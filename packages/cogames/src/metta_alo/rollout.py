@@ -9,7 +9,7 @@ from typing import Callable, Optional, Protocol, Sequence
 import numpy as np
 from pydantic import BaseModel, Field
 
-from alo.pure_single_episode_runner import (
+from metta_alo.pure_single_episode_runner import (
     PureSingleEpisodeJob,
     PureSingleEpisodeResult,
     _validate_assignments,

@@ -5,7 +5,8 @@ import os
 import uuid
 from pathlib import Path
 
-from alo.policy import parse_policy_identifier
+from metta_alo.policy import parse_policy_identifier
+
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.metta_repo import PolicyVersionWithName
 from metta.common.util.constants import PROD_STATS_SERVER_URI

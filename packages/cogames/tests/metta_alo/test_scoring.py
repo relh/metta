@@ -2,17 +2,18 @@ from typing import Optional
 
 import numpy as np
 import pytest
-
-from alo.rollout import write_replay
-from alo.scoring import (
+from metta_alo.rollout import write_replay
+from metta_alo.scoring import (
     VorScenarioSummary,
     VorTotals,
     allocate_counts,
     summarize_vor_scenario,
 )
-from mettagrid.simulator.multi_episode.rollout import EpisodeRolloutResult, MultiEpisodeRolloutResult
 
-EMPTY_STATS: dict[str, object] = {"game": {}, "agent": []}
+from mettagrid.simulator.multi_episode.rollout import EpisodeRolloutResult, MultiEpisodeRolloutResult
+from mettagrid.types import EpisodeStats
+
+EMPTY_STATS: EpisodeStats = {"game": {}, "agent": []}
 
 
 def _episode(assignments: list[int], rewards: list[float]) -> EpisodeRolloutResult:

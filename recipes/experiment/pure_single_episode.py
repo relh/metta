@@ -4,7 +4,8 @@ import subprocess
 import tempfile
 import uuid
 
-from alo.rollout import PureSingleEpisodeJob
+from metta_alo.rollout import PureSingleEpisodeJob
+
 from cogames.cogs_vs_clips.missions import Machina1OpenWorldSharedRewardsMission
 from metta.app_backend.clients.base_client import get_machine_token
 from metta.app_backend.clients.stats_client import StatsClient

@@ -7,15 +7,14 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
+from metta_alo.rollout import SingleEpisodeJob
+from metta_alo.scoring import compute_average_scores_per_agent
 from opentelemetry import trace as otel_trace
 from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
-
-from alo.rollout import SingleEpisodeJob
-from alo.scoring import compute_average_scores_per_agent
 
 # pyright: reportArgumentType=false
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
