@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import uuid
 
@@ -22,7 +23,7 @@ class PureSingleEpisodeTool(Tool):
                 json.dumps({"job": self.job.model_dump(), "device": "cpu", "allow_network": True}).encode("utf-8")
             )
             temp_file.flush()
-            subprocess.run(["python", "-m", "alo.rollout", temp_file.name], check=True)
+            subprocess.run([sys.executable, "-m", "metta_alo.rollout", temp_file.name], check=True)
         return 0
 
 
@@ -58,7 +59,7 @@ class SingleEpisodeTool(Tool):
         env = os.environ.copy()
         env["BACKEND_URL"] = self.stats_server_uri
         env["MACHINE_TOKEN"] = machine_token or ""
-        subprocess.run(["python", "-m", "metta.sim.single_episode_runner", str(self.job_id)], check=True, env=env)
+        subprocess.run([sys.executable, "-m", "metta.sim.single_episode_runner", str(self.job_id)], check=True, env=env)
         return 0
 
 
