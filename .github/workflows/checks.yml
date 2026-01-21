@@ -110,7 +110,7 @@ jobs:
         id: check_py_files
         uses: ./.github/actions/file-changes
         with:
-          patterns: "**/*.py,**/*.cpp,**/*.hpp,**/*.toml,**/conftest.py,**/pyproject.toml,**/pytest.ini,.github/workflows/*.yml"
+          patterns: "**/*.py,**/*.cpp,**/*.hpp,**/*.toml,**/conftest.py,**/pyproject.toml,**/pytest.ini,.github/workflows/*.yml,**/BUILD,**/BUILD.bazel,**/*.bzl,**/MODULE.bazel,**/.bazelrc,.bazelversion"
           specific_files: "uv.lock,README.md"
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
