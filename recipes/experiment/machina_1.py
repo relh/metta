@@ -32,17 +32,13 @@ def train(
         eval_variants = variants
 
     if teacher is None and use_default_teacher:
-        bc_steps = 2_500_000_000
-        anneal_steps = 3_000_000_000
         teacher = TeacherConfig(
+            mode="supervisor",
             policy_uri="metta://policy/dinky:v15",
-            mode="sliced_cloner",
-            steps=bc_steps + anneal_steps,
+            steps=5_500_000_000,
             teacher_led_proportion=0.0,
-            student_led_proportion=1.0,
-            anneal_start_step=bc_steps,
+            anneal_start_step=2_500_000_000,
             ppo_begin_step=0,
-            kwargs={"restrict_ppo_to_ppo_mask": False},
         )
 
     tt = train_single_mission(
