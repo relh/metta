@@ -44,8 +44,9 @@ def log_rich_progress(
     rollout_pct: float,
     stats_pct: float,
     run_name: str | None,
-    heart_value: float,
-    heart_rate: float | None,
+    metric_label: str,
+    metric_value: float,
+    metric_rate: float | None,
     epoch_time: float,
 ) -> None:
     """Render training progress in a rich table."""
@@ -65,11 +66,11 @@ def log_rich_progress(
     progress_pct = (agent_step / total_timesteps) * 100 if total_timesteps > 0 else 0.0
     sps_display = f"{steps_per_sec:,.0f} SPS"
     epoch_time_display = _format_epoch_time(epoch_time)
-    heart_display = f"heart.c {heart_value:.3f}"
-    if heart_rate is not None:
-        heart_display += f" ({heart_rate:.3f}/s)"
+    metric_display = f"{metric_label} {metric_value:.3f}"
+    if metric_rate is not None:
+        metric_display += f" ({metric_rate:.3f}/s)"
 
-    values_display = f"{epoch_time_display} | {heart_display}"
+    values_display = f"{epoch_time_display} | {metric_display}"
 
     table.add_row(
         "Steps",
@@ -97,6 +98,7 @@ def log_training_progress(
     stats_time: float,
     run_name: str | None,
     metrics: Dict[str, float],
+    metric_key: str = "env_game/assembler.heart.created",
 ) -> None:
     """Log training progress with timing breakdown and optional metrics."""
 
@@ -109,10 +111,13 @@ def log_training_progress(
     else:
         steps_per_sec = train_pct = rollout_pct = stats_pct = 0.0
 
-    heart_value = metrics.get(
-        "env_game/assembler.heart.created.avg", metrics.get("env_game/assembler.heart.created", 0.0)
-    )
-    heart_rate = metrics.get("env_game/assembler.heart.created.rate")
+    metric_value = metrics.get(f"{metric_key}.avg", metrics.get(metric_key, 0.0))
+    metric_rate = metrics.get(f"{metric_key}.rate")
+    if metric_key == "env_game/assembler.heart.created":
+        metric_label_rich = "heart.c"
+        metric_label_plain = "heart.created"
+    else:
+        metric_label_rich = metric_label_plain = metric_key.split("/")[-1]
 
     if should_use_rich_console():
         log_rich_progress(
@@ -124,8 +129,9 @@ def log_training_progress(
             rollout_pct=rollout_pct,
             stats_pct=stats_pct,
             run_name=run_name,
-            heart_value=heart_value,
-            heart_rate=heart_rate,
+            metric_label=metric_label_rich,
+            metric_value=metric_value,
+            metric_rate=metric_rate,
             epoch_time=total_time,
         )
     else:
@@ -142,9 +148,9 @@ def log_training_progress(
             f"train {train_pct:.0f}% _ rollout {rollout_pct:.0f}% _ stats {stats_pct:.0f}% _ "
             f"{epoch_time_str}"
         )
-        segment = f"heart.created {heart_value:.3f}"
-        if heart_rate is not None:
-            segment += f" ({heart_rate:.3f}/s)"
+        segment = f"{metric_label_plain} {metric_value:.3f}"
+        if metric_rate is not None:
+            segment += f" ({metric_rate:.3f}/s)"
         message = f"{message} _ {segment}"
         logger.info(message)
 
@@ -175,6 +181,12 @@ class ProgressLogger(TrainerComponent):
     def on_epoch_end(self, epoch: int) -> None:  # type: ignore[override]
         ctx = self.context
         metrics = self._latest_metrics()
+        stats_reporter = getattr(ctx, "stats_reporter", None)
+        metric_key = getattr(
+            getattr(stats_reporter, "config", None),
+            "progress_metric",
+            "env_game/assembler.heart.created",
+        )
         log_training_progress(
             epoch=ctx.epoch,
             agent_step=ctx.agent_step,
@@ -185,6 +197,7 @@ class ProgressLogger(TrainerComponent):
             stats_time=ctx.stopwatch.get_last_elapsed("_process_stats"),
             run_name=ctx.run_name,
             metrics=metrics,
+            metric_key=metric_key,
         )
         self._previous_agent_step = ctx.agent_step
 

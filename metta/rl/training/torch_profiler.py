@@ -127,7 +127,11 @@ class TorchProfileSession:
                         f'<a href="{upload_url}">Torch Trace (Epoch {self._start_epoch})</a>'
                     )
                 }
-                self._wandb_run.log(link_summary)
+                run_step = getattr(self._wandb_run, "step", None)
+                if run_step is None:
+                    self._wandb_run.log(link_summary)
+                else:
+                    self._wandb_run.log(link_summary, step=int(run_step))
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

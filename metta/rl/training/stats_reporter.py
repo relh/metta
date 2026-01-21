@@ -104,6 +104,10 @@ class StatsReporterConfig(Config):
         default_factory=lambda: ("env_game/assembler.heart.created",),
         description="Environment metrics that should be logged as 0 when missing.",
     )
+    progress_metric: str = Field(
+        default="env_game/assembler.heart.created",
+        description="Metric key to show in CLI progress output.",
+    )
 
 
 class StatsReporterState(Config):
@@ -164,6 +168,10 @@ class StatsReporter(TrainerComponent):
         self._state = StatsReporterState()
         self._latest_payload: dict[str, float] | None = None
         self._state.rolling_stats = {}
+
+    @property
+    def config(self) -> StatsReporterConfig:
+        return self._config
 
     @property
     def wandb_run(self) -> WandbRun | None:

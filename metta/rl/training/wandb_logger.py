@@ -54,7 +54,7 @@ class WandbLogger(TrainerComponent):
         for k, v in elapsed.items():
             self._prev_elapsed[k] = float(v)
 
-        self._wandb_run.log(payload)
+        self._wandb_run.log(payload, step=context.agent_step)
 
     def on_training_complete(self) -> None:  # noqa: D401
         self._log_status("completed")
