@@ -11,7 +11,7 @@ from safetensors.torch import save_file as save_safetensors_file
 from metta.rl.system_config import SystemConfig
 from metta.rl.training.optimizer import is_schedulefree_optimizer
 from metta.tools.utils.auto_config import PolicyStorageDecision, auto_policy_storage_decision
-from mettagrid.policy.submission import POLICY_SPEC_FILENAME, SubmissionPolicySpec
+from mettagrid.policy.submission import POLICY_SPEC_FILENAME, SubmissionPolicySpec, write_submission_policy_spec
 from mettagrid.util.file import local_copy, write_file
 from mettagrid.util.uri_resolvers.schemes import resolve_uri
 
@@ -49,15 +49,7 @@ def write_checkpoint_bundle(
         data_path="weights.safetensors",
         init_kwargs={"architecture_spec": architecture_spec, "device": "cpu"},
     )
-    with tempfile.NamedTemporaryFile(
-        dir=checkpoint_dir,
-        prefix=f".{POLICY_SPEC_FILENAME}.",
-        suffix=".tmp",
-        delete=False,
-    ) as tmp:
-        tmp_path = Path(tmp.name)
-        tmp.write(spec.model_dump_json().encode("utf-8"))
-    tmp_path.replace(checkpoint_dir / POLICY_SPEC_FILENAME)
+    write_submission_policy_spec(checkpoint_dir / POLICY_SPEC_FILENAME, spec)
 
 
 class CheckpointManager:
