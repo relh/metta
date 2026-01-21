@@ -76,6 +76,7 @@ class Checkpointer(TrainerComponent):
                 payload = self._distributed.broadcast_from_master(payload)
                 class_path, init_kwargs, state_dict = payload
                 init_kwargs = dict(init_kwargs)
+                self._set_architecture_from_checkpoint(class_path, init_kwargs)
                 if "device" in init_kwargs:
                     init_kwargs["device"] = str(load_device)
                 policy_class = load_symbol(class_path)
@@ -93,17 +94,23 @@ class Checkpointer(TrainerComponent):
                 return policy
 
         if candidate_uri:
-            policy = initialize_or_load_policy(
-                policy_env_info,
-                policy_spec_from_uri(candidate_uri),
-                device_override=str(load_device),
-            )
+            policy_spec = policy_spec_from_uri(candidate_uri)
+            self._set_architecture_from_checkpoint(policy_spec.class_path, policy_spec.init_kwargs or {})
+            policy = initialize_or_load_policy(policy_env_info, policy_spec, device_override=str(load_device))
             self._latest_policy_uri = resolve_uri(candidate_uri).canonical
             logger.info("Loaded policy from %s", candidate_uri)
             return policy
 
         logger.info("Creating new policy for training run")
         return self._policy_architecture.make_policy(policy_env_info)
+
+    def _set_architecture_from_checkpoint(self, class_path: str, init_kwargs: dict[str, object]) -> None:
+        if class_path != "metta.agent.policy.CheckpointPolicy":
+            return
+        architecture_spec = init_kwargs.get("architecture_spec")
+        if not isinstance(architecture_spec, str) or not architecture_spec:
+            raise ValueError("Checkpoint policy spec is missing architecture_spec.")
+        self._policy_architecture = PolicyArchitecture.from_spec(architecture_spec)
 
     def get_latest_policy_uri(self) -> Optional[str]:
         return self._checkpoint_manager.get_latest_checkpoint() or self._latest_policy_uri
