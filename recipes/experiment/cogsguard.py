@@ -6,9 +6,10 @@ This recipe is automatically validated in CI and release processes.
 
 from __future__ import annotations
 
-from typing import Literal, Optional, Sequence
+from typing import Optional, Sequence
 
 import metta.cogworks.curriculum as cc
+from cogames.cogs_vs_clips.cogsguard_reward_variants import apply_reward_variants
 from cogames.cogs_vs_clips.missions import make_cogsguard_mission
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -25,105 +26,26 @@ from metta.tools.eval import EvaluateTool
 from metta.tools.play import PlayTool
 from metta.tools.replay import ReplayTool
 from metta.tools.train import TrainTool
-from mettagrid.config.mettagrid_config import AgentRewards, MettaGridConfig
-
-RewardPreset = Literal["credit", "milestones", "objective"]
-
-
-def _reward_preset_objective(*, max_steps: int) -> AgentRewards:
-    return AgentRewards(
-        collective_stats={
-            "aligned.junction.held": 1.0 / max_steps,
-        },
-    )
-
-
-def _reward_preset_milestones(*, max_steps: int) -> AgentRewards:
-    rewards = _reward_preset_objective(max_steps=max_steps)
-
-    w_heart = 0.02
-    cap_heart = 0.2
-    w_align_gear = 0.05
-    cap_align_gear = 0.1
-    w_scramble_gear = 0.05
-    cap_scramble_gear = 0.1
-
-    rewards.stats = {
-        "heart.gained": w_heart,
-        "aligner.gained": w_align_gear,
-        "scrambler.gained": w_scramble_gear,
-    }
-    rewards.stats_max = {
-        "heart.gained": cap_heart,
-        "aligner.gained": cap_align_gear,
-        "scrambler.gained": cap_scramble_gear,
-    }
-
-    w_deposit = 0.0005
-    cap_deposit = 0.02
-    for element in ["carbon", "oxygen", "germanium", "silicon"]:
-        stat = f"collective.{element}.deposited"
-        rewards.collective_stats[stat] = w_deposit
-        rewards.collective_stats_max[stat] = cap_deposit
-
-    return rewards
-
-
-def _reward_preset_credit(*, max_steps: int) -> AgentRewards:
-    rewards = _reward_preset_milestones(max_steps=max_steps)
-
-    w_scramble_act = 0.2
-    cap_scramble_act = 0.2
-    w_align_act = 0.2
-    cap_align_act = 0.2
-
-    rewards.stats.update(
-        {
-            "junction.scrambled_by_agent": w_scramble_act,
-            "junction.aligned_by_agent": w_align_act,
-        }
-    )
-    rewards.stats_max.update(
-        {
-            "junction.scrambled_by_agent": cap_scramble_act,
-            "junction.aligned_by_agent": cap_align_act,
-        }
-    )
-
-    return rewards
-
-
-def _apply_reward_preset(env: MettaGridConfig, *, reward_preset: RewardPreset) -> None:
-    if reward_preset == "objective":
-        return
-
-    max_steps = env.game.max_steps
-    if reward_preset == "milestones":
-        env.game.agent.rewards = _reward_preset_milestones(max_steps=max_steps)
-        return
-    if reward_preset == "credit":
-        env.game.agent.rewards = _reward_preset_credit(max_steps=max_steps)
-        return
-    raise ValueError(f"Unknown reward_preset: {reward_preset}")
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
 def make_env(
     num_agents: int = 10,
     max_steps: int = 1000,
-    reward_preset: RewardPreset = "objective",
+    variants: str | Sequence[str] | None = None,
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
     env = make_cogsguard_mission(num_agents, max_steps).make_env()
-    _apply_reward_preset(env, reward_preset=reward_preset)
+    apply_reward_variants(env, variants=variants)
     return env
 
 
 def make_curriculum(
     env: Optional[MettaGridConfig] = None,
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
-    reward_preset: RewardPreset = "objective",
+    variants: str | Sequence[str] | None = None,
 ) -> CurriculumConfig:
-    env = env or make_env(reward_preset=reward_preset)
+    env = env or make_env(variants=variants)
 
     tasks = cc.bucketed(env)
 
@@ -152,9 +74,9 @@ def make_curriculum(
 
 def simulations(
     env: Optional[MettaGridConfig] = None,
-    reward_preset: RewardPreset = "objective",
+    variants: str | Sequence[str] | None = None,
 ) -> list[SimulationConfig]:
-    env = env or make_env(reward_preset=reward_preset)
+    env = env or make_env(variants=variants)
 
     return [
         SimulationConfig(suite="cogsguard", name="basic", env=env),
@@ -165,13 +87,13 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    reward_preset: RewardPreset = "objective",
+    variants: str | Sequence[str] | None = None,
 ) -> TrainTool:
     return train_single_mission(
         curriculum=curriculum,
         policy_architecture=policy_architecture,
         teacher=teacher,
-        reward_preset=reward_preset,
+        variants=variants,
     )
 
 
@@ -179,14 +101,14 @@ def train_single_mission(
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    reward_preset: RewardPreset = "objective",
+    variants: str | Sequence[str] | None = None,
 ) -> TrainTool:
     from metta.agent.policies.vit import ViTDefaultConfig
 
-    resolved_curriculum = curriculum or make_curriculum(reward_preset=reward_preset)
+    resolved_curriculum = curriculum or make_curriculum(variants=variants)
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
-    evaluator_cfg = EvaluatorConfig(simulations=simulations(reward_preset=reward_preset))
+    evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants))
     scheduler = None
 
     if teacher and teacher.enabled:
@@ -217,7 +139,7 @@ def train_single_mission(
 
 def evaluate(
     policy_uris: str | Sequence[str] | None = None,
-    reward_preset: RewardPreset = "objective",
+    variants: str | Sequence[str] | None = None,
 ) -> EvaluateTool:
     resolved_policy_uris: str | list[str]
     if policy_uris is None:
@@ -227,16 +149,16 @@ def evaluate(
     else:
         resolved_policy_uris = list(policy_uris)
     return EvaluateTool(
-        simulations=simulations(reward_preset=reward_preset),
+        simulations=simulations(variants=variants),
         policy_uris=resolved_policy_uris,
     )
 
 
-def play(policy_uri: Optional[str] = None) -> PlayTool:
+def play(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> PlayTool:
     """Interactive play with a policy."""
-    return PlayTool(sim=simulations()[0], policy_uri=policy_uri)
+    return PlayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
 
 
-def replay(policy_uri: Optional[str] = None) -> ReplayTool:
+def replay(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> ReplayTool:
     """Generate replay from a policy."""
-    return ReplayTool(sim=simulations()[0], policy_uri=policy_uri)
+    return ReplayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
