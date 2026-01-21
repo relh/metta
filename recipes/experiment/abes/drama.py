@@ -97,7 +97,7 @@ def train(
     _ensure_cuda_extras_installed()
 
     try:
-        from metta.agent.components.drama import DramaWorldModelConfig
+        from metta.agent.components.drama.config import DramaWorldModelConfig
         from metta.agent.policies.drama_policy import DramaPolicyConfig
     except ModuleNotFoundError as exc:
         if exc.name == "mamba_ssm":

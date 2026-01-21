@@ -13,6 +13,9 @@ urls = { Homepage = "https://daveey.github.io", Repository = "https://github.com
 
 dependencies = ["pufferlib-core", "einops>=0.7.0"]
 
+[project.optional-dependencies]
+mamba = ["mamba-ssm"]
+
 [dependency-groups]
 dev = [
   "pyright>=1.1.401",

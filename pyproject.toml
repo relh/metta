@@ -86,6 +86,7 @@ license = { text = "MIT" }
 
 [project.optional-dependencies]
 tribal-village = ["tribal-village"]
+mamba = ["mamba-ssm"]
 
 [dependency-groups]
 testing = [
