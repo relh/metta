@@ -83,7 +83,7 @@ def main():
                 [
                     sys.executable,
                     "-m",
-                    "alo.pure_single_episode_runner",
+                    "metta_alo.pure_single_episode_runner",
                     temp_file.name,
                 ],
                 capture_output=True,
@@ -96,7 +96,8 @@ def main():
                 error_output = result.stderr or result.stdout or "No output"
                 if len(error_output) > 200000:
                     error_output = error_output[:200000] + "\n... (truncated)"
-                raise RuntimeError(f"alo.pure_single_episode_runner failed (exit {result.returncode}):\n{error_output}")
+                msg = f"metta_alo.pure_single_episode_runner failed (exit {result.returncode}):\n{error_output}"
+                raise RuntimeError(msg)
 
         for src, dest, content_type in [
             (local_replay_uri, job.replay_uri, "application/x-compress"),

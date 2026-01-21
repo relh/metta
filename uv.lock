@@ -2098,6 +2098,21 @@ wheels = [
 ]
 
 [[package]]
+name = "mamba-ssm"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "ninja" },
+    { name = "packaging" },
+    { name = "setuptools" },
+    { name = "torch" },
+    { name = "transformers" },
+    { name = "triton" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/54/69/a87f06d9dba78c041adb81f2228e978aab179477c64f1a210c0fe0d63e8d/mamba_ssm-2.3.0.tar.gz", hash = "sha256:8294e12125f76021e4e190f4137e84a84935920eeda5d0037a6917524456b303", size = 121116, upload-time = "2026-01-12T17:07:22.152Z" }
+
+[[package]]
 name = "marimo"
 version = "0.15.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2316,6 +2331,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+mamba = [
+    { name = "mamba-ssm" },
+]
 tribal-village = [
     { name = "tribal-village" },
 ]
@@ -2401,6 +2419,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "imageio", specifier = ">=2.37.0" },
     { name = "jmespath", specifier = ">=1.0.1" },
+    { name = "mamba-ssm", marker = "extra == 'mamba'" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "metta-agent", editable = "agent" },
     { name = "metta-app-backend", editable = "app_backend" },
@@ -2448,7 +2467,7 @@ requires-dist = [
     { name = "wandb", specifier = ">=0.23.0" },
     { name = "wandb-core", specifier = ">=0.17.0b11" },
 ]
-provides-extras = ["tribal-village"]
+provides-extras = ["tribal-village", "mamba"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2512,6 +2531,11 @@ dependencies = [
     { name = "pufferlib-core" },
 ]
 
+[package.optional-dependencies]
+mamba = [
+    { name = "mamba-ssm" },
+]
+
 [package.dev-dependencies]
 dev = [
     { name = "pyright" },
@@ -2525,8 +2549,10 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "einops", specifier = ">=0.7.0" },
+    { name = "mamba-ssm", marker = "extra == 'mamba'" },
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
 ]
+provides-extras = ["mamba"]
 
 [package.metadata.requires-dev]
 dev = [
