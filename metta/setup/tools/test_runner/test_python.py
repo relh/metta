@@ -4,6 +4,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Iterable, Sequence
 
@@ -19,6 +20,24 @@ from metta.setup.tools.test_runner.summary import (
     write_slow_tests_github_summary,
 )
 from metta.setup.utils import error, info
+
+
+@lru_cache(maxsize=1)
+def _detect_pytest_parallelism() -> str:
+    """Detect appropriate pytest-xdist parallelism level.
+
+    Returns "auto" for native execution, or a reduced count for emulated environments
+    where high parallelism causes timeouts due to QEMU overhead.
+    """
+    try:
+        cpuinfo = Path("/proc/cpuinfo").read_text()
+        # OrbStack/Apple Virtualization running x86 on ARM shows "VirtualApple"
+        if "VirtualApple" in cpuinfo:
+            # Under emulation, limit to 4 workers to avoid timeouts
+            return "4"
+    except (FileNotFoundError, PermissionError):
+        pass
+    return "auto"
 
 
 class Package(BaseModel):
@@ -232,7 +251,8 @@ def run(
             exit_code = max((result.returncode for result in results), default=0)
         raise typer.Exit(exit_code)
 
-    cmd.extend(["-n", "auto"])
+    parallelism = _detect_pytest_parallelism()
+    cmd.extend(["-n", parallelism])
 
     # Apply benchmark filtering for non-CI mode
     if run_benchmarks and not run_tests:

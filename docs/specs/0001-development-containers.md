@@ -32,32 +32,47 @@ multiple failure modes that can leave developers stuck with a broken environment
 - [ ] **Reproducible debugging**: "Works in the devcontainer" becomes a reliable baseline for reproducing issues
 - [ ] **CI/CD parity**: Local development environment matches the build pipeline, catching issues before they hit CI
 - [ ] **Remote dev containers**: enables remote container development when different hardware is necessary e.g. GPU
+- [ ] **Make devcontainer for cogs**: maybe build and host the docker image as part of CD --- with uv, is this
+      necessary?
 
-#### 2. All metta commands work:
+#### 2. Enable appropriate metta commands:
 
-- [ ] configure - Configure Metta settings
-- [ ] install - Install or update components
-- [ ] status - Show status of components
-- [ ] run - Run component-specific commands
-- [ ] clean - Clean build artifacts and temporary files
-- [ ] tool - Run a tool from the tools/ directory
-- [ ] shell - Start an IPython shell with Metta imports
-- [ ] go - Navigate to a Softmax Home shortcut
-- [ ] pr-feed - Show PRs that touch a specific path
-- [ ] build-dockerfiles - Build all repository Dockerfiles
-- [ ] report-env-details - Report environment details including UV project directory
-- [ ] clip - Copy codebase to clipboard. Pass through any codeclip flags
-- [ ] gridworks - Start the Gridworks web UI
-- [ ] run-monitor - Monitor training runs
-- [ ] ci - Run CI checks locally
-- [ ] publish - Create and push a release tag for a package
-- [ ] observatory - Observatory local development
-- [ ] book - Interactive marimo notebook commands
-- [ ] codebase - Codebase management tools
-- [ ] pytest - Python test runner
-- [ ] cpptest - MettaGrid C++ test runner
-- [ ] nimtest - MettaGrid Nim test runner
-- [ ] lint - Code formatters
+#### Must haves
+
+- [ ] user config shell other tools shell customizations
+- [ ] install - Install or update components logs into services add llm login?
+- [ ] observatory - Observatory local development run tournament locally will need port forwarding
+- [ ] pytest - Python test runner CI calls
+- [ ] cpptest - MettaGrid C++ test runner CI calls
+- [ ] nimtest - MettaGrid Nim test runner CI calls
+- [ ] codebase - Codebase management tools generate protobuf generate mermaid
+- [ ] lint - Code formatters CI calls
+- [ ] ci - Run CI checks locally stages - get in merge queue CI - push to main (not part of ci) CD -- build containers,
+      restart kub (web site, tourney) Training
+- [ ] run - Run component-specific commands used by git hooks and filter repo support git hooks
+- [ ] configure - Configure Metta settings githooks
+
+#### Lower priority
+
+- [ ] clean - Clean build artifacts and temporary files likely keep
+- [ ] publish - Create and push a release tag for a package just sets a github tag, which triggers stuff
+- [ ] gridworks - Start the Gridworks web UI slava uses?
+- [ ] run-monitor - Monitor training runs used
+
+#### Investigate deprecation
+
+- [ ] status - Show status of components just have install?
+- [ ] pr-feed - Show PRs that touch a specific path not used?
+- [ ] build-dockerfiles - Build all repository Dockerfiles not used?
+
+#### Deprecate
+
+- [ ] tool - Run a tool from the tools/ directory toss
+- [ ] shell - Start an IPython shell with Metta imports toss
+- [ ] go - Navigate to a Softmax Home shortcut toss
+- [ ] report-env-details - Report environment details including UV project directory not used
+- [ ] clip - Copy codebase to clipboard. Pass through any codeclip flags not used
+- [ ] book - Interactive marimo notebook commands toss
 
 #### 3. Preserve what works
 
@@ -89,6 +104,8 @@ What is explicitly out of scope:
 4. Some will require multiple containers, and there is some question on best way to approach
 5. We want to make devcontainers part of the CI/CD verification process so that we know that devcontainers stay
    functioning - unclear what the minimal test to verify so that we aren't greatly increasing the checks time
+6. We want to avoid having to log into various external services (Claude, etc.) when you start a container, so we should
+   probably map relevant local files into the container
 
 ## References
 

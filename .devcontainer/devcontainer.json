@@ -1,0 +1,29 @@
+{
+  "name": "Metta Dev",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "options": ["--platform=linux/amd64"]
+  },
+  "runArgs": ["--platform=linux/amd64"],
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "initializeCommand": ".devcontainer/hostsetup.sh",
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/gh,target=/root/.config/gh,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/gcloud,target=/root/.config/gcloud,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/wandb,target=/root/.config/wandb,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/graphite,target=/root/.config/graphite,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.config/devdotfiles,target=/root/.config/devdotfiles,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.netrc,target=/root/.netrc,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.sky,target=/root/.sky,type=bind,consistency=cached"
+  ],
+  "postCreateCommand": ".devcontainer/usersetup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  }
+}
