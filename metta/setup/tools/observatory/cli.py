@@ -207,6 +207,7 @@ def frontend(
 
     if backend == "local":
         env["OBSERVATORY_API_URL"] = LOCAL_BACKEND_URL
+        env["DEV_AUTH_TOKEN"] = LOCAL_MACHINE_TOKEN
         info(f"Connecting to local backend at {LOCAL_BACKEND_URL}")
     else:
         env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI

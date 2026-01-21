@@ -373,11 +373,18 @@ export class Repo {
 
   private async handleErrorResponse(response: Response): Promise<never> {
     if (response.status === 401) {
-      redirect('/') // initialize login again - token is invalid
+      if (typeof window === 'undefined') {
+        redirect('/')
+      } else {
+        window.location.href = '/'
+        throw new Error('Session expired, redirecting to login...')
+      }
     }
     if (response.status === 404) {
-      // TODO - is this too much? bugs can cause 404 on the entire page because of some specific resource
-      notFound()
+      if (typeof window === 'undefined') {
+        notFound()
+      }
+      throw new Error('Not found')
     }
     let detail: string | undefined
     try {

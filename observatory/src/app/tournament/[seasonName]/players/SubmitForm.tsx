@@ -112,6 +112,7 @@ export const SubmitForm: FC<{
       <div className="flex gap-3 items-end">
         <div className="flex-1">
           <AsyncSelect<PolicyOption>
+            instanceId="policy-select"
             value={selectedPolicy}
             onChange={setSelectedPolicy}
             loadOptions={loadPolicies}
@@ -127,6 +128,7 @@ export const SubmitForm: FC<{
         {selectedPolicy && versions.length > 0 && (
           <div className="w-28">
             <Select<VersionOption>
+              instanceId="version-select"
               value={selectedVersion}
               onChange={setSelectedVersion}
               options={versions}
