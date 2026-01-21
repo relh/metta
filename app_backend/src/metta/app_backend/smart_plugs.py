@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from pathlib import Path
 from typing import Any, Optional
 
 import httpx
@@ -39,7 +38,7 @@ RATE_LIMIT_SECONDS = 1.0
 REQUEST_TIMEOUT_SECONDS = 10.0
 
 _config_cache: _SmartPlugConfig | None = None
-_config_mtime: float | None = None
+_config_payload: str | None = None
 
 
 class _RateLimiter:
@@ -76,19 +75,18 @@ def _parse_config(payload: Any) -> _SmartPlugConfig:
 
 
 def _get_config() -> _SmartPlugConfig:
-    global _config_cache, _config_mtime
+    global _config_cache, _config_payload
 
     if not settings.SMART_PLUGS_ENABLED:
         raise RuntimeError("Smart plugs are disabled")
 
-    if not settings.SMART_PLUGS_CONFIG_PATH:
-        raise RuntimeError("Smart plug config path is not configured")
+    payload = settings.SMART_PLUGS_CONFIG_JSON
+    if not payload:
+        raise RuntimeError("Smart plug config is not configured")
 
-    path = Path(settings.SMART_PLUGS_CONFIG_PATH).expanduser()
-    mtime = path.stat().st_mtime
-    if _config_cache is None or _config_mtime != mtime:
-        _config_cache = _parse_config(json.loads(path.read_text(encoding="utf-8")))
-        _config_mtime = mtime
+    if _config_cache is None or _config_payload != payload:
+        _config_cache = _parse_config(json.loads(payload))
+        _config_payload = payload
     return _config_cache
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from metta.setup.components.base import SetupModule
 from metta.setup.registry import register_module
@@ -10,7 +9,6 @@ from metta.setup.utils import info, success, warning
 from softmax.aws.secrets_manager import get_secretsmanager_secret
 
 DEFAULT_SECRET_NAME = "smart-plugs/founders-wing"
-DEFAULT_CONFIG_PATH = "~/.config/metta/smart_plugs.json"
 
 
 @register_module
@@ -34,14 +32,7 @@ class SmartPlugsSetup(SetupModule):
         }
 
     def check_installed(self) -> bool:
-        config_path = Path(DEFAULT_CONFIG_PATH).expanduser()
-        if not config_path.exists():
-            return False
-        try:
-            payload = json.loads(config_path.read_text(encoding="utf-8"))
-        except Exception:
-            return False
-        return isinstance(payload, dict) and "plugs" in payload
+        return bool(self.get_setting("config_json", None))
 
     def install(self, non_interactive: bool = False, force: bool = False) -> None:
         saved_settings = get_saved_settings()
@@ -50,8 +41,6 @@ class SmartPlugsSetup(SetupModule):
             return
 
         secret_name = self.get_setting("secret_name", DEFAULT_SECRET_NAME)
-        config_path = Path(DEFAULT_CONFIG_PATH).expanduser()
-
         info(f"Fetching smart plug config from Secrets Manager ({secret_name})...")
         secret = get_secretsmanager_secret(secret_name, require_exists=False)
         if not secret:
@@ -67,12 +56,8 @@ class SmartPlugsSetup(SetupModule):
             warning("Smart plug secret must be a JSON object with a 'plugs' list")
             return
 
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        config_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        try:
-            config_path.chmod(0o600)
-        except Exception:
-            warning(f"Could not set permissions on {config_path}")
+        config_json = json.dumps(payload)
+        self.set_setting("config_json", config_json)
 
-        success(f"Smart plug config written to {config_path}")
-        info("Observatory backend reads smart plug config from the default path.")
+        success("Smart plug config saved to ~/.metta/config.yaml")
+        info("Observatory backend reads smart plug config from SMART_PLUGS_CONFIG_JSON.")
