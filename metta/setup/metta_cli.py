@@ -238,7 +238,9 @@ def cmd_install(
     force: Annotated[bool, typer.Option("--force", help="Force reinstall")] = False,
     no_clean: Annotated[bool, typer.Option("--no-clean", help="Skip cleaning before install")] = False,
     non_interactive: Annotated[bool, typer.Option("--non-interactive", help="Non-interactive mode")] = False,
-    check_status: Annotated[bool, typer.Option("--check-status", help="Check status after installation")] = True,
+    check_status: Annotated[
+        bool, typer.Option("--check-status/--no-check-status", help="Check status after installation")
+    ] = True,
 ):
     if not no_clean:
         cmd_clean(force=force)

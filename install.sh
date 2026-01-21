@@ -2,6 +2,7 @@
 set -eu
 PROFILE_ADDITION=""
 NON_INTERACTIVE_ADDITION=""
+NO_CHECK_STATUS_ADDITION=""
 INSTALL_CUDA_EXTRAS="0"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -15,6 +16,10 @@ while [ $# -gt 0 ]; do
       ;;
     --non-interactive)
       NON_INTERACTIVE_ADDITION="--non-interactive"
+      shift
+      ;;
+    --no-check-status)
+      NO_CHECK_STATUS_ADDITION="--no-check-status"
       shift
       ;;
     --with-cuda-extras)
@@ -34,6 +39,7 @@ while [ $# -gt 0 ]; do
       echo "  --profile PROFILE      Set user profile (external, cloud, or softmax)"
       echo "                         If not specified, runs interactive configuration"
       echo "  --non-interactive      Run in non-interactive mode (no prompts)"
+      echo "  --no-check-status      Skip status check after installation"
       echo "  --with-cuda-extras     Install optional CUDA extras (flash-attn/causal-conv1d)"
       echo "  -h, --help             Show this help message"
       echo ""
@@ -92,7 +98,7 @@ echo "Installing bootstrap dependencies..."
 uv run --no-sync python -m metta.setup.components.system_packages.bootstrap $NON_INTERACTIVE_ADDITION
 
 uv sync
-uv run python -m metta.setup.metta_cli install $PROFILE_ADDITION $NON_INTERACTIVE_ADDITION
+uv run python -m metta.setup.metta_cli install $PROFILE_ADDITION $NON_INTERACTIVE_ADDITION $NO_CHECK_STATUS_ADDITION
 if [ "$INSTALL_CUDA_EXTRAS" = "1" ]; then
   if [ "$(uname -s)" = "Linux" ]; then
     uv run python scripts/install_cuda_extras.py --quiet || true
