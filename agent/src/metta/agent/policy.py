@@ -5,7 +5,7 @@ implement the required methods that MettaAgent depends on."""
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, ClassVar, List, Optional
+from typing import Any, ClassVar, List, Optional, cast
 
 import numpy as np
 import torch
@@ -341,7 +341,7 @@ class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=Pol
 
     def forward(self, td: TensorDict, action: Optional[torch.Tensor] = None) -> TensorDict:
         """Forward pass via DDP to preserve distributed hooks."""
-        return super().forward(td, action=action)
+        return cast(TensorDict, super().forward(td, action=action))
 
     def state_dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return self.module.state_dict(*args, **kwargs)
