@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 from pydantic import Field
@@ -41,6 +41,8 @@ class EERKickstarter(Loss):
        This corresponds to minimizing Expected Entropy Regularized objective.
     2. Auxiliary Distillation Loss: KL(pi_student || pi_teacher) minimization term.
     """
+
+    cfg: EERKickstarterConfig
 
     __slots__ = ("teacher_policy", "last_teacher_log_probs", "has_last_probs")
 
@@ -114,6 +116,7 @@ class EERKickstarter(Loss):
             self.has_last_probs[indices] = True
 
         # Store experience
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
@@ -125,8 +128,8 @@ class EERKickstarter(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
-        student_td = shared_loss_data["policy_td"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
+        student_td = cast(TensorDict, shared_loss_data["policy_td"])
 
         student_full_log_probs = student_td["full_log_probs"]
         teacher_full_log_probs = minibatch["teacher_full_log_probs"]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import torch
 from pydantic import Field
@@ -50,6 +50,8 @@ class StableLatentStateConfig(LossConfig):
 class StableLatentStateLoss(Loss):
     """Encourages latent representations to evolve smoothly over time."""
 
+    cfg: StableLatentStateConfig
+
     __slots__ = ("_target_key",)
 
     def __init__(
@@ -75,7 +77,10 @@ class StableLatentStateLoss(Loss):
 
     def policy_output_keys(self, policy_td: TensorDict | None = None) -> set[str]:
         key = self._target_key
-        return {key} if isinstance(key, str) else {key}
+        # Convert tuple keys to dot-separated string notation for the return set
+        if isinstance(key, str):
+            return {key}
+        return {".".join(key)}
 
     def run_train(
         self,
@@ -83,12 +88,14 @@ class StableLatentStateLoss(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        policy_td = shared_loss_data.get("policy_td")
-        minibatch = shared_loss_data.get("sampled_mb")
-        if policy_td is None:
+        policy_td_raw = shared_loss_data.get("policy_td")
+        minibatch_raw = shared_loss_data.get("sampled_mb")
+        if policy_td_raw is None:
             raise KeyError("StableLatentStateLoss requires 'policy_td' in shared_loss_data.")
-        if minibatch is None:
+        if minibatch_raw is None:
             raise KeyError("StableLatentStateLoss requires 'sampled_mb' in shared_loss_data.")
+        policy_td = cast(TensorDict, policy_td_raw)
+        minibatch = cast(TensorDict, minibatch_raw)
 
         latent = policy_td.get(self._target_key)
         if latent is None:

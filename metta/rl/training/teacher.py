@@ -190,6 +190,7 @@ def apply_teacher_phase(
 
     elif teacher_cfg.mode == "sliced_kickstarter":
         _require_policy_uri(teacher_cfg)
+        assert teacher_cfg.policy_uri is not None
         sliced_kick = losses.sliced_kickstarter
         sliced_kick.enabled = True
         sliced_kick.teacher_uri = teacher_cfg.policy_uri
@@ -209,6 +210,7 @@ def apply_teacher_phase(
 
     elif teacher_cfg.mode == "eer_kickstarter":
         _require_policy_uri(teacher_cfg)
+        assert teacher_cfg.policy_uri is not None
         eer_kick = losses.eer_kickstarter
         eer_kick.enabled = True
         eer_kick.teacher_uri = teacher_cfg.policy_uri
@@ -251,6 +253,7 @@ def apply_teacher_phase(
             )
     elif teacher_cfg.mode == "kickstarter":
         _require_policy_uri(teacher_cfg)
+        assert teacher_cfg.policy_uri is not None
         ks = losses.kickstarter
         ks.enabled = True
         ks.teacher_uri = teacher_cfg.policy_uri
@@ -285,6 +288,7 @@ def apply_teacher_phase(
 
     elif teacher_cfg.mode == "logit_kickstarter":
         _require_policy_uri(teacher_cfg)
+        assert teacher_cfg.policy_uri is not None
         logit = losses.logit_kickstarter
         logit.enabled = True
         logit.teacher_uri = teacher_cfg.policy_uri

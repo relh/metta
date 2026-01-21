@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import torch
@@ -55,6 +55,8 @@ class GRPO(Loss):
     sampled responses for each state/prompt.
     """
 
+    cfg: GRPOConfig
+
     __slots__ = (
         "advantages",
         "burn_in_steps",
@@ -73,9 +75,9 @@ class GRPO(Loss):
     ) -> None:
         super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
         self.advantages = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-        self.burn_in_steps = 0
+        self.burn_in_steps: int = 0
         if hasattr(self.policy, "burn_in_steps"):
-            self.burn_in_steps = self.policy.burn_in_steps
+            self.burn_in_steps = cast(int, self.policy.burn_in_steps)
         self.burn_in_steps_iter = 0
         self.last_action = None
         self.register_state_attr("burn_in_steps_iter")
@@ -107,6 +109,7 @@ class GRPO(Loss):
         env_slice = self._training_env_id(
             context, error="ComponentContext.training_env_id is required for GRPO rollout"
         )
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
         return
@@ -118,6 +121,7 @@ class GRPO(Loss):
         self, shared_loss_data: TensorDict, context: ComponentContext, mb_idx: int
     ) -> tuple[Tensor, TensorDict, bool]:
         """GRPO training loop with group-based advantage estimation."""
+        assert self.replay is not None
         config = self.cfg
         stop_update_epoch = False
         self.policy.reset_memory()
@@ -136,14 +140,14 @@ class GRPO(Loss):
             shared_loss_data["advantages"] = self.replay.buffer["advantages"][indices]
 
         loss = self._process_minibatch_update(
-            minibatch=shared_loss_data["sampled_mb"],
-            policy_td=shared_loss_data["policy_td"],
+            minibatch=cast(TensorDict, shared_loss_data["sampled_mb"]),
+            policy_td=cast(TensorDict, shared_loss_data["policy_td"]),
             indices=shared_loss_data["indices"][:, 0],
         )
 
         return loss, shared_loss_data, stop_update_epoch
 
-    def on_train_phase_end(self, context: ComponentContext) -> None:
+    def on_train_phase_end(self, context: ComponentContext | None = None) -> None:
         """Track metrics at the end of training phase."""
         pass
 
@@ -154,6 +158,7 @@ class GRPO(Loss):
         discounted return against the mean return of a group of trajectories.
         This eliminates the need for a value network.
         """
+        assert self.replay is not None
         cfg = self.cfg
         with torch.no_grad():
             # Compute discounted returns for all trajectories

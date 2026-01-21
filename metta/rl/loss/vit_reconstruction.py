@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, cast
 
 import torch
 import torch.nn as nn
@@ -45,6 +45,8 @@ class ViTReconstructionLossConfig(LossConfig):
 
 
 class ViTReconstructionDecoder(nn.Module):
+    fourier_table: Tensor
+
     def __init__(
         self,
         cfg: ViTReconstructionLossConfig,
@@ -155,6 +157,8 @@ class ViTReconstructionLoss(Loss):
     Reconstructs the input sparse observations from the latent representation.
     """
 
+    cfg: ViTReconstructionLossConfig
+
     def __init__(
         self,
         policy: Policy,
@@ -165,7 +169,6 @@ class ViTReconstructionLoss(Loss):
         cfg: ViTReconstructionLossConfig,
     ) -> None:
         super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
-        self.cfg: ViTReconstructionLossConfig = cfg  # type: ignore
         self.decoder = None
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
@@ -236,9 +239,8 @@ class ViTReconstructionLoss(Loss):
         # Attach to policy to ensure parameters are accessible if needed
         # Unwrapping policy if it's wrapped (e.g. DDP)
         # Use a unique name
-        (
-            self.policy.module if hasattr(self.policy, "module") else self.policy
-        ).vit_reconstruction_decoder = self.decoder
+        policy_obj = self.policy.module if hasattr(self.policy, "module") else self.policy
+        setattr(policy_obj, "vit_reconstruction_decoder", self.decoder)  # noqa: B010
 
     def run_train(
         self,
@@ -246,9 +248,10 @@ class ViTReconstructionLoss(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        policy_td = shared_loss_data.get("policy_td")
-        if policy_td is None:
+        policy_td_raw = shared_loss_data.get("policy_td")
+        if policy_td_raw is None:
             return self._zero(), shared_loss_data, False
+        policy_td = cast(TensorDict, policy_td_raw)
 
         obs_shim_tokens = policy_td.get("obs_shim_tokens")
         obs_latent_attn = policy_td.get("obs_latent_attn")
@@ -271,6 +274,7 @@ class ViTReconstructionLoss(Loss):
             self._init_decoder(latent_dim=obs_latent_attn.shape[-1], context=context)
 
         # Run decoder
+        assert self.decoder is not None
         pred_logits, pred_values, target_ids, target_values, valid_mask = self.decoder(obs_shim_tokens, obs_latent_attn)
 
         # 7. Compute Losses
@@ -280,7 +284,8 @@ class ViTReconstructionLoss(Loss):
 
         # Use the derived num_attribute_classes for normalization
         # Handle both wrapped and unwrapped decoder
-        num_classes = (self.decoder.module if isinstance(self.decoder, DDP) else self.decoder)._num_attribute_classes
+        decoder = self.decoder
+        num_classes = (decoder.module if isinstance(decoder, DDP) else decoder)._num_attribute_classes
         mask_expanded = valid_mask.unsqueeze(-1)
         loss_id = (loss_id * mask_expanded).sum() / (mask_expanded.sum() * num_classes + 1e-6)
 

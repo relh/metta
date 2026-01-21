@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import torch
@@ -38,6 +38,8 @@ class PPOCriticConfig(LossConfig):
 class PPOCritic(Loss):
     """PPO value loss."""
 
+    cfg: "PPOCriticConfig"
+
     __slots__ = (
         "burn_in_steps",
         "burn_in_steps_iter",
@@ -55,7 +57,7 @@ class PPOCritic(Loss):
         super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
 
         if hasattr(self.policy, "burn_in_steps"):
-            self.burn_in_steps = self.policy.burn_in_steps
+            self.burn_in_steps: int = cast(int, self.policy.burn_in_steps)
         else:
             self.burn_in_steps = 0
         self.burn_in_steps_iter = 0
@@ -78,7 +80,8 @@ class PPOCritic(Loss):
             # If another loss already produced actions (e.g., sliced_cloner teacher slice),
             # reuse them to avoid overwriting while still computing values/logprobs.
             if "actions" in td.keys():
-                self.policy.forward(td, action=td["actions"])
+                actions: Tensor = td["actions"]
+                self.policy.forward(td, action=actions)
             else:
                 self.policy.forward(td)
 
@@ -87,6 +90,7 @@ class PPOCritic(Loss):
             return
 
         env_slice = self._training_env_id(context)
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
@@ -124,43 +128,52 @@ class PPOCritic(Loss):
     def run_train(
         self, shared_loss_data: TensorDict, context: ComponentContext, mb_idx: int
     ) -> tuple[Tensor, TensorDict, bool]:
+        assert self.loss_tracker is not None
+        assert self.replay is not None
         # Sampling happens in the core loop; use the shared minibatch and indices.
-        minibatch = shared_loss_data["sampled_mb"]
+        minibatch: TensorDict = shared_loss_data["sampled_mb"]
 
         if minibatch.batch_size.numel() == 0:  # early exit if minibatch is empty
-            return self._zero_tensor, shared_loss_data, False
+            return self._zero(), shared_loss_data, False
 
         # Advantages are computed in the core loop and passed through shared_loss_data.
         # Keep the full advantages around for explained variance logging and prioritized sampling.
-        old_values = minibatch["values"]
+        old_values: Tensor = minibatch["values"]
         if self.cfg.critic_update == "gtd_lambda":
-            policy_td = shared_loss_data["policy_td"]
+            policy_td: TensorDict = shared_loss_data["policy_td"]
             if "h_values" not in policy_td.keys():
                 raise RuntimeError("Policy must output 'h_values' for critic_update='gtd_lambda'")
 
-            new_values = policy_td["values"].reshape(old_values.shape)
-            h_values = policy_td["h_values"]
+            new_values: Tensor = policy_td["values"]
+            new_values = new_values.reshape(old_values.shape)
+            h_values: Tensor = policy_td["h_values"]
             if h_values.dim() == 3 and h_values.shape[-1] == 1:
                 h_values = h_values.squeeze(-1)
             h_values = h_values.reshape(old_values.shape)
 
-            delta_lambda = shared_loss_data["advantages_pg"]
+            delta_lambda: Tensor = shared_loss_data["advantages_pg"]
             if "teacher_mask" in minibatch.keys():
-                teacher_mask = minibatch["teacher_mask"][:, 0]
+                teacher_mask: Tensor = minibatch["teacher_mask"]
+                teacher_mask = teacher_mask[:, 0]
                 if bool(teacher_mask.any()):
                     if "act_log_prob" not in policy_td.keys():
                         raise RuntimeError("Teacher-slice TD(λ) correction requires policy_td['act_log_prob']")
-                    rho = policy_td["act_log_prob"].reshape(minibatch["actions"].shape).exp()
+                    act_log_prob: Tensor = policy_td["act_log_prob"]
+                    mb_actions: Tensor = minibatch["actions"]
+                    rho = act_log_prob.reshape(mb_actions.shape).exp()
                     rho_trim = rho.detach()[teacher_mask][:, :-1]
                     rho_clip = float(self.cfg.teacher_offpolicy_rho_clip)
                     self.loss_tracker["teacher_td_lambda_rho_clipfrac"].append(
                         float((rho_trim > rho_clip).float().mean().item())
                     )
-                    centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
+                    mb_rewards: Tensor = minibatch["rewards"]
+                    mb_reward_baseline: Tensor = minibatch["reward_baseline"]
+                    mb_dones: Tensor = minibatch["dones"]
+                    centered_rewards = mb_rewards - mb_reward_baseline
                     corrected = self._importance_sampled_delta_lambda(
                         values=new_values[teacher_mask],
                         rewards=centered_rewards[teacher_mask],
-                        dones=minibatch["dones"][teacher_mask],
+                        dones=mb_dones[teacher_mask],
                         rho=rho.detach()[teacher_mask],
                         gamma=float(context.config.advantage.gamma),
                         gae_lambda=float(context.config.advantage.gae_lambda),
@@ -197,25 +210,29 @@ class PPOCritic(Loss):
             self.loss_tracker["gtd_delta_lambda_abs"].append(float(dl.detach().abs().mean().item()))
 
             # Update values in experience buffer for advantage_full recomputation + EV logging.
+            mb_values: Tensor = minibatch["values"]
             update_td = TensorDict(
                 {
-                    "values": new_values.reshape(minibatch["values"].shape).detach(),
+                    "values": new_values.reshape(mb_values.shape).detach(),
                 },
                 batch_size=minibatch.batch_size,
             )
-            indices = shared_loss_data["indices"][:, 0]
-            self.replay.update(indices, update_td)
+            indices: Tensor = shared_loss_data["indices"]
+            self.replay.update(indices[:, 0], update_td)
 
             return total, shared_loss_data, False
 
-        advantages_mb = shared_loss_data["advantages"]
-        returns = advantages_mb + minibatch["values"]
+        advantages_mb: Tensor = shared_loss_data["advantages"]
+        mb_values2: Tensor = minibatch["values"]
+        returns = advantages_mb + mb_values2
         minibatch["returns"] = returns
         # Read policy forward results from the core loop (forward_policy_for_training).
-        policy_td = shared_loss_data.get("policy_td", None)
-        newvalue_reshaped = None
-        if policy_td is not None:
-            newvalue = policy_td["values"]
+        policy_td2_raw = shared_loss_data.get("policy_td", None)
+        newvalue_reshaped: Tensor | None = None
+        newvalue: Tensor | None = None
+        if policy_td2_raw is not None:
+            policy_td2 = cast(TensorDict, policy_td2_raw)
+            newvalue = cast(Tensor, policy_td2["values"])
             newvalue_reshaped = newvalue.view(returns.shape)
 
         if newvalue_reshaped is not None:
@@ -247,14 +264,16 @@ class PPOCritic(Loss):
                 )
 
             # Update values in experience buffer
+            assert newvalue is not None
+            mb_values3: Tensor = minibatch["values"]
             update_td = TensorDict(
                 {
-                    "values": newvalue.view(minibatch["values"].shape).detach(),
+                    "values": newvalue.view(mb_values3.shape).detach(),
                 },
                 batch_size=minibatch.batch_size,
             )
-            indices = shared_loss_data["indices"][:, 0]
-            self.replay.update(indices, update_td)
+            indices2: Tensor = shared_loss_data["indices"]
+            self.replay.update(indices2[:, 0], update_td)
         else:
             v_loss = 0.5 * ((old_values - returns) ** 2).mean()
         # Scale value loss by coefficient
@@ -263,11 +282,15 @@ class PPOCritic(Loss):
 
         return v_loss, shared_loss_data, False
 
-    def on_train_phase_end(self, context: ComponentContext) -> None:
+    def on_train_phase_end(self, context: ComponentContext | None = None) -> None:
         """Compute value-function explained variance for logging, mirroring monolithic PPO."""
+        assert self.replay is not None
+        assert self.loss_tracker is not None
         with torch.no_grad():
-            y_pred = self.replay.buffer["values"].flatten()
-            y_true = self.replay.buffer["advantages_full"].flatten() + self.replay.buffer["values"].flatten()
+            values: Tensor = self.replay.buffer["values"]
+            adv_full: Tensor = self.replay.buffer["advantages_full"]
+            y_pred = values.flatten()
+            y_true = adv_full.flatten() + values.flatten()
             var_y = y_true.var()
             ev = (1 - (y_true - y_pred).var() / var_y).item() if var_y > 0 else 0.0
             self.loss_tracker["explained_variance"].append(float(ev))

@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import torch
 from pydantic import Field
@@ -30,6 +30,8 @@ class EMAConfig(LossConfig):
 
 
 class EMA(Loss):
+    cfg: EMAConfig
+
     __slots__ = ("target_model",)
 
     def __init__(
@@ -65,13 +67,14 @@ class EMA(Loss):
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
         self.update_target_model()
-        policy_td = shared_loss_data["policy_td"]
+        policy_td = cast(TensorDict, shared_loss_data["policy_td"])
         B, TT = policy_td.batch_size
         policy_td = policy_td.reshape(B * TT)
         ensure_sequence_metadata(policy_td, batch_size=B, time_steps=TT)
 
         pred_flat: Tensor = policy_td["EMA_pred_output_2"].to(dtype=torch.float32)
 
+        assert self.policy_experience_spec is not None
         target_td = policy_td.select(*self.policy_experience_spec.keys(include_nested=True)).clone()
         ensure_sequence_metadata(target_td, batch_size=B, time_steps=TT)
 

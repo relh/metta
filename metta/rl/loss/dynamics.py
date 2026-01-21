@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import einops
 import torch
@@ -32,6 +32,8 @@ class DynamicsConfig(LossConfig):
 class Dynamics(Loss):
     """The dynamics term in the Muesli loss."""
 
+    cfg: DynamicsConfig
+
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"returns_pred", "reward_pred"}
 
@@ -42,7 +44,7 @@ class Dynamics(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        policy_td = shared_loss_data["policy_td"]
+        policy_td = cast(TensorDict, shared_loss_data["policy_td"])
 
         returns_pred: Tensor = policy_td["returns_pred"].to(dtype=torch.float32)
         reward_pred: Tensor = policy_td["reward_pred"].to(dtype=torch.float32)
@@ -52,8 +54,9 @@ class Dynamics(Loss):
         reward_pred = einops.rearrange(reward_pred, "b t 1 -> b (t 1)")
 
         # targets
-        returns = shared_loss_data["sampled_mb"]["returns"]
-        rewards = shared_loss_data["sampled_mb"]["rewards"]
+        sampled_mb = cast(TensorDict, shared_loss_data["sampled_mb"])
+        returns = sampled_mb["returns"]
+        rewards = sampled_mb["rewards"]
 
         # The model predicts future returns and rewards.
         # We align the predictions with the future targets by slicing the tensors.

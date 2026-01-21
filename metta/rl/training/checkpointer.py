@@ -2,13 +2,13 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional, cast
 
 import torch
 from pydantic import Field
 from safetensors.torch import load_file as load_safetensors_file
 
-from metta.agent.policy import Policy, PolicyArchitecture
+from metta.agent.policy import PolicyArchitecture
 from metta.rl.checkpoint_manager import CheckpointManager
 from metta.rl.training import DistributedHelper, TrainerComponent
 from mettagrid.base_config import Config
@@ -53,7 +53,7 @@ class Checkpointer(TrainerComponent):
         policy_env_info: PolicyEnvInterface,
         *,
         policy_uri: Optional[str] = None,
-    ) -> Policy:
+    ) -> Any:  # Returns Policy or MultiAgentPolicy
         """Load the latest policy checkpoint or create a new policy."""
         candidate_uri = policy_uri or self._checkpoint_manager.get_latest_checkpoint()
         load_device = torch.device(self._distributed.config.device)
@@ -67,6 +67,7 @@ class Checkpointer(TrainerComponent):
                 payload: tuple[str, dict[str, object], dict[str, torch.Tensor]] | None = None
                 if self._distributed.is_master():
                     policy_spec = policy_spec_from_uri(normalized_uri)
+                    assert policy_spec.data_path is not None, "policy_spec.data_path must be set"
                     state_dict = load_safetensors_file(str(Path(policy_spec.data_path).expanduser()))
                     payload = (
                         policy_spec.class_path,
@@ -74,13 +75,14 @@ class Checkpointer(TrainerComponent):
                         {k: v.cpu() for k, v in state_dict.items()},
                     )
                 payload = self._distributed.broadcast_from_master(payload)
+                assert payload is not None, "broadcast_from_master must return non-None payload"
                 class_path, init_kwargs, state_dict = payload
                 init_kwargs = dict(init_kwargs)
                 self._set_architecture_from_checkpoint(class_path, init_kwargs)
                 if "device" in init_kwargs:
                     init_kwargs["device"] = str(load_device)
-                policy_class = load_symbol(class_path)
-                policy = policy_class(policy_env_info, **init_kwargs)  # type: ignore[call-arg]
+                policy_class = cast(Callable[..., Any], load_symbol(class_path))
+                policy = policy_class(policy_env_info, **init_kwargs)
                 if hasattr(policy, "to"):
                     policy = policy.to(load_device)
                 policy.load_state_dict(state_dict, strict=True)

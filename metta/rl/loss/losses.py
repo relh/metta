@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, ClassVar
 import torch
 from pydantic import Field
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.loss import contrastive_config
 from metta.rl.loss.action_supervised import ActionSupervisedConfig
 from metta.rl.loss.cmpo import CMPOConfig
@@ -97,7 +97,7 @@ class LossesConfig(Config):
 
     def init_losses(
         self,
-        policy: Policy,
+        policy: Policy | DistributedPolicy,
         trainer_cfg: "TrainerConfig",
         env: TrainingEnvironment,
         device: torch.device,

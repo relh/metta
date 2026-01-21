@@ -1,9 +1,9 @@
 import importlib
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
 import torch
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.common.util.log_config import getRankAwareLogger
 from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
@@ -18,7 +18,7 @@ from metta.rl.training import (
     TrainerState,
     TrainingEnvironment,
 )
-from metta.rl.training.optimizer import create_optimizer, is_schedulefree_optimizer
+from metta.rl.training.optimizer import ScheduleFreeOptimizer, create_optimizer, is_schedulefree_optimizer
 from mettagrid.profiling.stopwatch import Stopwatch
 
 try:
@@ -68,7 +68,7 @@ class Trainer:
         self._policy.initialize_to_environment(self._env.policy_env_info, self._device)
         self._policy.train()
 
-        self._policy = self._distributed_helper.wrap_policy(self._policy, self._device)
+        self._policy: Policy | DistributedPolicy = self._distributed_helper.wrap_policy(self._policy, self._device)
         self._policy.to(self._device)
         losses = self._cfg.losses.init_losses(self._policy, self._cfg, self._env, self._device)
         self._policy.train()
@@ -174,7 +174,7 @@ class Trainer:
         with self.timer("_rollout"):
             # Ensure ScheduleFree optimizer is in eval mode during rollout
             if self._is_schedulefree:
-                self.optimizer.eval()
+                cast(ScheduleFreeOptimizer, self.optimizer).eval()
 
             rollout_result = self.core_loop.rollout_phase(self._env, self._context)
             self._context.training_env_id = rollout_result.training_env_id
@@ -191,7 +191,7 @@ class Trainer:
         with self.timer("_train"):
             # ScheduleFree optimizer is in train mode for training phase
             if self._is_schedulefree:
-                self.optimizer.train()
+                cast(ScheduleFreeOptimizer, self.optimizer).train()
 
             losses_stats, epochs_trained = self.core_loop.training_phase(
                 context=self._context,

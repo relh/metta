@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         TrainingEnvironmentConfig,
         VectorizedTrainingEnvironment,
     )
+    from metta.rl.training.update_epochs_tuner import UpdateEpochAutoTuner
     from metta.rl.training.wandb_aborter import WandbAborter, WandbAborterConfig
     from metta.rl.training.wandb_logger import WandbLogger
 

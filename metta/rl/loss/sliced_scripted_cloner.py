@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 from pydantic import Field
@@ -45,6 +45,8 @@ class SlicedScriptedCloner(Loss):
     """This uses a scripted policy's actions (provided by the environment) to supervise the student
     on specific slices of the experience, similar to SlicedKickstarter but with Ground Truth actions.
     """
+
+    cfg: SlicedScriptedClonerConfig
 
     __slots__ = ("rollout_batch_size", "stud_mask", "teacher_mask", "ppo_mask")
 
@@ -100,6 +102,7 @@ class SlicedScriptedCloner(Loss):
 
         # Store experience
         env_slice = self._training_env_id(context)
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
         if self.teacher_mask.any():
@@ -114,8 +117,8 @@ class SlicedScriptedCloner(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
-        student_td = shared_loss_data["policy_td"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
+        student_td = cast(TensorDict, shared_loss_data["policy_td"])
 
         # slice - minus teacher led minus student led
         train_stud_mask = minibatch["stud_mask"][:, 0]
@@ -139,7 +142,7 @@ class SlicedScriptedCloner(Loss):
         student_td = student_td.reshape(sliced_b * sliced_tt)
 
         if minibatch.batch_size.numel() == 0 or student_td.batch_size.numel() == 0:  # early exit if minibatch is empty
-            return self._zero_tensor, shared_loss_data, False
+            return self._zero(), shared_loss_data, False
 
         # action loss
         policy_full_log_probs = student_td["full_log_probs"].reshape(sliced_b * sliced_tt, -1)

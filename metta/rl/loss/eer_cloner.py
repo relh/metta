@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 from pydantic import Field
@@ -33,6 +33,8 @@ class EERClonerConfig(LossConfig):
 
 
 class EERCloner(Loss):
+    cfg: EERClonerConfig
+
     __slots__ = ("last_teacher_actions", "has_last_actions")
 
     def __init__(
@@ -106,8 +108,8 @@ class EERCloner(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
-        policy_td = shared_loss_data["policy_td"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
+        policy_td = cast(TensorDict, shared_loss_data["policy_td"])
 
         # Supervised Loss: Maximize log probability of the teacher's action -> L = - log(pi_student(a_teacher | s))
         policy_full_log_probs = policy_td["full_log_probs"].reshape(minibatch.shape[0], minibatch.shape[1], -1)

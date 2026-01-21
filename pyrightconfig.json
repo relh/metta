@@ -30,6 +30,7 @@
     "./packages/mettagrid/python/src",
     "./packages/pufferlib-core/src"
   ],
+  "stubPath": "./typings",
   "typeCheckingMode": "basic",
   "reportMissingModuleSource": false,
   "pythonVersion": "3.12",

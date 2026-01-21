@@ -44,7 +44,17 @@ def ensure_sequence_metadata(
     needs_bptt = "bptt" not in keys
     if not (needs_batch or needs_bptt):
         return
-    batch_tensor, bptt_tensor = _get_policy_metadata_tensors(td.device, batch_size, time_steps, cache=cache)
+    device = td.device
+    if device is None:
+        # Infer device from first tensor in TensorDict
+        for key in td.keys():
+            val = td[key]
+            if isinstance(val, Tensor):
+                device = val.device
+                break
+    if device is None:
+        raise ValueError("TensorDict has no device and contains no tensors to infer device from")
+    batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, batch_size, time_steps, cache=cache)
     if needs_batch:
         td.set("batch", batch_tensor)
     if needs_bptt:
@@ -69,7 +79,17 @@ def prepare_policy_forward_td(
 
     B, TT = td.batch_size
     td = td.reshape(B * TT)
-    batch_tensor, bptt_tensor = _get_policy_metadata_tensors(td.device, B, TT)
+    device = td.device
+    if device is None:
+        # Infer device from first tensor in TensorDict
+        for key in td.keys():
+            val = td[key]
+            if isinstance(val, Tensor):
+                device = val.device
+                break
+    if device is None:
+        raise ValueError("TensorDict has no device and contains no tensors to infer device from")
+    batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, B, TT)
     td.set("batch", batch_tensor)
     td.set("bptt", bptt_tensor)
 

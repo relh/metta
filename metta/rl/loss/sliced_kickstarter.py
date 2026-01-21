@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 import torch.nn.functional as F
@@ -43,6 +43,8 @@ class SlicedKickstarter(Loss):
     """This uses another policy that is forwarded during rollout, here, in the loss and then compares its logits and
     value against the student's using a KL divergence and MSE loss respectively.
     """
+
+    cfg: "SlicedKickstarterConfig"
 
     __slots__ = ("teacher_policy", "rollout_batch_size", "stud_mask", "teacher_mask", "ppo_mask")
 
@@ -96,6 +98,7 @@ class SlicedKickstarter(Loss):
 
         # Store experience
         env_slice = self._training_env_id(context)
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
         if self.teacher_mask.any():
@@ -110,8 +113,8 @@ class SlicedKickstarter(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
-        student_td = shared_loss_data["policy_td"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
+        student_td = cast(TensorDict, shared_loss_data["policy_td"])
 
         # slice - minus teacher led minus student led
         train_stud_mask = minibatch["stud_mask"][:, 0]
@@ -129,7 +132,7 @@ class SlicedKickstarter(Loss):
         student_td = student_td.reshape(sliced_b * sliced_tt)
 
         if minibatch.batch_size.numel() == 0 or student_td.batch_size.numel() == 0:  # early exit if minibatch is empty
-            return self._zero_tensor, shared_loss_data, False
+            return self._zero(), shared_loss_data, False
 
         # action loss
         temperature = self.cfg.temperature

@@ -193,6 +193,7 @@ _CHECK_PYRIGHT_PACKAGES = [
     "packages/cogames",
     "app_backend",
     "packages/mettagrid/python/src",  # mettagrid/tests is not type-safe yet
+    "metta/rl",
 ]
 
 

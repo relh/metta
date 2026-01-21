@@ -41,6 +41,8 @@ class Kickstarter(Loss):
     value against the student's using a KL divergence and MSE loss respectively.
     """
 
+    cfg: "KickstarterConfig"
+
     __slots__ = ("teacher_policy",)
 
     def __init__(
@@ -72,13 +74,14 @@ class Kickstarter(Loss):
         with torch.no_grad():
             teacher_td = td.clone()
             self.teacher_policy.forward(teacher_td)
-            teacher_actions = teacher_td["actions"]
+            teacher_actions: Tensor = teacher_td["actions"]
             td["teacher_logits"] = teacher_td["logits"]
             td["teacher_values"] = teacher_td["values"]
             self.policy.forward(td)
 
         # Store experience
         env_slice = self._training_env_id(context)
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
         if torch.rand(1) < self.cfg.teacher_led_proportion:
@@ -94,15 +97,17 @@ class Kickstarter(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
+        minibatch: TensorDict = shared_loss_data["sampled_mb"]
         B, TT = minibatch.batch_size
 
-        student_td = shared_loss_data["policy_td"].reshape(B * TT)  # we should do this without reshaping
+        student_td: TensorDict = shared_loss_data["policy_td"].reshape(B * TT)
 
         # action loss
         temperature = self.cfg.temperature
-        teacher_logits = minibatch["teacher_logits"].to(dtype=torch.float32).reshape(B * TT, -1).detach()
-        student_logits = student_td["logits"].to(dtype=torch.float32)
+        teacher_logits: Tensor = minibatch["teacher_logits"]
+        teacher_logits = teacher_logits.to(dtype=torch.float32).reshape(B * TT, -1).detach()
+        student_logits: Tensor = student_td["logits"]
+        student_logits = student_logits.to(dtype=torch.float32)
         teacher_log_probs = F.log_softmax(teacher_logits / temperature, dim=-1).detach()
         student_log_probs = F.log_softmax(student_logits / temperature, dim=-1)
         student_probs = torch.exp(student_log_probs)
@@ -111,12 +116,15 @@ class Kickstarter(Loss):
         )
 
         # value loss
-        teacher_value = minibatch["teacher_values"].to(dtype=torch.float32).reshape(B * TT).detach()
-        student_value = student_td["values"].to(dtype=torch.float32)
+        teacher_value: Tensor = minibatch["teacher_values"]
+        teacher_value = teacher_value.to(dtype=torch.float32).reshape(B * TT).detach()
+        student_value: Tensor = student_td["values"]
+        student_value = student_value.to(dtype=torch.float32)
         ks_value_loss = ((teacher_value.detach() - student_value) ** 2).mean()
 
         loss = ks_action_loss * self.cfg.action_loss_coef + ks_value_loss * self.cfg.value_loss_coef
 
+        assert self.loss_tracker is not None
         self.loss_tracker["ks_act_loss"].append(float(ks_action_loss.item()))
         self.loss_tracker["ks_val_loss"].append(float(ks_value_loss.item()))
         self.loss_tracker["ks_act_loss_coef"].append(float(self.cfg.action_loss_coef))

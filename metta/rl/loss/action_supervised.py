@@ -36,6 +36,8 @@ class ActionSupervisedConfig(LossConfig):
 
 
 class ActionSupervised(Loss):
+    cfg: "ActionSupervisedConfig"
+
     __slots__ = ("rollout_batch_size", "teacher_mask")
 
     def __init__(
@@ -91,24 +93,26 @@ class ActionSupervised(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
-        policy_td = shared_loss_data["policy_td"]
+        minibatch: TensorDict = shared_loss_data["sampled_mb"]
+        policy_td: TensorDict = shared_loss_data["policy_td"]
 
-        policy_full_log_probs = policy_td["full_log_probs"].reshape(minibatch.shape[0], minibatch.shape[1], -1)
-        teacher_actions = minibatch["teacher_actions"]
+        policy_full_log_probs: Tensor = policy_td["full_log_probs"]
+        policy_full_log_probs = policy_full_log_probs.reshape(minibatch.shape[0], minibatch.shape[1], -1)
+        teacher_actions: Tensor = minibatch["teacher_actions"]
         # get the student's logprob for the action that the teacher chose
         student_log_probs = policy_full_log_probs.gather(dim=-1, index=teacher_actions.unsqueeze(-1))
         student_log_probs = student_log_probs.reshape(minibatch.shape[0], minibatch.shape[1])
 
         loss = -student_log_probs.mean() * self.cfg.action_loss_coef
 
+        assert self.loss_tracker is not None
         self.loss_tracker["supervised_action_loss"].append(float(loss.item()))
 
         # --------------------------Add action loss to rewards as per Matt's doc----------------------------------
         if self.cfg.add_action_loss_to_rewards:
-            minibatch["rewards"] = (
-                minibatch["rewards"] + self.cfg.action_reward_coef * policy_td["act_log_prob"].detach()
-            )
+            rewards: Tensor = minibatch["rewards"]
+            act_log_prob: Tensor = policy_td["act_log_prob"]
+            minibatch["rewards"] = rewards + self.cfg.action_reward_coef * act_log_prob.detach()
             # NOTE: we should somehow normalize the policy loss before adding it to rewards, perhaps exponentiate then
             # softplus?
 

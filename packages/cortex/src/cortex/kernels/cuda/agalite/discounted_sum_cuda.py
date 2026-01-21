@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import os
-from typing import Tuple
+from typing import TYPE_CHECKING, Callable, Tuple
 
 import torch
-from torch._dynamo import disable
 from torch.autograd import Function
 from torch.utils.cpp_extension import load
+
+if not TYPE_CHECKING:
+    from torch._dynamo import disable
+else:
+    from typing import TypeVar
+
+    _F = TypeVar("_F", bound=Callable)
+
+    def disable(fn: _F) -> _F:  # type: ignore[misc]
+        return fn
+
 
 _mod_path = os.path.dirname(__file__)
 _ext = None

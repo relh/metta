@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 import torch.nn.functional as F
@@ -48,6 +48,8 @@ class SLCheckpointedKickstarterConfig(LossConfig):
 class SLCheckpointedKickstarter(Loss):
     """This is currently only student-led. No blockers to make it teacher-led, but not needed yet.
     It should be better at avoiding student-led curriculum hacking since we keep changing the teacher."""
+
+    cfg: SLCheckpointedKickstarterConfig
 
     __slots__ = (
         "teacher_policy",
@@ -104,13 +106,13 @@ class SLCheckpointedKickstarter(Loss):
         elif context.epoch == self._terminating_epoch:
             self.load_teacher_policy(self._final_checkpoint)
 
-        minibatch = shared_loss_data["sampled_mb"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
 
         # Teacher forward pass
         teacher_td, B, TT = prepare_policy_forward_td(minibatch, self.teacher_policy_spec, clone=True)
         teacher_td = self.teacher_policy(teacher_td, action=None)
 
-        student_td = shared_loss_data["policy_td"].reshape(B * TT)
+        student_td = cast(TensorDict, shared_loss_data["policy_td"]).reshape(B * TT)
 
         temperature = self.temperature
         teacher_logits = teacher_td["logits"].to(dtype=torch.float32)
@@ -145,7 +147,6 @@ class SLCheckpointedKickstarter(Loss):
             self.env,
             policy_uri=new_uri,
             device=self.device,
-            error="Environment metadata is required to reload teacher policy",
         )
 
         # Detach gradient

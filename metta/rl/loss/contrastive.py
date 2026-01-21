@@ -1,5 +1,7 @@
 # metta/rl/loss/contrastive.py
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 from tensordict import TensorDict
@@ -10,9 +12,14 @@ from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
+if TYPE_CHECKING:
+    from metta.rl.loss.contrastive_config import ContrastiveConfig
+
 
 class ContrastiveLoss(Loss):
     """Contrastive loss for representation learning."""
+
+    cfg: "ContrastiveConfig"
 
     _EMBEDDING_CANDIDATES = ("encoder_output", "encoded_obs", "core", "hidden_state", "features")
 
@@ -75,8 +82,8 @@ class ContrastiveLoss(Loss):
         self, shared_loss_data: TensorDict, context: ComponentContext, mb_idx: int
     ) -> tuple[Tensor, TensorDict, bool]:
         """Compute contrastive loss."""
-        policy_td = shared_loss_data["policy_td"]
-        minibatch = shared_loss_data["sampled_mb"]
+        policy_td = cast(TensorDict, shared_loss_data["policy_td"])
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
 
         # Get embeddings from policy
         embeddings = self._get_embeddings(policy_td)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 import random
 from collections import deque
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import torch
 import torch.nn as nn
@@ -15,7 +15,7 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.loss.loss import Loss, LossConfig
 from metta.rl.training import ComponentContext, Experience, TrainingEnvironment
 from metta.rl.utils import add_dummy_loss_for_unused_params, ensure_sequence_metadata, forward_policy_for_training
@@ -153,6 +153,8 @@ class TransitionBuffer:
 
 
 class CMPO(Loss):
+    cfg: CMPOConfig
+
     def __init__(
         self,
         policy: Policy,
@@ -176,10 +178,11 @@ class CMPO(Loss):
         self.world_model_opt = torch.optim.Adam(self.world_model.parameters(), lr=cfg.world_model.learning_rate)
         self.transition_buffer = TransitionBuffer(cfg.world_model.buffer_size)
 
-        self.prior_model: Optional[Policy] = None
+        self.prior_model: Policy | DistributedPolicy | None = None
         if cfg.prior_ema_decay is not None:
             # π_prior in CMPO; EMA helps stabilize off-policy updates.
             self.prior_model = copy.deepcopy(self.policy).to(device)
+            assert self.prior_model is not None
             for param in self.prior_model.parameters():
                 param.requires_grad = False
 
@@ -188,7 +191,7 @@ class CMPO(Loss):
         self._has_prev = torch.empty((0,), dtype=torch.bool, device=device)
         self._valid_action_mask: Optional[Tensor] = None
 
-    def attach_replay_buffer(self, experience: Experience) -> None:  # type: ignore[override]
+    def attach_replay_buffer(self, experience: Experience) -> None:
         super().attach_replay_buffer(experience)
         segments = experience.segments
         device = self.device
@@ -250,6 +253,7 @@ class CMPO(Loss):
         if self.burn_in_steps_iter < self.burn_in_steps:
             self.burn_in_steps_iter += 1
         else:
+            assert self.replay is not None
             self.replay.store(data_td=td, env_id=env_slice)
 
         self._prev_obs[env_slice] = obs_flat.detach()
@@ -276,17 +280,19 @@ class CMPO(Loss):
             self._update_prior_model()
             return self._zero(), shared_loss_data, stop_update_epoch
 
-        minibatch = shared_loss_data["sampled_mb"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
         if minibatch.batch_size.numel() == 0:
             return self._zero(), shared_loss_data, stop_update_epoch
 
-        policy_td = shared_loss_data["policy_td"]
+        policy_td = cast(TensorDict, shared_loss_data["policy_td"])
         B, TT = minibatch.batch_size
         log_pi = policy_td["full_log_probs"].reshape(B, TT, -1)
         if self._valid_action_mask is None:
             self._valid_action_mask = (log_pi > -1e8).any(dim=(0, 1))
+        assert self._valid_action_mask is not None
+        valid_action_mask = self._valid_action_mask
         prior_log_probs = self._get_prior_log_probs(minibatch, policy_td)
-        q_values = self._compute_q_values(minibatch["env_obs"], valid_action_mask=self._valid_action_mask)  # [B, T, A]
+        q_values = self._compute_q_values(minibatch["env_obs"], valid_action_mask=valid_action_mask)  # [B, T, A]
         pi_prior = prior_log_probs.exp()
         v_prior = (pi_prior * q_values).sum(dim=-1, keepdim=True)
         advantages = q_values - v_prior
@@ -339,6 +345,7 @@ class CMPO(Loss):
             return policy_td["full_log_probs"].reshape(B, TT, -1).detach()
 
         with torch.no_grad():
+            assert self.policy_experience_spec is not None
             prior_td = forward_policy_for_training(self.prior_model, minibatch, self.policy_experience_spec)
         return prior_td["full_log_probs"].reshape(B, TT, -1).detach()
 
@@ -388,7 +395,7 @@ class CMPO(Loss):
 
         return q_values.view(B, TT, self.action_dim)
 
-    def _value_from_obs(self, model: Policy, obs: Tensor) -> Tensor:
+    def _value_from_obs(self, model: Policy | DistributedPolicy, obs: Tensor) -> Tensor:
         batch = obs.shape[0]
         td = TensorDict(
             {

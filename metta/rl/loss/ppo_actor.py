@@ -40,6 +40,8 @@ class PPOActorConfig(LossConfig):
 class PPOActor(Loss):
     """PPO actor loss."""
 
+    cfg: "PPOActorConfig"
+
     __slots__ = ()
 
     def __init__(
@@ -62,6 +64,7 @@ class PPOActor(Loss):
     def run_train(
         self, shared_loss_data: TensorDict, context: ComponentContext, mb_idx: int
     ) -> tuple[Tensor, TensorDict, bool]:
+        assert self.loss_tracker is not None
         stop_update_epoch = False
         if mb_idx > 0 and self.cfg.target_kl is not None:
             avg_kl = np.mean(self.loss_tracker["approx_kl"]) if self.loss_tracker["approx_kl"] else 0.0
@@ -70,15 +73,16 @@ class PPOActor(Loss):
 
         cfg = self.cfg
 
-        minibatch = shared_loss_data["sampled_mb"]
+        minibatch: TensorDict = shared_loss_data["sampled_mb"]
 
         if minibatch.batch_size.numel() == 0:  # early exit if minibatch is empty
-            return self._zero_tensor, shared_loss_data, False
+            return self._zero(), shared_loss_data, False
 
-        policy_td = shared_loss_data["policy_td"]
-        old_logprob = minibatch["act_log_prob"]
-        new_logprob = policy_td["act_log_prob"].reshape(old_logprob.shape)
-        entropy = policy_td["entropy"]
+        policy_td: TensorDict = shared_loss_data["policy_td"]
+        old_logprob: Tensor = minibatch["act_log_prob"]
+        new_logprob: Tensor = policy_td["act_log_prob"]
+        new_logprob = new_logprob.reshape(old_logprob.shape)
+        entropy: Tensor = policy_td["entropy"]
 
         importance_sampling_ratio = shared_loss_data.get("importance_sampling_ratio", None)
         if importance_sampling_ratio is None:
@@ -91,17 +95,18 @@ class PPOActor(Loss):
             },
             batch_size=minibatch.batch_size,
         )
-        indices = shared_loss_data["indices"][:, 0]
-        self.replay.update(indices, update_td)
+        indices: Tensor = shared_loss_data["indices"]
+        assert self.replay is not None
+        self.replay.update(indices[:, 0], update_td)
 
         adv = shared_loss_data.get("advantages_pg", None)
         if adv is None:
-            adv = shared_loss_data["advantages"]
+            adv: Tensor = shared_loss_data["advantages"]
         adv = adv.detach()
 
         # Normalize advantages with distributed support, then apply prioritized weights
         adv = normalize_advantage_distributed(adv, cfg.norm_adv)
-        prio_weights = shared_loss_data["prio_weights"]
+        prio_weights: Tensor = shared_loss_data["prio_weights"]
         adv = prio_weights * adv
 
         pg_loss1 = -adv * importance_sampling_ratio
@@ -118,7 +123,8 @@ class PPOActor(Loss):
 
         # Compute metrics
         with torch.no_grad():
-            logratio = new_logprob - minibatch["act_log_prob"]
+            old_logprob_metric: Tensor = minibatch["act_log_prob"]
+            logratio = new_logprob - old_logprob_metric
             approx_kl = ((importance_sampling_ratio - 1) - logratio).mean()
             clipfrac = ((importance_sampling_ratio - 1.0).abs() > self.cfg.clip_coef).float().mean()
 

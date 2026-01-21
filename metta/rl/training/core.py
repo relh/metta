@@ -4,8 +4,9 @@ from typing import Any
 import torch
 from pydantic import ConfigDict
 from tensordict import NonTensorData, TensorDict
+from torch import Tensor
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.advantage import compute_advantage, compute_delta_lambda
 from metta.rl.loss.loss import Loss
 from metta.rl.training import ComponentContext, Experience, TrainingEnvironment
@@ -30,7 +31,7 @@ class CoreTrainingLoop:
 
     def __init__(
         self,
-        policy: Policy,
+        policy: Policy | DistributedPolicy,
         experience: Experience,
         losses: dict[str, Loss],
         optimizer: torch.optim.Optimizer,
@@ -86,7 +87,7 @@ class CoreTrainingLoop:
             loss.on_rollout_start(context)
 
         # Get buffer for storing experience
-        buffer_step = self.experience.buffer[self.experience.row_slot_ids, self.experience.t_in_row - 1]
+        buffer_step: TensorDict = self.experience.buffer[self.experience.row_slot_ids, self.experience.t_in_row - 1]
         buffer_step = buffer_step.select(*self.policy_spec.keys())
 
         total_steps = 0
@@ -101,6 +102,7 @@ class CoreTrainingLoop:
             with context.stopwatch("_rollout.td_prep"):
                 td = buffer_step[training_env_id].clone()
                 target_device = td.device
+                assert target_device is not None
                 td["env_obs"] = o.to(device=target_device, non_blocking=True)
 
                 rewards = r.to(device=target_device, non_blocking=True)
@@ -143,12 +145,14 @@ class CoreTrainingLoop:
             avg_reward = context.state.avg_reward
             beta = float(context.config.advantage.reward_centering.beta)
             with torch.no_grad():
-                rewards_f32 = td["rewards"].to(dtype=torch.float32)
+                td_rewards: Tensor = td["rewards"]
+                rewards_f32 = td_rewards.to(dtype=torch.float32)
                 avg_reward[agent_ids] = baseline + beta * (rewards_f32 - baseline)
             context.state.avg_reward = avg_reward
 
             assert "actions" in td, "No loss performed inference - at least one loss must generate actions"
-            raw_actions = td["actions"].detach()
+            td_actions: Tensor = td["actions"]
+            raw_actions = td_actions.detach()
             if raw_actions.dim() != 1:
                 raise ValueError(
                     "Policies must emit a single discrete action id per agent; "
@@ -165,10 +169,11 @@ class CoreTrainingLoop:
 
             target_buffer = self.last_action[training_env_id]
             if target_buffer.shape != actions_column.shape:
+                td_actions2: Tensor = td["actions"]
                 msg = "last_action buffer shape mismatch: target=%s actions=%s raw=%s" % (
                     target_buffer.shape,
                     actions_column.shape,
-                    tuple(td["actions"].shape),
+                    tuple(td_actions2.shape),
                 )
                 logger.error(msg, exc_info=True)
                 raise RuntimeError(msg)
@@ -177,7 +182,8 @@ class CoreTrainingLoop:
 
             # Ship actions to the environment
             with context.stopwatch("_rollout.send"):
-                env.send_actions(td["actions"].cpu().numpy())
+                td_actions3: Tensor = td["actions"]
+                env.send_actions(td_actions3.cpu().numpy())
 
             infos_list: list[dict[str, Any]] = list(info) if info else []
             if infos_list:
@@ -186,6 +192,7 @@ class CoreTrainingLoop:
             total_steps += num_steps
 
         context.training_env_id = last_env_id
+        assert last_env_id is not None, "No rollout steps completed - last_env_id is None"
         return RolloutResult(raw_infos=raw_infos, agent_steps=total_steps, training_env_id=last_env_id)
 
     def training_phase(
@@ -222,14 +229,17 @@ class CoreTrainingLoop:
 
         for _ in range(update_epochs):
             if "values" in self.experience.buffer.keys():
-                values_for_adv = self.experience.buffer["values"]
+                values_for_adv: Tensor = self.experience.buffer["values"]
                 if values_for_adv.dim() > 2:
                     values_for_adv = values_for_adv.mean(dim=-1)
-                centered_rewards = self.experience.buffer["rewards"] - self.experience.buffer["reward_baseline"]
+                buf_rewards: Tensor = self.experience.buffer["rewards"]
+                buf_reward_baseline: Tensor = self.experience.buffer["reward_baseline"]
+                buf_dones: Tensor = self.experience.buffer["dones"]
+                centered_rewards = buf_rewards - buf_reward_baseline
                 advantages_full = compute_advantage(
                     values_for_adv,
                     centered_rewards,
-                    self.experience.buffer["dones"],
+                    buf_dones,
                     torch.ones_like(values_for_adv),
                     torch.zeros_like(values_for_adv, device=self.device),
                     advantage_cfg.gamma,
@@ -265,14 +275,15 @@ class CoreTrainingLoop:
                 if mb_idx == 0:
                     shared_loss_mb_data["advantages_full"] = NonTensorData(advantages_full)
 
-                policy_td = shared_loss_mb_data["sampled_mb"]
+                policy_td: TensorDict = shared_loss_mb_data["sampled_mb"]
                 policy_td = forward_policy_for_training(self.policy, policy_td, self.policy_spec)
                 shared_loss_mb_data["policy_td"] = policy_td
 
-                sampled_mb = shared_loss_mb_data["sampled_mb"]
+                sampled_mb: TensorDict = shared_loss_mb_data["sampled_mb"]
                 if "act_log_prob" in sampled_mb.keys() and "act_log_prob" in policy_td.keys():
-                    old_logprob = sampled_mb["act_log_prob"]
-                    new_logprob = policy_td["act_log_prob"].reshape(old_logprob.shape)
+                    old_logprob: Tensor = sampled_mb["act_log_prob"]
+                    new_logprob: Tensor = policy_td["act_log_prob"]
+                    new_logprob = new_logprob.reshape(old_logprob.shape)
                     logratio = torch.clamp(new_logprob - old_logprob, -10, 10)
                     shared_loss_mb_data["importance_sampling_ratio"] = logratio.exp()
 
@@ -280,37 +291,45 @@ class CoreTrainingLoop:
                     if "values" not in sampled_mb.keys():
                         raise RuntimeError("delta_lambda advantages require minibatch['values']")
 
-                    new_values = policy_td["values"]
+                    new_values: Tensor = policy_td["values"]
                     if new_values.dim() == 3 and new_values.shape[-1] == 1:
                         new_values = new_values.squeeze(-1)
-                    new_values = new_values.reshape(sampled_mb["values"].shape)
+                    sampled_values: Tensor = sampled_mb["values"]
+                    new_values = new_values.reshape(sampled_values.shape)
 
-                    centered_rewards = sampled_mb["rewards"] - sampled_mb["reward_baseline"]
+                    sampled_rewards: Tensor = sampled_mb["rewards"]
+                    sampled_baseline: Tensor = sampled_mb["reward_baseline"]
+                    sampled_dones: Tensor = sampled_mb["dones"]
+                    centered_rewards = sampled_rewards - sampled_baseline
                     shared_loss_mb_data["advantages_pg"] = compute_delta_lambda(
                         values=new_values,
                         rewards=centered_rewards,
-                        dones=sampled_mb["dones"],
+                        dones=sampled_dones,
                         gamma=float(advantage_cfg.gamma),
                         gae_lambda=float(advantage_cfg.gae_lambda),
                     )
                 else:
-                    values_for_adv = sampled_mb["values"] if "values" in sampled_mb.keys() else None
-                    if values_for_adv is not None:
-                        if values_for_adv.dim() > 2:
-                            values_for_adv = values_for_adv.mean(dim=-1)
+                    values_for_adv2: Tensor | None = sampled_mb["values"] if "values" in sampled_mb.keys() else None
+                    if values_for_adv2 is not None:
+                        if values_for_adv2.dim() > 2:
+                            values_for_adv2 = values_for_adv2.mean(dim=-1)
 
                         importance_sampling_ratio = shared_loss_mb_data.get("importance_sampling_ratio", None)
                         if importance_sampling_ratio is None:
-                            importance_sampling_ratio = torch.ones_like(values_for_adv)
+                            importance_sampling_ratio = torch.ones_like(values_for_adv2)
 
                         with torch.no_grad():
-                            centered_rewards = sampled_mb["rewards"] - sampled_mb["reward_baseline"]
+                            sampled_rewards2: Tensor = sampled_mb["rewards"]
+                            sampled_baseline2: Tensor = sampled_mb["reward_baseline"]
+                            sampled_dones2: Tensor = sampled_mb["dones"]
+                            advantages_clone: Tensor = shared_loss_mb_data["advantages"]
+                            centered_rewards = sampled_rewards2 - sampled_baseline2
                             shared_loss_mb_data["advantages_pg"] = compute_advantage(
-                                values_for_adv,
+                                values_for_adv2,
                                 centered_rewards,
-                                sampled_mb["dones"],
+                                sampled_dones2,
                                 importance_sampling_ratio,
-                                shared_loss_mb_data["advantages"].clone(),
+                                advantages_clone.clone(),
                                 advantage_cfg.gamma,
                                 advantage_cfg.gae_lambda,
                                 self.device,
@@ -346,8 +365,9 @@ class CoreTrainingLoop:
                     # Get max_grad_norm from first loss that has it
                     actual_max_grad_norm = max_grad_norm
                     for loss_obj in self.losses.values():
-                        if hasattr(loss_obj.cfg, "max_grad_norm"):
-                            actual_max_grad_norm = loss_obj.cfg.max_grad_norm
+                        loss_max_grad_norm = getattr(loss_obj.cfg, "max_grad_norm", None)
+                        if loss_max_grad_norm is not None:
+                            actual_max_grad_norm = loss_max_grad_norm
                             break
 
                     torch.nn.utils.clip_grad_norm_(self.policy.parameters(), actual_max_grad_norm)
@@ -385,7 +405,8 @@ class CoreTrainingLoop:
             loss.on_epoch_start(context)
 
     def add_last_action_to_td(self, td: TensorDict) -> None:
-        env_ids = td["training_env_ids"].squeeze(-1)
+        env_ids: Tensor = td["training_env_ids"]
+        env_ids = env_ids.squeeze(-1)
 
         if self.last_action.device != td.device:
             self.last_action = self.last_action.to(device=td.device)

@@ -5,10 +5,20 @@ from __future__ import annotations
 import importlib
 import logging
 import os
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import torch
-from torch._dynamo import disable
+
+if not TYPE_CHECKING:
+    from torch._dynamo import disable
+else:
+    from typing import TypeVar
+
+    _F = TypeVar("_F", bound=Callable)
+
+    def disable(fn: _F) -> _F:  # type: ignore[misc]
+        return fn
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +74,7 @@ def select_backend(
         )
         return cuda_fn_resolved
 
-    use_triton = TRITON_AVAILABLE and triton_fn_resolved is not None and allow_triton and tensor.is_cuda
-    if use_triton:
+    if TRITON_AVAILABLE and triton_fn_resolved is not None and allow_triton and tensor.is_cuda:
         logger.debug(
             f"Using Triton backend for {triton_fn_resolved.__name__} (device={tensor.device}, dtype={tensor.dtype})"
         )
@@ -82,6 +91,8 @@ def select_backend(
         reasons.append(f"tensor on {tensor.device}")
 
     reason_str = ", ".join(reasons) if reasons else "unknown reason"
+    if pytorch_fn_resolved is None:
+        raise RuntimeError(f"Failed to resolve PyTorch backend function: {pytorch_fn}")
     logger.debug(f"Using PyTorch backend for {pytorch_fn_resolved.__name__} ({reason_str})")
     return pytorch_fn_resolved
 

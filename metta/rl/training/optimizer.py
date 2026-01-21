@@ -1,16 +1,25 @@
 import logging
+from typing import Protocol, runtime_checkable
 
 import schedulefree
 import torch
 from heavyball import ForeachMuon
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.trainer_config import OptimizerConfig
 
 logger = logging.getLogger(__name__)
 
 
-def create_optimizer(cfg: OptimizerConfig, policy: Policy) -> torch.optim.Optimizer:
+@runtime_checkable
+class ScheduleFreeOptimizer(Protocol):
+    """Protocol for ScheduleFree optimizers with train/eval mode support."""
+
+    def train(self) -> None: ...
+    def eval(self) -> None: ...
+
+
+def create_optimizer(cfg: OptimizerConfig, policy: Policy | DistributedPolicy) -> torch.optim.Optimizer:
     """Create optimizer and load state if available."""
     optimizer_type = cfg.type
 

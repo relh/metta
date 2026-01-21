@@ -117,6 +117,11 @@ class TrainingEnvironment(ABC):
     def policy_env_info(self) -> PolicyEnvInterface:
         """Get the environment policy interface information."""
 
+    @property
+    @abstractmethod
+    def total_parallel_agents(self) -> int:
+        """Total agent slots tracked across all vectorized environments."""
+
 
 class VectorizedTrainingEnvironment(TrainingEnvironment):
     """Manages the vectorized training environment and experience generation."""
@@ -211,6 +216,7 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
 
     def close(self) -> None:
         """Close the environment."""
+        assert self._vecenv is not None
         self._vecenv.close()
 
     @property
@@ -234,10 +240,12 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
     @property
     def single_action_space(self) -> Any:
         # Use the underlying driver environment's action space, which remains single-agent Discrete
+        assert self._vecenv is not None
         return self._vecenv.driver_env.single_action_space
 
     @property
     def single_observation_space(self) -> Any:
+        assert self._vecenv is not None
         return self._vecenv.single_observation_space
 
     @property
@@ -248,9 +256,11 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
     @property
     def driver_env(self) -> Any:
         """Expose the driver environment for components that need direct access."""
+        assert self._vecenv is not None
         return self._vecenv.driver_env
 
     def get_observations(self) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, List[dict], slice, Tensor, int]:
+        assert self._vecenv is not None
         o, r, d, t, ta, info, env_id, mask = self._vecenv.recv()
 
         training_env_id = slice(env_id[0], env_id[-1] + 1)
@@ -272,4 +282,5 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
     def send_actions(self, actions: np.ndarray) -> None:
         if actions.dtype != dtype_actions:
             actions = actions.astype(dtype_actions, copy=False)
+        assert self._vecenv is not None
         self._vecenv.send(actions)

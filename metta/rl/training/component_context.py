@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 import torch
 from torch.optim import Optimizer
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.training import Experience, TrainingEnvironment
 from mettagrid.profiling.memory_monitor import MemoryMonitor
 from mettagrid.profiling.stopwatch import Stopwatch
@@ -65,7 +65,7 @@ class ComponentContext:
         self,
         *,
         state: TrainerState,
-        policy: Policy,
+        policy: Policy | DistributedPolicy,
         env: TrainingEnvironment,
         experience: Experience,
         optimizer: Optimizer,

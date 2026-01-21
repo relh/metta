@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 import torch.nn.functional as F
@@ -38,6 +38,8 @@ class LogitKickstarterConfig(LossConfig):
 
 class LogitKickstarter(Loss):
     """This also injects the teacher's logits into the student's observations."""
+
+    cfg: LogitKickstarterConfig
 
     __slots__ = (
         "teacher_policy",
@@ -85,6 +87,7 @@ class LogitKickstarter(Loss):
 
         # Store experience
         env_slice = self._training_env_id(context)
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
         if torch.rand(1) < self.cfg.teacher_led_proportion:
@@ -100,10 +103,11 @@ class LogitKickstarter(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
         B, TT = minibatch.batch_size
 
-        student_td = shared_loss_data["policy_td"].reshape(B * TT)  # we should do this without reshaping
+        # TODO: we should do this without reshaping
+        student_td = cast(TensorDict, shared_loss_data["policy_td"]).reshape(B * TT)
 
         # action loss
         temperature = self.cfg.temperature

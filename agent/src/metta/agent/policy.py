@@ -53,7 +53,7 @@ class PolicyArchitecture(Config):
     def make_policy(self, policy_env_info: PolicyEnvInterface) -> "Policy":
         """Create an agent instance from configuration."""
         AgentClass = load_symbol(self.class_path)
-        return AgentClass(policy_env_info, self)  # type: ignore[misc]
+        return AgentClass(policy_env_info, self)
 
     def to_spec(self) -> str:
         """Serialize this architecture to a string specification."""
@@ -306,11 +306,13 @@ class CheckpointPolicy(Policy):
 class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=PolicyRegistryABCMeta):
     """Thin wrapper around DistributedDataParallel that preserves Policy interface."""
 
-    def __init__(self, policy: MultiAgentPolicy, device: torch.device):
+    module: "Policy"
+
+    def __init__(self, policy: "Policy", device: torch.device):
         MultiAgentPolicy.__init__(self, policy.policy_env_info)
 
         # Then initialize DistributedDataParallel
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "module": policy,
             "broadcast_buffers": False,
             "find_unused_parameters": False,
@@ -325,10 +327,26 @@ class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=Pol
         except AttributeError:
             return getattr(self.module, name)
 
-    def state_dict(self, *args, **kwargs):
+    def agent_policy(self, agent_id: int) -> AgentPolicy:
+        """Delegate to wrapped policy."""
+        return self.module.agent_policy(agent_id)
+
+    def get_agent_experience_spec(self) -> "Composite":
+        """Delegate to wrapped policy."""
+        return self.module.get_agent_experience_spec()
+
+    def reset_memory(self) -> None:
+        """Delegate to wrapped policy."""
+        self.module.reset_memory()
+
+    def forward(self, td: TensorDict, action: Optional[torch.Tensor] = None) -> TensorDict:
+        """Forward pass via DDP to preserve distributed hooks."""
+        return super().forward(td, action=action)
+
+    def state_dict(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return self.module.state_dict(*args, **kwargs)
 
-    def load_state_dict(self, state_dict, *args, **kwargs):
+    def load_state_dict(self, state_dict: dict[str, Any], *args: Any, **kwargs: Any) -> Any:
         return self.module.load_state_dict(state_dict, *args, **kwargs)
 
 

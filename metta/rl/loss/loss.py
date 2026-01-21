@@ -10,7 +10,7 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite
 
-from metta.agent.policy import Policy
+from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.training import ComponentContext, Experience, TrainingEnvironment
 from mettagrid.base_config import Config
 
@@ -112,7 +112,7 @@ class LossConfig(Config):
 
     def create(
         self,
-        policy: Policy,
+        policy: Policy | DistributedPolicy,
         trainer_cfg: "TrainerConfig",
         env: TrainingEnvironment,
         device: torch.device,
@@ -125,7 +125,7 @@ class LossConfig(Config):
 class Loss:
     """Base class coordinating rollout and training behaviour for concrete losses."""
 
-    policy: Policy
+    policy: Policy | DistributedPolicy
     trainer_cfg: "TrainerConfig"
     env: TrainingEnvironment
     device: torch.device
@@ -134,7 +134,7 @@ class Loss:
 
     policy_experience_spec: Composite | None = None
     replay: Experience | None = None
-    loss_tracker: dict[str, list[float]] | None = None
+    loss_tracker: defaultdict[str, list[float]] = field(default_factory=lambda: defaultdict(list), init=False)
     _zero_tensor: Tensor | None = None
     _context: ComponentContext | None = None
 
@@ -142,7 +142,6 @@ class Loss:
 
     def __post_init__(self) -> None:
         self.policy_experience_spec = self.policy.get_agent_experience_spec()
-        self.loss_tracker = defaultdict(list)
         self._zero_tensor = torch.tensor(0.0, device=self.device, dtype=torch.float32)
         self.register_state_attr("loss_tracker")
 

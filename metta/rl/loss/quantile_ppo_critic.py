@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import numpy as np
 import torch
@@ -34,6 +34,8 @@ class QuantilePPOCriticConfig(LossConfig):
 class QuantilePPOCritic(Loss):
     """Quantile PPO value loss."""
 
+    cfg: QuantilePPOCriticConfig
+
     __slots__ = (
         "advantages",
         "burn_in_steps",
@@ -55,14 +57,14 @@ class QuantilePPOCritic(Loss):
         self.advantages = torch.tensor(0.0, dtype=torch.float32, device=self.device)
 
         if hasattr(self.policy, "burn_in_steps"):
-            self.burn_in_steps = self.policy.burn_in_steps
+            self.burn_in_steps: int = cast(int, self.policy.burn_in_steps)
         else:
             self.burn_in_steps = 0
         self.burn_in_steps_iter = 0
 
         if not hasattr(self.policy, "critic_quantiles"):
             raise ValueError("Policy must expose 'critic_quantiles' attribute for QuantilePPOCritic")
-        self.num_quantiles = self.policy.critic_quantiles
+        self.num_quantiles: int = cast(int, self.policy.critic_quantiles)
 
         # Pre-compute tau_hat (quantile midpoints)
         # Shape: [1, N]
@@ -97,6 +99,7 @@ class QuantilePPOCritic(Loss):
             return
 
         env_slice = self._training_env_id(context)
+        assert self.replay is not None
         self.replay.store(data_td=td, env_id=env_slice)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
@@ -105,7 +108,8 @@ class QuantilePPOCritic(Loss):
     def run_train(
         self, shared_loss_data: TensorDict, context: ComponentContext, mb_idx: int
     ) -> tuple[Tensor, TensorDict, bool]:
-        minibatch = shared_loss_data["sampled_mb"]
+        assert self.replay is not None
+        minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
         indices = shared_loss_data["indices"][:, 0]
         # compute advantages on the first mb
         if mb_idx == 0:
@@ -128,7 +132,7 @@ class QuantilePPOCritic(Loss):
             )
 
         if minibatch.batch_size.numel() == 0:  # early exit if minibatch is empty
-            return self._zero_tensor, shared_loss_data, False
+            return self._zero(), shared_loss_data, False
 
         advantages = shared_loss_data["advantages_full"][indices]
 
@@ -140,9 +144,10 @@ class QuantilePPOCritic(Loss):
         returns = advantages + old_values_mean
         minibatch["returns"] = returns
 
-        policy_td = shared_loss_data.get("policy_td", None)
+        policy_td_raw = shared_loss_data.get("policy_td", None)
         newvalue = None
-        if policy_td is not None:
+        if policy_td_raw is not None:
+            policy_td = cast(TensorDict, policy_td_raw)
             newvalue = policy_td["values"]  # [B, N]
 
         if newvalue is not None:
@@ -223,8 +228,9 @@ class QuantilePPOCritic(Loss):
 
         return loss
 
-    def on_train_phase_end(self, context: ComponentContext) -> None:
+    def on_train_phase_end(self, context: ComponentContext | None = None) -> None:
         """Compute value-function explained variance for logging."""
+        assert self.replay is not None
         with torch.no_grad():
             # Use mean of quantiles for explained variance
             values_quantiles = self.replay.buffer["values"]
