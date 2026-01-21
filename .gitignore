@@ -144,3 +144,6 @@ tools/dev/python_imports/*.txt
 
 # In-repo worktrees
 .worktrees/
+
+# Claude memory directories
+.memory/
