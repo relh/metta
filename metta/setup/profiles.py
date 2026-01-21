@@ -104,7 +104,7 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "scratchpad": {"enabled": True},
             "helm": {"enabled": True},
             "docker-compose": {"enabled": True},
-            "pr-similarity": {"enabled": True},
+            "pr-similarity": {"enabled": False},
             "ide-extensions": {"enabled": True},
             "binary-symlinks": {"enabled": True},
         }
