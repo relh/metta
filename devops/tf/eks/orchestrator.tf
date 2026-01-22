@@ -35,6 +35,15 @@ resource "aws_iam_policy" "orchestrator_s3" {
           "arn:aws:s3:::observatory-private",
           "arn:aws:s3:::observatory-private/*",
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue",
+        ]
+        Resource = [
+          "arn:aws:secretsmanager:us-east-1:751442549699:secret:github/metta-deploy-key*",
+        ]
       }
     ]
   })
