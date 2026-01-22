@@ -8,6 +8,8 @@ on:
       - "observatory/**"
   pull_request:
     types: [opened, synchronize, closed]
+    paths:
+      - "observatory/**"
   workflow_dispatch: {}
 
 jobs:
