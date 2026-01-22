@@ -1,5 +1,6 @@
 import tempfile
 import uuid
+from datetime import datetime
 from typing import Annotated, Any, Optional
 
 import aioboto3
@@ -11,11 +12,85 @@ from metta.app_backend.auth import CheckMaybeUser, CheckUser
 from metta.app_backend.metta_repo import (
     EpisodeWithTags,
     MettaRepo,
-    PolicyRow,
-    PolicyVersionWithName,
-    PublicPolicyVersionRow,
 )
+from metta.app_backend.models.policies import Policy, PolicyVersion
+from metta.app_backend.queries import policy_queries
+from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
+
+
+class PolicyRow(BaseModel):
+    id: uuid.UUID
+    name: str
+    created_at: datetime
+    user_id: str
+    attributes: dict[str, Any]
+    version_count: int
+
+    @classmethod
+    def from_model(cls, policy: Policy) -> "PolicyRow":
+        return cls(
+            id=policy.id,
+            name=policy.name,
+            created_at=policy.created_at,
+            user_id=policy.user_id,
+            attributes=policy.attributes or {},
+            version_count=len(policy.versions) if policy.versions else 0,
+        )
+
+
+class PublicPolicyVersionRow(BaseModel):
+    id: uuid.UUID
+    policy_id: uuid.UUID
+    created_at: datetime
+    policy_created_at: datetime
+    user_id: str
+    name: str
+    version: int
+    tags: dict[str, str] = Field(default_factory=dict)
+    version_count: int | None = None
+
+    @classmethod
+    def from_model(cls, pv: PolicyVersion) -> "PublicPolicyVersionRow":
+        return cls(
+            id=pv.id,
+            policy_id=pv.policy_id,
+            created_at=pv.created_at,
+            policy_created_at=pv.policy.created_at,
+            user_id=pv.policy.user_id,
+            name=pv.policy.name,
+            version=pv.version,
+            tags={tag.key: tag.value for tag in pv.tags} if pv.tags else {},
+        )
+
+
+class PolicyVersionWithName(BaseModel):
+    id: uuid.UUID
+    internal_id: int | None
+    policy_id: uuid.UUID
+    version: int
+    s3_path: str | None
+    git_hash: str | None
+    policy_spec: dict[str, Any]
+    attributes: dict[str, Any]
+    created_at: datetime
+    name: str
+
+    @classmethod
+    def from_model(cls, pv: PolicyVersion) -> "PolicyVersionWithName":
+        return cls(
+            id=pv.id,
+            internal_id=pv.internal_id,
+            policy_id=pv.policy_id,
+            version=pv.version,
+            s3_path=pv.s3_path,
+            git_hash=pv.git_hash,
+            policy_spec=pv.policy_spec or {},
+            attributes=pv.attributes or {},
+            created_at=pv.created_at,
+            name=pv.policy.name,
+        )
+
 
 OBSERVATORY_S3_BUCKET = "observatory-private"
 
@@ -121,20 +196,20 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
     async def _create_policy_version_from_s3_key(name: str, user_id: str, s3_key: str) -> PolicyVersionResponse:
         s3_path = f"s3://{OBSERVATORY_S3_BUCKET}/{s3_key}"
         try:
-            policy_id = await stats_repo.upsert_policy(name=name, user_id=user_id, attributes={})
-        except ValueError as e:
+            policy_id = await policy_queries.upsert_policy(name=name, user_id=user_id, attributes={})
+        except PolicyNameTakenError as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
-        policy_version_id = await stats_repo.create_policy_version(
+        policy_version_id = await policy_queries.create_policy_version(
             policy_id=policy_id,
             s3_path=s3_path,
             git_hash=None,
             policy_spec={},
             attributes={},
         )
-        pv = await stats_repo.get_policy_version_with_name(policy_version_id)
+        pv = await policy_queries.get_policy_version_with_name(policy_version_id)
         if pv is None:
             raise HTTPException(status_code=500, detail="Failed to retrieve created policy version")
-        return PolicyVersionResponse(id=policy_version_id, name=pv.name, version=pv.version)
+        return PolicyVersionResponse(id=policy_version_id, name=pv.policy.name, version=pv.version)
 
     @router.post("/policies")
     @timed_http_handler
@@ -145,8 +220,10 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
             user_id = user.id
 
         try:
-            policy_id = await stats_repo.upsert_policy(name=policy.name, user_id=user_id, attributes=policy.attributes)
-        except ValueError as e:
+            policy_id = await policy_queries.upsert_policy(
+                name=policy.name, user_id=user_id, attributes=policy.attributes
+            )
+        except PolicyNameTakenError as e:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from None
         return UUIDResponse(id=policy_id)
 
@@ -156,7 +233,7 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         policy_id_str: str, policy_version: PolicyVersionCreate, user: CheckUser
     ) -> UUIDResponse:
         policy_id = uuid.UUID(policy_id_str)
-        policy_version_id = await stats_repo.create_policy_version(
+        policy_version_id = await policy_queries.create_policy_version(
             policy_id=policy_id,
             s3_path=policy_version.s3_path,
             git_hash=policy_version.git_hash,
@@ -169,32 +246,25 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
     @timed_http_handler
     async def get_policy_version(policy_version_id_str: str) -> PolicyVersionWithName:
         policy_version_id = uuid.UUID(policy_version_id_str)
-        policy_version = await stats_repo.get_policy_version_with_name(policy_version_id)
-        if policy_version is None:
+        pv = await policy_queries.get_policy_version_with_name(policy_version_id)
+        if pv is None:
             raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
-        return policy_version
+        return PolicyVersionWithName.from_model(pv)
 
     @router.get("/policies/{policy_id}")
     @timed_http_handler
     async def get_policy_by_id(policy_id: str, user: CheckUser) -> PublicPolicyVersionRow:
-        """Get a single policy version by ID.
-
-        Note: Despite the parameter name 'policy_id', this endpoint expects
-        a policy_version_id (UUID). This naming matches the frontend's convention.
-
-        The frontend page at /alignmentleague/policy/[id] relies on this endpoint.
-        """
         try:
             policy_version_id = uuid.UUID(policy_id)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid UUID format: {policy_id}") from None
 
-        policy_version = await stats_repo.get_public_policy_version_by_id(policy_version_id)
+        pv = await policy_queries.get_policy_version_by_id(policy_version_id)
 
-        if policy_version is None:
+        if pv is None:
             raise HTTPException(status_code=404, detail=f"Policy version {policy_id} not found")
 
-        return policy_version
+        return PublicPolicyVersionRow.from_model(pv)
 
     @router.put("/policies/versions/{policy_version_id_str}/tags")
     @timed_http_handler
@@ -202,7 +272,7 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         policy_version_id_str: str, tags: Annotated[dict[str, str], Body(...)], user: CheckUser
     ) -> UUIDResponse:
         policy_version_id = uuid.UUID(policy_version_id_str)
-        await stats_repo.upsert_policy_version_tags(policy_version_id, tags)
+        await policy_queries.upsert_policy_version_tags(policy_version_id, tags)
         return UUIDResponse(id=policy_version_id)
 
     @router.post("/policies/submit")
@@ -390,13 +460,16 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         limit: int = 50,
         offset: int = 0,
     ) -> PoliciesResponse:
-        entries, total_count = await stats_repo.get_policies(
+        policies, total_count = await policy_queries.get_policies(
             name_exact=name_exact,
             name_fuzzy=name_fuzzy,
             limit=limit,
             offset=offset,
         )
-        return PoliciesResponse(entries=entries, total_count=total_count)
+        return PoliciesResponse(
+            entries=[PolicyRow.from_model(p) for p in policies],
+            total_count=total_count,
+        )
 
     @router.get("/policy-versions")
     @timed_http_handler
@@ -413,7 +486,7 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         if mine and not user:
             raise HTTPException(status_code=401, detail="Authentication required for mine=true")
         pv_uuids = [uuid.UUID(pv_id) for pv_id in policy_version_ids] if policy_version_ids else None
-        entries, total_count = await stats_repo.get_policy_versions(
+        versions, total_count = await policy_queries.get_policy_versions(
             name_exact=name_exact,
             name_fuzzy=name_fuzzy,
             version=version,
@@ -422,7 +495,10 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
             limit=limit,
             offset=offset,
         )
-        return PolicyVersionsResponse(entries=entries, total_count=total_count)
+        return PolicyVersionsResponse(
+            entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],
+            total_count=total_count,
+        )
 
     @router.get("/policies/{policy_id}/versions")
     @timed_http_handler
@@ -431,18 +507,21 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
         limit: int = 500,
         offset: int = 0,
     ) -> PolicyVersionsResponse:
-        entries, total_count = await stats_repo.get_versions_for_policy(
-            policy_id=policy_id,
+        versions, total_count = await policy_queries.get_versions_for_policy(
+            policy_id=uuid.UUID(policy_id),
             limit=limit,
             offset=offset,
         )
-        return PolicyVersionsResponse(entries=entries, total_count=total_count)
+        return PolicyVersionsResponse(
+            entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],
+            total_count=total_count,
+        )
 
     @router.get("/policies/my-versions")
     @timed_http_handler
     async def get_my_policy_versions(user: CheckUser) -> MyPolicyVersionsResponse:
-        policy_versions = await stats_repo.get_user_policy_versions(user.id)
-        return MyPolicyVersionsResponse(entries=policy_versions)
+        versions = await policy_queries.get_user_policy_versions(user.id)
+        return MyPolicyVersionsResponse(entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions])
 
     @router.post("/episodes/query")
     @timed_http_handler

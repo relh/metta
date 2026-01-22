@@ -14,7 +14,14 @@ class Episode(SQLModel, table=True):
     __tablename__ = "episodes"  # type: ignore[assignment]
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    internal_id: int | None = Field(default=None, sa_column_kwargs={"autoincrement": True, "unique": True})
+    internal_id: int | None = Field(
+        default=None,
+        sa_column_kwargs={
+            "autoincrement": True,
+            "unique": True,
+            "server_default": text("nextval('episodes_internal_id_seq')"),
+        },
+    )
     replay_url: str | None = None
     attributes: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     created_at: datetime = Field(

@@ -7,7 +7,7 @@ from typing import Sequence
 from pydantic import Field
 
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.metta_repo import PolicyVersionWithName
+from metta.app_backend.routes.stats_routes import PolicyVersionWithName
 from metta.common.tool import Tool
 from metta.common.tool.tool import ToolResult, ToolWithResult
 from metta.common.wandb.context import WandbRunAppendContext

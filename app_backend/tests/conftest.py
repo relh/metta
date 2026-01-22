@@ -131,6 +131,13 @@ def isolated_db_context(db_uri: str) -> str:
 @pytest.fixture(scope="function")
 def isolated_stats_repo(isolated_db_context: str) -> MettaRepo:
     """Create a MettaRepo instance with an isolated schema."""
+    from metta.app_backend import config as app_config
+    from metta.app_backend import database
+
+    database._engine = None
+    database._session_factory = None
+    app_config.settings.STATS_DB_URI = isolated_db_context
+
     return MettaRepo(isolated_db_context)
 
 

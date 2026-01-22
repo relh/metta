@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from metta.app_backend.metta_repo import MettaRepo
+from metta.app_backend.queries import policy_queries
 
 
 @pytest.mark.asyncio
@@ -13,8 +14,8 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
     auth_headers: dict[str, str],
 ) -> None:
     user = "episodes@example.com"
-    policy_id = await isolated_stats_repo.upsert_policy(name="episodes-policy", user_id=user, attributes={})
-    pv_id = await isolated_stats_repo.create_policy_version(
+    policy_id = await policy_queries.upsert_policy(name="episodes-policy", user_id=user, attributes={})
+    pv_id = await policy_queries.create_policy_version(
         policy_id=policy_id,
         s3_path=None,
         git_hash=None,

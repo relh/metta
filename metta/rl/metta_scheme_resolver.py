@@ -8,7 +8,7 @@ from pathlib import Path
 from metta_alo.policy import parse_policy_identifier
 
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.metta_repo import PolicyVersionWithName
+from metta.app_backend.routes.stats_routes import PolicyVersionWithName
 from metta.common.util.constants import PROD_STATS_SERVER_URI
 from metta.rl.system_config import guess_data_dir
 from mettagrid.util.uri_resolvers.base import MettaParsedScheme, SchemeResolver

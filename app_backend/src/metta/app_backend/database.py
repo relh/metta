@@ -57,6 +57,10 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
         token = _current_session.set(session)
         try:
             yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             _current_session.reset(token)
 
