@@ -51,14 +51,17 @@ file_mounts:
     mode: MOUNT_CACHED
 
 # `set -u`: Exit on undefined variables to catch missing env vars early
-setup: set -u && bash <(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${METTA_GIT_REF}/devops/skypilot/config/lifecycle/setup.sh")
+setup: |
+  set -u
+  curl -fsSL -H "Authorization: token ${GITHUB_PAT}" \
+    "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${METTA_GIT_REF}/devops/skypilot/config/lifecycle/setup.sh" \
+    | bash
 
 # `set -e`: Ensure SkyPilot propagates exit codes from skypilot_run.sh (otherwise restart test fails)
 run: set -e && /workspace/metta/devops/skypilot/config/skypilot_run.sh
 
 envs:
   GITHUB_REPOSITORY: Metta-AI/metta
-  GITHUB_PAT: ""
 
   METTA_RUN_ID: ""
   METTA_MODULE_PATH: ""
@@ -69,5 +72,6 @@ envs:
   DATA_DIR: /mnt/s3/train_dir
 secrets:
   # configured by launch script based on local credentials
+  GITHUB_PAT: ""
   WANDB_PASSWORD: ""
   OBSERVATORY_TOKEN: ""

@@ -16,7 +16,9 @@ file_mounts:
 
 setup: |
   set -u
-  bash <(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${METTA_GIT_REF}/devops/skypilot/config/lifecycle/setup.sh")
+  curl -fsSL -H "Authorization: token ${GITHUB_PAT}" \
+    "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${METTA_GIT_REF}/devops/skypilot/config/lifecycle/setup.sh" \
+    | bash
 
 run: |
   set -e
@@ -36,6 +38,7 @@ run: |
   METTA_ENV_FILE="$(uv run ./common/src/metta/common/util/constants.py METTA_ENV_FILE)"
   source "$METTA_ENV_FILE"
 
+  echo ""
   echo "Sandbox setup complete. Ready for SSH."
 
 envs:
@@ -44,5 +47,6 @@ envs:
 
 secrets:
   # sandbox uses a placeholder; override as needed
+  GITHUB_PAT: ""
   WANDB_PASSWORD: "dummy"
   OBSERVATORY_TOKEN: ""

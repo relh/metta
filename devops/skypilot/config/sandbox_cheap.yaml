@@ -21,7 +21,9 @@ setup: |
   # Create directories for credentials that will be SCP'd later
   mkdir -p ~/.metta
 
-  bash <(curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${METTA_GIT_REF}/devops/skypilot/config/lifecycle/setup.sh")
+  curl -fsSL -H "Authorization: token ${GITHUB_PAT}" \
+    "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${METTA_GIT_REF}/devops/skypilot/config/lifecycle/setup.sh" \
+    | bash
 
 run: |
   set -e
@@ -41,6 +43,7 @@ run: |
   METTA_ENV_FILE="$(uv run ./common/src/metta/common/util/constants.py METTA_ENV_FILE)"
   source "$METTA_ENV_FILE"
 
+  echo ""
   echo "Sandbox setup complete. Ready for SSH."
 
 envs:
@@ -55,5 +58,6 @@ envs:
 # Note: secrets are intentionally minimal for cheap mode
 # Credentials will be transferred via SCP after launch
 secrets:
+  GITHUB_PAT: ""
   WANDB_PASSWORD: ""
   OBSERVATORY_TOKEN: ""

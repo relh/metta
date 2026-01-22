@@ -485,10 +485,17 @@ def new(
 
     autostop_hours = 48
 
+    # Check GitHub token before preparing task
+    github_token = git.get_github_token()
+    if not github_token:
+        print(f"{red('✗')} No GitHub token found. Run 'gh auth login' or set GITHUB_TOKEN.")
+        raise typer.Exit(1)
+
     # Prepare task
     with spinner("Preparing task configuration", style=cyan):
         task = sky.Task.from_yaml(config_path)
         set_task_secrets(task)
+        task.update_secrets({"GITHUB_PAT": github_token})
 
         if not sweep_controller and gpus is not None:
             task.set_resources_override({"accelerators": f"{gpu_type}:{gpus}"})

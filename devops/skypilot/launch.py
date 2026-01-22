@@ -290,10 +290,16 @@ def main(
 
     # Set secrets only when actually launching (not for dry-run or dump-config)
     set_task_secrets(task)
+
+    github_token = github_pat or git.get_github_token()
+    if not github_token:
+        print(red("No GitHub token found. Run 'gh auth login' or set GITHUB_TOKEN."))
+        raise typer.Exit(1)
+
     task.update_secrets(
         dict(
             DISCORD_WEBHOOK_URL=discord_webhook_url or "",
-            GITHUB_PAT=github_pat or "",
+            GITHUB_PAT=github_token,
         )
     )
 
