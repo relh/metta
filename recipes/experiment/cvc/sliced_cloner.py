@@ -95,7 +95,7 @@ def make_curriculum(
                 continue
 
             mission_env = make_training_env(num_cogs=num_cogs, mission=mission_name, variants=variant_set or None)
-            mission_env.game.global_obs.goal_obs = True
+            mission_env.game.obs.global_obs.goal_obs = True
             mission_tasks = cc.bucketed(mission_env)
 
             # Add buckets

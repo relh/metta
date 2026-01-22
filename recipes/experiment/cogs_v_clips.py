@@ -269,7 +269,7 @@ def make_curriculum(
                 mission=mission_name,
                 variants=applied_variants or None,
             )
-            mission_env.game.global_obs.goal_obs = True
+            mission_env.game.obs.global_obs.goal_obs = True
             mission_tasks = cc.bucketed(mission_env)
             mission_tasks.add_bucket("game.max_steps", [750, 1000, 1250, 1500])
 

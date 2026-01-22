@@ -526,9 +526,9 @@ def _(
     mg_config.desync_episodes = True  # Changes max_steps for first episode only
 
     # Global observation tokens from old config
-    mg_config.game.global_obs.episode_completion_pct = True
-    mg_config.game.global_obs.last_action = True
-    mg_config.game.global_obs.last_reward = True
+    mg_config.game.obs.global_obs.episode_completion_pct = True
+    mg_config.game.obs.global_obs.last_action = True
+    mg_config.game.obs.global_obs.last_reward = True
 
     print("✅ Simple hallway environment: start with arena, add custom map")
     return (
