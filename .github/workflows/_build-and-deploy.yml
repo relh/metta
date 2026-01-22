@@ -71,6 +71,8 @@ jobs:
       - name: Configure EKS
         if: github.ref == 'refs/heads/main' || (env.BUILD_PREVIEW == 'true' && inputs.preview_helm_values != '') || env.DELETE_PREVIEW == 'true'
         uses: ./.github/actions/eks-configure
+        with:
+          aws_role: ${{ vars.AWS_ROLE }}
 
       # useful for home deployment
       - name: Pre-deploy command
