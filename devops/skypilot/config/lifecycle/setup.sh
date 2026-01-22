@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu
 REPO_DIR="/workspace/metta"
 DEPLOY_KEY_SECRET="github/metta-deploy-key"
 
@@ -24,12 +24,14 @@ setup_deploy_key() {
     --region us-east-1 > ~/.ssh/metta-deploy-key
   chmod 600 ~/.ssh/metta-deploy-key
 
-  cat >> ~/.ssh/config << 'EOF'
+  if ! grep -q "metta-deploy-key" ~/.ssh/config 2> /dev/null; then
+    cat >> ~/.ssh/config << 'EOF'
 Host github.com
   IdentityFile ~/.ssh/metta-deploy-key
   IdentitiesOnly yes
   StrictHostKeyChecking accept-new
 EOF
+  fi
   chmod 600 ~/.ssh/config
 }
 
