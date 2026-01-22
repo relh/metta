@@ -49,6 +49,9 @@ class JobRequestUpdate(SQLModel):
         default=None, sa_column=Column(JSONB), description="Contains job-specific results, including possibly errors"
     )
     error: str | None = Field(default=None, description="Tracks k8s-lifecycle errors, not semantic job errors")
+    error_type: str | None = Field(
+        default=None, description="Classified error type: timeout, oom, policy_error, unknown"
+    )
 
 
 class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):

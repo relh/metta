@@ -66,16 +66,6 @@ class JobMetrics:
         snapshot = dict(self._running_counts)
         return [Observation(count, {"job_type": job_type}) for job_type, count in snapshot.items()]
 
-    def _classify_error(self, error: Optional[str]) -> str:
-        if not error:
-            return "none"
-        error_lower = error.lower()
-        if "timeout" in error_lower or "deadline" in error_lower:
-            return "timeout"
-        if "oom" in error_lower or "out of memory" in error_lower:
-            return "oom"
-        return "unknown"
-
     def _record_stage_duration(
         self,
         stage: str,
@@ -111,7 +101,7 @@ class JobMetrics:
                 "from_status": from_status.value,
                 "to_status": to_status.value,
                 "job_type": job.job_type.value,
-                "error_type": self._classify_error(error_type),
+                "error_type": error_type or "none",
             },
         )
         if from_status == JobStatus.pending:

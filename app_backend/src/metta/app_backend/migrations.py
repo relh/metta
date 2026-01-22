@@ -235,4 +235,11 @@ MIGRATIONS = [
             """ALTER TABLE policies ADD CONSTRAINT policies_name_key UNIQUE (name)""",
         ],
     ),
+    SqlMigration(
+        version=7,
+        description="Add error_type column to job_requests for structured error classification",
+        sql_statements=[
+            """ALTER TABLE job_requests ADD COLUMN error_type TEXT""",
+        ],
+    ),
 ]

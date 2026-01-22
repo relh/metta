@@ -86,12 +86,13 @@ def create_job_router() -> APIRouter:
                 else:
                     job_request.status = JobStatus.failed
                     job_request.error = result.error
+                    job_request.error_type = "unknown"  # Dispatch failures are generic
                     metrics.record_transition(
                         JobStatus.pending,
                         JobStatus.failed,
                         job_request,
                         result.time,
-                        result.error,
+                        "unknown",
                     )
             await session.commit()
             await metrics.update_running_counts(session, {job.job_type for job in job_requests})
@@ -161,6 +162,9 @@ def create_job_router() -> APIRouter:
             if request.error is not None:
                 job.error = request.error
 
+            if request.error_type is not None:
+                job.error_type = request.error_type
+
             if request.result is not None:
                 job.result = request.result
                 if job.completed_at is None:
@@ -169,9 +173,8 @@ def create_job_router() -> APIRouter:
             await session.commit()
             await session.refresh(job)
             if request.status is not None and previous_status is not None and transition_time is not None:
-                error_type = request.error or job.error
                 metrics = get_job_metrics()
-                metrics.record_transition(previous_status, job.status, job, transition_time, error_type)
+                metrics.record_transition(previous_status, job.status, job, transition_time, job.error_type)
                 await metrics.update_running_counts(session, {job.job_type})
             return job
 

@@ -152,7 +152,9 @@ def _reconcile_stale_jobs(stats_client: StatsClient):
                 completed_count += 1
             else:
                 logger.warning(f"Reconciliation: job {job.id} marked {job.status} but no pod found, marking failed")
-                _update_job_status(stats_client, job.id, JobStatus.failed, error="Pod not found (reconciliation)")
+                _update_job_status(
+                    stats_client, job.id, JobStatus.failed, error="Pod not found (reconciliation)", error_type="unknown"
+                )
                 stale_count += 1
 
     span = otel_trace.get_current_span()
@@ -197,7 +199,8 @@ def _handle_pod_state(stats_client: StatsClient, pod: client.V1Pod):
         logger.info(f"Job {job_id} completed (pod {pod_name})")
     elif phase == "Failed":
         error = _get_pod_error(pod)
-        _update_job_status(stats_client, job_id, JobStatus.failed, error=error)
+        error_type = _classify_error(error)
+        _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
         _delete_k8s_job_for_pod(pod)
         logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
     elif phase == "Running" and _is_container_running(pod):
@@ -215,7 +218,7 @@ def _handle_pod_deleted(stats_client: StatsClient, pod: client.V1Pod):
         return
 
     job_id, pod_name = info
-    _update_job_status(stats_client, job_id, JobStatus.failed, error="Pod deleted unexpectedly")
+    _update_job_status(stats_client, job_id, JobStatus.failed, error="Pod deleted unexpectedly", error_type="unknown")
     logger.warning(f"Job {job_id} failed: pod {pod_name} deleted unexpectedly (phase={phase})")
 
 
@@ -237,6 +240,29 @@ def _get_pod_error(pod: client.V1Pod) -> str:
                 if cs.state and cs.state.terminated and cs.state.terminated.reason:
                     return cs.state.terminated.reason
     return (pod.status.message if pod.status else None) or "Pod failed"
+
+
+def _classify_error(error: str) -> str:
+    """Classify error into a low-cardinality bucket for metrics."""
+    error_lower = error.lower()
+    if "timeout" in error_lower or "deadline" in error_lower:
+        return "timeout"
+    if "oom" in error_lower or "out of memory" in error_lower or "oomkilled" in error_lower:
+        return "oom"
+    if any(
+        marker in error_lower
+        for marker in (
+            "policy",
+            "policy_uri",
+            "policy_uris",
+            "file not found",
+            "no such file",
+            "does_not_exist",
+            "zipfile",
+        )
+    ):
+        return "policy_error"
+    return "unknown"
 
 
 def _get_job_failure_reason(pod: client.V1Pod) -> str | None:
@@ -283,6 +309,7 @@ def _update_job_status(
     job_id: UUID,
     status: JobStatus,
     error: str | None = None,
+    error_type: str | None = None,
     worker: str | None = None,
 ):
     try:
@@ -292,9 +319,11 @@ def _update_job_status(
         if current.status in (JobStatus.completed, JobStatus.failed):
             # Job already in terminal state, but still update error if we have one (e.g., OOMKilled)
             if error and not current.error:
-                stats_client.update_job(job_id, JobRequestUpdate(error=error))
+                stats_client.update_job(job_id, JobRequestUpdate(error=error, error_type=error_type))
             return
-        stats_client.update_job(job_id, JobRequestUpdate(status=status, error=error, worker=worker))
+        stats_client.update_job(
+            job_id, JobRequestUpdate(status=status, error=error, error_type=error_type, worker=worker)
+        )
     except Exception as e:
         logger.error(f"Failed to update job {job_id} status to {status}: {e}")
 
