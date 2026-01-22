@@ -1,10 +1,10 @@
 name: Build Image and Deploy with Helm
+# Reusable workflow to build and deploy a Docker image to EKS using Helm
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
-# Reusable workflow to build and deploy a Docker image to EKS using Helm
 on:
   workflow_call:
     inputs:
@@ -35,11 +35,24 @@ on:
         required: false
         type: string
         default: ""
+      preview_helm_values:
+        description: "Additional Helm values for PR preview. If not provided, the preview will not be deployed."
+        required: false
+        type: string
+        default: ""
+      preview_host:
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build-and-deploy:
     runs-on: ${{ inputs.runs_on }}
     timeout-minutes: 20
+
+    env:
+      BUILD_PREVIEW: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.preview_helm_values != '' }}
+      DELETE_PREVIEW: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
 
     steps:
       - name: Checkout code
@@ -48,6 +61,7 @@ jobs:
       - name: Build Docker image
         id: build-image
         uses: ./.github/actions/docker-build
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || env.BUILD_PREVIEW == 'true'
         with:
           image_name: ${{ inputs.image_name }}
           dockerfile: ${{ inputs.dockerfile }}
@@ -55,19 +69,72 @@ jobs:
           aws_role: ${{ vars.AWS_ROLE }}
 
       - name: Configure EKS
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || (env.BUILD_PREVIEW == 'true' && inputs.preview_helm_values != '') || env.DELETE_PREVIEW == 'true'
         uses: ./.github/actions/eks-configure
 
       # useful for home deployment
       - name: Pre-deploy command
-        if: github.ref == 'refs/heads/main' && inputs.pre_deploy_command != ''
+        if: inputs.pre_deploy_command != ''
         run: ${{ inputs.pre_deploy_command }}
 
-      - name: Deploy with Helm
-        if: github.ref == 'refs/heads/main'
-        uses: ./.github/actions/helm-deploy
+      - name: Deploy to production
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          helm upgrade \
+            -n ${{ inputs.namespace }} \
+            ${{ inputs.release }} \
+            ${{ inputs.chart }} \
+            --set image.tag=${{ steps.build-image.outputs.tag }}
+
+      - name: Deploy PR preview
+        if: env.BUILD_PREVIEW == 'true' && inputs.preview_helm_values != ''
+        run: |
+          helm upgrade -i \
+            -n ${{ inputs.namespace }} \
+            ${{ inputs.release }}-pr-${{ github.event.pull_request.number }} \
+            ${{ inputs.chart }} \
+            --set image.tag=${{ steps.build-image.outputs.tag }} \
+            ${{ inputs.preview_helm_values }}
+
+      - name: Comment PR with preview URL
+        if: env.BUILD_PREVIEW == 'true' && inputs.preview_host != ''
+        uses: actions/github-script@v7
         with:
-          namespace: ${{ inputs.namespace }}
-          release: ${{ inputs.release }}
-          chart: ${{ inputs.chart }}
-          image_tag: ${{ steps.build-image.outputs.tag }}
+          script: |
+            const url = `https://${{ inputs.preview_host }}`;
+            const body = `🚀 Preview deployment is ready!\n\n**URL:** ${url}`;
+
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment =>
+                comment.user.type === 'Bot' &&
+                comment.body.includes('Preview deployment is ready') &&
+                comment.body.includes(url)
+            );
+
+            if (botComment) {
+                // Update existing comment
+                await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: botComment.id,
+                    body: body
+                });
+            } else {
+                // Create new comment
+                await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: body
+                });
+            }
+
+      - name: Delete PR preview
+        if: env.DELETE_PREVIEW == 'true'
+        run: helm delete -n ${{ inputs.namespace }} ${{ inputs.release }}-pr-${{ github.event.pull_request.number }}

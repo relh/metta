@@ -6,7 +6,8 @@ on:
       - main
     paths:
       - "observatory/**"
-      - ".github/workflows/**"
+  pull_request:
+    types: [opened, synchronize, closed]
   workflow_dispatch: {}
 
 jobs:
@@ -14,6 +15,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      pull-requests: write
 
     uses: ./.github/workflows/_build-and-deploy.yml
     with:
@@ -22,3 +24,5 @@ jobs:
       namespace: observatory
       release: observatory
       chart: ./devops/charts/observatory
+      preview_helm_values: "--set host=${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('observatory-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}"
+      preview_host: "${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('observatory-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}"
