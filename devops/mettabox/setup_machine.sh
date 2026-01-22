@@ -27,6 +27,17 @@ apt-get install -y \
   gnupg \
   rsyslog # for remote journald if you enable it later
 
+# GitHub CLI
+if ! command -v gh &> /dev/null; then
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+  chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+  apt-get update -y
+  apt-get install -y gh
+fi
+
 ################################################################################
 # 1.  Tailscale
 ################################################################################
