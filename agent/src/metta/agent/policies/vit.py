@@ -33,6 +33,7 @@ class ViTDefaultConfig(PolicyArchitecture):
     core_num_heads: int = Field(default=4)
     max_tokens: int = Field(default=128)
     core_num_latents: int = Field(default=12)
+    obs_shim_ignore_inventory_power_tokens: bool = True
 
     # Whether training passes cached pre-state to the Cortex core
     pass_state_during_training: bool = False
@@ -60,7 +61,12 @@ class ViTDefaultConfig(PolicyArchitecture):
             return super().make_policy(policy_env_info)
 
         self.components = [
-            ObsShimTokensConfig(in_key="env_obs", out_key="obs_shim_tokens", max_tokens=self.max_tokens),
+            ObsShimTokensConfig(
+                in_key="env_obs",
+                out_key="obs_shim_tokens",
+                max_tokens=self.max_tokens,
+                ignore_inventory_power_tokens=self.obs_shim_ignore_inventory_power_tokens,
+            ),
             ObsAttrEmbedFourierConfig(
                 in_key="obs_shim_tokens",
                 out_key="obs_attr_embed",

@@ -133,7 +133,7 @@ def train_single_mission(
     tt.stats_reporter.default_zero_metrics = tt.stats_reporter.default_zero_metrics + (
         "env_collective/cogs/aligned.junction.held",
     )
-    tt.policy_architecture = policy_architecture or ViTDefaultConfig()
+    tt.policy_architecture = policy_architecture or ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
     return tt
 
 

@@ -61,10 +61,7 @@ class ObsTokenPadStrip(nn.Module):
             if self._is_inventory_power_feature(props.name):
                 continue
             legacy_name_to_id[props.name] = legacy_id
-            if props.name.startswith("inv:"):
-                legacy_norms[legacy_id] = 100.0
-            else:
-                legacy_norms[legacy_id] = props.normalization
+            legacy_norms[legacy_id] = props.normalization
             legacy_id += 1
         return legacy_name_to_id, legacy_norms
 
