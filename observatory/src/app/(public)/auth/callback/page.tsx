@@ -47,7 +47,7 @@ export default function AuthCallback() {
       setStatus({ type: 'success' })
 
       setTimeout(() => {
-        router.push('/')
+        router.push(searchParams.get('observatory_url') ?? '/')
       }, 2000)
     }
 
