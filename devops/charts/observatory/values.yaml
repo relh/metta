@@ -10,3 +10,11 @@ image:
 cert_manager_issuer: letsencrypt
 
 replicaCount: 2
+
+resources:
+  requests:
+    cpu: 1000m
+    memory: 256Mi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
