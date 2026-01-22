@@ -74,14 +74,34 @@ files written using older schemas or services that haven't been redeployed.
 
 See `common/src/metta/common/tool/README.md` for details.
 
-## GitHub Integration
+## Git / Graphite
 
-Use graphite (`gt`) for all PR operations:
+This repo uses Graphite stacks. Before committing:
 
-```bash
-gt track                  # Track current branch with graphite
-gt submit                 # Push and create/update PR
-gt log                    # View stack of branches
-```
+1. Run `gt log short` to understand the current stack. Review what each branch contains so you can determine where your
+   changes belong.
+2. If changes belong to a **different branch** in the stack, ask the user to confirm which one, then:
+   ```bash
+   git stash
+   gt checkout <target-branch>
+   git stash pop
+   git add <files>
+   gt modify
+   ```
+3. If changes belong to the **current branch**:
+   ```bash
+   git add <files>
+   gt modify
+   ```
+4. If starting **new work** (or not in a stack):
+   ```bash
+   git add <files>
+   gt create <branch-name> -m "description"
+   ```
 
-Branch naming: `$user/short-description` (5 words or less)
+Note: `gt modify` amends the current branch's commit rather than creating a new one. Use `-m` only if the commit message
+needs updating; otherwise omit it to keep the existing message.
+
+When creating new branches, name them `$user/short-issue-name` (5 words or less).
+
+Include a co-author footer in commit messages with your model name and version.
