@@ -112,7 +112,6 @@ handle_master_cleanup() {
   esac
 
   export CMD_EXIT
-  uv run devops/skypilot/config/observability/set_github_status.py "$GITHUB_STATUS_STATE" "$GITHUB_STATUS_DESCRIPTION"
 }
 
 print_final_summary() {

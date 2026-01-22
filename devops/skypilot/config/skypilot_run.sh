@@ -103,19 +103,8 @@ if [[ "$IS_MASTER" == "true" ]]; then
     echo "[RUN] Discord notifications are disabled (no webhook URL)"
   fi
 
-  if [ -n "${GITHUB_PAT:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${METTA_GIT_REF:-}" ]; then
-    export ENABLE_GITHUB_STATUS=true
-    echo "[RUN] GitHub status reporting is enabled"
-
-    # Set initial GitHub status
-    uv run devops/skypilot/config/observability/set_github_status.py "pending" "Queued on SkyPilot…"
-  else
-    export ENABLE_GITHUB_STATUS=false
-    echo "[RUN] GitHub status reporting is disabled (missing required credentials)"
-  fi
 else
   export ENABLE_DISCORD=false
-  export ENABLE_GITHUB_STATUS=false
 fi
 
 shutdown() {
