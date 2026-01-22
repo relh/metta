@@ -240,6 +240,14 @@ devcontainer up --workspace-folder . --remove-existing-container
 
 ## Troubleshooting
 
+**`metta` command fails with "cannot execute: required file not found":**
+
+- This happens when your host machine's `.venv` is mounted into the container. The virtual environment scripts contain
+  hardcoded paths (e.g., `#!/Users/yourname/metta/.venv/bin/python`) that don't exist inside the container.
+- **Solution:** Run `./install.sh` inside the container to recreate the virtual environment with correct paths.
+- **Alternative:** Use `uv run` directly (e.g., `uv run pytest` instead of `metta pytest`) which doesn't rely on the
+  venv scripts.
+
 **Container fails to start with mount error:**
 
 - Run `hostsetup.sh` manually: `.devcontainer/hostsetup.sh`

@@ -28,12 +28,18 @@ def _detect_pytest_parallelism() -> str:
 
     Returns "auto" for native execution, or a reduced count for emulated environments
     where high parallelism causes timeouts due to QEMU overhead.
+
+    Why we can't always use "auto": When running x86 Linux containers on Apple Silicon
+    Macs, the container runs under QEMU emulation. The pytest-xdist "auto" setting
+    spawns one worker per CPU core, but under emulation each process has significant
+    overhead. Spawning 8-10 workers creates so much contention that tests hit the
+    120-second timeout. Limiting to 4 workers reduces contention while still
+    providing parallelism benefits.
     """
     try:
         cpuinfo = Path("/proc/cpuinfo").read_text()
         # OrbStack/Apple Virtualization running x86 on ARM shows "VirtualApple"
         if "VirtualApple" in cpuinfo:
-            # Under emulation, limit to 4 workers to avoid timeouts
             return "4"
     except (FileNotFoundError, PermissionError):
         pass

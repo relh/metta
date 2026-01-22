@@ -39,10 +39,11 @@ ENV PATH="/root/.cargo/bin:$PATH"
 RUN curl -fsSL https://go.dev/dl/go1.23.5.linux-amd64.tar.gz | tar -xz -C /usr/local
 ENV PATH="/usr/local/go/bin:$PATH"
 
-# Node.js
+# Node.js and pnpm
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    npm install -g pnpm
 
 # =============================================================================
 # Build Tools (Bazel, Nim, Nimby)
@@ -61,6 +62,11 @@ RUN npm install -g @anthropic-ai/claude-code @openai/codex
 # =============================================================================
 # Developer Tools
 # =============================================================================
+
+# clang-format for C++ linting
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    clang-format && \
+    rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
