@@ -59,3 +59,8 @@ class PolicyVersionTag(SQLModel, table=True):
     value: str
 
     policy_version: PolicyVersion = Relationship(back_populates="tags")
+
+
+# Import tournament after all models are defined to resolve forward references.
+# This ensures PoolPlayer is available when SQLAlchemy configures the PolicyVersion.pool_players relationship.
+from metta.app_backend.models import tournament as _tournament  # noqa: E402, F401
