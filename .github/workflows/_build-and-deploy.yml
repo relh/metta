@@ -57,6 +57,9 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.dockerfile == 'true' || steps.filter.outputs.chart == 'true' || steps.filter.outputs.paths == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Check for file changes
         id: filter
         uses: dorny/paths-filter@v3.0.2
