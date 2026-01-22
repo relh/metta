@@ -113,6 +113,9 @@ jobs:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           OBSERVATORY_TOKEN: ${{ secrets.OBSERVATORY_TOKEN }}
           SKYPILOT_SERVICE_ACCOUNT_TOKEN: ${{ secrets.SKYPILOT_SERVICE_ACCOUNT_TOKEN }}
+          # Note: GITHUB_TOKEN expires after 24h. If a SkyPilot job restarts after expiry,
+          # the setup phase (which downloads setup.sh via curl) will fail. For now this is acceptable.
+          # because stable-release should finish on the order of single-digit hours
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASANA_TOKEN: ${{ secrets.ASANA_TOKEN }}
           ASANA_PROJECT_ID: ${{ secrets.ASANA_BUGS_PROJECT_ID }}
