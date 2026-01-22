@@ -24,6 +24,7 @@ concurrency:
 
 # Set default permissions
 permissions:
+  contents: read
   checks: write
   pull-requests: write
 
