@@ -74,6 +74,14 @@ files written using older schemas or services that haven't been redeployed.
 
 See `common/src/metta/common/tool/README.md` for details.
 
-## Git Hub Integration
+## GitHub Integration
 
-Use graphite ("gt") to create PRs. Name the branch $user-short-issue-name (5 words or less)
+Use graphite (`gt`) for all PR operations:
+
+```bash
+gt track                  # Track current branch with graphite
+gt submit                 # Push and create/update PR
+gt log                    # View stack of branches
+```
+
+Branch naming: `$user/short-description` (5 words or less)
