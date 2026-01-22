@@ -35,7 +35,7 @@ RUN echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://p
 RUN chmod 644 /etc/apt/sources.list.d/kubernetes.list
 RUN apt-get update && apt-get install -y kubectl && rm -rf /var/lib/apt/lists/*
 
-RUN uv sync --all-extras --frozen && \
+RUN uv sync --frozen && \
     uv run python -c "import metta.app_backend.eval_task_orchestrator" && \
     uv run python -c "import metta.app_backend.eval_task_worker"
 
