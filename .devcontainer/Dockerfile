@@ -16,8 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
-    fish \
-    g++ \
     git \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
@@ -80,6 +78,11 @@ RUN npm install -g @withgraphite/graphite-cli
 # =============================================================================
 # Shell Enhancements
 # =============================================================================
+
+# Fish
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fish && \
+    rm -rf /var/lib/apt/lists/*
 
 # Nushell
 RUN curl -fsSL https://github.com/nushell/nushell/releases/download/0.101.0/nu-0.101.0-x86_64-unknown-linux-gnu.tar.gz | \

@@ -8,7 +8,11 @@
   "runArgs": ["--platform=linux/amd64"],
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
-  "initializeCommand": "mkdir -p ~/.claude ~/.codex ~/.config/gh ~/.config/gcloud ~/.config/wandb ~/.config/graphite ~/.config/devdotfiles ~/.sky && touch ~/.netrc",
+  "initializeCommand": [
+    "bash",
+    "-c",
+    "mkdir -p ~/.claude   && mkdir -p ~/.codex   && mkdir -p ~/.config/gh   && mkdir -p ~/.config/gcloud   && mkdir -p ~/.config/wandb   && mkdir -p ~/.config/graphite   && mkdir -p ~/.config/devdotfiles   && mkdir -p ~/.sky   && touch ~/.netrc"
+  ],
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind,consistency=cached",
