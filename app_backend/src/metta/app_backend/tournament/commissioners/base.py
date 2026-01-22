@@ -492,11 +492,12 @@ class CommissionerBase(ABC):
             match_id = match.id
             span.set_attribute("match.id", str(match_id))
 
+            replay_uri = None if request.skip_replay else f"{SOFTMAX_S3_REPLAYS_PREFIX}/{match_id}.json.z"
             job_spec = SingleEpisodeJob(
                 policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
                 assignments=request.assignments,
                 env=request.env,
-                replay_uri=f"{SOFTMAX_S3_REPLAYS_PREFIX}/{match_id}.json.z",
+                replay_uri=replay_uri,
                 seed=request.seed,
                 episode_tags=request.episode_tags,
             ).model_dump()

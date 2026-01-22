@@ -1,24 +1,24 @@
+from abc import abstractmethod
 from collections import defaultdict
 from uuid import UUID
 
 from metta.app_backend.models.tournament import MatchStatus, PoolPlayer
 from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase
 from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
-NUM_AGENTS = 4
 MAX_FAILED_ATTEMPTS = 3
 
 
-class SelfPlayReferee(RefereeBase):
-    """Schedules self-play matches where a single policy controls all agents.
-
-    Each player gets up to `matches_per_player` self-play matches to establish
-    a baseline score before being considered for promotion to competition pools.
-    Retries failed matches up to MAX_FAILED_ATTEMPTS times.
-    """
-
+class SelfPlayRefereeBase(RefereeBase):
+    num_agents: int
     matches_per_player: int = 2
-    description: str = "Self-play matches on Machina 1 Open World"
+    game_tag: str | None = None
+    skip_replay: bool = False
+
+    @abstractmethod
+    def make_env(self, seed: int) -> MettaGridConfig:
+        pass
 
     def get_matches_to_schedule(
         self,
@@ -54,18 +54,30 @@ class SelfPlayReferee(RefereeBase):
             if in_progress > 0:
                 continue
 
-            # Use completed + match_i so each player plays on the same sequence of maps
             seed = 42
             needed = self.matches_per_player - completed
+            episode_tags = {"match_type": "self_play"}
+            if self.game_tag:
+                episode_tags["game"] = self.game_tag
+
             for match_i in range(needed):
                 requests.append(
                     MatchRequest(
                         pool_player_ids=[pp_id],
-                        assignments=[0, 0, 0, 0],
-                        env=make_shared_rewards_env(seed + completed + match_i, NUM_AGENTS),
+                        assignments=[0] * self.num_agents,
+                        env=self.make_env(seed + completed + match_i),
                         seed=seed,
-                        episode_tags={"match_type": "self_play"},
+                        episode_tags=episode_tags,
+                        skip_replay=self.skip_replay,
                     )
                 )
 
         return requests
+
+
+class SelfPlayReferee(SelfPlayRefereeBase):
+    num_agents: int = 4
+    description: str = "Self-play matches on Machina 1 Open World"
+
+    def make_env(self, seed: int) -> MettaGridConfig:
+        return make_shared_rewards_env(seed, self.num_agents)
