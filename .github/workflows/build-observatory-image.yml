@@ -2,14 +2,9 @@ name: "Build Observatory Frontend Docker Image"
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "observatory/**"
+    branches: [main]
   pull_request:
     types: [opened, synchronize, closed]
-    paths:
-      - "observatory/**"
   workflow_dispatch: {}
 
 jobs:
@@ -21,16 +16,18 @@ jobs:
 
     uses: ./.github/workflows/_build-and-deploy.yml
     with:
+      code_paths: |
+        - 'observatory/**'
       image_name: metta-app-frontend
       dockerfile: observatory/Dockerfile
       namespace: observatory
       release: observatory
       chart: ./devops/charts/observatory
       preview_helm_values: |
-        --set host=${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('observatory-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}
-        --set resources.requests.cpu=100m
-        --set resources.requests.memory=64Mi
-        --set resources.limits.cpu=1000m
-        --set resources.limits.memory=512Mi
+        --set host=${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('observatory-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }} \
+        --set resources.requests.cpu=100m \
+        --set resources.requests.memory=64Mi \
+        --set resources.limits.cpu=1000m \
+        --set resources.limits.memory=512Mi \
         --set replicaCount=1
       preview_host: "${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('observatory-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}"
