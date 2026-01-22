@@ -56,12 +56,7 @@ if TYPE_CHECKING:
         post_commit_status,
         run_gh,
     )
-    from .secrets import (
-        clear_cache,
-        get_anthropic_api_key,
-        get_github_token,
-        get_secret,
-    )
+    from .secrets import get_github_token
     from .split import PRSplitter, split_pr
 
 _LAZY_ATTRS: dict[str, tuple[str, str]] = {
@@ -76,10 +71,7 @@ _LAZY_ATTRS: dict[str, tuple[str, str]] = {
     "post_commit_status": ("gitta.github", "post_commit_status"),
     "run_gh": ("gitta.github", "run_gh"),
     # Secrets management
-    "clear_cache": ("gitta.secrets", "clear_cache"),
-    "get_anthropic_api_key": ("gitta.secrets", "get_anthropic_api_key"),
     "get_github_token": ("gitta.secrets", "get_github_token"),
-    "get_secret": ("gitta.secrets", "get_secret"),
     # PR splitting functionality
     "PRSplitter": ("gitta.split", "PRSplitter"),
     "split_pr": ("gitta.split", "split_pr"),
@@ -144,10 +136,7 @@ __all__ = [
     # Filter
     "filter_repo",
     # Secrets
-    "get_secret",
     "get_github_token",
-    "get_anthropic_api_key",
-    "clear_cache",
     # Split
     "split_pr",
     "PRSplitter",

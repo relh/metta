@@ -64,7 +64,7 @@ def github_client(
     Yields:
         Configured httpx.Client for GitHub API requests
     """
-    github_token = token or get_github_token(required=False)
+    github_token = token or get_github_token()
 
     # Build base URL
     if base_url is None:
@@ -202,7 +202,9 @@ def post_commit_status(
         raise ValueError("Repository must be provided in format 'owner/repo'")
 
     # Get token (required)
-    github_token = token or get_github_token(required=True)
+    github_token = token or get_github_token()
+    if not github_token:
+        raise ValueError("GitHub token not found - set GITHUB_TOKEN env var or run `gh auth login`")
 
     # Build request
     url = f"https://api.github.com/repos/{repo}/statuses/{commit_sha}"
@@ -265,7 +267,9 @@ def create_pr(
         raise ValueError("Repository must be provided in format 'owner/repo'")
 
     # Get token (required)
-    github_token = token or get_github_token(required=True)
+    github_token = token or get_github_token()
+    if not github_token:
+        raise ValueError("GitHub token not found - set GITHUB_TOKEN env var or run `gh auth login`")
 
     # Build request
     url = f"https://api.github.com/repos/{repo}/pulls"

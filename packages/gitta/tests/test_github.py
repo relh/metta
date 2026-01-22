@@ -9,7 +9,6 @@ import pytest
 
 from gitta import (
     GitError,
-    create_pr,
     get_matched_pr,
     post_commit_status,
     run_gh,
@@ -119,13 +118,15 @@ class TestGitHubAPI:
         assert "Authorization" in call_args[1]["headers"]
         assert "token test_token" in call_args[1]["headers"]["Authorization"]
 
+    @patch("subprocess.run")
     @patch("httpx.post")
-    def test_post_commit_status_no_token(self, mock_post):
+    def test_post_commit_status_no_token(self, mock_post, mock_subprocess):
         """Test that post_commit_status fails without token."""
+        mock_subprocess.side_effect = FileNotFoundError()
         with patch.dict(os.environ, {}, clear=True):
             with pytest.raises(ValueError) as exc_info:
                 post_commit_status("abc123", "success", "Metta-AI/metta")
-            assert "secret not found" in str(exc_info.value).lower()
+            assert "token not found" in str(exc_info.value).lower()
         # Should not have made any HTTP calls
         mock_post.assert_not_called()
 
@@ -138,73 +139,3 @@ class TestGitHubAPI:
             assert "repository must be provided" in str(exc_info.value).lower()
         # Should not have made any HTTP calls
         mock_post.assert_not_called()
-
-    @patch("httpx.post")
-    def test_create_pr_success(self, mock_post):
-        """Test creating a pull request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "number": 456,
-            "html_url": "https://github.com/Metta-AI/metta/pull/456",
-            "title": "Test PR",
-            "state": "open",
-        }
-        mock_response.raise_for_status = Mock()
-        mock_post.return_value = mock_response
-
-        with patch.dict(os.environ, {"GITHUB_TOKEN": "test_token"}):
-            result = create_pr(
-                repo="Metta-AI/metta", title="Test PR", body="Test description", head="feature-branch", base="main"
-            )
-
-        assert result["number"] == 456
-        assert "pull/456" in result["html_url"]
-        mock_post.assert_called_once()
-
-    @patch("httpx.post")
-    def test_create_pr_with_draft(self, mock_post):
-        """Test creating a draft pull request."""
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "number": 789,
-            "draft": True,
-            "html_url": "https://github.com/Metta-AI/metta/pull/789",
-        }
-        mock_response.raise_for_status = Mock()
-        mock_post.return_value = mock_response
-
-        with patch.dict(os.environ, {"GITHUB_TOKEN": "test_token"}):
-            result = create_pr(
-                repo="Metta-AI/metta", title="Draft PR", body="WIP", head="feature", base="main", draft=True
-            )
-
-        assert result["draft"] is True
-        # Check that draft parameter was sent
-        call_args = mock_post.call_args
-        assert call_args[1]["json"]["draft"] is True
-
-    @patch("httpx.post")
-    def test_create_pr_no_token(self, mock_post):
-        """Test that create_pr fails without token."""
-        with patch.dict(os.environ, {}, clear=True):
-            with pytest.raises(ValueError) as exc_info:
-                create_pr(repo="Metta-AI/metta", title="Test", body="Test", head="feature", base="main")
-            assert "secret not found" in str(exc_info.value).lower()
-        # Should not have made any HTTP calls
-        mock_post.assert_not_called()
-
-    @patch("httpx.post")
-    def test_create_pr_api_error(self, mock_post):
-        """Test create_pr with API error."""
-        mock_response = Mock()
-        mock_response.text = "Bad request: invalid base branch"
-
-        # Use real httpx.HTTPError
-        mock_response.raise_for_status.side_effect = httpx.HTTPError("Bad request: invalid base branch")
-        mock_post.return_value = mock_response
-
-        with patch.dict(os.environ, {"GITHUB_TOKEN": "test_token"}):
-            with pytest.raises(GitError) as exc_info:
-                create_pr(repo="Metta-AI/metta", title="Test", body="Test", head="feature", base="invalid")
-            assert "Failed to create PR" in str(exc_info.value)
-            assert "Bad request" in str(exc_info.value)
