@@ -7,7 +7,7 @@ variable "cluster_name" {
 }
 
 variable "cluster_version" {
-  default = "1.32"
+  default = "1.34"
 }
 
 variable "oauth_secret_arn" {
