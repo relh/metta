@@ -17,7 +17,7 @@ class _LoggerState(NamedTuple):
     """Snapshot of a logger's mutable state for restoration."""
 
     handlers: tuple[logging.Handler, ...]
-    filters: tuple[logging.Filter, ...]
+    filters: tuple[logging._FilterType, ...]
     level: int
     propagate: bool
     disabled: bool

@@ -44,10 +44,10 @@ class DramaWorldModelConfig(ComponentConfig):
     use_reset_token: bool = True
     pool: str = "mean"
 
-    ssm_cfg: Dict[str, Any] = None
-    attn_layer_idx: list[int] = None
-    attn_cfg: Dict[str, Any] = None
-    pff_cfg: Dict[str, Any] = None
+    ssm_cfg: Optional[Dict[str, Any]] = None
+    attn_layer_idx: Optional[list[int]] = None
+    attn_cfg: Optional[Dict[str, Any]] = None
+    pff_cfg: Optional[Dict[str, Any]] = None
 
     def make_component(self, env: Optional[Any] = None):  # type: ignore[override]
         from .world_model_component import DramaWorldModelComponent

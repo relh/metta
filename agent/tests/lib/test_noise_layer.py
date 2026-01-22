@@ -13,7 +13,11 @@ def _build_td(batch_size: int = 4, features: int = 6) -> TensorDict:
 
 def _make_layer(std: float, *, seed: int, noise_during_eval: bool = False) -> NoiseLayer:
     torch.manual_seed(seed)
-    return NoiseLayer(NoiseLayerConfig(**BASE_CONFIG, std=std, noise_during_eval=noise_during_eval))
+    return NoiseLayer(
+        NoiseLayerConfig(
+            in_key=BASE_CONFIG["in_key"], out_key=BASE_CONFIG["out_key"], std=std, noise_during_eval=noise_during_eval
+        )
+    )
 
 
 def _run(layer: NoiseLayer, td: TensorDict, *, seed: int, out_key: str | None = None) -> torch.Tensor:

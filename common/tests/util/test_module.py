@@ -48,4 +48,4 @@ def test_load_config() -> None:
 
 def test_load_nested_symbol(with_extra_imports_root) -> None:
     result = load_symbol("foo.bar.baz.Foo.Bar.Baz")
-    assert result.__name__ == "Baz"
+    assert result is not None and result.__name__ == "Baz"

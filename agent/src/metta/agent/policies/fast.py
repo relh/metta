@@ -123,7 +123,7 @@ class FastPolicy(Policy):
         self.action_probs = ActionProbs(config=self.config.action_probs_config)
 
     @torch._dynamo.disable  # Avoid graph breaks from TensorDict operations hurting performance
-    def forward(self, td: TensorDict, state=None, action: torch.Tensor = None):
+    def forward(self, td: TensorDict, state=None, action: Optional[torch.Tensor] = None):
         self.obs_shim(td)
         self.cnn_encoder(td)
         self.core(td)
@@ -144,7 +144,7 @@ class FastPolicy(Policy):
         self,
         policy_env_info: PolicyEnvInterface,
         device: torch.device,
-    ) -> List[str]:
+    ) -> List[str | None]:
         device = torch.device(device)
         self.to(device)
 

@@ -10,14 +10,14 @@ from tensordict.nn import TensorDictSequential
 from torch.nn.parameter import UninitializedParameter
 from torchrl.data import Composite, UnboundedDiscrete
 
-from metta.agent.policy import Policy
+from metta.agent.policy import Policy, PolicyArchitecture
 from mettagrid.base_config import Config
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 logger = logging.getLogger("metta_agent")
 
 
-def log_on_master_with_level(log_level: str | int, *args, **argv) -> None:
+def log_on_master_with_level(log_level: int, *args, **argv) -> None:
     if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
         logger.log(log_level, *args, **argv)
 
@@ -33,11 +33,12 @@ class PolicyAutoBuilder(Policy):
         self.config = config
 
         self.components = OrderedDict()
-        for component_config in self.config.components:
-            name = component_config.name
-            self.components[name] = component_config.make_component(policy_env_info)
+        if self.config is not None and isinstance(self.config, PolicyArchitecture):
+            for component_config in self.config.components:
+                name = component_config.name
+                self.components[name] = component_config.make_component(policy_env_info)
+            self.action_probs = self.config.action_probs_config.make_component()
 
-        self.action_probs = self.config.action_probs_config.make_component()
         self._sequential_network = TensorDictSequential(self.components, inplace=True)
         self._sdpa_context = ExitStack()
 
@@ -71,7 +72,8 @@ class PolicyAutoBuilder(Policy):
                 logs.append(value.initialize_to_environment(policy_env_info, device))
         if hasattr(self, "action_probs"):
             if hasattr(self.action_probs, "initialize_to_environment"):
-                self.action_probs.initialize_to_environment(policy_env_info, device)
+                if callable(self.action_probs.initialize_to_environment):
+                    self.action_probs.initialize_to_environment(policy_env_info, device)
 
         for log in logs:
             if log is not None:
@@ -85,7 +87,8 @@ class PolicyAutoBuilder(Policy):
 
         nn_attention = getattr(torch.nn, "attention", None)
         sdpa_kernel = getattr(nn_attention, "sdpa_kernel", None)
-        if callable(sdpa_kernel):
+
+        if sdpa_kernel is not None and nn_attention is not None:
             configured = self._enter_sdp_context(
                 sdpa_kernel,
                 backends=[

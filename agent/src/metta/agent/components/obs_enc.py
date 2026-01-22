@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, cast
 
 import einops
 import torch
@@ -175,7 +175,11 @@ class ObsLatentAttn(nn.Module):
             mask_value = -torch.finfo(k_p.dtype).max
             attn_bias = einops.rearrange(key_mask, "b m -> b 1 1 m").to(k_p.dtype) * mask_value
 
-        for layer in self.layers:
+        for raw_layer in self.layers:
+            # Pyright cannot infer that the ModuleList is a list of ModuleDict
+            # and instead interprets it as a list of Module
+            layer = cast(nn.ModuleDict, raw_layer)
+
             # Attention block
             queries_res = queries
             queries_norm = layer["norm1"](queries)
@@ -287,7 +291,11 @@ class ObsPerceiverLatent(nn.Module):
 
         latents = self.latents.expand(x_features.shape[0], -1, -1)
 
-        for layer in self.layers:
+        for raw_layer in self.layers:
+            # Pyright cannot infer that the ModuleList is a list of ModuleDict
+            # and instead interprets it as a list of Module
+            layer = cast(nn.ModuleDict, raw_layer)
+
             residual = latents
             q = layer["q_proj"](layer["latent_norm"](latents))
             q = einops.rearrange(q, "b n (h d) -> b h n d", h=self._num_heads)
@@ -383,6 +391,8 @@ class ObsSelfAttn(nn.Module):
             if self._use_cls_token:
                 cls_pad = torch.zeros(key_mask.shape[0], 1, device=key_mask.device, dtype=torch.bool)
                 key_mask = torch.cat([cls_pad, key_mask], dim=1)
+
+            assert x_features.dtype is not None
             mask_value = -torch.finfo(x_features.dtype).max
             attn_bias = einops.rearrange(key_mask, "b m -> b 1 1 m").to(x_features.dtype) * mask_value
 

@@ -1,6 +1,6 @@
 import logging
 import types
-from typing import List
+from typing import List, Optional
 
 import torch
 from cortex.stacks import build_cortex_auto_config
@@ -24,7 +24,7 @@ from mettagrid.util.module import load_symbol
 logger = logging.getLogger(__name__)
 
 
-def forward(self, td: TensorDict, action: torch.Tensor = None) -> TensorDict:
+def forward(self, td: TensorDict, action: Optional[torch.Tensor] = None) -> TensorDict:
     """Forward pass for the FastDynamics policy."""
     self.network(td)
     self.action_probs(td, action)
@@ -101,13 +101,17 @@ class FastDynamicsConfig(PolicyArchitecture):
 
     def make_policy(self, policy_env_info: PolicyEnvInterface) -> Policy:
         AgentClass = load_symbol(self.class_path)
+
+        if not isinstance(AgentClass, type):
+            raise TypeError(f"Loaded symbol {self.class_path} is not a class")
+
         policy = AgentClass(policy_env_info, self)
 
         num_actions = policy_env_info.action_space.n
         pred_input_dim = self._core_out_dim + num_actions
-        returns_module = nn.Linear(pred_input_dim, 1)
-        reward_module = nn.Linear(pred_input_dim, 1)
-        future_latent_module = nn.Linear(pred_input_dim, self._core_out_dim)
+        returns_module = nn.Linear(int(pred_input_dim), 1)
+        reward_module = nn.Linear(int(pred_input_dim), 1)
+        future_latent_module = nn.Linear(int(pred_input_dim), self._core_out_dim)
         policy.returns_pred = TDM(returns_module, in_keys=["pred_input"], out_keys=["returns_pred"])
         policy.reward_pred = TDM(reward_module, in_keys=["pred_input"], out_keys=["reward_pred"])
         policy.future_latent_pred = TDM(

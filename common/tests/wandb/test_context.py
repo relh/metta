@@ -185,7 +185,7 @@ def test_run_config_types(monkeypatch, caplog):
 
     # Test 5: Invalid type
     invalid_config = 12345
-    with WandbContext(cfg, invalid_config) as run:
+    with WandbContext(cfg, invalid_config) as run:  # pyright: ignore[reportArgumentType] -> Intentional Mismatch
         assert run is not None
     assert init_calls[-1]["config"] is None
     assert "Invalid extra_cfg: 12345" in caplog.text

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Collection, Dict, Hashable, Iterable, List, Optional, Tuple, cast
 
 import optree
 import torch
@@ -10,6 +10,7 @@ from cortex.config import CortexStackConfig
 from cortex.factory import build_cortex
 from cortex.stacks import CortexStack
 from einops import rearrange
+from optree import PyTree, PyTreeSpec
 from pydantic import ConfigDict, model_validator
 from tensordict import TensorDict, TensorDictBase
 from torchrl.data import Composite, UnboundedDiscrete
@@ -22,7 +23,8 @@ logger = logging.getLogger(__name__)
 FlatKey = str
 
 
-def _td_flatten(td: TensorDictBase) -> Tuple[Iterable[Any], tuple]:
+def _td_flatten(node: TensorDictBase) -> Tuple[Iterable[Any], tuple]:
+    td = cast(TensorDict, node)  # Satisfies Pyright
     keys = tuple(td.keys())
     children = [td.get(k) for k in keys]
     meta = (
@@ -34,7 +36,10 @@ def _td_flatten(td: TensorDictBase) -> Tuple[Iterable[Any], tuple]:
     return children, meta
 
 
-def _td_unflatten(meta: tuple, children: Iterable[Any]) -> TensorDict:
+def _td_unflatten(meta: Hashable, children: Iterable[Any]) -> Collection[Any]:
+    if not isinstance(meta, tuple) or len(meta) != 4:
+        raise ValueError("Expected 4-tuple metadata for TensorDict pytree node")
+
     keys, _meta_batch_size, _meta_device, td_type = meta
     children_list = list(children)
     data = {k: c for k, c in zip(keys, children_list, strict=False)}
@@ -48,12 +53,12 @@ def _td_unflatten(meta: tuple, children: Iterable[Any]) -> TensorDict:
             break
     if inferred_bs is None:
         inferred_bs = tuple(_meta_batch_size) if isinstance(_meta_batch_size, tuple) else _meta_batch_size
-    return td_type(data, batch_size=inferred_bs)
+    return cast(Collection[Any], td_type(data, batch_size=inferred_bs))
 
 
 _REGISTERED_TD_NODE = globals().get("_REGISTERED_TD_NODE", False)
 if not _REGISTERED_TD_NODE:
-    optree.register_pytree_node(TensorDictBase, _td_flatten, _td_unflatten, namespace="torch")
+    optree.register_pytree_node(TensorDictBase, _td_flatten, _td_unflatten, namespace="torch")  # type: ignore[arg-type]
     _REGISTERED_TD_NODE = True
 
 
@@ -149,7 +154,7 @@ class CortexTD(nn.Module):
         self.out_features: Optional[int] = config.out_features
         self.key_prefix: str = config.key_prefix
 
-        self._state_treedef: Optional[Any] = None
+        self._state_treedef: Optional[PyTreeSpec] = None
         self._leaf_shapes: List[Tuple[int, ...]] = []
 
         layers: List[nn.Module] = []
@@ -169,7 +174,7 @@ class CortexTD(nn.Module):
         self._rollout_current_state: Optional[TensorDict] = None
         self._rollout_current_env_ids: Optional[torch.Tensor] = None
 
-    def initialize_to_environment(self, _policy_env_info: Any, device: torch.device) -> Optional[str]:
+    def initialize_to_environment(self, _policy_env_info: Any, _device: torch.device) -> Optional[str]:
         return None
 
     def _init_template_if_needed(self, *, B: int, device: torch.device, dtype: torch.dtype) -> None:
@@ -182,11 +187,13 @@ class CortexTD(nn.Module):
         x0 = torch.zeros(batch, int(self.d_hidden), device=device, dtype=dtype)
         with torch.no_grad():
             _y, s1 = self.stack.step(x0, None)
-        return s1
+        if s1 is None:
+            raise ValueError("Stack step returned None state during initialization")
+        return cast(TensorDict, s1)
 
     def _adopt_template_from_state(self, state: TensorDictBase) -> None:
         """Adopt treedef and shapes from a representative state."""
-        leaves, treedef = optree.tree_flatten(state, namespace="torch")
+        leaves, treedef = optree.tree_flatten(state, namespace="torch")  # type: ignore[arg-type]
         self._state_treedef = treedef
         self._leaf_shapes = []
         for leaf in leaves:
@@ -197,7 +204,7 @@ class CortexTD(nn.Module):
 
     def _maybe_refresh_template(self, state: TensorDictBase) -> None:
         """Refresh template if current state's structure diverges."""
-        leaves, _ = optree.tree_flatten(state, namespace="torch")
+        leaves, _ = optree.tree_flatten(state, namespace="torch")  # type: ignore[arg-type]
         if self._state_treedef is None or len(leaves) != len(self._leaf_shapes):
             self._adopt_template_from_state(state)
 
@@ -207,15 +214,18 @@ class CortexTD(nn.Module):
         return self._storage_dtype if hasattr(self, "_storage_dtype") else caller_dtype
 
     def _cast_state_dtype(self, state: TensorDictBase, dtype: torch.dtype) -> TensorDict:
-        leaves, treedef = optree.tree_flatten(state, namespace="torch")
+        leaves, treedef = optree.tree_flatten(state, namespace="torch")  # type: ignore[arg-type]
         casted: List[Any] = []
         for leaf in leaves:
             casted.append(leaf.to(dtype) if isinstance(leaf, torch.Tensor) else leaf)
-        return optree.tree_unflatten(treedef, casted)
+        return cast(TensorDict, optree.tree_unflatten(treedef, casted))
 
     @torch._dynamo.disable
     def forward(self, td: TensorDict) -> TensorDict:  # type: ignore[override]
         x = td[self.in_key]
+
+        assert x.device is not None
+        assert x.dtype is not None
 
         device = x.device
         storage_dtype = self._storage_dtype
@@ -240,7 +250,7 @@ class CortexTD(nn.Module):
                     "[CortexTD] Missing 'training_env_ids'; defaulting to arange(B) with B=%d.",
                     B,
                 )
-            env_ids_2d = td["training_env_ids"].to(device=device, dtype=torch.long)
+            env_ids_2d = cast(torch.Tensor, td["training_env_ids"]).to(device=device, dtype=torch.long)
             assert env_ids_2d.dim() == 2 and env_ids_2d.shape[1] == 1, "training_env_ids must be [B,1]"
             env_ids_long = env_ids_2d.view(-1)
 
@@ -253,8 +263,8 @@ class CortexTD(nn.Module):
                     "[CortexTD] Missing 'row_id' or 't_in_row' during evaluation (TT==1); skipping row_store caching."
                 )
             else:
-                row_id_flat = td["row_id"].to(device=device, dtype=torch.long).view(-1)
-                t_in_row_flat = td["t_in_row"].to(device=device, dtype=torch.long).view(-1)
+                row_id_flat = cast(torch.Tensor, td["row_id"]).to(device=device, dtype=torch.long).view(-1)
+                t_in_row_flat = cast(torch.Tensor, td["t_in_row"]).to(device=device, dtype=torch.long).view(-1)
                 mask_start = t_in_row_flat == 0
                 if bool(mask_start.any()):
                     idx = torch.nonzero(mask_start, as_tuple=False).reshape(-1)
@@ -262,7 +272,9 @@ class CortexTD(nn.Module):
                     if isinstance(state_sel, TensorDict) and compute_dtype != storage_dtype:
                         state_sel = self._cast_state_dtype(state_sel, storage_dtype)
                     row_ids_sel = row_id_flat[idx]
-                    self._scatter_state_by_slots_list(state_sel, row_ids_sel, store=self._row_store_leaves)
+                    self._scatter_state_by_slots_list(
+                        cast(TensorDictBase, state_sel), row_ids_sel, store=self._row_store_leaves
+                    )
 
             x_step = x.view(B, -1) if x.dtype is compute_dtype else x.view(B, -1).to(compute_dtype)
             y, state_next = self.stack.step(x_step, state_prev, resets=resets)
@@ -277,7 +289,7 @@ class CortexTD(nn.Module):
         if self.config.pass_state_during_training:
             if "row_id" not in td.keys():
                 raise KeyError("CortexTD training path (TT>1) requires 'row_id' when pass_state_during_training=True")
-            row_tensor = td["row_id"].to(device=device, dtype=torch.long)
+            row_tensor = cast(torch.Tensor, td["row_id"]).to(device=device, dtype=torch.long)
             if row_tensor.numel() != B * TT:
                 raise ValueError("row_id must contain exactly B*TT elements")
             row_ids = row_tensor.view(B, TT)[:, 0]
@@ -381,7 +393,7 @@ class CortexTD(nn.Module):
             leaves: List[torch.Tensor] = []
             for shape in self._leaf_shapes:
                 leaves.append(torch.zeros((B, *shape), device=device, dtype=dtype))
-            return optree.tree_unflatten(self._state_treedef, leaves)
+            return cast(TensorDict, optree.tree_unflatten(self._state_treedef, leaves))
 
         if slot_ids.dim() != 1:
             slot_ids = slot_ids.reshape(-1)
@@ -399,7 +411,7 @@ class CortexTD(nn.Module):
             if not bool(valid_mask.all()):
                 gathered[~valid_mask] = 0
             gathered_leaves.append(gathered.to(dtype=dtype, device=device))
-        return optree.tree_unflatten(self._state_treedef, gathered_leaves)
+        return cast(TensorDict, optree.tree_unflatten(self._state_treedef, gathered_leaves))
 
     def _scatter_state_by_slots_list(
         self, state: TensorDictBase, slot_ids: torch.Tensor, *, store: List[torch.Tensor]
@@ -409,7 +421,7 @@ class CortexTD(nn.Module):
         if slot_ids.dim() != 1:
             slot_ids = slot_ids.reshape(-1)
         max_slot = int(slot_ids.max().item()) + 1
-        leaves, _ = optree.tree_flatten(state, namespace="torch")
+        leaves, _ = optree.tree_flatten(state, namespace="torch")  # type: ignore[arg-type]
         assert all(isinstance(leaf_item, torch.Tensor) for leaf_item in leaves), "Cortex state leaves must be Tensors"
         leaf_device = leaves[0].device if leaves else torch.device("cpu")
         storage_dtype = self._storage_dtype if hasattr(self, "_storage_dtype") else leaves[0].dtype
@@ -419,12 +431,13 @@ class CortexTD(nn.Module):
         for leaf, dest in zip(leaves, store, strict=False):
             dest.index_copy_(0, slot_ids, leaf.to(dtype=dest.dtype).detach())
 
-    def _select_state_rows(self, state: TensorDictBase, idx: torch.Tensor) -> TensorDict:
+    def _select_state_rows(self, state: TensorDictBase, idx: torch.Tensor) -> PyTree[torch.Tensor]:
         """Return state with each tensor leaf indexed by given rows."""
         if idx.dim() != 1:
             idx = idx.reshape(-1)
-        leaves, _ = optree.tree_flatten(state, namespace="torch")
+        leaves, _ = optree.tree_flatten(state, namespace="torch")  # type: ignore[arg-type]
         sel_leaves: List[torch.Tensor] = [leaf.index_select(0, idx) for leaf in leaves]
+        assert self._state_treedef is not None
         return optree.tree_unflatten(self._state_treedef, sel_leaves)
 
     def _flush_rollout_current_to_store(self) -> None:

@@ -1,18 +1,26 @@
-from types import SimpleNamespace
-
 import torch
 from tensordict import TensorDict
 
 from metta.agent.components.obs_shim import ObsShimTokens, ObsShimTokensConfig, ObsTokenPadStrip
 from metta.agent.components.obs_tokenizers import ObsAttrEmbedFourier, ObsAttrEmbedFourierConfig
+from mettagrid.config.id_map import ObservationFeatureSpec
+from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 
-def _make_policy_env_info(feature_map):
+def _make_policy_env_info(feature_map) -> PolicyEnvInterface:
     obs_features = [
-        SimpleNamespace(name=name, id=feat_id, normalization=norm) for name, (feat_id, norm) in feature_map.items()
+        ObservationFeatureSpec(id=feat_id, name=name, normalization=norm)
+        for name, (feat_id, norm) in feature_map.items()
     ]
-    return SimpleNamespace(
-        obs_features=obs_features, feature_normalizations={feat_id: norm for feat_id, norm in (feature_map.values())}
+
+    return PolicyEnvInterface(
+        obs_features=obs_features,
+        action_names=[],
+        tags=[],
+        num_agents=1,
+        observation_shape=(100, 3),  # Not used in test
+        egocentric_shape=(7, 7),  # Not used in test
+        assembler_protocols=[],
     )
 
 

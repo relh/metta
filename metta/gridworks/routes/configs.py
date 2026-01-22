@@ -1,4 +1,5 @@
 import logging
+from typing import Sequence, Union
 
 from fastapi import APIRouter, HTTPException
 
@@ -6,6 +7,7 @@ from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.common.util.fs import get_repo_root
 from metta.gridworks.common import extend_config
 from metta.gridworks.configs.registry import ConfigMaker, ConfigMakerKind, ConfigMakerRegistry
+from metta.sim.runner import SimulationRunConfig
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.eval import EvaluateTool
 from metta.tools.play import PlayTool
@@ -17,6 +19,14 @@ from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.utils.storable_map import StorableMap, StorableMapDict
 
 logger = logging.getLogger(__name__)
+
+
+# Helper Type for Pyright to be satisfied when an EvaluateTool
+# map is processed and it's simulations
+# field is 'SimulationRunConfig' list
+# instead of a 'SimulationConfig' list
+# the former not being a subclass of 'Config'
+ConfigLike = Union[Config, SimulationRunConfig]
 
 
 def make_configs_router() -> APIRouter:
@@ -52,7 +62,9 @@ def make_configs_router() -> APIRouter:
             status_code=400, detail=f"Config of type {type(cfg)} can't be converted to a MapBuilderConfig"
         )
 
-    def config_to_map_builder_by_name(cfg: Config | list[Config] | dict[str, Config], name: str) -> MapBuilderConfig:
+    def config_to_map_builder_by_name(
+        cfg: Union[ConfigLike, Sequence[ConfigLike], dict[str, Config]], name: str
+    ) -> MapBuilderConfig:
         if isinstance(cfg, EvaluateTool):
             return config_to_map_builder_by_name(list(cfg.simulations), name)
 

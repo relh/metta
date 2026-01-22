@@ -28,6 +28,7 @@ class QuantilePolicyAutoBuilder(PolicyAutoBuilder):
 
     @property
     def critic_quantiles(self) -> int:
+        assert isinstance(self.config, ViTQuantileConfig)
         return self.config.critic_quantiles
 
 

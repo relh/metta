@@ -57,10 +57,21 @@ class _OptionalLoadLinear(nn.Linear):
 class PufferPolicy(Policy):
     """Policy that exactly matches PufferLib architecture"""
 
+    class PolicyComponents(nn.Module):
+        max_vec: torch.Tensor
+        conv1: nn.Conv2d
+        conv2: nn.Conv2d
+        network: nn.Sequential
+        self_encoder: nn.Module
+        actor: nn.Module
+        value: nn.Module
+
+    policy: PolicyComponents
+
     def __init__(self, policy_env_info: PolicyEnvInterface, config: Optional[PufferPolicyConfig] = None):
         super().__init__(policy_env_info)
 
-        self.policy = torch.nn.Module()
+        self.policy = PufferPolicy.PolicyComponents()
         self.config = config or PufferPolicyConfig()
         self.is_continuous = False
         self.action_space = policy_env_info.action_space
@@ -189,7 +200,7 @@ class PufferPolicy(Policy):
         return logits, value, h_value
 
     @torch._dynamo.disable  # Avoid graph breaks from TensorDict operations
-    def forward(self, td: TensorDict, state=None, action: torch.Tensor = None):
+    def forward(self, td: TensorDict, state=None, action: Optional[torch.Tensor] = None):
         observations = td["env_obs"]
 
         # [B, obs] -> [B, 512]

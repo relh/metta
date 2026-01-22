@@ -5,7 +5,7 @@ implement the required methods that MettaAgent depends on."""
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any, ClassVar, List, Optional, cast
+from typing import Any, Callable, ClassVar, List, Optional, cast
 
 import numpy as np
 import torch
@@ -23,7 +23,22 @@ from metta.agent.components.obs_shim import (
     ObsShimTokens,
     ObsShimTokensConfig,
 )
-from metta.rl.utils import ensure_sequence_metadata
+
+try:
+    from metta.rl.utils import ensure_sequence_metadata
+except ImportError:
+    # Fallback implementation if not found
+    def ensure_sequence_metadata(
+        td: TensorDict,
+        *,
+        batch_size: int,
+        time_steps: int,
+        cache: dict[tuple[str, int, int], tuple[torch.Tensor, torch.Tensor]] | None = None,
+    ) -> None:
+        """Fallback implementation that does nothing."""
+        pass
+
+
 from mettagrid.base_config import Config
 from mettagrid.policy.lstm import obs_to_obs_tensor
 from mettagrid.policy.policy import (
@@ -50,9 +65,13 @@ class PolicyArchitecture(Config):
     # a separate component that optionally accepts actions and process logits into log probs, entropy, etc.
     action_probs_config: ComponentConfig
 
+    critic_quantiles: Optional[int] = None
+
     def make_policy(self, policy_env_info: PolicyEnvInterface) -> "Policy":
         """Create an agent instance from configuration."""
-        AgentClass = load_symbol(self.class_path)
+        AgentClass = cast(Callable[[PolicyEnvInterface, "PolicyArchitecture"], "Policy"], load_symbol(self.class_path))
+        if AgentClass is None:
+            raise ValueError(f"Failed to load class from path: {self.class_path}")
         return AgentClass(policy_env_info, self)
 
     def to_spec(self) -> str:
@@ -168,7 +187,7 @@ class Policy(MultiAgentPolicy, nn.Module):
     def reset_memory(self):
         pass
 
-    def network(self) -> nn.Module:
+    def network(self) -> Optional[nn.Module]:
         """Return the nn.Module representing the policy."""
         return self
 
@@ -381,7 +400,7 @@ class ExternalPolicyWrapper(Policy):
                 config=ObsShimTokensConfig(in_key="env_obs", out_key="obs"),
             )
 
-    def forward(self, td: TensorDict) -> TensorDict:
+    def forward(self, td: TensorDict, action: Optional[torch.Tensor] = None) -> TensorDict:
         self.obs_shaper(td)
         return self.policy(td["obs"])
 

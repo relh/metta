@@ -4,25 +4,26 @@ import copy
 import math
 from dataclasses import dataclass, field
 from functools import partial
+from typing import cast
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import repeat
-from mamba_ssm.modules.block import Block
-from mamba_ssm.modules.mamba2 import Mamba2
-from mamba_ssm.modules.mha import MHA
+from mamba_ssm.modules.block import Block  # pyright: ignore[reportMissingImports]
+from mamba_ssm.modules.mamba2 import Mamba2  # pyright: ignore[reportMissingImports]
+from mamba_ssm.modules.mha import MHA  # pyright: ignore[reportMissingImports]
 
 try:
     from mamba_ssm.modules.mlp import MLP  # type: ignore[attr-defined]
 except ImportError:  # pragma: no cover - compatibility with newer mamba-ssm releases
     from mamba_ssm.modules.mlp import GatedMLP as MLP  # type: ignore[attr-defined]
-from mamba_ssm.ops.triton.layer_norm import (
+from mamba_ssm.ops.triton.layer_norm import (  # pyright: ignore[reportMissingImports]
     RMSNorm,
     layer_norm_fn,
     rms_norm_fn,
 )
-from mamba_ssm.utils.generation import GenerationMixin
+from mamba_ssm.utils.generation import GenerationMixin  # pyright: ignore[reportMissingImports]
 
 
 @dataclass
@@ -61,25 +62,26 @@ def create_block(
     *,
     guard_triton: bool = True,
 ):
-    factory_kwargs = {"device": device, "dtype": dtype}
     if layer_idx not in attn_layer_idx:
         # Create a copy of the config to modify
         ssm_cfg = copy.deepcopy(ssm_cfg)
         ssm_layer = ssm_cfg.pop("layer", "Mamba2")
         if ssm_layer != "Mamba2":
             raise ValueError(f"Invalid ssm_layer: {ssm_layer}, only support Mamba2")
-        mixer_cls = partial(Mamba2, layer_idx=layer_idx, **ssm_cfg, **factory_kwargs)
+        mixer_cls = partial(Mamba2, layer_idx=layer_idx, device=device, dtype=dtype, **ssm_cfg)
     else:
-        mixer_cls = partial(MHA, layer_idx=layer_idx, **attn_cfg, **factory_kwargs)
+        mixer_cls = partial(MHA, layer_idx=layer_idx, device=device, dtype=dtype, **attn_cfg)
     if guard_triton and rms_norm and RMSNorm is None:
         raise RuntimeError(
             "MambaWrapperModel requires Triton RMSNorm kernels; install torchao/triton or disable rms_norm"
         )
-    norm_cls = partial(nn.LayerNorm if not rms_norm else RMSNorm, eps=norm_epsilon, **factory_kwargs)
+    norm_cls = partial(nn.LayerNorm if not rms_norm else RMSNorm, eps=norm_epsilon, device=device, dtype=dtype)
     if d_intermediate == 0:
         mlp_cls = nn.Identity
     else:
-        mlp_cls = partial(MLP, hidden_features=d_intermediate, out_features=d_model, **pff_cfg, **factory_kwargs)
+        mlp_cls = partial(
+            MLP, hidden_features=d_intermediate, out_features=d_model, device=device, dtype=dtype, **pff_cfg
+        )
     block = Block(
         d_model,
         mixer_cls,
@@ -127,12 +129,11 @@ def _init_weights(
 
 class PositionalEncoding1D(nn.Module):
     def __init__(self, max_length: int, embed_dim: int, device=None, dtype=None):
-        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.max_length = max_length
         self.embed_dim = embed_dim
 
-        self.pos_emb = nn.Embedding(self.max_length, embed_dim, **factory_kwargs)
+        self.pos_emb = nn.Embedding(num_embeddings=self.max_length, embedding_dim=embed_dim, device=device, dtype=dtype)
 
     def forward(self, feat):
         pos_emb = self.pos_emb(torch.arange(self.max_length, device=feat.device))
@@ -171,19 +172,16 @@ class MixerModel(nn.Module):
         device=None,
         dtype=None,
     ) -> None:
-        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
         self.residual_in_fp32 = residual_in_fp32
 
         self.action_dim = action_dim
         self.feat_dim = d_model
 
-        # self.embedding = nn.Embedding(vocab_size, d_model, **factory_kwargs)
-
         norm_cls = RMSNorm if rms_norm and RMSNorm is not None else nn.LayerNorm
         self.stem = nn.Sequential(
-            nn.Linear(stoch_dim + action_dim, d_model, bias=True, **factory_kwargs),
-            norm_cls(d_model, eps=norm_epsilon, **factory_kwargs),
+            nn.Linear(stoch_dim + action_dim, d_model, bias=True, device=device, dtype=dtype),
+            norm_cls(d_model, eps=norm_epsilon, device=device, dtype=dtype),
             nn.SiLU(),
         )
 
@@ -215,14 +213,15 @@ class MixerModel(nn.Module):
                     residual_in_fp32=residual_in_fp32,
                     fused_add_norm=fused_add_norm,
                     layer_idx=i,
-                    **factory_kwargs,
+                    device=device,
+                    dtype=dtype,
                 )
                 for i in range(n_layer)
             ]
         )
 
         norm_final = nn.LayerNorm if not rms_norm or RMSNorm is None else RMSNorm
-        self.norm_f = norm_final(d_model, eps=norm_epsilon, **factory_kwargs)
+        self.norm_f = norm_final(d_model, eps=norm_epsilon, device=device, dtype=dtype)
 
         self.apply(
             partial(
@@ -235,7 +234,7 @@ class MixerModel(nn.Module):
 
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
         return {
-            i: layer.allocate_inference_cache(batch_size, max_seqlen, dtype=dtype, **kwargs)
+            i: cast(nn.Module, layer.allocate_inference_cache)(batch_size, max_seqlen, dtype=dtype, **kwargs)
             for i, layer in enumerate(self.layers)
         }
 
@@ -293,7 +292,6 @@ class MambaWrapperModel(nn.Module, GenerationMixin):
         rms_norm = config.rms_norm
         residual_in_fp32 = config.residual_in_fp32
         fused_add_norm = config.fused_add_norm
-        factory_kwargs = {"device": device, "dtype": dtype}
 
         super().__init__()
         self.backbone = MixerModel(
@@ -311,10 +309,9 @@ class MambaWrapperModel(nn.Module, GenerationMixin):
             initializer_cfg=initializer_cfg,
             fused_add_norm=fused_add_norm,
             residual_in_fp32=residual_in_fp32,
-            **factory_kwargs,
+            device=device,
+            dtype=dtype,
         )
-        # self.lm_head = nn.Linear(d_model, vocab_size, bias=False, **factory_kwargs)
-
         # Initialize weights and apply final processing
         self.apply(
             partial(

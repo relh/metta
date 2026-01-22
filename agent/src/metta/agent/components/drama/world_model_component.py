@@ -60,9 +60,10 @@ class DramaWorldModelComponent(nn.Module):
             samples = samples.unsqueeze(1)
 
         batch_size, seq_len = samples.shape[0], samples.shape[1]
+        device = samples.device if samples.device is not None else torch.device("cpu")
 
         if actions is None:
-            actions = zero_long((batch_size, seq_len), device=samples.device)
+            actions = zero_long((batch_size, seq_len), device=device)
         else:
             actions = actions.to(device=samples.device)
             # Collapse one-hot or singleton action dimensions to scalars.
@@ -77,7 +78,7 @@ class DramaWorldModelComponent(nn.Module):
             if actions.size(1) == 1:
                 actions = actions.expand(-1, seq_len)
             elif actions.size(1) < seq_len:
-                pad = zero_long((batch_size, seq_len - actions.size(1)), device=samples.device)
+                pad = zero_long((batch_size, seq_len - actions.size(1)), device=device)
                 actions = torch.cat([actions, pad], dim=1)
             elif actions.size(1) > seq_len:
                 actions = actions[:, :seq_len]

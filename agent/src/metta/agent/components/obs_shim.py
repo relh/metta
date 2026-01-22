@@ -27,6 +27,8 @@ class ObsTokenPadStrip(nn.Module):
     dense tokens than the average sequence so there is room for improvement by computing attention over ragged tensors.
     """
 
+    feature_id_remap: torch.Tensor
+
     def __init__(
         self,
         policy_env_info,
@@ -77,6 +79,8 @@ class ObsTokenPadStrip(nn.Module):
             props.id: props.normalization for props in features_list if hasattr(props, "normalization")
         }
 
+        feature_remap: dict[int, int] = {}
+
         if self._ignore_inventory_power_tokens:
             UNKNOWN_FEATURE_ID = 255
             legacy_map, legacy_norms = self._build_legacy_feature_map(features_list)
@@ -84,7 +88,6 @@ class ObsTokenPadStrip(nn.Module):
             if not hasattr(self, "original_feature_mapping"):
                 self.original_feature_mapping = legacy_map
                 stored_log = f"Stored original feature mapping with {len(self.original_feature_mapping)} features"
-            feature_remap: dict[int, int] = {}
 
             for props in features_list:
                 name = props.name
@@ -112,7 +115,7 @@ class ObsTokenPadStrip(nn.Module):
         else:
             # Re-initialization - create remapping for agent portability
             UNKNOWN_FEATURE_ID = 255
-            feature_remap: dict[int, int] = {}
+            feature_remap = {}
             unknown_features = []
 
             for props in features_list:
@@ -156,7 +159,7 @@ class ObsTokenPadStrip(nn.Module):
             if feature_id not in mapping and feature_id not in current_feature_ids:
                 remap_tensor[feature_id] = unknown_id
 
-        self.register_buffer("feature_id_remap", remap_tensor.to(self.feature_id_remap.device))
+        self.register_buffer("feature_id_remap", remap_tensor.to(device))
         identity = torch.arange(256, dtype=torch.uint8, device=remap_tensor.device)
         self._remapping_active = not torch.equal(remap_tensor, identity)
 
@@ -210,6 +213,8 @@ class ObsTokenPadStrip(nn.Module):
 
 class ObsAttrValNorm(nn.Module):
     """Normalizes attr values based on the attr index."""
+
+    _norm_factors: torch.Tensor
 
     def __init__(
         self, policy_env_info, in_key: str = "obs_token_pad_strip", out_key: str = "obs_attr_val_norm"
@@ -477,7 +482,7 @@ class ObsShimBox(nn.Module):
         self,
         policy_env_info: "PolicyEnvInterface",
         device: torch.device,
-    ) -> None:
+    ) -> Optional[str]:
         self.observation_normalizer.initialize_to_environment(policy_env_info, device)
 
     def forward(self, td: TensorDict):

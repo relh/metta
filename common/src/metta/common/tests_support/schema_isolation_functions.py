@@ -2,6 +2,7 @@ import uuid
 from urllib.parse import quote, urlparse, urlunparse
 
 import psycopg
+from psycopg import sql
 
 
 def create_isolated_schema_uri(base_uri: str, schema_name: str) -> str:
@@ -34,11 +35,11 @@ def isolated_test_schema_uri(base_uri: str) -> str:
     with psycopg.connect(base_uri) as conn:
         with conn.cursor() as cursor:
             # Create the isolated schema
-            cursor.execute(f"CREATE SCHEMA {schema_name}")
+            cursor.execute(sql.SQL("CREATE SCHEMA {}").format(sql.Identifier(schema_name)))
             # Ensure UUID extension is available (create it in public schema if not exists)
             cursor.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
             # Set search path to use our schema
-            cursor.execute(f"SET search_path TO {schema_name}, public")
+            cursor.execute(sql.SQL("SET search_path TO {}, public").format(sql.Identifier(schema_name)))
         conn.commit()
 
     # Create URI that uses the isolated schema

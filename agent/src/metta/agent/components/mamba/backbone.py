@@ -200,6 +200,11 @@ class MambaBackboneComponent(nn.Module):
         reset_flags = torch.logical_or(dones.bool(), truncateds.bool()).reshape(batch, tt)
 
         if self.use_aux_tokens:
+            # Invariants: should always be set if use_aux_tokens=True
+            assert self.reward_proj is not None
+            assert self.reset_proj is not None
+            assert self.action_proj is not None
+
             zeros = torch.zeros(batch_flat, device=device)
             rewards = rearrange(rewards, "(b tt) -> b tt 1 1", b=batch, tt=tt).float()
             reward_token = self.reward_proj(rewards)

@@ -195,7 +195,7 @@ def extract_schema(
 
         if not has_default and field.default_factory is not None:
             try:
-                default_val = field.default_factory()
+                default_val = field.default_factory.__call__()
                 has_default = True
             except Exception:
                 default_val = "<factory>"
@@ -212,7 +212,7 @@ def extract_schema(
         except TypeError:
             pass
 
-        if is_nested_model and include_nested_models:
+        if is_nested_model and include_nested_models and actual_type is not None:
             # Add entry for the nested model itself
             schema[field_path] = {
                 "type": actual_type.__name__,

@@ -17,7 +17,7 @@ def simulations() -> list[SimulationConfig]:
 
 def evaluate() -> EvaluateTool:
     """Explicit evaluate tool for testing."""
-    return EvaluateTool(simulations=simulations())
+    return EvaluateTool(simulations=simulations(), policy_uris=["mock://policy-uri"])
 
 
 def train_shaped() -> TrainTool:

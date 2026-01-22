@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import contextlib
 from contextlib import contextmanager
-from typing import Optional
+from typing import Any, Optional, Protocol, runtime_checkable
 
 import torch
+
+
+@runtime_checkable
+class SdpaKernel(Protocol):
+    """Satisfy pyright and make sdpa_kernel checkable as an instance"""
+
+    def __call__(
+        self, backends: list[Any] | Any, *, set_priority: bool = False
+    ) -> contextlib.AbstractContextManager: ...
 
 
 def build_sdpa_context(
@@ -51,7 +60,8 @@ def _modern_sdpa_context(
         return None
 
     sdpa_kernel = getattr(nn_attention, "sdpa_kernel", None)
-    if not callable(sdpa_kernel):
+
+    if not isinstance(sdpa_kernel, SdpaKernel):
         return None
 
     backend_cls = getattr(nn_attention, "SDPBackend", None)

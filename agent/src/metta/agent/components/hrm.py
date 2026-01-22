@@ -54,6 +54,8 @@ class HRMBlock(nn.Module):
 class HRMReasoningModule(nn.Module):
     """Reasoning module with input injection, matching official implementation."""
 
+    layers: nn.ModuleList
+
     def __init__(self, layers: list[HRMBlock]):
         super().__init__()
         self.layers = nn.ModuleList(layers)
@@ -93,6 +95,9 @@ class HRMReasoningConfig(ComponentConfig):
 
 class HRMReasoning(nn.Module):
     """HRM reasoning component matching official implementation."""
+
+    L_init: torch.Tensor
+    H_init: torch.Tensor
 
     def __init__(self, config: HRMReasoningConfig):
         super().__init__()
