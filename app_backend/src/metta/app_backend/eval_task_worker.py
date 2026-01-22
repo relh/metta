@@ -37,10 +37,18 @@ from metta.common.datadog.tracing import init_tracing, trace
 from metta.common.tool.tool import ToolResult
 from metta.common.util.collections import remove_none_values
 from metta.common.util.constants import SOFTMAX_S3_BASE, SOFTMAX_S3_BUCKET
-from metta.common.util.git_repo import REPO_URL
 from mettagrid.util.file import local_copy
 
+SSH_REPO_URL = "git@github.com:Metta-AI/metta.git"
+DEPLOY_KEY_SCRIPT = "/workspace/metta/devops/scripts/setup_deploy_key.py"
+
 logger = logging.getLogger(__name__)
+
+
+def setup_ssh_deploy_key() -> None:
+    result = subprocess.run(["python", DEPLOY_KEY_SCRIPT], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to setup SSH deploy key: {result.stderr}")
 
 
 @dataclass
@@ -152,8 +160,8 @@ class SimTaskExecutor(AbstractTaskExecutor):
             # Initialize empty repo
             self._run_setup_cmd(["git", "init"])
 
-            # Add remote
-            self._run_setup_cmd(["git", "remote", "add", "origin", REPO_URL])
+            # Add remote (SSH URL for private repo access via deploy key)
+            self._run_setup_cmd(["git", "remote", "add", "origin", SSH_REPO_URL])
 
             # Shallow fetch the specific ref (works for both commits and branches)
             self._run_setup_cmd(["git", "fetch", "--depth", "1", "origin", git_ref])
@@ -367,6 +375,7 @@ def init_logging():
 async def main() -> None:
     init_logging()
     init_tracing()
+    setup_ssh_deploy_key()
 
     backend_url = os.environ["BACKEND_URL"]
     assignee = os.environ["WORKER_ASSIGNEE"]
