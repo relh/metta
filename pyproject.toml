@@ -149,6 +149,7 @@ members = [
   "app_backend",
   "common",
   "packages/codebot",
+  "packages/cogames-agents",
   "packages/cogames",
   "packages/cortex",
   "packages/gitta",
@@ -160,6 +161,7 @@ members = [
 
 [tool.uv.sources]
 codebot = { workspace = true }
+cogames-agents = { workspace = true }
 cogames = { workspace = true }
 cortexcore = { workspace = true }
 gitta = { workspace = true }
