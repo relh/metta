@@ -1,7 +1,7 @@
 import { FC, use, useState } from 'react'
 
-import { AppContext } from '../../AppContext'
-import { Button } from '../../components/Button'
+import { AppContext } from '@/app/(main)/AppContext'
+import { Button } from '@/components/Button'
 
 export const AIQueryBuilder: FC<{
   onQueryGenerated: (query: string) => void

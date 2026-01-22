@@ -1,5 +1,5 @@
-import { Card } from '../../components/Card'
-import { TasksTable } from '../../EvalTasks/TasksTable'
+import { Card } from '@/components/Card'
+import { TasksTable } from '@/EvalTasks/TasksTable'
 
 export default function EvalTasks() {
   return (

@@ -2,8 +2,8 @@
 import clsx from 'clsx'
 import { FC, useState } from 'react'
 
-import { Table, TableBody, TableHeader, TD, TH, TR } from '../../components/Table'
-import { SQLQueryResponse } from '../../lib/repo'
+import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { SQLQueryResponse } from '@/lib/repo'
 
 function formatCell(cell: unknown) {
   if (cell === null) return <em className="text-gray-400">NULL</em>

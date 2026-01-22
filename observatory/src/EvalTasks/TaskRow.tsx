@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { FC, Fragment, use, useState } from 'react'
 
-import { AppContext } from '@/AppContext'
+import { AppContext } from '@/app/(main)/AppContext'
 
 import { A } from '../components/A'
 import { Spinner } from '../components/Spinner'

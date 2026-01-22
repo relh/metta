@@ -4,12 +4,11 @@ import { Metadata } from 'next'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import { PropsWithChildren } from 'react'
 
-import { AppProvider } from '@/AppContext'
+import { AppProvider } from '@/app/(main)/AppContext'
+import { TopMenu } from '@/app/(main)/TopMenu'
 import { getAuthToken } from '@/auth/server'
 import { config } from '@/config'
 import { getRepo } from '@/lib/repo/server'
-
-import { TopMenu } from '../TopMenu'
 
 export default async function RootLayout({ children }: PropsWithChildren) {
   const token = await getAuthToken()

@@ -4,8 +4,7 @@ import { FC } from 'react'
 
 import { Card } from '@/components/Card'
 import { Spinner } from '@/components/Spinner'
-
-import { TableInfo } from '../../lib/repo'
+import { TableInfo } from '@/lib/repo'
 
 export interface QueryHistoryItem {
   query: string

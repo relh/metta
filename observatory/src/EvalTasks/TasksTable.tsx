@@ -1,7 +1,7 @@
 'use client'
 import { FC, use, useCallback, useEffect, useRef, useState } from 'react'
 
-import { AppContext } from '@/AppContext'
+import { AppContext } from '@/app/(main)/AppContext'
 
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'

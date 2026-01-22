@@ -1,6 +1,6 @@
 import { FC, useContext, useEffect, useState } from 'react'
 
-import { AppContext } from './AppContext'
+import { AppContext } from './app/(main)/AppContext'
 import { Button } from './components/Button'
 import { SmartPlugStatus } from './lib/repo'
 

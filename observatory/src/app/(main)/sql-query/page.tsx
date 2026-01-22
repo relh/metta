@@ -1,11 +1,11 @@
 'use client'
 import { use, useEffect, useState } from 'react'
 
+import { AppContext } from '@/app/(main)/AppContext'
+import { Button } from '@/components/Button'
 import { Spinner } from '@/components/Spinner'
+import { SQLQueryResponse, TableInfo, TableSchema } from '@/lib/repo'
 
-import { AppContext } from '../../AppContext'
-import { Button } from '../../components/Button'
-import { SQLQueryResponse, TableInfo, TableSchema } from '../../lib/repo'
 import { AIQueryBuilder } from './AIQueryBuilder'
 import { QueryResultsTable } from './QueryResultsTable'
 import { QueryHistoryItem, TablesSidebar } from './TablesSidebar'

@@ -1,7 +1,7 @@
 'use client'
 import { createContext, FC, PropsWithChildren } from 'react'
 
-import { Repo } from './lib/repo'
+import { Repo } from '../../lib/repo'
 
 export const AppContext = createContext<{
   repo: Repo

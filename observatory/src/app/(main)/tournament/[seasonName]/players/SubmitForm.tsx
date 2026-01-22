@@ -4,7 +4,7 @@ import { FC, use, useEffect, useState } from 'react'
 import Select, { StylesConfig } from 'react-select'
 import AsyncSelect from 'react-select/async'
 
-import { AppContext } from '@/AppContext'
+import { AppContext } from '@/app/(main)/AppContext'
 import { Button } from '@/components/Button'
 import { PolicyRow, PublicPolicyVersionRow } from '@/lib/repo'
 

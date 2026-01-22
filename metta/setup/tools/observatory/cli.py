@@ -202,16 +202,20 @@ def watcher():
 @handle_errors
 def frontend(
     backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
+    skip_auto_auth: Annotated[
+        bool, typer.Option("--skip-auto-auth", "-d", help="Don't authenticate with the backend on launch")
+    ] = False,
 ):
     env = _base_env()
 
     if backend == "local":
         env["OBSERVATORY_API_URL"] = LOCAL_BACKEND_URL
-        env["DEV_AUTH_TOKEN"] = LOCAL_MACHINE_TOKEN
+        if not skip_auto_auth:
+            env["DEV_AUTH_TOKEN"] = LOCAL_MACHINE_TOKEN
         info(f"Connecting to local backend at {LOCAL_BACKEND_URL}")
     else:
         env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
-        if token := get_machine_token(env["OBSERVATORY_API_URL"]):
+        if not skip_auto_auth and (token := get_machine_token(env["OBSERVATORY_API_URL"])):
             env["DEV_AUTH_TOKEN"] = token
         info("Connecting to prod backend")
 
