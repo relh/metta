@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 def setup_ssh_deploy_key() -> None:
-    result = subprocess.run(["python", DEPLOY_KEY_SCRIPT], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, DEPLOY_KEY_SCRIPT], capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"Failed to setup SSH deploy key: {result.stderr}")
 

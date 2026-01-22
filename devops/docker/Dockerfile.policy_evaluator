@@ -13,6 +13,7 @@ WORKDIR /workspace/metta
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
+    openssh-client \
     build-essential \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
