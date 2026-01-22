@@ -10,7 +10,7 @@ from typing_extensions import Literal
 
 from metta.agent.policy import Policy
 from metta.rl.advantage import td_lambda_reverse_scan
-from metta.rl.loss.loss import Loss, LossConfig, analyze_loss_alignment
+from metta.rl.loss.loss import Loss, LossConfig
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
 
@@ -252,16 +252,6 @@ class PPOCritic(Loss):
             v_loss = v_loss_vec.mean()
 
             shared_loss_data["ppo_val_loss_vec"] = v_loss_vec
-
-            # 12-21-25 av experimental code. cute but delete later (compare with Kickstarter value loss if available)
-            if "ks_val_loss_vec" in shared_loss_data:
-                analyze_loss_alignment(
-                    shared_data=shared_loss_data,
-                    name1="ks_val",
-                    name2="ppo_val",
-                    params=list(self.policy.parameters()),
-                    tracker=self.loss_tracker,
-                )
 
             # Update values in experience buffer
             assert newvalue is not None

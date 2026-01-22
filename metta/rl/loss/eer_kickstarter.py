@@ -141,8 +141,6 @@ class EERKickstarter(Loss):
         ks_value_loss_vec = (teacher_value.detach() - student_value) ** 2
         ks_value_loss = ks_value_loss_vec.mean()
 
-        shared_loss_data["ks_val_loss_vec"] = ks_value_loss_vec
-
         loss = ks_action_loss * self.cfg.action_loss_coef + ks_value_loss * self.cfg.value_loss_coef
 
         # track losses for plotting
