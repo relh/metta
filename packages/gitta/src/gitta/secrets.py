@@ -118,7 +118,28 @@ def get_secret(
 
 
 def get_github_token(required: bool = False) -> str | None:
-    """Get GitHub token from GITHUB_TOKEN env var or AWS secret 'github/token'."""
+    """Get GitHub token from GITHUB_TOKEN env var, gh CLI, or AWS secret 'github/token'."""
+    value = os.environ.get("GITHUB_TOKEN")
+    if value:
+        logger.debug("Using GITHUB_TOKEN from environment variable")
+        return value
+
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        token = result.stdout.strip()
+        if token:
+            logger.debug("Using GitHub token from gh CLI")
+            return token
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
     return get_secret("GITHUB_TOKEN", "github/token", required=required)
 
 
