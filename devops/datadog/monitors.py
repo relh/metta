@@ -15,15 +15,20 @@ def k8s_deployment_replicas_monitor() -> dict:
     Uses min(last_10m) instead of avg(last_5m) so we only alert if replicas have
     been unavailable for the ENTIRE 10-minute window. Brief outages during node
     rotation (typically <2 minutes) won't trigger false alarms.
+
+    Excludes:
+    - observatory-pr-*: PR preview deployments that may be scaled down or transient
     """
     return {
         "name": "[Kubernetes] Deployment Replicas Down",
         "type": "query alert",
         "query": (
             "min(last_10m):"
-            "avg:kubernetes_state.deployment.replicas_desired{env:production, kube_cluster_name:main} "
+            "avg:kubernetes_state.deployment.replicas_desired{"
+            "env:production, kube_cluster_name:main, !kube_deployment:observatory-pr-*} "
             "by {kube_cluster_name,kube_namespace,kube_deployment} - "
-            "avg:kubernetes_state.deployment.replicas_available{env:production, kube_cluster_name:main} "
+            "avg:kubernetes_state.deployment.replicas_available{"
+            "env:production, kube_cluster_name:main, !kube_deployment:observatory-pr-*} "
             "by {kube_cluster_name,kube_namespace,kube_deployment} >= 1"
         ),
         "message": (
