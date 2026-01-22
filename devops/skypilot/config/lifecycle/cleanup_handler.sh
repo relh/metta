@@ -49,31 +49,23 @@ handle_master_cleanup() {
 
     "heartbeat_timeout")
       echo "[ERROR] Job terminated due to heartbeat timeout"
-      export GITHUB_STATUS_STATE="failure"
-      export GITHUB_STATUS_DESCRIPTION="Job failed - no heartbeat for ${HEARTBEAT_TIMEOUT} seconds"
       bash ./devops/skypilot/config/observability/send_discord_notification.sh \
-        "❌" "SkyPilot Job Failed" "${GITHUB_STATUS_DESCRIPTION}"
+        "❌" "SkyPilot Job Failed" "Job failed - no heartbeat for ${HEARTBEAT_TIMEOUT} seconds"
       ;;
 
     "max_runtime_reached")
       echo "[INFO] Job terminated due to max runtime limit"
-      export GITHUB_STATUS_STATE="success"
-      export GITHUB_STATUS_DESCRIPTION="Job ran successfully for ${MAX_RUNTIME_HOURS:-unknown} hours"
       CMD_EXIT=0
       ;;
 
     "force_restart_test")
       echo "[INFO] Job restarting for test purposes"
-      export GITHUB_STATUS_STATE="pending"
-      export GITHUB_STATUS_DESCRIPTION="Forced a restart test in run #${RESTART_COUNT}"
       CMD_EXIT=1
       FINAL_EXIT_CODE=1
       ;;
 
     "job_completed")
       echo "[SUCCESS] Job completed successfully"
-      export GITHUB_STATUS_STATE="success"
-      export GITHUB_STATUS_DESCRIPTION="Job completed successfully"
       CMD_EXIT=0
       ;;
 
@@ -82,31 +74,23 @@ handle_master_cleanup() {
       if [[ $CMD_EXIT -eq $EXIT_SUCCESS ]]; then
         echo "[SUCCESS] Job completed successfully (fallback)"
         export TERMINATION_REASON="completed"
-        export GITHUB_STATUS_STATE="success"
-        export GITHUB_STATUS_DESCRIPTION="Job completed successfully"
       else
         echo "[ERROR] Job failed with exit code $CMD_EXIT (no termination reason)"
         export TERMINATION_REASON="exit_code_${CMD_EXIT}"
-        export GITHUB_STATUS_STATE="failure"
-        export GITHUB_STATUS_DESCRIPTION="Job failed with exit code $CMD_EXIT"
       fi
       ;;
 
     *)
       if [[ $CMD_EXIT -eq $EXIT_NCCL_TEST_FAILURE ]]; then
         echo "[ERROR] Job failed during NCCL tests"
-        export GITHUB_STATUS_STATE="error"
-        export GITHUB_STATUS_DESCRIPTION="NCCL tests failed - GPU communication issue"
         export TERMINATION_REASON="nccl_test_failure"
         bash ./devops/skypilot/config/observability/send_discord_notification.sh \
-          "⚠️" "SkyPilot Job NCCL Config Error" "${GITHUB_STATUS_DESCRIPTION}"
+          "⚠️" "SkyPilot Job NCCL Config Error" "NCCL tests failed - GPU communication issue"
       else
         echo "[ERROR] Job failed with exit code $CMD_EXIT (reason: $TERMINATION_REASON)"
-        export GITHUB_STATUS_STATE="failure"
-        export GITHUB_STATUS_DESCRIPTION="Job failed with exit code $CMD_EXIT"
         export TERMINATION_REASON="exit_code_${CMD_EXIT}"
         bash ./devops/skypilot/config/observability/send_discord_notification.sh \
-          "❌" "SkyPilot Job Failed" "${GITHUB_STATUS_DESCRIPTION}"
+          "❌" "SkyPilot Job Failed" "Job failed with exit code $CMD_EXIT"
       fi
       ;;
   esac
