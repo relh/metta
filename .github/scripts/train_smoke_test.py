@@ -24,7 +24,6 @@ class TrainingSmokeTest(SmokeTest):
         # Set required environment variables
         os.environ.setdefault("PYTHONUNBUFFERED", "1")
         os.environ.setdefault("PYTHONOPTIMIZE", "1")
-        os.environ.setdefault("HYDRA_FULL_ERROR", "1")
         os.environ.setdefault("WANDB_DIR", "./wandb")
         os.environ.setdefault("DATA_DIR", "./train_dir")
 

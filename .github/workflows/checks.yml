@@ -11,26 +11,15 @@ on:
     types: [opened, synchronize, ready_for_review, labeled]
   push:
     branches: [main]
-  merge_group:
-    types: [checks_requested]
-    branches: [main]
   workflow_dispatch:
     inputs:
       run_test:
         description: "Run tests"
         type: boolean
         default: true
-      run_benchmark:
-        description: "Run benchmarks (requires tests)"
-        type: boolean
-        default: true
-      run_id:
-        description: "Optional unique identifier for this run (for parallel CI benchmarking)"
-        required: false
-        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'merge_group' && github.event.merge_group.head_ref || github.ref }}-${{ inputs.run_id || 'default' }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 # Set default permissions
@@ -38,36 +27,24 @@ permissions:
   checks: write
   pull-requests: write
 
-env:
-  HYDRA_FULL_ERROR: 1
-  VENV_PATH: .venv
-  EVAL_SMOKE_TEST_POLICY: m.av.replay.probe.751 # just the name, no need to include any uri preamble like "wandb://run/"
-  EVAL_SMOKE_TEST_MAX_ATTEMPTS: 3
-  EVAL_SMOKE_TEST_MIN_REWARD: 0.0
-
 jobs:
-  echo-run-id:
-    name: Echo run_id
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_id != '' }}
-    steps:
-      - name: Echo run_id
-        run: echo "RUN_ID=${{ inputs.run_id }}"
-
-  # check if CI should run based on Graphite's stack position
-  graphite-ci-optimizer:
-    name: "Graphite CI Optimizer"
+  # check if any source code files have changed, and if Graphite wants to skip the checks
+  setup-checks:
+    name: "Set up for source code checks"
     if: |
       !contains(github.event.pull_request.labels.*.name, 'skip-ci') ||
-      github.event_name == 'push' ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'merge_group'
+       github.event_name == 'push' ||
+       github.event_name == 'workflow_dispatch'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
-      should_skip: ${{ steps.graphite_ci.outputs.skip || 'false' }}
+      skip: ${{ steps.graphite_ci.outputs.skip || 'false' }}
+      has_relevant_changes: ${{ steps.filter.outputs.py_files || 'false' }}
+      app_backend_has_changes: ${{ steps.filter.outputs.app_backend_files || 'false' }}
+      run_test: ${{ steps.determine_tasks.outputs.run_test || 'false' }}
+      is_external: ${{ steps.detect-pr.outputs.is_external || 'true' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Detect PR context
         id: detect-pr
@@ -81,77 +58,57 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           graphite_token: ${{ secrets.GRAPHITE_TOKEN }}
 
-  # check if any source code files have changed
-  setup-checks:
-    name: "Set up for source code checks"
-    needs: graphite-ci-optimizer
-    if: |
-      (needs.graphite-ci-optimizer.outputs.should_skip == 'false') &&
-      (!contains(github.event.pull_request.labels.*.name, 'skip-ci') ||
-       github.event_name == 'push' ||
-       github.event_name == 'workflow_dispatch' ||
-       github.event_name == 'merge_group')
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    outputs:
-      has_relevant_changes: ${{ steps.check_py_files.outputs.has_relevant_changes }}
-      app_backend_has_changes: ${{ steps.check_app_backend_files.outputs.has_relevant_changes }}
-      run_test: ${{ steps.determine_tasks.outputs.run_test }}
-      run_benchmark: ${{ steps.determine_tasks.outputs.run_benchmark }}
-      is_external: ${{ steps.detect-pr.outputs.is_external }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Detect PR context
-        id: detect-pr
-        uses: ./.github/actions/detect-external-pr
-
       - name: Check for file changes
-        id: check_py_files
-        uses: ./.github/actions/file-changes
+        if: steps.graphite_ci.outputs.skip != 'true'
+        id: filter
+        uses: dorny/paths-filter@v3.0.2
         with:
-          patterns: "**/*.py,**/*.cpp,**/*.hpp,**/*.toml,**/conftest.py,**/pyproject.toml,**/pytest.ini,.github/workflows/*.yml,**/BUILD,**/BUILD.bazel,**/*.bzl,**/MODULE.bazel,**/.bazelrc,.bazelversion"
-          specific_files: "uv.lock,README.md"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check for app_backend file changes
-        id: check_app_backend_files
-        uses: ./.github/actions/file-changes
-        with:
-          patterns: "app_backend/**"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          filters: |
+            py_files:
+              - '**/*.py'
+              - '**/*.cpp'
+              - '**/*.hpp'
+              - '**/*.toml'
+              - '**/conftest.py'
+              - '**/pyproject.toml'
+              - '**/pytest.ini'
+              - 'uv.lock'
+              - 'README.md'
+              - '**/BUILD'
+              - '**/BUILD.bazel'
+              - '**/*.bzl'
+              - '**/MODULE.bazel'
+              - '**/.bazelrc'
+              - '.bazelversion'
+            app_backend_files:
+              - 'app_backend/**'
 
       - name: Determine which tasks to run
+        if: steps.graphite_ci.outputs.skip != 'true'
         id: determine_tasks
         run: |
           # Default behavior based on event type and file changes
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             # Use workflow dispatch inputs for manual runs
             RUN_TEST="${{ github.event.inputs.run_test }}"
-            RUN_BENCHMARK="${{ github.event.inputs.run_benchmark }}"
-          elif [[ "${{ steps.check_py_files.outputs.has_relevant_changes }}" == "false" ]]; then
+          elif [[ "${{ steps.filter.outputs.py_files }}" == "false" ]]; then
             # Skip everything when no relevant files changed (PRs, merge queue, pushes)
             RUN_TEST="false"
-            RUN_BENCHMARK="false"
             echo "::notice title=Skipping Tasks::Skipping all tasks because no relevant files have changed"
           else
             # Default to running everything for other events or when changes exist
             RUN_TEST="true"
-            RUN_BENCHMARK="true"
           fi
 
           # Output the decisions
           echo "run_test=${RUN_TEST}" >> $GITHUB_OUTPUT
-          echo "run_benchmark=${RUN_BENCHMARK}" >> $GITHUB_OUTPUT
 
           echo "run test? ${RUN_TEST}"
-          echo "run benchmark? ${RUN_BENCHMARK}"
 
   lint:
     name: "Lint"
-    needs: [graphite-ci-optimizer, setup-checks]
-    if: |
-      (needs.graphite-ci-optimizer.outputs.should_skip == 'false')
+    needs: setup-checks
+    if: needs.setup-checks.outputs.skip == 'false'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
       - name: Checkout code
@@ -179,10 +136,10 @@ jobs:
 
   python-tests:
     name: "Tests - Python"
-    needs: [graphite-ci-optimizer, setup-checks]
+    needs: setup-checks
     if: |
-      (needs.graphite-ci-optimizer.outputs.should_skip == 'false') &&
-      (needs.setup-checks.outputs.run_test == 'true')
+      needs.setup-checks.outputs.skip == 'false' &&
+      needs.setup-checks.outputs.run_test == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
@@ -191,20 +148,6 @@ jobs:
 
       - name: Setup Environment
         uses: ./.github/actions/setup-environment
-
-      - name: Cache PufferLib clone
-        uses: actions/cache@v4
-        id: cache-pufferlib
-        with:
-          path: ~/pufferlib-cache
-          key: pufferlib-clone-${{ runner.os }}-${{ hashFiles('**/test_pufferlib_integration.py') }}
-          restore-keys: |
-            pufferlib-clone-${{ runner.os }}-
-
-      - name: Set PufferLib cache path
-        run: |
-          echo "PUFFERLIB_CACHE_DIR=$HOME/pufferlib-cache" >> $GITHUB_ENV
-          mkdir -p $HOME/pufferlib-cache
 
       - name: Configure Datadog
         if: needs.setup-checks.outputs.is_external != 'true'
@@ -226,17 +169,14 @@ jobs:
           uv run python .github/scripts/run_ci_stage.py python-tests-and-benchmarks -- "${ARGS[@]}"
 
       - name: Python type checking
-        shell: bash
-        run: |
-          set -eo pipefail
-          uv run python .github/scripts/run_ci_stage.py pyright
+        run: uv run python .github/scripts/run_ci_stage.py pyright
 
   recipe-tests:
     name: "Tests - Recipes"
-    needs: [graphite-ci-optimizer, setup-checks]
+    needs: setup-checks
     if: |
-      (needs.graphite-ci-optimizer.outputs.should_skip == 'false') &&
-      (needs.setup-checks.outputs.run_test == 'true')
+      needs.setup-checks.outputs.skip == 'false' &&
+      needs.setup-checks.outputs.run_test == 'true'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
     steps:
@@ -249,17 +189,14 @@ jobs:
           install-mode: "runtime"
 
       - name: Run Recipe tests
-        shell: bash
-        run: |
-          set -eo pipefail
-          uv run python .github/scripts/run_ci_stage.py recipe-tests --non-interactive
+        run: uv run python .github/scripts/run_ci_stage.py recipe-tests --non-interactive
 
   cpp-tests:
     name: "Tests - C++ and Nim"
-    needs: [graphite-ci-optimizer, setup-checks]
+    needs: setup-checks
     if: |
-      (needs.graphite-ci-optimizer.outputs.should_skip == 'false') &&
-      (needs.setup-checks.outputs.run_test == 'true')
+      needs.setup-checks.outputs.skip == 'false' &&
+      needs.setup-checks.outputs.run_test == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
@@ -316,6 +253,7 @@ jobs:
         id: mettagrid-nim-tests
         run: uv run python .github/scripts/run_ci_stage.py nim-tests
 
+  # Single status check for branch protection rule
   tests-summary:
     name: "Tests"
     needs: [python-tests, cpp-tests, recipe-tests]

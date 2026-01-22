@@ -62,19 +62,6 @@ jobs:
           restore-keys: |
             bazel-${{ runner.os }}-
 
-      - name: Cache PufferLib clone
-        uses: actions/cache@v4
-        with:
-          path: ~/pufferlib-cache
-          key: pufferlib-clone-${{ runner.os }}-${{ hashFiles('**/test_pufferlib_integration.py') }}
-          restore-keys: |
-            pufferlib-clone-${{ runner.os }}-
-
-      - name: Set PufferLib cache path
-        run: |
-          echo "PUFFERLIB_CACHE_DIR=$HOME/pufferlib-cache" >> $GITHUB_ENV
-          mkdir -p $HOME/pufferlib-cache
-
       - name: Configure Git
         run: |
           git config --global user.name "github-actions[bot]"
