@@ -32,12 +32,14 @@ def run_example(
     results_uri: str,
     replay_uri: str,
     assignments: list[int] | None = None,
+    debug_dir: str | None = None,
 ) -> PureSingleEpisodeTool:
     """
     ./tools/run.py recipes.experiment.pure_single_episode.run_example \
         policy_uris=metta://policy/dinky:v15 \
         results_uri=file://./results.json \
-        replay_uri=file://./replay.json.z
+        replay_uri=file://./replay.json.z \
+        debug_dir=./trace_output
 
     # Multiple policies with round-robin assignment:
     ./tools/run.py recipes.experiment.pure_single_episode.run_example \
@@ -75,6 +77,7 @@ def run_example(
             env=env,
             results_uri=results_uri,
             replay_uri=replay_uri,
+            debug_dir=debug_dir,
         )
     )
 
