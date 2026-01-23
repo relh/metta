@@ -1,17 +1,15 @@
-import json
 import logging
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Literal, Optional
-from uuid import UUID
+from typing import Any, Literal
 
 from psycopg import Connection
 from psycopg.rows import class_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, PoolTimeout
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from metta.app_backend.config import settings
 from metta.app_backend.migrations import MIGRATIONS
@@ -82,39 +80,6 @@ class SweepRow(BaseModel):
     user_id: str
     created_at: datetime
     updated_at: datetime
-
-
-class EpisodeReplay(BaseModel):
-    episode_id: uuid.UUID
-    replay_url: str
-
-
-class EpisodeWithTags(BaseModel):
-    id: uuid.UUID
-    primary_pv_id: Optional[uuid.UUID]
-    replay_url: Optional[str]
-    thumbnail_url: Optional[str]
-    attributes: dict[str, Any] = Field(default_factory=dict)
-    eval_task_id: Optional[uuid.UUID]
-    created_at: datetime
-    tags: dict[str, str] = Field(default_factory=dict)
-    avg_rewards: dict[uuid.UUID, float] = Field(default_factory=dict)
-
-    # We need this because we don't insert a json object into attributes, we insert a string reflecting the json object.
-    @field_validator("attributes", mode="before")
-    @classmethod
-    def _ensure_dict_attributes(cls, value: Any) -> dict[str, Any]:
-        """Coerce JSON strings into dictionaries so validation doesn't fail."""
-        if value is None:
-            return {}
-        if isinstance(value, dict):
-            return value
-        if isinstance(value, str):
-            parsed = json.loads(value)
-            if not isinstance(parsed, dict):
-                raise ValueError("attributes must be a JSON object")
-            return parsed
-        raise ValueError("attributes must be a dictionary")
 
 
 logger = logging.getLogger(name="metta_repo")
@@ -557,196 +522,3 @@ class MettaRepo:
                 if row[1]:  # Only add non-null git hashes
                     res[row[0]].append(row[1])
             return res
-
-    async def record_episode(
-        self,
-        id: UUID,
-        data_uri: str,
-        primary_pv_id: uuid.UUID | None,
-        replay_url: str | None,
-        attributes: dict[str, Any],
-        eval_task_id: uuid.UUID | None,
-        thumbnail_url: str | None,
-        tags: list[tuple[str, str]],
-        policy_versions: list[tuple[uuid.UUID, int]],  # pv_id, num_agents
-        policy_metrics: list[tuple[uuid.UUID, str, float]],  # pv_id, metric_name, metric_value
-    ) -> uuid.UUID:
-        async with self.connect() as con:
-            # Insert into episodes table
-            result = await con.execute(
-                """
-                INSERT INTO episodes (
-                    id,
-                    data_uri,
-                    primary_pv_id,
-                    replay_url,
-                    thumbnail_url,
-                    attributes,
-                    eval_task_id
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s
-                ) RETURNING internal_id
-                """,
-                (id, data_uri, primary_pv_id, replay_url, thumbnail_url, Jsonb(attributes), eval_task_id),
-            )
-            row = await result.fetchone()
-            if row is None:
-                raise RuntimeError("Failed to insert episode record")
-            episode_internal_id = row[0]
-
-            # Insert episode policies in bulk
-            async with con.cursor() as cur:
-                rows = [(id, pv_id, num_agents) for pv_id, num_agents in policy_versions]
-                await cur.executemany(
-                    """
-                    INSERT INTO episode_policies (episode_id, policy_version_id, num_agents)
-                    VALUES (%s, %s, %s)
-                    """,
-                    rows,
-                )
-
-            # Get internal_id for each policy version UUID
-            pv_uuid_to_internal_id: dict[uuid.UUID, int] = {}
-            if policy_metrics:
-                pv_uuids = list({pv_id for pv_id, _, _ in policy_metrics})
-                result = await con.execute(
-                    """
-                    SELECT id, internal_id FROM policy_versions WHERE id = ANY(%s)
-                    """,
-                    (pv_uuids,),
-                )
-                rows = await result.fetchall()
-                for row in rows:
-                    pv_uuid_to_internal_id[row[0]] = row[1]
-
-            # Insert episode policy metrics in bulk
-            async with con.cursor() as cur:
-                rows = [
-                    (episode_internal_id, pv_uuid_to_internal_id[pv_id], metric_name, metric_value)
-                    for pv_id, metric_name, metric_value in policy_metrics
-                ]
-                await cur.executemany(
-                    """
-                    INSERT INTO episode_policy_metrics (episode_internal_id, pv_internal_id, metric_name, value)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    rows,
-                )
-
-            # Insert episode tags in bulk
-            async with con.cursor() as cur:
-                rows = [(id, key, value) for key, value in tags]
-                await cur.executemany(
-                    """
-                    INSERT INTO episode_tags (episode_id, key, value)
-                    VALUES (%s, %s, %s)
-                    """,
-                    rows,
-                )
-
-            return id
-
-    async def get_episodes(
-        self,
-        *,
-        primary_policy_version_ids: Optional[list[uuid.UUID]] = None,
-        episode_ids: Optional[list[uuid.UUID]] = None,
-        tag_filters: Optional[dict[str, Optional[list[str]]]] = None,
-        limit: Optional[int] = 200,
-        offset: int = 0,
-    ) -> list[EpisodeWithTags]:
-        """Fetch episodes with optional filters and tag aggregation."""
-        where_conditions: list[str] = []
-        params: list[Any] = []
-
-        if primary_policy_version_ids:
-            where_conditions.append("e.primary_pv_id = ANY(%s)")
-            params.append(primary_policy_version_ids)
-
-        if episode_ids:
-            where_conditions.append("e.id = ANY(%s)")
-            params.append(episode_ids)
-
-        if tag_filters:
-            for idx, (tag_key, tag_values) in enumerate(tag_filters.items()):
-                if tag_values:
-                    where_conditions.append(
-                        f"""EXISTS (
-                            SELECT 1 FROM episode_tags et_{idx}
-                            WHERE et_{idx}.episode_id = e.id
-                              AND et_{idx}.key = %s
-                              AND et_{idx}.value = ANY(%s)
-                        )"""
-                    )
-                    params.extend([tag_key, tag_values])
-                else:
-                    where_conditions.append(
-                        f"""EXISTS (
-                            SELECT 1 FROM episode_tags et_{idx}
-                            WHERE et_{idx}.episode_id = e.id
-                              AND et_{idx}.key = %s
-                        )"""
-                    )
-                    params.append(tag_key)
-
-        where_clause = f"WHERE {' AND '.join(where_conditions)}" if where_conditions else ""
-        limit_clause = ""
-        if limit is not None:
-            limit_clause = "LIMIT %s"
-            params.append(limit)
-        if offset > 0:
-            limit_clause += " OFFSET %s" if limit_clause else "OFFSET %s"
-            params.append(offset)
-
-        query = f"""
-WITH episode_tags_agg AS (
-    SELECT episode_id, jsonb_object_agg(key, value) AS tags
-    FROM episode_tags
-    GROUP BY episode_id
-),
-episode_avg_rewards AS (
-    SELECT
-        e_sub.id AS episode_id,
-        jsonb_object_agg(
-            pv.id::text,
-            epm.value / NULLIF(ep.num_agents, 0)
-        ) FILTER (
-            WHERE epm.metric_name = 'reward'
-              AND ep.num_agents IS NOT NULL
-              AND ep.num_agents > 0
-        ) AS avg_rewards
-    FROM episodes e_sub
-    JOIN episode_policies ep ON ep.episode_id = e_sub.id
-    JOIN policy_versions pv ON pv.id = ep.policy_version_id
-    JOIN episode_policy_metrics epm
-        ON epm.episode_internal_id = e_sub.internal_id
-       AND epm.pv_internal_id = pv.internal_id
-    GROUP BY e_sub.id
-)
-SELECT
-    e.id,
-    e.primary_pv_id,
-    e.replay_url,
-    e.thumbnail_url,
-    COALESCE(e.attributes, '{{}}'::jsonb) AS attributes,
-    e.eval_task_id,
-    e.created_at,
-    COALESCE(t.tags, '{{}}'::jsonb) AS tags,
-    COALESCE(r.avg_rewards, '{{}}'::jsonb) AS avg_rewards
-FROM episodes e
-LEFT JOIN episode_tags_agg t ON t.episode_id = e.id
-LEFT JOIN episode_avg_rewards r ON r.episode_id = e.id
-{where_clause}
-ORDER BY e.created_at DESC
-{limit_clause}
-"""
-
-        async with self.connect() as con:
-            async with con.cursor(row_factory=class_row(EpisodeWithTags)) as cur:
-                await cur.execute(query, params)  # type: ignore
-                rows = await cur.fetchall()
-
-        for row in rows:
-            # `class_row` returns a dict for this attr but doesn't coerce its inner types
-            row.avg_rewards = {uuid.UUID(str(key)): value for key, value in row.avg_rewards.items()}
-        return list(rows)

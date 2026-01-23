@@ -9,12 +9,9 @@ from fastapi import APIRouter, Body, Form, HTTPException, Query, UploadFile, sta
 from pydantic import BaseModel, Field
 
 from metta.app_backend.auth import CheckMaybeUser, CheckUser
-from metta.app_backend.metta_repo import (
-    EpisodeWithTags,
-    MettaRepo,
-)
 from metta.app_backend.models.policies import Policy, PolicyVersion
-from metta.app_backend.queries import policy_queries
+from metta.app_backend.queries import episode_queries, policy_queries
+from metta.app_backend.queries.episode_queries import EpisodeWithTags
 from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
 
@@ -189,8 +186,7 @@ class PolicyVersionsResponse(BaseModel):
     total_count: int
 
 
-def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
-    """Create a stats router with the given StatsRepo instance."""
+def create_stats_router() -> APIRouter:
     router = APIRouter(prefix="/stats", tags=["stats"])
 
     async def _create_policy_version_from_s3_key(name: str, user_id: str, s3_key: str) -> PolicyVersionResponse:
@@ -433,7 +429,7 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
                 for metric_name, value in metrics.items()
             ]
 
-            await stats_repo.record_episode(
+            await episode_queries.record_episode(
                 id=episode_id,
                 data_uri=s3_uri,
                 primary_pv_id=primary_pv_id,
@@ -526,7 +522,7 @@ def create_stats_router(stats_repo: MettaRepo) -> APIRouter:
     @router.post("/episodes/query")
     @timed_http_handler
     async def query_episodes(request: EpisodeQueryRequest) -> EpisodeQueryResponse:
-        episodes = await stats_repo.get_episodes(
+        episodes = await episode_queries.get_episodes(
             primary_policy_version_ids=request.primary_policy_version_ids,
             episode_ids=request.episode_ids,
             tag_filters=request.tag_filters,

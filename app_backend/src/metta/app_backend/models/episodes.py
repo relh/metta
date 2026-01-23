@@ -1,6 +1,3 @@
-# TODO: These models are partial representations of the episodes/episode_policies/episode_policy_metrics tables.
-# Currently only used by tournament code. Migrate other raw SQL queries to use these models.
-
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -22,13 +19,18 @@ class Episode(SQLModel, table=True):
             "server_default": text("nextval('episodes_internal_id_seq')"),
         },
     )
+    data_uri: str | None = None
+    primary_pv_id: UUID | None = Field(default=None, foreign_key="policy_versions.id")
     replay_url: str | None = None
+    thumbnail_url: str | None = None
     attributes: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    eval_task_id: UUID | None = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("now()")}
     )
 
     episode_policies: list["EpisodePolicy"] = Relationship(back_populates="episode")
+    tags: list["EpisodeTag"] = Relationship(back_populates="episode")
 
 
 class EpisodePolicy(SQLModel, table=True):
@@ -48,3 +50,13 @@ class EpisodePolicyMetric(SQLModel, table=True):
     pv_internal_id: int = Field(foreign_key="policy_versions.internal_id", primary_key=True)
     metric_name: str = Field(primary_key=True)
     value: float
+
+
+class EpisodeTag(SQLModel, table=True):
+    __tablename__ = "episode_tags"  # type: ignore[assignment]
+
+    episode_id: UUID = Field(foreign_key="episodes.id", primary_key=True)
+    key: str = Field(primary_key=True)
+    value: str
+
+    episode: Episode = Relationship(back_populates="tags")

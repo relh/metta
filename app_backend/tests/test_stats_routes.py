@@ -3,13 +3,11 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from metta.app_backend.metta_repo import MettaRepo
-from metta.app_backend.queries import policy_queries
+from metta.app_backend.queries import episode_queries, policy_queries
 
 
 @pytest.mark.asyncio
 async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
-    isolated_stats_repo: MettaRepo,
     isolated_test_client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:
@@ -24,7 +22,7 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
     )
 
     episode_id = uuid.uuid4()
-    await isolated_stats_repo.record_episode(
+    await episode_queries.record_episode(
         id=episode_id,
         data_uri=f"s3://episodes/{uuid.uuid4()}",
         primary_pv_id=pv_id,
