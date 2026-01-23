@@ -49,3 +49,15 @@ def test_load_config() -> None:
 def test_load_nested_symbol(with_extra_imports_root) -> None:
     result = load_symbol("foo.bar.baz.Foo.Bar.Baz")
     assert result is not None and result.__name__ == "Baz"
+
+
+def test_load_symbol_from_notebook(with_extra_imports_root) -> None:
+    result = load_symbol("notebook_fixture.NotebookPolicyClass")
+    assert isinstance(result, type)
+    assert result.__name__ == "NotebookPolicyClass"
+
+
+def test_load_nested_symbol_from_notebook(with_extra_imports_root) -> None:
+    result = load_symbol("notebook_fixture.NotebookPolicyClass.Config")
+    assert isinstance(result, type)
+    assert result.__name__ == "Config"
