@@ -42,7 +42,8 @@ Circular import? Extract types to `types.py` or use module import (`import x.y a
 - Don't add comments that restate the code
 - Don't add backwards-compatibility shims for unused code
 - Don't run lint/tests automatically (too slow)
-- Don't push to git remote (humans do that)
+- Prefer user-driven pushes. Only push to the remote when the user explicitly asks, or when a required workflow cannot
+  proceed without a push. If unsure, ask.
 
 ## Additional style guides
 
