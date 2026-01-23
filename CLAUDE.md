@@ -2,6 +2,16 @@
 
 Guidance for AI assistants working on this codebase. See also `STYLE_GUIDE.md`.
 
+## Skills
+
+Canonical skills live in `skills/`, with optional user-specific skills in `skills/user/<username>/`. In-repo tooling
+uses symlinks:
+
+- `.codex/skills` → `skills/`
+- `.claude/skills` → `skills/`
+
+If you need to install skills outside the repo, copy or symlink `skills/` into that tool's skills directory.
+
 ## Setup
 
 ```bash
