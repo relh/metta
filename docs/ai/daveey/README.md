@@ -58,6 +58,7 @@ These skills help manage Graphite PR stacks:
 | `m:make-skill`   | Create a new skill with proper directory, symlink, and README updates           |
 | `m:update-skill` | Update an existing skill and submit via m:submit-skill                          |
 | `m:submit-skill` | Commit and submit skill changes (worktree, lint, submit, publish, merge)        |
+| `m:sync-skills`  | Sync skills to Claude Code and Codex (symlinks from a skills directory)         |
 | `m:learn-skills` | Import skills from a path (symlink if in-repo, copy via m:make-skill otherwise) |
 | `t:run-tests`    | Run tests progressively: failed tests → pytest → metta ci                       |
 

@@ -134,8 +134,65 @@ Task(
 )
 ```
 
-**If sub-agent reports no comments:** Continue to Step 4. **If sub-agent reports failures:** Review the summary and
+**If sub-agent reports no comments:** Continue to Step 3b. **If sub-agent reports failures:** Review the summary and
 decide whether to retry or escalate.
+
+### Step 3b: Verify All Comments Addressed
+
+After the fix-comments sub-agent completes, **verify that every comment has been responded to and resolved**. This
+catches any comments the sub-agent may have missed.
+
+```bash
+# Re-fetch unresolved threads (paginate to handle PRs with >100 threads)
+OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO=$(gh repo view --json name -q '.name')
+PR_NUMBER=$(gh pr view --json number -q '.number')
+
+UNRESOLVED=""
+CURSOR=""
+while true; do
+  AFTER_ARG=""
+  if [ -n "$CURSOR" ]; then
+    AFTER_ARG="-f after=$CURSOR"
+  fi
+
+  RESULT=$(gh api graphql -f query='
+    query($owner: String!, $repo: String!, $pr: Int!, $after: String) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 100, after: $after) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              isResolved
+              path
+              comments(first: 1) { nodes { body } }
+            }
+          }
+        }
+      }
+    }
+  ' -f owner=$OWNER -f repo=$REPO -F pr=$PR_NUMBER $AFTER_ARG)
+
+  PAGE_UNRESOLVED=$(echo "$RESULT" | jq -r '
+    .data.repository.pullRequest.reviewThreads.nodes[]
+    | select(.isResolved == false)')
+  UNRESOLVED="${UNRESOLVED}${PAGE_UNRESOLVED}"
+
+  HAS_NEXT=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+  if [ "$HAS_NEXT" != "true" ]; then
+    break
+  fi
+  CURSOR=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
+done
+```
+
+**If unresolved threads remain:**
+
+1. Log which comments are still unresolved
+2. Re-dispatch the fix-comments sub-agent for the remaining threads, OR
+3. If they are design disagreements, report them to the user
+
+**Only proceed to Step 4 when all actionable comments have been addressed and responded to.**
 
 ### Step 4: Fix CI (Sub-Agent)
 
@@ -203,14 +260,15 @@ Task(
 
 ## Quick Reference
 
-| Step | Action                     | Method    | Purpose                    |
-| ---- | -------------------------- | --------- | -------------------------- |
-| 0    | Worktree setup             | Direct    | Isolation                  |
-| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks  |
-| 2    | `gt restack`               | Direct    | Rebase current stack       |
-| 3    | Fix comments               | Sub-agent | Address PR review comments |
-| 4    | Fix CI                     | Sub-agent | Fix any CI failures        |
-| 5    | Submit                     | Sub-agent | Test, clean, submit branch |
+| Step | Action                     | Method    | Purpose                          |
+| ---- | -------------------------- | --------- | -------------------------------- |
+| 0    | Worktree setup             | Direct    | Isolation                        |
+| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks        |
+| 2    | `gt restack`               | Direct    | Rebase current stack             |
+| 3    | Fix comments               | Sub-agent | Address PR review comments       |
+| 3b   | Verify comments addressed  | Direct    | Ensure all comments responded to |
+| 4    | Fix CI                     | Sub-agent | Fix any CI failures              |
+| 5    | Submit                     | Sub-agent | Test, clean, submit branch       |
 
 ## Why Sub-Agents?
 

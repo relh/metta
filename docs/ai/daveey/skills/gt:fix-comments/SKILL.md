@@ -174,9 +174,34 @@ No test needed since behavior isn't changing.
 
 For these, present the situation and ask for guidance.
 
-### Step 3b: Resolve Thread
+### Step 3b: Respond and Resolve Thread
 
-After fixing or confirming a change, resolve the thread:
+After fixing or confirming a change, **always reply to the comment** explaining what was done, then resolve the thread.
+Every comment must get a response — never silently resolve.
+
+**Reply to the comment:**
+
+```bash
+# Reply to the PR review thread with what was done
+gh api graphql -f query='
+  mutation($threadId: ID!, $body: String!) {
+    addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) {
+      comment { id }
+    }
+  }
+' -f threadId=$THREAD_NODE_ID -f body="$RESPONSE_MESSAGE"
+```
+
+**Response message format:**
+
+| Action Taken                | Response                                                                    |
+| --------------------------- | --------------------------------------------------------------------------- |
+| Wrote test + fixed          | "Fixed: <what was changed>. Added regression test `test_<name>` to verify." |
+| Fixed directly (style/docs) | "Fixed: <what was changed>."                                                |
+| Already fixed               | "Already addressed in <commit/change>."                                     |
+| Skipped (design)            | "Leaving for discussion — see reply above."                                 |
+
+**Then resolve the thread:**
 
 ```bash
 gh api graphql -f query='

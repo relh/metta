@@ -20,7 +20,8 @@ merge-when-ready, and prints the Graphite URL.
 2. Lint changed files
 3. Commit and submit
 4. Publish PR and enable merge-when-ready
-5. Print Graphite URL
+5. Monitor PR; run `/gt:fix-branch` if CI fails or comments appear
+6. Print Graphite URL
 
 ## Step 1: Worktree and Branch
 
@@ -70,7 +71,50 @@ gh pr ready "$PR_NUMBER"
 gh pr merge "$PR_NUMBER" --auto --squash
 ```
 
-## Step 5: Report
+## Step 5: Monitor and Fix
+
+After enabling merge-when-ready, monitor the PR until it merges. Poll every 30 seconds:
+
+```bash
+while true; do
+  STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt -q '.state')
+  if [ "$STATE" = "MERGED" ]; then
+    echo "PR #$PR_NUMBER merged successfully"
+    break
+  fi
+
+  # Check for new review comments or CI failures
+  CHECKS_FAILING=$(gh api repos/{owner}/{repo}/commits/$(git rev-parse HEAD)/check-runs \
+    --jq '[.check_runs[] | select(.conclusion == "failure")] | length')
+  UNRESOLVED=$(gh api graphql -f query='
+    query($owner: String!, $repo: String!, $pr: Int!) {
+      repository(owner: $owner, name: $repo) {
+        pullRequest(number: $pr) {
+          reviewThreads(first: 100) {
+            nodes { isResolved }
+          }
+        }
+      }
+    }
+  ' -f owner="$OWNER" -f repo="$REPO" -F pr="$PR_NUMBER" \
+    --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+
+  if [ "$CHECKS_FAILING" -gt 0 ] || [ "$UNRESOLVED" -gt 0 ]; then
+    echo "Issues detected (CI failures: $CHECKS_FAILING, unresolved comments: $UNRESOLVED)"
+    # Run gt:fix-branch to address comments and CI failures
+    break  # Exit loop, dispatch fix-branch below
+  fi
+
+  sleep 30
+done
+```
+
+**If issues detected:** Invoke `/gt:fix-branch` (which handles sync, restack, fix-comments, fix-ci, and re-submit). Then
+re-enable merge-when-ready and resume monitoring.
+
+**If merged:** Proceed to Step 6.
+
+## Step 6: Report
 
 Print the Graphite URL:
 
@@ -79,6 +123,10 @@ https://app.graphite.com/github/pr/Metta-AI/metta/<PR_NUMBER>
 ```
 
 ## Integration
+
+**Uses:**
+
+- **gt:fix-branch** - Fixes PR comments and CI failures during monitoring
 
 **Called by:**
 
