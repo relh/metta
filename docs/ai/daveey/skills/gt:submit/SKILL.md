@@ -10,7 +10,7 @@ description: Run tests, fix issues, clean up compat code with /gt:cool, and subm
 Prepare and submit the current branch to Graphite. Runs tests, fixes any failures, cleans up backwards compatibility
 code, and submits.
 
-**Core principle:** Test → Fix → No Disabled Tests → Clean → Submit
+**Core principle:** Test → Fix → No Disabled Tests → Clean → Lint → Submit
 
 **Announce at start:** "I'm using the submit skill to test, clean up, and submit this branch."
 
@@ -28,7 +28,7 @@ digraph submit {
   cool [label="Step 5: Run /gt:cool"];
   lint [label="Step 6: Lint"];
   commit [label="Step 7: Commit Changes"];
-  submit [label="Step 8: Submit to Graphite"];
+  submit [label="Step 8: Submit to Graphite (verify lint ran)"];
 
   status -> test -> fix -> disabled -> cool -> lint -> commit -> submit;
   fix -> test [label="if failures"];
@@ -55,10 +55,10 @@ git diff main..HEAD --stat
 
 ```bash
 # Run tests for changed files
-metta pytest --changed -v
+metta pytest --changed
 
 # If no changed files detected, run tests related to the branch
-metta pytest tests/ -v --tb=short
+metta pytest tests/ --tb=short
 ```
 
 **Capture output** - you'll need it if tests fail.
@@ -85,14 +85,14 @@ For each failing test:
 4. **Re-run the specific test:**
 
    ```bash
-   metta pytest tests/path/to/test_file.py::test_name -v
+   metta pytest tests/path/to/test_file.py::test_name
    ```
 
 5. **Loop until passing**
 
 6. **Re-run full test suite:**
    ```bash
-   metta pytest --changed -v
+   metta pytest --changed
    ```
 
 ## Step 4: Check for Disabled Tests
@@ -151,7 +151,7 @@ grep -rn "# def test_\|#def test_\|# async def test_" tests/ --include="*.py"
 
 4. **Re-run tests:**
    ```bash
-   metta pytest --changed -v
+   metta pytest --changed
    ```
 
 ### 4d: Acceptable Skips
@@ -203,7 +203,7 @@ Use Skill tool: skill="gt:cool"
 metta pytest --changed -v
 ```
 
-## Step 6: Lint
+## Step 6: Lint (Mandatory)
 
 ```bash
 # Run linting
@@ -215,6 +215,8 @@ ruff format .
 ```
 
 **Fix any lint errors** before proceeding.
+
+**Do not skip this step.** Even if you plan to run `gt submit` directly, run `metta lint` first.
 
 ## Step 7: Commit Changes
 
@@ -244,10 +246,22 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 gt modify --no-interactive
 ```
 
-## Step 8: Submit to Graphite
+## Step 8: Submit to Graphite (and verify lint ran)
 
 ```bash
 # Submit to Graphite
+gt submit --no-interactive
+```
+
+**Verify lint actually ran.** If the submit output doesn’t show lint (or if you skipped Step 6), run:
+
+```bash
+metta lint
+```
+
+Then re-run:
+
+```bash
 gt submit --no-interactive
 ```
 
@@ -261,7 +275,7 @@ gt submit --no-interactive
 
 | Step           | Command                        | On Failure       |
 | -------------- | ------------------------------ | ---------------- |
-| Test           | `metta pytest --changed -v`    | Go to Step 3     |
+| Test           | `metta pytest --changed`       | Go to Step 3     |
 | Fix failures   | Fix code/tests                 | Re-run test      |
 | Check disabled | `grep -rn "@pytest.mark.skip"` | Fix test or code |
 | Cool           | `/gt:cool` skill               | Fix callsites    |
