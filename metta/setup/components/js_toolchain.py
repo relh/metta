@@ -18,7 +18,7 @@ class JsToolchainSetup(SetupModule):
 
     @property
     def description(self) -> str:
-        return "JavaScript toolchain (nvm, node, pnpm, turborepo)"
+        return "JavaScript toolchain (nvm, node, pnpm, turborepo, prettier)"
 
     def dependencies(self) -> list[str]:
         return ["system"]
@@ -37,7 +37,7 @@ class JsToolchainSetup(SetupModule):
         if not self._nvm_installed():
             return False
 
-        if not all(shutil.which(cmd) for cmd in ("node", "corepack", "pnpm", "turbo")):
+        if not all(shutil.which(cmd) for cmd in ("node", "corepack", "pnpm", "turbo", "prettier")):
             return False
 
         if not (self.repo_root / "node_modules").exists():
@@ -99,9 +99,13 @@ class JsToolchainSetup(SetupModule):
             info("Installing turbo globally...")
             self.run_command(["pnpm", "install", "--global", "turbo"], capture_output=False)
 
+        if not shutil.which("prettier"):
+            info("Installing prettier globally...")
+            self.run_command(["pnpm", "install", "--global", "prettier"], capture_output=False)
+
         info("Installing project dependencies...")
         self.run_command(["pnpm", "install", "--frozen-lockfile"], capture_output=False, cwd=self.repo_root)
 
         info("JS toolchain setup completed.")
-        if not shutil.which("turbo"):
-            info("Note: Restart your shell for 'turbo' to be available in PATH.")
+        if not shutil.which("turbo") or not shutil.which("prettier"):
+            info("Note: Restart your shell for 'turbo'/'prettier' to be available in PATH.")
