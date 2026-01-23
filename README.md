@@ -14,7 +14,7 @@
 
 A reinforcement learning codebase focusing on the emergence of cooperation and alignment in multi-agent AI systems.
 
-- **Discord**: <https://discord.gg/mQzrgwqmwy>
+- **Discord**: <https://discord.gg/secret-hologenesis>
 - **Short (5m) Talk**: <https://www.youtube.com/watch?v=bt6hV73VA8I>
 - **Talk**: <https://foresight.org/summary/david-bloomin-metta-learning-love-is-all-you-need/>
 
