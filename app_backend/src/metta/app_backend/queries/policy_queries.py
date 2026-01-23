@@ -186,8 +186,8 @@ async def get_policy_versions(
         count_query = count_query.where(col(Policy.name).ilike(f"%{name_fuzzy}%"))
 
     if version is not None:
-        query = query.filter_by(version=version)
-        count_query = count_query.filter_by(version=version)
+        query = query.where(PolicyVersion.version == version)
+        count_query = count_query.where(PolicyVersion.version == version)
 
     if user_id is not None:
         query = query.where(Policy.user_id == user_id)

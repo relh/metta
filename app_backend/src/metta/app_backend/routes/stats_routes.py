@@ -247,6 +247,12 @@ def create_stats_router() -> APIRouter:
             raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
         return PolicyVersionWithName.from_model(pv)
 
+    @router.get("/policies/my-versions")
+    @timed_http_handler
+    async def get_my_policy_versions(user: CheckUser) -> MyPolicyVersionsResponse:
+        versions = await policy_queries.get_user_policy_versions(user.id)
+        return MyPolicyVersionsResponse(entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions])
+
     @router.get("/policies/{policy_id}")
     @timed_http_handler
     async def get_policy_by_id(policy_id: str, user: CheckUser) -> PublicPolicyVersionRow:
@@ -512,12 +518,6 @@ def create_stats_router() -> APIRouter:
             entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],
             total_count=total_count,
         )
-
-    @router.get("/policies/my-versions")
-    @timed_http_handler
-    async def get_my_policy_versions(user: CheckUser) -> MyPolicyVersionsResponse:
-        versions = await policy_queries.get_user_policy_versions(user.id)
-        return MyPolicyVersionsResponse(entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions])
 
     @router.post("/episodes/query")
     @timed_http_handler
