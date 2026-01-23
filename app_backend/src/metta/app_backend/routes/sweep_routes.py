@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from metta.app_backend.auth import CheckUser
-from metta.app_backend.metta_repo import MettaRepo
+from metta.app_backend.queries import sweep_queries
 from metta.app_backend.route_logger import timed_http_handler
 
 
@@ -31,22 +31,18 @@ class RunIdResponse(BaseModel):
     run_id: str
 
 
-def create_sweep_router(metta_repo: MettaRepo) -> APIRouter:
-    """Create a sweep coordination router with the given MettaRepo instance."""
+def create_sweep_router() -> APIRouter:
     router = APIRouter(prefix="/sweeps", tags=["sweeps"])
 
     @router.post("/{sweep_name}/create_sweep")
     @timed_http_handler
     async def create_sweep(sweep_name: str, request: SweepCreateRequest, user: CheckUser) -> SweepCreateResponse:
-        """Initialize a new sweep or return existing sweep info (idempotent)."""
-        # Check if sweep already exists
-        existing_sweep = await metta_repo.get_sweep_by_name(sweep_name)
+        existing_sweep = await sweep_queries.get_sweep_by_name(sweep_name)
 
         if existing_sweep:
             return SweepCreateResponse(created=False, sweep_id=existing_sweep.id)
 
-        # Create new sweep
-        sweep_id = await metta_repo.create_sweep(
+        sweep_id = await sweep_queries.create_sweep(
             name=sweep_name,
             project=request.project,
             entity=request.entity,
@@ -59,8 +55,7 @@ def create_sweep_router(metta_repo: MettaRepo) -> APIRouter:
     @router.get("/{sweep_name}")
     @timed_http_handler
     async def get_sweep(sweep_name: str, user: CheckUser) -> SweepInfo:
-        """Get sweep information by name."""
-        sweep = await metta_repo.get_sweep_by_name(sweep_name)
+        sweep = await sweep_queries.get_sweep_by_name(sweep_name)
 
         if not sweep:
             return SweepInfo(exists=False, wandb_sweep_id="")
@@ -70,16 +65,12 @@ def create_sweep_router(metta_repo: MettaRepo) -> APIRouter:
     @router.post("/{sweep_name}/runs/next")
     @timed_http_handler
     async def get_next_run_id(sweep_name: str, user: CheckUser) -> RunIdResponse:
-        """Get the next run ID for a sweep (atomic operation)."""
-        sweep = await metta_repo.get_sweep_by_name(sweep_name)
+        sweep = await sweep_queries.get_sweep_by_name(sweep_name)
 
         if not sweep:
             raise HTTPException(status_code=404, detail=f"Sweep '{sweep_name}' not found")
 
-        # Atomically increment and get next run counter
-        next_counter = await metta_repo.get_next_sweep_run_counter(sweep.id)
-
-        # Format run ID as "sweep_name.r.counter"
+        next_counter = await sweep_queries.get_next_sweep_run_counter(sweep.id)
         run_id = f"{sweep_name}.r.{next_counter}"
 
         return RunIdResponse(run_id=run_id)
