@@ -60,7 +60,7 @@ git add docs/ai/daveey/skills/ docs/ai/daveey/README.md
 gt create "$BRANCH_NAME" -m "feat(skills): $SKILL_NAME skill
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
-gt submit --no-interactive
+gt submit --no-interactive --merge-when-ready --publish
 ```
 
 **If branch already exists** (updating):
@@ -68,14 +68,15 @@ gt submit --no-interactive
 ```bash
 git add -A
 gt modify --no-interactive
-gt submit --no-interactive
+gt submit --no-interactive --merge-when-ready --publish
 ```
 
-## Step 4: Publish and Merge-When-Ready
+## Step 4: Enable Merge-When-Ready
+
+Graphite's `--merge-when-ready` flag doesn't always enable GitHub's auto-merge. Explicitly enable it:
 
 ```bash
 PR_NUMBER=$(gh pr list --head "$BRANCH_NAME" --json number -q '.[0].number')
-gh pr ready "$PR_NUMBER"
 gh pr merge "$PR_NUMBER" --auto --squash
 ```
 
