@@ -79,6 +79,12 @@ gh pr ready "$PR_NUMBER"
 gh pr merge "$PR_NUMBER" --auto --squash
 ```
 
+**Immediately print the Graphite URL to the user** so they can follow along:
+
+```
+https://app.graphite.dev/github/pr/Metta-AI/metta/<PR_NUMBER>
+```
+
 ## Step 5: Monitor and Fix
 
 After enabling merge-when-ready, monitor the PR until it merges. Poll every 30 seconds:
@@ -127,10 +133,10 @@ re-enable merge-when-ready and resume monitoring.
 
 ## Step 6: Report
 
-Print the Graphite URL:
+Confirm the PR merged and print the Graphite URL:
 
 ```
-https://app.graphite.com/github/pr/Metta-AI/metta/<PR_NUMBER>
+https://app.graphite.dev/github/pr/Metta-AI/metta/<PR_NUMBER>
 ```
 
 ## Integration
