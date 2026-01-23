@@ -34,7 +34,7 @@ jobs:
         with:
           app-id: ${{ env.CI_APP_ID }}
           private-key: ${{ env.CI_APP_PRIVATE_KEY }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ steps.ci-token.outputs.token }}
           fetch-depth: 0 # Full history needed for git operations

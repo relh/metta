@@ -39,7 +39,7 @@ jobs:
           echo "Conclusion: ${{ github.event.workflow_run.conclusion }}"
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Cleanup cancelled runs from concurrency
         id: cleanup

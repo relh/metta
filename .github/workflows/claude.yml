@@ -184,7 +184,7 @@ jobs:
       # Only checkout and run Claude if not a review action
       - name: Checkout repository
         if: contains(fromJson('["comment", "create_pr"]'), steps.check_action.outputs.action)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: ${{ steps.check_action.outputs.fetch_depth == '0' && 0 || 1 }}
           token: ${{ secrets.GITHUB_TOKEN }}
