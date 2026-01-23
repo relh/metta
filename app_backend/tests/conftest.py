@@ -81,7 +81,7 @@ def stats_repo(db_uri: str) -> MettaRepo:
 @pytest.fixture(scope="class")
 def test_app(stats_repo: MettaRepo) -> FastAPI:
     """Create a test FastAPI app with dependency injection."""
-    return create_app(stats_repo)
+    return create_app()
 
 
 @pytest.fixture(scope="class")
@@ -144,7 +144,7 @@ def isolated_stats_repo(isolated_db_context: str) -> MettaRepo:
 @pytest.fixture(scope="function")
 def isolated_test_app(isolated_stats_repo: MettaRepo) -> FastAPI:
     """Create a test FastAPI app with isolated database."""
-    return create_app(isolated_stats_repo)
+    return create_app()
 
 
 @pytest.fixture(scope="function")

@@ -9,14 +9,17 @@ suppress_noisy_logs()
 import asyncio
 import logging
 import sys
+from contextlib import asynccontextmanager
 
 import fastapi
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from psycopg import AsyncConnection
 from pydantic.main import BaseModel
 
 from metta.app_backend.auth import get_user
-from metta.app_backend.metta_repo import MettaRepo
+from metta.app_backend.config import settings
+from metta.app_backend.migrations import MIGRATIONS
 from metta.app_backend.routes import (
     eval_task_routes,
     job_routes,
@@ -26,6 +29,7 @@ from metta.app_backend.routes import (
     sweep_routes,
     tournament_routes,
 )
+from metta.app_backend.schema_manager import run_migrations_async
 
 
 class WhoAmIResponse(BaseModel):
@@ -100,12 +104,17 @@ def setup_logging():
     )
 
 
-def create_app(stats_repo: MettaRepo) -> fastapi.FastAPI:
-    """Create a FastAPI app with the given StatsRepo instance."""
-    # Ensure logging is configured
+def create_app() -> fastapi.FastAPI:
     setup_logging()
 
-    app = fastapi.FastAPI()
+    @asynccontextmanager
+    async def lifespan(_: fastapi.FastAPI):
+        if settings.RUN_MIGRATIONS:
+            async with await AsyncConnection.connect(settings.STATS_DB_URI) as conn:
+                await run_migrations_async(conn, MIGRATIONS)
+        yield
+
+    app = fastapi.FastAPI(lifespan=lifespan)
 
     # Add CORS middleware
     app.add_middleware(
@@ -122,7 +131,7 @@ def create_app(stats_repo: MettaRepo) -> fastapi.FastAPI:
 
     # Create routers with the provided StatsRepo
     eval_task_router = eval_task_routes.create_eval_task_router()
-    sql_router = sql_routes.create_sql_router(stats_repo)
+    sql_router = sql_routes.create_sql_router()
     stats_router = stats_routes.create_stats_router()
     sweep_router = sweep_routes.create_sweep_router()
     jobs_router = job_routes.create_job_router()
@@ -146,14 +155,9 @@ def create_app(stats_repo: MettaRepo) -> fastapi.FastAPI:
 
 
 if __name__ == "__main__":
-    from metta.app_backend.config import settings
+    app = create_app()
 
-    stats_repo = MettaRepo(settings.STATS_DB_URI)
-    app = create_app(stats_repo)
-
-    # Start the updater in an async context
     async def main():
-        # Run uvicorn in a way that doesn't block
         config = uvicorn.Config(app, host=settings.HOST, port=settings.PORT)
         server = uvicorn.Server(config)
         await server.serve()

@@ -1,18 +1,22 @@
 """SQL query routes for self-service database access."""
 
 import asyncio
-from typing import Any, Dict, List
+import logging
+import time
+from typing import Any
 
 import httpx
 from fastapi import APIRouter, HTTPException
 from psycopg import errors as pg_errors
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from metta.app_backend.auth import CheckSoftmaxUser
 from metta.app_backend.config import settings
-from metta.app_backend.metta_repo import MettaRepo
-from metta.app_backend.query_logger import execute_query_and_log
+from metta.app_backend.database import db_session
 from metta.app_backend.route_logger import timed_route
+
+query_logger = logging.getLogger("db_performance")
 
 
 class SQLQueryRequest(BaseModel):
@@ -20,8 +24,8 @@ class SQLQueryRequest(BaseModel):
 
 
 class SQLQueryResponse(BaseModel):
-    columns: List[str]
-    rows: List[List[Any]]
+    columns: list[str]
+    rows: list[list[Any]]
     row_count: int
 
 
@@ -33,7 +37,7 @@ class TableInfo(BaseModel):
 
 class TableSchema(BaseModel):
     table_name: str
-    columns: List[Dict[str, Any]]
+    columns: list[dict[str, Any]]
 
 
 class AIQueryRequest(BaseModel):
@@ -44,18 +48,15 @@ class AIQueryResponse(BaseModel):
     query: str
 
 
-def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
-    """Create SQL query router with the provided MettaRepo instance."""
+def create_sql_router() -> APIRouter:
     router = APIRouter(prefix="/sql", tags=["sql"])
 
     @router.get("/tables")
     @timed_route("list_tables")
-    async def list_tables(user: CheckSoftmaxUser) -> List[TableInfo]:
-        """List all available tables in the database (excluding migrations)."""
+    async def list_tables(user: CheckSoftmaxUser) -> list[TableInfo]:
         try:
-            async with metta_repo.connect() as con:
-                # Get all tables except schema_migrations
-                tables_query = """
+            async with db_session() as session:
+                tables_query = text("""
                     SELECT
                         t.table_name,
                         COUNT(c.column_name) as column_count
@@ -68,18 +69,21 @@ def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
                         AND t.table_name != 'schema_migrations'
                     GROUP BY t.table_name
                     ORDER BY t.table_name
-                """
+                """)
 
-                tables = await execute_query_and_log(con, tables_query, (), "list_tables_metadata")
+                start = time.time()
+                result = await session.execute(tables_query)
+                tables = result.fetchall()
+                query_logger.info(f"list_tables_metadata completed in {time.time() - start:.3f}s")
 
-                # Get row counts for each table
                 table_info = []
                 for table_name, column_count in tables:
-                    row_count_query = "SELECT reltuples::bigint AS estimate FROM pg_class where relname = %s"
-                    row_count_result = await execute_query_and_log(
-                        con, row_count_query, (table_name,), f"count_rows_{table_name}"
-                    )
-                    row_count = row_count_result[0][0]
+                    row_count_query = text("SELECT reltuples::bigint AS estimate FROM pg_class where relname = :name")
+                    start = time.time()
+                    row_count_result = await session.execute(row_count_query, {"name": table_name})
+                    query_logger.info(f"count_rows_{table_name} completed in {time.time() - start:.3f}s")
+                    row = row_count_result.fetchone()
+                    row_count = row[0] if row else 0
 
                     table_info.append(TableInfo(table_name=table_name, column_count=column_count, row_count=row_count))
 
@@ -91,15 +95,12 @@ def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
     @router.get("/tables/{table_name}/schema")
     @timed_route("get_table_schema")
     async def get_table_schema(table_name: str, user: CheckSoftmaxUser) -> TableSchema:
-        """Get the schema for a specific table."""
         try:
-            async with metta_repo.connect() as con:
-                # Verify table exists and is not schema_migrations
-                if table_name == "schema_migrations":
-                    raise HTTPException(status_code=403, detail="Access to schema_migrations table is not allowed")
+            if table_name == "schema_migrations":
+                raise HTTPException(status_code=403, detail="Access to schema_migrations table is not allowed")
 
-                # Get column information
-                schema_query = """
+            async with db_session() as session:
+                schema_query = text("""
                     SELECT
                         column_name,
                         data_type,
@@ -108,11 +109,14 @@ def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
                         character_maximum_length
                     FROM information_schema.columns
                     WHERE table_schema = 'public'
-                        AND table_name = %s
+                        AND table_name = :table_name
                     ORDER BY ordinal_position
-                """
+                """)
 
-                columns = await execute_query_and_log(con, schema_query, (table_name,), f"get_schema_{table_name}")
+                start = time.time()
+                result = await session.execute(schema_query, {"table_name": table_name})
+                columns = result.fetchall()
+                query_logger.info(f"get_schema_{table_name} completed in {time.time() - start:.3f}s")
 
                 if not columns:
                     raise HTTPException(status_code=404, detail=f"Table '{table_name}' not found")
@@ -139,15 +143,11 @@ def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
     @router.post("/query")
     @timed_route("execute_sql_query")
     async def execute_query(request: SQLQueryRequest, user: CheckSoftmaxUser) -> SQLQueryResponse:
-        """Execute a SQL query with a 20-second timeout."""
         try:
-            # Basic validation to prevent access to schema_migrations
             query_lower = request.query.lower()
             if "schema_migrations" in query_lower:
                 raise HTTPException(status_code=403, detail="Access to schema_migrations table is not allowed")
 
-            # Ensure query is read-only (no writes allowed)
-            # Check for common write operations
             write_keywords = ["insert", "update", "delete", "drop", "create", "alter", "truncate", "grant", "revoke"]
             first_word = query_lower.strip().split()[0] if query_lower.strip() else ""
             if first_word in write_keywords:
@@ -156,29 +156,19 @@ def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
                 )
 
             async def run_query():
-                async with metta_repo.connect() as con:
-                    # Set statement timeout to 20 seconds
-                    await con.execute("SET statement_timeout = '20s'")
+                async with db_session() as session:
+                    await session.execute(text("SET statement_timeout = '20s'"))
+                    result = await session.execute(text(request.query))
 
-                    # Execute the query
-                    result = await con.execute(request.query)  # type: ignore[arg-type]
+                    if not result.returns_rows:  # type: ignore[union-attr]
+                        return SQLQueryResponse(columns=[], rows=[], row_count=0)
 
-                    # Get column names
-                    columns = []
-                    if result.description:
-                        columns = [desc.name for desc in result.description]
-
-                    # Fetch all rows with a limit of 1000
-                    rows = []
-                    if result.rowcount > 0 or (result.rowcount == -1 and result.description):
-                        rows = await result.fetchmany(1000)  # Limit to 1000 rows
-
-                    # Convert rows to list of lists for JSON serialization
+                    columns = list(result.keys()) if result.keys() else []
+                    rows = result.fetchmany(1000)
                     rows_list = [list(row) for row in rows]
 
                     return SQLQueryResponse(columns=columns, rows=rows_list, row_count=len(rows_list))
 
-            # Run with asyncio timeout as additional safeguard
             return await asyncio.wait_for(run_query(), timeout=21.0)
 
         except asyncio.TimeoutError as e:
@@ -193,11 +183,9 @@ def create_sql_router(metta_repo: MettaRepo) -> APIRouter:
             raise HTTPException(status_code=400, detail=f"Column not found: {str(e)}") from e
         except pg_errors.InsufficientPrivilege as e:
             raise HTTPException(status_code=403, detail=f"Insufficient privileges: {str(e)}") from e
-
         except HTTPException:
             raise
         except Exception as e:
-            # Log the full error for debugging but return a generic message
             error_type = type(e).__name__
             raise HTTPException(status_code=500, detail=f"Query execution failed ({error_type}): {str(e)}") from e
 
