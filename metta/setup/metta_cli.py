@@ -676,31 +676,6 @@ def cmd_report_env_details():
         info(f"Git Commit: {commit}")
 
 
-@app.command(
-    name="clip",
-    help="Copy codebase to clipboard. Pass through any codeclip flags",
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
-    add_help_option=False,  # Disable typer's help handling
-)
-def cmd_clip(
-    ctx: typer.Context,
-):
-    """Copy subsets of codebase for LLM contexts."""
-    # Find all arguments after 'clip' command
-    clip_index = sys.argv.index("clip")
-    args_after_clip = sys.argv[clip_index + 1 :]
-
-    # Build command with codeclip and pass all arguments through
-    cmd = ["codeclip"] + args_after_clip
-
-    try:
-        subprocess.run(cmd, cwd=get_repo_root(), check=False)
-    except FileNotFoundError:
-        error("Error: Command not found: codeclip")
-        info("Run: metta install codebot")
-        raise typer.Exit(1) from None
-
-
 @app.command(name="gridworks", help="Start the Gridworks web UI", context_settings={"allow_extra_args": True})
 def cmd_gridworks(ctx: typer.Context):
     cmd = ["./gridworks/start.py", *ctx.args]

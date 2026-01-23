@@ -112,7 +112,7 @@
     // Handle workspace packages specially
     {
       "description": "Workspace packages - update together",
-      "matchPackageNames": ["metta-agent", "metta-mettagrid", "metta-common", "metta-app-backend", "codebot", "gitta"],
+      "matchPackageNames": ["metta-agent", "metta-mettagrid", "metta-common", "metta-app-backend", "gitta"],
       "groupName": "workspace-packages",
       "commitMessageTopic": "workspace packages",
       "enabled": false  // These are local packages, don't update

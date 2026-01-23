@@ -28,7 +28,6 @@ exclude = [
 known-third-party = ["wandb", "torch", "omegaconf"]
 known-first-party = [
   "alo",
-  "codebot",
   "cogames",
   "gitta",
   "metta_agent",

@@ -13,7 +13,6 @@ dependencies = [
   "asana>=5.2.2",
   "bidict>=0.23.1",
   "boto3>=1.38.32",
-  "codebot",
   "cogames",
   "colorama>=0.4.6",
   "cortexcore",
@@ -148,7 +147,6 @@ members = [
   "agent",
   "app_backend",
   "common",
-  "packages/codebot",
   "packages/cogames-agents",
   "packages/cogames",
   "packages/cortex",
@@ -160,7 +158,6 @@ members = [
 ]
 
 [tool.uv.sources]
-codebot = { workspace = true }
 cogames-agents = { workspace = true }
 cogames = { workspace = true }
 cortexcore = { workspace = true }
