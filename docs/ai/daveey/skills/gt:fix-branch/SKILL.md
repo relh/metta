@@ -9,7 +9,7 @@ description:
 ## Overview
 
 Sync and fix the current Graphite branch by syncing with trunk, restacking, addressing PR review comments, and fixing CI
-failures. **Works in a git worktree by default** for isolation.
+failures. **Always works in a git worktree** for isolation (unless user explicitly opts out).
 
 **Core principle:** Worktree → Sync → Restack → Fix Comments → Fix CI
 
@@ -27,7 +27,7 @@ digraph fix_branch {
   restack [label="Step 2: gt restack"];
   fix_comments [label="Step 3: /gt:fix-comments"];
   fix_ci [label="Step 4: /gt:fix-ci"];
-  push [label="Step 5: Push Branch"];
+  push [label="Step 5: /gt:submit"];
   done [label="Done"];
 
   worktree -> sync -> restack -> fix_comments -> fix_ci -> push -> done;
@@ -41,9 +41,9 @@ ensures:
 - CI runs start immediately for each branch
 - If something fails later, earlier branches are already submitted
 
-### Step 0: Worktree Setup (Default)
+### Step 0: Worktree Setup (Always)
 
-By default, work in an isolated git worktree to avoid disrupting the main workspace.
+**Always** work in an isolated git worktree unless the user explicitly said not to. Do NOT ask - just set it up.
 
 **Check if already in a worktree for this branch:**
 
@@ -57,14 +57,7 @@ if [ "$(pwd)" = "$WORKTREE_PATH" ]; then
 fi
 ```
 
-**If not in a worktree, ask user:**
-
-Use AskUserQuestion with options:
-
-1. **Yes, use worktree (Recommended)** - Create/use worktree for isolation
-2. **No, work in current directory** - Skip worktree, work in place
-
-**If using worktree:**
+**If not in a worktree, set one up automatically:**
 
 Follow the `using-git-worktrees` skill to:
 
@@ -87,6 +80,8 @@ else
   cd .worktrees/$BRANCH
 fi
 ```
+
+**Only skip worktrees if** the user explicitly passed `--no-worktree` or said "don't use worktrees".
 
 ### Step 1: Sync with Trunk
 
@@ -137,38 +132,31 @@ This will:
 
 **Note:** If CI is already passing, this step completes quickly.
 
-### Step 5: Push Branch
+### Step 5: Submit Branch
 
-**Push immediately after fixing** - don't wait for the entire stack:
+**Submit immediately after fixing** - don't wait for the entire stack:
 
-```bash
-gt submit --no-interactive
+```
+/gt:submit
 ```
 
-This pushes the current branch to remote immediately. Benefits:
+This runs tests, cleans up compat code, lints, commits, and submits to Graphite. Benefits:
 
 - CI starts running right away
 - Other branches in the stack can be fixed in parallel
 - Progress is visible to reviewers
 - If later branches have issues, earlier ones are already submitted
-
-**If there are uncommitted changes from fix-ci:**
-
-```bash
-git add -A
-git commit -m "fix: address CI failures"
-gt submit --no-interactive
-```
+- Final quality gate ensures branch is clean before pushing
 
 ## Quick Reference
 
-| Step | Command                      | Purpose                    |
-| ---- | ---------------------------- | -------------------------- |
-| 1    | `gt sync --no-interactive`   | Pull trunk, rebase stacks  |
-| 2    | `gt restack`                 | Rebase current stack       |
-| 3    | `/gt:fix-comments`           | Address PR review comments |
-| 4    | `/gt:fix-ci`                 | Fix any CI failures        |
-| 5    | `gt submit --no-interactive` | Push branch immediately    |
+| Step | Command                    | Purpose                    |
+| ---- | -------------------------- | -------------------------- |
+| 1    | `gt sync --no-interactive` | Pull trunk, rebase stacks  |
+| 2    | `gt restack`               | Rebase current stack       |
+| 3    | `/gt:fix-comments`         | Address PR review comments |
+| 4    | `/gt:fix-ci`               | Fix any CI failures        |
+| 5    | `/gt:submit`               | Test, clean, submit branch |
 
 ## Common Mistakes
 
@@ -187,10 +175,10 @@ gt submit --no-interactive
 - **Problem:** PR comments fixed but CI still failing
 - **Fix:** Always run fix-ci after fix-comments
 
-**Waiting to push until stack is complete**
+**Waiting to submit until stack is complete**
 
 - **Problem:** Delays CI feedback, other branches wait unnecessarily
-- **Fix:** Push each branch immediately after fixing (Step 5)
+- **Fix:** Submit each branch immediately after fixing (Step 5 - /gt:submit)
 
 ## Red Flags
 
@@ -231,10 +219,11 @@ After the branch is fixed and submitted:
 - **using-git-worktrees** - For worktree setup (Step 0)
 - **gt:fix-comments** - Addresses PR review comments with regression tests
 - **gt:fix-ci** - Fixes CI failures
+- **gt:submit** - Final quality gate: tests, /gt:cool, lint, commit, submit
 
 **Called by:**
 
-- **gt:fix-stack** - Runs this on each branch in a stack (each branch is pushed immediately after fixing)
+- **gt:fix-stack** - Runs this on each branch in a stack (each branch is submitted immediately after fixing)
 
 **Pairs with:**
 

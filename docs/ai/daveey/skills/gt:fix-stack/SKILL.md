@@ -10,9 +10,10 @@ description:
 ## Overview
 
 Fix an entire Graphite stack by running `/gt:fix-branch` on each branch, starting from the bottom (closest to trunk) and
-working up to the top. **Uses git worktrees by default** - each branch gets its own isolated worktree.
+working up to the top. **Always uses git worktrees** - each branch gets its own isolated worktree (unless user
+explicitly opts out).
 
-**Core principle:** Ask worktree preference → Get stack → Fix bottom-up → Each branch gets full fix-branch treatment
+**Core principle:** Worktree (always) → Get stack → Fix bottom-up → Each branch gets full fix-branch treatment
 
 **Announce at start:** "I'm using the fix-stack skill to fix all branches in this stack."
 
@@ -23,7 +24,7 @@ digraph fix_stack {
   rankdir=TB;
   node [shape=box];
 
-  worktree_pref [label="Step 0: Ask worktree preference"];
+  worktree_pref [label="Step 0: Worktree Setup (always)"];
   get_stack [label="Step 1: Get current stack"];
   order [label="Step 2: Order branches bottom-up"];
   loop [label="Step 3: For each branch"];
@@ -37,16 +38,14 @@ digraph fix_stack {
 }
 ```
 
-### Step 0: Worktree Preference
+### Step 0: Worktree Setup (Always)
 
-Ask the user once at the start whether to use worktrees for all branches:
+**Always** use worktrees for all branches unless the user explicitly said not to. Do NOT ask - each branch automatically
+gets its own worktree in `.worktrees/<branch>`.
 
-Use AskUserQuestion with options:
+**Only skip worktrees if** the user explicitly passed `--no-worktree` or said "don't use worktrees".
 
-1. **Yes, use worktrees (Recommended)** - Each branch gets its own worktree in `.worktrees/<branch>`
-2. **No, work in current directory** - Switch branches in place (no isolation)
-
-**Carry this preference** to all `/gt:fix-branch` calls so user isn't asked repeatedly.
+Since `/gt:fix-branch` also always uses worktrees, no preference needs to be passed.
 
 ### Step 1: Get the Current Stack
 

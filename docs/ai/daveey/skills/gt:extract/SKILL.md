@@ -335,14 +335,24 @@ metta pytest --changed -v
 
 ## Step 9: Submit Both Branches
 
-```bash
-# Submit new branch
-git checkout "{new-branch-name}"
-gt submit --no-interactive
+**Submit the new (extracted) branch:**
 
-# Submit original branch
+```bash
+git checkout "{new-branch-name}"
+```
+
+```
+/gt:submit
+```
+
+**Submit the original branch:**
+
+```bash
 git checkout "$ORIGINAL_BRANCH"
-gt submit --no-interactive
+```
+
+```
+/gt:submit
 ```
 
 **Report:**
@@ -385,8 +395,15 @@ gt create -m "refactor: extract shared utilities"
 # Add shared code
 git checkout "$ORIGINAL_BRANCH" -- src/utils/shared.py
 gt modify --no-interactive
-gt submit --no-interactive
+```
 
+Then submit the foundation branch:
+
+```
+/gt:submit
+```
+
+```bash
 # Now create extracted feature branch ON TOP of foundation
 gt create -m "feat: extracted feature"
 # ... add extracted feature files

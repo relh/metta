@@ -188,28 +188,13 @@ uv run pytest tests/ -v
 
 ### Step 7: Submit Update
 
-```bash
-# Stage all changes
-git add -A
+Invoke the submit skill to stage, commit, and push:
 
-# Amend to current branch
-gt modify --no-interactive
-
-# Submit to Graphite
-gt submit --no-interactive
+```
+/gt:submit
 ```
 
-**After submit, verify CI is running:**
-
-```bash
-# Wait a moment for CI to start
-sleep 10
-
-# Check new CI status
-HEAD_SHA=$(git rev-parse HEAD)
-gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
-  --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'
-```
+This will stage all changes, run tests, clean up compat code, lint, commit (amend), and submit to Graphite.
 
 ## Quick Reference
 
@@ -221,7 +206,7 @@ gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
 | 4    | Analyze logs               | Identify root cause      |
 | 5    | Fix code                   | Address each failure     |
 | 6    | `metta pytest --changed`   | Verify locally           |
-| 7    | `gt modify && gt submit`   | Submit fix               |
+| 7    | `/gt:submit`               | Test, clean, submit fix  |
 
 ## CRITICAL: Never Use `gh pr checks`
 
@@ -291,11 +276,11 @@ If a test passes locally but fails in CI:
 **Uses:**
 
 - **using-git-worktrees** - For worktree setup (Step 0, when called standalone)
+- **gt:submit** - Final quality gate: tests, /gt:cool, lint, commit, submit
 
 **Called by:**
 
-- **gt:fix-branch** - After /gt:fix-comments, before /gt:submit (worktree already set up)
-- **gt:submit** - If CI fails after submission
+- **gt:fix-branch** - After /gt:fix-comments (worktree already set up)
 
 **Pairs with:**
 

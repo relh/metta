@@ -273,16 +273,13 @@ metta lint
 
 ### Step 5: Submit Update
 
-```bash
-# Stage all changes
-git add -A
+Invoke the submit skill to stage, commit, and push:
 
-# Amend to current branch
-gt modify --no-interactive
-
-# Submit to Graphite
-gt submit --no-interactive
 ```
+/gt:submit
+```
+
+This will stage all changes, run tests, clean up compat code, lint, commit (amend), and submit to Graphite.
 
 ## Quick Reference
 
@@ -360,14 +357,14 @@ gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
 **Uses:**
 
 - **using-git-worktrees** - For worktree setup (Step 0, when called standalone)
+- **gt:submit** - Final quality gate: tests, /gt:cool, lint, commit, submit
 
 **Called by:**
 
-- **gt:fix-branch** - After sync/restack, before /gt:fix-ci and /gt:submit (worktree already set up)
+- **gt:fix-branch** - After sync/restack, before /gt:fix-ci (worktree already set up)
 
 **Pairs with:**
 
 - **test-driven-development** - Follows TDD principles for fixes
 - **systematic-debugging** - For complex test failures
 - **gt:fix-ci** - Called after this to fix any CI failures
-- **gt:submit** - Called after this for final cleanup and submission

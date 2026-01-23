@@ -43,6 +43,12 @@ These skills help manage Graphite PR stacks:
 | ----------- | ----------------------------------------------------------------------------- |
 | `worktrunk` | Worktrunk configuration, hooks, LLM commits, and troubleshooting (via plugin) |
 
+### Repo Scaffolding
+
+| Skill            | Description                                                            |
+| ---------------- | ---------------------------------------------------------------------- |
+| `r:make-package` | Create a new Python package in packages/ with uv workspace integration |
+
 ### Meta Skills
 
 | Skill            | Description                                                                     |

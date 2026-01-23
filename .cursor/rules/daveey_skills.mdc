@@ -1,7 +1,7 @@
 ---
 description: Daveey's personal AI skills for Graphite PR management
 globs: []
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Daveey's Skills
@@ -54,6 +54,11 @@ Extract a feature from a branch into a new parallel branch.
 Copy a feature to a new branch without modifying the original.
 **Use when:** Landing a subset early while continuing full development.
 **Skill file:** `docs/ai/daveey/skills/gt:extract-copy/SKILL.md`
+
+### gt:apply
+Route uncommitted changes to the correct branches in a Graphite stack.
+**Use when:** You have uncommitted changes that belong to different branches.
+**Skill file:** `docs/ai/daveey/skills/gt:apply/SKILL.md`
 
 ### cf:really
 Keep running a skill until it succeeds. Loops with CI monitoring until complete.

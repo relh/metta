@@ -1,0 +1,36 @@
+name: Auto-approve AI docs
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "docs/ai/**"
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check if PR only touches docs/ai .md files
+        id: check
+        run: |
+          mapfile -t FILES < <(gh pr view ${{ github.event.pull_request.number }} --json files --jq -r '.files[].path')
+          ALL_MATCH=true
+          for f in "${FILES[@]}"; do
+            if [[ ! "$f" =~ ^docs/ai/.*\.md$ ]]; then
+              ALL_MATCH=false
+              break
+            fi
+          done
+          echo "all_match=$ALL_MATCH" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-approve PR
+        if: steps.check.outputs.all_match == 'true'
+        run: gh pr review ${{ github.event.pull_request.number }} --approve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
