@@ -11,9 +11,23 @@ description:
 Sync and fix the current Graphite branch by syncing with trunk, restacking, addressing PR review comments, and fixing CI
 failures. **Always works in a git worktree** for isolation (unless user explicitly opts out).
 
-**Core principle:** Worktree → Sync → Restack → Fix Comments → Fix CI
+**Core principle:** Worktree → Sync → Restack → Fix Comments (sub-agent) → Fix CI (sub-agent) → Submit (sub-agent)
 
 **Announce at start:** "I'm using the fix-branch skill to sync and fix this branch."
+
+## Sub-Agent Architecture
+
+Steps 3-5 are dispatched as **sub-agents** using the Task tool to reduce context churn. Each sub-agent runs
+independently with a focused prompt and returns a summary. The orchestrator (this skill) only tracks high-level
+success/failure.
+
+```
+Orchestrator (this skill)
+├── Step 0-2: Direct (lightweight git commands)
+├── Step 3: Task(subagent_type="Bash", prompt="fix-comments for <branch>")
+├── Step 4: Task(subagent_type="Bash", prompt="fix-ci for <branch>")
+└── Step 5: Task(subagent_type="Bash", prompt="submit <branch>")
+```
 
 ## The Process
 
@@ -25,21 +39,16 @@ digraph fix_branch {
   worktree [label="Step 0: Worktree Setup"];
   sync [label="Step 1: gt sync"];
   restack [label="Step 2: gt restack"];
-  fix_comments [label="Step 3: /gt:fix-comments"];
-  fix_ci [label="Step 4: /gt:fix-ci"];
-  push [label="Step 5: /gt:submit"];
+  fix_comments [label="Step 3: Sub-agent → /gt:fix-comments"];
+  fix_ci [label="Step 4: Sub-agent → /gt:fix-ci"];
+  push [label="Step 5: Sub-agent → /gt:submit"];
   done [label="Done"];
 
   worktree -> sync -> restack -> fix_comments -> fix_ci -> push -> done;
 }
 ```
 
-**Key principle:** Push each branch immediately after fixing, don't wait for the entire stack to be complete. This
-ensures:
-
-- Other team members see progress incrementally
-- CI runs start immediately for each branch
-- If something fails later, earlier branches are already submitted
+**Key principle:** Push each branch immediately after fixing, don't wait for the entire stack to be complete.
 
 ### Step 0: Worktree Setup (Always)
 
@@ -99,64 +108,124 @@ gt restack
 
 Ensures the current stack has latest changes from downstack branches.
 
-### Step 3: Fix Comments
+### Step 3: Fix Comments (Sub-Agent)
 
-Invoke the fix-comments skill to handle all PR review comments:
-
-```
-/gt:fix-comments
-```
-
-This will:
-
-- Fetch GitHub and Graphite review comments
-- Address each unresolved comment
-- Resolve addressed threads
-- Run tests until they pass
-- Submit the update
-
-### Step 4: Fix CI
-
-After comments are addressed, check and fix any CI failures:
+Dispatch a sub-agent to handle PR review comments. Use the Task tool:
 
 ```
-/gt:fix-ci
+Task(
+  subagent_type="general-purpose",
+  description="Fix PR comments on <branch>",
+  prompt="""
+  You are fixing PR review comments on branch '<branch>' in directory '<worktree_path>'.
+
+  Run the /gt:fix-comments skill:
+  1. Fetch GitHub and Graphite review comments for the current branch's PR
+  2. Address each unresolved comment by making code changes
+  3. Resolve addressed threads
+  4. Run tests to verify fixes: metta pytest --changed
+  5. Stage and commit: git add -A && gt modify --no-interactive
+
+  Working directory: <worktree_path>
+  Branch: <branch>
+
+  Report back: number of comments addressed, any that couldn't be resolved, test results.
+  """
+)
 ```
 
-This will:
+**If sub-agent reports no comments:** Continue to Step 4. **If sub-agent reports failures:** Review the summary and
+decide whether to retry or escalate.
 
-- Check CI status using the commit SHA (not `gh pr checks`)
-- Get failure logs if any checks failed
-- Fix each failure
-- Verify locally
+### Step 4: Fix CI (Sub-Agent)
 
-**Note:** If CI is already passing, this step completes quickly.
-
-### Step 5: Submit Branch
-
-**Submit immediately after fixing** - don't wait for the entire stack:
+Dispatch a sub-agent to check and fix CI failures:
 
 ```
-/gt:submit
+Task(
+  subagent_type="general-purpose",
+  description="Fix CI failures on <branch>",
+  prompt="""
+  You are fixing CI failures on branch '<branch>' in directory '<worktree_path>'.
+
+  Run the /gt:fix-ci skill:
+  1. Check CI status using commit SHA (NEVER use `gh pr checks` - it returns stale data):
+     HEAD_SHA=$(git rev-parse HEAD)
+     OWNER=$(gh repo view --json owner -q '.owner.login')
+     REPO=$(gh repo view --json name -q '.name')
+     gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
+       --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'
+  2. If all passing, report success and stop
+  3. If failures: get logs with `gh run view <run_id> --log-failed`
+  4. Fix each failure
+  5. Verify locally: metta pytest --changed
+  6. Stage and commit: git add -A && gt modify --no-interactive
+
+  Working directory: <worktree_path>
+  Branch: <branch>
+
+  Report back: CI status before/after, what was fixed, local test results.
+  """
+)
 ```
 
-This runs tests, cleans up compat code, lints, commits, and submits to Graphite. Benefits:
+**If sub-agent reports CI already passing:** Continue to Step 5. **If sub-agent reports fixes made:** Continue to
+Step 5. **If sub-agent reports unfixable failures:** Escalate to user.
 
-- CI starts running right away
-- Other branches in the stack can be fixed in parallel
-- Progress is visible to reviewers
-- If later branches have issues, earlier ones are already submitted
-- Final quality gate ensures branch is clean before pushing
+### Step 5: Submit Branch (Sub-Agent)
+
+Dispatch a sub-agent to run the full submit flow (lint → submit → test locally in parallel with CI):
+
+```
+Task(
+  subagent_type="general-purpose",
+  description="Submit <branch> to Graphite",
+  prompt="""
+  You are submitting branch '<branch>' to Graphite from directory '<worktree_path>'.
+
+  Run the /gt:submit skill:
+  1. Run /gt:cool to clean up backwards compat code
+  2. Check for disabled tests (@pytest.mark.skip etc) - fix or remove them
+  3. Run lint: metta lint (fix any errors)
+  4. Stage and commit: git add -A && gt modify --no-interactive
+  5. Submit: gt submit --no-interactive (CI starts running remotely)
+  6. Run tests locally (parallel with CI): metta pytest --changed -v
+  7. If local tests fail: fix, re-lint, re-commit (gt modify), re-submit
+  8. Loop step 6-7 until local tests pass
+
+  Working directory: <worktree_path>
+  Branch: <branch>
+
+  Report back: PR URL, test results, summary of changes, any issues.
+  """
+)
+```
 
 ## Quick Reference
 
-| Step | Command                    | Purpose                    |
-| ---- | -------------------------- | -------------------------- |
-| 1    | `gt sync --no-interactive` | Pull trunk, rebase stacks  |
-| 2    | `gt restack`               | Rebase current stack       |
-| 3    | `/gt:fix-comments`         | Address PR review comments |
-| 4    | `/gt:fix-ci`               | Fix any CI failures        |
-| 5    | `/gt:submit`               | Test, clean, submit branch |
+| Step | Action                     | Method    | Purpose                    |
+| ---- | -------------------------- | --------- | -------------------------- |
+| 0    | Worktree setup             | Direct    | Isolation                  |
+| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks  |
+| 2    | `gt restack`               | Direct    | Rebase current stack       |
+| 3    | Fix comments               | Sub-agent | Address PR review comments |
+| 4    | Fix CI                     | Sub-agent | Fix any CI failures        |
+| 5    | Submit                     | Sub-agent | Test, clean, submit branch |
+
+## Why Sub-Agents?
+
+Each sub-step (fix-comments, fix-ci, submit) involves:
+
+- Reading lots of CI logs, PR comments, test output
+- Multiple fix-verify cycles
+- Significant context accumulation
+
+By dispatching these as sub-agents:
+
+- The orchestrator stays lightweight (just tracks success/failure)
+- Each sub-agent starts fresh with focused context
+- Failed sub-agents can be retried without replaying the whole conversation
+- The user sees high-level progress without scrolling through logs
 
 ## Common Mistakes
 
@@ -178,7 +247,7 @@ This runs tests, cleans up compat code, lints, commits, and submits to Graphite.
 **Waiting to submit until stack is complete**
 
 - **Problem:** Delays CI feedback, other branches wait unnecessarily
-- **Fix:** Submit each branch immediately after fixing (Step 5 - /gt:submit)
+- **Fix:** Submit each branch immediately after fixing (Step 5)
 
 ## Red Flags
 
@@ -187,6 +256,7 @@ This runs tests, cleans up compat code, lints, commits, and submits to Graphite.
 - Sync fails with conflicts → Resolve conflicts manually before continuing
 - Restack fails → Check if downstack branches need attention first
 - CI failures in code you didn't touch → May be flaky tests or trunk issues
+- Sub-agent reports repeated failures → May need manual intervention
 
 ## CRITICAL: Check CI Status Correctly
 
@@ -217,9 +287,9 @@ After the branch is fixed and submitted:
 **Uses:**
 
 - **using-git-worktrees** - For worktree setup (Step 0)
-- **gt:fix-comments** - Addresses PR review comments with regression tests
-- **gt:fix-ci** - Fixes CI failures
-- **gt:submit** - Final quality gate: tests, /gt:cool, lint, commit, submit
+- **gt:fix-comments** - Addresses PR review comments (via sub-agent)
+- **gt:fix-ci** - Fixes CI failures (via sub-agent)
+- **gt:submit** - Final quality gate (via sub-agent)
 
 **Called by:**
 

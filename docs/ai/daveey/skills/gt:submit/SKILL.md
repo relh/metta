@@ -1,18 +1,18 @@
 ---
 name: gt:submit
-description: Run tests, fix issues, clean up compat code with /gt:cool, and submit branch to Graphite
+description: Lint, submit to Graphite, then run tests locally in parallel with CI. Fix and re-submit if tests fail.
 ---
 
 # Submit
 
 ## Overview
 
-Prepare and submit the current branch to Graphite. Runs tests, fixes any failures, cleans up backwards compatibility
-code, and submits.
+Prepare and submit the current branch to Graphite, then run tests locally while CI runs remotely. This maximizes
+parallelism - CI starts immediately while local tests provide faster feedback.
 
-**Core principle:** Test → Fix → No Disabled Tests → Clean → Lint → Submit
+**Core principle:** Cool → Disabled Tests → Lint → Commit → Submit → Test locally (parallel with CI) → Fix → Re-submit
 
-**Announce at start:** "I'm using the submit skill to test, clean up, and submit this branch."
+**Announce at start:** "I'm using the submit skill to clean up, submit, and validate this branch."
 
 ## The Process
 
@@ -22,17 +22,19 @@ digraph submit {
   node [shape=box];
 
   status [label="Step 1: Check Status"];
-  test [label="Step 2: Run Tests"];
-  fix [label="Step 3: Fix Failures"];
-  disabled [label="Step 4: Check Disabled Tests"];
-  cool [label="Step 5: Run /gt:cool"];
-  lint [label="Step 6: Lint"];
-  commit [label="Step 7: Commit Changes"];
-  submit [label="Step 8: Submit to Graphite (verify lint ran)"];
+  cool [label="Step 2: Run /gt:cool"];
+  disabled [label="Step 3: Check Disabled Tests"];
+  lint [label="Step 4: Lint"];
+  commit [label="Step 5: Commit Changes"];
+  submit [label="Step 6: Submit to Graphite"];
+  test [label="Step 7: Run t:run-tests (parallel with CI)"];
+  fix [label="Step 8: Fix Failures"];
+  resubmit [label="Re-lint, re-commit, re-submit"];
 
-  status -> test -> fix -> disabled -> cool -> lint -> commit -> submit;
-  fix -> test [label="if failures"];
-  disabled -> test [label="if found"];
+  status -> cool -> disabled -> lint -> commit -> submit -> test;
+  test -> fix [label="failures"];
+  fix -> resubmit -> test;
+  disabled -> lint [label="none found"];
 }
 ```
 
@@ -51,55 +53,23 @@ git diff main..HEAD --stat
 
 **If on main:** Stop and ask user which branch to work on.
 
-## Step 2: Run Tests
+## Step 2: Run /gt:cool
 
-```bash
-# Run tests for changed files
-metta pytest --changed
+Invoke the `/gt:cool` skill to clean up backwards compatibility code:
 
-# If no changed files detected, run tests related to the branch
-metta pytest tests/ --tb=short
+- Remove class/function aliases, fix callsites
+- Replace defensive fallbacks with assertions
+- Remove compatibility shims
+
+```
+Use Skill tool: skill="gt:cool"
 ```
 
-**Capture output** - you'll need it if tests fail.
-
-## Step 3: Fix Failures
-
-**If all tests pass:** Skip to Step 4.
-
-**If tests fail:**
-
-For each failing test:
-
-1. **Read the full error** including traceback
-2. **Understand the root cause:**
-   - Is it a bug in the new code?
-   - Is it a test that needs updating?
-   - Is it a missing import or dependency?
-
-3. **Fix the issue:**
-   - If bug in code → fix the code
-   - If test needs updating → update the test
-   - If unclear → use `/systematic-debugging`
-
-4. **Re-run the specific test:**
-
-   ```bash
-   metta pytest tests/path/to/test_file.py::test_name
-   ```
-
-5. **Loop until passing**
-
-6. **Re-run full test suite:**
-   ```bash
-   metta pytest --changed
-   ```
-
-## Step 4: Check for Disabled Tests
+## Step 3: Check for Disabled Tests
 
 **No tests should be disabled/skipped.** If a test is broken, fix it or fix the code.
 
-### 4a: Find Disabled Tests
+### 3a: Find Disabled Tests
 
 ```bash
 # Search for skip decorators in changed files
@@ -112,28 +82,7 @@ grep -rn "@pytest.mark.skip\|@unittest.skip\|pytest.skip(\|@pytest.mark.xfail" t
 grep -rn "# def test_\|#def test_\|# async def test_" tests/ --include="*.py"
 ```
 
-### 4b: Common Skip Patterns to Find
-
-| Pattern                           | Meaning                 |
-| --------------------------------- | ----------------------- |
-| `@pytest.mark.skip`               | Unconditionally skipped |
-| `@pytest.mark.skip(reason="...")` | Skipped with reason     |
-| `@pytest.mark.skipif(...)`        | Conditionally skipped   |
-| `@pytest.mark.xfail`              | Expected to fail        |
-| `@unittest.skip`                  | unittest skip           |
-| `pytest.skip()`                   | Skip inside test        |
-| `# def test_...`                  | Commented out test      |
-
-### 4c: Fix Each Disabled Test
-
-**For each disabled test found:**
-
-1. **Understand why it was disabled:**
-   - Read the skip reason if provided
-   - Look at git blame to see when/why it was added
-   - Check if it was disabled in this branch or earlier
-
-2. **Decide the fix:**
+### 3b: Fix Each Disabled Test
 
 | Situation                          | Action                                      |
 | ---------------------------------- | ------------------------------------------- |
@@ -144,17 +93,7 @@ grep -rn "# def test_\|#def test_\|# async def test_" tests/ --include="*.py"
 | Test needs update for new behavior | Update the test                             |
 | Environment-specific skip          | OK to keep (e.g., `skipif(not CI)`)         |
 
-3. **Make the fix:**
-   - Remove the skip decorator
-   - Fix the test or code
-   - Run the test to verify it passes
-
-4. **Re-run tests:**
-   ```bash
-   metta pytest --changed
-   ```
-
-### 4d: Acceptable Skips
+### 3c: Acceptable Skips
 
 **These are OK to keep:**
 
@@ -169,41 +108,7 @@ grep -rn "# def test_\|#def test_\|# async def test_" tests/ --include="*.py"
 @pytest.mark.skipif(not HAS_GPU, reason="Requires GPU")
 ```
 
-**These are NOT OK:**
-
-```python
-# Lazy skip
-@pytest.mark.skip(reason="TODO: fix this")
-@pytest.mark.skip(reason="Broken")
-@pytest.mark.skip  # No reason at all
-
-# Expected failure without plan to fix
-@pytest.mark.xfail(reason="Known bug")
-
-# Commented out
-# def test_something():
-#     ...
-```
-
-## Step 5: Run /gt:cool
-
-Invoke the `/gt:cool` skill to clean up backwards compatibility code:
-
-- Remove class/function aliases, fix callsites
-- Replace defensive fallbacks with assertions
-- Remove compatibility shims
-
-```
-Use Skill tool: skill="gt:cool"
-```
-
-**After /gt:cool completes:** Re-run tests to ensure cleanup didn't break anything.
-
-```bash
-metta pytest --changed -v
-```
-
-## Step 6: Lint (Mandatory)
+## Step 4: Lint (Mandatory)
 
 ```bash
 # Run linting
@@ -216,9 +121,7 @@ ruff format .
 
 **Fix any lint errors** before proceeding.
 
-**Do not skip this step.** Even if you plan to run `gt submit` directly, run `metta lint` first.
-
-## Step 7: Commit Changes
+## Step 5: Commit Changes
 
 ```bash
 # Check what changed
@@ -246,42 +149,85 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 gt modify --no-interactive
 ```
 
-## Step 8: Submit to Graphite (and verify lint ran)
+## Step 6: Submit to Graphite
 
-```bash
-# Submit to Graphite
-gt submit --no-interactive
-```
-
-**Verify lint actually ran.** If the submit output doesn’t show lint (or if you skipped Step 6), run:
-
-```bash
-metta lint
-```
-
-Then re-run:
+Submit immediately so CI starts running:
 
 ```bash
 gt submit --no-interactive
 ```
 
-**After submit, report:**
+**CI is now running remotely.** Proceed to local tests in parallel.
 
-- PR URL
-- Number of tests passing
-- Summary of changes made
+## Step 7: Run Tests Locally (Parallel with CI)
+
+Run local tests while CI runs remotely. Use t:run-tests for progressive testing:
+
+```bash
+# Run tests affected by changes
+metta pytest --changed -v
+
+# If --changed isn't available, run full suite
+uv run pytest tests/ -v --tb=short
+```
+
+Or invoke the t:run-tests skill for the full progressive flow (failed tests → pytest → metta ci).
+
+**If all tests pass:** Done! CI should also pass since local tests mirror CI checks.
+
+**If tests fail:** Continue to Step 8.
+
+## Step 8: Fix and Re-Submit
+
+For each failing test:
+
+1. **Read the full error** including traceback
+2. **Understand the root cause:**
+   - Is it a bug in the new code?
+   - Is it a test that needs updating?
+   - Is it a missing import or dependency?
+
+3. **Fix the issue:**
+   - If bug in code → fix the code
+   - If test needs updating → update the test
+   - If unclear → use `/systematic-debugging`
+
+4. **Re-run the specific test:**
+
+   ```bash
+   metta pytest tests/path/to/test_file.py::test_name
+   ```
+
+5. **Once fixed, re-lint, re-commit, and re-submit:**
+
+   ```bash
+   metta lint
+   git add -A
+   gt modify --no-interactive
+   gt submit --no-interactive
+   ```
+
+6. **Return to Step 7** to verify all tests pass.
 
 ## Quick Reference
 
-| Step           | Command                        | On Failure       |
-| -------------- | ------------------------------ | ---------------- |
-| Test           | `metta pytest --changed`       | Go to Step 3     |
-| Fix failures   | Fix code/tests                 | Re-run test      |
-| Check disabled | `grep -rn "@pytest.mark.skip"` | Fix test or code |
-| Cool           | `/gt:cool` skill               | Fix callsites    |
-| Lint           | `metta lint`                   | Fix lint errors  |
-| Commit         | `gt modify --no-interactive`   | -                |
-| Submit         | `gt submit --no-interactive`   | Check auth       |
+| Step           | Command                        | Purpose                      |
+| -------------- | ------------------------------ | ---------------------------- |
+| Cool           | `/gt:cool` skill               | Clean up compat code         |
+| Check disabled | `grep -rn "@pytest.mark.skip"` | Fix test or code             |
+| Lint           | `metta lint`                   | Fix lint errors              |
+| Commit         | `gt modify --no-interactive`   | Stage changes                |
+| Submit         | `gt submit --no-interactive`   | Push to Graphite (CI starts) |
+| Test           | `metta pytest --changed`       | Run locally parallel with CI |
+| Fix + resubmit | Fix → lint → modify → submit   | Iterate until tests pass     |
+
+## Why Submit Before Testing?
+
+- **CI starts immediately** - no waiting for local tests to finish first
+- **Parallel execution** - local tests and CI run simultaneously
+- **Faster feedback loops** - if local tests pass, CI likely passes too
+- **If local tests fail** - fix and re-submit; the previous CI run is just superseded
+- **Net time savings** - especially on branches where tests are likely to pass
 
 ## Handling Common Issues
 
@@ -306,25 +252,6 @@ def test_something():
 def test_something():
     config = {"key": "test_value"}  # Provide required key
     result = func(config)
-```
-
-### Found disabled tests
-
-```python
-# If test was disabled because of a bug:
-# 1. Remove the skip
-# 2. Run the test to see what fails
-# 3. Fix the underlying code
-# 4. Verify test passes
-
-# If test was disabled because test itself is wrong:
-# 1. Remove the skip
-# 2. Fix the test assertions/setup
-# 3. Verify test passes
-
-# If test is for a removed feature:
-# 1. Delete the entire test
-# 2. Remove any related test fixtures
 ```
 
 ### Lint errors after fixes
@@ -364,7 +291,8 @@ gt track
 
 **Uses:**
 
-- **/gt:cool** - Called in Step 4 to clean up compat code
+- **/gt:cool** - Called in Step 2 to clean up compat code
+- **/t:run-tests** - Progressive test runner (Step 7)
 - **/systematic-debugging** - For complex test failures
 
 **Called by:**
