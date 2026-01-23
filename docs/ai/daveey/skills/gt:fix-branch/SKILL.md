@@ -274,13 +274,17 @@ Task(
   Working directory: <worktree_path>
   Branch: <branch>
 
-  When reporting the PR URL, use the Graphite URL format:
-  https://app.graphite.dev/github/pr/<owner>/<repo>/<pr_number>
-  Get the PR number with: gh pr view --json number -q '.number'
-
-  Report back: Graphite PR URL, test results, summary of changes, any issues.
+  Report back: Graphite PR URL (format: https://app.graphite.dev/github/pr/OWNER/REPO/PR_NUMBER), test results, summary of changes, any issues.
+  To get the PR number: gh pr view --json number -q '.number'
+  To get owner/repo: gh repo view --json owner,name -q '.owner.login + "/" + .name'
   """
 )
+```
+
+**After the submit sub-agent completes**, print the Graphite URL for the user:
+
+```
+https://app.graphite.dev/github/pr/<OWNER>/<REPO>/<PR_NUMBER>
 ```
 
 ## Quick Reference
