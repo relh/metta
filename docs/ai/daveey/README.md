@@ -25,17 +25,18 @@ The skills are automatically available via `.cursor/rules/daveey_skills.mdc`.
 
 These skills help manage Graphite PR stacks:
 
-| Skill             | Description                                                      |
-| ----------------- | ---------------------------------------------------------------- |
-| `gt:fix-branch`   | Sync, restack, address PR comments, and fix CI on current branch |
-| `gt:fix-stack`    | Fix an entire Graphite stack from bottom to top                  |
-| `gt:fix-ci`       | Find and fix CI failures on a branch                             |
-| `gt:fix-comments` | Address PR review comments with regression tests                 |
-| `gt:submit`       | Run tests, cleanup, and submit to Graphite                       |
-| `gt:cool`         | Clean up backwards compatibility cruft                           |
-| `gt:make-stack`   | Break a large branch into a reviewable stack                     |
-| `gt:extract`      | Extract a feature into a separate parallel branch                |
-| `gt:extract-copy` | Copy a feature to a new branch without modifying original        |
+| Skill             | Description                                                                 |
+| ----------------- | --------------------------------------------------------------------------- |
+| `gt:fix-branch`   | Sync, restack, address PR comments, and fix CI on current branch            |
+| `gt:fix-stack`    | Fix an entire Graphite stack from bottom to top                             |
+| `gt:fix-ci`       | Find and fix CI failures on a branch                                        |
+| `gt:fix-comments` | Address PR review comments with regression tests                            |
+| `gt:submit`       | Run tests, cleanup, and submit to Graphite                                  |
+| `gt:cool`         | Clean up backwards compatibility cruft                                      |
+| `gt:make-stack`   | Break a large branch into a reviewable stack                                |
+| `gt:extract`      | Extract a feature into a separate parallel branch                           |
+| `gt:extract-copy` | Copy a feature to a new branch without modifying original                   |
+| `gt:split`        | Split a branch into multiple sequential branches in the same stack position |
 
 ### Worktrunk
 
@@ -55,6 +56,8 @@ These skills help manage Graphite PR stacks:
 | ---------------- | ------------------------------------------------------------------------------- |
 | `cf:really`      | Run a skill repeatedly until it succeeds (e.g., `cf:really gt:fix-ci`)          |
 | `m:make-skill`   | Create a new skill with proper directory, symlink, and README updates           |
+| `m:update-skill` | Update an existing skill and submit via m:submit-skill                          |
+| `m:submit-skill` | Commit and submit skill changes (worktree, lint, submit, publish, merge)        |
 | `m:learn-skills` | Import skills from a path (symlink if in-repo, copy via m:make-skill otherwise) |
 | `t:run-tests`    | Run tests progressively: failed tests → pytest → metta ci                       |
 

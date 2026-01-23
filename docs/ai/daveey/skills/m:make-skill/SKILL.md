@@ -26,8 +26,9 @@ digraph make_skill {
   write [label="Step 3: Write the Skill"];
   review [label="Step 4: Review & Improve"];
   setup [label="Step 5: File Setup"];
+  submit [label="Step 6: /m:submit-skill"];
 
-  gather -> scan -> write -> review -> setup;
+  gather -> scan -> write -> review -> setup -> submit;
   review -> write [label="issues found"];
 }
 ```
@@ -192,17 +193,9 @@ Edit `$REPO_ROOT/docs/ai/daveey/README.md`:
 - Add row to the appropriate table based on prefix
 - If prefix is new, create a new section heading and table
 
-### 5d: Report
+## Step 6: Submit
 
-```
-## Created: <skill-name>
-
-- Location: docs/ai/daveey/skills/<skill-name>/SKILL.md
-- Symlink: ~/.claude/skills/<skill-name>
-- README: updated
-- Related skills: <list>
-- Word count: <N>
-```
+Invoke `/m:submit-skill` to handle worktree, lint, commit, submit, publish, and merge-when-ready.
 
 ## Common Mistakes When Writing Skills
 
@@ -217,7 +210,12 @@ Edit `$REPO_ROOT/docs/ai/daveey/README.md`:
 
 ## Integration
 
+**Uses:**
+
+- **m:submit-skill** - Handles worktree, lint, commit, submit, publish, merge
+
 **Pairs with:**
 
+- **m:update-skill** - For modifying existing skills
 - **superpowers:writing-skills** - For comprehensive skill authoring best practices and TDD approach
 - **cf:really** - Can wrap any skill for retry semantics
