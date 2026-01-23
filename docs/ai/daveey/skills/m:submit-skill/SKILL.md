@@ -76,6 +76,9 @@ gh pr merge "$PR_NUMBER" --auto --squash
 After enabling merge-when-ready, monitor the PR until it merges. Poll every 30 seconds:
 
 ```bash
+OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO=$(gh repo view --json name -q '.name')
+
 while true; do
   STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt -q '.state')
   if [ "$STATE" = "MERGED" ]; then
@@ -84,7 +87,7 @@ while true; do
   fi
 
   # Check for new review comments or CI failures
-  CHECKS_FAILING=$(gh api repos/{owner}/{repo}/commits/$(git rev-parse HEAD)/check-runs \
+  CHECKS_FAILING=$(gh api "repos/$OWNER/$REPO/commits/$(git rev-parse HEAD)/check-runs" \
     --jq '[.check_runs[] | select(.conclusion == "failure")] | length')
   UNRESOLVED=$(gh api graphql -f query='
     query($owner: String!, $repo: String!, $pr: Int!) {
