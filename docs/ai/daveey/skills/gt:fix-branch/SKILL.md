@@ -140,50 +140,65 @@ decide whether to retry or escalate.
 ### Step 3b: Verify All Comments Addressed
 
 After the fix-comments sub-agent completes, **verify that every comment has been responded to and resolved**. This
-catches any comments the sub-agent may have missed.
+catches any comments the sub-agent may have missed, **including threads that were resolved without a reply**.
 
 ```bash
-# Re-fetch unresolved threads (paginate to handle PRs with >100 threads)
+# Re-fetch ALL threads (both resolved and unresolved) with full comment history
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=$(gh pr view --json number -q '.number')
+BOT_LOGIN=$(gh api user -q '.login')
 
-UNRESOLVED=""
-CURSOR=""
-while true; do
-  AFTER_ARG=""
-  if [ -n "$CURSOR" ]; then
-    AFTER_ARG="-f after=$CURSOR"
-  fi
-
-  RESULT=$(gh api graphql -f query='
-    query($owner: String!, $repo: String!, $pr: Int!, $after: String) {
-      repository(owner: $owner, name: $repo) {
-        pullRequest(number: $pr) {
-          reviewThreads(first: 100, after: $after) {
-            pageInfo { hasNextPage endCursor }
-            nodes {
-              isResolved
-              path
-              comments(first: 1) { nodes { body } }
+ALL_THREADS=$(gh api graphql -f query='
+  query($owner: String!, $repo: String!, $pr: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $pr) {
+        reviewThreads(first: 250) {
+          nodes {
+            id
+            isResolved
+            path
+            comments(first: 100) {
+              nodes {
+                body
+                author { login }
+              }
+              pageInfo {
+                hasNextPage
+              }
             }
+          }
+          pageInfo {
+            hasNextPage
           }
         }
       }
     }
-  ' -f owner=$OWNER -f repo=$REPO -F pr=$PR_NUMBER $AFTER_ARG)
+  }
+' -f owner=$OWNER -f repo=$REPO -F pr=$PR_NUMBER)
 
-  PAGE_UNRESOLVED=$(echo "$RESULT" | jq -r '
-    .data.repository.pullRequest.reviewThreads.nodes[]
-    | select(.isResolved == false)')
-  UNRESOLVED="${UNRESOLVED}${PAGE_UNRESOLVED}"
+# Verify we fetched all threads and comments (fail if pagination needed)
+THREADS_HAS_NEXT=$(echo "$ALL_THREADS" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
+COMMENTS_HAS_NEXT=$(echo "$ALL_THREADS" | jq -r '
+  [.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage] | any')
+if [ "$THREADS_HAS_NEXT" = "true" ] || [ "$COMMENTS_HAS_NEXT" = "true" ]; then
+  echo "WARNING: PR has more threads/comments than fetched. Manual review needed."
+fi
 
-  HAS_NEXT=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
-  if [ "$HAS_NEXT" != "true" ]; then
-    break
-  fi
-  CURSOR=$(echo "$RESULT" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor')
-done
+# Check 1: Unresolved threads (comments missed entirely)
+UNRESOLVED=$(echo "$ALL_THREADS" | jq -r '
+  .data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == false)
+  | "UNRESOLVED: \(.path) - \(.comments.nodes[0].body[0:80])"')
+
+# Check 2: Resolved threads without a reply from the bot/author
+# (resolved-without-response — violates the "always respond" requirement)
+RESOLVED_NO_REPLY=$(echo "$ALL_THREADS" | jq -r --arg bot "$BOT_LOGIN" '
+  .data.repository.pullRequest.reviewThreads.nodes[]
+  | select(.isResolved == true)
+  | select((.comments.nodes | length) > 0)
+  | select((.comments.nodes | map(.author.login) | any(. == $bot)) | not)
+  | "RESOLVED-NO-REPLY: \(.path) - \(.comments.nodes[0].body[0:80])"')
 ```
 
 **If unresolved threads remain:**
@@ -191,6 +206,12 @@ done
 1. Log which comments are still unresolved
 2. Re-dispatch the fix-comments sub-agent for the remaining threads, OR
 3. If they are design disagreements, report them to the user
+
+**If resolved-without-reply threads exist:**
+
+1. Log which threads were resolved without a response
+2. Re-dispatch the fix-comments sub-agent to add replies to those threads (the thread may need to be unresolved first,
+   replied to, then re-resolved)
 
 **Only proceed to Step 4 when all actionable comments have been addressed and responded to.**
 
@@ -253,7 +274,7 @@ Task(
   Working directory: <worktree_path>
   Branch: <branch>
 
-  Report back: PR URL, test results, summary of changes, any issues.
+  Report back: Graphite PR URL, test results, summary of changes, any issues.
   """
 )
 ```

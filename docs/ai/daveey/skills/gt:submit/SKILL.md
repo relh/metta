@@ -157,7 +157,14 @@ Submit immediately so CI starts running:
 gt submit --no-interactive
 ```
 
-**CI is now running remotely.** Proceed to local tests in parallel.
+**CI is now running remotely.** Print the Graphite PR URL and proceed to local tests in parallel:
+
+```bash
+PR_NUMBER=$(gh pr view --json number -q '.number')
+OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO=$(gh repo view --json name -q '.name')
+echo "https://app.graphite.dev/github/pr/$OWNER/$REPO/$PR_NUMBER"
+```
 
 ## Step 7: Run Tests Locally (Parallel with CI)
 
@@ -208,6 +215,27 @@ For each failing test:
    ```
 
 6. **Return to Step 7** to verify all tests pass.
+
+## Step 9: Remove Worktree
+
+After all tests pass and submission is complete, clean up the worktree if in one:
+
+```bash
+BRANCH=$(git branch --show-current)
+ESCAPED_BRANCH=$(printf '%s\n' "$BRANCH" | sed 's/[.\\^$*+?()[{|]/\\&/g')
+WORKTREE_PATH=$(git worktree list --porcelain | grep -B2 "branch refs/heads/$ESCAPED_BRANCH" | grep "^worktree " | sed 's/^worktree //')
+if [ -z "$WORKTREE_PATH" ]; then
+  echo "Warning: Could not find worktree path for branch $BRANCH"
+  exit 0
+fi
+MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | cut -d' ' -f2)
+
+# Only remove if we're in a secondary worktree (not the main repo)
+if [ "$(pwd)" = "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "$MAIN_WORKTREE" ]; then
+  cd "$MAIN_WORKTREE"
+  git worktree remove "$WORKTREE_PATH"
+fi
+```
 
 ## Quick Reference
 

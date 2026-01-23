@@ -94,28 +94,33 @@ gh api graphql -f query='
   query($owner: String!, $repo: String!, $pr: Int!) {
     repository(owner: $owner, name: $repo) {
       pullRequest(number: $pr) {
-        reviewThreads(first: 100) {
+        reviewThreads(first: 250) {
           nodes {
             id
             isResolved
             isOutdated
             path
             line
-            comments(first: 20) {
+            comments(first: 100) {
               nodes {
                 id
                 body
                 author { login }
                 createdAt
               }
+              pageInfo { hasNextPage }
             }
           }
+          pageInfo { hasNextPage }
         }
       }
     }
   }
 ' -f owner=$OWNER -f repo=$REPO -F pr=$PR_NUMBER
 ```
+
+**Note:** If `pageInfo.hasNextPage` is `true` for either threads or comments, the PR has more data than fetched. Log a
+warning and consider manual review for such large PRs.
 
 **Also check Greptile for additional comments:**
 
