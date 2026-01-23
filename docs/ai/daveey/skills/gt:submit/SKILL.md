@@ -108,18 +108,27 @@ grep -rn "# def test_\|#def test_\|# async def test_" tests/ --include="*.py"
 @pytest.mark.skipif(not HAS_GPU, reason="Requires GPU")
 ```
 
-## Step 4: Lint (Mandatory)
+## Step 4: Lint (MANDATORY - NEVER SKIP)
+
+**CRITICAL:** Lint MUST pass before submitting. Skipping lint causes CI failures. This step is non-negotiable even if
+tests pass.
 
 ```bash
-# Run linting
+# Run linting - this MUST exit cleanly (exit code 0)
 metta lint
-
-# Or if that's not available:
-ruff check . --fix
-ruff format .
 ```
 
-**Fix any lint errors** before proceeding.
+If lint fails:
+
+1. Fix the errors (line length, unused imports, formatting, etc.)
+2. Re-run `metta lint` to verify the fix
+3. **Do NOT proceed to Step 5 until lint passes with exit code 0**
+
+Common lint issues:
+
+- Line too long (> 120 chars) → break into multiple lines
+- Unused imports → remove them
+- Formatting → `ruff format .`
 
 ## Step 5: Commit Changes
 

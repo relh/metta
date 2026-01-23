@@ -39,11 +39,19 @@ wt switch --create "$BRANCH_NAME"
 wt switch "$BRANCH_NAME" || wt switch --create "$BRANCH_NAME"
 ```
 
-## Step 2: Lint
+## Step 2: Lint (MANDATORY - NEVER SKIP)
+
+**CRITICAL:** Lint MUST pass before committing. Skipping causes CI failures.
 
 ```bash
-metta lint --fix
+# Run lint - MUST exit cleanly before proceeding
+metta lint
+
+# If metta lint fails on markdown/prettier, use npx:
+npx prettier --write docs/ai/daveey/skills/
 ```
+
+**Do NOT proceed to Step 3 until lint passes.** Fix all errors first.
 
 ## Step 3: Commit and Submit
 
