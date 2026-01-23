@@ -239,6 +239,7 @@ stages: dict[str, StageRunner] = {
 
 DEFAULT_STAGES = {
     "lint",
+    "pyright",
     "python-tests-and-benchmarks",
     "cpp-tests",
     "cpp-benchmarks",
