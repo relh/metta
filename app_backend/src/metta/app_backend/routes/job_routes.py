@@ -170,11 +170,17 @@ def create_job_router() -> APIRouter:
                 if job.completed_at is None:
                     job.completed_at = transition_time or datetime.now(UTC)
 
-            await session.commit()
-            await session.refresh(job)
+            # Record metrics BEFORE commit to ensure they're captured even if subsequent operations fail
             if request.status is not None and previous_status is not None and transition_time is not None:
                 metrics = get_job_metrics()
-                metrics.record_transition(previous_status, job.status, job, transition_time, job.error_type)
+                metrics.record_transition(previous_status, request.status, job, transition_time, job.error_type)
+
+            await session.commit()
+            await session.refresh(job)
+
+            # Update running counts after commit (gauge based on current DB state)
+            if request.status is not None:
+                metrics = get_job_metrics()
                 await metrics.update_running_counts(session, {job.job_type})
             return job
 
