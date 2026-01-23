@@ -10,6 +10,7 @@ GitHub Actions workflow calls individual stages:
   - uv run metta ci --stage cpp-tests
   - uv run metta ci --stage cpp-benchmarks
   - uv run metta ci --stage recipe-tests
+  - uv run metta ci --stage cogames-docsync
 
 Local development can run all stages:
   - metta ci (runs all stages)
@@ -189,6 +190,15 @@ def _run_recipe_tests(*, verbose: bool = False, name_filter: str | None = None, 
     return CheckResult("Recipe Tests", passed)
 
 
+def _run_cogames_docsync(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
+    _ensure_no_extra_args("cogames-docsync", extra_args)
+    _print_header("CoGames Documentation Sync")
+
+    cmd = ["uv", "run", "cogames", "docsync", "check"]
+    passed = _run_command(cmd, "CoGames documentation sync", verbose=verbose)
+    return CheckResult("CoGames Docsync", passed)
+
+
 _CHECK_PYRIGHT_PACKAGES = [
     "agent",
     "app_backend",
@@ -235,6 +245,7 @@ stages: dict[str, StageRunner] = {
     "nim-tests": lambda v, args, name, _: _run_nim_tests(verbose=v, extra_args=args),
     "recipe-tests": lambda v, args, name, ni: _run_recipe_tests(verbose=v, name_filter=name),
     "cleanup-cancelled-runs": lambda v, args, name, _: _run_cleanup_cancelled_runs(verbose=v, extra_args=args),
+    "cogames-docsync": lambda v, args, name, _: _run_cogames_docsync(verbose=v, extra_args=args),
 }
 
 DEFAULT_STAGES = {
