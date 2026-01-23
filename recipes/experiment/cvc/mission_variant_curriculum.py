@@ -219,8 +219,8 @@ def _enforce_training_vibes(env: MettaGridConfig) -> None:
         if env.game.actions.change_vibe:
             env.game.actions.change_vibe.vibes = list(vibes.VIBES)
             # Filter initial vibe
-            if env.game.agent.initial_vibe >= len(vibes.VIBES):
-                env.game.agent.initial_vibe = 0
+            if env.game.agent.vibe >= len(vibes.VIBES):
+                env.game.agent.vibe = 0
 
         # This ensures action space is 19 (1 noop + 4 move + 14 vibes)
         if env.game.actions.attack:
@@ -597,8 +597,8 @@ def _configure_env_for_action_space(env, num_actions: int) -> None:
     if env.game.actions:
         if env.game.actions.change_vibe:
             env.game.actions.change_vibe.vibes = [vibes.VIBE_BY_NAME[name] for name in vibe_names]
-            if env.game.agent.initial_vibe >= len(vibe_names):
-                env.game.agent.initial_vibe = 0
+            if env.game.agent.vibe >= len(vibe_names):
+                env.game.agent.vibe = 0
         if env.game.actions.attack:
             env.game.actions.attack.enabled = False
 

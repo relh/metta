@@ -110,8 +110,8 @@ def _cleanup_nav_env(env: MettaGridConfig) -> MettaGridConfig:
             env.game.actions.change_vibe.enabled = True
             env.game.actions.change_vibe.vibes = list(vibes.VIBES)
 
-            if env.game.agent.initial_vibe >= len(vibes.VIBES):
-                env.game.agent.initial_vibe = 0
+            if env.game.agent.vibe >= len(vibes.VIBES):
+                env.game.agent.vibe = 0
 
         if env.game.actions.attack:
             env.game.actions.attack.enabled = False

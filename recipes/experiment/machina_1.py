@@ -60,8 +60,8 @@ def train(
     change_vibe = getattr(env_cfg.game.actions, "change_vibe", None)
     if change_vibe is not None:
         change_vibe.vibes = list(vibes.VIBES)
-    if env_cfg.game.agent.initial_vibe >= len(vibes.VIBES):
-        env_cfg.game.agent.initial_vibe = 0
+    if env_cfg.game.agent.vibe >= len(vibes.VIBES):
+        env_cfg.game.agent.vibe = 0
 
     eval_variant_names = _normalize_variant_names(
         initial=[eval_difficulty] if eval_difficulty else None,
