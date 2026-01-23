@@ -32,5 +32,29 @@ else
     PROJECT_DIR="$DEFAULT_PROJECT_DIR"
 fi
 
+# In worktrees, reuse the parent repo's venv if uv.lock hasn't changed.
+# This avoids a ~2s penalty for creating a fresh venv on every worktree invocation.
+if [ -f "$PROJECT_DIR/.git" ] && [ -z "${UV_PROJECT_ENVIRONMENT:-}" ]; then
+    # Detect parent repo: check if we're inside a .worktrees/ directory
+    case "$PROJECT_DIR" in
+        */.worktrees/*)
+            PARENT_REPO_DIR="${PROJECT_DIR%%/.worktrees/*}"
+            ;;
+        */worktrees/*)
+            PARENT_REPO_DIR="${PROJECT_DIR%%/worktrees/*}"
+            ;;
+        *)
+            PARENT_REPO_DIR=""
+            ;;
+    esac
+    if [ -n "$PARENT_REPO_DIR" ] && \
+       [ -d "$PARENT_REPO_DIR/.venv" ] && \
+       [ -f "$PARENT_REPO_DIR/uv.lock" ] && \
+       [ -f "$PROJECT_DIR/uv.lock" ] && \
+       cmp -s "$PROJECT_DIR/uv.lock" "$PARENT_REPO_DIR/uv.lock"; then
+        export UV_PROJECT_ENVIRONMENT="$PARENT_REPO_DIR/.venv"
+    fi
+fi
+
 # Run metta using uv with the project directory
 exec uv run --project "$PROJECT_DIR" python -m metta.setup.metta_cli "$@"
