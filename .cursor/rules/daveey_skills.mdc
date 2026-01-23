@@ -1,0 +1,75 @@
+---
+description: Daveey's personal AI skills for Graphite PR management
+globs: []
+alwaysApply: false
+---
+
+# Daveey's Skills
+
+Skills for managing Graphite PR stacks. Skill files live in `docs/ai/daveey/skills/`.
+
+## Available Skills
+
+### gt:fix-branch
+Sync, restack, address PR comments, and fix CI on the current branch.
+**Use when:** You need to update a branch with latest changes and fix issues.
+**Skill file:** `docs/ai/daveey/skills/gt:fix-branch/SKILL.md`
+
+### gt:fix-stack
+Fix an entire Graphite stack from bottom to top.
+**Use when:** Multiple branches in a stack need fixing.
+**Skill file:** `docs/ai/daveey/skills/gt:fix-stack/SKILL.md`
+
+### gt:fix-ci
+Find and fix CI failures on a branch.
+**Use when:** CI is failing and you need to diagnose and fix it.
+**Skill file:** `docs/ai/daveey/skills/gt:fix-ci/SKILL.md`
+
+### gt:fix-comments
+Address PR review comments with regression tests.
+**Use when:** There are unresolved PR review comments to address.
+**Skill file:** `docs/ai/daveey/skills/gt:fix-comments/SKILL.md`
+
+### gt:submit
+Run tests, cleanup with gt:cool, and submit to Graphite.
+**Use when:** A branch is ready to submit.
+**Skill file:** `docs/ai/daveey/skills/gt:submit/SKILL.md`
+
+### gt:cool
+Clean up backwards compatibility code (aliases, shims, fallbacks).
+**Use when:** Cleaning up compat cruft before submitting.
+**Skill file:** `docs/ai/daveey/skills/gt:cool/SKILL.md`
+
+### gt:make-stack
+Break a large branch into a reviewable Graphite stack.
+**Use when:** A branch is too large and needs to be split sequentially.
+**Skill file:** `docs/ai/daveey/skills/gt:make-stack/SKILL.md`
+
+### gt:extract
+Extract a feature from a branch into a new parallel branch.
+**Use when:** Splitting independent features that can be reviewed separately.
+**Skill file:** `docs/ai/daveey/skills/gt:extract/SKILL.md`
+
+### gt:extract-copy
+Copy a feature to a new branch without modifying the original.
+**Use when:** Landing a subset early while continuing full development.
+**Skill file:** `docs/ai/daveey/skills/gt:extract-copy/SKILL.md`
+
+### cf:really
+Keep running a skill until it succeeds. Loops with CI monitoring until complete.
+**Use when:** You want to persist until a skill actually succeeds (e.g., CI passes).
+**Usage:** `cf:really gt:fix-ci`, `cf:really gt:submit`
+**Skill file:** `docs/ai/daveey/skills/cf:really/SKILL.md`
+
+### t:run-tests
+Run tests progressively: failed tests from context → pytest → metta ci.
+**Use when:** Validating changes before committing or submitting.
+**Skill file:** `docs/ai/daveey/skills/t:run-tests/SKILL.md`
+
+## How to Use
+
+When the user asks to use a skill (e.g., "use gt:fix-branch" or "fix the current branch using the fix-branch skill"):
+
+1. Read the full skill file from `docs/ai/daveey/skills/<skill-name>/SKILL.md`
+2. Follow the instructions in the skill file
+3. Announce the skill being used as specified in the skill file
