@@ -20,13 +20,16 @@
     "metta-research",
     "notebooks/.ipynb_checkpoints",
     "**/.venv",
-    "**/bindings/generated"
+    "**/bindings/generated",
+    "packages/cogames/README.py",
+    "packages/cogames/tutorials"
   ],
   "extraPaths": [
     "./agent/src",
     "./app_backend/src",
     "./common/src",
     "./packages/cogames/src",
+    "./packages/cogames/tests/docsync",
     "./packages/mettagrid/python/src",
     "./packages/pufferlib-core/src"
   ],

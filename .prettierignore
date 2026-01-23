@@ -19,3 +19,7 @@ htmlcov/
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# cogames markdown files are auto-generated from notebooks
+packages/cogames/README.md
+packages/cogames/tutorials/

@@ -587,13 +587,13 @@ source = { editable = "packages/cogames" }
 dependencies = [
     { name = "einops" },
     { name = "fastapi" },
-    { name = "heavyball" },
     { name = "httpx" },
     { name = "mettagrid" },
     { name = "packaging" },
     { name = "pufferlib-core" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "questionary" },
     { name = "rich" },
     { name = "scipy" },
     { name = "typer" },
@@ -610,13 +610,13 @@ requires-dist = [
     { name = "cogames-agents", marker = "extra == 'agents'", editable = "packages/cogames-agents" },
     { name = "einops", specifier = ">=0.8.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "heavyball", specifier = ">=2.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "mettagrid", editable = "packages/mettagrid" },
     { name = "packaging", specifier = ">=24.0.0" },
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "typer", specifier = ">=0.19.2" },
@@ -1567,6 +1567,15 @@ wheels = [
 ]
 
 [[package]]
+name = "importnb"
+version = "2023.11.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/a1/4fa06bd014d43f689915878295748243e7ec199a08ab8fc2c51b4e4c2ad4/importnb-2023.11.1.tar.gz", hash = "sha256:95a745ac7299a81f776e8210e8ad77f05731dfce7bad79eb85e08ed37a2488c0", size = 411404, upload-time = "2023-11-02T04:04:32.344Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/42/f0/7f12bb74fc6c64c509c30ca01138c214dede42a78a7c33175c2d09ea4a2b/importnb-2023.11.1-py3-none-any.whl", hash = "sha256:1a294ae2156c851a5794b49dc7b82995932f5116203ba3041de1aaf3ed3173b8", size = 45997, upload-time = "2023-11-02T04:04:33.835Z" },
+]
+
+[[package]]
 name = "iniconfig"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1957,6 +1966,22 @@ wheels = [
 ]
 
 [[package]]
+name = "jupytext"
+version = "1.19.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py" },
+    { name = "mdit-py-plugins" },
+    { name = "nbformat" },
+    { name = "packaging" },
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2b/84/79a28abd8e6a9376fa623670ab8ac7ebcf45b10f2974e0121bb5e8e086a2/jupytext-1.19.0.tar.gz", hash = "sha256:724c1f75c850a12892ccbcdff33004ede33965d0da8520ab9ea74b39ff51283a", size = 4306554, upload-time = "2026-01-18T17:41:58.959Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/8c/e27aaea0a3fbea002f0e138902432e64f35b39d942cfa13bdc5dd63ce310/jupytext-1.19.0-py3-none-any.whl", hash = "sha256:6e82527920600883088c5825f5d4a5bd06a2676d4958d4f3bc622bad2439c0ac", size = 169904, upload-time = "2026-01-18T17:41:57.467Z" },
+]
+
+[[package]]
 name = "kiwisolver"
 version = "1.4.9"
 source = { registry = "https://pypi.org/simple" }
@@ -2241,6 +2266,18 @@ cli = [
 ]
 
 [[package]]
+name = "mdit-py-plugins"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markdown-it-py" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b2/fd/a756d36c0bfba5f6e39a1cdbdbfdd448dc02692467d83816dff4592a1ebc/mdit_py_plugins-0.5.0.tar.gz", hash = "sha256:f4918cb50119f50446560513a8e311d574ff6aaed72606ddae6d35716fe809c6", size = 44655, upload-time = "2025-08-11T07:25:49.083Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/86/dd6e5db36df29e76c7a7699123569a4a18c1623ce68d826ed96c62643cae/mdit_py_plugins-0.5.0-py3-none-any.whl", hash = "sha256:07a08422fc1936a5d26d146759e9155ea466e842f5ab2f7d2266dd084c8dab1f", size = 57205, upload-time = "2025-08-11T07:25:47.597Z" },
+]
+
+[[package]]
 name = "mdurl"
 version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2339,8 +2376,12 @@ dev = [
     { name = "gcovr" },
     { name = "grpcio-tools" },
     { name = "import-linter" },
+    { name = "ipykernel" },
+    { name = "jupytext" },
     { name = "metta-pr-similarity-mcp" },
     { name = "mypy" },
+    { name = "nbconvert" },
+    { name = "nbstripout" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-benchmark" },
@@ -2376,6 +2417,10 @@ testing = [
     { name = "freezegun" },
     { name = "gcovr" },
     { name = "grpcio-tools" },
+    { name = "ipykernel" },
+    { name = "jupytext" },
+    { name = "nbconvert" },
+    { name = "nbstripout" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-benchmark" },
@@ -2469,8 +2514,12 @@ dev = [
     { name = "gcovr", specifier = ">=8.3" },
     { name = "grpcio-tools", specifier = ">=1.76.0" },
     { name = "import-linter", specifier = ">=2.1" },
+    { name = "ipykernel", specifier = ">=6.29.5" },
+    { name = "jupytext", specifier = ">=1.16.0" },
     { name = "metta-pr-similarity-mcp", editable = "mcp_servers/pr_similarity" },
     { name = "mypy", specifier = ">=1.18.2" },
+    { name = "nbconvert", specifier = ">=7.16.0" },
+    { name = "nbstripout", specifier = ">=0.8.0" },
     { name = "pyright", specifier = ">=1.1.401" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
@@ -2504,6 +2553,10 @@ testing = [
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "gcovr", specifier = ">=8.3" },
     { name = "grpcio-tools", specifier = ">=1.76.0" },
+    { name = "ipykernel", specifier = ">=6.29.5" },
+    { name = "jupytext", specifier = ">=1.16.0" },
+    { name = "nbconvert", specifier = ">=7.16.0" },
+    { name = "nbstripout", specifier = ">=0.8.0" },
     { name = "pyright", specifier = ">=1.1.401" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
@@ -2699,6 +2752,7 @@ dependencies = [
     { name = "boto3" },
     { name = "botocore" },
     { name = "gymnasium" },
+    { name = "importnb" },
     { name = "pettingzoo" },
     { name = "pufferlib-core" },
     { name = "pydantic" },
@@ -2725,6 +2779,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "botocore", specifier = ">=1.38.29" },
     { name = "gymnasium", specifier = ">=1.1.1" },
+    { name = "importnb", specifier = ">=2023.11.1" },
     { name = "pettingzoo", specifier = ">=1.25" },
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
     { name = "pydantic", specifier = ">=2.12.2" },
@@ -2882,6 +2937,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6d/fd/91545e604bc3dad7dca9ed03284086039b294c6b3d75c0d2fa45f9e9caf3/nbformat-5.10.4.tar.gz", hash = "sha256:322168b14f937a5d11362988ecac2a4952d3d8e3a2cbeb2319584631226d5b3a", size = 142749, upload-time = "2024-04-04T11:20:37.371Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a9/82/0340caa499416c78e5d8f5f05947ae4bc3cba53c9f038ab6e9ed964e22f1/nbformat-5.10.4-py3-none-any.whl", hash = "sha256:3b48d6c8fbca4b299bf3982ea7db1af21580e4fec269ad087b9e81588891200b", size = 78454, upload-time = "2024-04-04T11:20:34.895Z" },
+]
+
+[[package]]
+name = "nbstripout"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nbformat" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/57/6d/8d4654b4fb6374483334b3734c48c7ba494c71cb8fa216411a72063160c5/nbstripout-0.9.0.tar.gz", hash = "sha256:4354284d11309f254a6ba4bd9e2f8c5953b16474b7431c278ce67b470e2123a2", size = 32002, upload-time = "2026-01-17T18:46:23.282Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/91/0d/cae9c3f6e9e5d95936a83f79508bfdb1ee7b45da2a348b2af3e16d156ed1/nbstripout-0.9.0-py3-none-any.whl", hash = "sha256:98acb9d8152beeece931564bf1a7b8e7763d9f0919b09103bbb181913bbe0b3d", size = 18839, upload-time = "2026-01-17T18:46:20.91Z" },
 ]
 
 [[package]]
@@ -4227,6 +4294,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/2f/104c0a3c778d7c2ab8190e9db4f62f0b6957b53c9d87db77c284b69f33ea/pyzmq-27.1.0-cp312-abi3-win32.whl", hash = "sha256:250e5436a4ba13885494412b3da5d518cd0d3a278a1ae640e113c073a5f88edd", size = 559184, upload-time = "2025-09-08T23:08:15.163Z" },
     { url = "https://files.pythonhosted.org/packages/fc/7f/a21b20d577e4100c6a41795842028235998a643b1ad406a6d4163ea8f53e/pyzmq-27.1.0-cp312-abi3-win_amd64.whl", hash = "sha256:9ce490cf1d2ca2ad84733aa1d69ce6855372cb5ce9223802450c9b2a7cba0ccf", size = 619480, upload-time = "2025-09-08T23:08:17.192Z" },
     { url = "https://files.pythonhosted.org/packages/78/c2/c012beae5f76b72f007a9e91ee9401cb88c51d0f83c6257a03e785c81cc2/pyzmq-27.1.0-cp312-abi3-win_arm64.whl", hash = "sha256:75a2f36223f0d535a0c919e23615fc85a1e23b71f40c7eb43d7b1dedb4d8f15f", size = 552993, upload-time = "2025-09-08T23:08:18.926Z" },
+]
+
+[[package]]
+name = "questionary"
+version = "2.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "prompt-toolkit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f6/45/eafb0bba0f9988f6a2520f9ca2df2c82ddfa8d67c95d6625452e97b204a5/questionary-2.1.1.tar.gz", hash = "sha256:3d7e980292bb0107abaa79c68dd3eee3c561b83a0f89ae482860b181c8bd412d", size = 25845, upload-time = "2025-08-28T19:00:20.851Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3c/26/1062c7ec1b053db9e499b4d2d5bc231743201b74051c973dadeac80a8f43/questionary-2.1.1-py3-none-any.whl", hash = "sha256:a51af13f345f1cdea62347589fbb6df3b290306ab8930713bfae4d475a7d4a59", size = 36753, upload-time = "2025-08-28T19:00:19.56Z" },
 ]
 
 [[package]]
