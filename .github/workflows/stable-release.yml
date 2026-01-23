@@ -16,6 +16,10 @@ on:
         type: boolean
         default: false
 
+env:
+  CI_APP_ID: ${{ secrets.CI_APP_ID }}
+  CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
 jobs:
   stable-release:
     runs-on: ubuntu-8core
@@ -25,9 +29,14 @@ jobs:
       id-token: write # Needed for AWS OIDC authentication
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
         with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
           fetch-depth: 0 # Full history needed for git operations
 
       - name: Setup Environment

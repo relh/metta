@@ -15,6 +15,7 @@ jobs:
       pull-requests: write
 
     uses: ./.github/workflows/_build-and-deploy.yml
+    secrets: inherit
     with:
       code_paths: |
         - 'observatory/**'

@@ -50,6 +50,10 @@ on:
         type: string
         default: ""
 
+env:
+  CI_APP_ID: ${{ secrets.CI_APP_ID }}
+  CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
 jobs:
   checks:
     name: "Filter for relevant changes"
@@ -57,8 +61,14 @@ jobs:
     outputs:
       run: ${{ steps.filter.outputs.dockerfile == 'true' || steps.filter.outputs.chart == 'true' || steps.filter.outputs.paths == 'true' || github.event_name == 'workflow_dispatch' }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
 
       - name: Check for file changes
         id: filter
@@ -87,8 +97,14 @@ jobs:
       DELETE_PREVIEW: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
 
       - name: Build Docker image
         id: build-image

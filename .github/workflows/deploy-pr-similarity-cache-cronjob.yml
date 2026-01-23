@@ -18,6 +18,7 @@ jobs:
       contents: read
 
     uses: ./.github/workflows/_build-and-deploy.yml
+    secrets: inherit
     with:
       image_name: metta-cronjobs
       tag_suffix: "-pr-similarity"
