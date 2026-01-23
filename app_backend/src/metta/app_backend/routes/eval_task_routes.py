@@ -13,7 +13,9 @@ from pydantic import BaseModel, Field
 
 import gitta as git
 from metta.app_backend.auth import CheckSoftmaxUser
-from metta.app_backend.metta_repo import EvalTaskRow, FinishedTaskStatus, MettaRepo, TaskAttemptRow, TaskStatus
+from metta.app_backend.models.eval_task import FinishedTaskStatus, TaskStatus
+from metta.app_backend.queries import eval_task_queries
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow, TaskAttemptRow
 from metta.app_backend.route_logger import timed_http_handler
 from metta.common.util.git_repo import REPO_SLUG
 
@@ -83,7 +85,7 @@ class TaskAttemptsResponse(BaseModel):
     attempts: list[TaskAttemptRow]
 
 
-def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
+def create_eval_task_router() -> APIRouter:
     router = APIRouter(prefix="/tasks", tags=["eval_tasks"])
 
     # Cache for latest commit
@@ -121,7 +123,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
 
             os.remove(file_path)
 
-        task = await stats_repo.create_eval_task(
+        task = await eval_task_queries.create_eval_task(
             command=request.command,
             git_hash=request.git_hash or await get_cached_latest_commit(),
             attributes=request.attributes,
@@ -133,7 +135,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
     @router.get("/latest", response_model=EvalTaskRow)
     @timed_http_handler
     async def get_latest_assigned_task_for_worker(assignee: str) -> EvalTaskRow | None:
-        task = await stats_repo.get_latest_assigned_task_for_worker(assignee=assignee)
+        task = await eval_task_queries.get_latest_assigned_task_for_worker(assignee=assignee)
         return task
 
     @router.get("/available")
@@ -141,13 +143,13 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
     async def get_available_tasks(
         limit: int = Query(default=200, ge=1, le=1000),
     ) -> TasksResponse:
-        tasks = await stats_repo.get_available_tasks(limit=limit)
+        tasks = await eval_task_queries.get_available_tasks(limit=limit)
         return TasksResponse(tasks=tasks)
 
     @router.post("/claim")
     @timed_http_handler
     async def claim_tasks(request: TaskClaimRequest) -> TaskClaimResponse:
-        claimed_ids = await stats_repo.claim_tasks(
+        claimed_ids = await eval_task_queries.claim_tasks(
             task_ids=request.tasks,
             assignee=request.assignee,
         )
@@ -156,13 +158,13 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
     @router.get("/claimed")
     @timed_http_handler
     async def get_claimed_tasks(assignee: str | None = Query(None)) -> TasksResponse:
-        tasks = await stats_repo.get_claimed_tasks(assignee=assignee)
+        tasks = await eval_task_queries.get_claimed_tasks(assignee=assignee)
         return TasksResponse(tasks=tasks)
 
     @router.post("/git-hashes")
     @timed_http_handler
     async def get_git_hashes_for_workers(request: GitHashesRequest) -> GitHashesResponse:
-        git_hashes = await stats_repo.get_git_hashes_for_workers(assignees=request.assignees)
+        git_hashes = await eval_task_queries.get_git_hashes_for_workers(assignees=request.assignees)
         return GitHashesResponse(git_hashes=git_hashes)
 
     @router.get("/all")
@@ -172,7 +174,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
         statuses: list[TaskStatus] | None = Query(default=None),
         git_hash: str | None = Query(default=None),
     ) -> TasksResponse:
-        tasks = await stats_repo.get_all_tasks(
+        tasks = await eval_task_queries.get_all_tasks(
             limit=limit,
             statuses=statuses,
             git_hash=git_hash,
@@ -191,7 +193,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
         created_at: str | None = Query(default=None),
         assigned_at: str | None = Query(default=None),
     ) -> PaginatedTasksResponse:
-        tasks, total_count = await stats_repo.get_tasks_paginated(
+        tasks, total_count = await eval_task_queries.get_tasks_paginated(
             page=page,
             page_size=page_size,
             status=status,
@@ -213,13 +215,13 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
     @router.post("/{task_id}/start")
     @timed_http_handler
     async def start_task(task_id: int) -> TaskIdResponse:
-        await stats_repo.start_task(task_id=task_id)
+        await eval_task_queries.start_task(task_id=task_id)
         return TaskIdResponse(task_id=task_id)
 
     @router.post("/{task_id}/finish")
     @timed_http_handler
     async def finish_task(task_id: int, request: TaskFinishRequest) -> TaskIdResponse:
-        await stats_repo.finish_task(
+        await eval_task_queries.finish_task(
             task_id=task_id, status=request.status, status_details=request.status_details, log_path=request.log_path
         )
         return TaskIdResponse(task_id=task_id)
@@ -228,7 +230,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
     @timed_http_handler
     async def get_task(task_id: int) -> EvalTaskRow:
         """Get a single task by ID with full details including attributes."""
-        task = await stats_repo.get_task_by_id(task_id)
+        task = await eval_task_queries.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
         return task
@@ -237,7 +239,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
     @timed_http_handler
     async def get_task_attempts(task_id: int) -> TaskAttemptsResponse:
         """Get all attempts for a specific task."""
-        attempts = await stats_repo.get_task_attempts(task_id)
+        attempts = await eval_task_queries.get_task_attempts(task_id)
         return TaskAttemptsResponse(attempts=attempts)
 
     @router.get("/{task_id}/logs/{log_type}")
@@ -256,7 +258,7 @@ def create_eval_task_router(stats_repo: MettaRepo) -> APIRouter:
             raise HTTPException(status_code=400, detail="log_type must be 'stdout' or 'stderr' or 'output'")
 
         # Get the task to retrieve the log path from attributes
-        task = await stats_repo.get_task_by_id(task_id)
+        task = await eval_task_queries.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 

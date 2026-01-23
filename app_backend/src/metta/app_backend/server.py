@@ -121,7 +121,7 @@ def create_app(stats_repo: MettaRepo) -> fastapi.FastAPI:
     )
 
     # Create routers with the provided StatsRepo
-    eval_task_router = eval_task_routes.create_eval_task_router(stats_repo)
+    eval_task_router = eval_task_routes.create_eval_task_router()
     sql_router = sql_routes.create_sql_router(stats_repo)
     stats_router = stats_routes.create_stats_router()
     sweep_router = sweep_routes.create_sweep_router(stats_repo)

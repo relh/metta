@@ -1,5 +1,5 @@
 from metta.app_backend.clients.base_client import BaseAppBackendClient
-from metta.app_backend.metta_repo import EvalTaskRow
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import (
     GitHashesRequest,
     GitHashesResponse,

@@ -4,7 +4,7 @@ from typing import Sequence
 from pydantic import BaseModel
 
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.metta_repo import EvalTaskRow
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import TaskCreateRequest
 from metta.sim.runner import SimulationRunConfig
 

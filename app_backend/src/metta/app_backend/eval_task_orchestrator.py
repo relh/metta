@@ -25,7 +25,7 @@ from ddtrace.trace import tracer
 
 from metta.app_backend.clients.eval_task_client import EvalTaskClient
 from metta.app_backend.container_managers.factory import create_container_manager
-from metta.app_backend.metta_repo import EvalTaskRow
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import (
     TaskClaimRequest,
     TaskFinishRequest,

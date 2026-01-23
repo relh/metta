@@ -8,8 +8,8 @@ import httpx
 from pydantic import BaseModel
 
 from metta.app_backend.clients.base_client import BaseAppBackendClient, NotAuthenticatedError, get_machine_token
-from metta.app_backend.metta_repo import EvalTaskRow
 from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobRequestUpdate, JobStatus, JobType
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import TaskCreateRequest, TaskFilterParams, TasksResponse
 from metta.app_backend.routes.sql_routes import SQLQueryResponse
 from metta.app_backend.routes.stats_routes import (

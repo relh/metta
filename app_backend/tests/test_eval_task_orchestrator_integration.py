@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from metta.app_backend.clients.eval_task_client import EvalTaskClient
 from metta.app_backend.eval_task_orchestrator import EvalTaskOrchestrator
 from metta.app_backend.eval_task_worker import AbstractTaskExecutor, EvalTaskWorker, TaskResult
-from metta.app_backend.metta_repo import EvalTaskRow
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import (
     TaskCreateRequest,
     TaskFilterParams,

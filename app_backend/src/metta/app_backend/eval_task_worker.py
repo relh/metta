@@ -30,7 +30,8 @@ import boto3
 from ddtrace.trace import tracer
 
 from metta.app_backend.clients.eval_task_client import EvalTaskClient
-from metta.app_backend.metta_repo import EvalTaskRow, FinishedTaskStatus
+from metta.app_backend.models.eval_task import FinishedTaskStatus
+from metta.app_backend.queries.eval_task_queries import EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import TaskFinishRequest
 from metta.common.auth.auth_config_reader_writer import observatory_auth_config
 from metta.common.datadog.tracing import init_tracing, trace
