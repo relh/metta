@@ -274,6 +274,10 @@ Task(
   Working directory: <worktree_path>
   Branch: <branch>
 
+  When reporting the PR URL, use the Graphite URL format:
+  https://app.graphite.dev/github/pr/<owner>/<repo>/<pr_number>
+  Get the PR number with: gh pr view --json number -q '.number'
+
   Report back: Graphite PR URL, test results, summary of changes, any issues.
   """
 )
