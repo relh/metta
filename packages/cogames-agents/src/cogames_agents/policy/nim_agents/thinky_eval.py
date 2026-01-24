@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import Dict, List, Tuple
 
-import cogames.policy.nim_agents.agents as na
+import cogames_agents.policy.nim_agents.agents as na
 from cogames.cli.utils import suppress_noisy_logs
 from cogames.cogs_vs_clips.evals.diagnostic_evals import DIAGNOSTIC_EVALS
 from cogames.cogs_vs_clips.mission import Mission, NumCogsVariant
@@ -15,7 +15,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator.rollout import Rollout
 
 # Agent to evaluate
-AGENT_PATH = "cogames.policy.nim_agents.agents.ThinkyAgentsMultiPolicy"
+AGENT_PATH = "cogames_agents.policy.nim_agents.agents.ThinkyAgentsMultiPolicy"
 
 # Defaults (keep simple)
 NUM_COGS = 4

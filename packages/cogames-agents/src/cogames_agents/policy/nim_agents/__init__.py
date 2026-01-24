@@ -1,6 +1,6 @@
 """Nim-based agent policies for CoGames."""
 
-from cogames.policy.nim_agents import agents  # noqa: F401
+from cogames_agents.policy.nim_agents import agents  # noqa: F401
 
 __all__ = [
     "RandomAgentsMultiPolicy",
@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 # Re-export the policy classes for convenience
-from cogames.policy.nim_agents.agents import (  # noqa: F401
+from cogames_agents.policy.nim_agents.agents import (  # noqa: F401
     LadyBugAgentsMultiPolicy,
     RaceCarAgentsMultiPolicy,
     RandomAgentsMultiPolicy,

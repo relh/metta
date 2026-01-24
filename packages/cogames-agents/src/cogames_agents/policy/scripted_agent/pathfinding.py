@@ -11,7 +11,7 @@ from collections import deque
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from cogames.policy.scripted_agent.types import CellType, SimpleAgentState
+    from cogames_agents.policy.scripted_agent.types import CellType, SimpleAgentState
 
 
 def compute_goal_cells(

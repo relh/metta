@@ -8,10 +8,28 @@ version = "0.0.1"
 description = "Optional agent policies for CoGames"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+dependencies = ["cogames>=0.0.1", "mettagrid==0.2.0.58", "numpy>=2.0.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["cogames_agents", "cogames_agents.*"]
 
+[tool.setuptools]
+include-package-data = true
+
 [tool.setuptools.package-data]
 "cogames_agents" = ["py.typed"]
+
+[tool.uv]
+cache-keys = [
+  { file = "src/cogames_agents/policy/nim_agents/nim_agents.nim" },
+  { file = "src/cogames_agents/policy/nim_agents/nim_agents.nims" },
+  { file = "src/cogames_agents/policy/nim_agents/common.nim" },
+  { file = "src/cogames_agents/policy/nim_agents/random_agents.nim" },
+  { file = "src/cogames_agents/policy/nim_agents/thinky_agents.nim" },
+  { file = "src/cogames_agents/policy/nim_agents/racecar_agents.nim" },
+]
+
+[tool.uv.sources]
+cogames = { workspace = true }
+mettagrid = { workspace = true }

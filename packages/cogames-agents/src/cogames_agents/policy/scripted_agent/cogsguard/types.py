@@ -15,7 +15,7 @@ from mettagrid.simulator import Action
 if TYPE_CHECKING:
     from mettagrid.simulator.interface import AgentObservation
 
-from cogames.policy.scripted_agent.types import ExtractorInfo
+from cogames_agents.policy.scripted_agent.types import ExtractorInfo
 
 
 class Role(Enum):

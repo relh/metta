@@ -628,6 +628,18 @@ provides-extras = ["agents"]
 name = "cogames-agents"
 version = "0.0.1"
 source = { editable = "packages/cogames-agents" }
+dependencies = [
+    { name = "cogames" },
+    { name = "mettagrid" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cogames", editable = "packages/cogames" },
+    { name = "mettagrid", editable = "packages/mettagrid" },
+    { name = "numpy", specifier = ">=2.0.0" },
+]
 
 [[package]]
 name = "colorama"

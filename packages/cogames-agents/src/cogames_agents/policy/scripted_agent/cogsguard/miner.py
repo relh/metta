@@ -17,7 +17,7 @@ Strategy:
 
 from __future__ import annotations
 
-from cogames.policy.scripted_agent.utils import is_adjacent
+from cogames_agents.policy.scripted_agent.utils import is_adjacent
 from mettagrid.simulator import Action
 
 from .policy import DEBUG, CogsguardAgentPolicyImpl

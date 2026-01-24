@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from cogames.policy.scripted_agent.pathfinding import is_traversable
-from cogames.policy.scripted_agent.types import CellType
-from cogames.policy.scripted_agent.utils import is_adjacent
+from cogames_agents.policy.scripted_agent.pathfinding import is_traversable
+from cogames_agents.policy.scripted_agent.types import CellType
+from cogames_agents.policy.scripted_agent.utils import is_adjacent
 from mettagrid.simulator import Action
 
 from .policy import DEBUG, CogsguardAgentPolicyImpl

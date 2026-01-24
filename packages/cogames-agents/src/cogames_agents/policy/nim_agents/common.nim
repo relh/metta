@@ -29,6 +29,7 @@ type
     features*: Features
     tags*: Tags
     vibes*: Vibes
+    vibeNames*: seq[string]
     assemblerProtocols*: seq[AssemblerProtocol]
     inventoryTokenBase*: int
     inventoryPowerFeatures*: Table[int, array[2, int]]
@@ -124,6 +125,11 @@ type
     invModulator*: int
     invResonator*: int
     invScrambler*: int
+    invMiner*: int
+    invScout*: int
+    invAligner*: int
+    invInfluence*: int
+    invHp*: int
 
     protocolInputEnergy*: int
     protocolInputCarbon*: int
@@ -435,6 +441,16 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.invResonator = feature.id
       of "inv:scrambler":
         result.features.invScrambler = feature.id
+      of "inv:miner":
+        result.features.invMiner = feature.id
+      of "inv:scout":
+        result.features.invScout = feature.id
+      of "inv:aligner":
+        result.features.invAligner = feature.id
+      of "inv:influence":
+        result.features.invInfluence = feature.id
+      of "inv:hp":
+        result.features.invHp = feature.id
       of "protocol_input:energy":
         result.features.protocolInputEnergy = feature.id
       of "protocol_input:carbon":
@@ -483,6 +499,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.inventoryPowerFeatures[inventoryBaseIds[resource]] = powers
 
     for id, name in config.actions:
+      if name.startsWith("change_vibe_"):
+        result.vibeNames.add(name[12 .. ^1])
       case name:
       of "noop":
         result.actions.noop = id

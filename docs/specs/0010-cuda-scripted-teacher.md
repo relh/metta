@@ -9,8 +9,8 @@ all agents without the current SPS penalty.
 
 Thinky is our in-repo scripted policy (Nim) and the default teacher:
 
-- Core logic: `packages/cogames/src/cogames/policy/nim_agents/thinky_agents.nim`
-- Python wrapper + short name `thinky`: `packages/cogames/src/cogames/policy/nim_agents/agents.py`
+- Core logic: `packages/cogames-agents/src/cogames_agents/policy/nim_agents/thinky_agents.nim`
+- Python wrapper + short name `thinky`: `packages/cogames-agents/src/cogames_agents/policy/nim_agents/agents.py`
 
 ## Getting started (example commands)
 

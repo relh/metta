@@ -13,25 +13,25 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING, Optional
 
-from cogames.policy.scripted_agent.pathfinding import (
+from cogames_agents.policy.scripted_agent.pathfinding import (
     compute_goal_cells,
     shortest_path,
 )
-from cogames.policy.scripted_agent.pathfinding import (
+from cogames_agents.policy.scripted_agent.pathfinding import (
     is_traversable as path_is_traversable,
 )
-from cogames.policy.scripted_agent.pathfinding import (
+from cogames_agents.policy.scripted_agent.pathfinding import (
     is_within_bounds as path_is_within_bounds,
 )
-from cogames.policy.scripted_agent.types import CellType, ObjectState, ParsedObservation
-from cogames.policy.scripted_agent.utils import (
+from cogames_agents.policy.scripted_agent.types import CellType, ObjectState, ParsedObservation
+from cogames_agents.policy.scripted_agent.utils import (
     add_inventory_token,
     change_vibe_action,
     is_adjacent,
     is_station,
     is_wall,
 )
-from cogames.policy.scripted_agent.utils import (
+from cogames_agents.policy.scripted_agent.utils import (
     parse_observation as utils_parse_observation,
 )
 from mettagrid.config.mettagrid_config import CardinalDirection
@@ -541,7 +541,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         obj_state: ObjectState,
     ) -> None:
         """Track a discovered extractor (legacy)."""
-        from cogames.policy.scripted_agent.types import ExtractorInfo
+        from cogames_agents.policy.scripted_agent.types import ExtractorInfo
 
         for existing in s.extractors[resource_type]:
             if existing.position == pos:
