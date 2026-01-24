@@ -193,6 +193,7 @@ class CommissionerBase(ABC):
     async def _sync_match_statuses(self) -> bool:
         """Sync match statuses from job statuses. Returns True if any changed."""
         session = get_db()
+
         pending = list(
             (
                 await session.execute(
@@ -486,9 +487,10 @@ class CommissionerBase(ABC):
                 span.set_status(Status(StatusCode.ERROR, "pool_players_missing"))
                 return False
 
+            # Commit to release transaction before HTTP call
+            await session.commit()
+
             match = Match(pool_id=pool_id, assignments=request.assignments)  # type: ignore[call-arg]
-            session.add(match)
-            await session.flush()
             match_id = match.id
             span.set_attribute("match.id", str(match_id))
 
@@ -526,14 +528,15 @@ class CommissionerBase(ABC):
             span.set_attribute("job.id", str(job_id))
             span.set_attribute("job.enqueue.outcome", "success")
 
+            match.job_id = job_id
+            match.status = MatchStatus.scheduled
+            session.add(match)
             session.add_all(
                 [
                     MatchPlayer(match_id=match.id, pool_player_id=pp_id, policy_index=idx)
                     for idx, pp_id in enumerate(request.pool_player_ids)
                 ]
             )
-            match.job_id = job_id
-            match.status = MatchStatus.scheduled
             await session.commit()
 
             logger.debug(f"Match {match_id} -> job {job_id}")

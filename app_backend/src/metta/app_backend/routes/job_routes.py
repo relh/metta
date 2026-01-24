@@ -7,6 +7,7 @@ import boto3
 from botocore.config import Config
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import col, select
 
 from metta.app_backend.auth import CheckUser
@@ -19,12 +20,13 @@ from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
+MAX_OUTSTANDING_JOBS = 200
+
 DEBUG_S3_BUCKET = "observatory-private"
 DEBUG_S3_PREFIX = "replays/tournament"
 
 
 def _fixup_episode_job(job: JobRequest) -> None:
-    """Fill in server-generated fields for episode jobs."""
     if job.job.get("debug_uri") is None:
         s3 = boto3.client("s3", config=Config(signature_version="s3v4"))
         job.job = {
@@ -36,7 +38,7 @@ def _fixup_episode_job(job: JobRequest) -> None:
                     "Key": f"{DEBUG_S3_PREFIX}/{job.id}.debug.zip",
                     "ContentType": "application/zip",
                 },
-                ExpiresIn=JOB_TIMEOUT_SECONDS + 60 * 60,  # 1 hour buffer after job timeout
+                ExpiresIn=JOB_TIMEOUT_SECONDS + 60 * 60,
             ),
         }
 
@@ -60,6 +62,19 @@ def create_job_router() -> APIRouter:
     async def create_jobs_batch(jobs: list[JobRequestCreate], user: CheckUser) -> list[UUID]:
         if not jobs:
             return []
+
+        # Backpressure: reject if too many outstanding jobs
+        async with db_session() as session:
+            outstanding_statuses = [JobStatus.pending, JobStatus.dispatched, JobStatus.running]
+            count_result = await session.execute(
+                select(func.count()).select_from(JobRequest).where(col(JobRequest.status).in_(outstanding_statuses))
+            )
+            outstanding_count = count_result.scalar() or 0
+            if outstanding_count + len(jobs) > MAX_OUTSTANDING_JOBS:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Too many outstanding jobs ({outstanding_count}). Max allowed: {MAX_OUTSTANDING_JOBS}",
+                )
 
         # Create all jobs in db as pending
         db_jobs: list[JobRequest] = []
