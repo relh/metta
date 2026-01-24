@@ -66,7 +66,7 @@ harness.run_until_stuck(threshold=10, max_steps=200)
 ### Run from Command Line
 
 ```bash
-cd /Users/daveey/code/metta
+cd /path/to/metta
 uv run python -c "
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
 h = DebugHarness.from_recipe(num_agents=10)
