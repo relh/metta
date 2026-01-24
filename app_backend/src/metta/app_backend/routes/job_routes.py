@@ -28,7 +28,7 @@ DEBUG_S3_PREFIX = "replays/tournament"
 
 def _fixup_episode_job(job: JobRequest) -> None:
     if job.job.get("debug_uri") is None:
-        s3 = boto3.client("s3", config=Config(signature_version="s3v4"))
+        s3 = boto3.client("s3", region_name="us-east-1", config=Config(signature_version="s3v4"))
         job.job = {
             **job.job,
             "debug_uri": s3.generate_presigned_url(

@@ -112,16 +112,19 @@ def main():
             if dest is not None:
                 copy_data(src, dest, content_type=content_type)
 
-        # Zip and upload debug directory
+        # Zip and upload debug directory (best-effort, don't fail job if upload fails)
         if local_debug_dir is not None and job.debug_uri is not None:
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for abs_dir, _, filenames in os.walk(local_debug_dir):
-                    for filename in filenames:
-                        abs_file = os.path.join(abs_dir, filename)
-                        arcname = os.path.relpath(abs_file, local_debug_dir)
-                        zf.write(abs_file, arcname)
-            write_data(job.debug_uri, buf.getvalue(), content_type="application/zip")
+            try:
+                buf = io.BytesIO()
+                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for abs_dir, _, filenames in os.walk(local_debug_dir):
+                        for filename in filenames:
+                            abs_file = os.path.join(abs_dir, filename)
+                            arcname = os.path.relpath(abs_file, local_debug_dir)
+                            zf.write(abs_file, arcname)
+                write_data(job.debug_uri, buf.getvalue(), content_type="application/zip")
+            except Exception as e:
+                logger.warning(f"Failed to upload debug.zip: {e}")
 
         results = PureSingleEpisodeResult.model_validate_json(read(local_results_uri))
 
