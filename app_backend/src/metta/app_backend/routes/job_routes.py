@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from typing import Optional
 from uuid import UUID
 
+import boto3
+from botocore.config import Config
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlmodel import col, select
@@ -13,8 +15,31 @@ from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobRequestUpdate, JobStatus, JobType
 from metta.app_backend.otel.metrics import get_job_metrics
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
+
+DEBUG_S3_BUCKET = "observatory-private"
+DEBUG_S3_PREFIX = "replays/tournament"
+
+
+def _fixup_episode_job(job: JobRequest) -> None:
+    """Fill in server-generated fields for episode jobs."""
+    if job.job.get("debug_uri") is None:
+        s3 = boto3.client("s3", config=Config(signature_version="s3v4"))
+        job.job = {
+            **job.job,
+            "debug_uri": s3.generate_presigned_url(
+                "put_object",
+                Params={
+                    "Bucket": DEBUG_S3_BUCKET,
+                    "Key": f"{DEBUG_S3_PREFIX}/{job.id}.debug.zip",
+                    "ContentType": "application/zip",
+                },
+                ExpiresIn=JOB_TIMEOUT_SECONDS + 60 * 60,  # 1 hour buffer after job timeout
+            ),
+        }
+
 
 VALID_TRANSITIONS = {
     JobStatus.pending: {JobStatus.dispatched},
@@ -41,6 +66,8 @@ def create_job_router() -> APIRouter:
         async with db_session() as session:
             for job_create in jobs:
                 db_job = JobRequest(**job_create.model_dump(), user_id=user.id, status=JobStatus.pending)
+                if db_job.job_type == JobType.episode:
+                    _fixup_episode_job(db_job)
                 session.add(db_job)
                 db_jobs.append(db_job)
             await session.commit()

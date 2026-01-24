@@ -103,6 +103,14 @@ def stats_client(test_client: TestClient) -> StatsClient:
 
 
 @pytest.fixture(autouse=True)
+def fake_aws_credentials(monkeypatch):
+    """Set fake AWS credentials for boto3 (required for presigned URL generation)."""
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+
+
+@pytest.fixture(autouse=True)
 def mock_k8s_client(monkeypatch):
     """Prevent any accidental k8s API calls in tests."""
     from metta.app_backend.job_runner import dispatcher

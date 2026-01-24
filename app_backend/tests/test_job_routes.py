@@ -32,7 +32,10 @@ class TestEpisodeJobRoutes:
             job = stats_client.get_job(job_ids[i])
             assert job.job_type == JobType.episode
             assert job.id == job_ids[i]
-            assert job.job == j.job
+            # Server adds debug_uri for episode jobs; verify original fields preserved
+            for key, value in j.job.items():
+                assert job.job[key] == value, f"Mismatch for {key}"
+            assert "debug_uri" in job.job, "Server should add debug_uri for episode jobs"
 
         # Jobs start as dispatched (dispatch_job stub succeeds)
         fetched_job = stats_client.get_job(job_ids[0])

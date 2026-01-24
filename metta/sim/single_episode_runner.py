@@ -1,10 +1,13 @@
+import io
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
+import zipfile
 from uuid import UUID
 
 from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
@@ -16,7 +19,7 @@ from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.rl.metta_scheme_resolver import MettaSchemeResolver
 from metta.sim.handle_results import write_single_episode_to_observatory
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
-from mettagrid.util.file import copy_data, read
+from mettagrid.util.file import copy_data, read, write_data
 from mettagrid.util.uri_resolvers.schemes import parse_uri, resolve_uri
 
 logger = logging.getLogger(__name__)
@@ -52,6 +55,7 @@ def main():
     observatory_auth_config.save_token(os.environ["MACHINE_TOKEN"], os.environ["STATS_SERVER_URI"])
 
     stats_client = StatsClient.create(os.environ["STATS_SERVER_URI"])
+    local_debug_dir: str | None = None
 
     try:
         job_data = stats_client.get_job(job_id)
@@ -61,6 +65,7 @@ def main():
 
         local_results_uri = "file://results.json"
         local_replay_uri = "file://replay.json.z" if job.replay_uri else None
+        local_debug_dir = tempfile.mkdtemp() if job.debug_uri else None
         local_policy_uris = _localize_policy_uris(job.policy_uris)
 
         with tempfile.NamedTemporaryFile(delete=True) as temp_file:
@@ -71,6 +76,7 @@ def main():
                     env=job.env,
                     results_uri=local_results_uri,
                     replay_uri=local_replay_uri,
+                    debug_dir=local_debug_dir,
                     seed=job.seed,
                     max_action_time_ms=job.max_action_time_ms,
                 ).model_dump(),
@@ -106,6 +112,17 @@ def main():
             if dest is not None:
                 copy_data(src, dest, content_type=content_type)
 
+        # Zip and upload debug directory
+        if local_debug_dir is not None and job.debug_uri is not None:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for abs_dir, _, filenames in os.walk(local_debug_dir):
+                    for filename in filenames:
+                        abs_file = os.path.join(abs_dir, filename)
+                        arcname = os.path.relpath(abs_file, local_debug_dir)
+                        zf.write(abs_file, arcname)
+            write_data(job.debug_uri, buf.getvalue(), content_type="application/zip")
+
         results = PureSingleEpisodeResult.model_validate_json(read(local_results_uri))
 
         policy_version_ids: list[uuid.UUID | None] = []
@@ -136,6 +153,8 @@ def main():
         stats_client.update_job(job_id, JobRequestUpdate(result={"error": str(e)}))
         raise
     finally:
+        if local_debug_dir is not None:
+            shutil.rmtree(local_debug_dir, ignore_errors=True)
         stats_client.close()
 
 
