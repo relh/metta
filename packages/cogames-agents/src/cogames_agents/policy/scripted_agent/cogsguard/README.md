@@ -6,15 +6,15 @@ A vibe-based multi-agent policy for the Cogs vs Clips arena game.
 
 Agents use **vibes** to determine their behavior dynamically:
 
-| Vibe        | Behavior                                                        |
-| ----------- | --------------------------------------------------------------- |
-| `default`   | Do nothing (noop) - agent is idle                               |
-| `gear`      | Pick a random role (scout/miner/aligner/scrambler), change vibe |
-| `miner`     | Get miner gear if needed, then mine resources                   |
-| `scout`     | Get scout gear if needed, then explore the map                  |
-| `aligner`   | Get aligner gear if needed, then align chargers to cogs         |
-| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers      |
-| `heart`     | Do nothing (noop)                                               |
+| Vibe        | Behavior                                                   |
+| ----------- | ---------------------------------------------------------- |
+| `default`   | Do nothing (noop) - agent is idle                          |
+| `gear`      | Pick a role via the smart coordinator, change vibe         |
+| `miner`     | Get miner gear if needed, then mine resources              |
+| `scout`     | Get scout gear if needed, then explore the map             |
+| `aligner`   | Get aligner gear if needed, then align chargers to cogs    |
+| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers |
+| `heart`     | Do nothing (noop)                                          |
 
 This allows external systems (like training policies) to control agent behavior by setting their vibe.
 
@@ -73,7 +73,7 @@ Agents must acquire role-specific gear from gear stations before executing their
                     External vibe change
                            │
                            ▼
-┌─────────────┐     Pick random     ┌───────────────┐
+┌─────────────┐   Pick smart role   ┌───────────────┐
 │    gear     │ ──────────────────► │  role vibe    │
 │             │    role vibe        │ (miner/scout/ │
 └─────────────┘                     │  aligner/     │
@@ -175,7 +175,7 @@ Extractors ──► Miners ──► Commons ──► Gear Stations ──► 
 You can control how many agents start with each role using URI query parameters:
 
 ```bash
-# Custom distribution: 4 miners, 2 scramblers, 1 gear (random role)
+# Custom distribution: 4 miners, 2 scramblers, 1 gear (smart role)
 ./tools/run.py recipes.experiment.cogsguard.play \
     policy_uri="metta://policy/cogsguard?miner=4&scrambler=2&gear=1"
 
@@ -190,13 +190,13 @@ You can control how many agents start with each role using URI query parameters:
 
 **Supported vibe parameters:**
 
-| Parameter   | Description                                            |
-| ----------- | ------------------------------------------------------ |
-| `miner`     | Number of agents starting as miners                    |
-| `scout`     | Number of agents starting as scouts                    |
-| `aligner`   | Number of agents starting as aligners                  |
-| `scrambler` | Number of agents starting as scramblers                |
-| `gear`      | Number of agents starting with gear (pick random role) |
+| Parameter   | Description                                      |
+| ----------- | ------------------------------------------------ |
+| `miner`     | Number of agents starting as miners              |
+| `scout`     | Number of agents starting as scouts              |
+| `aligner`   | Number of agents starting as aligners            |
+| `scrambler` | Number of agents starting as scramblers          |
+| `gear`      | Number of agents starting with gear (smart role) |
 
 **Assignment order:** `scrambler → aligner → miner → scout → gear`
 

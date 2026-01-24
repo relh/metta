@@ -186,11 +186,6 @@ class DebugHarness:
             return (loc[1], loc[0])
         elif hasattr(agent, "r") and hasattr(agent, "c"):
             return (agent.r, agent.c)
-
-        grid_objects = self.sim.grid_objects()
-        for obj_data in grid_objects.values():
-            if obj_data.get("agent_id") == agent_idx:
-                return (obj_data["r"], obj_data["c"])
         return None
 
     def verify_position_tracking(self, verbose: bool = True) -> dict[int, dict]:

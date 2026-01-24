@@ -104,15 +104,15 @@ harness.diagnose_coordinate_system()
 
 Agents use **vibes** to determine their behavior:
 
-| Vibe        | Behavior                                                                     |
-| ----------- | ---------------------------------------------------------------------------- |
-| `default`   | Do nothing (noop)                                                            |
-| `gear`      | Pick a random role (scout/miner/aligner/scrambler), change vibe to that role |
-| `miner`     | Get miner gear if needed, then mine resources                                |
-| `scout`     | Get scout gear if needed, then explore                                       |
-| `aligner`   | Get aligner gear if needed, then align chargers to cogs                      |
-| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers                   |
-| `heart`     | Do nothing (noop)                                                            |
+| Vibe        | Behavior                                                                    |
+| ----------- | --------------------------------------------------------------------------- |
+| `default`   | Do nothing (noop)                                                           |
+| `gear`      | Pick a smart role (scout/miner/aligner/scrambler), change vibe to that role |
+| `miner`     | Get miner gear if needed, then mine resources                               |
+| `scout`     | Get scout gear if needed, then explore                                      |
+| `aligner`   | Get aligner gear if needed, then align chargers to cogs                     |
+| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers                  |
+| `heart`     | Do nothing (noop)                                                           |
 
 ## Quick Start
 
@@ -143,7 +143,7 @@ metta://policy/cogsguard?miner=4&scrambler=2&gear=1&aligner=2&scout=1
 ```
 
 - `miner`, `scout`, `aligner`, `scrambler`: Count for each role
-- `gear`: Agents that pick a random role
+- `gear`: Agents that pick a smart role
 - Assignment order: `scrambler → aligner → miner → scout → gear`
 - Default: `scrambler=1, miner=4`
 
@@ -158,7 +158,7 @@ DEBUG = True  # Line ~48
 This enables detailed logging for:
 
 - Agent step summaries: `[A0] Step 1: vibe=gear role=miner | Phase=get_gear | ...`
-- Vibe transitions: `[A0] GEAR_VIBE: Picking random role vibe: scout`
+- Vibe transitions: `[A0] GEAR_VIBE: Picking role vibe: scout`
 - Discovery events: `[A0] DISCOVERED miner_station at (105, 100)`
 - Phase transitions and decisions
 

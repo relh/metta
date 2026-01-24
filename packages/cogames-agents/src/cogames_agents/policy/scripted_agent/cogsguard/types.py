@@ -111,6 +111,10 @@ class CogsguardAgentState:
     # Current vibe (read from observation)
     current_vibe: str = "default"
 
+    # Role switching guardrails (for smart-role logic)
+    last_role_switch_step: int = 0
+    role_lock_until_step: int = 0
+
     step_count: int = 0
 
     # Position tracking (origin-relative)
@@ -220,6 +224,10 @@ class CogsguardAgentState:
     _gear_attempt_step: int = 0  # Step when we last tried to get gear
     _resources_deposited_since_gear_attempt: int = 0  # Resources deposited since last gear attempt
     _gear_attempts_failed: int = 0  # Count of failed gear acquisition attempts (for scrambler)
+
+    # Option execution state
+    active_option_id: int = -1
+    active_option_ticks: int = 0
 
     # Energy costs (can be overridden based on game config)
     MOVE_ENERGY_COST: int = 2  # Default move energy cost

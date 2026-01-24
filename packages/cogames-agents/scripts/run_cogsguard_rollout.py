@@ -33,6 +33,7 @@ def run_rollout(
     seed: int,
     recipe_module: str,
     policy_uri: str,
+    allow_missing_roles: bool,
 ) -> int:
     harness = DebugHarness.from_recipe(
         recipe_module=recipe_module,
@@ -230,22 +231,23 @@ def run_rollout(
         return 1
     if neutral_charger_mismatches:
         return 1
-    if expected_roles - observed_roles:
-        return 1
-    if role_stats["miner"]["mine_attempts"] == 0 or role_stats["miner"]["mine_mismatches"] > 0:
-        return 1
-    if role_stats["miner"]["deposit_attempts"] == 0:
-        return 1
-    if role_stats["aligner"]["align_attempts"] == 0 or role_stats["aligner"]["align_mismatches"] > 0:
-        return 1
-    if role_stats["aligner"]["align_cogs_targets"] > 0:
-        return 1
-    if role_stats["scrambler"]["scramble_attempts"] == 0 or role_stats["scrambler"]["scramble_mismatches"] > 0:
-        return 1
-    if role_stats["scrambler"]["scramble_cogs_targets"] > 0:
-        return 1
-    if role_stats["scout"]["max_structures_seen"] < 5:
-        return 1
+    if not allow_missing_roles:
+        if expected_roles - observed_roles:
+            return 1
+        if role_stats["miner"]["mine_attempts"] == 0 or role_stats["miner"]["mine_mismatches"] > 0:
+            return 1
+        if role_stats["miner"]["deposit_attempts"] == 0:
+            return 1
+        if role_stats["aligner"]["align_attempts"] == 0 or role_stats["aligner"]["align_mismatches"] > 0:
+            return 1
+        if role_stats["aligner"]["align_cogs_targets"] > 0:
+            return 1
+        if role_stats["scrambler"]["scramble_attempts"] == 0 or role_stats["scrambler"]["scramble_mismatches"] > 0:
+            return 1
+        if role_stats["scrambler"]["scramble_cogs_targets"] > 0:
+            return 1
+        if role_stats["scout"]["max_structures_seen"] < 5:
+            return 1
     return 0
 
 
@@ -260,6 +262,7 @@ def main() -> int:
         "--policy-uri",
         default="metta://policy/cogsguard?miner=4&scout=2&aligner=2&scrambler=2",
     )
+    parser.add_argument("--allow-missing-roles", action="store_true")
     args = parser.parse_args()
 
     return run_rollout(
@@ -269,6 +272,7 @@ def main() -> int:
         seed=args.seed,
         recipe_module=args.recipe,
         policy_uri=args.policy_uri,
+        allow_missing_roles=args.allow_missing_roles,
     )
 
 
