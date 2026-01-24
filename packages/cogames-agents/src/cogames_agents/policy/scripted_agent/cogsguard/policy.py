@@ -957,7 +957,7 @@ class CogsguardPolicy(MultiAgentPolicy):
     remaining agents get "gear" vibe (which picks a random role).
     """
 
-    short_names = ["cogsguard"]
+    short_names = ["cogsguard_py"]
 
     def __init__(
         self,

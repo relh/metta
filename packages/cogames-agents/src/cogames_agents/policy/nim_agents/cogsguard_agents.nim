@@ -407,7 +407,6 @@ proc newCogsguardAgent*(agentId: int, environmentConfig: string): CogsguardAgent
   result.hub = none(Location)
   result.chest = none(Location)
   result.actionIds = initTable[string, int]()
-
   for id, name in config.config.actions:
     result.actionIds[name] = id
 

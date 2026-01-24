@@ -56,7 +56,7 @@ class RaceCarAgentsMultiPolicy(NimMultiAgentPolicy):
 
 
 class LadyBugAgentsMultiPolicy(NimMultiAgentPolicy):
-    short_names = ["nim_ladybug"]
+    short_names = ["ladybug"]
 
     def __init__(self, policy_env_info: PolicyEnvInterface, agent_ids: Sequence[int] | None = None):
         super().__init__(
@@ -67,9 +67,14 @@ class LadyBugAgentsMultiPolicy(NimMultiAgentPolicy):
 
 
 class CogsguardAgentsMultiPolicy(NimMultiAgentPolicy):
-    short_names = ["nim_cogsguard"]
+    short_names = ["cogsguard"]
 
-    def __init__(self, policy_env_info: PolicyEnvInterface, agent_ids: Sequence[int] | None = None):
+    def __init__(
+        self,
+        policy_env_info: PolicyEnvInterface,
+        agent_ids: Sequence[int] | None = None,
+        **_: object,
+    ):
         super().__init__(
             policy_env_info,
             nim_policy_factory=na.CogsguardPolicy,

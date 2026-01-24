@@ -440,7 +440,7 @@ class UnclippingPolicy(MultiAgentPolicy):
     It handles multiple agents, each with their own UnclippingAgent instance.
     """
 
-    short_names = ["ladybug"]
+    short_names = ["ladybug_py"]
 
     def __init__(
         self,

@@ -616,6 +616,7 @@ requires-dist = [
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "questionary", specifier = ">=2.0.1" },
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "scipy", specifier = ">=1.15.3" },
