@@ -13,6 +13,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.models.job_request import JobRequest, JobType
+from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -129,12 +130,10 @@ def create_episode_job(job: JobRequest) -> str:
         spec=client.V1JobSpec(
             # No retries for now
             backoff_limit=0,
-            # Kill job if it runs longer than 3 hours. Worst case: 10k steps, 4 agents in
-            # sequence, 250ms each = 10k seconds (~2.8h), so 3h gives some headroom.
             # The k8s default may give a grace period (SIGTERM before SIGKILL). The orchestrator
             # has a longer failsafe timeout (TASK_TIMEOUT_MINUTES, default 3.5h) that force-kills
             # if this doesn't fire.
-            active_deadline_seconds=3 * 60 * 60,
+            active_deadline_seconds=JOB_TIMEOUT_SECONDS,
             # Auto-delete job 1 hour after completion (backup; watcher deletes immediately)
             # Longer TTL gives watcher time to catch up if it restarts
             ttl_seconds_after_finished=3600,
