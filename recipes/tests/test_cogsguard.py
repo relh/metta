@@ -10,6 +10,7 @@ import random
 import pytest
 
 from cogames.cogs_vs_clips.stations import COGSGUARD_ELEMENTS, COGSGUARD_GEAR
+from metta.rl.training.teacher import TeacherConfig
 
 # Import after cogsguard to avoid circular import issues
 from mettagrid.simulator import Simulation
@@ -155,3 +156,14 @@ def test_environment_scales_with_agents(num_agents: int) -> None:
         sim.step()
 
     assert sim.current_step == 3
+
+
+def test_train_with_smart_gear_teacher_policy_uri() -> None:
+    teacher_uri = "metta://policy/cogsguard?gear=10"
+    teacher = TeacherConfig(policy_uri=teacher_uri, mode="sliced_cloner")
+
+    tool = cogsguard.train(teacher=teacher)
+
+    assert tool.training_env.supervisor_policy_uri == teacher_uri
+    assert tool.trainer.losses.sliced_scripted_cloner.enabled
+    assert tool.scheduler is not None
