@@ -72,7 +72,7 @@ Observatory local development.
   metta observatory tournament       # Tournament commissioner (creates matches, updates scores)
 
 [bold]Upload policy:[/bold]
-  uv run cogames submit -p class=scripted_baseline --server {LOCAL_BACKEND_URL} --skip-validation -n <your-policy-name>
+  uv run cogames submit -p baseline --server {LOCAL_BACKEND_URL} --skip-validation -n <your-policy-name>
 
 [bold]Submit test jobs:[/bold]
   uv run python app_backend/scripts/submit_test_jobs.py --policy-uri metta://policy/<your-policy-name>

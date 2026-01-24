@@ -326,36 +326,36 @@ agents.
 
 ```bash
 # Single agent, standard difficulty (63.5% success)
-uv run cogames play --mission evals.collect_resources_classic -p scripted_baseline --cogs 1
+uv run cogames play --mission evals.collect_resources_classic -p baseline --cogs 1
 
 # 4 agents, optimal configuration (54.9% success!)
-uv run cogames play --mission evals.oxygen_bottleneck -p scripted_baseline --cogs 4
+uv run cogames play --mission evals.oxygen_bottleneck -p baseline --cogs 4
 
 # Energy crisis test (59.6% success)
-uv run cogames play --mission evals.energy_starved -p scripted_baseline --cogs 2
+uv run cogames play --mission evals.energy_starved -p baseline --cogs 2
 ```
 
 ### Test UnclippingAgent
 
 ```bash
 # Silicon unclipping (57.7% success)
-uv run cogames play --mission evals.energy_starved -p scripted_unclipping --cogs 1 --difficulty clipped_silicon
+uv run cogames play --mission evals.energy_starved -p ladybug --cogs 1 --difficulty clipped_silicon
 
 # Oxygen unclipping (50% success)
-uv run cogames play --mission evals.energy_starved -p scripted_unclipping --cogs 2 --difficulty clipped_oxygen
+uv run cogames play --mission evals.energy_starved -p ladybug --cogs 2 --difficulty clipped_oxygen
 
 # Multi-agent optimal (45% success, 4 agents)
-uv run cogames play --mission evals.energy_starved -p scripted_unclipping --cogs 4
+uv run cogames play --mission evals.energy_starved -p ladybug --cogs 4
 ```
 
 ### Debug Carbon Unclipping Failure
 
 ```bash
 # Carbon unclipping (0% success - BROKEN!)
-uv run cogames play --mission evals.energy_starved -p scripted_unclipping --cogs 1 --difficulty clipped_carbon --steps 2000
+uv run cogames play --mission evals.energy_starved -p ladybug --cogs 1 --difficulty clipped_carbon --steps 2000
 
 # Germanium unclipping (2% success - BROKEN!)
-uv run cogames play --mission evals.energy_starved -p scripted_unclipping --cogs 1 --difficulty clipped_germanium --steps 2000
+uv run cogames play --mission evals.energy_starved -p ladybug --cogs 1 --difficulty clipped_germanium --steps 2000
 ```
 
 ---
@@ -383,7 +383,7 @@ uv run python packages/cogames/scripts/evaluate_scripted_agents.py
 
 ### BaselineAgent
 
-**File**: `packages/cogames/src/cogames/policy/scripted_agent/baseline_agent.py`
+**File**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/baseline_agent.py`
 
 **Core Features**:
 
@@ -409,7 +409,7 @@ uv run python packages/cogames/scripts/evaluate_scripted_agents.py
 
 ### UnclippingAgent (extends BaselineAgent)
 
-**File**: `packages/cogames/src/cogames/policy/scripted_agent/unclipping_agent.py`
+**File**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/unclipping_agent.py`
 
 **Added Features**:
 
