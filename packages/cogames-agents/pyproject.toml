@@ -8,6 +8,16 @@ version = "0.0.1"
 description = "Optional agent policies for CoGames"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Metta AI" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+]
+urls = { Homepage = "https://github.com/Metta-AI/metta/tree/main/packages/cogames-agents", Repository = "https://github.com/Metta-AI/metta" }
 dependencies = ["cogames>=0.0.1", "mettagrid==0.2.0.58", "numpy>=2.0.0"]
 
 [tool.setuptools.packages.find]
@@ -18,7 +28,18 @@ include = ["cogames_agents", "cogames_agents.*"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"cogames_agents" = ["py.typed"]
+"cogames_agents" = [
+  "py.typed",
+  # Nim source files for building
+  "policy/nim_agents/*.nim",
+  "policy/nim_agents/*.nims",
+  "policy/nim_agents/nimby.lock",
+  # Compiled Nim binaries
+  "policy/nim_agents/bindings/generated/*.so",
+  "policy/nim_agents/bindings/generated/*.dylib",
+  "policy/nim_agents/bindings/generated/*.dll",
+  "policy/nim_agents/bindings/generated/*.py",
+]
 
 [tool.uv]
 cache-keys = [

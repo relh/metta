@@ -1,0 +1,7 @@
+# Include Nim source files for building from source distribution
+recursive-include src/cogames_agents/policy/nim_agents *.nim *.nims
+include src/cogames_agents/policy/nim_agents/nimby.lock
+
+# Exclude build artifacts
+prune src/cogames_agents/policy/nim_agents/nimbledeps
+prune src/cogames_agents/policy/nim_agents/bindings/generated
