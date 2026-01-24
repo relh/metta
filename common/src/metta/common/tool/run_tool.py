@@ -20,7 +20,7 @@ import signal
 import sys
 import tempfile
 import traceback
-from typing import Any
+from typing import Any, get_type_hints
 
 from pydantic import BaseModel, TypeAdapter
 from rich.console import Console
@@ -526,6 +526,8 @@ constructor/function vs configuration overrides based on introspection.
             func_kwargs: dict[str, Any] = {}
             consumed_keys: set[str] = set()
 
+            resolved_hints = get_type_hints(tool_maker)
+
             if known_args.verbose and (cli_args or nested_cli):
                 func_name = getattr(tool_maker, "__name__", str(tool_maker))
                 output_info(f"\n{cyan(f'Creating {func_name}:')}")
@@ -552,11 +554,15 @@ constructor/function vs configuration overrides based on introspection.
                     data = base if base is not None else provided
 
                     # If annotated as a Pydantic model class, validate against it.
+                    # Use p.annotation directly for the isclass check since resolved_hints
+                    # returns strings when `from __future__ import annotations` is used.
                     ann = p.annotation
                     try:
                         if inspect.isclass(ann) and issubclass(ann, BaseModel):
                             val = ann.model_validate(data)
                         else:
+                            # For non-BaseModel types (e.g. Optional[SomeModel]), use resolved hints
+                            ann = resolved_hints.get(name, p.annotation)
                             val = type_parse(data, ann)
                     except Exception:
                         # Fall back to raw data; better to surface error downstream than to crash here.
