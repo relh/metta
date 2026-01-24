@@ -12,8 +12,8 @@ from cogames_agents.policy.scripted_agent.cogsguard.types import (
     StructureInfo,
     StructureType,
 )
+from cogames_agents.policy.scripted_agent.types import CellType
 
-from cogames.policy.scripted_agent.types import CellType
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 

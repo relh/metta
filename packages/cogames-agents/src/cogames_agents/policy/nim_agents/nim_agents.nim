@@ -1,6 +1,6 @@
 import
   genny, fidget2/measure,
-  random_agents, thinky_agents, racecar_agents, ladybug_agent
+  random_agents, thinky_agents, racecar_agents, ladybug_agent, cogsguard_agents
 
 
 proc ctrlCHandler() {.noconv.} =
@@ -49,6 +49,12 @@ exportRefObject LadybugPolicy:
     newLadybugPolicy(string)
   procs:
     stepBatch(LadybugPolicy, pointer, int, int, int, int, pointer, int, pointer)
+
+exportRefObject CogsguardPolicy:
+  constructor:
+    newCogsguardPolicy(string)
+  procs:
+    stepBatch(CogsguardPolicy, pointer, int, int, int, int, pointer, int, pointer)
 
 writeFiles("bindings/generated", "NimAgents")
 

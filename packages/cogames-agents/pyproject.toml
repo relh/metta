@@ -28,6 +28,7 @@ cache-keys = [
   { file = "src/cogames_agents/policy/nim_agents/random_agents.nim" },
   { file = "src/cogames_agents/policy/nim_agents/thinky_agents.nim" },
   { file = "src/cogames_agents/policy/nim_agents/racecar_agents.nim" },
+  { file = "src/cogames_agents/policy/nim_agents/cogsguard_agents.nim" },
 ]
 
 [tool.uv.sources]
