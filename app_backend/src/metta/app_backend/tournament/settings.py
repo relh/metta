@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 POLL_INTERVAL_SECONDS: float = 30.0
 POLL_INTERVAL_FAST_SECONDS: float = 2.0
-MAX_OUTSTANDING_MATCHES: int = 5
+MAX_OUTSTANDING_MATCHES: int = 20
 PROMOTION_MIN_SCORE: float = 0.1
 
 # Job timeout for episode runner k8s jobs. Worst case: 10k steps, 4 agents in
