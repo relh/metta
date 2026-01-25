@@ -119,10 +119,102 @@ def k8s_node_count_monitor() -> dict:
     }
 
 
+def job_queue_buildup_monitor() -> dict:
+    """Monitor for job queue buildup approaching backpressure limit.
+
+    Alerts when outstanding jobs (pending + dispatched + running) are building up,
+    indicating the system can't process jobs fast enough. Backpressure kicks in at 200.
+    """
+    return {
+        "name": "[Tournament] Job Queue Buildup: {{value}} outstanding",
+        "type": "query alert",
+        "query": ("avg(last_5m):sum:job.outstanding_count{service:observatory-backend} > 150"),
+        "message": (
+            "{{value}} outstanding jobs (limit: 200). Jobs may be processing slowly or failing.\n\n"
+            "Check: https://observatory.softmax-research.net/episode-jobs\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 180, "warning": 150},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
+            "include_tags": False,
+        },
+    }
+
+
+def job_failure_rate_monitor() -> dict:
+    """Monitor for high job failure rate.
+
+    Alerts when the rate of job failures is elevated, indicating systematic issues
+    with job execution (OOM, policy errors, timeouts, etc).
+    """
+    return {
+        "name": "[Tournament] High Job Failure Rate",
+        "type": "query alert",
+        "query": (
+            "sum(last_15m):sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count() > 10"
+        ),
+        "message": (
+            "{{value}} jobs failed in the last 15 minutes.\n\n"
+            "Check error types in Datadog or: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 20, "warning": 10},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
+def job_stuck_pending_monitor() -> dict:
+    """Monitor for jobs stuck in pending/dispatched state.
+
+    Alerts when there are pending or dispatched jobs but no running jobs,
+    indicating the job runner may be stuck or k8s scheduling issues.
+    """
+    return {
+        "name": "[Tournament] Jobs Stuck - No Running Jobs",
+        "type": "query alert",
+        "query": (
+            "avg(last_10m):"
+            "(sum:job.outstanding_count{status:pending,service:observatory-backend} + "
+            "sum:job.outstanding_count{status:dispatched,service:observatory-backend}) - "
+            "sum:job.outstanding_count{status:running,service:observatory-backend} > 5"
+        ),
+        "message": (
+            "Jobs are queued but none are running. Possible issues:\n"
+            "- K8s node scaling problems\n"
+            "- Job dispatcher issues\n"
+            "- Resource constraints\n\n"
+            "Check k8s pods: `kubectl get pods -n metta | grep episode`\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 5},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
 ALL_MONITORS = [
     k8s_deployment_replicas_monitor,
     k8s_crashloopbackoff_monitor,
     k8s_node_count_monitor,
+    job_queue_buildup_monitor,
+    job_failure_rate_monitor,
+    job_stuck_pending_monitor,
 ]
 
 

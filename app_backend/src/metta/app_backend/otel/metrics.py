@@ -53,18 +53,29 @@ class JobMetrics:
             unit="s",
         )
         self._running_counts: dict[str, int] = {}
+        self._outstanding_counts: dict[tuple[str, str], int] = {}
         meter.create_observable_gauge(
             "job.running_count",
             callbacks=[self._observe_running_count],
             description="Current number of running jobs",
             unit="1",
         )
+        meter.create_observable_gauge(
+            "job.outstanding_count",
+            callbacks=[self._observe_outstanding_count],
+            description="Jobs by status (pending/dispatched/running)",
+            unit="1",
+        )
 
     def _observe_running_count(self, options: CallbackOptions) -> Iterable[Observation]:
         del options
-        # Counts update on job transitions, so values can be stale between updates.
         snapshot = dict(self._running_counts)
         return [Observation(count, {"job_type": job_type}) for job_type, count in snapshot.items()]
+
+    def _observe_outstanding_count(self, options: CallbackOptions) -> Iterable[Observation]:
+        del options
+        snapshot = dict(self._outstanding_counts)
+        return [Observation(count, {"job_type": jt, "status": st}) for (jt, st), count in snapshot.items()]
 
     def _record_stage_duration(
         self,
@@ -115,15 +126,24 @@ class JobMetrics:
     async def update_running_counts(self, session: AsyncSession, job_types: set[JobType]) -> None:
         if not job_types:
             return
+
+        outstanding_statuses = [JobStatus.pending, JobStatus.dispatched, JobStatus.running]
         result = await session.execute(
-            select(JobRequest.job_type, func.count())
-            .where(JobRequest.status == JobStatus.running)
+            select(JobRequest.job_type, JobRequest.status, func.count())
+            .where(col(JobRequest.status).in_(outstanding_statuses))
             .where(col(JobRequest.job_type).in_(job_types))
-            .group_by(JobRequest.job_type)
+            .group_by(JobRequest.job_type, JobRequest.status)
         )
-        counts = {job_type: count for job_type, count in result.all()}
+
+        counts_by_type_status: dict[tuple[JobType, JobStatus], int] = {}
+        for job_type, status, count in result.all():
+            counts_by_type_status[(job_type, status)] = count
+
         for job_type in job_types:
-            self._running_counts[job_type.value] = counts.get(job_type, 0)
+            for status in outstanding_statuses:
+                key = (job_type.value, status.value)
+                self._outstanding_counts[key] = counts_by_type_status.get((job_type, status), 0)
+            self._running_counts[job_type.value] = counts_by_type_status.get((job_type, JobStatus.running), 0)
 
 
 @lru_cache
