@@ -26,7 +26,15 @@
       "Bash(git branch)",
       "Bash(git branch --list:*)",
       "Bash(git branch -a)",
-      "Bash(git branch -r)"
+      "Bash(git branch -r)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)"
     ],
     "deny": []
   },
