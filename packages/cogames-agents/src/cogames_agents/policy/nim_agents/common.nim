@@ -369,6 +369,119 @@ proc registerProtocolFeature(feature: ConfigFeature; prefix: string;
   dest[resource] = feature.id
   return true
 
+proc updateRecipeFromProtocol*(cfg: Config; feature: FeatureValue; recipe: var RecipeInfo) =
+  let fid = feature.featureId
+  let value = feature.value
+  if cfg.features.protocolInputEnergy != 0 and fid == cfg.features.protocolInputEnergy:
+    recipe.energyCost = value
+  elif cfg.features.protocolInputCarbon != 0 and fid == cfg.features.protocolInputCarbon:
+    recipe.carbonCost = value
+  elif cfg.features.protocolInputOxygen != 0 and fid == cfg.features.protocolInputOxygen:
+    recipe.oxygenCost = value
+  elif cfg.features.protocolInputGermanium != 0 and fid == cfg.features.protocolInputGermanium:
+    recipe.germaniumCost = value
+  elif cfg.features.protocolInputSilicon != 0 and fid == cfg.features.protocolInputSilicon:
+    recipe.siliconCost = value
+  elif cfg.features.protocolInputHeart != 0 and fid == cfg.features.protocolInputHeart:
+    recipe.heartCost = value
+  elif cfg.features.protocolInputDecoder != 0 and fid == cfg.features.protocolInputDecoder:
+    recipe.decoderCost = value
+  elif cfg.features.protocolInputModulator != 0 and fid == cfg.features.protocolInputModulator:
+    recipe.modulatorCost = value
+  elif cfg.features.protocolInputResonator != 0 and fid == cfg.features.protocolInputResonator:
+    recipe.resonatorCost = value
+  elif cfg.features.protocolInputScrambler != 0 and fid == cfg.features.protocolInputScrambler:
+    recipe.scramblerCost = value
+  elif cfg.features.protocolOutputEnergy != 0 and fid == cfg.features.protocolOutputEnergy:
+    recipe.energyOutput = value
+  elif cfg.features.protocolOutputCarbon != 0 and fid == cfg.features.protocolOutputCarbon:
+    recipe.carbonOutput = value
+  elif cfg.features.protocolOutputOxygen != 0 and fid == cfg.features.protocolOutputOxygen:
+    recipe.oxygenOutput = value
+  elif cfg.features.protocolOutputGermanium != 0 and fid == cfg.features.protocolOutputGermanium:
+    recipe.germaniumOutput = value
+  elif cfg.features.protocolOutputSilicon != 0 and fid == cfg.features.protocolOutputSilicon:
+    recipe.siliconOutput = value
+  elif cfg.features.protocolOutputHeart != 0 and fid == cfg.features.protocolOutputHeart:
+    recipe.heartOutput = value
+  elif cfg.features.protocolOutputDecoder != 0 and fid == cfg.features.protocolOutputDecoder:
+    recipe.decoderOutput = value
+  elif cfg.features.protocolOutputModulator != 0 and fid == cfg.features.protocolOutputModulator:
+    recipe.modulatorOutput = value
+  elif cfg.features.protocolOutputResonator != 0 and fid == cfg.features.protocolOutputResonator:
+    recipe.resonatorOutput = value
+  elif cfg.features.protocolOutputScrambler != 0 and fid == cfg.features.protocolOutputScrambler:
+    recipe.scramblerOutput = value
+
+proc assignProtocolTables*(
+  cfg: Config,
+  feature: FeatureValue,
+  inputs: var Table[string, int],
+  outputs: var Table[string, int]
+) =
+  let fid = feature.featureId
+  let value = feature.value
+  if cfg.features.protocolInputEnergy != 0 and fid == cfg.features.protocolInputEnergy:
+    inputs["energy"] = value
+  elif cfg.features.protocolInputCarbon != 0 and fid == cfg.features.protocolInputCarbon:
+    inputs["carbon"] = value
+  elif cfg.features.protocolInputOxygen != 0 and fid == cfg.features.protocolInputOxygen:
+    inputs["oxygen"] = value
+  elif cfg.features.protocolInputGermanium != 0 and fid == cfg.features.protocolInputGermanium:
+    inputs["germanium"] = value
+  elif cfg.features.protocolInputSilicon != 0 and fid == cfg.features.protocolInputSilicon:
+    inputs["silicon"] = value
+  elif cfg.features.protocolInputHeart != 0 and fid == cfg.features.protocolInputHeart:
+    inputs["heart"] = value
+  elif cfg.features.protocolInputHp != 0 and fid == cfg.features.protocolInputHp:
+    inputs["hp"] = value
+  elif cfg.features.protocolInputDecoder != 0 and fid == cfg.features.protocolInputDecoder:
+    inputs["decoder"] = value
+  elif cfg.features.protocolInputModulator != 0 and fid == cfg.features.protocolInputModulator:
+    inputs["modulator"] = value
+  elif cfg.features.protocolInputResonator != 0 and fid == cfg.features.protocolInputResonator:
+    inputs["resonator"] = value
+  elif cfg.features.protocolInputScrambler != 0 and fid == cfg.features.protocolInputScrambler:
+    inputs["scrambler"] = value
+  elif cfg.features.protocolInputMiner != 0 and fid == cfg.features.protocolInputMiner:
+    inputs["miner"] = value
+  elif cfg.features.protocolInputScout != 0 and fid == cfg.features.protocolInputScout:
+    inputs["scout"] = value
+  elif cfg.features.protocolInputAligner != 0 and fid == cfg.features.protocolInputAligner:
+    inputs["aligner"] = value
+  elif cfg.features.protocolInputInfluence != 0 and fid == cfg.features.protocolInputInfluence:
+    inputs["influence"] = value
+  elif cfg.features.protocolOutputEnergy != 0 and fid == cfg.features.protocolOutputEnergy:
+    outputs["energy"] = value
+  elif cfg.features.protocolOutputCarbon != 0 and fid == cfg.features.protocolOutputCarbon:
+    outputs["carbon"] = value
+  elif cfg.features.protocolOutputOxygen != 0 and fid == cfg.features.protocolOutputOxygen:
+    outputs["oxygen"] = value
+  elif cfg.features.protocolOutputGermanium != 0 and fid == cfg.features.protocolOutputGermanium:
+    outputs["germanium"] = value
+  elif cfg.features.protocolOutputSilicon != 0 and fid == cfg.features.protocolOutputSilicon:
+    outputs["silicon"] = value
+  elif cfg.features.protocolOutputHeart != 0 and fid == cfg.features.protocolOutputHeart:
+    outputs["heart"] = value
+  elif cfg.features.protocolOutputHp != 0 and fid == cfg.features.protocolOutputHp:
+    outputs["hp"] = value
+  elif cfg.features.protocolOutputDecoder != 0 and fid == cfg.features.protocolOutputDecoder:
+    outputs["decoder"] = value
+  elif cfg.features.protocolOutputModulator != 0 and fid == cfg.features.protocolOutputModulator:
+    outputs["modulator"] = value
+  elif cfg.features.protocolOutputResonator != 0 and fid == cfg.features.protocolOutputResonator:
+    outputs["resonator"] = value
+  elif cfg.features.protocolOutputScrambler != 0 and fid == cfg.features.protocolOutputScrambler:
+    outputs["scrambler"] = value
+  elif cfg.features.protocolOutputMiner != 0 and fid == cfg.features.protocolOutputMiner:
+    outputs["miner"] = value
+  elif cfg.features.protocolOutputScout != 0 and fid == cfg.features.protocolOutputScout:
+    outputs["scout"] = value
+  elif cfg.features.protocolOutputAligner != 0 and fid == cfg.features.protocolOutputAligner:
+    outputs["aligner"] = value
+  elif cfg.features.protocolOutputInfluence != 0 and fid == cfg.features.protocolOutputInfluence:
+    outputs["influence"] = value
+
 proc ctrlCHandler*() {.noconv.} =
   ## Handle ctrl-c signal to exit cleanly.
   echo "\nNim DLL caught ctrl-c, exiting..."

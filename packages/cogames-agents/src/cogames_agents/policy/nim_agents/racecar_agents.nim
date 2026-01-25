@@ -87,47 +87,7 @@ proc getActiveRecipe(agent: RaceCarAgent): RecipeInfo {.measure.} =
     # Get the required resources.
     let assemblerFeatures = agent.map[location]
     for feature in assemblerFeatures:
-      if feature.featureId == agent.cfg.features.protocolInputEnergy:
-        result.energyCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputCarbon:
-        result.carbonCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputOxygen:
-        result.oxygenCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputGermanium:
-        result.germaniumCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputSilicon:
-        result.siliconCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputHeart:
-        result.heartCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputDecoder:
-        result.decoderCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputModulator:
-        result.modulatorCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputResonator:
-        result.resonatorCost = feature.value
-      elif feature.featureId == agent.cfg.features.protocolInputScrambler:
-        result.scramblerCost = feature.value
-
-      elif feature.featureId == agent.cfg.features.protocolOutputEnergy:
-        result.energyOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputCarbon:
-        result.carbonOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputOxygen:
-        result.oxygenOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputGermanium:
-        result.germaniumOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputSilicon:
-        result.siliconOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputHeart:
-        result.heartOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputDecoder:
-        result.decoderOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputModulator:
-        result.modulatorOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputResonator:
-        result.resonatorOutput = feature.value
-      elif feature.featureId == agent.cfg.features.protocolOutputScrambler:
-        result.scramblerOutput = feature.value
+      updateRecipeFromProtocol(agent.cfg, feature, result)
 
 proc newRaceCarAgent*(agentId: int, environmentConfig: string): RaceCarAgent =
   ## Create a new racecar agent, the fastest and the smartest agent.

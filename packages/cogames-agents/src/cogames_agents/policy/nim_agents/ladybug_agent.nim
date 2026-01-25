@@ -137,16 +137,6 @@ proc tagName(cfg: Config, tagId: int): string =
     return cfg.config.tags[tagId]
   ""
 
-proc maybeAssign(
-  table: var Table[string, int],
-  featureField: int,
-  key: string,
-  featureId: int,
-  value: int
-) =
-  if featureField != 0 and featureId == featureField:
-    table[key] = value
-
 proc clearCachedPath(agent: LadybugAgent) =
   agent.state.cachedPath = @[]
   agent.state.cachedPathTarget = none(Location)
@@ -243,37 +233,7 @@ proc buildObservedObject(agent: LadybugAgent, features: seq[FeatureValue]): Obse
     elif fv.featureId == agent.cfg.features.frozen:
       result.agentFrozen = fv.value
     else:
-      let fid = fv.featureId
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputEnergy, "energy", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputCarbon, "carbon", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputOxygen, "oxygen", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputGermanium, "germanium", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputSilicon, "silicon", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputHeart, "heart", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputHp, "hp", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputDecoder, "decoder", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputModulator, "modulator", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputResonator, "resonator", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputScrambler, "scrambler", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputMiner, "miner", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputScout, "scout", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputAligner, "aligner", fid, fv.value)
-      maybeAssign(result.protocolInputs, agent.cfg.features.protocolInputInfluence, "influence", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputEnergy, "energy", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputCarbon, "carbon", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputOxygen, "oxygen", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputGermanium, "germanium", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputSilicon, "silicon", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputHeart, "heart", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputHp, "hp", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputDecoder, "decoder", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputModulator, "modulator", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputResonator, "resonator", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputScrambler, "scrambler", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputMiner, "miner", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputScout, "scout", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputAligner, "aligner", fid, fv.value)
-      maybeAssign(result.protocolOutputs, agent.cfg.features.protocolOutputInfluence, "influence", fid, fv.value)
+      assignProtocolTables(agent.cfg, fv, result.protocolInputs, result.protocolOutputs)
 
   if tagIds.len > 0:
     result.name = tagName(agent.cfg, tagIds[0])
