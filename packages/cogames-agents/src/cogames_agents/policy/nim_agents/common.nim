@@ -137,10 +137,15 @@ type
     protocolInputGermanium*: int
     protocolInputSilicon*: int
     protocolInputHeart*: int
+    protocolInputHp*: int
     protocolInputDecoder*: int
     protocolInputModulator*: int
     protocolInputResonator*: int
     protocolInputScrambler*: int
+    protocolInputMiner*: int
+    protocolInputScout*: int
+    protocolInputAligner*: int
+    protocolInputInfluence*: int
 
     protocolOutputEnergy*: int
     protocolOutputCarbon*: int
@@ -148,10 +153,15 @@ type
     protocolOutputGermanium*: int
     protocolOutputSilicon*: int
     protocolOutputHeart*: int
+    protocolOutputHp*: int
     protocolOutputDecoder*: int
     protocolOutputModulator*: int
     protocolOutputResonator*: int
     protocolOutputScrambler*: int
+    protocolOutputMiner*: int
+    protocolOutputScout*: int
+    protocolOutputAligner*: int
+    protocolOutputInfluence*: int
 
   RecipeInfo* = object
     pattern*: seq[int] # In vibe indices
@@ -463,6 +473,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolInputSilicon = feature.id
       of "protocol_input:heart":
         result.features.protocolInputHeart = feature.id
+      of "protocol_input:hp":
+        result.features.protocolInputHp = feature.id
       of "protocol_input:decoder":
         result.features.protocolInputDecoder = feature.id
       of "protocol_input:modulator":
@@ -471,6 +483,14 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolInputResonator = feature.id
       of "protocol_input:scrambler":
         result.features.protocolInputScrambler = feature.id
+      of "protocol_input:miner":
+        result.features.protocolInputMiner = feature.id
+      of "protocol_input:scout":
+        result.features.protocolInputScout = feature.id
+      of "protocol_input:aligner":
+        result.features.protocolInputAligner = feature.id
+      of "protocol_input:influence":
+        result.features.protocolInputInfluence = feature.id
       of "protocol_output:energy":
         result.features.protocolOutputEnergy = feature.id
       of "protocol_output:carbon":
@@ -483,6 +503,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolOutputSilicon = feature.id
       of "protocol_output:heart":
         result.features.protocolOutputHeart = feature.id
+      of "protocol_output:hp":
+        result.features.protocolOutputHp = feature.id
       of "protocol_output:decoder":
         result.features.protocolOutputDecoder = feature.id
       of "protocol_output:modulator":
@@ -491,6 +513,14 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolOutputResonator = feature.id
       of "protocol_output:scrambler":
         result.features.protocolOutputScrambler = feature.id
+      of "protocol_output:miner":
+        result.features.protocolOutputMiner = feature.id
+      of "protocol_output:scout":
+        result.features.protocolOutputScout = feature.id
+      of "protocol_output:aligner":
+        result.features.protocolOutputAligner = feature.id
+      of "protocol_output:influence":
+        result.features.protocolOutputInfluence = feature.id
       else:
         echo "Unknown feature: ", feature.name
 
