@@ -71,9 +71,18 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         # Check if last action succeeded (for retry logic)
         # Actions can fail due to insufficient energy - agents auto-regen so just retry
         if s._pending_action_type == "scramble":
+            target = s._pending_action_target
             if s.check_action_success():
                 if DEBUG:
                     print(f"[A{s.agent_id}] SCRAMBLER: Previous scramble succeeded!")
+                if target is not None and self._smart_role_coordinator is not None:
+                    assembler_pos = s.stations.get("assembler")
+                    self._smart_role_coordinator.register_charger_alignment(
+                        target,
+                        None,
+                        assembler_pos,
+                        s.step_count,
+                    )
             elif s.should_retry_action(MAX_RETRIES):
                 retry_count = s.increment_retry()
                 if DEBUG:
@@ -196,13 +205,13 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         So as long as miners deposit resources, scramblers can get hearts.
         If we've been trying to get hearts for too long, go explore instead.
         """
-        # If we've waited more than 20 steps for hearts, go explore instead
+        # If we've waited more than 40 steps for hearts, go explore instead
         # This prevents getting stuck when commons is out of resources
         if s._heart_wait_start == 0:
             s._heart_wait_start = s.step_count
-        if s.step_count - s._heart_wait_start > 20:
+        if s.step_count - s._heart_wait_start > 40:
             if DEBUG:
-                print(f"[A{s.agent_id}] SCRAMBLER: Waited 20+ steps for hearts, exploring instead")
+                print(f"[A{s.agent_id}] SCRAMBLER: Waited 40+ steps for hearts, exploring instead")
             s._heart_wait_start = 0
             return self._explore_for_chargers(s)
 
@@ -244,7 +253,6 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         # Collect chargers and sort by distance, skipping recently worked ones
         enemy_chargers: list[tuple[int, tuple[int, int]]] = []
-        neutral_chargers: list[tuple[int, tuple[int, int]]] = []
         any_chargers: list[tuple[int, tuple[int, int]]] = []
 
         if DEBUG and s.step_count % 20 == 1:
@@ -277,39 +285,52 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 if DEBUG and s.step_count % 20 == 1:
                     print("    ADD to enemy_chargers")
                 enemy_chargers.append((dist, pos))
-            elif charger.alignment is None or charger.alignment == "neutral":
-                neutral_chargers.append((dist, pos))
             else:
                 any_chargers.append((dist, pos))
 
         if DEBUG and s.step_count % 20 == 1:
-            print(f"  enemy_chargers={enemy_chargers} neutral={neutral_chargers} any={any_chargers}")
+            print(f"  enemy_chargers={enemy_chargers} any={any_chargers}")
 
         # First try enemy chargers (sorted by distance)
         if enemy_chargers:
             enemy_chargers.sort()
             if DEBUG:
                 print(f"[A{s.agent_id}] FIND_TARGET: Returning enemy charger at {enemy_chargers[0][1]}")
-            return enemy_chargers[0][1]
+            target_idx = 0
+            if self._smart_role_coordinator is not None:
+                scrambler_ids = sorted(
+                    agent_id
+                    for agent_id, snapshot in self._smart_role_coordinator.agent_snapshots.items()
+                    if snapshot.role == Role.SCRAMBLER
+                )
+                if scrambler_ids:
+                    target_idx = scrambler_ids.index(s.agent_id) if s.agent_id in scrambler_ids else 0
+            return enemy_chargers[target_idx % len(enemy_chargers)][1]
 
-        # Then try neutral chargers
-        if neutral_chargers:
-            neutral_chargers.sort()
-            if DEBUG:
-                print(f"[A{s.agent_id}] FIND_TARGET: Returning neutral charger at {neutral_chargers[0][1]}")
-            return neutral_chargers[0][1]
-
-        # Then try any non-cogs charger
+        # Then try any non-cogs charger (unknown alignment)
         if any_chargers:
             any_chargers.sort()
             if DEBUG:
                 print(f"[A{s.agent_id}] FIND_TARGET: Returning any charger at {any_chargers[0][1]}")
-            return any_chargers[0][1]
+            target_idx = 0
+            if self._smart_role_coordinator is not None:
+                scrambler_ids = sorted(
+                    agent_id
+                    for agent_id, snapshot in self._smart_role_coordinator.agent_snapshots.items()
+                    if snapshot.role == Role.SCRAMBLER
+                )
+                if scrambler_ids:
+                    target_idx = scrambler_ids.index(s.agent_id) if s.agent_id in scrambler_ids else 0
+            return any_chargers[target_idx % len(any_chargers)][1]
 
         return None
 
     def _explore_for_chargers(self, s: CogsguardAgentState) -> Action:
         """Explore aggressively to find more chargers spread around the map."""
+        frontier_action = self._explore_frontier(s)
+        if frontier_action is not None:
+            return frontier_action
+
         # Move in a direction based on agent ID and step count to spread out
         # Chargers are spread around the map, so cover different areas
         directions = ["north", "south", "east", "west"]

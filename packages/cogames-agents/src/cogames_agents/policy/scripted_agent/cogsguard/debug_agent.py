@@ -82,7 +82,7 @@ class DebugHarness:
         num_agents: int = 10,
         max_steps: int = 1000,
         seed: int = 42,
-        policy_uri: str = "metta://policy/cogsguard?scrambler=1&miner=4",
+        policy_uri: str = "metta://policy/role?scrambler=1&miner=4",
     ) -> "DebugHarness":
         """Create debug harness from a recipe module.
 
@@ -91,7 +91,7 @@ class DebugHarness:
             num_agents: Number of agents
             max_steps: Maximum simulation steps
             seed: Random seed
-            policy_uri: Policy URI with role counts (e.g., "metta://policy/cogsguard?miner=4&scrambler=1")
+            policy_uri: Policy URI with role counts (e.g., "metta://policy/role?miner=4&scrambler=1")
         """
         import importlib
 
@@ -108,7 +108,7 @@ class DebugHarness:
         env_cfg = make_env(num_agents=num_agents, max_steps=max_steps)
         policy_env_info = PolicyEnvInterface.from_mg_cfg(env_cfg)
 
-        # Load the cogsguard policy with role counts from URI
+        # Load the role policy with role counts from URI
         policy_spec = policy_spec_from_uri(policy_uri)
         multi_policy = initialize_or_load_policy(policy_env_info, policy_spec)
 

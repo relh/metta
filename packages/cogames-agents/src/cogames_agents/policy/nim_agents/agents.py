@@ -67,7 +67,7 @@ class LadyBugAgentsMultiPolicy(NimMultiAgentPolicy):
 
 
 class CogsguardAgentsMultiPolicy(NimMultiAgentPolicy):
-    short_names = ["cogsguard", "cogsguard_nim"]
+    short_names = ["role", "role_nim"]
 
     def __init__(
         self,
@@ -83,7 +83,7 @@ class CogsguardAgentsMultiPolicy(NimMultiAgentPolicy):
 
 
 class CogsguardAlignAllAgentsMultiPolicy(NimMultiAgentPolicy):
-    short_names = ["cogsguard_align_all"]
+    short_names = ["alignall"]
 
     def __init__(
         self,

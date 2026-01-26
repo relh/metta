@@ -159,7 +159,7 @@ def test_environment_scales_with_agents(num_agents: int) -> None:
 
 
 def test_train_with_smart_gear_teacher_policy_uri() -> None:
-    teacher_uri = "metta://policy/cogsguard?gear=10"
+    teacher_uri = "metta://policy/role?gear=10"
     teacher = TeacherConfig(policy_uri=teacher_uri, mode="sliced_cloner")
 
     tool = cogsguard.train(teacher=teacher)

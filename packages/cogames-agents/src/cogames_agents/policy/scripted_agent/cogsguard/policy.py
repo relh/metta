@@ -11,6 +11,7 @@ Agents use vibes to determine their behavior:
 from __future__ import annotations
 
 import random
+from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
@@ -44,6 +45,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action, AgentObservation, ObservationToken
 
 from .types import (
+    ROLE_TO_GEAR,
     ROLE_TO_STATION,
     CogsguardAgentState,
     CogsguardPhase,
@@ -62,6 +64,18 @@ VIBE_TO_ROLE = {
 }
 SMART_ROLE_SWITCH_COOLDOWN = 40
 SCRAMBLER_GEAR_PRIORITY_STEPS = 25
+
+_GLOBAL_COORDINATORS: dict[int, "SmartRoleCoordinator"] = {}
+
+
+def _shared_coordinator(policy_env_info: PolicyEnvInterface) -> "SmartRoleCoordinator":
+    key = id(policy_env_info)
+    coordinator = _GLOBAL_COORDINATORS.get(key)
+    if coordinator is None or coordinator.num_agents != policy_env_info.num_agents:
+        coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
+        _GLOBAL_COORDINATORS[key] = coordinator
+    return coordinator
+
 
 if TYPE_CHECKING:
     from mettagrid.simulator.interface import AgentObservation
@@ -112,14 +126,21 @@ class SmartRoleCoordinator:
 
     num_agents: int
     agent_snapshots: dict[int, SmartRoleAgentSnapshot] = field(default_factory=dict)
+    charger_alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
+    station_offsets: dict[str, tuple[int, int]] = field(default_factory=dict)
+    recent_scrambles: dict[tuple[int, int], int] = field(default_factory=dict)
 
     def update_agent(self, s: CogsguardAgentState) -> None:
+        assembler_pos = s.stations.get("assembler")
+        if assembler_pos is not None:
+            self._record_known_chargers(s, assembler_pos)
+            self._record_known_stations(s, assembler_pos)
+            self._apply_alignment_overrides(s, assembler_pos)
+            self._apply_station_overrides(s, assembler_pos)
         charger_counts = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
         for struct in s.get_structures_by_type(StructureType.CHARGER):
-            if struct.alignment in ("cogs", "clips", "neutral"):
-                charger_counts[struct.alignment] += 1
-            else:
-                charger_counts["unknown"] += 1
+            bucket = self._normalize_alignment(struct.alignment)
+            charger_counts[bucket] += 1
 
         known_structures = tuple(sorted({struct.structure_type.value for struct in s.structures.values()}))
         self.agent_snapshots[s.agent_id] = SmartRoleAgentSnapshot(
@@ -132,6 +153,123 @@ class SmartRoleCoordinator:
             influence_count=s.influence,
             charger_alignment_counts=charger_counts,
         )
+
+    def register_charger_alignment(
+        self,
+        pos: tuple[int, int],
+        alignment: Optional[str],
+        assembler_pos: Optional[tuple[int, int]],
+        step: Optional[int] = None,
+    ) -> None:
+        if assembler_pos is None:
+            return
+        offset = (pos[0] - assembler_pos[0], pos[1] - assembler_pos[1])
+        self.charger_alignment_overrides[offset] = alignment
+        if step is None:
+            return
+        if alignment is None:
+            self.recent_scrambles[offset] = step
+        elif alignment == "cogs":
+            self.recent_scrambles.pop(offset, None)
+
+    def recent_scramble_targets(
+        self,
+        assembler_pos: Optional[tuple[int, int]],
+        step: int,
+        *,
+        max_age: int = 200,
+    ) -> list[tuple[int, int]]:
+        if assembler_pos is None:
+            return []
+        targets: list[tuple[int, int]] = []
+        stale_offsets: list[tuple[int, int]] = []
+        for offset, scramble_step in self.recent_scrambles.items():
+            if step - scramble_step > max_age:
+                stale_offsets.append(offset)
+                continue
+            targets.append((assembler_pos[0] + offset[0], assembler_pos[1] + offset[1]))
+        for offset in stale_offsets:
+            self.recent_scrambles.pop(offset, None)
+        return targets
+
+    def _record_known_chargers(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+        for charger in s.get_structures_by_type(StructureType.CHARGER):
+            offset = (charger.position[0] - assembler_pos[0], charger.position[1] - assembler_pos[1])
+            if offset not in self.charger_alignment_overrides and charger.alignment is not None:
+                self.charger_alignment_overrides[offset] = charger.alignment
+
+    def _record_known_stations(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+        for name, pos in s.stations.items():
+            if pos is None or name in ("assembler", "charger"):
+                continue
+            if name not in self.station_offsets:
+                self.station_offsets[name] = (pos[0] - assembler_pos[0], pos[1] - assembler_pos[1])
+
+    def _apply_station_overrides(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+        if not self.station_offsets:
+            return
+        for name, offset in self.station_offsets.items():
+            if s.stations.get(name) is not None:
+                continue
+            pos = (assembler_pos[0] + offset[0], assembler_pos[1] + offset[1])
+            if not (0 <= pos[0] < s.map_height and 0 <= pos[1] < s.map_width):
+                continue
+            s.stations[name] = pos
+            if pos not in s.structures:
+                s.structures[pos] = StructureInfo(
+                    position=pos,
+                    structure_type=self._station_structure_type(name),
+                    name=name,
+                    last_seen_step=s.step_count,
+                )
+            s.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
+
+    def _apply_alignment_overrides(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+        if not self.charger_alignment_overrides:
+            return
+        for offset, alignment in self.charger_alignment_overrides.items():
+            pos = (assembler_pos[0] + offset[0], assembler_pos[1] + offset[1])
+            if not (0 <= pos[0] < s.map_height and 0 <= pos[1] < s.map_width):
+                continue
+            struct = s.structures.get(pos)
+            if struct is None:
+                s.structures[pos] = StructureInfo(
+                    position=pos,
+                    structure_type=StructureType.CHARGER,
+                    name="junction",
+                    last_seen_step=s.step_count,
+                    alignment=alignment,
+                )
+                s.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
+            elif struct.structure_type == StructureType.CHARGER:
+                if struct.last_seen_step == s.step_count:
+                    continue
+                if struct.alignment != alignment:
+                    struct.alignment = alignment
+
+        if s.supply_depots:
+            for idx, (pos, _alignment) in enumerate(s.supply_depots):
+                offset = (pos[0] - assembler_pos[0], pos[1] - assembler_pos[1])
+                if offset in self.charger_alignment_overrides:
+                    s.supply_depots[idx] = (pos, self.charger_alignment_overrides[offset])
+
+    @staticmethod
+    def _station_structure_type(name: str) -> StructureType:
+        return {
+            "miner_station": StructureType.MINER_STATION,
+            "scout_station": StructureType.SCOUT_STATION,
+            "aligner_station": StructureType.ALIGNER_STATION,
+            "scrambler_station": StructureType.SCRAMBLER_STATION,
+            "chest": StructureType.CHEST,
+        }.get(name, StructureType.UNKNOWN)
+
+    @staticmethod
+    def _normalize_alignment(alignment: Optional[str]) -> str:
+        if alignment is None or alignment == "neutral":
+            return "neutral"
+        if alignment in ("cogs", "clips"):
+            return alignment
+        return "unknown"
 
     def choose_role(self, agent_id: int) -> str:
         """Pick a role vibe based on aggregated snapshots."""
@@ -174,6 +312,9 @@ class SmartRoleCoordinator:
             for key in totals:
                 totals[key] = max(totals[key], snapshot.charger_alignment_counts.get(key, 0))
         return totals
+
+    def aligned_charger_count(self) -> int:
+        return self._aggregate_charger_counts().get("cogs", 0)
 
     def _aggregate_structures(self) -> set[str]:
         structures: set[str] = set()
@@ -513,12 +654,13 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     break
 
             # Discover supply depots (charger in cogsguard)
-            if (
+            is_charger = (
                 "supply_depot" in obj_name
                 or "charger" in obj_name
                 or "junction" in obj_name
                 or any(token in tag for tag in obj_tags for token in ("supply_depot", "charger", "junction"))
-            ):
+            )
+            if is_charger:
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHARGER, obj_state)
 
@@ -626,6 +768,24 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                 alignment=alignment,
                 inventory_amount=inventory_amount,
             )
+
+        if structure_type in {
+            StructureType.ASSEMBLER,
+            StructureType.CHEST,
+            StructureType.MINER_STATION,
+            StructureType.SCOUT_STATION,
+            StructureType.ALIGNER_STATION,
+            StructureType.SCRAMBLER_STATION,
+        }:
+            s.stations[structure_type.value] = pos
+
+        if structure_type == StructureType.CHARGER:
+            for idx, (depot_pos, _alignment) in enumerate(s.supply_depots):
+                if depot_pos == pos:
+                    s.supply_depots[idx] = (pos, alignment)
+                    break
+            else:
+                s.supply_depots.append((pos, alignment))
             if DEBUG:
                 print(
                     f"[A{s.agent_id}] STRUCTURE: Added {structure_type.value} at {pos} "
@@ -881,6 +1041,66 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
         return self._noop()
 
+    def _explore_frontier(self, s: CogsguardAgentState) -> Optional[Action]:
+        """Find and move toward the nearest unexplored frontier."""
+        if not s.explored or len(s.explored) == 0:
+            return None
+
+        start = (s.row, s.col)
+        visited: set[tuple[int, int]] = {start}
+        queue: deque[tuple[tuple[int, int], Optional[str]]] = deque()
+        queue.append((start, None))
+
+        directions = [("north", -1, 0), ("south", 1, 0), ("east", 0, 1), ("west", 0, -1)]
+        direction_deltas = {direction: (dr, dc) for direction, dr, dc in directions}
+
+        while queue:
+            pos, first_step = queue.popleft()
+            r, c = pos
+
+            for direction, dr, dc in directions:
+                nr, nc = r + dr, c + dc
+                if not (0 <= nr < s.map_height and 0 <= nc < s.map_width):
+                    continue
+                if (nr, nc) in visited:
+                    continue
+
+                visited.add((nr, nc))
+
+                if not s.explored[nr][nc]:
+                    if first_step is None:
+                        if s.occupancy[nr][nc] == CellType.FREE.value and (nr, nc) not in s.agent_occupancy:
+                            if DEBUG and s.step_count <= 100:
+                                print(f"[A{s.agent_id}] FRONTIER: Moving {direction} to unexplored ({nr},{nc})")
+                            return self._move(direction)
+                    else:
+                        step_dr, step_dc = direction_deltas[first_step]
+                        step_r, step_c = s.row + step_dr, s.col + step_dc
+                        if not (0 <= step_r < s.map_height and 0 <= step_c < s.map_width):
+                            continue
+                        if s.occupancy[step_r][step_c] != CellType.FREE.value or (step_r, step_c) in s.agent_occupancy:
+                            continue
+                        if DEBUG and s.step_count <= 100:
+                            explored_count = sum(sum(row) for row in s.explored)
+                            total_cells = s.map_height * s.map_width
+                            print(
+                                f"[A{s.agent_id}] FRONTIER: Heading {first_step} towards "
+                                f"frontier at ({nr},{nc}), explored={explored_count}/{total_cells}"
+                            )
+                        return self._move(first_step)
+
+                if s.explored[nr][nc] and s.occupancy[nr][nc] == CellType.FREE.value:
+                    next_first_step = first_step
+                    if first_step is None and (r, c) == start:
+                        next_first_step = direction
+                    queue.append(((nr, nc), next_first_step))
+
+        if DEBUG and s.step_count % 50 == 0:
+            explored_count = sum(sum(row) for row in s.explored)
+            total_cells = s.map_height * s.map_width
+            print(f"[A{s.agent_id}] FRONTIER: None found, explored={explored_count}/{total_cells}")
+        return None
+
     def _explore(self, s: CogsguardAgentState) -> Action:
         """Explore systematically - cycle through cardinal directions."""
         # Check for location loop (agents blocking each other back and forth)
@@ -1083,13 +1303,13 @@ class CogsguardPolicy(MultiAgentPolicy):
     - heart: do nothing
 
     Initial vibe counts can be specified via URI query parameters:
-        metta://policy/cogsguard?miner=4&scrambler=2&gear=1
+        metta://policy/role?miner=4&scrambler=2&gear=1
 
     Vibes are assigned to agents in order. If counts don't sum to num_agents,
     remaining agents get "gear" vibe (which picks a role via the smart coordinator).
     """
 
-    short_names = ["cogsguard_py"]
+    short_names = ["role_py"]
 
     def __init__(
         self,
@@ -1099,7 +1319,7 @@ class CogsguardPolicy(MultiAgentPolicy):
     ):
         super().__init__(policy_env_info, device=device)
         self._agent_policies: dict[int, StatefulAgentPolicy[CogsguardAgentState]] = {}
-        self._smart_role_coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
+        self._smart_role_coordinator = _shared_coordinator(policy_env_info)
         self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
         self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
@@ -1330,3 +1550,353 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
         """Delegate to role-specific implementation based on current role (set from vibe)."""
         role_impl = self._get_role_impl(s.role)
         return role_impl.execute_role(s)
+
+
+class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
+    """Generalist agent that picks roles based on situational priorities."""
+
+    ROLE = Role.MINER
+    ROLE_SWITCH_COOLDOWN = 120
+    EARLY_SCOUT_STEPS = 80
+    MIN_STRUCTURES_FOR_MIDGAME = 6
+    MIN_ENERGY_BUFFER = 2
+
+    def __init__(
+        self,
+        policy_env_info: PolicyEnvInterface,
+        agent_id: int,
+        smart_role_coordinator: Optional[SmartRoleCoordinator] = None,
+    ):
+        super().__init__(policy_env_info, agent_id, Role.MINER, smart_role_coordinator=smart_role_coordinator)
+        self._role_impls: dict[Role, CogsguardAgentPolicyImpl] = {}
+
+    def _update_phase(self, s: CogsguardAgentState) -> None:
+        desired_role = self._select_role(s)
+        if self._should_switch_role(s, desired_role):
+            if DEBUG:
+                print(f"[A{s.agent_id}] GENERALIST: Switching role {s.role.value} -> {desired_role.value}")
+            s.role = desired_role
+            s.last_role_switch_step = s.step_count
+            s.role_lock_until_step = s.step_count + self.ROLE_SWITCH_COOLDOWN
+
+        if s.has_gear() or s.step_count > 30:
+            s.phase = CogsguardPhase.EXECUTE_ROLE
+        else:
+            s.phase = CogsguardPhase.GET_GEAR
+
+    def _execute_phase(self, s: CogsguardAgentState) -> Action:
+        if self._should_recharge(s):
+            return self._do_recharge(s)
+        if s.phase == CogsguardPhase.GET_GEAR:
+            return self._do_get_gear(s)
+        if s.phase == CogsguardPhase.EXECUTE_ROLE:
+            return self.execute_role(s)
+        return self._noop()
+
+    def execute_role(self, s: CogsguardAgentState) -> Action:
+        role_impl = self._get_role_impl(s.role)
+        return role_impl.execute_role(s)
+
+    def _select_role(self, s: CogsguardAgentState) -> Role:
+        if s._pending_action_type is not None:
+            return s.role
+
+        assembler_known = s.stations.get("assembler") is not None
+        chest_known = s.stations.get("chest") is not None
+
+        if not assembler_known:
+            return Role.SCOUT
+
+        if s._pending_alignment_target is not None:
+            return Role.ALIGNER
+
+        if s.step_count < self.EARLY_SCOUT_STEPS and (
+            not chest_known or len(s.structures) < self.MIN_STRUCTURES_FOR_MIDGAME
+        ):
+            return Role.SCOUT
+
+        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        has_enemy_chargers = any(charger.alignment == "clips" for charger in chargers)
+        has_neutral_chargers = any(charger.alignment in (None, "neutral") for charger in chargers)
+        role_counts = self._role_counts()
+
+        if s.role == Role.SCRAMBLER:
+            if has_neutral_chargers and self._role_is_ready(s, Role.ALIGNER):
+                return Role.ALIGNER
+            if has_enemy_chargers:
+                return Role.SCRAMBLER
+        if s.role == Role.ALIGNER:
+            if (
+                s._pending_alignment_target is None
+                and not has_neutral_chargers
+                and has_enemy_chargers
+                and self._role_is_ready(s, Role.SCRAMBLER)
+            ):
+                return Role.SCRAMBLER
+            if has_enemy_chargers or has_neutral_chargers:
+                return Role.ALIGNER
+
+        target_counts = self._target_role_counts(
+            num_agents=self._policy_env_info.num_agents,
+            has_enemy_chargers=has_enemy_chargers,
+            has_neutral_chargers=has_neutral_chargers,
+            assembler_known=assembler_known,
+            step_count=s.step_count,
+        )
+        deficit_role = self._pick_deficit_role(s, role_counts, target_counts)
+        if deficit_role is not None:
+            return deficit_role
+
+        if has_enemy_chargers and self._role_is_ready(s, Role.SCRAMBLER):
+            return Role.SCRAMBLER
+        if has_neutral_chargers and self._role_is_ready(s, Role.ALIGNER):
+            return Role.ALIGNER
+
+        if not s.get_usable_extractors():
+            return Role.SCOUT
+
+        if s.total_cargo < s.cargo_capacity - 2:
+            return Role.MINER
+
+        return self._pick_balanced_role(s, has_enemy_chargers, has_neutral_chargers)
+
+    def _should_switch_role(self, s: CogsguardAgentState, desired_role: Role) -> bool:
+        if desired_role == s.role:
+            return False
+        if s._pending_action_type is not None:
+            return False
+        if desired_role == Role.ALIGNER and s._pending_alignment_target is not None:
+            return True
+        if desired_role == Role.ALIGNER and s.role == Role.SCRAMBLER:
+            has_neutral = any(
+                charger.alignment in (None, "neutral") for charger in s.get_structures_by_type(StructureType.CHARGER)
+            )
+            if has_neutral:
+                return True
+        if s.step_count < s.role_lock_until_step:
+            return False
+        return True
+
+    def _role_is_ready(self, s: CogsguardAgentState, role: Role) -> bool:
+        if role in (Role.ALIGNER, Role.SCRAMBLER) and s.stations.get("assembler") is None:
+            return False
+        if role in (Role.MINER, Role.SCOUT):
+            return True
+        return True
+
+    def _target_role_counts(
+        self,
+        num_agents: int,
+        has_enemy_chargers: bool,
+        has_neutral_chargers: bool,
+        assembler_known: bool,
+        step_count: int,
+    ) -> dict[Role, int]:
+        targets: dict[Role, int] = {}
+        if step_count < self.EARLY_SCOUT_STEPS:
+            targets[Role.SCOUT] = 2 if num_agents >= 8 else 1
+        else:
+            targets[Role.SCOUT] = 1
+        targets[Role.MINER] = max(4, num_agents // 2)
+        if assembler_known:
+            targets[Role.SCRAMBLER] = 2 if has_enemy_chargers else 1
+            targets[Role.ALIGNER] = 2 if has_neutral_chargers else 1
+        return targets
+
+    def _pick_deficit_role(
+        self,
+        s: CogsguardAgentState,
+        role_counts: dict[Role, int],
+        target_counts: dict[Role, int],
+    ) -> Role | None:
+        if not target_counts:
+            return None
+        deficits: list[Role] = []
+        ordered_roles = [Role.SCRAMBLER, Role.ALIGNER, Role.SCOUT, Role.MINER]
+        for role in ordered_roles:
+            target = target_counts.get(role, 0)
+            if target <= 0:
+                continue
+            deficit = max(target - role_counts.get(role, 0), 0)
+            deficits.extend([role] * deficit)
+        if not deficits:
+            return None
+        role = deficits[s.agent_id % len(deficits)]
+        if self._role_is_ready(s, role):
+            return role
+        return None
+
+    def _should_recharge(self, s: CogsguardAgentState) -> bool:
+        if s.total_cargo > 0:
+            return False
+        if s.energy >= s.MOVE_ENERGY_COST * self.MIN_ENERGY_BUFFER:
+            return False
+        return s.stations.get("assembler") is not None
+
+    def _role_has_gear(self, s: CogsguardAgentState, role: Role) -> bool:
+        return getattr(s, ROLE_TO_GEAR[role], 0) > 0
+
+    def _role_station_known(self, s: CogsguardAgentState, role: Role) -> bool:
+        return s.stations.get(ROLE_TO_STATION[role]) is not None
+
+    def _pick_balanced_role(
+        self,
+        s: CogsguardAgentState,
+        has_enemy_chargers: bool,
+        has_neutral_chargers: bool,
+    ) -> Role:
+        candidates = [Role.MINER, Role.SCOUT]
+        if has_enemy_chargers and self._role_is_ready(s, Role.SCRAMBLER):
+            candidates.append(Role.SCRAMBLER)
+        if has_neutral_chargers and self._role_is_ready(s, Role.ALIGNER):
+            candidates.append(Role.ALIGNER)
+
+        role_counts = self._role_counts()
+        best_role = s.role
+        best_score = float("-inf")
+        for role in candidates:
+            score = 0
+            if role == s.role:
+                score += 2
+            if self._role_has_gear(s, role):
+                score += 3
+            elif self._role_station_known(s, role):
+                score += 1
+            if role_counts:
+                score += 2 - role_counts.get(role, 0)
+            if score > best_score:
+                best_score = score
+                best_role = role
+        return best_role
+
+    def _role_counts(self) -> dict[Role, int]:
+        if self._smart_role_coordinator is None:
+            return {}
+        counts = {role: 0 for role in Role}
+        for snapshot in self._smart_role_coordinator.agent_snapshots.values():
+            counts[snapshot.role] += 1
+        return counts
+
+    def _get_role_impl(self, role: Role) -> CogsguardAgentPolicyImpl:
+        if role not in self._role_impls:
+            from .aligner import AlignerAgentPolicyImpl
+            from .miner import MinerAgentPolicyImpl
+            from .scout import ScoutAgentPolicyImpl
+            from .scrambler import ScramblerAgentPolicyImpl
+
+            impl_class = {
+                Role.MINER: MinerAgentPolicyImpl,
+                Role.SCOUT: ScoutAgentPolicyImpl,
+                Role.ALIGNER: AlignerAgentPolicyImpl,
+                Role.SCRAMBLER: ScramblerAgentPolicyImpl,
+            }[role]
+
+            self._role_impls[role] = impl_class(
+                self._policy_env_info,
+                self._agent_id,
+                role,
+                smart_role_coordinator=self._smart_role_coordinator,
+            )
+        return self._role_impls[role]
+
+
+class CogsguardWomboImpl(CogsguardGeneralistImpl):
+    """Generalist agent that prioritizes aligning multiple junctions."""
+
+    TARGET_ALIGNED_JUNCTIONS = 2
+    JUNCTION_PUSH_SCOUTS = 2
+    JUNCTION_PUSH_ALIGNERS = 2
+    JUNCTION_PUSH_SCRAMBLERS = 2
+    MIN_MINERS = 4
+
+    def _select_role(self, s: CogsguardAgentState) -> Role:
+        aligned_count = 0
+        if self._smart_role_coordinator is not None:
+            aligned_count = self._smart_role_coordinator.aligned_charger_count()
+        if aligned_count < self.TARGET_ALIGNED_JUNCTIONS:
+            if s._pending_action_type is not None:
+                return s.role
+            if s.stations.get("assembler") is None:
+                return Role.SCOUT
+            if s.role in (Role.SCRAMBLER, Role.ALIGNER) and s.has_gear():
+                return s.role
+            if s.role == Role.SCRAMBLER and s._pending_alignment_target is not None:
+                return Role.SCRAMBLER
+        return super()._select_role(s)
+
+    def _should_recharge(self, s: CogsguardAgentState) -> bool:
+        aligned_count = 0
+        if self._smart_role_coordinator is not None:
+            aligned_count = self._smart_role_coordinator.aligned_charger_count()
+        if aligned_count < self.TARGET_ALIGNED_JUNCTIONS and s.role in (Role.SCRAMBLER, Role.ALIGNER):
+            if s.total_cargo > 0:
+                return False
+            if s.energy >= s.MOVE_ENERGY_COST * self.MIN_ENERGY_BUFFER:
+                return False
+            return s.stations.get("assembler") is not None
+        return super()._should_recharge(s)
+
+    def _target_role_counts(
+        self,
+        num_agents: int,
+        has_enemy_chargers: bool,
+        has_neutral_chargers: bool,
+        assembler_known: bool,
+        step_count: int,
+    ) -> dict[Role, int]:
+        targets = super()._target_role_counts(
+            num_agents=num_agents,
+            has_enemy_chargers=has_enemy_chargers,
+            has_neutral_chargers=has_neutral_chargers,
+            assembler_known=assembler_known,
+            step_count=step_count,
+        )
+
+        aligned_count = 0
+        if self._smart_role_coordinator is not None:
+            aligned_count = self._smart_role_coordinator.aligned_charger_count()
+
+        if aligned_count < self.TARGET_ALIGNED_JUNCTIONS:
+            targets[Role.SCOUT] = max(targets.get(Role.SCOUT, 0), self.JUNCTION_PUSH_SCOUTS)
+            if assembler_known:
+                targets[Role.SCRAMBLER] = max(targets.get(Role.SCRAMBLER, 0), self.JUNCTION_PUSH_SCRAMBLERS)
+                targets[Role.ALIGNER] = max(targets.get(Role.ALIGNER, 0), self.JUNCTION_PUSH_ALIGNERS)
+            targets[Role.MINER] = max(self.MIN_MINERS, num_agents // 2)
+
+        return targets
+
+
+class CogsguardGeneralistPolicy(CogsguardPolicy):
+    """Generalist policy that adapts roles based on map and resource priorities."""
+
+    def __init__(self, policy_env_info: PolicyEnvInterface, device: str = "cpu", **_ignored: int):
+        super().__init__(policy_env_info, device=device, **_ignored)
+
+    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[CogsguardAgentState]:
+        if agent_id not in self._agent_policies:
+            impl = CogsguardGeneralistImpl(
+                self._policy_env_info,
+                agent_id,
+                smart_role_coordinator=self._smart_role_coordinator,
+            )
+            self._agent_policies[agent_id] = StatefulAgentPolicy(impl, self._policy_env_info, agent_id=agent_id)
+        return self._agent_policies[agent_id]
+
+
+class CogsguardWomboPolicy(CogsguardPolicy):
+    """Generalist policy that prioritizes role rigs based on map conditions."""
+
+    short_names = ["wombo"]
+
+    def __init__(self, policy_env_info: PolicyEnvInterface, device: str = "cpu", **_ignored: int):
+        super().__init__(policy_env_info, device=device, **_ignored)
+
+    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[CogsguardAgentState]:
+        if agent_id not in self._agent_policies:
+            impl = CogsguardWomboImpl(
+                self._policy_env_info,
+                agent_id,
+                smart_role_coordinator=self._smart_role_coordinator,
+            )
+            self._agent_policies[agent_id] = StatefulAgentPolicy(impl, self._policy_env_info, agent_id=agent_id)
+        return self._agent_policies[agent_id]

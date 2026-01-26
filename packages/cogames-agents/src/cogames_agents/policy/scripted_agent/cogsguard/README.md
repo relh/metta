@@ -168,11 +168,11 @@ Extractors ──► Miners ──► Commons ──► Gear Stations ──► 
 ## Usage
 
 ```bash
-# Run with the cogsguard policy (default: 1 scrambler, 4 miners)
-./tools/run.py recipes.experiment.cogsguard.play policy_uri=metta://policy/cogsguard
+# Run with the role policy (default: 1 scrambler, 4 miners)
+./tools/run.py recipes.experiment.cogsguard.play policy_uri=metta://policy/role
 
 # With limited timesteps and log rendering
-./tools/run.py recipes.experiment.cogsguard.play policy_uri=metta://policy/cogsguard render=log max_steps=500
+./tools/run.py recipes.experiment.cogsguard.play policy_uri=metta://policy/role render=log max_steps=500
 ```
 
 ### Specifying Initial Vibe Counts
@@ -182,15 +182,15 @@ You can control how many agents start with each role using URI query parameters:
 ```bash
 # Custom distribution: 4 miners, 2 scramblers, 1 gear (smart role)
 ./tools/run.py recipes.experiment.cogsguard.play \
-    policy_uri="metta://policy/cogsguard?miner=4&scrambler=2&gear=1"
+    policy_uri="metta://policy/role?miner=4&scrambler=2&gear=1"
 
 # All miners
 ./tools/run.py recipes.experiment.cogsguard.play \
-    policy_uri="metta://policy/cogsguard?miner=10"
+    policy_uri="metta://policy/role?miner=10"
 
 # Balanced team
 ./tools/run.py recipes.experiment.cogsguard.play \
-    policy_uri="metta://policy/cogsguard?miner=3&scout=2&aligner=2&scrambler=3"
+    policy_uri="metta://policy/role?miner=3&scout=2&aligner=2&scrambler=3"
 ```
 
 **Supported vibe parameters:**

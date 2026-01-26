@@ -80,9 +80,18 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         # Check if last action succeeded (for retry logic)
         # Actions can fail due to insufficient energy - agents auto-regen so just retry
         if s._pending_action_type == "align":
+            target = s._pending_action_target
             if s.check_action_success():
                 if DEBUG:
                     print(f"[A{s.agent_id}] ALIGNER: Previous align succeeded!")
+                if target is not None and self._smart_role_coordinator is not None:
+                    assembler_pos = s.stations.get("assembler")
+                    self._smart_role_coordinator.register_charger_alignment(
+                        target,
+                        "cogs",
+                        assembler_pos,
+                        s.step_count,
+                    )
             elif s.should_retry_action(MAX_RETRIES):
                 retry_count = s.increment_retry()
                 if DEBUG:
@@ -96,10 +105,23 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             else:
                 if DEBUG:
                     print(f"[A{s.agent_id}] ALIGNER: Align failed after {MAX_RETRIES} retries, moving on")
+                if target is not None and target == s._pending_alignment_target:
+                    s._pending_alignment_target = None
                 s.clear_pending_action()
 
         # Find the best depot to align (prioritize closest non-cogs charger)
-        target_depot = self._find_best_target(s)
+        target_depot = None
+        pending_target = s._pending_alignment_target
+        if pending_target is not None:
+            pending_struct = s.get_structure_at(pending_target)
+            if pending_struct is None or pending_struct.structure_type == StructureType.CHARGER:
+                if pending_struct is None or pending_struct.alignment in (None, "neutral"):
+                    target_depot = pending_target
+                elif pending_struct.alignment == "cogs":
+                    s._pending_alignment_target = None
+
+        if target_depot is None:
+            target_depot = self._find_best_target(s)
 
         if target_depot is None:
             if DEBUG and s.step_count % 50 == 0:
@@ -164,12 +186,12 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         If we've been trying to get hearts for too long, go explore instead.
         """
         if need_heart:
-            # If we've waited more than 20 steps for hearts, go explore instead
+            # If we've waited more than 40 steps for hearts, go explore instead
             if s._heart_wait_start == 0:
                 s._heart_wait_start = s.step_count
-            if s.step_count - s._heart_wait_start > 20:
+            if s.step_count - s._heart_wait_start > 40:
                 if DEBUG:
-                    print(f"[A{s.agent_id}] ALIGNER: Waited 20+ steps for hearts, exploring instead")
+                    print(f"[A{s.agent_id}] ALIGNER: Waited 40+ steps for hearts, exploring instead")
                 s._heart_wait_start = 0
                 return self._explore_for_chargers(s)
 
@@ -218,6 +240,33 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         # How long to ignore a charger after working on it (steps)
         cooldown = 50
 
+        recent_candidates: list[tuple[int, tuple[int, int]]] = []
+        if self._smart_role_coordinator is not None:
+            assembler_pos = s.stations.get("assembler")
+            recent_targets = self._smart_role_coordinator.recent_scramble_targets(assembler_pos, s.step_count)
+            for pos in recent_targets:
+                last_worked = s.worked_chargers.get(pos, 0)
+                if last_worked > 0 and s.step_count - last_worked < cooldown:
+                    continue
+                charger = s.get_structure_at(pos)
+                if charger is not None and charger.alignment in ("cogs", "clips"):
+                    continue
+                dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
+                recent_candidates.append((dist, pos))
+
+        if recent_candidates:
+            recent_candidates.sort()
+            target_idx = 0
+            if self._smart_role_coordinator is not None:
+                aligner_ids = sorted(
+                    agent_id
+                    for agent_id, snapshot in self._smart_role_coordinator.agent_snapshots.items()
+                    if snapshot.role == Role.ALIGNER
+                )
+                if aligner_ids:
+                    target_idx = aligner_ids.index(s.agent_id) if s.agent_id in aligner_ids else 0
+            return recent_candidates[target_idx % len(recent_candidates)][1]
+
         # Collect all un-aligned chargers (not cogs) and sort by distance
         unaligned_chargers: list[tuple[int, tuple[int, int]]] = []
 
@@ -244,12 +293,25 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 count = len(unaligned_chargers)
                 closest = unaligned_chargers[0][1]
                 print(f"[A{s.agent_id}] ALIGNER: Found {count} un-aligned chargers, closest at {closest}")
-            return unaligned_chargers[0][1]
+            target_idx = 0
+            if self._smart_role_coordinator is not None:
+                aligner_ids = sorted(
+                    agent_id
+                    for agent_id, snapshot in self._smart_role_coordinator.agent_snapshots.items()
+                    if snapshot.role == Role.ALIGNER
+                )
+                if aligner_ids:
+                    target_idx = aligner_ids.index(s.agent_id) if s.agent_id in aligner_ids else 0
+            return unaligned_chargers[target_idx % len(unaligned_chargers)][1]
 
         return None
 
     def _explore_for_chargers(self, s: CogsguardAgentState) -> Action:
         """Explore aggressively to find more chargers spread around the map."""
+        frontier_action = self._explore_frontier(s)
+        if frontier_action is not None:
+            return frontier_action
+
         # Move in a direction based on agent ID and step count to spread out
         directions = ["north", "south", "east", "west"]
         # Cycle through directions, spending 20 steps in each direction

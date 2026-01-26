@@ -9,8 +9,8 @@ starvation problem that prevents agents from effectively navigating and completi
 
 ### 1. Scripted Agents Are NOT Successfully Aligning Junctions
 
-After running `cogames play` with both the Nim (`metta://policy/cogsguard`) and Python (`metta://policy/cogsguard_py`)
-policies, I observed:
+After running `cogames play` with both the Nim (`metta://policy/role`) and Python (`metta://policy/role_py`) policies, I
+observed:
 
 - **clips.aligned.junction.held: ~135,000** (over 5000 steps)
 - **cogs.aligned.junction.held: 0** (zero junctions aligned to cogs)
@@ -131,7 +131,7 @@ Same structure as assembler, but junctions are clips-aligned, so they:
 uv run tools/run.py cogsguard.play "policy_uri=metta://policy/teacher" render=log max_steps=3000
 
 # Run with Python policy
-uv run tools/run.py cogsguard.play "policy_uri=metta://policy/cogsguard_py" render=log max_steps=3000
+uv run tools/run.py cogsguard.play "policy_uri=metta://policy/role_py" render=log max_steps=3000
 
 # Check simulation state
 uv run python -c "

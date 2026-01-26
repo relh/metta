@@ -138,6 +138,8 @@ class CogsguardAgentState:
     # === Unified structure map ===
     # All discovered structures: position -> StructureInfo
     structures: dict[tuple[int, int], StructureInfo] = field(default_factory=dict)
+    stations: dict[str, Optional[tuple[int, int]]] = field(default_factory=dict)
+    supply_depots: list[tuple[tuple[int, int], Optional[str]]] = field(default_factory=list)
 
     # Alignment overrides from our own actions (pos -> alignment).
     alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
@@ -215,6 +217,7 @@ class CogsguardAgentState:
     _action_retry_count: int = 0
     _pre_action_heart: int = 0  # Heart count before action attempt
     _pre_action_cargo: int = 0  # Cargo count before action attempt
+    _pending_alignment_target: Optional[tuple[int, int]] = None
 
     # Miner gear acquisition tracking
     _gear_attempt_step: int = 0  # Step when we last tried to get gear
@@ -348,8 +351,16 @@ class CogsguardAgentState:
             # These actions consume 1 heart on success
             if self.heart < self._pre_action_heart:
                 if self._pending_action_target:
+                    target = self._pending_action_target
                     new_alignment = "cogs" if action_type == "align" else None
-                    self.record_alignment_override(self._pending_action_target, new_alignment)
+                    self.record_alignment_override(target, new_alignment)
+                    for idx, (pos, _alignment) in enumerate(self.supply_depots):
+                        if pos == target:
+                            self.supply_depots[idx] = (pos, new_alignment)
+                    if action_type == "scramble":
+                        self._pending_alignment_target = target
+                    elif action_type == "align" and target == self._pending_alignment_target:
+                        self._pending_alignment_target = None
                 # Heart was consumed - action succeeded
                 self.clear_pending_action()
                 return True

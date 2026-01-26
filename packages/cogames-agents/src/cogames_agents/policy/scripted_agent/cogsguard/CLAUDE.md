@@ -119,11 +119,11 @@ Agents use **vibes** to determine their behavior:
 
 ```bash
 # Run with limited steps and log output (no GUI)
-./tools/run.py recipes.experiment.cogsguard.play policy_uri=metta://policy/cogsguard render=log max_steps=100
+./tools/run.py recipes.experiment.cogsguard.play policy_uri=metta://policy/role render=log max_steps=100
 
 # Custom vibe distribution: 4 miners, 2 scramblers, 1 gear
 ./tools/run.py recipes.experiment.cogsguard.play \
-    policy_uri="metta://policy/cogsguard?miner=4&scrambler=2&gear=1" render=log max_steps=100
+    policy_uri="metta://policy/role?miner=4&scrambler=2&gear=1" render=log max_steps=100
 
 # Filter output for specific agent
 ./tools/run.py ... 2>&1 | grep -E "^\[A0\]"
@@ -140,7 +140,7 @@ Agents use **vibes** to determine their behavior:
 Control agent role distribution via query parameters:
 
 ```
-metta://policy/cogsguard?miner=4&scrambler=2&gear=1&aligner=2&scout=1
+metta://policy/role?miner=4&scrambler=2&gear=1&aligner=2&scout=1
 ```
 
 - `miner`, `scout`, `aligner`, `scrambler`: Count for each role

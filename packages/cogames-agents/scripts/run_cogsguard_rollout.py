@@ -356,7 +356,7 @@ def main() -> int:
     parser.add_argument("--recipe", default="recipes.experiment.cogsguard")
     parser.add_argument(
         "--policy-uri",
-        default="metta://policy/cogsguard?miner=4&scout=2&aligner=2&scrambler=2",
+        default="metta://policy/role?miner=4&scout=2&aligner=2&scrambler=2",
     )
     parser.add_argument("--allow-missing-roles", action="store_true")
     args = parser.parse_args()
