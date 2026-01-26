@@ -97,7 +97,6 @@ def _load_all_missions() -> Dict[str, Mission]:
 
     missions: List[Mission] = []
     for mod_name in (
-        "cogames.cogs_vs_clips.evals.eval_missions",
         "cogames.cogs_vs_clips.evals.integrated_evals",
         "cogames.cogs_vs_clips.evals.spanning_evals",
         "cogames.cogs_vs_clips.missions",
