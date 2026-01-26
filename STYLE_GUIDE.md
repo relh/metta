@@ -35,6 +35,16 @@ from metta.common.types import X    # Shared types from types.py
 
 Circular import? Extract types to `types.py` or use module import (`import x.y as y_mod`).
 
+## CI and Linting
+
+When CI fails on lint issues, fix them with:
+
+```bash
+metta lint --fix
+```
+
+This runs all linters (ruff, mypy, prettier) with auto-fix. Run before pushing to ensure CI passes.
+
 ## What Not To Do
 
 - Don't add error handling for impossible cases
