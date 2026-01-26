@@ -35,7 +35,6 @@ class CogsguardTeacherPolicy(MultiAgentPolicy):
         self._last_action_feature_id = self._find_feature_id("last_action")
 
         self._role_action_ids = self._resolve_role_actions(role_vibes)
-        self._episode_index = [0] * self._num_agents
         self._reset_episode_state()
 
     def agent_policy(self, agent_id: int) -> AgentPolicy:
@@ -142,6 +141,7 @@ class CogsguardTeacherPolicy(MultiAgentPolicy):
         return role_action_ids
 
     def _reset_episode_state(self) -> None:
+        self._episode_index = [0] * self._num_agents
         self._forced_vibe = [False] * self._num_agents
         self._last_episode_pct = [-1] * self._num_agents
         self._step_in_episode = [0] * self._num_agents

@@ -246,7 +246,7 @@ uv run cogames play --mission training_facility.harvest --variant clip_hub_stati
 
 ```bash
 # Run full evaluation suite
-uv run python packages/cogames/scripts/run_evaluation.py
+uv run python packages/cogames/scripts/run_evaluation.py --policy ladybug
 
 # Evaluate specific agent
 uv run python packages/cogames/scripts/run_evaluation.py --policy baseline
