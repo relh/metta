@@ -14,6 +14,8 @@ import random
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
+
 from cogames_agents.policy.scripted_agent.pathfinding import (
     compute_goal_cells,
     shortest_path,
@@ -36,9 +38,10 @@ from cogames_agents.policy.scripted_agent.utils import (
     parse_observation as utils_parse_observation,
 )
 from mettagrid.config.mettagrid_config import CardinalDirection
+from mettagrid.mettagrid_c import PackedCoordinate, dtype_actions
 from mettagrid.policy.policy import MultiAgentPolicy, StatefulAgentPolicy, StatefulPolicyImpl
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
-from mettagrid.simulator import Action
+from mettagrid.simulator import Action, AgentObservation, ObservationToken
 
 from .types import (
     ROLE_TO_STATION,
@@ -1081,6 +1084,9 @@ class CogsguardPolicy(MultiAgentPolicy):
         super().__init__(policy_env_info, device=device)
         self._agent_policies: dict[int, StatefulAgentPolicy[CogsguardAgentState]] = {}
         self._smart_role_coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
+        self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
+        self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
+        self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
         # Build initial vibe assignment from URI params (e.g., ?scrambler=1&miner=4)
         counts = {k: v for k, v in vibe_counts.items() if isinstance(v, int)}
@@ -1114,6 +1120,36 @@ class CogsguardPolicy(MultiAgentPolicy):
             self._agent_policies[agent_id] = StatefulAgentPolicy(impl, self._policy_env_info, agent_id=agent_id)
 
         return self._agent_policies[agent_id]
+
+    def step_batch(self, raw_observations: np.ndarray, raw_actions: np.ndarray) -> None:
+        num_agents = min(raw_observations.shape[0], self._policy_env_info.num_agents)
+        for agent_id in range(num_agents):
+            obs = self._raw_obs_to_agent_obs(agent_id, raw_observations[agent_id])
+            action = self.agent_policy(agent_id).step(obs)
+            action_index = self._action_name_to_index.get(action.name, self._noop_action_value)
+            raw_actions[agent_id] = dtype_actions.type(action_index)
+
+    def _raw_obs_to_agent_obs(self, agent_id: int, raw_obs: np.ndarray) -> AgentObservation:
+        tokens: list[ObservationToken] = []
+        for token in raw_obs:
+            feature_id = int(token[1])
+            if feature_id == 0xFF:
+                break
+            feature = self._feature_by_id.get(feature_id)
+            if feature is None:
+                continue
+            location_packed = int(token[0])
+            location = PackedCoordinate.unpack(location_packed) or (0, 0)
+            value = int(token[2])
+            tokens.append(
+                ObservationToken(
+                    feature=feature,
+                    location=location,
+                    value=value,
+                    raw_token=(location_packed, feature_id, value),
+                )
+            )
+        return AgentObservation(agent_id=agent_id, tokens=tokens)
 
 
 class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):

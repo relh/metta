@@ -817,6 +817,12 @@ proc getLastAction*(cfg: Config, visible: Table[Location, seq[FeatureValue]]): i
   ## Get the last action of the visible map.
   cfg.getFeature(visible, cfg.features.lastAction)
 
+proc getEpisodeCompletionPct*(cfg: Config, visible: Table[Location, seq[FeatureValue]]): int =
+  ## Get episode completion percent, or -1 when the feature is unavailable.
+  if cfg.features.episodeCompletionPct == 0:
+    return -1
+  cfg.getFeature(visible, cfg.features.episodeCompletionPct)
+
 proc getInventory*(
   cfg: Config,
   visible: Table[Location, seq[FeatureValue]],

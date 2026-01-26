@@ -21,6 +21,9 @@ const Offsets4 = [
 ]
 
 type
+  SmartRoleCoordinator* = ref object
+    numAgents: int
+
   CogsguardAgent* = ref object
     agentId*: int
     cfg: Config
@@ -43,9 +46,15 @@ type
     chest: Option[Location]
 
     actionIds: Table[string, int]
+    lastEpisodePct: int
+    stepInEpisode: int
+    assignedRoleIdx: int
+    lastHeart: int
+    lastInfluence: int
 
   CogsguardPolicy* = ref object
     agents*: seq[CogsguardAgent]
+    smartRoleCoordinator: SmartRoleCoordinator
 
 proc getVibeName(agent: CogsguardAgent, vibeId: int): string =
   if vibeId >= 0 and vibeId < agent.cfg.vibeNames.len:
@@ -58,6 +67,91 @@ proc getActionId(agent: CogsguardAgent, name: string): int =
 proc actionForVibe(agent: CogsguardAgent, vibe: string): int =
   let actionName = "change_vibe_" & vibe
   return agent.getActionId(actionName)
+
+proc roleIndex(roleName: string): int =
+  for idx, name in RoleNames:
+    if name == roleName:
+      return idx
+  return -1
+
+proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy, agentId: int): int =
+  discard coordinator
+  discard agentId
+  var hasHub = false
+  var hasChest = false
+  var roleCounts = newSeq[int](RoleNames.len)
+  var chargerCounts: array[3, int] # cogs, clips, neutral/unknown
+  var heartsTotal = 0
+  var influenceTotal = 0
+  var maxStructuresSeen = 0
+
+  for agent in policy.agents:
+    if agent.hub.isSome:
+      hasHub = true
+    if agent.chest.isSome:
+      hasChest = true
+
+    if agent.assignedRoleIdx >= 0 and agent.assignedRoleIdx < RoleNames.len:
+      roleCounts[agent.assignedRoleIdx] += 1
+
+    heartsTotal += agent.lastHeart
+    influenceTotal += agent.lastInfluence
+
+    let structuresSeen = agent.depots.len + agent.stations.len + agent.extractors.len
+    if structuresSeen > maxStructuresSeen:
+      maxStructuresSeen = structuresSeen
+
+    var agentCounts: array[3, int]
+    for _, alignment in agent.depots:
+      if alignment == 1:
+        agentCounts[0] += 1
+      elif alignment == -1:
+        agentCounts[1] += 1
+      else:
+        agentCounts[2] += 1
+    for i in 0 .. 2:
+      if agentCounts[i] > chargerCounts[i]:
+        chargerCounts[i] = agentCounts[i]
+
+  if not hasHub or not hasChest:
+    return roleIndex("scout")
+
+  let minerIdx = roleIndex("miner")
+  if minerIdx >= 0 and roleCounts[minerIdx] == 0:
+    return minerIdx
+
+  let knownChargers = chargerCounts[0] + chargerCounts[1] + chargerCounts[2]
+  if knownChargers == 0:
+    return roleIndex("scout")
+
+  if chargerCounts[1] > 0 and heartsTotal > 0:
+    return roleIndex("scrambler")
+  if chargerCounts[2] > 0 and heartsTotal > 0 and influenceTotal > 0:
+    return roleIndex("aligner")
+
+  if maxStructuresSeen < 10:
+    return roleIndex("scout")
+  return minerIdx
+
+proc updateEpisodeState(agent: CogsguardAgent, episodePct: int) =
+  if episodePct == -1:
+    return
+
+  var newEpisode = false
+  if agent.lastEpisodePct == -1:
+    newEpisode = true
+  elif episodePct < agent.lastEpisodePct:
+    newEpisode = true
+  elif agent.lastEpisodePct > 0 and episodePct == 0:
+    newEpisode = true
+
+  if newEpisode:
+    agent.stepInEpisode = 0
+    agent.assignedRoleIdx = -1
+  else:
+    agent.stepInEpisode += 1
+
+  agent.lastEpisodePct = episodePct
 
 proc featureValue(
   features: seq[FeatureValue],
@@ -337,6 +431,7 @@ proc parseVisible(
     result[location].add(FeatureValue(featureId: featureId.int, value: value.int))
 
 proc step*(
+  policy: CogsguardPolicy,
   agent: CogsguardAgent,
   numAgents: int,
   numTokens: int,
@@ -361,17 +456,32 @@ proc step*(
     let invGermanium = agent.cfg.getInventory(visible, agent.cfg.features.invGermanium)
     let invSilicon = agent.cfg.getInventory(visible, agent.cfg.features.invSilicon)
     let invHeart = agent.cfg.getInventory(visible, agent.cfg.features.invHeart)
+    let invInfluence =
+      if agent.cfg.features.invInfluence != 0:
+        agent.cfg.getInventory(visible, agent.cfg.features.invInfluence)
+      else:
+        0
     let invMiner = agent.cfg.getInventory(visible, agent.cfg.features.invMiner)
     let invScout = agent.cfg.getInventory(visible, agent.cfg.features.invScout)
     let invAligner = agent.cfg.getInventory(visible, agent.cfg.features.invAligner)
     let invScrambler = agent.cfg.getInventory(visible, agent.cfg.features.invScrambler)
     let cargo = invCarbon + invOxygen + invGermanium + invSilicon
 
+    agent.lastHeart = invHeart
+    agent.lastInfluence = invInfluence
+
+    let episodePct = agent.cfg.getEpisodeCompletionPct(visible)
+    agent.updateEpisodeState(episodePct)
+
     var action = agent.cfg.actions.noop
 
     if vibeName == "gear":
-      let choice = agent.random.rand(0 ..< RoleNames.len)
-      action = agent.actionForVibe(RoleNames[choice])
+      if agent.assignedRoleIdx < 0:
+        var selectedIdx = policy.smartRoleCoordinator.chooseSmartRole(policy, agent.agentId)
+        if selectedIdx < 0 or selectedIdx >= RoleNames.len:
+          selectedIdx = agent.random.rand(0 ..< RoleNames.len)
+        agent.assignedRoleIdx = selectedIdx
+      action = agent.actionForVibe(RoleNames[agent.assignedRoleIdx])
     elif vibeName == "miner":
       action = agent.actMiner(cargo, invMiner)
     elif vibeName == "scout":
@@ -409,13 +519,18 @@ proc newCogsguardAgent*(agentId: int, environmentConfig: string): CogsguardAgent
   result.actionIds = initTable[string, int]()
   for id, name in config.config.actions:
     result.actionIds[name] = id
+  result.lastEpisodePct = -1
+  result.stepInEpisode = 0
+  result.assignedRoleIdx = -1
+  result.lastHeart = 0
+  result.lastInfluence = 0
 
 proc newCogsguardPolicy*(environmentConfig: string): CogsguardPolicy =
   let cfg = parseConfig(environmentConfig)
   var agents: seq[CogsguardAgent] = @[]
   for id in 0 ..< cfg.config.numAgents:
     agents.add(newCogsguardAgent(id, environmentConfig))
-  CogsguardPolicy(agents: agents)
+  CogsguardPolicy(agents: agents, smartRoleCoordinator: SmartRoleCoordinator(numAgents: agents.len))
 
 proc stepBatch*(
   policy: CogsguardPolicy,
@@ -437,4 +552,4 @@ proc stepBatch*(
     let idx = int(ids[i])
     let obsPtr = cast[pointer](obsArray[idx * obsStride].addr)
     let actPtr = cast[ptr int32](actionArray[idx].addr)
-    step(policy.agents[idx], numAgents, numTokens, sizeToken, obsPtr, numActions, actPtr)
+    step(policy, policy.agents[idx], numAgents, numTokens, sizeToken, obsPtr, numActions, actPtr)

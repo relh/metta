@@ -10,13 +10,14 @@ and teachers share these identifiers, so the same name works for evaluation, pla
 Available scripted policy names:
 
 - `baseline`
-- `ladybug`
-- `thinky`
-- `race_car`
-- `nim_random`
-- `cogsguard`
-- `cogsguard_py`
-- `teacher`
+- `tiny_baseline`
+- `starter`
+- `thinky` (`thinky_nim`)
+- `race_car` (`race_car_nim`)
+- `ladybug` (`ladybug_nim`, `ladybug_py`)
+- `nim_random` (`random_nim`)
+- `cogsguard` (`cogsguard_nim`, `cogsguard_py`)
+- `teacher` (`teacher_nim`)
 - `miner`
 - `scout`
 - `aligner`
@@ -40,8 +41,10 @@ The `recipes.experiment.scripted_agents` recipe accepts the same scripted policy
 
 ## Included policies
 
-- Nim policies (short names; default when both exist): `thinky`, `nim_random`, `race_car`, `ladybug`, `cogsguard`
+- Short names map to the fastest implementation (Nim when available, otherwise Python).
+- Nim policies (short names + `_nim` aliases): `thinky`, `race_car`, `ladybug`, `cogsguard`, `nim_random` (alias
+  `random_nim`)
 - Python scripted policies (use `_py` only when Nim exists): `baseline`, `tiny_baseline`, `ladybug_py`, `cogsguard_py`
 - Core scripted policy (in `cogames`): `starter`
 - Scripted roles: `miner`, `scout`, `aligner`, `scrambler`
-- Teacher wrapper: `teacher` (forces an initial role/vibe, then delegates to the Nim policy)
+- Teacher wrapper: `teacher` (`teacher_nim`) forces an initial role/vibe, then delegates to the Nim policy

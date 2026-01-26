@@ -16,7 +16,7 @@ DEFAULT_ROLE_VIBES = ("miner", "scout", "aligner", "scrambler")
 class CogsguardTeacherPolicy(MultiAgentPolicy):
     """Teacher wrapper that forces an initial vibe, then delegates to the Nim policy."""
 
-    short_names = ["teacher"]
+    short_names = ["teacher", "teacher_nim"]
 
     def __init__(
         self,
