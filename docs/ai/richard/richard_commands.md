@@ -175,3 +175,57 @@ vs observed behavior. Steps:
 
 - locate variant definitions and reward logic
 - diff vs main Output: root cause + fix proposal + verify command.
+
+### /mettabox-run
+
+Purpose: launch a tools/run.py job inside a mettabox container (optionally in tmux). Inputs: host (metta0..4),
+tools/run.py args, tmux session override (optional), attach (optional). Steps:
+
+- run `./devops/mettabox/cli.py run <host> -- <tools/run.py args...>`
+- use `--attach` or `tmux` command to observe the session Output: session name + launch command.
+
+### /mettabox-instrument
+
+Purpose: stream job logs (and GPU snapshot) from a mettabox container. Inputs: host, run_id, follow (optional). Steps:
+
+- run `./devops/mettabox/cli.py instrument <host> <run_id> --follow`
+- optionally pass `--no-gpu` for logs-only Output: live log stream.
+
+### /mettabox-runs
+
+Purpose: list active tools/run.py processes inside mettabox containers. Inputs: host or --all, pattern (optional).
+Steps:
+
+- run `./devops/mettabox/cli.py runs <host>`
+- for all hosts: `./devops/mettabox/cli.py runs --all` Output: process list.
+
+### /mettabox-progress
+
+Purpose: show the latest training progress block for a run. Inputs: host, run_id. Steps:
+
+- run `./devops/mettabox/cli.py progress <host> <run_id>` Output: latest progress block.
+
+### /mettabox-audit
+
+Purpose: audit a mettabox container for git state, running jobs, tmux sessions, GPU, and disk. Inputs: host or --all.
+Steps:
+
+- run `./devops/mettabox/cli.py audit <host>` or `./devops/mettabox/cli.py audit --all` Output: status snapshot.
+
+### /mettabox-profile
+
+Purpose: capture a quick resource snapshot inside the mettabox container. Inputs: host. Steps:
+
+- run `./devops/mettabox/cli.py profile <host>` Output: GPU + CPU/memory top processes.
+
+### /mettabox-exec
+
+Purpose: run a one-off command inside a mettabox container. Inputs: host, command. Steps:
+
+- run `./devops/mettabox/cli.py exec <host> -- <command...>` Output: command output and exit status.
+
+### /skypilot-status
+
+Purpose: list available SkyPilot sandboxes. Inputs: none. Steps:
+
+- run `./devops/mettabox/cli.py sky-status` Output: sky status table.
