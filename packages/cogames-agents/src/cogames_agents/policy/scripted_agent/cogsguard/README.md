@@ -201,9 +201,9 @@ You can control how many agents start with each role using URI query parameters:
 **Assignment order:** `scrambler → aligner → miner → scout → gear`
 
 Agents are assigned vibes in order by agent ID. Agents beyond the total count specified get no initial target vibe and
-will use the environment's default.
+start with the `gear` vibe (smart role selection).
 
-**Default counts** (if no params specified): `scrambler=1, miner=4`
+**Default counts** (if no params specified): `scrambler=1, miner=4`, remainder `gear`
 
 ## File Structure
 

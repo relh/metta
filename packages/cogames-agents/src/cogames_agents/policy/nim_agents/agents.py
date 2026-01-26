@@ -80,3 +80,19 @@ class CogsguardAgentsMultiPolicy(NimMultiAgentPolicy):
             nim_policy_factory=na.CogsguardPolicy,
             agent_ids=agent_ids,
         )
+
+
+class CogsguardAlignAllAgentsMultiPolicy(NimMultiAgentPolicy):
+    short_names = ["cogsguard_align_all"]
+
+    def __init__(
+        self,
+        policy_env_info: PolicyEnvInterface,
+        agent_ids: Sequence[int] | None = None,
+        **_: object,
+    ):
+        super().__init__(
+            policy_env_info,
+            nim_policy_factory=na.CogsguardAlignAllPolicy,
+            agent_ids=agent_ids,
+        )

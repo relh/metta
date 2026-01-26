@@ -146,6 +146,9 @@ class CogsguardAgentState:
     # alignment: "cogs", "clips", or None (neutral)
     supply_depots: list[tuple[tuple[int, int], Optional[str]]] = field(default_factory=list)
 
+    # Alignment overrides from our own actions (pos -> alignment).
+    alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
+
     # Inventory - gear items
     miner: int = 0
     scout: int = 0
@@ -230,7 +233,7 @@ class CogsguardAgentState:
     active_option_ticks: int = 0
 
     # Energy costs (can be overridden based on game config)
-    MOVE_ENERGY_COST: int = 2  # Default move energy cost
+    MOVE_ENERGY_COST: int = 3  # Default move energy cost
 
     def has_gear(self) -> bool:
         """Check if agent has their role's gear equipped."""
@@ -309,6 +312,16 @@ class CogsguardAgentState:
         self._pre_action_heart = self.heart
         self._pre_action_cargo = self.total_cargo
 
+    def record_alignment_override(self, pos: tuple[int, int], alignment: Optional[str]) -> None:
+        """Persist alignment changes from successful actions."""
+        self.alignment_overrides[pos] = alignment
+        struct = self.structures.get(pos)
+        if struct is not None:
+            struct.alignment = alignment
+        for idx, (depot_pos, _) in enumerate(self.supply_depots):
+            if depot_pos == pos:
+                self.supply_depots[idx] = (pos, alignment)
+
     def check_action_success(self) -> bool:
         """Check if the last action attempt succeeded based on state changes.
 
@@ -335,6 +348,9 @@ class CogsguardAgentState:
         if action_type in ("scramble", "align"):
             # These actions consume 1 heart on success
             if self.heart < self._pre_action_heart:
+                if self._pending_action_target:
+                    new_alignment = "cogs" if action_type == "align" else None
+                    self.record_alignment_override(self._pending_action_target, new_alignment)
                 # Heart was consumed - action succeeded
                 self.clear_pending_action()
                 return True

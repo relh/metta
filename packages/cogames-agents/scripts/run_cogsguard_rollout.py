@@ -8,6 +8,9 @@ from typing import Iterable
 
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
 from cogames_agents.policy.scripted_agent.cogsguard.types import StructureType
+from cogames_agents.policy.scripted_agent.utils import is_adjacent
+
+from cogames.cogs_vs_clips.stations import COGSGUARD_GEAR_COSTS
 
 
 def _is_assembler_tag(name: str, tags: Iterable[str]) -> bool:
@@ -23,6 +26,14 @@ def _is_charger_tag(name: str, tags: Iterable[str]) -> bool:
 def _has_alignment_tag(name: str, tags: Iterable[str]) -> bool:
     combined = {name, *tags}
     return any("cogs" in tag or "clips" in tag for tag in combined)
+
+
+MOVE_DELTAS = {
+    "move_north": (-1, 0),
+    "move_south": (1, 0),
+    "move_east": (0, 1),
+    "move_west": (0, -1),
+}
 
 
 def run_rollout(
@@ -56,6 +67,10 @@ def run_rollout(
         "miner": {
             "agents": set(),
             "gear_seen": False,
+            "gear_station_uses": 0,
+            "gear_acquired": 0,
+            "gear_attempts_with_resources": 0,
+            "gear_attempts_without_resources": 0,
             "mine_attempts": 0,
             "mine_mismatches": 0,
             "deposit_attempts": 0,
@@ -63,12 +78,20 @@ def run_rollout(
         "scout": {
             "agents": set(),
             "gear_seen": False,
+            "gear_station_uses": 0,
+            "gear_acquired": 0,
+            "gear_attempts_with_resources": 0,
+            "gear_attempts_without_resources": 0,
             "unique_positions": {},
             "max_structures_seen": 0,
         },
         "aligner": {
             "agents": set(),
             "gear_seen": False,
+            "gear_station_uses": 0,
+            "gear_acquired": 0,
+            "gear_attempts_with_resources": 0,
+            "gear_attempts_without_resources": 0,
             "align_attempts": 0,
             "align_mismatches": 0,
             "align_cogs_targets": 0,
@@ -76,6 +99,10 @@ def run_rollout(
         "scrambler": {
             "agents": set(),
             "gear_seen": False,
+            "gear_station_uses": 0,
+            "gear_acquired": 0,
+            "gear_attempts_with_resources": 0,
+            "gear_attempts_without_resources": 0,
             "scramble_attempts": 0,
             "scramble_mismatches": 0,
             "scramble_cogs_targets": 0,
@@ -84,9 +111,24 @@ def run_rollout(
 
     last_pending_action: dict[int, str | None] = {}
     last_cargo: dict[int, int] = {}
+    last_gear: dict[int, dict[str, int]] = {}
+    gear_resource_windows = {role: 0 for role in COGSGUARD_GEAR_COSTS}
+    gear_resource_windows_with_adjacent = {role: 0 for role in COGSGUARD_GEAR_COSTS}
 
     for _ in range(steps):
         harness.step(1)
+        collective_inv = {}
+        if hasattr(harness.sim, "_c_sim"):
+            collective_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
+        gear_resources_available = {
+            role: all(collective_inv.get(resource, 0) >= amount for resource, amount in cost.items())
+            for role, cost in COGSGUARD_GEAR_COSTS.items()
+        }
+        for role, available in gear_resources_available.items():
+            if available:
+                gear_resource_windows[role] += 1
+
+        adjacent_by_role = {role: False for role in COGSGUARD_GEAR_COSTS}
         for agent_id in range(harness.num_agents):
             policy = harness.agent_policies[agent_id]
             base_policy = policy._base_policy if hasattr(policy, "_base_policy") else policy
@@ -99,6 +141,35 @@ def run_rollout(
                 role_stats[role]["agents"].add(agent_id)
                 if state.has_gear():
                     role_stats[role]["gear_seen"] = True
+
+                if role in COGSGUARD_GEAR_COSTS:
+                    station = state.stations.get(f"{role}_station")
+                    if station and is_adjacent((state.row, state.col), station):
+                        adjacent_by_role[role] = True
+
+                gear_snapshot = last_gear.get(agent_id, {})
+                current_gear = {
+                    "aligner": state.aligner,
+                    "scrambler": state.scrambler,
+                    "miner": state.miner,
+                    "scout": state.scout,
+                }
+                if role in COGSGUARD_GEAR_COSTS and current_gear.get(role, 0) > gear_snapshot.get(role, 0):
+                    role_stats[role]["gear_acquired"] += 1
+
+                action_name = state.last_action.name if state.last_action else ""
+                if state.using_object_this_step and action_name in MOVE_DELTAS and role in COGSGUARD_GEAR_COSTS:
+                    dr, dc = MOVE_DELTAS[action_name]
+                    target = (state.row + dr, state.col + dc)
+                    station = state.stations.get(f"{role}_station")
+                    if station and target == station:
+                        role_stats[role]["gear_station_uses"] += 1
+                        if gear_resources_available.get(role, False):
+                            role_stats[role]["gear_attempts_with_resources"] += 1
+                        else:
+                            role_stats[role]["gear_attempts_without_resources"] += 1
+
+                last_gear[agent_id] = current_gear
             parsed = base_policy._parse_observation(state, state.current_obs)
             for pos, obj_state in parsed.nearby_objects.items():
                 obj_name = obj_state.name.lower()
@@ -123,6 +194,8 @@ def run_rollout(
 
                 struct = state.structures.get(pos)
                 if struct is None or struct.structure_type != StructureType.CHARGER:
+                    continue
+                if pos in state.alignment_overrides:
                     continue
 
                 if expected_alignment is not None:
@@ -186,6 +259,10 @@ def run_rollout(
                     elif target_struct.alignment == "cogs":
                         role_stats["scrambler"]["scramble_cogs_targets"] += 1
 
+        for role, adjacent in adjacent_by_role.items():
+            if adjacent and gear_resources_available.get(role, False):
+                gear_resource_windows_with_adjacent[role] += 1
+
     print("Cogsguard rollout sanity check")
     print(f"- steps: {steps}")
     print(f"- assembler seen: {assembler_seen}")
@@ -224,6 +301,19 @@ def run_rollout(
         f"scramble_mismatches={role_stats['scrambler']['scramble_mismatches']} "
         f"scramble_cogs_targets={role_stats['scrambler']['scramble_cogs_targets']}"
     )
+    print("Gear station diagnostics")
+    for role in ["scrambler", "aligner", "miner", "scout"]:
+        if role not in role_stats:
+            continue
+        stats = role_stats[role]
+        print(
+            f"- {role}: station_uses={stats['gear_station_uses']} "
+            f"gear_acquired={stats['gear_acquired']} "
+            f"attempts_with_resources={stats['gear_attempts_with_resources']} "
+            f"attempts_without_resources={stats['gear_attempts_without_resources']}"
+        )
+    print(f"- gear resource windows: {gear_resource_windows}")
+    print(f"- gear resource windows with role adjacent: {gear_resource_windows_with_adjacent}")
 
     if assembler_seen and assembler_missing:
         return 1

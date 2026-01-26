@@ -24,6 +24,8 @@ from .types import CogsguardAgentState, Role, StructureType
 
 # Maximum number of times to retry a failed align action
 MAX_RETRIES = 3
+# HP buffer to start returning to the hub before gear is lost.
+HP_RETURN_BUFFER = 12
 
 
 class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
@@ -48,6 +50,14 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"[A{s.agent_id}] ALIGNER: step={s.step_count} influence={s.influence} "
                 f"heart={s.heart} energy={s.energy} gear={s.aligner} chargers_known={num_chargers} worked={num_worked}"
             )
+
+        assembler_pos = s.stations.get("assembler")
+        if assembler_pos is not None:
+            dist_to_hub = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
+            if s.hp <= dist_to_hub + HP_RETURN_BUFFER:
+                if DEBUG and s.step_count % 10 == 0:
+                    print(f"[A{s.agent_id}] ALIGNER: Low HP ({s.hp}), returning to hub")
+                return self._do_recharge(s)
 
         # === Resource check: need gear, heart, and influence to align ===
         has_gear = s.aligner >= 1

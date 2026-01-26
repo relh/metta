@@ -52,6 +52,11 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
     """Miner agent: gather resources and deposit at nearest aligned building."""
 
     ROLE = Role.MINER
+    RESOURCE_ORDER = ["carbon", "oxygen", "germanium", "silicon"]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._preferred_resource = self.RESOURCE_ORDER[self._agent_id % len(self.RESOURCE_ORDER)]
 
     def _get_nearest_aligned_depot(self, s: CogsguardAgentState) -> tuple[int, int] | None:
         """Find the nearest aligned building that accepts deposits.
@@ -305,7 +310,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         """
         # Use structures map for most up-to-date extractor info
         # Prefer extractors that are safe (not near clips chargers)
-        extractor = self._get_safe_extractor(s)
+        extractor = self._get_safe_extractor(s, preferred_resource=self._preferred_resource)
 
         if extractor is None:
             # No usable extractors known - explore to find more
@@ -406,7 +411,11 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             print(f"[A{s.agent_id}] MINER: exploring towards corner {corner_idx}, target=({target_r},{target_c})")
         return self._move_towards(s, (target_r, target_c), reach_adjacent=False)
 
-    def _get_safe_extractor(self, s: CogsguardAgentState) -> "StructureInfo | None":
+    def _get_safe_extractor(
+        self,
+        s: CogsguardAgentState,
+        preferred_resource: str | None = None,
+    ) -> "StructureInfo | None":
         """Get extractor prioritized by distance to aligned stations.
 
         Prioritizes extractors nearest to aligned buildings (assembler/cogs chargers)
@@ -430,10 +439,15 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         # Get usable extractors
         extractors = s.get_usable_extractors()
+        if preferred_resource:
+            preferred = [ext for ext in extractors if ext.resource_type == preferred_resource]
+            if preferred:
+                extractors = preferred
 
         # Sort by distance to aligned station and prefer safe ones within HP range
         safe_extractors: list[tuple[int, int, StructureInfo]] = []  # (dist_to_depot, dist_to_ext, ext)
         risky_extractors: list[tuple[int, int, StructureInfo]] = []
+        fallback_preferred: list[tuple[int, int, StructureInfo]] = []
 
         # Get nearest aligned depot for round-trip calculations
         nearest_depot = self._get_nearest_aligned_depot(s)
@@ -458,6 +472,8 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
             # Skip extractors that are too far for our current HP
             if round_trip > max_safe_dist:
+                if preferred_resource and ext.resource_type == preferred_resource:
+                    fallback_preferred.append((dist_ext_to_depot, dist_to_ext, ext))
                 if DEBUG:
                     print(
                         f"[A{s.agent_id}] MINER: Skipping extractor at {ext.position}, "
@@ -488,6 +504,10 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         if risky_extractors:
             risky_extractors.sort(key=lambda x: (x[0], x[1]))
             return risky_extractors[0][2]
+
+        if fallback_preferred:
+            fallback_preferred.sort(key=lambda x: (x[0], x[1]))
+            return fallback_preferred[0][2]
 
         return None
 

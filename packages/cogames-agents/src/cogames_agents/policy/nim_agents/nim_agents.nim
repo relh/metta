@@ -1,6 +1,7 @@
 import
   genny, fidget2/measure,
-  random_agents, thinky_agents, racecar_agents, ladybug_agent, cogsguard_agents
+  random_agents, thinky_agents, racecar_agents, ladybug_agent, cogsguard_agents,
+  cogsguard_align_all_agents
 
 
 proc ctrlCHandler() {.noconv.} =
@@ -55,6 +56,12 @@ exportRefObject CogsguardPolicy:
     newCogsguardPolicy(string)
   procs:
     stepBatch(CogsguardPolicy, pointer, int, int, int, int, pointer, int, pointer)
+
+exportRefObject CogsguardAlignAllPolicy:
+  constructor:
+    newCogsguardAlignAllPolicy(string)
+  procs:
+    stepBatch(CogsguardAlignAllPolicy, pointer, int, int, int, int, pointer, int, pointer)
 
 writeFiles("bindings/generated", "NimAgents")
 

@@ -18,6 +18,7 @@ SCRIPTED_AGENT_URIS: dict[str, str] = {
     "cogsguard": "metta://policy/cogsguard",
     "cogsguard_nim": "metta://policy/cogsguard_nim",
     "cogsguard_py": "metta://policy/cogsguard_py",
+    "cogsguard_align_all": "metta://policy/cogsguard_align_all",
     "teacher": "metta://policy/teacher",
     "teacher_nim": "metta://policy/teacher_nim",
     "miner": "metta://policy/miner",

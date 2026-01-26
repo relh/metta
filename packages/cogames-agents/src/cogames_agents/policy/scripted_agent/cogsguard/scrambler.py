@@ -26,6 +26,10 @@ from .types import CogsguardAgentState, Role, StructureType
 
 # Maximum number of times to retry a failed scramble action
 MAX_RETRIES = 3
+# HP buffer to start returning to the hub before gear is lost.
+HP_RETURN_BUFFER = 12
+# Scramblers should switch to aligner gear after making some neutral chargers.
+SCRAMBLE_TO_ALIGN_THRESHOLD = 1
 
 
 class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
@@ -51,6 +55,14 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"[A{s.agent_id}] SCRAMBLER: step={s.step_count} heart={s.heart} energy={s.energy} gear={s.scrambler} "
                 f"chargers={num_chargers} clips={clips_chargers} scrambled={num_worked}"
             )
+
+        assembler_pos = s.stations.get("assembler")
+        if assembler_pos is not None:
+            dist_to_hub = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
+            if s.hp <= dist_to_hub + HP_RETURN_BUFFER:
+                if DEBUG and s.step_count % 10 == 0:
+                    print(f"[A{s.agent_id}] SCRAMBLER: Low HP ({s.hp}), returning to hub")
+                return self._do_recharge(s)
 
         # === Resource check: need both gear AND heart to scramble ===
         has_gear = s.scrambler >= 1
@@ -87,6 +99,24 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 print(f"[A{s.agent_id}] SCRAMBLER: Have gear but no heart, getting hearts first")
             return self._get_hearts(s)
 
+        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        enemy_chargers = [c for c in chargers if c.alignment == "clips" or c.clipped]
+        neutral_chargers = [c for c in chargers if c.alignment is None]
+
+        if has_gear and len(s.alignment_overrides) >= SCRAMBLE_TO_ALIGN_THRESHOLD:
+            if DEBUG and s.step_count % 10 == 0:
+                print(f"[A{s.agent_id}] SCRAMBLER: Swapping to aligner gear after scrambles")
+            action = self._switch_to_aligner_gear(s)
+            if action is not None:
+                return action
+
+        if has_gear and not enemy_chargers and neutral_chargers:
+            if DEBUG and s.step_count % 10 == 0:
+                print(f"[A{s.agent_id}] SCRAMBLER: No enemy chargers; swapping to aligner gear")
+            action = self._switch_to_aligner_gear(s)
+            if action is not None:
+                return action
+
         # Find the best enemy depot to scramble (prioritize closest enemy charger)
         target_depot = self._find_best_target(s)
 
@@ -122,6 +152,14 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"(alignment={alignment}, heart={s.heart}, energy={s.energy})!"
             )
         return self._use_object_at(s, target_depot)
+
+    def _switch_to_aligner_gear(self, s: CogsguardAgentState) -> Optional[Action]:
+        aligner_station = s.stations.get("aligner_station")
+        if aligner_station is None:
+            return None
+        if not is_adjacent((s.row, s.col), aligner_station):
+            return self._move_towards(s, aligner_station, reach_adjacent=True)
+        return self._use_object_at(s, aligner_station)
 
     def _handle_no_gear(self, s: CogsguardAgentState) -> Action:
         """Handle behavior when scrambler doesn't have gear.

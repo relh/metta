@@ -61,12 +61,35 @@ VIBE_TO_ROLE = {
     "scrambler": Role.SCRAMBLER,
 }
 SMART_ROLE_SWITCH_COOLDOWN = 40
+SCRAMBLER_GEAR_PRIORITY_STEPS = 25
 
 if TYPE_CHECKING:
     from mettagrid.simulator.interface import AgentObservation
 
 # Debug flag - set to True to see detailed agent behavior
 DEBUG = False
+GEAR_SEARCH_OFFSETS = [
+    # BaseHub places stations ~4-5 rows below the assembler, spaced by 2 columns.
+    # Search those slots first to capture early gear windows.
+    (4, -4),
+    (4, -2),
+    (4, 0),
+    (4, 2),
+    (4, 4),
+    (5, -4),
+    (5, -2),
+    (5, 0),
+    (5, 2),
+    (5, 4),
+    # Fallbacks for variations/tighter layouts.
+    (6, -4),
+    (6, 0),
+    (6, 4),
+    (0, 5),
+    (5, 0),
+    (0, -5),
+    (-5, 0),
+]
 
 
 @dataclass
@@ -121,6 +144,8 @@ class SmartRoleCoordinator:
             return "scout"
 
         role_counts = self._aggregate_role_counts()
+        if role_counts.get("scout", 0) == 0:
+            return "scout"
         if role_counts.get("miner", 0) == 0:
             return "miner"
 
@@ -129,12 +154,14 @@ class SmartRoleCoordinator:
         if known_chargers == 0:
             return "scout"
 
-        hearts_total = self._aggregate_heart_count()
-        influence_total = self._aggregate_influence_count()
-
-        if charger_counts["clips"] > 0 and hearts_total > 0:
+        if role_counts.get("scrambler", 0) == 0:
             return "scrambler"
-        if charger_counts["neutral"] > 0 and hearts_total > 0 and influence_total > 0:
+        if role_counts.get("aligner", 0) == 0:
+            return "aligner"
+
+        if charger_counts["clips"] > 0 and role_counts.get("scrambler", 0) <= role_counts.get("aligner", 0):
+            return "scrambler"
+        if charger_counts["neutral"] > 0:
             return "aligner"
 
         if self._aggregate_structures_seen() < 10:
@@ -161,6 +188,17 @@ class SmartRoleCoordinator:
             if role_name in counts:
                 counts[role_name] += 1
         return counts
+
+    def _aggregate_role_gear_counts(self) -> dict[str, int]:
+        counts = {role: 0 for role in ROLE_VIBES}
+        for snapshot in self.agent_snapshots.values():
+            role_name = snapshot.role.value
+            if role_name in counts and snapshot.has_gear:
+                counts[role_name] += 1
+        return counts
+
+    def get_role_gear_counts(self) -> dict[str, int]:
+        return self._aggregate_role_gear_counts()
 
     def _aggregate_heart_count(self) -> int:
         return sum(snapshot.heart_count for snapshot in self.agent_snapshots.values())
@@ -193,6 +231,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         self._role = role
         self._policy_env_info = policy_env_info
         self._smart_role_coordinator = smart_role_coordinator
+        self._move_energy_cost = policy_env_info.move_energy_cost
 
         # Observation grid half-ranges
         self._obs_hr = policy_env_info.obs_height // 2
@@ -223,6 +262,9 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
     def _noop(self) -> Action:
         return Action(name="noop")
 
+    def _has_vibe(self, vibe_name: str) -> bool:
+        return vibe_name in self._vibe_names
+
     def _move(self, direction: str) -> Action:
         action_name = f"move_{direction}"
         if action_name in self._action_set:
@@ -246,7 +288,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         grid_size = 200
         grid_center = grid_size // 2
 
-        return CogsguardAgentState(
+        state = CogsguardAgentState(
             agent_id=self._agent_id,
             role=self._role,
             map_height=grid_size,
@@ -258,6 +300,10 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             col=grid_center,
             stations={},
         )
+
+        if self._move_energy_cost is not None:
+            state.MOVE_ENERGY_COST = self._move_energy_cost
+        return state
 
     def step_with_state(self, obs: AgentObservation, s: CogsguardAgentState) -> tuple[Action, CogsguardAgentState]:
         """Main step function."""
@@ -457,7 +503,11 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
             # Discover gear stations
             for _role, station_name in ROLE_TO_STATION.items():
-                if is_station(obj_name, station_name) or station_name in obj_name:
+                if (
+                    is_station(obj_name, station_name)
+                    or station_name in obj_name
+                    or any(station_name in tag for tag in obj_tags)
+                ):
                     s.occupancy[r][c] = CellType.OBSTACLE.value
                     struct_type = self._get_station_type(station_name)
                     self._update_structure(s, pos, obj_name, struct_type, obj_state)
@@ -469,7 +519,12 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     break
 
             # Discover supply depots (charger in cogsguard)
-            if "supply_depot" in obj_name or "charger" in obj_name or "junction" in obj_name:
+            if (
+                "supply_depot" in obj_name
+                or "charger" in obj_name
+                or "junction" in obj_name
+                or any(token in tag for tag in obj_tags for token in ("supply_depot", "charger", "junction"))
+            ):
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHARGER, obj_state)
                 # Legacy: update stations dict and supply_depots list
@@ -484,9 +539,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             is_assembler = (
                 "assembler" in obj_name
                 or obj_name in {"main_nexus", "hub"}
-                or "assembler" in obj_tags
-                or "main_nexus" in obj_tags
-                or "hub" in obj_tags
+                or any("assembler" in tag or "main_nexus" in tag or "hub" in tag or "nexus" in tag for tag in obj_tags)
             )
             if is_assembler:
                 s.occupancy[r][c] = CellType.OBSTACLE.value
@@ -497,11 +550,15 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     if DEBUG:
                         print(f"[A{s.agent_id}] DISCOVERED assembler at {pos}")
 
-            # Discover chest (for hearts) - NOT resource extractors, just "chest"
-            # Must check this isn't a resource extractor (carbon_chest, etc)
+            # Discover chest (for hearts) - exclude extractors which are ChestConfig-backed.
             resources = ["carbon", "oxygen", "germanium", "silicon"]
+            has_extractor_tag = "extractor" in obj_name or any("extractor" in tag for tag in obj_tags)
             is_resource_chest = any(f"{res}_" in obj_name or f"{res}chest" in obj_name for res in resources)
-            if obj_name == "chest" or ("chest" in obj_name and not is_resource_chest):
+            if (
+                not has_extractor_tag
+                and (obj_name == "chest" or ("chest" in obj_name and not is_resource_chest))
+                or any(tag == "chest" for tag in obj_tags)
+            ):
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHEST, obj_state)
                 # Track chest for heart acquisition
@@ -510,9 +567,9 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     if DEBUG:
                         print(f"[A{s.agent_id}] DISCOVERED chest at {pos}")
 
-            # Discover extractors (in cogsguard they're named {resource}_chest)
+            # Discover extractors (in cogsguard they're named {resource}_extractor).
             for resource in ["carbon", "oxygen", "germanium", "silicon"]:
-                if f"{resource}_extractor" in obj_name or f"{resource}_chest" in obj_name:
+                if f"{resource}_extractor" in obj_name or any(f"{resource}_extractor" in tag for tag in obj_tags):
                     s.occupancy[r][c] = CellType.OBSTACLE.value
                     self._update_structure(s, pos, obj_name, StructureType.EXTRACTOR, obj_state, resource_type=resource)
                     # Legacy: update extractors dict
@@ -545,6 +602,12 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Derive alignment from clipped field, object name, and structure type
         clipped = obj_state.clipped > 0
         alignment = self._derive_alignment(obj_name, clipped, structure_type, obj_state.tags)
+        if pos in s.alignment_overrides:
+            override = s.alignment_overrides[pos]
+            if alignment is None:
+                alignment = override
+            elif alignment != override:
+                s.alignment_overrides[pos] = alignment
 
         # Calculate inventory amount for extractors
         # Key insight: empty dict {} on FIRST observation = no info yet (assume full)
@@ -636,6 +699,12 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
     def _discover_supply_depot(self, s: CogsguardAgentState, pos: tuple[int, int], obj_state: ObjectState) -> None:
         """Track a supply depot with its alignment (legacy)."""
         alignment = self._derive_alignment(obj_state.name, obj_state.clipped > 0, StructureType.CHARGER, obj_state.tags)
+        if pos in s.alignment_overrides:
+            override = s.alignment_overrides[pos]
+            if alignment is None:
+                alignment = override
+            elif alignment != override:
+                s.alignment_overrides[pos] = alignment
 
         # Check if already tracked
         for i, (depot_pos, _) in enumerate(s.supply_depots):
@@ -692,9 +761,8 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             # Always try to get gear first, then execute role
             if s.has_gear():
                 s.phase = CogsguardPhase.EXECUTE_ROLE
-            elif s.step_count > 30:
-                # After 30 steps, proceed without gear to bootstrap economy
-                # Miners can mine with reduced capacity, others can still contribute
+            elif s.step_count > 30 and s.role in (Role.MINER, Role.SCOUT):
+                # After 30 steps, miners/scouts can proceed without gear to bootstrap economy/exploration.
                 s.phase = CogsguardPhase.EXECUTE_ROLE
             else:
                 s.phase = CogsguardPhase.GET_GEAR
@@ -804,14 +872,36 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
     def _do_get_gear(self, s: CogsguardAgentState) -> Action:
         """Find gear station and equip gear."""
+        if (
+            self._smart_role_coordinator is not None
+            and s.role != Role.SCRAMBLER
+            and s.step_count <= SCRAMBLER_GEAR_PRIORITY_STEPS
+        ):
+            gear_counts = self._smart_role_coordinator.get_role_gear_counts()
+            if gear_counts.get("scrambler", 0) == 0:
+                if DEBUG and s.step_count % 5 == 0:
+                    print(f"[A{s.agent_id}] GET_GEAR: yielding to scrambler gear priority")
+                return self._explore(s)
         station_name = s.get_gear_station_name()
         station_pos = s.stations.get(station_name)
+        assembler_pos = s.stations.get("assembler")
 
         if DEBUG and s.step_count <= 10:
             print(f"[A{s.agent_id}] GET_GEAR: station={station_name} pos={station_pos} all={list(s.stations.keys())}")
 
-        # Explore until we find the station
+        # Bootstrap with scout gear for mobility when station is unknown.
         if station_pos is None:
+            scout_station = s.stations.get("scout_station")
+            if scout_station is not None and s.scout == 0 and station_name != "scout_station":
+                if not is_adjacent((s.row, s.col), scout_station):
+                    return self._move_towards(s, scout_station, reach_adjacent=True)
+                return self._use_object_at(s, scout_station)
+
+            if assembler_pos is not None:
+                offset = GEAR_SEARCH_OFFSETS[(s.agent_id + s.step_count // 10) % len(GEAR_SEARCH_OFFSETS)]
+                target = (assembler_pos[0] + offset[0], assembler_pos[1] + offset[1])
+                return self._move_towards(s, target, reach_adjacent=True)
+
             if DEBUG:
                 print(f"[A{s.agent_id}] GET_GEAR: No {station_name} found, exploring")
             return self._explore(s)
@@ -1088,15 +1178,27 @@ class CogsguardPolicy(MultiAgentPolicy):
         self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
+        available_vibes = {
+            name[len("change_vibe_") :] for name in policy_env_info.action_names if name.startswith("change_vibe_")
+        }
+        role_vibes = [vibe for vibe in ["scrambler", "aligner", "miner", "scout"] if vibe in available_vibes]
+
         # Build initial vibe assignment from URI params (e.g., ?scrambler=1&miner=4)
         counts = {k: v for k, v in vibe_counts.items() if isinstance(v, int)}
+        if not counts and role_vibes:
+            counts = {"scrambler": 1, "miner": 4}
 
         # Build list of vibes to assign to agents
         self._initial_vibes: list[str] = []
-        for vibe_name in ["scrambler", "aligner", "miner", "scout"]:  # Role vibes first
-            self._initial_vibes.extend([vibe_name] * counts.get(vibe_name, 0))
+        if role_vibes:
+            for vibe_name in role_vibes:  # Role vibes first
+                self._initial_vibes.extend([vibe_name] * counts.get(vibe_name, 0))
         # Add gear vibes (agents will pick a role)
-        self._initial_vibes.extend(["gear"] * counts.get("gear", 0))
+        if "gear" in available_vibes:
+            self._initial_vibes.extend(["gear"] * counts.get("gear", 0))
+        remaining = policy_env_info.num_agents - len(self._initial_vibes)
+        if remaining > 0 and "gear" in available_vibes:
+            self._initial_vibes.extend(["gear"] * remaining)
 
         if DEBUG:
             print(f"[CogsguardPolicy] Initial vibe assignment: {self._initial_vibes}")
@@ -1182,6 +1284,10 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
         """
         # If we have a target vibe and haven't switched yet, do it first
         if self._initial_target_vibe and not self._initial_vibe_set:
+            if not self._has_vibe(self._initial_target_vibe):
+                self._initial_vibe_set = True
+                self._smart_role_enabled = False
+                return self._noop()
             if s.current_vibe != self._initial_target_vibe:
                 if DEBUG:
                     print(
@@ -1218,6 +1324,8 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
                 selected_role = self._smart_role_coordinator.choose_role(s.agent_id)
             if DEBUG:
                 print(f"[A{s.agent_id}] GEAR_VIBE: Picking role vibe: {selected_role}")
+            if not self._has_vibe(selected_role):
+                return self._noop()
             return change_vibe_action(selected_role, action_names=self._action_names)
 
         # Role vibes: execute the role behavior
@@ -1237,8 +1345,24 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
             return None
         if s._pending_action_type is not None:
             return None
+        if s.phase == CogsguardPhase.GET_GEAR:
+            return None
         if s.step_count < s.role_lock_until_step:
             return None
+
+        gear_role = None
+        if s.aligner > 0:
+            gear_role = "aligner"
+        elif s.scrambler > 0:
+            gear_role = "scrambler"
+        elif s.miner > 0:
+            gear_role = "miner"
+        elif s.scout > 0:
+            gear_role = "scout"
+        if gear_role and gear_role != s.current_vibe:
+            if not self._has_vibe(gear_role):
+                return None
+            return change_vibe_action(gear_role, action_names=self._action_names)
 
         selected_role = self._smart_role_coordinator.choose_role(s.agent_id)
         if selected_role == s.current_vibe:
@@ -1248,6 +1372,8 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
         s.role_lock_until_step = s.step_count + SMART_ROLE_SWITCH_COOLDOWN
         if DEBUG:
             print(f"[A{s.agent_id}] SMART_ROLE: Switching to {selected_role}")
+        if not self._has_vibe(selected_role):
+            return None
         return change_vibe_action(selected_role, action_names=self._action_names)
 
     def _get_role_impl(self, role: Role) -> CogsguardAgentPolicyImpl:
