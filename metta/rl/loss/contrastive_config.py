@@ -20,6 +20,16 @@ class ContrastiveConfig(LossConfig):
     )
     embedding_dim: int = Field(default=128, gt=0, description="Dimension of contrastive embeddings")
     use_projection_head: bool = Field(default=True, description="Whether to use projection head")
+    use_dropout_positives: bool = Field(
+        default=False,
+        description="Whether to use dropout-augmented positives from the same embedding",
+    )
+    dropout_prob: float = Field(
+        default=0.1,
+        ge=0.0,
+        lt=1.0,
+        description="Dropout probability for contrastive augmentation",
+    )
     log_similarities: bool = Field(
         default=False, description="Whether to log positive/negative similarities to console"
     )

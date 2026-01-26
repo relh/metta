@@ -32,6 +32,9 @@ class ContrastiveLoss(Loss):
         "_projection_head_input_dim",
         "_value_projection",
         "discount",
+        "use_dropout_positives",
+        "dropout_prob",
+        "dropout",
     )
 
     def __init__(
@@ -50,6 +53,11 @@ class ContrastiveLoss(Loss):
         self.embedding_dim = self.cfg.embedding_dim
         self.embedding_key = getattr(self.cfg, "embedding_key", None)
         self.discount = self.cfg.discount
+        self.use_dropout_positives = self.cfg.use_dropout_positives
+        self.dropout_prob = self.cfg.dropout_prob
+        self.dropout = (
+            torch.nn.Dropout(self.dropout_prob) if self.use_dropout_positives and self.dropout_prob > 0 else None
+        )
 
         # Add projection head if needed
         if self.cfg.use_projection_head:
@@ -216,9 +224,10 @@ class ContrastiveLoss(Loss):
 
             candidate_anchors: list[tuple[int, int]] = []
             for episode_start, episode_end in episode_bounds:
-                if episode_end - episode_start < 1:
+                if not self.use_dropout_positives and episode_end - episode_start < 1:
                     continue
-                for anchor in range(episode_start, episode_end):
+                anchor_range_end = episode_end + 1 if self.use_dropout_positives else episode_end
+                for anchor in range(episode_start, anchor_range_end):
                     candidate_anchors.append((anchor, episode_end))
 
             if not candidate_anchors:
@@ -227,18 +236,22 @@ class ContrastiveLoss(Loss):
             choice_idx = int(torch.randint(len(candidate_anchors), (1,), device=self.device).item())
             anchor_step, episode_end = candidate_anchors[choice_idx]
             max_future = episode_end - anchor_step
-            if max_future < 1:
+            if max_future < 1 and not self.use_dropout_positives:
                 continue
 
-            delta = int(geom_dist.sample().item())
-            attempts = 0
-            while delta > max_future and attempts < 10:
+            if self.use_dropout_positives:
+                delta = 0
+                positive_step = anchor_step
+            else:
                 delta = int(geom_dist.sample().item())
-                attempts += 1
-            if delta > max_future:
-                delta = max_future
+                attempts = 0
+                while delta > max_future and attempts < 10:
+                    delta = int(geom_dist.sample().item())
+                    attempts += 1
+                if delta > max_future:
+                    delta = max_future
 
-            positive_step = anchor_step + delta
+                positive_step = anchor_step + delta
 
             batch_indices.append(batch_idx)
             anchor_steps.append(anchor_step)
@@ -262,6 +275,11 @@ class ContrastiveLoss(Loss):
 
         anchor_embeddings = embeddings[batch_idx_tensor, anchor_idx_tensor]
         positive_embeddings = embeddings[batch_idx_tensor, positive_idx_tensor]
+        if self.use_dropout_positives:
+            if self.dropout is None:
+                self.dropout = torch.nn.Dropout(self.dropout_prob)
+            anchor_embeddings = self.dropout(anchor_embeddings)
+            positive_embeddings = self.dropout(positive_embeddings)
 
         similarities = anchor_embeddings @ positive_embeddings.T
         positive_logits = similarities.diagonal().unsqueeze(1)
@@ -277,7 +295,7 @@ class ContrastiveLoss(Loss):
         negative_sim_mean = negative_logits.mean().item()
         positive_sim_std = positive_logits.std().item()
         negative_sim_std = negative_logits.std().item()
-        delta_mean = float(sum(sampled_deltas) / len(sampled_deltas))
+        delta_mean = float(sum(sampled_deltas) / len(sampled_deltas)) if sampled_deltas else 0.0
 
         metrics = {
             "positive_sim_mean": positive_sim_mean,
