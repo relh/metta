@@ -101,6 +101,12 @@ EOF
   aws configure set profile.softmax-admin.sso_role_name AdministratorAccess
   aws configure set profile.softmax-admin.region us-east-1
 
+  # Set up tournament profile (isolated account for running tournament jobs)
+  aws configure set profile.tournament.sso_session softmax-sso
+  aws configure set profile.tournament.sso_account_id 583928386201
+  aws configure set profile.tournament.sso_role_name AdministratorAccess
+  aws configure set profile.tournament.region us-east-1
+
   echo "AWS profiles have been configured successfully."
 
   # Function to get the correct zshrc path based on ZDOTDIR
