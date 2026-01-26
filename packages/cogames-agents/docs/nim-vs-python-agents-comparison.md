@@ -1,6 +1,6 @@
 # Nim vs Python Scripted Agent Implementations Comparison
 
-**Date:** 2026-01-24 **Author:** Polecat brotherhood **Issue:** mt-nim-agents
+**Date:** 2026-01-26 **Author:** Polecat brotherhood **Issue:** mt-nim-agents
 
 ## Executive Summary
 
@@ -10,14 +10,14 @@ performance-optimized implementation, while the Python version offers more featu
 
 ## Comparison Table
 
-| Agent         | Python | Nim     | Parity  | Notes                                                                              |
-| ------------- | ------ | ------- | ------- | ---------------------------------------------------------------------------------- |
-| **miner**     | ✓ Full | ✓ Basic | Partial | Python has HP-awareness, retry logic, safe extractor selection                     |
-| **scout**     | ✓ Full | ✓ Basic | Partial | Python has frontier-based BFS exploration; Nim uses simple direction-based explore |
-| **aligner**   | ✓ Full | ✓ Basic | Partial | Python has heart/influence management, retry logic; Nim is simpler                 |
-| **scrambler** | ✓ Full | ✓ Basic | Partial | Python has heart acquisition, retry logic; Nim is simpler                          |
-| **cogsguard** | ✓ Full | ✓ Basic | Partial | Python has multi-role coordinator, vibe system; Nim has basic vibe switching       |
-| **teacher**   | ✓ Full | ✗ None  | None    | Python-only wrapper that delegates to Nim and forces initial vibes                 |
+| Agent                 | Python | Nim     | Parity  | Notes                                                                                                   |
+| --------------------- | ------ | ------- | ------- | ------------------------------------------------------------------------------------------------------- |
+| **miner**             | ✓ Full | ✓ Basic | Partial | Python has HP-awareness, retry logic, safe extractor selection; Nim is a simpler gather/deposit loop    |
+| **scout**             | ✓ Full | ✓ Basic | Partial | Python has frontier-based BFS + patrol; Nim uses spiral unseen search + direction-based exploration     |
+| **aligner**           | ✓ Full | ✓ Basic | Partial | Python adds influence gating, retry logic, per-charger cooldown; Nim handles hearts + chest acquisition |
+| **scrambler**         | ✓ Full | ✓ Basic | Partial | Python adds retry logic; Nim handles hearts + chest acquisition                                         |
+| **role (multi-role)** | ✓ Full | ✓ Basic | Partial | Python has a smart-role coordinator + phase machine; Nim uses simple smart-role heuristics + vibes      |
+| **teacher**           | ✓ Full | ✗ None  | None    | Python-only wrapper that delegates to Nim and forces initial vibes                                      |
 
 ## File Locations
 
@@ -48,11 +48,11 @@ performance-optimized implementation, while the Python version offers more featu
 | HP-aware mining (return for healing)       | ✓      | ✗   |
 | Safe extractor selection (avoid enemy AOE) | ✓      | ✗   |
 | Action retry on failure                    | ✓      | ✗   |
-| Gear re-acquisition on loss                | ✓      | ✗   |
+| Gear re-acquisition on loss                | ✓      | ✓   |
 | Extractor depletion tracking               | ✓      | ✓   |
 | Corner-directed exploration                | ✓      | ✗   |
 
-**Python LOC**: ~550 **Nim LOC**: ~100 (actMiner function)
+**Python LOC**: ~570 **Nim LOC**: ~14 (actMiner function)
 
 ### Scout Agent
 
@@ -64,20 +64,21 @@ performance-optimized implementation, while the Python version offers more featu
 | Systematic patrol fallback     | ✓      | ✗   |
 | Unseen cell tracking           | ✓      | ✓   |
 
-**Python LOC**: ~150 **Nim LOC**: ~10 (actScout function)
+**Python LOC**: ~70 **Nim LOC**: ~9 (actScout function)
 
 ### Aligner Agent
 
-| Feature                           | Python | Nim |
-| --------------------------------- | ------ | --- |
-| Align neutral chargers            | ✓      | ✓   |
-| Gear acquisition                  | ✓      | ✓   |
-| Heart/influence requirement check | ✓      | ✗   |
-| Heart acquisition from chest      | ✓      | ✗   |
-| Action retry on failure           | ✓      | ✗   |
-| Cooldown tracking per charger     | ✓      | ✗   |
+| Feature                       | Python | Nim |
+| ----------------------------- | ------ | --- |
+| Align neutral chargers        | ✓      | ✓   |
+| Gear acquisition              | ✓      | ✓   |
+| Heart requirement check       | ✓      | ✓   |
+| Influence requirement check   | ✓      | ✗   |
+| Heart acquisition from chest  | ✓      | ✓   |
+| Action retry on failure       | ✓      | ✗   |
+| Cooldown tracking per charger | ✓      | ✗   |
 
-**Python LOC**: ~280 **Nim LOC**: ~15 (actAligner function)
+**Python LOC**: ~330 **Nim LOC**: ~13 (actAligner function)
 
 ### Scrambler Agent
 
@@ -86,40 +87,46 @@ performance-optimized implementation, while the Python version offers more featu
 | Scramble enemy chargers           | ✓      | ✓   |
 | Gear acquisition                  | ✓      | ✓   |
 | Heart requirement check           | ✓      | ✓   |
-| Heart acquisition from chest      | ✓      | ✗   |
+| Heart acquisition from chest      | ✓      | ✓   |
 | Action retry on failure           | ✓      | ✗   |
 | Prioritize clips-aligned chargers | ✓      | ✓   |
 
-**Python LOC**: ~300 **Nim LOC**: ~15 (actScrambler function)
+**Python LOC**: ~350 **Nim LOC**: ~13 (actScrambler function)
 
 ### CogsGuard Main Policy
 
 | Feature                   | Python | Nim |
 | ------------------------- | ------ | --- |
 | Vibe-based role switching | ✓      | ✓   |
-| Smart role coordinator    | ✓      | ✗   |
+| Smart role coordinator    | ✓      | ✓   |
 | Phase-based state machine | ✓      | ✗   |
 | Detailed state tracking   | ✓      | ✓   |
 | A\* pathfinding           | ✓      | ✓   |
 | Map/occupancy tracking    | ✓      | ✓   |
 | Structure discovery       | ✓      | ✓   |
 
+**Note:** Nim's smart-role logic is a lightweight heuristic (hub/chest/heart/influence gated) rather than the full
+Python `SmartRoleCoordinator` implementation.
+
 ## Which Version is Used by Default?
 
 The default depends on how the policy is invoked:
 
-1. **`metta://policy/cogsguard`** - Uses **Nim** implementation (`CogsguardAgentsMultiPolicy`)
-2. **`metta://policy/cogsguard_py`** - Uses **Python** implementation (`CogsguardPolicy`)
-3. **`metta://policy/teacher`** - Uses **Nim** implementation via `CogsguardAgentsMultiPolicy` wrapped by Python teacher
+1. **`metta://policy/role`** (or `role_nim`) - Uses **Nim** implementation (`CogsguardAgentsMultiPolicy`)
+2. **`metta://policy/role_py`** - Uses **Python** implementation (`CogsguardPolicy`)
+3. **`metta://policy/teacher`** (or `teacher_nim`) - Uses **Nim** implementation via `CogsguardAgentsMultiPolicy`
+   wrapped by Python teacher
 4. **`metta://policy/miner`**, **`scout`**, **`aligner`**, **`scrambler`** - Uses **Python** role-specific
    implementations
 
 **Short name registry:**
 
 ```
-cogsguard     -> Nim (CogsguardAgentsMultiPolicy)
-cogsguard_py  -> Python (CogsguardPolicy)
+role          -> Nim (CogsguardAgentsMultiPolicy)
+role_nim      -> Nim (CogsguardAgentsMultiPolicy)
+role_py       -> Python (CogsguardPolicy)
 teacher       -> Python wrapper over Nim
+teacher_nim   -> Python wrapper over Nim
 miner         -> Python (MinerPolicy)
 scout         -> Python (ScoutPolicy)
 aligner       -> Python (AlignerPolicy)
@@ -150,7 +157,7 @@ Tests exist for both versions:
 
 - Simpler procedural approach
 - Single `CogsguardAgent` struct with all state
-- Role selection via vibe-based switch statement
+- Role selection via a small heuristic when in the `gear` vibe, then vibe-based switch for role execution
 - Direct function calls for each role behavior
 
 ### Performance
