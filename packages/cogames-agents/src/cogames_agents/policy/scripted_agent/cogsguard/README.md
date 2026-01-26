@@ -160,6 +160,11 @@ Extractors ──► Miners ──► Commons ──► Gear Stations ──► 
 3. **Random Station Placement**: Gear stations are randomly placed around the hub perimeter, making exploration outcomes
    variable.
 
+## Investigations
+
+- [aligned_junction_held_investigation](aligned_junction_held_investigation.md): AOE energy issues blocking junction
+  alignment in `aligned.junction.held`.
+
 ## Usage
 
 ```bash
