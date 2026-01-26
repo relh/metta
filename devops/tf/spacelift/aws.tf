@@ -59,8 +59,11 @@ import {
 
 # Tournament account integration
 # IAM role was bootstrapped via devops/tf/tournament-bootstrap/
+# Stacks in devops/tf/tournament* should use label "autoattach:tournament-aws"
 resource "spacelift_aws_integration" "tournament" {
-  name             = "tournament-aws"
-  role_arn         = "arn:aws:iam::583928386201:role/Spacelift"
-  duration_seconds = 3600
+  name               = "tournament-aws"
+  role_arn           = "arn:aws:iam::583928386201:role/Spacelift"
+  duration_seconds   = 3600
+  autoattach_enabled = true
+  labels             = ["autoattach:tournament-aws"]
 }
