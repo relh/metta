@@ -1,7 +1,6 @@
 import os
 import subprocess
 import sys
-import tomllib
 from enum import Enum
 from pathlib import Path
 
@@ -73,17 +72,8 @@ class GitHooksSetup(SetupModule):
         return not self._is_in_worktree()
 
     def _is_in_worktree(self) -> bool:
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "--is-inside-work-tree"],
-                cwd=self.repo_root,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            return result.stdout.strip() == "true"
-        except subprocess.CalledProcessError:
-            return False
+        git_path = self.repo_root / ".git"
+        return git_path.is_file()
 
     def _get_main_repo_root(self) -> Path:
         """Get the main repository root, even if we're in a worktree"""
@@ -250,14 +240,12 @@ class GitHooksSetup(SetupModule):
         hook_mode = CommitHookMode.parse(self.get_setting("commit_hook_mode", default=None))
         gitleaks_mode = GitLeaksMode.parse(self.get_setting("gitleaks_mode", default=None))
 
-        # Run gitleaks check first
         if not self._run_gitleaks(gitleaks_mode):
             sys.exit(1)
 
         if hook_mode == CommitHookMode.NONE:
             sys.exit(0)
 
-        # Get staged Python files
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
             cwd=self.repo_root,
@@ -265,46 +253,19 @@ class GitHooksSetup(SetupModule):
             text=True,
             check=True,
         )
-        files = [f for f in result.stdout.strip().split("\n") if f.endswith(".py") and f]
+        staged_files = [f for f in result.stdout.strip().split("\n") if f]
 
-        if not files:
-            # No Python files to lint
+        if not staged_files:
             sys.exit(0)
 
-        # Filter out excluded paths based on .ruff.toml
-        ruff_config_path = self.repo_root / ".ruff.toml"
-        with open(ruff_config_path, "rb") as f:
-            config = tomllib.load(f)
-        excluded_paths = config.get("exclude", [])
-
-        if excluded_paths:
-            filtered_files = []
-            for f in files:
-                file_path = Path(f)
-                should_exclude = any(
-                    file_path == Path(excluded) or file_path.is_relative_to(Path(excluded))
-                    for excluded in excluded_paths
-                )
-                if not should_exclude:
-                    filtered_files.append(f)
-
-            files = filtered_files
-
-        if not files:
-            # No files to lint after exclusions
-            sys.exit(0)
-
-        lint_cmd = ["metta", "lint"]
+        lint_cmd = ["uv", "run", "--no-sync", "python", "-m", "metta.setup.tools.code_formatters", "--staged"]
         if hook_mode == CommitHookMode.FIX:
             lint_cmd.append("--fix")
-        lint_cmd.extend(files)
 
         try:
             subprocess.run(lint_cmd, cwd=self.repo_root, check=True)
-
             if hook_mode == CommitHookMode.FIX:
-                subprocess.run(["git", "add"] + files, cwd=self.repo_root, check=True)
-
+                subprocess.run(["git", "add"] + staged_files, cwd=self.repo_root, check=True)
         except subprocess.CalledProcessError as e:
             if hook_mode == CommitHookMode.CHECK:
                 error("Linting failed. Please fix the issues before committing.")
