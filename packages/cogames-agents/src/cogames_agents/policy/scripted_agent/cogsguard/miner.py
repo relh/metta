@@ -67,7 +67,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         candidates: list[tuple[int, tuple[int, int]]] = []
 
         # Assembler is always aligned to cogs
-        assembler_pos = s.stations.get("assembler")
+        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
         if assembler_pos:
             dist = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
             candidates.append((dist, assembler_pos))
@@ -99,7 +99,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         has_gear = s.miner > 0
 
         if DEBUG and s.step_count <= 50:
-            num_extractors = sum(len(exts) for exts in s.extractors.values())
+            num_extractors = len(s.get_structures_by_type(StructureType.EXTRACTOR))
             mode = "deposit" if total_cargo >= cargo_capacity - 2 else "gather"
             gear_status = "GEAR" if has_gear else "NO_GEAR"
             steps_to_heal = self._get_steps_to_healing(s)
@@ -259,7 +259,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         After depositing, immediately try to get gear before continuing to mine.
         """
         depot_pos = self._get_nearest_aligned_depot(s)
-        station_pos = s.stations.get("miner_station")
+        station_pos = s.get_structure_position(StructureType.MINER_STATION)
 
         # If we still have cargo, deposit first at nearest aligned building
         if s.total_cargo > 0:

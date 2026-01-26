@@ -56,7 +56,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"chargers={num_chargers} clips={clips_chargers} scrambled={num_worked}"
             )
 
-        assembler_pos = s.stations.get("assembler")
+        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
         if assembler_pos is not None:
             dist_to_hub = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
             if s.hp <= dist_to_hub + HP_RETURN_BUFFER:
@@ -154,7 +154,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         return self._use_object_at(s, target_depot)
 
     def _switch_to_aligner_gear(self, s: CogsguardAgentState) -> Optional[Action]:
-        aligner_station = s.stations.get("aligner_station")
+        aligner_station = s.get_structure_position(StructureType.ALIGNER_STATION)
         if aligner_station is None:
             return None
         if not is_adjacent((s.row, s.col), aligner_station):
@@ -167,7 +167,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         Strategy: Go to gear station and wait there until gear is available.
         Can't do much without gear, so just wait.
         """
-        station_pos = s.stations.get("scrambler_station")
+        station_pos = s.get_structure_position(StructureType.SCRAMBLER_STATION)
 
         # If we don't know where the station is, explore to find it
         if station_pos is None:
@@ -207,7 +207,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             return self._explore_for_chargers(s)
 
         # Try chest first - it's the primary heart source
-        chest_pos = s.stations.get("chest")
+        chest_pos = s.get_structure_position(StructureType.CHEST)
         if chest_pos is not None:
             if DEBUG and s.step_count % 10 == 0:
                 adj = is_adjacent((s.row, s.col), chest_pos)
@@ -217,7 +217,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             return self._use_object_at(s, chest_pos)
 
         # Try assembler as fallback (may have heart AOE or deposit function)
-        assembler_pos = s.stations.get("assembler")
+        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
         if assembler_pos is not None:
             if DEBUG:
                 print(f"[A{s.agent_id}] SCRAMBLER: No chest found, trying assembler at {assembler_pos}")
@@ -305,20 +305,6 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             if DEBUG:
                 print(f"[A{s.agent_id}] FIND_TARGET: Returning any charger at {any_chargers[0][1]}")
             return any_chargers[0][1]
-
-        # Fall back to legacy supply_depots list
-        for depot_pos, alignment in s.supply_depots:
-            if alignment != "cogs":
-                last_worked = s.worked_chargers.get(depot_pos, 0)
-                if s.step_count - last_worked >= cooldown:
-                    return depot_pos
-
-        # Last resort: try charger from stations dict (if not on cooldown)
-        charger_pos = s.stations.get("charger")
-        if charger_pos:
-            last_worked = s.worked_chargers.get(charger_pos, 0)
-            if s.step_count - last_worked >= cooldown:
-                return charger_pos
 
         return None
 

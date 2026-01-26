@@ -20,6 +20,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from cogames_agents.policy.scripted_agent.cogsguard.types import StructureType
+
 # Ensure we can import from project root
 sys.path.insert(0, ".")
 
@@ -156,7 +158,7 @@ class DebugHarness:
                 info.current_vibe = state.current_vibe
                 info.last_action = state.last_action.name if state.last_action else None
                 info.target_position = state.target_position
-                info.assembler_pos = state.stations.get("assembler")
+                info.assembler_pos = state.get_structure_position(StructureType.ASSEMBLER)
 
                 # Track position history
                 info.position_history.append(pos)

@@ -48,7 +48,6 @@ def _make_state(
         explored=explored,
         row=row,
         col=col,
-        stations={},
     )
 
 
@@ -91,7 +90,12 @@ def test_aligner_requires_influence_before_aligning(policy_env_info: PolicyEnvIn
     state.aligner = 1
     state.heart = 1
     state.influence = 0
-    state.stations["assembler"] = (state.row, state.col + 1)
+    state.structures[(state.row, state.col + 1)] = StructureInfo(
+        position=(state.row, state.col + 1),
+        structure_type=StructureType.ASSEMBLER,
+        name="assembler",
+        alignment="cogs",
+    )
     state.structures[(state.row, state.col - 1)] = StructureInfo(
         position=(state.row, state.col - 1),
         structure_type=StructureType.CHARGER,
@@ -140,7 +144,12 @@ def test_miner_prefers_nearest_aligned_depot(policy_env_info: PolicyEnvInterface
     policy = MinerAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.MINER)
     state = _make_state(Role.MINER, map_size=10, row=0, col=0)
 
-    state.stations["assembler"] = (0, 5)
+    state.structures[(0, 5)] = StructureInfo(
+        position=(0, 5),
+        structure_type=StructureType.ASSEMBLER,
+        name="assembler",
+        alignment="cogs",
+    )
     state.structures[(0, 2)] = StructureInfo(
         position=(0, 2),
         structure_type=StructureType.CHARGER,

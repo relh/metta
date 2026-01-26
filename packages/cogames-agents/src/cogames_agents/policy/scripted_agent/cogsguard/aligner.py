@@ -51,7 +51,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"heart={s.heart} energy={s.energy} gear={s.aligner} chargers_known={num_chargers} worked={num_worked}"
             )
 
-        assembler_pos = s.stations.get("assembler")
+        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
         if assembler_pos is not None:
             dist_to_hub = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
             if s.hp <= dist_to_hub + HP_RETURN_BUFFER:
@@ -134,7 +134,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         Strategy: Go to gear station and wait there until gear is available.
         Can't do much without gear, so just wait.
         """
-        station_pos = s.stations.get("aligner_station")
+        station_pos = s.get_structure_position(StructureType.ALIGNER_STATION)
 
         # If we don't know where the station is, explore to find it
         if station_pos is None:
@@ -174,7 +174,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 return self._explore_for_chargers(s)
 
             # Try chest first - it's the primary heart source
-            chest_pos = s.stations.get("chest")
+            chest_pos = s.get_structure_position(StructureType.CHEST)
             if chest_pos is not None:
                 if DEBUG and s.step_count % 10 == 0:
                     adj = is_adjacent((s.row, s.col), chest_pos)
@@ -184,7 +184,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 return self._use_object_at(s, chest_pos)
 
             # Try assembler as fallback (may have heart AOE or deposit function)
-            assembler_pos = s.stations.get("assembler")
+            assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
             if assembler_pos is not None:
                 if DEBUG:
                     print(f"[A{s.agent_id}] ALIGNER: No chest found, trying assembler at {assembler_pos}")
@@ -199,7 +199,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             return self._explore(s)
 
         # Just need influence - wait for AOE regeneration near assembler
-        assembler_pos = s.stations.get("assembler")
+        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
         if assembler_pos is None:
             return self._explore(s)
         if not is_adjacent((s.row, s.col), assembler_pos):
@@ -245,29 +245,6 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 closest = unaligned_chargers[0][1]
                 print(f"[A{s.agent_id}] ALIGNER: Found {count} un-aligned chargers, closest at {closest}")
             return unaligned_chargers[0][1]
-
-        # Check legacy supply_depots list
-        legacy_targets: list[tuple[int, tuple[int, int]]] = []
-        for depot_pos, alignment in s.supply_depots:
-            if alignment is None:
-                last_worked = s.worked_chargers.get(depot_pos, 0)
-                if last_worked == 0 or s.step_count - last_worked >= cooldown:
-                    dist = abs(depot_pos[0] - s.row) + abs(depot_pos[1] - s.col)
-                    legacy_targets.append((dist, depot_pos))
-
-        if legacy_targets:
-            legacy_targets.sort()
-            return legacy_targets[0][1]
-
-        # Last resort: try charger from stations dict
-        charger_pos = s.stations.get("charger")
-        if charger_pos:
-            charger = s.get_structure_at(charger_pos)
-            if charger is not None and charger.alignment is not None:
-                return None
-            last_worked = s.worked_chargers.get(charger_pos, 0)
-            if last_worked == 0 or s.step_count - last_worked >= cooldown:
-                return charger_pos
 
         return None
 

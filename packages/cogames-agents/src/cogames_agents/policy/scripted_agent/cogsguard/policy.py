@@ -99,7 +99,7 @@ class SmartRoleAgentSnapshot:
     step: int
     role: Role
     has_gear: bool
-    stations_known: tuple[str, ...]
+    structures_known: tuple[str, ...]
     structures_seen: int
     heart_count: int
     influence_count: int
@@ -121,12 +121,12 @@ class SmartRoleCoordinator:
             else:
                 charger_counts["unknown"] += 1
 
-        known_stations = tuple(sorted(k for k, v in s.stations.items() if v is not None))
+        known_structures = tuple(sorted({struct.structure_type.value for struct in s.structures.values()}))
         self.agent_snapshots[s.agent_id] = SmartRoleAgentSnapshot(
             step=s.step_count,
             role=s.role,
             has_gear=s.has_gear(),
-            stations_known=known_stations,
+            structures_known=known_structures,
             structures_seen=len(s.structures),
             heart_count=s.heart,
             influence_count=s.influence,
@@ -139,8 +139,8 @@ class SmartRoleCoordinator:
         if snapshot is None:
             return random.choice(ROLE_VIBES)
 
-        stations_known = self._aggregate_stations()
-        if "assembler" not in stations_known or "chest" not in stations_known:
+        structures_known = self._aggregate_structures()
+        if "assembler" not in structures_known or "chest" not in structures_known:
             return "scout"
 
         role_counts = self._aggregate_role_counts()
@@ -175,11 +175,11 @@ class SmartRoleCoordinator:
                 totals[key] = max(totals[key], snapshot.charger_alignment_counts.get(key, 0))
         return totals
 
-    def _aggregate_stations(self) -> set[str]:
-        stations: set[str] = set()
+    def _aggregate_structures(self) -> set[str]:
+        structures: set[str] = set()
         for snapshot in self.agent_snapshots.values():
-            stations.update(snapshot.stations_known)
-        return stations
+            structures.update(snapshot.structures_known)
+        return structures
 
     def _aggregate_role_counts(self) -> dict[str, int]:
         counts = {role: 0 for role in ROLE_VIBES}
@@ -298,7 +298,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             # Start at (0, 0) relative - stored at grid center for negative offset support
             row=grid_center,
             col=grid_center,
-            stations={},
         )
 
         if self._move_energy_cost is not None:
@@ -335,7 +334,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Debug logging
         if DEBUG and s.step_count <= 50:  # Only first 50 steps per agent
             gear_status = "HAS_GEAR" if s.has_gear() else "NO_GEAR"
-            nexus_pos = s.stations.get("assembler", "NOT_FOUND")
+            nexus_pos = s.get_structure_position(StructureType.ASSEMBLER) or "NOT_FOUND"
             print(
                 f"[A{s.agent_id}] Step {s.step_count}: vibe={s.current_vibe} role={s.role.value} | "
                 f"Phase={s.phase.value} | {gear_status} | "
@@ -511,11 +510,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     s.occupancy[r][c] = CellType.OBSTACLE.value
                     struct_type = self._get_station_type(station_name)
                     self._update_structure(s, pos, obj_name, struct_type, obj_state)
-                    # Legacy: update stations dict
-                    if station_name not in s.stations or s.stations[station_name] is None:
-                        s.stations[station_name] = pos
-                        if DEBUG:
-                            print(f"[A{s.agent_id}] DISCOVERED {station_name} at {pos}")
                     break
 
             # Discover supply depots (charger in cogsguard)
@@ -527,12 +521,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             ):
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHARGER, obj_state)
-                # Legacy: update stations dict and supply_depots list
-                if "charger" not in s.stations or s.stations["charger"] is None:
-                    s.stations["charger"] = pos
-                    if DEBUG:
-                        print(f"[A{s.agent_id}] DISCOVERED charger/supply_depot at {pos}")
-                self._discover_supply_depot(s, pos, obj_state)
 
             # Discover assembler (the resource deposit point)
             # In cogsguard, the assembler object uses "hub" or "main_nexus" tags.
@@ -544,11 +532,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             if is_assembler:
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.ASSEMBLER, obj_state)
-                # Legacy: update stations dict
-                if "assembler" not in s.stations or s.stations["assembler"] is None:
-                    s.stations["assembler"] = pos
-                    if DEBUG:
-                        print(f"[A{s.agent_id}] DISCOVERED assembler at {pos}")
 
             # Discover chest (for hearts) - exclude extractors which are ChestConfig-backed.
             resources = ["carbon", "oxygen", "germanium", "silicon"]
@@ -561,22 +544,12 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             ):
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHEST, obj_state)
-                # Track chest for heart acquisition
-                if "chest" not in s.stations or s.stations["chest"] is None:
-                    s.stations["chest"] = pos
-                    if DEBUG:
-                        print(f"[A{s.agent_id}] DISCOVERED chest at {pos}")
 
             # Discover extractors (in cogsguard they're named {resource}_extractor).
             for resource in ["carbon", "oxygen", "germanium", "silicon"]:
                 if f"{resource}_extractor" in obj_name or any(f"{resource}_extractor" in tag for tag in obj_tags):
                     s.occupancy[r][c] = CellType.OBSTACLE.value
                     self._update_structure(s, pos, obj_name, StructureType.EXTRACTOR, obj_state, resource_type=resource)
-                    # Legacy: update extractors dict
-                    if resource in s.extractors:
-                        self._discover_extractor(s, pos, resource, obj_state)
-                        if DEBUG and s.step_count <= 30:
-                            print(f"[A{s.agent_id}] DISCOVERED {resource} extractor at {pos}")
                     break
 
     def _get_station_type(self, station_name: str) -> StructureType:
@@ -696,54 +669,6 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                 return "cogs"
         return None  # Unknown/neutral
 
-    def _discover_supply_depot(self, s: CogsguardAgentState, pos: tuple[int, int], obj_state: ObjectState) -> None:
-        """Track a supply depot with its alignment (legacy)."""
-        alignment = self._derive_alignment(obj_state.name, obj_state.clipped > 0, StructureType.CHARGER, obj_state.tags)
-        if pos in s.alignment_overrides:
-            override = s.alignment_overrides[pos]
-            if alignment is None:
-                alignment = override
-            elif alignment != override:
-                s.alignment_overrides[pos] = alignment
-
-        # Check if already tracked
-        for i, (depot_pos, _) in enumerate(s.supply_depots):
-            if depot_pos == pos:
-                # Update alignment
-                s.supply_depots[i] = (pos, alignment)
-                return
-        # Add new depot
-        s.supply_depots.append((pos, alignment))
-
-    def _discover_extractor(
-        self,
-        s: CogsguardAgentState,
-        pos: tuple[int, int],
-        resource_type: str,
-        obj_state: ObjectState,
-    ) -> None:
-        """Track a discovered extractor (legacy)."""
-        from cogames_agents.policy.scripted_agent.types import ExtractorInfo
-
-        for existing in s.extractors[resource_type]:
-            if existing.position == pos:
-                existing.cooldown_remaining = obj_state.cooldown_remaining
-                existing.clipped = obj_state.clipped > 0
-                existing.remaining_uses = obj_state.remaining_uses
-                existing.last_seen_step = s.step_count
-                return
-
-        s.extractors[resource_type].append(
-            ExtractorInfo(
-                position=pos,
-                resource_type=resource_type,
-                last_seen_step=s.step_count,
-                cooldown_remaining=obj_state.cooldown_remaining,
-                clipped=obj_state.clipped > 0,
-                remaining_uses=obj_state.remaining_uses,
-            )
-        )
-
     def _update_phase(self, s: CogsguardAgentState) -> None:
         """Update agent phase based on current vibe.
 
@@ -817,7 +742,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         """
         # The main_nexus is cogs-aligned and has AOE that gives energy to cogs agents
         # The supply_depot is clips-aligned and won't give energy to cogs agents
-        nexus_pos = s.stations.get("assembler")
+        nexus_pos = s.get_structure_position(StructureType.ASSEMBLER)
         if nexus_pos is None:
             if DEBUG:
                 print(f"[A{s.agent_id}] RECHARGE: No nexus found, exploring")
@@ -883,15 +808,16 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     print(f"[A{s.agent_id}] GET_GEAR: yielding to scrambler gear priority")
                 return self._explore(s)
         station_name = s.get_gear_station_name()
-        station_pos = s.stations.get(station_name)
-        assembler_pos = s.stations.get("assembler")
+        station_pos = s.get_structure_position(s.get_gear_station_type())
+        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
 
         if DEBUG and s.step_count <= 10:
-            print(f"[A{s.agent_id}] GET_GEAR: station={station_name} pos={station_pos} all={list(s.stations.keys())}")
+            known_structures = sorted({struct.structure_type.value for struct in s.structures.values()})
+            print(f"[A{s.agent_id}] GET_GEAR: station={station_name} pos={station_pos} all={known_structures}")
 
         # Bootstrap with scout gear for mobility when station is unknown.
         if station_pos is None:
-            scout_station = s.stations.get("scout_station")
+            scout_station = s.get_structure_position(StructureType.SCOUT_STATION)
             if scout_station is not None and s.scout == 0 and station_name != "scout_station":
                 if not is_adjacent((s.row, s.col), scout_station):
                     return self._move_towards(s, scout_station, reach_adjacent=True)

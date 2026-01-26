@@ -15,8 +15,6 @@ from mettagrid.simulator import Action
 if TYPE_CHECKING:
     from mettagrid.simulator.interface import AgentObservation
 
-from cogames_agents.policy.scripted_agent.types import ExtractorInfo
-
 
 class Role(Enum):
     """Agent roles in CoGsGuard."""
@@ -89,6 +87,14 @@ ROLE_TO_STATION = {
     Role.SCRAMBLER: "scrambler_station",
 }
 
+# Map roles to their gear station structure types
+ROLE_TO_STRUCTURE_TYPE = {
+    Role.MINER: StructureType.MINER_STATION,
+    Role.SCOUT: StructureType.SCOUT_STATION,
+    Role.ALIGNER: StructureType.ALIGNER_STATION,
+    Role.SCRAMBLER: StructureType.SCRAMBLER_STATION,
+}
+
 # Map roles to the gear item name in inventory
 ROLE_TO_GEAR = {
     Role.MINER: "miner",
@@ -132,19 +138,6 @@ class CogsguardAgentState:
     # === Unified structure map ===
     # All discovered structures: position -> StructureInfo
     structures: dict[tuple[int, int], StructureInfo] = field(default_factory=dict)
-
-    # Legacy fields (kept for backward compatibility, populated from structures)
-    # Discovered stations: station_name -> position
-    stations: dict[str, tuple[int, int] | None] = field(default_factory=dict)
-
-    # Discovered extractors by resource type
-    extractors: dict[str, list[ExtractorInfo]] = field(
-        default_factory=lambda: {"carbon": [], "oxygen": [], "germanium": [], "silicon": []}
-    )
-
-    # Discovered supply depots: list of (position, alignment) tuples
-    # alignment: "cogs", "clips", or None (neutral)
-    supply_depots: list[tuple[tuple[int, int], Optional[str]]] = field(default_factory=list)
 
     # Alignment overrides from our own actions (pos -> alignment).
     alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
@@ -244,6 +237,15 @@ class CogsguardAgentState:
         """Get the station name for this agent's role."""
         return ROLE_TO_STATION[self.role]
 
+    def get_gear_station_type(self) -> StructureType:
+        """Get the structure type for this agent's gear station."""
+        return ROLE_TO_STRUCTURE_TYPE[self.role]
+
+    def get_structure_position(self, structure_type: StructureType) -> Optional[tuple[int, int]]:
+        """Get the nearest structure position for the given type."""
+        structure = self.get_nearest_structure(structure_type)
+        return structure.position if structure else None
+
     # === Structure query methods ===
 
     def get_structures_by_type(self, structure_type: StructureType) -> list[StructureInfo]:
@@ -318,9 +320,6 @@ class CogsguardAgentState:
         struct = self.structures.get(pos)
         if struct is not None:
             struct.alignment = alignment
-        for idx, (depot_pos, _) in enumerate(self.supply_depots):
-            if depot_pos == pos:
-                self.supply_depots[idx] = (pos, alignment)
 
     def check_action_success(self) -> bool:
         """Check if the last action attempt succeeded based on state changes.

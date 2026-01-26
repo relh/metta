@@ -48,10 +48,11 @@ harness.diagnose_coordinate_system()
 harness.diagnose_coordinate_system()
 
 # Inspect specific agent state
+from cogames_agents.policy.scripted_agent.cogsguard.types import StructureType
 state = harness.get_agent_state(0)
 print(f"Role: {state.role}, Phase: {state.phase}")
 print(f"Position: ({state.row}, {state.col})")
-print(f"Known assembler: {state.stations.get('assembler')}")
+print(f"Known assembler: {state.get_structure_position(StructureType.ASSEMBLER)}")
 
 # Check actual vs believed assembler positions
 actual = harness.find_assemblers()

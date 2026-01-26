@@ -7,7 +7,7 @@ import argparse
 from typing import Iterable
 
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
-from cogames_agents.policy.scripted_agent.cogsguard.types import StructureType
+from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
 from cogames.cogs_vs_clips.stations import COGSGUARD_GEAR_COSTS
@@ -135,6 +135,7 @@ def run_rollout(
             state = harness.get_agent_state(agent_id)
             if state is None or state.current_obs is None:
                 continue
+            role_enum = state.role if isinstance(state.role, Role) else None
             role = state.role.value if hasattr(state.role, "value") else str(state.role)
             if role in role_stats:
                 observed_roles.add(role)
@@ -142,8 +143,8 @@ def run_rollout(
                 if state.has_gear():
                     role_stats[role]["gear_seen"] = True
 
-                if role in COGSGUARD_GEAR_COSTS:
-                    station = state.stations.get(f"{role}_station")
+                if role in COGSGUARD_GEAR_COSTS and role_enum in ROLE_TO_STRUCTURE_TYPE:
+                    station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
                     if station and is_adjacent((state.row, state.col), station):
                         adjacent_by_role[role] = True
 
@@ -158,10 +159,15 @@ def run_rollout(
                     role_stats[role]["gear_acquired"] += 1
 
                 action_name = state.last_action.name if state.last_action else ""
-                if state.using_object_this_step and action_name in MOVE_DELTAS and role in COGSGUARD_GEAR_COSTS:
+                if (
+                    state.using_object_this_step
+                    and action_name in MOVE_DELTAS
+                    and role in COGSGUARD_GEAR_COSTS
+                    and role_enum in ROLE_TO_STRUCTURE_TYPE
+                ):
                     dr, dc = MOVE_DELTAS[action_name]
                     target = (state.row + dr, state.col + dc)
-                    station = state.stations.get(f"{role}_station")
+                    station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
                     if station and target == station:
                         role_stats[role]["gear_station_uses"] += 1
                         if gear_resources_available.get(role, False):
@@ -177,7 +183,7 @@ def run_rollout(
 
                 if _is_assembler_tag(obj_name, obj_tags):
                     assembler_seen = True
-                    if state.stations.get("assembler") is None:
+                    if state.get_structure_position(StructureType.ASSEMBLER) is None:
                         assembler_missing += 1
 
                 if not _is_charger_tag(obj_name, obj_tags):
@@ -221,7 +227,7 @@ def run_rollout(
                 previous_cargo = last_cargo.get(agent_id, current_cargo)
                 if current_cargo < previous_cargo:
                     aligned_positions: list[tuple[int, int]] = []
-                    assembler_pos = state.stations.get("assembler")
+                    assembler_pos = state.get_structure_position(StructureType.ASSEMBLER)
                     if assembler_pos is not None:
                         aligned_positions.append(assembler_pos)
                     for charger in state.get_structures_by_type(StructureType.CHARGER):
@@ -266,7 +272,7 @@ def run_rollout(
     print("Cogsguard rollout sanity check")
     print(f"- steps: {steps}")
     print(f"- assembler seen: {assembler_seen}")
-    print(f"- assembler missing in stations: {assembler_missing}")
+    print(f"- assembler missing in structures: {assembler_missing}")
     print(f"- tagged/clipped chargers checked: {charger_alignment_checks}")
     print(f"- tagged/clipped charger mismatches: {charger_alignment_mismatches}")
     print(f"- neutral chargers checked: {neutral_charger_checks}")
