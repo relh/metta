@@ -1,0 +1,32 @@
+# Asana sync configuration for metta rig
+# Copy from docs/ai/richard/tasks/config.yaml in metta repo
+
+asana:
+  # Metta-AI workspace
+  workspace_gid: "1209016784099267"
+
+  # User config (for "my tasks" scope)
+  user:
+    # Leave empty to use the token owner ("me")
+    gid: ""
+    # Fallback email if token is a service account
+    email: ""
+
+  # Projects to sync (for "projects" or "all" scope)
+  projects:
+    - gid: "1211365635533653"
+      name: "Science + Benchmarking"
+    - gid: "1211901220010053"
+      name: "Science + Benchmarking"
+    - gid: "1210768730121842"
+      name: "Science + Benchmarking"
+    - gid: "1209041170403490"
+      name: "Kick-Starting + Supervised Learning"
+    - gid: "1211340635624763"
+      name: "Kick-Starting + Supervised Learning"
+    - gid: "1211348290073094"
+      name: "Misc & Forwarded"
+    - gid: "1209041170403484"
+      name: "Misc & Forwarded"
+    - gid: "1209041170403476"
+      name: "Misc & Forwarded"
