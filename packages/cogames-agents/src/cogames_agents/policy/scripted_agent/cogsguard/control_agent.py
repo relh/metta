@@ -1,0 +1,323 @@
+"""CoGsGuard scripted policy with a phased leader coordinator."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Optional
+
+from cogames_agents.policy.scripted_agent.utils import change_vibe_action
+from mettagrid.policy.policy import StatefulAgentPolicy
+from mettagrid.policy.policy_env_interface import PolicyEnvInterface
+from mettagrid.simulator import Action
+
+from .aligner import AlignerAgentPolicyImpl
+from .miner import MinerAgentPolicyImpl
+from .policy import DEBUG, CogsguardAgentPolicyImpl, CogsguardMultiRoleImpl, CogsguardPolicy
+from .scout import ScoutAgentPolicyImpl
+from .scrambler import ScramblerAgentPolicyImpl
+from .types import CogsguardAgentState, Role, StructureType
+
+PLAN_INTERVAL_STEPS = 40
+PHASE_EXPLORE_END = 60
+PHASE_CONTROL_END = 220
+CHEST_LOW_THRESHOLD = 60
+CONTROL_VIBES = {"scrambler", "aligner"}
+
+
+def _default_role_counts(num_agents: int) -> dict[str, int]:
+    if num_agents <= 1:
+        return {"miner": 1}
+    if num_agents == 2:
+        return {"scrambler": 1, "miner": 1}
+    if num_agents == 3:
+        return {"scrambler": 1, "miner": 1, "scout": 1}
+    if num_agents <= 7:
+        scramblers = 1
+        aligners = 1
+        scouts = 1
+    else:
+        scramblers = max(2, num_agents // 6)
+        aligners = max(2, num_agents // 6)
+        scouts = 1
+    miners = max(1, num_agents - scramblers - scouts - aligners)
+    return {
+        "scrambler": scramblers,
+        "aligner": aligners,
+        "miner": miners,
+        "scout": scouts,
+    }
+
+
+def _normalize_counts(num_agents: int, counts: dict[str, int]) -> dict[str, int]:
+    normalized = {k: v for k, v in counts.items() if isinstance(v, int)}
+    total = sum(normalized.values())
+    if total < num_agents:
+        normalized["miner"] = normalized.get("miner", 0) + (num_agents - total)
+    elif total > num_agents:
+        overflow = total - num_agents
+        miners = normalized.get("miner", 0)
+        normalized["miner"] = max(0, miners - overflow)
+    return normalized
+
+
+def _build_role_plan(num_agents: int, counts: dict[str, int]) -> list[str]:
+    ordered: list[str] = []
+    for role_name in ["scrambler", "aligner", "miner", "scout"]:
+        ordered.extend([role_name] * counts.get(role_name, 0))
+    if len(ordered) < num_agents:
+        ordered.extend(["miner"] * (num_agents - len(ordered)))
+    return ordered[:num_agents]
+
+
+@dataclass
+class CommanderPlannerState:
+    num_agents: int
+    desired_vibes: list[str] = field(default_factory=list)
+    last_plan_step: int = 0
+    known_chargers: int = 0
+    aligned_chargers: int = 0
+    chest_resources: int = 0
+    charger_map: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
+    assigned_targets: dict[int, tuple[int, int]] = field(default_factory=dict)
+
+    def update_from_agent(self, s: CogsguardAgentState) -> None:
+        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        aligned = [c for c in chargers if c.alignment == "cogs"]
+        self.known_chargers = max(self.known_chargers, len(chargers))
+        self.aligned_chargers = max(self.aligned_chargers, len(aligned))
+        for charger in chargers:
+            self.charger_map[charger.position] = charger.alignment
+
+        chest_resources = 0
+        for struct in s.get_structures_by_type(StructureType.CHEST):
+            chest_resources = max(chest_resources, struct.inventory_amount)
+        if chest_resources > 0:
+            self.chest_resources = max(self.chest_resources, chest_resources)
+
+    def maybe_plan(self, step_count: int) -> None:
+        if step_count - self.last_plan_step < PLAN_INTERVAL_STEPS:
+            return
+        self.last_plan_step = step_count
+
+        counts = self._choose_counts(step_count)
+        self.desired_vibes = _build_role_plan(self.num_agents, counts)
+        self._assign_targets()
+
+        if DEBUG:
+            print(
+                f"[COMMANDER] plan@{step_count}: chargers={self.known_chargers} "
+                f"aligned={self.aligned_chargers} chest={self.chest_resources} "
+                f"roles={counts}"
+            )
+
+    def _choose_counts(self, step_count: int) -> dict[str, int]:
+        if step_count < PHASE_EXPLORE_END or self.known_chargers == 0:
+            scouts = 2 if self.num_agents >= 5 else 1
+            return {
+                "scrambler": 1,
+                "aligner": 0,
+                "scout": scouts,
+                "miner": max(1, self.num_agents - (1 + scouts)),
+            }
+
+        if step_count < PHASE_CONTROL_END and self.aligned_chargers < max(1, self.known_chargers // 3):
+            scramblers = 2 if self.num_agents >= 6 else 1
+            aligners = 2 if self.num_agents >= 6 else 1
+            return {
+                "scrambler": scramblers,
+                "aligner": aligners,
+                "scout": 1,
+                "miner": max(1, self.num_agents - (scramblers + aligners + 1)),
+            }
+
+        if 0 < self.chest_resources < CHEST_LOW_THRESHOLD:
+            return {
+                "scrambler": 1,
+                "aligner": 1,
+                "scout": 1,
+                "miner": max(1, self.num_agents - 3),
+            }
+
+        return {
+            "scrambler": 1,
+            "aligner": 1,
+            "scout": 1,
+            "miner": max(1, self.num_agents - 3),
+        }
+
+    def _assign_targets(self) -> None:
+        targets = [pos for pos, alignment in self.charger_map.items() if alignment != "cogs"]
+        targets.sort()
+
+        self.assigned_targets.clear()
+        if not targets or not self.desired_vibes:
+            return
+
+        target_index = 0
+        for agent_id, vibe in enumerate(self.desired_vibes):
+            if vibe not in CONTROL_VIBES:
+                continue
+            self.assigned_targets[agent_id] = targets[target_index]
+            target_index = (target_index + 1) % len(targets)
+
+
+class CogsguardCommanderMultiRoleImpl(CogsguardMultiRoleImpl):
+    def __init__(
+        self,
+        policy_env_info: PolicyEnvInterface,
+        agent_id: int,
+        initial_target_vibe: Optional[str],
+        shared_state: CommanderPlannerState,
+    ):
+        super().__init__(policy_env_info, agent_id, initial_target_vibe=initial_target_vibe)
+        self._shared_state = shared_state
+
+    def _execute_phase(self, s: CogsguardAgentState) -> Action:
+        self._shared_state.update_from_agent(s)
+        if s.agent_id == 0:
+            self._shared_state.maybe_plan(s.step_count)
+
+        if self._shared_state.desired_vibes:
+            desired = self._shared_state.desired_vibes[s.agent_id]
+            if desired != s.current_vibe:
+                return change_vibe_action(desired, action_names=self._action_names)
+
+        return super()._execute_phase(s)
+
+    def execute_role(self, s: CogsguardAgentState) -> Action:
+        target = self._shared_state.assigned_targets.get(s.agent_id)
+        if target and s.current_vibe in CONTROL_VIBES and s.has_gear() and s.heart >= 1:
+            struct = s.get_structure_at(target)
+            if struct and struct.alignment != "cogs":
+                if abs(target[0] - s.row) + abs(target[1] - s.col) > 1:
+                    return self._move_towards(s, target, reach_adjacent=True)
+                return self._use_object_at(s, target)
+        return super().execute_role(s)
+
+    def _get_role_impl(self, role: Role) -> CogsguardAgentPolicyImpl:
+        if role not in self._role_impls:
+            impl_class = {
+                Role.MINER: MinerAgentPolicyImpl,
+                Role.SCOUT: ScoutAgentPolicyImpl,
+                Role.ALIGNER: CommanderAlignerAgentPolicyImpl,
+                Role.SCRAMBLER: CommanderScramblerAgentPolicyImpl,
+            }[role]
+            self._role_impls[role] = impl_class(self._policy_env_info, self._agent_id, role)
+        return self._role_impls[role]
+
+
+class CommanderScramblerAgentPolicyImpl(ScramblerAgentPolicyImpl):
+    def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
+        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        cooldown = 20 if len(chargers) <= 4 else 50
+
+        enemy_chargers: list[tuple[int, tuple[int, int]]] = []
+        neutral_chargers: list[tuple[int, tuple[int, int]]] = []
+        any_chargers: list[tuple[int, tuple[int, int]]] = []
+
+        for charger in chargers:
+            pos = charger.position
+            dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
+
+            last_worked = s.worked_chargers.get(pos, 0)
+            if last_worked > 0 and s.step_count - last_worked < cooldown:
+                continue
+
+            if charger.alignment == "cogs":
+                continue
+
+            if charger.alignment == "clips" or charger.clipped:
+                enemy_chargers.append((dist, pos))
+            elif charger.alignment is None or charger.alignment == "neutral":
+                neutral_chargers.append((dist, pos))
+            else:
+                any_chargers.append((dist, pos))
+
+        if enemy_chargers:
+            enemy_chargers.sort()
+            return enemy_chargers[0][1]
+        if neutral_chargers:
+            neutral_chargers.sort()
+            return neutral_chargers[0][1]
+        if any_chargers:
+            any_chargers.sort()
+            return any_chargers[0][1]
+
+        return super()._find_best_target(s)
+
+
+class CommanderAlignerAgentPolicyImpl(AlignerAgentPolicyImpl):
+    def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
+        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        cooldown = 20 if len(chargers) <= 4 else 50
+
+        neutral_chargers: list[tuple[int, tuple[int, int]]] = []
+        clips_chargers: list[tuple[int, tuple[int, int]]] = []
+        other_chargers: list[tuple[int, tuple[int, int]]] = []
+
+        for charger in chargers:
+            pos = charger.position
+            dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
+
+            last_worked = s.worked_chargers.get(pos, 0)
+            if last_worked > 0 and s.step_count - last_worked < cooldown:
+                continue
+
+            if charger.alignment == "cogs":
+                continue
+
+            if charger.alignment is None or charger.alignment == "neutral":
+                neutral_chargers.append((dist, pos))
+            elif charger.alignment == "clips" or charger.clipped:
+                clips_chargers.append((dist, pos))
+            else:
+                other_chargers.append((dist, pos))
+
+        if neutral_chargers:
+            neutral_chargers.sort()
+            return neutral_chargers[0][1]
+        if clips_chargers:
+            clips_chargers.sort()
+            return clips_chargers[0][1]
+        if other_chargers:
+            other_chargers.sort()
+            return other_chargers[0][1]
+
+        return super()._find_best_target(s)
+
+
+class CogsguardControlAgent(CogsguardPolicy):
+    """CoGsGuard policy with a phased coordinator that overrides roles."""
+
+    short_names = ["cogsguard_control"]
+
+    def __init__(
+        self,
+        policy_env_info: PolicyEnvInterface,
+        device: str = "cpu",
+        **vibe_counts: Any,
+    ):
+        has_explicit_counts = any(isinstance(v, int) for v in vibe_counts.values())
+        if has_explicit_counts:
+            counts = _normalize_counts(policy_env_info.num_agents, vibe_counts)
+        else:
+            counts = _default_role_counts(policy_env_info.num_agents)
+        super().__init__(policy_env_info, device=device, **counts)
+        self._shared_state = CommanderPlannerState(policy_env_info.num_agents)
+        self._shared_state.desired_vibes = _build_role_plan(policy_env_info.num_agents, counts)
+
+    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[CogsguardAgentState]:
+        if agent_id not in self._agent_policies:
+            target_vibe = None
+            if agent_id < len(self._initial_vibes):
+                target_vibe = self._initial_vibes[agent_id]
+
+            impl = CogsguardCommanderMultiRoleImpl(
+                self._policy_env_info,
+                agent_id,
+                initial_target_vibe=target_vibe,
+                shared_state=self._shared_state,
+            )
+            self._agent_policies[agent_id] = StatefulAgentPolicy(impl, self._policy_env_info, agent_id=agent_id)
+
+        return self._agent_policies[agent_id]
