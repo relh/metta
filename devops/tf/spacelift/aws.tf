@@ -54,3 +54,11 @@ import {
   to = aws_iam_role.spacelift
   id = local.iam_role_name
 }
+
+# Tournament account integration
+# IAM role was bootstrapped via devops/tf/tournament-bootstrap/
+resource "spacelift_aws_integration" "tournament" {
+  name             = "tournament-aws"
+  role_arn         = "arn:aws:iam::583928386201:role/Spacelift"
+  duration_seconds = 3600
+}
