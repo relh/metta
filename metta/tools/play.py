@@ -6,7 +6,7 @@ from typing import Optional
 
 import torch
 from metta_alo.rollout import run_single_episode
-from pydantic import model_validator
+from pydantic import PrivateAttr, model_validator
 from rich.console import Console
 
 from metta.app_backend.clients.stats_client import StatsClient
@@ -14,6 +14,7 @@ from metta.common.tool import Tool
 from metta.common.wandb.context import WandbConfig
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_stats_server_uri, auto_wandb_config
+from mettagrid.map_builder.map_builder import HasSeed
 from mettagrid.renderer.renderer import RenderMode
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
@@ -37,9 +38,45 @@ class PlayTool(Tool):
 
     open_browser_on_start: bool = True
     max_steps: Optional[int] = None
-    seed: int = 42
+    # Single source of truth for determinism in `play`:
+    # - If the user passes `seed=<N>`, we also set `system.seed=<N>` so Python/NumPy/Torch
+    #   are seeded consistently.
+    # - If the user passes only `system.seed=<N>`, we default `seed` to that value so the
+    #   simulator rollout is deterministic as well.
+    seed: int | None = None
     render: RenderMode = "gui"
     stats_server_uri: str | None = auto_stats_server_uri()
+
+    _explicit_seed_overrides: set[str] = PrivateAttr(default_factory=set)
+
+    def override(self, key: str, value: object):  # type: ignore[override]
+        """Keep `seed` a single determinism knob unless the user explicitly overrides individual seeds."""
+        tool = super().override(key, value)
+        assert isinstance(tool, PlayTool)
+
+        if key in {"seed", "system.seed", "sim.env.game.map_builder.seed"}:
+            tool._explicit_seed_overrides.add(key)
+
+        if key == "seed" and tool.seed is not None:
+            if "system.seed" not in tool._explicit_seed_overrides:
+                tool.system.seed = int(tool.seed)
+            map_builder = tool.sim.env.game.map_builder
+            if isinstance(map_builder, HasSeed):
+                if "sim.env.game.map_builder.seed" not in tool._explicit_seed_overrides:
+                    map_builder.seed = int(tool.seed)
+
+        if key == "system.seed":
+            if "seed" not in tool._explicit_seed_overrides and tool.seed is None:
+                tool.seed = int(tool.system.seed)
+            map_builder = tool.sim.env.game.map_builder
+            if isinstance(map_builder, HasSeed):
+                if "sim.env.game.map_builder.seed" not in tool._explicit_seed_overrides:
+                    seed = tool.seed
+                    if seed is None:
+                        raise RuntimeError("PlayTool.seed should be set when syncing map_builder seed")
+                    map_builder.seed = int(seed)
+
+        return tool
 
     @model_validator(mode="after")
     def validate(self) -> "PlayTool":
@@ -82,13 +119,17 @@ class PlayTool(Tool):
             # Fall back to random policies only when no policy was configured explicitly.
             policy_specs = [policy_spec_from_uri("metta://policy/random", device=str(device))]
 
+        seed = self.seed
+        if seed is None:
+            seed = self.system.seed
+
         episode_results, _replay = run_single_episode(
             policy_specs=policy_specs,
             assignments=[0] * env_cfg.game.num_agents,
             env=env_cfg,
             results_uri=None,
             replay_uri=None,
-            seed=self.seed,
+            seed=seed,
             max_action_time_ms=10000,
             device=str(device),
             render_mode=self.render,
