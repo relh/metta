@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,26 @@ from mettagrid.util.file import copy_data, read, write_data
 from mettagrid.util.uri_resolvers.schemes import parse_uri, resolve_uri
 
 logger = logging.getLogger(__name__)
+
+
+def _upload_debug_dir(local_debug_dir: str | None, debug_uri: str | None) -> None:
+    """Zip and upload debug directory. Best-effort, logs warnings on failure."""
+    if local_debug_dir is None or debug_uri is None:
+        return
+    if not os.path.isdir(local_debug_dir):
+        return
+    try:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for abs_dir, _, filenames in os.walk(local_debug_dir):
+                for filename in filenames:
+                    abs_file = os.path.join(abs_dir, filename)
+                    arcname = os.path.relpath(abs_file, local_debug_dir)
+                    zf.write(abs_file, arcname)
+        write_data(debug_uri, buf.getvalue(), content_type="application/zip")
+        logger.info(f"Uploaded debug.zip to {debug_uri}")
+    except Exception as e:
+        logger.warning(f"Failed to upload debug.zip: {e}")
 
 
 def _localize_policy_uris(policy_uris: list[str]) -> list[str]:
@@ -66,6 +87,14 @@ def main():
         local_results_uri = "file://results.json"
         local_replay_uri = "file://replay.json.z" if job.replay_uri else None
         local_debug_dir = tempfile.mkdtemp() if job.debug_uri else None
+        debug_uri = job.debug_uri
+
+        def sigterm_handler(signum, frame):
+            logger.warning("Received SIGTERM, uploading debug_dir before exit...")
+            _upload_debug_dir(local_debug_dir, debug_uri)
+            sys.exit(128 + signal.SIGTERM)
+
+        signal.signal(signal.SIGTERM, sigterm_handler)
         local_policy_uris = _localize_policy_uris(job.policy_uris)
 
         with tempfile.NamedTemporaryFile(delete=True) as temp_file:
@@ -112,19 +141,7 @@ def main():
             if dest is not None:
                 copy_data(src, dest, content_type=content_type)
 
-        # Zip and upload debug directory (best-effort, don't fail job if upload fails)
-        if local_debug_dir is not None and job.debug_uri is not None:
-            try:
-                buf = io.BytesIO()
-                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for abs_dir, _, filenames in os.walk(local_debug_dir):
-                        for filename in filenames:
-                            abs_file = os.path.join(abs_dir, filename)
-                            arcname = os.path.relpath(abs_file, local_debug_dir)
-                            zf.write(abs_file, arcname)
-                write_data(job.debug_uri, buf.getvalue(), content_type="application/zip")
-            except Exception as e:
-                logger.warning(f"Failed to upload debug.zip: {e}")
+        _upload_debug_dir(local_debug_dir, debug_uri)
 
         results = PureSingleEpisodeResult.model_validate_json(read(local_results_uri))
 
