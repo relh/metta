@@ -9,6 +9,8 @@ import sys
 import tempfile
 import uuid
 import zipfile
+from contextlib import nullcontext
+from pathlib import Path
 from uuid import UUID
 
 from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
@@ -17,6 +19,7 @@ from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestUpdate
 from metta.common.auth.auth_config_reader_writer import observatory_auth_config
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
+from metta.common.util.perf_profiler import PerfProfiler
 from metta.rl.metta_scheme_resolver import MettaSchemeResolver
 from metta.sim.handle_results import write_single_episode_to_observatory
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
@@ -114,24 +117,41 @@ def main():
             }
             temp_file.write(json.dumps(pure_job_spec).encode("utf-8"))
             temp_file.flush()
-            result = subprocess.run(
+
+            proc = subprocess.Popen(
                 [
                     sys.executable,
                     "-m",
                     "metta_alo.pure_single_episode_runner",
                     temp_file.name,
                 ],
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
             )
-            if result.returncode != 0:
-                if result.returncode < 0:
-                    signal_num = -result.returncode
+
+            # Start profiler if debug_dir is set (perf data goes alongside trace)
+            if local_debug_dir is None:
+                profiler_ctx = nullcontext()
+            else:
+                debug_path = Path(local_debug_dir)
+                profiler_ctx = PerfProfiler(
+                    pid=proc.pid,
+                    data_path=debug_path / f"perf.{proc.pid}.data",
+                    log_path=debug_path / f"perf.{proc.pid}.log",
+                )
+
+            with profiler_ctx:
+                stdout, stderr = proc.communicate()
+
+            if proc.returncode != 0:
+                if proc.returncode < 0:
+                    signal_num = -proc.returncode
                     raise RuntimeError(f"Killed by signal {signal_num}")
-                error_output = result.stderr or result.stdout or "No output"
+                error_output = stderr or stdout or "No output"
                 if len(error_output) > 200000:
                     error_output = error_output[:200000] + "\n... (truncated)"
-                msg = f"metta_alo.pure_single_episode_runner failed (exit {result.returncode}):\n{error_output}"
+                msg = f"metta_alo.pure_single_episode_runner failed (exit {proc.returncode}):\n{error_output}"
                 raise RuntimeError(msg)
 
         for src, dest, content_type in [

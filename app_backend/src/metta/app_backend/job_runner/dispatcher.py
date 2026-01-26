@@ -156,6 +156,9 @@ def create_episode_job(job: JobRequest) -> str:
                             name="worker",
                             image=cfg.EPISODE_RUNNER_IMAGE,
                             image_pull_policy="IfNotPresent" if cfg.LOCAL_DEV else "Always",
+                            security_context=client.V1SecurityContext(
+                                capabilities=client.V1Capabilities(add=["PERFMON"]),
+                            ),
                             command=[
                                 "uv",
                                 "run",
