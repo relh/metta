@@ -61,6 +61,26 @@ resource "aws_eks_access_policy_association" "primary_account" {
   }
 }
 
+# Grant SSO roles direct cluster access for developers
+resource "aws_eks_access_entry" "admin" {
+  for_each      = toset(local.admins)
+  cluster_name  = module.eks.cluster_name
+  principal_arn = each.value
+}
+
+resource "aws_eks_access_policy_association" "admin" {
+  for_each      = toset(local.admins)
+  cluster_name  = module.eks.cluster_name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = each.value
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.admin]
+}
+
 # Output the role ARN for use in primary account configuration
 output "eks_access_role_arn" {
   value       = aws_iam_role.primary_account_eks_access.arn

@@ -6,6 +6,12 @@ locals {
     Terraform = "true"
     Stack     = "tournament"
   }
+
+  # Add new roles here to grant them access to the EKS cluster.
+  admins = [
+    "arn:aws:iam::583928386201:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_AdministratorAccess_ff47d45445c4a87a",
+    "arn:aws:iam::583928386201:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_PowerUserAccess_5be0f4f1939ddd98",
+  ]
 }
 
 data "aws_availability_zones" "available" {
