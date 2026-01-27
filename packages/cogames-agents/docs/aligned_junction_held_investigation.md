@@ -124,6 +124,196 @@ Same structure as assembler, but junctions are clips-aligned, so they:
 5. **Check Scripted Agent Logic**: The Nim agents may have bugs in their pathfinding or role execution that cause them
    to get stuck even when they have energy.
 
+## Follow-up (2026-01-27): Scripted Agent Position/Action Drift
+
+I audited the Python scripted agents (`role_py`) with the debug harness to verify whether they are behaving sensibly in
+the current Cogsguard arena. The results point to a concrete failure mode in the scripted agent stack, independent of
+PPO.
+
+### Summary
+
+- **Action execution appears 1-step delayed** in observations. The policy compares the _current_ intended action with
+  `last_action_executed`, but the observation's `last_action` appears to reflect the **previous** step. This creates
+  persistent mismatches.
+- **Internal position drifts** for some agents (up to ~20 cells by ~200 steps), which corrupts the internal map.
+- **Map pollution** follows: agents believe there are ~40k chargers (nearly the entire 200x200 internal grid) and only 1
+  extractor, which collapses mining/gear loops.
+- **Economy stalls quickly**: carbon/oxygen/germanium never increase in the collective, only silicon drifts upward. Gear
+  resource windows close at steps ~15-17 and never reopen, so miners never get gear and aligner/scrambler are starved
+  for hearts.
+
+### Key Evidence
+
+**Action mismatch (agent 0, first few steps)**
+
+```
+1 intended change_vibe_scrambler executed noop
+2 intended move_south executed change_vibe_scrambler
+3 intended move_south executed move_south
+4 intended move_west executed move_south
+5 intended move_south executed move_west
+```
+
+**Internal vs actual position drift after ~200 steps**
+
+- Example: agent 0 delta ≈ (-21, -1) between internal and actual positions (computed using initial offset)
+- Several other agents show smaller but non-zero drift
+
+**Structure discovery skew (agent 0 @ 300 steps)**
+
+- Extractors known: **1**
+- Chargers known: **~39,940** (cogs-aligned: 0)
+
+**Collective resource deltas (first 300 steps)**
+
+- carbon: +0
+- oxygen: +0
+- germanium: +0
+- silicon: +33
+
+**Gear resource availability windows**
+
+- aligner/scrambler: available only for ~15 steps
+- miner/scout: available only for ~17 steps
+- After that, resources never re-accumulate
+
+### Likely Root Cause
+
+The policy updates position only when `last_action_executed == last_action` (intended). If `last_action_executed` lags
+by one step, the policy effectively discards real movement and accumulates drift. That drift corrupts object locations,
+causing chargers to fill the map and extractors to be ignored as unsafe/unreachable.
+
+### Suggested Fix Directions
+
+- Verify `last_action` timing in observations and adjust tracking (e.g., compare against previous intended action or
+  update position from executed action alone).
+- Add a debug sanity check to detect action mismatch rates and position drift early.
+- Re-run the scripted audit after the action tracking fix to validate extractor discovery and gear acquisition.
+
+### Future Work & Potential Leads
+
+- Confirm `last_action` semantics in the simulator (does it report the previous step?). Add a minimal probe to log the
+  raw action id each step to verify the off-by-one hypothesis.
+- Consider tracking movement solely from `last_action_executed` (ignore intended action), or stash the previous intended
+  action to align with the observation timing.
+- Improve object tag handling: prefer `type:*` tags over `collective:*` tags when choosing the primary object name, or
+  use explicit tag precedence to reduce misclassification.
+- Add a drift/mismatch counter to the debug harness that fails fast when mismatch rate exceeds a threshold.
+- Revisit extractor safety heuristics after fixing drift (danger radius 12 on a 50x50 map may be too conservative once
+  chargers are correctly localized).
+- Re-run multi-seed audits (e.g., seeds 1–5) and longer rollouts (2–5k steps) to confirm resource accumulation, gear
+  acquisition, and alignment/scramble loops are restored.
+
+### Likely Failure Modes Across Scripted Agents (Role Py, Teacher, Targeted)
+
+Below are the top suspected failure modes that explain _all_ observed symptoms (no gear, no mining loop, no alignment),
+and what would definitively confirm or clear each one. These are ordered by impact.
+
+1. **Action timing off-by-one in scripted agent tracking (position drift)**
+   - **Symptom:** Large intended vs executed mismatch rates; internal position drift; map pollution.
+   - **Why it breaks everything:** Incorrect positions cause object coordinates to shift, so chargers/extractors are
+     recorded in wrong places. This makes extractors appear unsafe/unreachable and stalls mining.
+   - **Definitive test:** Log `(intended_action, last_action_executed)` with step index and compare to simulator action
+     stream. If `last_action_executed` consistently matches the _previous_ intended action, this is confirmed.
+
+2. **Tag precedence / object naming misclassification**
+   - **Symptom:** Objects are identified by first tag (e.g., `collective:*`), which can hide type tags; leads to
+     incorrect structure typing and alignment inference.
+   - **Why it breaks everything:** Stations/extractors/chargers are misclassified, so role logic targets the wrong tiles
+     or never discovers the required structure types.
+   - **Definitive test:** Force tag precedence (`type:*` over `collective:*`) and re-run scripted audit. If extractor
+     discovery and gear acquisition recover, this was a key blocker.
+
+3. **Charger over-discovery / map flooding**
+   - **Symptom:** 10s of thousands of chargers recorded in a 200x200 internal grid after a few hundred steps.
+   - **Why it breaks everything:** Safety heuristics see chargers everywhere (enemy danger zones), so miners avoid
+     extractors; aligner/scrambler logic targets noise.
+   - **Definitive test:** After fixing action timing + tag precedence, chargers should localize to a small count. If
+     not, the charger discovery logic itself is faulty.
+
+4. **Extractor safety heuristics too conservative for Cogsguard map**
+   - **Symptom:** Even with correct localization, miners reject extractors as “unsafe” and never gather resources.
+   - **Why it breaks everything:** Collective resources never replenish; gear stations stay unaffordable; align/scramble
+     loops never start.
+   - **Definitive test:** Temporarily relax danger radius (e.g., 12 -> 6) or bypass danger check for first 200 steps. If
+     mining/gear starts, heuristics are the culprit.
+
+5. **Resource bootstrap loop too fragile (gear depends on deposits that depend on gear)**
+   - **Symptom:** Gear availability only in the first 15–17 steps, then permanently unavailable.
+   - **Why it breaks everything:** Miners never get gear; aligners/scramblers never get hearts/influence; junctions
+     remain clips-aligned.
+   - **Definitive test:** Seed collective resources for gear (e.g., 2–3 gear purchases worth) or give miners initial
+     gear. If scripted policies stabilize, bootstrap constraints are too tight.
+
+### Agent-Specific Failure Modes to Check
+
+**Role Py (multi-role scripted policy)**
+
+- **Action tracking drift**: already observed in audit; this is the primary suspect.
+- **Gear acquisition race**: scramblers spam gear stations without resources early; miners/scouts stay gearless.
+- **Map pollution**: chargers/extractors mislocalized if tag precedence + action timing are both off.
+- **Definitive checks**: fix action timing; enforce tag precedence; re-run role_py audit.
+
+**Teacher (CogsguardTeacherPolicy + Nim backend)**
+
+- **Vibe reset / schedule issues**: teacher relies on episode pct + scheduler; resets could pin agents in wrong vibe.
+- **Cross-impl parity**: Nim agents may interpret obs/vibe tags differently than Python.
+- **Definitive checks**: run teacher in the same debug harness for 200–500 steps with verbose vibe logs; compare to
+  role_py on identical seed/map. If behavior diverges, Nim parity is suspect.
+
+**Targeted/Control/V2 policies**
+
+- **Extractor targeting assumptions**: targeted miners prefer extractors based on `inventory_amount` and
+  `resource_type`; if extractor tags are misclassified, targeting degenerates.
+- **Role allocation stability**: targeted/control policies can shift role ratios; if miners drop to zero or are delayed,
+  the economy never recovers.
+- **Definitive checks**: log role counts each step and ensure miners stay ≥1; verify extractor discovery count rises.
+
+**Wombo/Swiss (generalist multi-role)**
+
+- **Role thrash**: frequent role switching can prevent any agent from completing gear → action loops.
+- **Definitive check**: add a role-lock window or log role switches; if action throughput increases, thrash was hurting.
+
+**Single-role policies (miner/scout/aligner/scrambler)**
+
+- **Tooling sanity**: if single-role agents fail to do their one job, the environment or tag parsing is broken.
+- **Definitive check**: run `miner` alone and verify extractor discovery + deposit; run `aligner` and verify junction
+  alignment when hearts/influence are seeded.
+
+### Additional Failure Modes Worth Ruling Out
+
+- **Agent occupancy detection depends on tag order**: occupancy is only recorded when `obj_name == "agent"`. If tag
+  ordering yields `obj_name = "collective:cogs"` or `type:agent`, collisions will be ignored and pathing will walk
+  through other agents. This can strand agents on stations or block extractor access.
+  - **Test:** treat any object with tag `agent` or `type:agent` as an agent for occupancy.
+
+- **Extractor inventory visibility**: `inventory_amount` is derived from `obj_state.inventory`. If extractor inventory
+  tokens are absent in observations, the first “empty dict” after discovery marks the extractor as depleted forever.
+  - **Test:** log `obj_state.inventory` for extractors over time; if it is always empty, treat extractors as usable
+    unless `remaining_uses == 0` or `clipped == True`.
+
+- **Junction/charger alignment inference**: alignment uses `obj_state.clipped` or tag heuristics. If `clipped` is not
+  reliable for junctions, chargers can appear neutral or misaligned, breaking align/scramble targeting and safety.
+  - **Test:** compare alignment inferred by tags vs. by simulator ground truth for a few steps.
+
+- **Vibe change reliability**: initial role assignment depends on successful `change_vibe_*` actions. If those actions
+  are delayed or rate-limited, agents can remain in `default` longer than expected.
+  - **Test:** log current vibe vs. intended vibe for the first 20 steps; ensure all agents reach their role vibe.
+
+- **Policy URI mismatch during audits**: `cogsguard_py` is not a registered short name; `teacher` does not accept
+  role-count kwargs. Passing the wrong URI can silently invalidate comparisons.
+  - **Test:** use `role_py` for multi-role counts and `teacher` with no role args.
+
+### Shortlist: 3–5 Things That Should Clear This Up
+
+If we want the fastest route to clarity, do these in order:
+
+1. Fix/validate action timing (`last_action_executed`) and update position tracking accordingly.
+2. Enforce tag precedence (`type:*` > `collective:*`) when choosing object names/types.
+3. Re-run scripted audit; confirm charger counts and extractor discovery normalize.
+4. If still stalled, relax extractor danger radius or disable danger gating for early steps.
+5. If still stalled, provide minimal resource/gear bootstrap and re-test.
+
 ## Test Commands Used
 
 ```bash
