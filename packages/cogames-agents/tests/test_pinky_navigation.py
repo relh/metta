@@ -44,15 +44,11 @@ class MockPolicyEnvInfo:
 
 
 def make_token(feature_name: str, row: int, col: int, value: int) -> ObservationToken:
-    """Create a mock observation token.
-
-    Note: ObservationToken.location is stored as (col, row) to match mettagrid convention.
-    The row()/col() methods extract correctly: row() = location[1], col() = location[0].
-    """
+    """Create a mock observation token."""
     feature = ObservationFeatureSpec(id=0, name=feature_name, normalization=255.0)
     return ObservationToken(
         feature=feature,
-        location=(col, row),  # mettagrid convention: (col, row)
+        location=(row, col),
         value=value,
         raw_token=(0, 0, 0),
     )
