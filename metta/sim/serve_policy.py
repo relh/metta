@@ -64,7 +64,7 @@ def parse_triplet_v1(data: bytes, features: dict[int, ObservationFeatureSpec]) -
         tokens.append(
             ObservationToken(
                 feature=feature,
-                location=(col, row),
+                location=(row, col),
                 value=value,
                 raw_token=(loc_byte, feature_id, value),
             )
