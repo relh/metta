@@ -31,7 +31,7 @@ from mettagrid.config.mettagrid_config import MettaGridConfig
 
 def make_env(
     num_agents: int = 10,
-    max_steps: int = 1000,
+    max_steps: int = 10000,
     variants: str | Sequence[str] | None = None,
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
