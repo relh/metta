@@ -14,6 +14,7 @@ Usage:
 import glob
 import logging
 import re
+import shutil
 import signal
 import subprocess
 import time
@@ -131,6 +132,18 @@ class PerfProfiler:
             logger.warning("perf killed after timeout")
 
         self._proc = None
+
+        # Copy Python's perf map file if it exists (generated when PYTHONPERFSUPPORT=1)
+        perf_map = Path(f"/tmp/perf-{self.pid}.map")
+        if perf_map.exists():
+            dest = self.data_path.parent / perf_map.name
+            try:
+                shutil.copy(perf_map, dest)
+                logger.info(f"Copied {perf_map} to {dest}")
+            except shutil.SameFileError:
+                logger.info(f"Perf map already at {dest}")
+            except Exception as e:
+                logger.warning(f"Failed to copy perf map {perf_map} to {dest}: {e}")
 
         if self._file_handler:
             logger.removeHandler(self._file_handler)

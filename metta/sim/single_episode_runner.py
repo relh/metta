@@ -130,11 +130,14 @@ def run_episode(
             temp_file.write(json.dumps(pure_job_spec).encode("utf-8"))
             temp_file.flush()
 
+            # Enable Python perf support when profiling (writes /tmp/perf-<pid>.map)
+            env = {**os.environ, "PYTHONPERFSUPPORT": "1"} if local_debug_dir else None
             proc = subprocess.Popen(
                 [sys.executable, "-m", "metta_alo.pure_single_episode_runner", temp_file.name],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                env=env,
             )
 
             if use_profiler and local_debug_dir:
