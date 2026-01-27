@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from typing import Optional
 
+import numpy as np
+
+from mettagrid.mettagrid_c import PackedCoordinate, dtype_actions
 from mettagrid.policy.policy import MultiAgentPolicy, StatefulAgentPolicy, StatefulPolicyImpl
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
-from mettagrid.simulator import Action
+from mettagrid.simulator import Action, ObservationToken
 from mettagrid.simulator.interface import AgentObservation
 
 from .behaviors import (
@@ -277,6 +280,9 @@ class PinkyPolicy(MultiAgentPolicy):
         **kwargs: object,
     ):
         super().__init__(policy_env_info, device=device)
+        self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
+        self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
+        self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
         # Debug mode from URI param (?debug=1)
         self._debug = bool(debug)
@@ -328,3 +334,35 @@ class PinkyPolicy(MultiAgentPolicy):
             )
 
         return self._agent_policies[agent_id]
+
+    def step_batch(self, raw_observations: np.ndarray, raw_actions: np.ndarray) -> None:
+        raw_actions[...] = self._noop_action_value
+        num_agents = min(raw_observations.shape[0], self._policy_env_info.num_agents)
+        active_agents = min(num_agents, len(self._vibe_distribution))
+        for agent_id in range(active_agents):
+            obs = self._raw_obs_to_agent_obs(agent_id, raw_observations[agent_id])
+            action = self.agent_policy(agent_id).step(obs)
+            action_index = self._action_name_to_index.get(action.name, 0)
+            raw_actions[agent_id] = dtype_actions.type(action_index)
+
+    def _raw_obs_to_agent_obs(self, agent_id: int, raw_obs: np.ndarray) -> AgentObservation:
+        tokens: list[ObservationToken] = []
+        for token in raw_obs:
+            feature_id = int(token[1])
+            if feature_id == 0xFF:
+                break
+            feature = self._feature_by_id.get(feature_id)
+            if feature is None:
+                continue
+            location_packed = int(token[0])
+            location = PackedCoordinate.unpack(location_packed) or (0, 0)
+            value = int(token[2])
+            tokens.append(
+                ObservationToken(
+                    feature=feature,
+                    location=location,
+                    value=value,
+                    raw_token=(location_packed, feature_id, value),
+                )
+            )
+        return AgentObservation(agent_id=agent_id, tokens=tokens)
