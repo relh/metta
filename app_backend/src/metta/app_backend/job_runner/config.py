@@ -26,14 +26,18 @@ class JobDispatchConfig(BaseSettings):
 
     # S3 bucket for job artifacts (specs, results, replays)
     EVAL_S3_BUCKET: str = ""
-    # IAM role ARN for cross-account S3 access to eval/policy buckets
-    EVAL_ROLE_ARN: str | None = None
     # S3 bucket where uploaded policies are stored
     POLICY_S3_BUCKET: str | None = None
     PRESIGNED_URL_EXPIRATION: int = 7200
     # Alternate S3 endpoint for generating presigned URLs (e.g. host.docker.internal
     # for local dev where pods can't use localhost). Direct S3 ops use AWS_ENDPOINT_URL.
     S3_PRESIGNED_ENDPOINT: str | None = None
+
+    # Cross-account eval cluster access
+    # When set, dispatcher assumes this role to access the eval EKS cluster
+    EVAL_CLUSTER_NAME: str = ""
+    EVAL_CLUSTER_ROLE_ARN: str = ""
+    EVAL_CLUSTER_EXTERNAL_ID: str = "tournament-eval-access"
 
 
 @lru_cache
