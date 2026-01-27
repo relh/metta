@@ -1,21 +1,37 @@
 import functools
 import logging
+from dataclasses import dataclass
+from urllib.parse import urlparse
+from uuid import UUID
 
+import boto3
 from kubernetes import client
 from kubernetes.config.incluster_config import load_incluster_config
 from kubernetes.config.kube_config import load_kube_config
 
+from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.job_runner.config import (
-    JOB_NAMESPACE,
     LABEL_APP,
     LABEL_APP_VALUE,
     LABEL_JOB_ID,
     get_dispatch_config,
 )
+from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.models.job_request import JobRequest, JobType
-from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_policy_uri_to_s3_key(uri: str, stats_client: StatsClient) -> str:
+    if uri.startswith("metta://"):
+        resolver = MettaSchemeResolver(stats_client=stats_client)
+        return resolver.get_s3_key(uri)
+
+    if uri.startswith("s3://"):
+        parsed = urlparse(uri)
+        return parsed.path.lstrip("/")
+
+    raise ValueError(f"Unsupported policy URI scheme: {uri}")
 
 
 @functools.cache
@@ -27,7 +43,6 @@ def get_k8s_client() -> client.BatchV1Api:
             raise ValueError("LOCAL_DEV=true requires LOCAL_DEV_K8S_CONTEXT to be set")
         load_kube_config(context=cfg.LOCAL_DEV_K8S_CONTEXT)
     else:
-        # Prod: require in-cluster config, no silent fallback
         load_incluster_config()
 
     return client.BatchV1Api()
@@ -44,11 +59,50 @@ def create_episode_job(job: JobRequest) -> str:
     batch_v1 = get_k8s_client()
     job_name = f"job-{job.id.hex[:8]}"
 
+    env_vars: list[client.V1EnvVar] = []
+
+    if cfg.EVAL_S3_BUCKET:
+        job_spec = job.job
+        original_policy_uris: list[str] = job_spec.get("policy_uris", [])
+
+        stats_client = StatsClient.create(cfg.STATS_SERVER_URI)
+        policy_s3_keys = [resolve_policy_uri_to_s3_key(uri, stats_client) for uri in original_policy_uris]
+
+        urls = generate_job_presigned_urls(
+            job_id=job.id,
+            policy_s3_keys=policy_s3_keys,
+            eval_bucket=cfg.EVAL_S3_BUCKET,
+            policy_bucket=cfg.POLICY_S3_BUCKET,
+            expiration=cfg.PRESIGNED_URL_EXPIRATION,
+        )
+
+        import requests
+
+        spec_to_write = {**job_spec, "policy_uris": urls.policy_uris}
+        response = requests.put(
+            urls.spec_put_uri,
+            json=spec_to_write,
+            headers={"Content-Type": "application/json"},
+        )
+        response.raise_for_status()
+
+        env_vars = [
+            client.V1EnvVar(name="JOB_SPEC_URI", value=urls.spec_get_uri),
+            client.V1EnvVar(name="RESULTS_URI", value=urls.results_uri),
+            client.V1EnvVar(name="REPLAY_URI", value=urls.replay_uri),
+        ]
+    else:
+        env_vars = [
+            client.V1EnvVar(name="STATS_SERVER_URI", value=cfg.STATS_SERVER_URI),
+            client.V1EnvVar(name="MACHINE_TOKEN", value=cfg.MACHINE_TOKEN),
+        ]
+
+    if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE:
+        env_vars.append(client.V1EnvVar(name="AWS_PROFILE", value=cfg.LOCAL_DEV_AWS_PROFILE))
+
     labels = {
         LABEL_APP: LABEL_APP_VALUE,
         LABEL_JOB_ID: str(job.id),
-        # TODO(Nishad): Create EKS Fargate Profile with selector (namespace=jobs, compute=fargate)
-        # "compute": "fargate",
     }
 
     volumes: list[client.V1Volume] = []
@@ -124,18 +178,12 @@ def create_episode_job(job: JobRequest) -> str:
     k8s_job = client.V1Job(
         metadata=client.V1ObjectMeta(
             name=job_name,
-            namespace=JOB_NAMESPACE,
+            namespace=cfg.JOB_NAMESPACE,
             labels=labels,
         ),
         spec=client.V1JobSpec(
-            # No retries for now
             backoff_limit=0,
-            # The k8s default may give a grace period (SIGTERM before SIGKILL). The orchestrator
-            # has a longer failsafe timeout (TASK_TIMEOUT_MINUTES, default 3.5h) that force-kills
-            # if this doesn't fire.
-            active_deadline_seconds=JOB_TIMEOUT_SECONDS,
-            # Auto-delete job 1 hour after completion (backup; watcher deletes immediately)
-            # Longer TTL gives watcher time to catch up if it restarts
+            active_deadline_seconds=3600,
             ttl_seconds_after_finished=3600,
             template=client.V1PodTemplateSpec(
                 metadata=client.V1ObjectMeta(
@@ -168,15 +216,7 @@ def create_episode_job(job: JobRequest) -> str:
                                 "metta.sim.single_episode_runner",
                                 str(job.id),
                             ],
-                            env=[
-                                client.V1EnvVar(name="STATS_SERVER_URI", value=cfg.STATS_SERVER_URI),
-                                client.V1EnvVar(name="MACHINE_TOKEN", value=cfg.MACHINE_TOKEN),
-                            ]
-                            + (
-                                [client.V1EnvVar(name="AWS_PROFILE", value=cfg.LOCAL_DEV_AWS_PROFILE)]
-                                if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE
-                                else []
-                            ),
+                            env=env_vars,
                             volume_mounts=volume_mounts,
                             resources=client.V1ResourceRequirements(
                                 requests={"cpu": "3", "memory": ("8Gi" if cfg.LOCAL_DEV else "16Gi")},
@@ -189,6 +229,66 @@ def create_episode_job(job: JobRequest) -> str:
         ),
     )
 
-    batch_v1.create_namespaced_job(namespace=JOB_NAMESPACE, body=k8s_job)
+    batch_v1.create_namespaced_job(namespace=cfg.JOB_NAMESPACE, body=k8s_job)
     logger.info(f"Created k8s Job {job_name} for job {job.id}")
     return job_name
+
+
+@dataclass
+class JobPresignedUrls:
+    spec_put_uri: str
+    spec_get_uri: str
+    results_uri: str
+    replay_uri: str
+    policy_uris: list[str]
+
+
+def generate_job_presigned_urls(
+    job_id: UUID,
+    policy_s3_keys: list[str],
+    eval_bucket: str,
+    policy_bucket: str,
+    expiration: int = 3600,
+) -> JobPresignedUrls:
+    s3_client = boto3.client("s3")
+    job_prefix = f"jobs/{job_id}"
+
+    spec_put_uri = s3_client.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/spec.json", "ContentType": "application/json"},
+        ExpiresIn=expiration,
+    )
+    spec_get_uri = s3_client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/spec.json"},
+        ExpiresIn=expiration,
+    )
+
+    results_uri = s3_client.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/results.json", "ContentType": "application/json"},
+        ExpiresIn=expiration,
+    )
+
+    replay_uri = s3_client.generate_presigned_url(
+        "put_object",
+        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/replay.json.z", "ContentType": "application/x-compress"},
+        ExpiresIn=expiration,
+    )
+
+    policy_uris = [
+        s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": policy_bucket, "Key": key},
+            ExpiresIn=expiration,
+        )
+        for key in policy_s3_keys
+    ]
+
+    return JobPresignedUrls(
+        spec_put_uri=spec_put_uri,
+        spec_get_uri=spec_get_uri,
+        results_uri=results_uri,
+        replay_uri=replay_uri,
+        policy_uris=policy_uris,
+    )

@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 from metta_alo.policy import parse_policy_identifier
 
@@ -23,11 +24,6 @@ def _guess_data_dir() -> Path:
 
 
 def _is_uuid(s: str) -> bool:
-    """Check if string is a valid UUID.
-
-    Returns True if valid UUID, False if clearly not a UUID.
-    Raises ValueError if the string looks like a UUID (correct format) but is invalid.
-    """
     if len(s) != 36:
         return False
     if not (s[8] == "-" and s[13] == "-" and s[18] == "-" and s[23] == "-"):
@@ -50,8 +46,16 @@ class MettaSchemeResolver(SchemeResolver):
       - metta://policy/<name>:v<N>         (specific version N of named policy)
     """
 
-    def __init__(self, stats_server_uri: str | None = None):
+    def __init__(self, stats_server_uri: str | None = None, stats_client: StatsClient | None = None):
         self._stats_server_uri = stats_server_uri or os.environ.get("STATS_SERVER_URI") or PROD_STATS_SERVER_URI
+        self._stats_client = stats_client
+
+    def _get_stats_client(self) -> StatsClient:
+        if self._stats_client:
+            return self._stats_client
+        if not self._stats_server_uri:
+            raise ValueError("Cannot resolve metta:// URI: stats server not configured")
+        return StatsClient.create(self._stats_server_uri)
 
     @property
     def scheme(self) -> str:
@@ -78,9 +82,7 @@ class MettaSchemeResolver(SchemeResolver):
                 f"Expected metta://policy/<policy_version_id> or metta://policy/<policy_name>"
             )
 
-        if not self._stats_server_uri:
-            raise ValueError("Cannot resolve metta:// URI: stats server not configured")
-        stats_client = StatsClient.create(self._stats_server_uri)
+        stats_client = self._get_stats_client()
 
         if _is_uuid(path_parts[1]):
             policy_version = stats_client.get_policy_version(uuid.UUID(path_parts[1]))
@@ -94,6 +96,19 @@ class MettaSchemeResolver(SchemeResolver):
             policy_version = stats_client.get_policy_version(entry.id)
 
         return policy_version
+
+    def get_policy_version_id(self, uri: str) -> uuid.UUID:
+        return self.get_policy_version(uri).id
+
+    def get_s3_key(self, uri: str) -> str:
+        policy_version = self.get_policy_version(uri)
+        if not policy_version.s3_path:
+            raise ValueError(f"Policy version {policy_version.id} has no s3_path")
+        s3_uri = policy_version.s3_path
+        if s3_uri.startswith("s3://"):
+            parsed = urlparse(s3_uri)
+            return parsed.path.lstrip("/")
+        raise ValueError(f"Unexpected s3_path format: {s3_uri}")
 
     def get_path_to_policy_spec(self, uri: str) -> str:
         parsed = self.parse(uri)
