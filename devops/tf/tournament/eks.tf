@@ -62,6 +62,23 @@ module "vpc" {
   tags = local.tags
 }
 
+resource "helm_release" "system" {
+  name      = "system"
+  namespace = "kube-system"
+  chart     = "${path.module}/../../charts/system"
+
+  values = [yamlencode({
+    pools = [
+      {
+        name     = "jobs-nodepool"
+        workload = "jobs"
+      }
+    ]
+  })]
+
+  depends_on = [module.eks]
+}
+
 resource "kubernetes_namespace" "jobs" {
   metadata {
     name = var.jobs_namespace
