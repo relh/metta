@@ -78,6 +78,10 @@ def _shared_coordinator(policy_env_info: PolicyEnvInterface) -> "SmartRoleCoordi
     return coordinator
 
 
+def _parse_vibe_sequence(value: str) -> list[str]:
+    return [item.strip() for item in value.replace("|", ",").split(",") if item.strip()]
+
+
 if TYPE_CHECKING:
     from mettagrid.simulator.interface import AgentObservation
 
@@ -373,6 +377,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         self._role = role
         self._policy_env_info = policy_env_info
         self._smart_role_coordinator = smart_role_coordinator
+        # Some env configs omit move_energy_cost; default to 1 to match simulator fallback.
         self._move_energy_cost = getattr(policy_env_info, "move_energy_cost", 1)
 
         # Observation grid half-ranges
@@ -1424,6 +1429,57 @@ class CogsguardPolicy(MultiAgentPolicy):
                 )
             )
         return AgentObservation(agent_id=agent_id, tokens=tokens)
+
+
+class CogsguardRosterPolicy(CogsguardPolicy):
+    short_names = ["role_roster", "role_mix"]
+
+    def __init__(
+        self,
+        policy_env_info: PolicyEnvInterface,
+        device: str = "cpu",
+        roster: Optional[str] = None,
+        pattern: Optional[str] = None,
+        **vibe_counts: int,
+    ):
+        super().__init__(policy_env_info, device=device, **vibe_counts)
+
+        has_counts = any(isinstance(value, int) for value in vibe_counts.values())
+        if roster is None and pattern is None and has_counts:
+            return
+
+        available_vibes = {
+            name[len("change_vibe_") :] for name in policy_env_info.action_names if name.startswith("change_vibe_")
+        }
+
+        if roster:
+            # Explicit roster assigns a vibe per agent, in order.
+            target_vibes = _parse_vibe_sequence(roster)
+        else:
+            # Pattern repeats to fill all agent slots (default: aligner, miner, scrambler, scout).
+            pattern_vibes = _parse_vibe_sequence(pattern or "aligner,miner,scrambler,scout")
+            if not pattern_vibes:
+                pattern_vibes = ["aligner", "miner", "scrambler", "scout"]
+            target_vibes = [pattern_vibes[idx % len(pattern_vibes)] for idx in range(self._policy_env_info.num_agents)]
+
+        # Normalize requested vibes to what's supported by the environment.
+        fallback_vibe = "gear" if "gear" in available_vibes else "default"
+        if fallback_vibe not in available_vibes:
+            fallback_vibe = next(iter(available_vibes))
+        target_vibes = [vibe if vibe in available_vibes else fallback_vibe for vibe in target_vibes]
+        if DEBUG:
+            print(f"[CogsguardRosterPolicy] Vibes normalized to available set: {target_vibes}")
+
+        self._initial_vibes = target_vibes[: self._policy_env_info.num_agents]
+
+        remaining = self._policy_env_info.num_agents - len(self._initial_vibes)
+        if remaining > 0:
+            if "gear" not in available_vibes:
+                raise ValueError("Cannot fill remaining roster slots without gear vibe support.")
+            self._initial_vibes.extend(["gear"] * remaining)
+
+        if DEBUG:
+            print(f"[CogsguardRosterPolicy] Initial vibe assignment: {self._initial_vibes}")
 
 
 class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
