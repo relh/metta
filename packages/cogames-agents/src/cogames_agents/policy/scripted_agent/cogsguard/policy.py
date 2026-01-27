@@ -373,7 +373,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         self._role = role
         self._policy_env_info = policy_env_info
         self._smart_role_coordinator = smart_role_coordinator
-        self._move_energy_cost = policy_env_info.move_energy_cost
+        self._move_energy_cost = getattr(policy_env_info, "move_energy_cost", 1)
 
         # Observation grid half-ranges
         self._obs_hr = policy_env_info.obs_height // 2
@@ -1285,6 +1285,12 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 # =============================================================================
 
 
+def _parse_vibe_list(raw: Optional[str]) -> list[str]:
+    if not raw:
+        return []
+    return [entry.strip().lower() for entry in raw.split(",") if entry.strip()]
+
+
 class CogsguardPolicy(MultiAgentPolicy):
     """Multi-agent policy for CoGsGuard with vibe-based role selection.
 
@@ -1296,6 +1302,9 @@ class CogsguardPolicy(MultiAgentPolicy):
 
     Initial vibe counts can be specified via URI query parameters:
         metta://policy/role?miner=4&scrambler=2&gear=1
+    You can also set a fixed role pattern with:
+        metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
+        metta://policy/role_py?role_order=aligner,miner,aligner,miner,scout
 
     Vibes are assigned to agents in order. If counts don't sum to num_agents,
     remaining agents get "gear" vibe (which picks a role via the smart coordinator).
@@ -1307,6 +1316,8 @@ class CogsguardPolicy(MultiAgentPolicy):
         self,
         policy_env_info: PolicyEnvInterface,
         device: str = "cpu",
+        role_cycle: Optional[str] = None,
+        role_order: Optional[str] = None,
         **vibe_counts: int,
     ):
         super().__init__(policy_env_info, device=device)
@@ -1321,22 +1332,45 @@ class CogsguardPolicy(MultiAgentPolicy):
         }
         role_vibes = [vibe for vibe in ["scrambler", "aligner", "miner", "scout"] if vibe in available_vibes]
 
-        # Build initial vibe assignment from URI params (e.g., ?scrambler=1&miner=4)
-        counts = {k: v for k, v in vibe_counts.items() if isinstance(v, int)}
-        if not counts and role_vibes:
-            counts = {"scrambler": 1, "miner": 4}
-
-        # Build list of vibes to assign to agents
         self._initial_vibes: list[str] = []
-        if role_vibes:
-            for vibe_name in role_vibes:  # Role vibes first
-                self._initial_vibes.extend([vibe_name] * counts.get(vibe_name, 0))
-        # Add gear vibes (agents will pick a role)
-        if "gear" in available_vibes:
-            self._initial_vibes.extend(["gear"] * counts.get("gear", 0))
-        remaining = policy_env_info.num_agents - len(self._initial_vibes)
-        if remaining > 0 and "gear" in available_vibes:
-            self._initial_vibes.extend(["gear"] * remaining)
+        role_cycle_list = _parse_vibe_list(role_cycle)
+        role_order_list = _parse_vibe_list(role_order)
+
+        if role_order_list:
+            self._initial_vibes = []
+            fallback_vibe = "default"
+            for vibe in role_order_list:
+                if vibe in available_vibes or vibe == "default":
+                    self._initial_vibes.append(vibe)
+                else:
+                    if DEBUG:
+                        print(f"[CogsguardPolicy] Unknown role_order vibe '{vibe}', using '{fallback_vibe}'")
+                    self._initial_vibes.append(fallback_vibe)
+            remaining = policy_env_info.num_agents - len(self._initial_vibes)
+            if remaining > 0 and "gear" in available_vibes:
+                self._initial_vibes.extend(["gear"] * remaining)
+        elif role_cycle_list:
+            cycle = [vibe for vibe in role_cycle_list if vibe in available_vibes]
+            if cycle:
+                while len(self._initial_vibes) < policy_env_info.num_agents:
+                    self._initial_vibes.extend(cycle)
+                self._initial_vibes = self._initial_vibes[: policy_env_info.num_agents]
+
+        if not self._initial_vibes:
+            # Build initial vibe assignment from URI params (e.g., ?scrambler=1&miner=4)
+            counts = {k: v for k, v in vibe_counts.items() if isinstance(v, int)}
+            if not counts and role_vibes:
+                counts = {"scrambler": 1, "miner": 4}
+
+            if role_vibes:
+                for vibe_name in role_vibes:  # Role vibes first
+                    self._initial_vibes.extend([vibe_name] * counts.get(vibe_name, 0))
+            # Add gear vibes (agents will pick a role)
+            if "gear" in available_vibes:
+                self._initial_vibes.extend(["gear"] * counts.get("gear", 0))
+            remaining = policy_env_info.num_agents - len(self._initial_vibes)
+            if remaining > 0 and "gear" in available_vibes:
+                self._initial_vibes.extend(["gear"] * remaining)
 
         if DEBUG:
             print(f"[CogsguardPolicy] Initial vibe assignment: {self._initial_vibes}")
@@ -1873,6 +1907,19 @@ class CogsguardGeneralistPolicy(CogsguardPolicy):
             )
             self._agent_policies[agent_id] = StatefulAgentPolicy(impl, self._policy_env_info, agent_id=agent_id)
         return self._agent_policies[agent_id]
+
+
+class CogsguardWomboMixPolicy(CogsguardPolicy):
+    """Fixed-role mix policy that cycles roles by agent index."""
+
+    short_names = ["wombo_mix", "wombo10"]
+
+    def __init__(self, policy_env_info: PolicyEnvInterface, device: str = "cpu", **_ignored: int):
+        super().__init__(
+            policy_env_info,
+            device=device,
+            role_cycle="aligner,miner,scrambler,scout",
+        )
 
 
 class CogsguardWomboPolicy(CogsguardPolicy):

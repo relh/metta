@@ -210,6 +210,30 @@ start with the `gear` vibe (smart role selection).
 
 **Default counts** (if no params specified): `scrambler=1, miner=4`, remainder `gear`
 
+### Role Cycle / Fixed Mix
+
+If you want a fixed, repeating role pattern by agent index, use `role_cycle` (comma-separated). This is handy for
+hardcoding a mix like 3 aligners, 3 miners, 2 scramblers, 2 scouts when running 10 agents.
+
+```bash
+# 10 agents: aligner, miner, scrambler, scout repeating (3/3/2/2)
+./tools/run.py recipes.experiment.cogsguard.play \
+    policy_uri="metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout" \
+    sim.env.game.num_agents=10 \
+    sim.env.game.map_builder.instance.spawn_count=10
+```
+
+You can also use the short-name policy that hardcodes the same cycle:
+
+```bash
+./tools/run.py recipes.experiment.cogsguard.play \
+    policy_uri="metta://policy/wombo_mix" \
+    sim.env.game.num_agents=10 \
+    sim.env.game.map_builder.instance.spawn_count=10
+```
+
+For a one-off explicit ordering, use `role_order` (comma-separated) to list the exact vibes per agent id.
+
 ## File Structure
 
 ```
