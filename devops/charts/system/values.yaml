@@ -6,7 +6,3 @@ pools:
   # new episode jobs system
   - name: jobs-nodepool
     workload: jobs
-
-  - name: jobs-nodepool-warm
-    workload: jobs
-    replicas: 2 # pre-allocate two nodes to avoid cold start latency
