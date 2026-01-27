@@ -167,3 +167,88 @@ def test_cmpo_config_initializes_world_model() -> None:
     assert cmpo_loss.action_dim == 6
     assert len(cmpo_loss.world_model.members) == cfg.world_model.ensemble_size
     assert cmpo_loss.prior_model is None
+
+
+def test_cmpo_state_dict_save_and_load() -> None:
+    """Test that CMPO properly saves and loads its state."""
+    cfg = CMPOConfig()
+    env = SimpleNamespace(
+        single_action_space=gym_spaces.Discrete(6),
+        single_observation_space=gym_spaces.Box(low=0, high=255, shape=(4, 4, 3), dtype=np.uint8),
+    )
+    trainer_cfg = SimpleNamespace(
+        total_timesteps=1024,
+        batch_size=64,
+        advantage=SimpleNamespace(gamma=0.99, gae_lambda=0.95, vtrace_rho_clip=1.0, vtrace_c_clip=1.0),
+    )
+
+    # Create first instance and modify its state
+    cmpo1 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo1")
+    cmpo1.burn_in_steps_iter = 42
+
+    # Modify world model weights
+    with torch.no_grad():
+        for param in cmpo1.world_model.parameters():
+            param.fill_(1.5)
+
+    # Add some transitions to the buffer
+    cmpo1.transition_buffer.add_batch(
+        states=torch.randn(10, cmpo1.obs_dim),
+        actions_enc=torch.randn(10, cmpo1.action_dim),
+        rewards=torch.randn(10),
+        next_states=torch.randn(10, cmpo1.obs_dim),
+    )
+
+    # Save state
+    state = cmpo1.state_dict()
+
+    # Create second instance
+    cmpo2 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo2")
+    assert cmpo2.burn_in_steps_iter == 0
+    assert len(cmpo2.transition_buffer) == 0
+
+    # Load state
+    cmpo2.load_state_dict(state, strict=False)
+
+    # Verify state was restored
+    assert cmpo2.burn_in_steps_iter == 42
+    assert len(cmpo2.transition_buffer) == 10
+
+    # Verify world model weights were restored
+    for p1, p2 in zip(cmpo1.world_model.parameters(), cmpo2.world_model.parameters(), strict=True):
+        assert torch.allclose(p1, p2)
+
+
+def test_cmpo_state_dict_with_prior_model() -> None:
+    """Test that CMPO saves and loads prior model state when enabled."""
+    cfg = CMPOConfig(prior_ema_decay=0.99)
+    env = SimpleNamespace(
+        single_action_space=gym_spaces.Discrete(6),
+        single_observation_space=gym_spaces.Box(low=0, high=255, shape=(4, 4, 3), dtype=np.uint8),
+    )
+    trainer_cfg = SimpleNamespace(
+        total_timesteps=1024,
+        batch_size=64,
+        advantage=SimpleNamespace(gamma=0.99, gae_lambda=0.95, vtrace_rho_clip=1.0, vtrace_c_clip=1.0),
+    )
+
+    # Create first instance with prior model
+    cmpo1 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo1")
+    assert cmpo1.prior_model is not None
+
+    # Modify prior model weights to be different
+    with torch.no_grad():
+        for param in cmpo1.prior_model.parameters():
+            param.fill_(2.5)
+
+    # Save state
+    state = cmpo1.state_dict()
+    assert "prior_model" in state
+
+    # Create second instance and load state
+    cmpo2 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo2")
+    cmpo2.load_state_dict(state, strict=False)
+
+    # Verify prior model weights were restored
+    for p1, p2 in zip(cmpo1.prior_model.parameters(), cmpo2.prior_model.parameters(), strict=True):
+        assert torch.allclose(p1, p2)

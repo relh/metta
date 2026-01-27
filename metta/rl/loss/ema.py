@@ -1,5 +1,6 @@
 import copy
-from typing import Any, Optional, cast
+from collections import OrderedDict
+from typing import Any, Mapping, Optional, cast
 
 import torch
 from pydantic import Field
@@ -86,3 +87,28 @@ class EMA(Loss):
         self.loss_tracker["EMA_mse_loss"].append(float(loss.item()))
         shared_loss_data["policy_td"] = policy_td.reshape(B, TT)
         return loss, shared_loss_data, False
+
+    # ------------------------------------------------------------------
+    # State dict methods for checkpointing
+    # ------------------------------------------------------------------
+    def state_dict(self) -> OrderedDict[str, Any]:
+        """Return state dict including target model weights."""
+        state = super().state_dict()
+        state["target_model"] = {k: v.cpu() for k, v in self.target_model.state_dict().items()}
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any], *, strict: bool = True) -> tuple[list[str], list[str]]:
+        """Load state dict including target model weights."""
+        # Load base class state (loss_tracker)
+        missing, unexpected = super().load_state_dict(
+            {k: v for k, v in state_dict.items() if k in self._state_attrs},
+            strict=False,
+        )
+
+        # Load target model weights
+        if "target_model" in state_dict:
+            self.target_model.load_state_dict(state_dict["target_model"])
+        elif strict:
+            missing.append("target_model")
+
+        return missing, unexpected

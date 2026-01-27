@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import copy
 import random
-from collections import deque
-from typing import Any, Optional, cast
+from collections import OrderedDict, deque
+from typing import Any, Mapping, Optional, cast
 
 import torch
 import torch.nn as nn
@@ -448,3 +448,83 @@ class CMPO(Loss):
             self.world_model_opt.step()
 
             self.loss_tracker["world_model_loss"].append(float(loss.item()))
+
+    # ------------------------------------------------------------------
+    # State dict methods for checkpointing
+    # ------------------------------------------------------------------
+    def state_dict(self) -> OrderedDict[str, Any]:
+        """Return state dict including world model and optimizer state."""
+        state = super().state_dict()
+
+        # Save world model weights
+        state["world_model"] = {k: v.cpu() for k, v in self.world_model.state_dict().items()}
+
+        # Save optimizer state
+        opt_state = self.world_model_opt.state_dict()
+        # Move tensors in optimizer state to CPU
+        cpu_opt_state: dict[str, Any] = {"state": {}, "param_groups": opt_state["param_groups"]}
+        for k, v in opt_state["state"].items():
+            cpu_opt_state["state"][k] = {sk: sv.cpu() if isinstance(sv, Tensor) else sv for sk, sv in v.items()}
+        state["world_model_opt"] = cpu_opt_state
+
+        # Save transition buffer contents
+        buffer_data = []
+        for item in self.transition_buffer._buffer:
+            buffer_data.append({k: v.cpu() for k, v in item.items()})
+        state["transition_buffer"] = buffer_data
+
+        # Save prior model if it exists
+        if self.prior_model is not None:
+            state["prior_model"] = {k: v.cpu() for k, v in self.prior_model.state_dict().items()}
+
+        # Save burn-in counter
+        state["burn_in_steps_iter"] = self.burn_in_steps_iter
+
+        return state
+
+    def load_state_dict(self, state_dict: Mapping[str, Any], *, strict: bool = True) -> tuple[list[str], list[str]]:
+        """Load state dict including world model and optimizer state."""
+        # Load base class state (loss_tracker)
+        missing, unexpected = super().load_state_dict(
+            {k: v for k, v in state_dict.items() if k in self._state_attrs},
+            strict=False,
+        )
+
+        # Load world model weights
+        if "world_model" in state_dict:
+            self.world_model.load_state_dict(state_dict["world_model"])
+        elif strict:
+            missing.append("world_model")
+
+        # Load optimizer state
+        if "world_model_opt" in state_dict:
+            # Move optimizer state tensors to the correct device
+            opt_state = state_dict["world_model_opt"]
+            device_opt_state: dict[str, Any] = {"state": {}, "param_groups": opt_state["param_groups"]}
+            for k, v in opt_state["state"].items():
+                device_opt_state["state"][k] = {
+                    sk: sv.to(self.device) if isinstance(sv, Tensor) else sv for sk, sv in v.items()
+                }
+            self.world_model_opt.load_state_dict(device_opt_state)
+        elif strict:
+            missing.append("world_model_opt")
+
+        # Load transition buffer
+        if "transition_buffer" in state_dict:
+            self.transition_buffer._buffer.clear()
+            for item in state_dict["transition_buffer"]:
+                self.transition_buffer._buffer.append({k: v.clone() for k, v in item.items()})
+        elif strict:
+            missing.append("transition_buffer")
+
+        # Load prior model if it exists
+        if "prior_model" in state_dict and self.prior_model is not None:
+            self.prior_model.load_state_dict(state_dict["prior_model"])
+
+        # Load burn-in counter
+        if "burn_in_steps_iter" in state_dict:
+            self.burn_in_steps_iter = state_dict["burn_in_steps_iter"]
+        elif strict:
+            missing.append("burn_in_steps_iter")
+
+        return missing, unexpected

@@ -144,3 +144,4 @@ tools/dev/python_imports/*.txt
 
 # Claude memory directories
 .memory/
+.beads/
