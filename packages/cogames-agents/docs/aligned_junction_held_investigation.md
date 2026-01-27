@@ -212,6 +212,61 @@ rather than purely insufficient miner counts.
 - Compare 1000-step vs 3000-step runs to see if longer horizons meaningfully increase cogs alignment.
 - Add a small experiment that forces fixed role ratios in `wombo` (or a targeted policy) to isolate role-mix effects.
 
+## Additional failure modes observed across scripted agents
+
+These are inferred from the 1000-step evals plus the debug harness runs. Each bullet is a distinct failure mode that can
+block `cogs.aligned.junction.held`, regardless of role mix.
+
+1. **Resource windows are too short and poorly aligned with role adjacency**
+   - Gear station usage is dominated by attempts without resources.
+   - Resource windows exist but are brief, and the right role is rarely adjacent during those windows.
+   - Outcome: role agents fail to equip, so alignment actions never trigger.
+
+2. **Aligner/scrambler action rate is extremely low**
+   - Even with role_py and miner-heavy ratios, align/scramble attempts are sparse.
+   - Outcome: junctions remain clips-aligned, so cogs never get junction hold credit.
+
+3. **Role thrash / non-concurrent roles**
+   - In role_py, the “agents=10” count reflects agents spending time in that role at some point, not concurrent role
+     assignment. This suggests roles may be cycling without sustained role coverage.
+   - Outcome: miners/aligners/scramblers are not reliably present at the same time to complete the multi-step flow.
+
+4. **Instrumentation visibility mismatch (Nim vs Python)**
+   - Nim `role` policy does not expose `_state`, so debug harness visibility is limited. This can mask state/role
+     misbehaviors in the Nim path.
+   - Outcome: we may be missing a Nim-specific failure mode (pathing/role execution), distinct from Python behavior.
+
+5. **Potential prerequisites beyond gear (hearts/influence)**
+   - Aligner requires aligner gear + influence + heart. Scrambler requires scrambler gear + heart.
+   - The debug harness does not currently verify these prerequisites at the moment of action.
+   - Outcome: actions may fail even with gear, if hearts/influence are starved.
+
+## Definitive next steps (3–5 experiments to disambiguate causes)
+
+These are designed to be decisive; each should either confirm a root cause or eliminate it.
+
+1. **Resource window tracing (collective inventory deltas)**
+   - Add a short-lived trace that logs collective resource levels each tick plus gear station attempts.
+   - Goal: confirm whether resources are actually available when agents are adjacent and whether deposits are hitting
+     the correct collective bucket.
+
+2. **Action prerequisite audit (hearts/influence at action time)**
+   - Instrument align/scramble attempts to log inventory state (gear, hearts, influence).
+   - Goal: determine if action failures are due to missing hearts/influence versus pathing/targeting.
+
+3. **Concurrent role coverage audit**
+   - Track per-tick role counts and role transitions for role_py/wombo.
+   - Goal: measure how often the miner + scrambler + aligner roles are simultaneously staffed for >N steps.
+
+4. **Nim vs Python parity check**
+   - Run the same scenario with `role` (Nim) vs `role_py`, capturing only metrics available to both (e.g., action
+     counts, movement success).
+   - Goal: isolate Nim-specific logic or pathing regressions that don’t exist in Python.
+
+5. **Long-horizon comparison (1000 vs 3000 steps)**
+   - Repeat the 1000-step runs at 3000 steps to determine if time horizon is the limiting factor.
+   - Goal: verify whether alignment is simply delayed versus fundamentally blocked.
+
 ## Related Files
 
 - `packages/cogames/src/cogames/cogs_vs_clips/mission.py` - CogsGuard mission config
