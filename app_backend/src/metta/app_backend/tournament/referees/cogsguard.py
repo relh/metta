@@ -10,8 +10,6 @@ class CogsguardSelfPlayReferee(SelfPlayRefereeBase):
     num_agents: int = NUM_AGENTS
     game_tag: str = "cogsguard"
     description: str = "Self-play matches on CogsGuard arena"
-    # TODO: Re-enable replays once mettascope supports the new cogsguard config format
-    skip_replay: bool = True
 
     def make_env(self, seed: int) -> MettaGridConfig:
         return make_cogsguard_env(seed, self.num_agents)
@@ -29,8 +27,6 @@ class CogsguardPairingReferee(PairingRefereeBase):
         "Pairwise matchups on CogsGuard arena with varied agent splits (1+9, 9+1, 5+5); "
         "scored by participation-weighted average"
     )
-    # TODO: Re-enable replays once mettascope supports the new cogsguard config format
-    skip_replay: bool = True
 
     def make_env(self, seed: int) -> MettaGridConfig:
         return make_cogsguard_env(seed, self.num_agents)
