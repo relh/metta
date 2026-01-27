@@ -6,22 +6,30 @@ from metta_alo.rollout import SingleEpisodeJob
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestCreate, JobType
-from metta.common.util.constants import SOFTMAX_S3_REPLAYS_PREFIX
+from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI, SOFTMAX_S3_REPLAYS_PREFIX
 from mettagrid import MettaGridConfig
 from mettagrid.util.file import http_url
+
+SERVERS = {
+    "dev": DEV_STATS_SERVER_URI,
+    "prod": PROD_STATS_SERVER_URI,
+}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Submit test episode jobs")
-    parser.add_argument("--server", default="http://localhost:8000", help="Backend URL")
+    parser.add_argument("--server", choices=["dev", "prod"], default="dev", help="Target environment")
     parser.add_argument("--num-agents", type=int, default=2, help="Number of agents")
     parser.add_argument("--num-jobs", type=int, default=1, help="Number of jobs to submit")
     parser.add_argument("--policy-uri", help="Policy URI")
     parser.add_argument("--no-replay", action="store_true", help="Skip replay generation")
+    parser.add_argument("--use-tournament-account", action="store_true", help="Dispatch to tournament eval cluster")
     args = parser.parse_args()
 
     if not args.policy_uri:
         raise ValueError("Policy URI is required")
+
+    server_url = SERVERS[args.server]
 
     policy_uris = [args.policy_uri]
     env = MettaGridConfig.EmptyRoom(num_agents=args.num_agents, width=20, height=20)
@@ -38,9 +46,15 @@ def main():
             seed=seed,
             episode_tags={"source": "submit_test_jobs"},
         )
-        jobs.append(JobRequestCreate(job_type=JobType.episode, job=job.model_dump()))
+        jobs.append(
+            JobRequestCreate(
+                job_type=JobType.episode,
+                job=job.model_dump(),
+                use_tournament_account=args.use_tournament_account,
+            )
+        )
 
-    stats_client = StatsClient(args.server)
+    stats_client = StatsClient(server_url)
     try:
         job_ids = stats_client.create_jobs(jobs)
         print(f"Created {len(job_ids)} job(s):")
