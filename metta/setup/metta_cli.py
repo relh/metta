@@ -678,7 +678,7 @@ def cmd_report_env_details():
 
 @app.command(name="gridworks", help="Start the Gridworks web UI", context_settings={"allow_extra_args": True})
 def cmd_gridworks(ctx: typer.Context):
-    cmd = ["./gridworks/start.py", *ctx.args]
+    cmd = ["./web/gridworks/start.py", *ctx.args]
     subprocess.run(cmd, cwd=get_repo_root(), check=False)
 
 

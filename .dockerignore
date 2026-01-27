@@ -33,12 +33,9 @@ test_data
 **/mettagrid_debug.log
 cpplint_output*
 
-mettascope/dist
-
 **/node_modules
 **/.next
-/observatory/.vite/
-/observatory/dist/
+**/.vite
 
 wandb
 

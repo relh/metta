@@ -32,9 +32,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY --from=pruned-source /metta/out/full/ .
 # turbo's pruned sources don't include some files
-COPY home ./home
+COPY web/home ./web/home
 
-WORKDIR /metta/home
+WORKDIR /metta/web/home
 
 # Generate nginx.conf from template and links.yaml
 RUN node generate-nginx-redirects.js
@@ -46,10 +46,10 @@ RUN pnpm build
 FROM nginx:alpine
 
 # Copy built assets from builder stage
-COPY --from=builder /metta/home/dist /usr/share/nginx/html
+COPY --from=builder /metta/web/home/dist /usr/share/nginx/html
 
 # Copy generated nginx configuration from builder stage
-COPY --from=builder /metta/home/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /metta/web/home/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Expose port 80
 EXPOSE 80

@@ -2,9 +2,7 @@ packages:
   # These are filesystem paths - the package names are set in subdir/package.json.
   # It's important not to have `./` prefix here for turbo to work,
   # see https://github.com/vercel/turborepo/discussions/8514#discussioncomment-9786742
-  - "gridworks" # @softmax/gridworks
-  - "home" # softmax-home
-  - "observatory" # @softmax/observatory
+  - "web/*" # gridworks, home, observatory
   - "notebooks/utils/scorecard_widget" # @softmax/scorecard_widget
   - "notebooks/utils/eval_finder_widget" # @softmax/eval_finder_widget
   - "notebooks/utils/policy_selector_widget" # @softmax/policy_selector_widget

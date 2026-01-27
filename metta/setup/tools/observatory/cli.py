@@ -234,7 +234,7 @@ def frontend(
     info("Starting Observatory frontend")
     info(f"API URL: {env.get('OBSERVATORY_API_URL')}")
 
-    subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "observatory")
+    subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/observatory")
 
 
 @app.command(name="tournament", help="Run the tournament commissioner")

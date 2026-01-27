@@ -18,9 +18,9 @@ jobs:
     secrets: inherit
     with:
       code_paths: |
-        - 'observatory/**'
+        - 'web/observatory/**'
       image_name: metta-app-frontend
-      dockerfile: observatory/Dockerfile
+      dockerfile: web/observatory/Dockerfile
       namespace: observatory
       release: observatory
       chart: ./devops/charts/observatory

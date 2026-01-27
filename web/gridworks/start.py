@@ -20,7 +20,7 @@ def main():
 
     cd_repo_root()
     repo_root = Path.cwd()
-    gridworks_dir = repo_root / "gridworks"
+    gridworks_dir = repo_root / "web/gridworks"
 
     print(f"Starting servers from repo root: {repo_root}")
     print(f"Gridworks frontend directory: {gridworks_dir}")

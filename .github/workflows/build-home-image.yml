@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - "home/**"
+      - "web/home/**"
       - ".github/workflows/build-home-image.yml"
   workflow_dispatch: {}
 
@@ -19,9 +19,9 @@ jobs:
     secrets: inherit
     with:
       image_name: softmax-home
-      dockerfile: home/Dockerfile
+      dockerfile: web/home/Dockerfile
       namespace: default
       release: home
       chart: ./devops/charts/home
       pre_deploy_command: |
-        cp home/links.yaml devops/charts/home/
+        cp web/home/links.yaml devops/charts/home/

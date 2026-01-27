@@ -34,14 +34,14 @@ RUN pnpm install --frozen-lockfile
 
 COPY --from=pruned-source /metta/out/full/ .
 # turbo's pruned sources don't include .env files
-COPY observatory ./observatory
+COPY web/observatory ./web/observatory
 
-WORKDIR /metta/observatory
+WORKDIR /metta/web/observatory
 
 RUN pnpm run build
 
 # ================================ Serve the Next.js app ================================
-FROM base AS runtime
+FROM node:24-bookworm-slim AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production
@@ -49,9 +49,9 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /metta/observatory/public ./observatory/public
-COPY --from=builder --chown=nextjs:nodejs /metta/observatory/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /metta/observatory/.next/static ./observatory/.next/static
+COPY --from=builder /metta/web/observatory/public ./web/observatory/public
+COPY --from=builder --chown=nextjs:nodejs /metta/web/observatory/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /metta/web/observatory/.next/static ./web/observatory/.next/static
 
 USER nextjs
 
@@ -60,4 +60,4 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 # Start the Next.js server
-CMD ["node", "observatory/server.js"]
+CMD ["node", "web/observatory/server.js"]

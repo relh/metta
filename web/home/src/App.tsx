@@ -202,8 +202,8 @@ function App() {
 
           <div className="setup-subsection">
             Modify{' '}
-            <a href="https://github.com/Metta-AI/metta/blob/main/home/links.yaml">
-              <code>home/links.yaml</code>
+            <a href="https://github.com/Metta-AI/metta/blob/main/web/home/links.yaml">
+              <code>web/home/links.yaml</code>
             </a>
             . Updates should auto-deploy after merge.
           </div>
