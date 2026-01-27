@@ -231,3 +231,95 @@ jobs:
               environment_url: process.env.DEPLOY_URL,
               description: 'Publish failed',
             });
+
+  verify-pypi-install:
+    name: Verify PyPI installation
+    needs:
+      - publish
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'yes' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    env:
+      PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target || 'pypi' }}
+    steps:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Extract cogames version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/cogames-v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#cogames-v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Extracted version: $VERSION"
+          else
+            echo "No version tag found, will install latest"
+            echo "version=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for cogames on PyPI
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "${{ env.PUBLISH_TARGET }}" == "testpypi" ]; then
+            PYPI_URL="https://test.pypi.org"
+          else
+            PYPI_URL="https://pypi.org"
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "No specific version to wait for, skipping wait"
+            exit 0
+          fi
+
+          MAX_WAIT=600  # 10 minutes
+          CHECK_INTERVAL=30
+          ELAPSED=0
+
+          echo "Waiting for cogames==$VERSION to be available on $PYPI_URL..."
+
+          while [ $ELAPSED -le $MAX_WAIT ]; do
+            if curl -sf "$PYPI_URL/pypi/cogames/$VERSION/json" > /dev/null 2>&1; then
+              echo "✓ cogames $VERSION is available on $PYPI_URL!"
+              exit 0
+            fi
+            echo "⏳ Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
+            sleep $CHECK_INTERVAL
+            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+          done
+
+          echo "❌ ERROR: cogames $VERSION not found on $PYPI_URL after $MAX_WAIT seconds"
+          exit 1
+
+      - name: Install and test cogames from PyPI
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Set up index URL for testpypi if needed
+          if [ "${{ env.PUBLISH_TARGET }}" == "testpypi" ]; then
+            INDEX_ARGS="--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/"
+          else
+            INDEX_ARGS=""
+          fi
+
+          # Install cogames from PyPI
+          if [ -n "$VERSION" ]; then
+            echo "Installing cogames==$VERSION from PyPI..."
+            uv pip install $INDEX_ARGS "cogames==$VERSION" --system
+          else
+            echo "Installing latest cogames from PyPI..."
+            uv pip install $INDEX_ARGS cogames --system
+          fi
+
+          # Smoke test 1: Check version command works
+          echo ""
+          echo "=== Testing cogames version ==="
+          cogames version
+
+          # Smoke test 2: Check missions list works (verifies mettagrid dependency)
+          echo ""
+          echo "=== Testing cogames missions ==="
+          cogames missions
+
+          echo ""
+          echo "✓ cogames smoke tests passed!"
