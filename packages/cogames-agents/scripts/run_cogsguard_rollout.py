@@ -7,6 +7,10 @@ import argparse
 from typing import Iterable
 
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
+from cogames_agents.policy.scripted_agent.cogsguard.prereq_trace import (
+    format_prereq_trace_line,
+    prereq_missing,
+)
 from cogames_agents.policy.scripted_agent.cogsguard.role_trace import (
     count_role_transitions,
     count_steps_with_roles,
@@ -57,6 +61,7 @@ def run_rollout(
     recipe_module: str,
     policy_uri: str,
     allow_missing_roles: bool,
+    trace_prereqs: bool,
     trace_roles: bool,
     trace_role_every: int,
     trace_role_limit: int,
@@ -80,6 +85,11 @@ def run_rollout(
     neutral_charger_mismatches = 0
     expected_roles = {"miner", "scout", "aligner", "scrambler"}
     observed_roles: set[str] = set()
+    prereq_trace_lines: list[str] = []
+    prereq_stats = {
+        "aligner": {"attempts": 0, "missing_gear": 0, "missing_heart": 0, "missing_influence": 0},
+        "scrambler": {"attempts": 0, "missing_gear": 0, "missing_heart": 0},
+    }
     role_counts_history: list[dict[str, int]] = []
     role_transitions: list[tuple[str, str]] = []
     role_trace_lines: list[str] = []
@@ -297,6 +307,31 @@ def run_rollout(
 
                 if current_pending == "align" and role == "aligner":
                     role_stats["aligner"]["align_attempts"] += 1
+                    prereq_stats["aligner"]["attempts"] += 1
+                    missing = prereq_missing(
+                        "align",
+                        gear=state.aligner,
+                        heart=state.heart,
+                        influence=state.influence,
+                    )
+                    if missing.get("gear"):
+                        prereq_stats["aligner"]["missing_gear"] += 1
+                    if missing.get("heart"):
+                        prereq_stats["aligner"]["missing_heart"] += 1
+                    if missing.get("influence"):
+                        prereq_stats["aligner"]["missing_influence"] += 1
+                    if trace_prereqs:
+                        prereq_trace_lines.append(
+                            format_prereq_trace_line(
+                                step=harness.step_count,
+                                agent_id=agent_id,
+                                action_type="align",
+                                gear=state.aligner,
+                                heart=state.heart,
+                                influence=state.influence,
+                                missing=missing,
+                            )
+                        )
                     if target_struct is None or target_struct.structure_type != StructureType.CHARGER:
                         role_stats["aligner"]["align_mismatches"] += 1
                     elif target_struct.alignment == "cogs":
@@ -304,6 +339,29 @@ def run_rollout(
 
                 if current_pending == "scramble" and role == "scrambler":
                     role_stats["scrambler"]["scramble_attempts"] += 1
+                    prereq_stats["scrambler"]["attempts"] += 1
+                    missing = prereq_missing(
+                        "scramble",
+                        gear=state.scrambler,
+                        heart=state.heart,
+                        influence=state.influence,
+                    )
+                    if missing.get("gear"):
+                        prereq_stats["scrambler"]["missing_gear"] += 1
+                    if missing.get("heart"):
+                        prereq_stats["scrambler"]["missing_heart"] += 1
+                    if trace_prereqs:
+                        prereq_trace_lines.append(
+                            format_prereq_trace_line(
+                                step=harness.step_count,
+                                agent_id=agent_id,
+                                action_type="scramble",
+                                gear=state.scrambler,
+                                heart=state.heart,
+                                influence=state.influence,
+                                missing=missing,
+                            )
+                        )
                     if target_struct is None or target_struct.structure_type != StructureType.CHARGER:
                         role_stats["scrambler"]["scramble_mismatches"] += 1
                     elif target_struct.alignment == "cogs":
@@ -412,6 +470,22 @@ def run_rollout(
         print("Role trace")
         for line in role_trace_lines:
             print(f"- {line}")
+    print("Action prerequisite checks")
+    print(
+        f"- aligner: attempts={prereq_stats['aligner']['attempts']} "
+        f"missing_gear={prereq_stats['aligner']['missing_gear']} "
+        f"missing_heart={prereq_stats['aligner']['missing_heart']} "
+        f"missing_influence={prereq_stats['aligner']['missing_influence']}"
+    )
+    print(
+        f"- scrambler: attempts={prereq_stats['scrambler']['attempts']} "
+        f"missing_gear={prereq_stats['scrambler']['missing_gear']} "
+        f"missing_heart={prereq_stats['scrambler']['missing_heart']}"
+    )
+    if trace_prereqs:
+        print("Action prerequisite trace")
+        for line in prereq_trace_lines:
+            print(f"- {line}")
     if trace_resources:
         print("Resource trace (cogs collective inventory)")
         for line in resource_trace_lines:
@@ -455,6 +529,7 @@ def main() -> int:
         default="metta://policy/role?miner=4&scout=2&aligner=2&scrambler=2",
     )
     parser.add_argument("--allow-missing-roles", action="store_true")
+    parser.add_argument("--trace-prereqs", action="store_true")
     parser.add_argument("--trace-roles", action="store_true")
     parser.add_argument("--trace-role-every", type=int, default=1)
     parser.add_argument("--trace-role-limit", type=int, default=0)
@@ -471,6 +546,7 @@ def main() -> int:
         recipe_module=args.recipe,
         policy_uri=args.policy_uri,
         allow_missing_roles=args.allow_missing_roles,
+        trace_prereqs=args.trace_prereqs,
         trace_roles=args.trace_roles,
         trace_role_every=args.trace_role_every,
         trace_role_limit=args.trace_role_limit,
