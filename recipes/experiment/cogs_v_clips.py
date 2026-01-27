@@ -14,7 +14,7 @@ from cogames.cli.mission import find_mission, parse_variants
 
 # eval_missions.py was deleted - missions moved to integrated_evals.py
 from cogames.cogs_vs_clips.mission import MAP_MISSION_DELIMITER, Mission, NumCogsVariant
-from cogames.cogs_vs_clips.missions import get_core_missions
+from cogames.cogs_vs_clips.missions import get_core_missions, get_legacy_missions
 from cogames.cogs_vs_clips.variants import VARIANTS
 from devops.stable.registry import ci_job, stable_job
 from devops.stable.runner import AcceptanceCriterion
@@ -82,18 +82,20 @@ def _normalize_variant_names(
 
 
 def _resolve_mission_template(name: str) -> Mission:
-    for mission in get_core_missions():
+    # Check core missions and legacy missions
+    all_missions = [*get_core_missions(), *get_legacy_missions()]
+    for mission in all_missions:
         if mission.name == name or mission.full_name() == name:
-            return mission
+            return mission  # type: ignore[return-value]
 
     if MAP_MISSION_DELIMITER not in name:
-        return find_mission(name, None, include_evals=True)
+        return find_mission(name, None, include_evals=True, include_legacy=True)  # type: ignore[return-value]
 
     if name.count(MAP_MISSION_DELIMITER) > 1:
         raise ValueError(f"Mission name can contain at most one '{MAP_MISSION_DELIMITER}' delimiter")
 
     site_name, mission_name = name.split(MAP_MISSION_DELIMITER)
-    return find_mission(site_name, mission_name, include_evals=True)
+    return find_mission(site_name, mission_name, include_evals=True, include_legacy=True)  # type: ignore[return-value]
 
 
 def _resolve_eval_variants(

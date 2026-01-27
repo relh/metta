@@ -1,5 +1,8 @@
 """Arena recipe with shaped rewards - STABLE
 This recipe is automatically validated in CI and release processes.
+
+TODO (cogsguard migration): This stable release recipe uses Escape from Machina (arena) missions.
+Consider adding a CogsGuard stable release recipe or migrating this one.
 """
 
 from typing import Optional

@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException
 
 from cogames.cli.mission import parse_variants
-from cogames.cogs_vs_clips.mission import Mission, MissionVariant
+from cogames.cogs_vs_clips.mission import AnyMission, MissionVariant
 from cogames.cogs_vs_clips.missions import MISSIONS
 from cogames.cogs_vs_clips.variants import VARIANTS
 from metta.gridworks.common import ConfigWithExtraInfo, extend_config
 from mettagrid.mapgen.utils.storable_map import StorableMap, StorableMapDict
 
 
-def _get_mission(site_name: str, mission_name: str, variants: str = "") -> Mission:
+def _get_mission(site_name: str, mission_name: str, variants: str = "") -> AnyMission:
     mission = next(
         (mission for mission in MISSIONS if mission.site.name == site_name and mission.name == mission_name), None
     )
