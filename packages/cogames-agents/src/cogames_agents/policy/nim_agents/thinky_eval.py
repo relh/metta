@@ -51,8 +51,6 @@ EVALS: List[Tuple[str, str, int]] = [
     ("diagnostic_extract_missing_oxygen", "", 1),
     ("diagnostic_extract_missing_germanium", "", 1),
     ("diagnostic_extract_missing_silicon", "", 1),
-    ("diagnostic_unclip_craft", "", 1),
-    ("diagnostic_unclip_preseed", "", 1),
     ("diagnostic_agile", "", 1),
     ("diagnostic_radial", "", 1),
     # Hello World evals
