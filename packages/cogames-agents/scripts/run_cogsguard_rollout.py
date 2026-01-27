@@ -7,6 +7,12 @@ import argparse
 from typing import Iterable
 
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
+from cogames_agents.policy.scripted_agent.cogsguard.role_trace import (
+    count_role_transitions,
+    count_steps_with_roles,
+    format_role_trace_line,
+    summarize_role_counts,
+)
 from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
     TRACE_RESOURCES,
     format_resource_trace_line,
@@ -51,6 +57,9 @@ def run_rollout(
     recipe_module: str,
     policy_uri: str,
     allow_missing_roles: bool,
+    trace_roles: bool,
+    trace_role_every: int,
+    trace_role_limit: int,
     trace_resources: bool,
     trace_resource_every: int,
     trace_resource_limit: int,
@@ -71,6 +80,10 @@ def run_rollout(
     neutral_charger_mismatches = 0
     expected_roles = {"miner", "scout", "aligner", "scrambler"}
     observed_roles: set[str] = set()
+    role_counts_history: list[dict[str, int]] = []
+    role_transitions: list[tuple[str, str]] = []
+    role_trace_lines: list[str] = []
+    last_role_by_agent: dict[int, str] = {}
 
     role_stats = {
         "miner": {
@@ -129,6 +142,9 @@ def run_rollout(
     if trace_resources and trace_resource_every <= 0:
         raise ValueError("trace_resource_every must be >= 1")
 
+    if trace_role_every <= 0:
+        raise ValueError("trace_role_every must be >= 1")
+
     for _ in range(steps):
         harness.step(1)
         collective_inv = {}
@@ -143,6 +159,8 @@ def run_rollout(
                 gear_resource_windows[role] += 1
 
         adjacent_by_role = {role: False for role in COGSGUARD_GEAR_COSTS}
+        role_counts_step = {role: 0 for role in expected_roles}
+        transition_events = 0
         station_uses_step = {role: 0 for role in COGSGUARD_GEAR_COSTS}
         station_uses_with_resources_step = {role: 0 for role in COGSGUARD_GEAR_COSTS}
         for agent_id in range(harness.num_agents):
@@ -156,6 +174,8 @@ def run_rollout(
             if role in role_stats:
                 observed_roles.add(role)
                 role_stats[role]["agents"].add(agent_id)
+                if role in expected_roles:
+                    role_counts_step[role] += 1
                 if state.has_gear():
                     role_stats[role]["gear_seen"] = True
 
@@ -194,6 +214,12 @@ def run_rollout(
                             role_stats[role]["gear_attempts_without_resources"] += 1
 
                 last_gear[agent_id] = current_gear
+
+                previous_role = last_role_by_agent.get(agent_id)
+                if previous_role is not None and previous_role != role:
+                    role_transitions.append((previous_role, role))
+                    transition_events += 1
+                last_role_by_agent[agent_id] = role
             parsed = base_policy._parse_observation(state, state.current_obs)
             for pos, obj_state in parsed.nearby_objects.items():
                 obj_name = obj_state.name.lower()
@@ -287,6 +313,18 @@ def run_rollout(
             if adjacent and gear_resources_available.get(role, False):
                 gear_resource_windows_with_adjacent[role] += 1
 
+        role_counts_history.append(role_counts_step)
+        if trace_roles and harness.step_count % trace_role_every == 0:
+            if trace_role_limit <= 0 or len(role_trace_lines) < trace_role_limit:
+                role_trace_lines.append(
+                    format_role_trace_line(
+                        step=harness.step_count,
+                        role_counts=role_counts_step,
+                        roles=sorted(expected_roles),
+                        transitions=transition_events,
+                    )
+                )
+
         if trace_resources:
             if harness.step_count % trace_resource_every == 0:
                 if trace_resource_limit <= 0 or len(resource_trace_lines) < trace_resource_limit:
@@ -356,6 +394,24 @@ def run_rollout(
         )
     print(f"- gear resource windows: {gear_resource_windows}")
     print(f"- gear resource windows with role adjacent: {gear_resource_windows_with_adjacent}")
+    role_summary = summarize_role_counts(role_counts_history, sorted(expected_roles))
+    all_roles_steps = count_steps_with_roles(role_counts_history, sorted(expected_roles))
+    core_roles_steps = count_steps_with_roles(role_counts_history, ["miner", "aligner", "scrambler"])
+    transition_counts = count_role_transitions(role_transitions)
+    print("Role coverage")
+    for role in sorted(expected_roles):
+        summary = role_summary[role]
+        print(f"- {role}: min={summary['min']} max={summary['max']} avg={summary['avg']:.2f}")
+    print(f"- steps_with_all_roles: {all_roles_steps}")
+    print(f"- steps_with_core_roles: {core_roles_steps}")
+    if transition_counts:
+        top_transitions = sorted(transition_counts.items(), key=lambda item: item[1], reverse=True)[:5]
+        formatted = ", ".join(f"{prev}->{next}:{count}" for (prev, next), count in top_transitions)
+        print(f"- top_role_transitions: {formatted}")
+    if trace_roles:
+        print("Role trace")
+        for line in role_trace_lines:
+            print(f"- {line}")
     if trace_resources:
         print("Resource trace (cogs collective inventory)")
         for line in resource_trace_lines:
@@ -399,6 +455,9 @@ def main() -> int:
         default="metta://policy/role?miner=4&scout=2&aligner=2&scrambler=2",
     )
     parser.add_argument("--allow-missing-roles", action="store_true")
+    parser.add_argument("--trace-roles", action="store_true")
+    parser.add_argument("--trace-role-every", type=int, default=1)
+    parser.add_argument("--trace-role-limit", type=int, default=0)
     parser.add_argument("--trace-resources", action="store_true")
     parser.add_argument("--trace-resource-every", type=int, default=1)
     parser.add_argument("--trace-resource-limit", type=int, default=0)
@@ -412,6 +471,9 @@ def main() -> int:
         recipe_module=args.recipe,
         policy_uri=args.policy_uri,
         allow_missing_roles=args.allow_missing_roles,
+        trace_roles=args.trace_roles,
+        trace_role_every=args.trace_role_every,
+        trace_role_limit=args.trace_role_limit,
         trace_resources=args.trace_resources,
         trace_resource_every=args.trace_resource_every,
         trace_resource_limit=args.trace_resource_limit,
