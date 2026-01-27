@@ -50,8 +50,7 @@ resource "aws_ecr_repository_policy" "episode_runner_cross_account" {
           "ecr:PutImage",
           "ecr:InitiateLayerUpload",
           "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload",
-          "ecr:GetAuthorizationToken"
+          "ecr:CompleteLayerUpload"
         ]
       }
     ]

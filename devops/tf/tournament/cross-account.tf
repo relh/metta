@@ -1,5 +1,5 @@
 # IAM role that can be assumed by the primary account for EKS access
-# Used by Dispatcher and Watcher to manage jobs in the eval cluster
+# Used by the observatory backend to dispatch and watch eval jobs
 
 resource "aws_iam_role" "primary_account_eks_access" {
   name        = "PrimaryAccountEKSAccess"
