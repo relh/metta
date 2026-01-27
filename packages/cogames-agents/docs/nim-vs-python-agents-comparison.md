@@ -125,6 +125,15 @@ The default depends on how the policy is invoked:
 role          -> Nim (CogsguardAgentsMultiPolicy)
 role_nim      -> Nim (CogsguardAgentsMultiPolicy)
 role_py       -> Python (CogsguardPolicy)
+role_roster   -> Python (CogsguardRosterPolicy)
+role_mix      -> Python (CogsguardRosterPolicy alias)
+wombo         -> Python (CogsguardWomboPolicy)
+swiss         -> Python (CogsguardWomboPolicy alias)
+wombo_mix     -> Python (CogsguardWomboMixPolicy)
+wombo10       -> Python (CogsguardWomboMixPolicy alias)
+cogsguard_control  -> Python (CogsguardControlAgent)
+cogsguard_targeted -> Python (CogsguardTargetedAgent)
+cogsguard_v2       -> Python (CogsguardV2Agent)
 teacher       -> Python wrapper over Nim
 teacher_nim   -> Python wrapper over Nim
 miner         -> Python (MinerPolicy)

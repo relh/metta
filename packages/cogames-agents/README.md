@@ -16,23 +16,43 @@ python -c "from cogames_agents.policy.scripted_registry import list_scripted_age
 
 Common scripted policy names include:
 
-- `baseline`, `tiny_baseline`
-- `thinky` (`thinky_nim`)
-- `race_car` (`race_car_nim`)
-- `ladybug` (`ladybug_nim`, `ladybug_py`)
-- `nim_random` (`random_nim`)
-- `role` (`role_nim`, `role_py`)
-- `wombo` (`swiss` alias)
-- `cogsguard_control`, `cogsguard_targeted`, `cogsguard_v2`
-- `alignall`
-- `teacher` (`teacher_nim`)
-- `miner`, `scout`, `aligner`, `scrambler`
+- Baselines: `baseline`, `tiny_baseline`, `ladybug_py`
+- CogsGuard core: `role` (`role_nim`), `role_py`, `wombo` (`swiss`)
+- Teaching/roles: `teacher` (`teacher_nim`), `miner`, `scout`, `aligner`, `scrambler`
+- Pinky: `pinky`
+
+For the full registry snapshot (including aliases), see `docs/scripted-agent-registry.md`.
 
 Role-specific policies are exposed via role names (miner/scout/aligner/scrambler). For the teacher policy, you can pass
 `role_vibes` as a comma-separated list:
 
 ```
 metta://policy/teacher?role_vibes=miner,scout
+```
+
+Roster/mix policies:
+
+- `role_roster` (`role_mix`) supports `roster=` or `pattern=` to assign initial vibes.
+- `wombo_mix` (`wombo10`) assigns a fixed role cycle (`aligner,miner,scrambler,scout`) by agent index.
+
+Examples:
+
+```
+metta://policy/role_roster?roster=aligner,miner,scrambler,scout
+metta://policy/role_roster?pattern=aligner,miner,scrambler,scout
+metta://policy/wombo_mix
+```
+
+Pinky role counts are applied in a different order than CogsGuard:
+
+- Pinky order: miner -> scout -> aligner -> scrambler, and any remaining agents stay default/noop.
+- CogsGuard order: scrambler -> aligner -> miner -> scout, then fills remaining agents with gear.
+
+Examples:
+
+```
+metta://policy/pinky?miner=4&aligner=2&scrambler=4
+metta://policy/pinky?miner=2&scout=2&aligner=1&scrambler=1&debug=1
 ```
 
 ## Recipe usage
@@ -47,9 +67,5 @@ The `recipes.experiment.scripted_agents` recipe accepts the same scripted policy
 ## Included policies
 
 - Short names map to the fastest implementation (Nim when available, otherwise Python).
-- Nim policies (short names + `_nim` aliases): `thinky`, `race_car`, `ladybug`, `role`, `nim_random` (alias
-  `random_nim`)
-- Python scripted policies (use `_py` only when Nim exists): `baseline`, `tiny_baseline`, `ladybug_py`, `role_py`
-- Python CoGsGuard scripted policies: `wombo` (`swiss`), `cogsguard_control`, `cogsguard_targeted`, `cogsguard_v2`
-- Scripted roles: `miner`, `scout`, `aligner`, `scrambler`
-- Teacher wrapper: `teacher` (`teacher_nim`) forces an initial role/vibe, then delegates to the Nim policy
+- `_nim` aliases exist when there is a Nim implementation alongside Python.
+- Teacher wrapper: `teacher` (`teacher_nim`) forces an initial role/vibe, then delegates to the Nim policy.
