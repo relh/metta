@@ -93,7 +93,7 @@ class TestCogsguardEnvironment:
 
         # Check that key object types exist
         assert "wall" in objects
-        assert "assembler" in objects  # hub
+        assert "hub" in objects  # hub
         assert "junction" in objects  # clips junction
         assert "chest" in objects
 
