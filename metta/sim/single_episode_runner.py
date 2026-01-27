@@ -174,12 +174,11 @@ def run_episode(
             copy_data(local_replay_uri, upload_replay_uri, content_type="application/x-compress")
             logger.info(f"Uploaded replay to {upload_replay_uri[:50]}...")
 
-        _upload_debug_dir(local_debug_dir, upload_debug_uri)
-
         return results
 
     finally:
         if local_debug_dir is not None:
+            _upload_debug_dir(local_debug_dir, upload_debug_uri)
             shutil.rmtree(local_debug_dir, ignore_errors=True)
 
 
