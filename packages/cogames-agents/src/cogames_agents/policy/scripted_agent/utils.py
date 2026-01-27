@@ -105,6 +105,16 @@ def process_feature_at_position(
         return
 
 
+def _select_primary_tag(tags: list[str]) -> str:
+    for tag in tags:
+        if tag.startswith("type:"):
+            return tag.split(":", 1)[1]
+    for tag in tags:
+        if not tag.startswith("collective:"):
+            return tag
+    return tags[0]
+
+
 def create_object_state(
     features: dict[str, Any],
     *,
@@ -113,7 +123,7 @@ def create_object_state(
     """Create an ObjectState from collected features.
 
     Note: Objects can have multiple tags (e.g., "wall" + "green" vibe).
-    We use the first tag as the primary object name.
+    Prefer type tags over collective tags for the primary object name.
     """
     # Get tags list (now stored as "tags" instead of "tag")
     tags_value = features.get("tags", [])
@@ -124,10 +134,10 @@ def create_object_state(
     else:
         tag_ids = []
 
-    # Use first tag as primary object name
+    # Pick a primary object name with tag precedence.
     if tag_ids:
         tags = [tag_names.get(tag_id, f"unknown_tag_{tag_id}") for tag_id in tag_ids]
-        obj_name = tags[0]
+        obj_name = _select_primary_tag(tags)
     else:
         tags = []
         obj_name = "unknown"
