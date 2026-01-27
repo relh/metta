@@ -87,7 +87,9 @@ def create_job_router() -> APIRouter:
                 db_jobs.append(db_job)
             await session.commit()
             # Capture IDs before session closes
-            job_data = [(j.id, j) for j in db_jobs]
+            job_data = [
+                (j.id, j, job_create.use_tournament_account) for j, job_create in zip(db_jobs, jobs, strict=True)
+            ]
 
         class _DispatchResult(BaseModel):
             k8s_job_name: Optional[str] = None
@@ -96,10 +98,11 @@ def create_job_router() -> APIRouter:
 
         # Dispatch each job (outside DB session)
         dispatch_results: dict[UUID, _DispatchResult] = {}
-        for job_id, db_job in job_data:
+        for job_id, db_job, use_tournament_account in job_data:
             try:
                 dispatch_results[job_id] = _DispatchResult(
-                    k8s_job_name=dispatch_job(db_job, use_tournament_account=True), time=datetime.now(UTC)
+                    k8s_job_name=dispatch_job(db_job, use_tournament_account=use_tournament_account),
+                    time=datetime.now(UTC),
                 )
             except Exception as e:
                 logger.error(f"Failed to dispatch job {job_id}: {e}", exc_info=True)
