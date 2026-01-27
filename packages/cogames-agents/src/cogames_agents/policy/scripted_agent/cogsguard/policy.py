@@ -549,14 +549,9 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
     def _update_agent_position(self, s: CogsguardAgentState) -> None:
         """Update position based on last action that was ACTUALLY EXECUTED.
 
-        IMPORTANT: Position is ONLY updated when OUR intended action matches
-        the executed action. This ensures:
-        1. Position doesn't update when moves fail (executed=noop, intended=move_X)
-        2. Position doesn't update when a human takes over and moves the cog
-           (the human's moves are not what we intended)
-
-        This keeps internal position consistent even during human control,
-        so when control returns to the agent, its internal map remains valid.
+        IMPORTANT: Position is updated from the executed action in observations.
+        This keeps internal position consistent with the simulator, even when
+        movement is delayed or overridden by another controller.
         """
         # Use last_action_executed from observation, NOT last_action (our intent)
         executed_action = s.last_action_executed
@@ -572,14 +567,8 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
         # ONLY update position when:
         # 1. The executed action is a move
-        # 2. The executed action matches what WE intended (not human control)
-        # 3. We're not interacting with an object this step
-        if (
-            executed_action
-            and executed_action.startswith("move_")
-            and intended_action == executed_action  # Only if WE intended this move
-            and not s.using_object_this_step
-        ):
+        # 2. We're not interacting with an object this step
+        if executed_action and executed_action.startswith("move_") and not s.using_object_this_step:
             direction = executed_action[5:]  # Remove "move_" prefix
             if direction in self._move_deltas:
                 dr, dc = self._move_deltas[direction]
