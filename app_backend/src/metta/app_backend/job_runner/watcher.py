@@ -1,9 +1,11 @@
 import functools
+import json
 import logging
 import time
 from typing import Literal, TypedDict, cast
 from uuid import UUID
 
+import boto3
 from kubernetes import (
     client,
     watch,  # type: ignore[attr-defined]
@@ -11,17 +13,18 @@ from kubernetes import (
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.incluster_config import load_incluster_config
 from kubernetes.config.kube_config import load_kube_config
+from metta_alo.rollout import PureSingleEpisodeResult, SingleEpisodeJob
 from opentelemetry import trace as otel_trace
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.health_server import start_health_server, update_heartbeat
 from metta.app_backend.job_runner.config import (
-    JOB_NAMESPACE,
     LABEL_APP,
     LABEL_APP_VALUE,
     LABEL_JOB_ID,
     get_dispatch_config,
 )
+from metta.app_backend.job_runner.episode_recording import record_job_episode
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
@@ -65,7 +68,7 @@ def run_watcher():
 
     stats_client = StatsClient(backend_url=cfg.STATS_SERVER_URI, machine_token=cfg.MACHINE_TOKEN)
     stats_client._validate_authenticated()
-    logger.info(f"Watcher started: stats_server_uri={cfg.STATS_SERVER_URI}, namespace={JOB_NAMESPACE}")
+    logger.info(f"Watcher started: stats_server_uri={cfg.STATS_SERVER_URI}, namespace={cfg.JOB_NAMESPACE}")
 
     last_reconcile = 0.0
 
@@ -86,10 +89,11 @@ def run_watcher():
 
 
 def _watch_pods(stats_client: StatsClient):
+    cfg = get_dispatch_config()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
     core_v1, _ = _get_k8s_clients()
 
-    pod_list = core_v1.list_namespaced_pod(namespace=JOB_NAMESPACE, label_selector=label_selector)
+    pod_list = core_v1.list_namespaced_pod(namespace=cfg.JOB_NAMESPACE, label_selector=label_selector)
     if not pod_list.metadata or not pod_list.metadata.resource_version:
         logger.error(f"Invalid pod list: {pod_list}")
         return
@@ -105,7 +109,7 @@ def _watch_pods(stats_client: StatsClient):
     event: K8sPodWatchEvent
     for event in w.stream(  # type: ignore[assignment]
         core_v1.list_namespaced_pod,
-        namespace=JOB_NAMESPACE,
+        namespace=cfg.JOB_NAMESPACE,
         label_selector=label_selector,
         resource_version=resource_version,
         timeout_seconds=WATCH_TIMEOUT_SECONDS,
@@ -121,11 +125,12 @@ def _watch_pods(stats_client: StatsClient):
 @trace("tournament.job.reconcile")
 def _reconcile_stale_jobs(stats_client: StatsClient):
     """Check for jobs marked running/dispatched that have no corresponding pod."""
+    cfg = get_dispatch_config()
     core_v1, _ = _get_k8s_clients()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
 
     try:
-        pods = core_v1.list_namespaced_pod(namespace=JOB_NAMESPACE, label_selector=label_selector)
+        pods = core_v1.list_namespaced_pod(namespace=cfg.JOB_NAMESPACE, label_selector=label_selector)
     except Exception as e:
         logger.error(f"Failed to list pods for reconciliation: {e}")
         return
@@ -177,6 +182,61 @@ def _get_job_info(pod: client.V1Pod) -> tuple[UUID, str] | None:
     return UUID(job_id_str), pod.metadata.name or "unknown"
 
 
+def _get_pod_env_var(pod: client.V1Pod, name: str) -> str | None:
+    if not pod.spec or not pod.spec.containers:
+        return None
+    for container in pod.spec.containers:
+        if not container.env:
+            continue
+        for env_var in container.env:
+            if env_var.name == name:
+                return env_var.value
+    return None
+
+
+def read_results_from_s3(job_id: UUID, bucket: str) -> PureSingleEpisodeResult | None:
+    s3_client = boto3.client("s3")
+    key = f"jobs/{job_id}/results.json"
+
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        data = json.loads(response["Body"].read().decode("utf-8"))
+        return PureSingleEpisodeResult.model_validate(data)
+    except s3_client.exceptions.NoSuchKey:
+        logger.warning(f"No results found in S3 for job {job_id}")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to read results from S3 for job {job_id}: {e}")
+        return None
+
+
+def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str, pod: client.V1Pod):
+    cfg = get_dispatch_config()
+    results_uri = _get_pod_env_var(pod, "RESULTS_URI")
+
+    if not results_uri or not cfg.EVAL_S3_BUCKET:
+        _update_job_status(stats_client, job_id, JobStatus.completed)
+        logger.info(f"Job {job_id} completed (pod {pod_name}), no S3 pathway configured")
+        return
+
+    results = read_results_from_s3(job_id, cfg.EVAL_S3_BUCKET)
+    if not results:
+        _update_job_status(stats_client, job_id, JobStatus.completed)
+        logger.info(f"Job {job_id} completed (pod {pod_name}), no results in S3")
+        return
+
+    try:
+        job_request = stats_client.get_job(job_id)
+        job = SingleEpisodeJob.model_validate(job_request.job)
+        record_job_episode(job_id, job, results, stats_client)
+        _update_job_status(stats_client, job_id, JobStatus.completed)
+        logger.info(f"Job {job_id} completed (pod {pod_name})")
+    except Exception as e:
+        logger.error(f"Failed to record episode for job {job_id}: {e}", exc_info=True)
+        _update_job_status(stats_client, job_id, JobStatus.completed)
+        logger.info(f"Job {job_id} completed (pod {pod_name}), episode recording failed")
+
+
 @trace("tournament.job.status_update")
 def _handle_pod_state(stats_client: StatsClient, pod: client.V1Pod):
     info = _get_job_info(pod)
@@ -194,9 +254,8 @@ def _handle_pod_state(stats_client: StatsClient, pod: client.V1Pod):
             span.set_attribute("pod.phase", phase)
 
     if phase == "Succeeded":
-        _update_job_status(stats_client, job_id, JobStatus.completed)
+        _handle_pod_succeeded(stats_client, job_id, pod_name, pod)
         _delete_k8s_job_for_pod(pod)
-        logger.info(f"Job {job_id} completed (pod {pod_name})")
     elif phase == "Failed":
         error = _get_pod_error(pod)
         error_type = _classify_error(error)
@@ -271,8 +330,9 @@ def _get_job_failure_reason(pod: client.V1Pod) -> str | None:
     if not job_name:
         return None
     try:
+        cfg = get_dispatch_config()
         _, batch_v1 = _get_k8s_clients()
-        job = cast(client.V1Job, batch_v1.read_namespaced_job(name=job_name, namespace=JOB_NAMESPACE))
+        job = cast(client.V1Job, batch_v1.read_namespaced_job(name=job_name, namespace=cfg.JOB_NAMESPACE))
         if job.status and job.status.conditions:
             for cond in job.status.conditions:
                 if cond.type == "Failed" and cond.reason:
@@ -293,8 +353,9 @@ def _delete_k8s_job_for_pod(pod: client.V1Pod):
     if not job_name:
         return
     try:
+        cfg = get_dispatch_config()
         _, batch_v1 = _get_k8s_clients()
-        batch_v1.delete_namespaced_job(name=job_name, namespace=JOB_NAMESPACE, propagation_policy="Background")
+        batch_v1.delete_namespaced_job(name=job_name, namespace=cfg.JOB_NAMESPACE, propagation_policy="Background")
     except ApiException as e:
         if e.status == 404:
             logger.debug(f"K8s job {job_name} already deleted")

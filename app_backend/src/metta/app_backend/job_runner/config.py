@@ -2,8 +2,6 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings
 
-JOB_NAMESPACE = "jobs"
-
 LABEL_APP = "app"
 LABEL_APP_VALUE = "episode-runner"
 LABEL_JOB_ID = "job-id"

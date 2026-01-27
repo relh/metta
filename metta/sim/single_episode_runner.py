@@ -17,15 +17,14 @@ import requests
 from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
 
 from metta.app_backend.clients.stats_client import StatsClient
+from metta.app_backend.job_runner.episode_recording import record_job_episode
 from metta.app_backend.models.job_request import JobRequestUpdate
 from metta.common.auth.auth_config_reader_writer import observatory_auth_config
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.common.util.perf_profiler import PerfProfiler
-from metta.rl.metta_scheme_resolver import MettaSchemeResolver
-from metta.sim.handle_results import write_single_episode_to_observatory
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
 from mettagrid.util.file import copy_data, read, write_data
-from mettagrid.util.uri_resolvers.schemes import parse_uri, resolve_uri
+from mettagrid.util.uri_resolvers.schemes import resolve_uri
 
 logger = logging.getLogger(__name__)
 
@@ -210,27 +209,7 @@ def run_with_observatory(job_id: uuid.UUID):
             use_profiler=True,
         )
 
-        policy_version_ids: list[uuid.UUID | None] = []
-        stats_server_uri = os.environ["STATS_SERVER_URI"]
-        for policy_uri in job.policy_uris:
-            parsed = parse_uri(policy_uri, allow_none=False)
-            if parsed.scheme != "metta":
-                policy_version_ids.append(None)
-            else:
-                policy_version = MettaSchemeResolver(stats_server_uri).get_policy_version(policy_uri)
-                policy_version_ids.append(policy_version.id)
-
-        episode_tags = {"job_id": str(job_id), **job.episode_tags}
-        episode_id = write_single_episode_to_observatory(
-            replay_uri=job.replay_uri,
-            assignments=job.assignments,
-            episode_tags=episode_tags,
-            policy_version_ids=policy_version_ids,
-            results=results,
-            stats_client=stats_client,
-        )
-
-        stats_client.update_job(job_id, JobRequestUpdate(result={"episode_id": str(episode_id)}))
+        record_job_episode(job_id, job, results, stats_client)
         logger.info(f"Completed job {job_id}")
 
     except Exception as e:

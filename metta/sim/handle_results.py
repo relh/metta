@@ -386,33 +386,20 @@ def populate_single_episode_duckdb(
     assignments: list[int],
     results: PureSingleEpisodeResult,
 ) -> EpisodeId:
-    episode_id = EpisodeId(uuid.uuid4())
-
-    insert_episode(
-        conn,
-        episode_id=str(episode_id),
-        primary_pv_id=str(policy_version_ids[0]) if policy_version_ids[0] else None,
-        replay_url=http_url(replay_uri) if replay_uri else None,
-        thumbnail_url=None,
-        eval_task_id=None,
+    from metta.app_backend.job_runner.episode_recording import (
+        populate_single_episode_duckdb as _populate,
     )
 
-    for key, value in episode_tags.items():
-        insert_episode_tag(conn, str(episode_id), key, value)
-
-    for agent_id, assignment in enumerate(assignments):
-        policy_version_id = policy_version_ids[assignment]
-        if policy_version_id:
-            insert_agent_policy(conn, str(episode_id), str(policy_version_id), agent_id)
-
-        insert_agent_metric(conn, str(episode_id), agent_id, "reward", results.rewards[agent_id])
-        insert_agent_metric(conn, str(episode_id), agent_id, "action_timeout", float(results.action_timeouts[agent_id]))
-
-        agent_stats = results.stats["agent"][agent_id]
-        for metric_name, metric_value in agent_stats.items():
-            insert_agent_metric(conn, str(episode_id), agent_id, metric_name, metric_value)
-
-    return episode_id
+    return EpisodeId(
+        _populate(
+            conn,
+            episode_tags=episode_tags,
+            policy_version_ids=policy_version_ids,
+            replay_uri=replay_uri,
+            assignments=assignments,
+            results=results,
+        )
+    )
 
 
 def write_single_episode_to_observatory(
@@ -424,16 +411,17 @@ def write_single_episode_to_observatory(
     results: PureSingleEpisodeResult,
     stats_client: StatsClient,
 ) -> EpisodeId:
-    with episode_stats_db() as (conn, db_path):
-        episode_id = populate_single_episode_duckdb(
-            conn,
+    from metta.app_backend.job_runner.episode_recording import (
+        write_single_episode_to_observatory as _write,
+    )
+
+    return EpisodeId(
+        _write(
             episode_tags=episode_tags,
             policy_version_ids=policy_version_ids,
             replay_uri=replay_uri,
             assignments=assignments,
             results=results,
+            stats_client=stats_client,
         )
-        conn.execute("CHECKPOINT")
-        response = stats_client.bulk_upload_episodes(str(db_path))
-        logger.info(f"Uploaded episode: {response.episodes_created} episodes at {response.duckdb_s3_uri}")
-    return episode_id
+    )
