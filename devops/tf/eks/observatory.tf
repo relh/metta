@@ -35,6 +35,11 @@ resource "aws_iam_policy" "observatory_s3" {
           "arn:aws:s3:::observatory-private",
           "arn:aws:s3:::observatory-private/*",
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = "sts:AssumeRole"
+        Resource = "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
       }
     ]
   })

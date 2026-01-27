@@ -30,6 +30,34 @@ resource "aws_ecr_lifecycle_policy" "episode_runner" {
   })
 }
 
+# Allow primary account to push/pull images
+resource "aws_ecr_repository_policy" "episode_runner_cross_account" {
+  repository = aws_ecr_repository.episode_runner.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowPrimaryAccountAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${var.primary_account_id}:root"
+        }
+        Action = [
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:GetAuthorizationToken"
+        ]
+      }
+    ]
+  })
+}
+
 output "ecr_repository_url" {
   value       = aws_ecr_repository.episode_runner.repository_url
   description = "ECR repository URL for episode-runner images"

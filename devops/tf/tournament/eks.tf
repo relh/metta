@@ -69,3 +69,12 @@ resource "kubernetes_namespace" "jobs" {
 
   depends_on = [module.eks]
 }
+
+# Service account for episode-runner pods
+# Jobs use presigned S3 URLs so no IAM role is needed
+resource "kubernetes_service_account" "episode_runner" {
+  metadata {
+    name      = "episode-runner"
+    namespace = kubernetes_namespace.jobs.metadata[0].name
+  }
+}
