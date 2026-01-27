@@ -2,13 +2,12 @@ import base64
 import functools
 import json
 import logging
-import os
-import subprocess
 import tempfile
 from typing import Literal
 from urllib.parse import urlparse
 
 import boto3
+from botocore.signers import RequestSigner
 from kubernetes import client
 from kubernetes.client import ApiClient, Configuration
 from kubernetes.config.incluster_config import load_incluster_config
@@ -39,6 +38,32 @@ def resolve_policy_uri_to_s3_key(uri: str, stats_client: StatsClient) -> str:
     raise ValueError(f"Unsupported policy URI scheme: {uri}")
 
 
+# Generates an EKS-compatible bearer token by creating a presigned STS GetCallerIdentity URL.
+# boto3 has no SDK equivalent of `aws eks get-token`; this presigned-URL approach is the
+# standard workaround for Python. The EKS API server decodes the token, calls the presigned
+# URL to verify the caller's IAM identity, and maps it to a k8s identity via access entries.
+# See: https://docs.aws.amazon.com/eks/latest/userguide/cluster-auth.html
+def _get_eks_bearer_token(sts_client: boto3.client, cluster_name: str) -> str:  # type: ignore[valid-type]
+    signer = RequestSigner(
+        sts_client.meta.service_model.service_id,
+        sts_client.meta.region_name,
+        "sts",
+        "v4",
+        sts_client._request_signer._credentials,
+        sts_client.meta.events,
+    )
+    url = f"{sts_client.meta.endpoint_url}/?Action=GetCallerIdentity&Version=2011-06-15"
+    signed_url = signer.generate_presigned_url(
+        {"method": "GET", "url": url, "body": {}, "headers": {"x-k8s-aws-id": cluster_name}, "context": {}},
+        region_name=sts_client.meta.region_name,
+        expires_in=60,
+        operation_name="",
+    )
+    if not signed_url:
+        raise ValueError("Failed to get EKS bearer token")
+    return "k8s-aws-v1." + base64.urlsafe_b64encode(signed_url.encode("utf-8")).rstrip(b"=").decode("utf-8")
+
+
 def get_k8s_client(use_tournament_account: bool = False) -> client.BatchV1Api:
     if not use_tournament_account:
         return _get_local_or_incluster_client()
@@ -53,27 +78,18 @@ def get_k8s_client(use_tournament_account: bool = False) -> client.BatchV1Api:
     )
     creds = assumed["Credentials"]
 
-    eks = boto3.client(
-        "eks",
+    region = cfg.EVAL_CLUSTER_REGION
+    assumed_creds = dict(
         aws_access_key_id=creds["AccessKeyId"],
         aws_secret_access_key=creds["SecretAccessKey"],
         aws_session_token=creds["SessionToken"],
     )
+
+    eks = boto3.client("eks", region_name=region, **assumed_creds)
     cluster = eks.describe_cluster(name=cfg.EVAL_CLUSTER_NAME)["cluster"]
 
-    result = subprocess.run(
-        ["aws", "eks", "get-token", "--cluster-name", cfg.EVAL_CLUSTER_NAME, "--output", "json"],
-        capture_output=True,
-        text=True,
-        check=True,
-        env={
-            **os.environ,
-            "AWS_ACCESS_KEY_ID": creds["AccessKeyId"],
-            "AWS_SECRET_ACCESS_KEY": creds["SecretAccessKey"],
-            "AWS_SESSION_TOKEN": creds["SessionToken"],
-        },
-    )
-    token = json.loads(result.stdout)["status"]["token"]
+    sts_assumed = boto3.client("sts", region_name=region, **assumed_creds)
+    token = _get_eks_bearer_token(sts_assumed, cfg.EVAL_CLUSTER_NAME)
 
     ca_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
     ca_file.write(base64.b64decode(cluster["certificateAuthority"]["data"]))

@@ -36,6 +36,7 @@ class JobDispatchConfig(BaseSettings):
     # Cross-account eval cluster access
     # When set, dispatcher assumes this role to access the eval EKS cluster
     EVAL_CLUSTER_NAME: str = ""
+    EVAL_CLUSTER_REGION: str = "us-east-1"
     EVAL_CLUSTER_ROLE_ARN: str = ""
     EVAL_CLUSTER_EXTERNAL_ID: str = "tournament-eval-access"
 
