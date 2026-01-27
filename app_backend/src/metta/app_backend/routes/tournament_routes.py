@@ -24,7 +24,7 @@ from metta.app_backend.models.tournament import (
     Season,
 )
 from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.tournament.registry import SEASONS
+from metta.app_backend.tournament.registry import HIDDEN_SEASONS, SEASONS
 
 
 async def get_session():
@@ -125,21 +125,25 @@ def create_tournament_router() -> APIRouter:
     @router.get("/seasons")
     @timed_http_handler
     async def list_seasons(session: AsyncSession = Depends(get_session)) -> list[SeasonResponse]:
-        seasons = (await session.execute(select(Season))).scalars().all()
+        seasons = (await session.execute(select(Season).where(col(Season.name).not_in(HIDDEN_SEASONS)))).scalars().all()
 
         return [SeasonResponse.from_commissioner(s.name) for s in seasons]
 
     @router.get("/seasons/{season_name}")
     @timed_http_handler
     async def get_season(season_name: str) -> SeasonResponse:
-        if season_name not in SEASONS:
+        if season_name not in SEASONS or season_name in HIDDEN_SEASONS:
             raise HTTPException(status_code=404, detail="Season not found")
         return SeasonResponse.from_commissioner(season_name)
 
     @router.get("/seasons/{season_name}/leaderboard")
     @timed_http_handler
-    async def get_leaderboard(season_name: str, session: AsyncSession = Depends(get_session)) -> list[LeaderboardEntry]:
-        if season_name not in SEASONS:
+    async def get_leaderboard(
+        season_name: str,
+        session: AsyncSession = Depends(get_session),
+        include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
+    ) -> list[LeaderboardEntry]:
+        if season_name not in SEASONS or (season_name in HIDDEN_SEASONS and not include_hidden):
             raise HTTPException(status_code=404, detail="Season not found")
 
         commissioner = SEASONS[season_name]()
@@ -180,8 +184,11 @@ def create_tournament_router() -> APIRouter:
         user: CheckMaybeUser,
         session: AsyncSession = Depends(get_session),
         mine: bool = Query(default=False, description="Filter to only policies owned by the authenticated user"),
+        include_hidden: bool = Query(
+            default=False, description="Include policies that are part of a hidden season (for testing)"
+        ),
     ) -> list[PolicySummary]:
-        if season_name not in SEASONS:
+        if season_name not in SEASONS or (season_name in HIDDEN_SEASONS and not include_hidden):
             raise HTTPException(status_code=404, detail="Season not found")
 
         query = (
@@ -274,7 +281,7 @@ def create_tournament_router() -> APIRouter:
         pool_names: list[str] | None = Query(default=None),
         policy_version_ids: list[UUID] | None = Query(default=None),
     ) -> list[MatchSummary]:
-        if season_name not in SEASONS:
+        if season_name not in SEASONS or season_name in HIDDEN_SEASONS:
             raise HTTPException(status_code=404, detail="Season not found")
 
         query = (
