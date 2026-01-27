@@ -31,6 +31,7 @@ from cogames_agents.policy.scripted_agent.types import CellType, ObjectState, Pa
 from cogames_agents.policy.scripted_agent.utils import (
     add_inventory_token,
     change_vibe_action,
+    has_type_tag,
     is_adjacent,
     is_station,
     is_wall,
@@ -643,12 +644,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     break
 
             # Discover supply depots (charger in cogsguard)
-            is_charger = (
-                "supply_depot" in obj_name
-                or "charger" in obj_name
-                or "junction" in obj_name
-                or any(token in tag for tag in obj_tags for token in ("supply_depot", "charger", "junction"))
-            )
+            is_charger = has_type_tag(obj_tags, ("supply_depot", "charger", "junction"))
             if is_charger:
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHARGER, obj_state)

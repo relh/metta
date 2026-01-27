@@ -6,7 +6,7 @@ Pure/stateless helper functions that can be reused across different agents.
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Iterable, cast
 
 from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
@@ -113,6 +113,16 @@ def _select_primary_tag(tags: list[str]) -> str:
         if not tag.startswith("collective:"):
             return tag
     return tags[0]
+
+
+def has_type_tag(tags: Iterable[str], tokens: Iterable[str]) -> bool:
+    for tag in tags:
+        if not tag.startswith("type:"):
+            continue
+        type_name = tag.split(":", 1)[1]
+        if any(token in type_name for token in tokens):
+            return True
+    return False
 
 
 def create_object_state(
