@@ -1886,7 +1886,7 @@ class CogsguardGeneralistPolicy(CogsguardPolicy):
 class CogsguardWomboPolicy(CogsguardPolicy):
     """Generalist policy that prioritizes role rigs based on map conditions."""
 
-    short_names = ["wombo"]
+    short_names = ["wombo", "swiss"]
 
     def __init__(self, policy_env_info: PolicyEnvInterface, device: str = "cpu", **_ignored: int):
         super().__init__(policy_env_info, device=device, **_ignored)

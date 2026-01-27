@@ -28,8 +28,8 @@ performance-optimized implementation, while the Python version offers more featu
 - **Scout**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/scout.py`
 - **Aligner**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/aligner.py`
 - **Scrambler**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/scrambler.py`
-- **Role wrappers**: `packages/cogames-agents/src/cogames_agents/policy/cogsguard_roles.py`
-- **Teacher**: `packages/cogames-agents/src/cogames_agents/policy/cogsguard_teacher.py`
+- **Role wrappers**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/roles.py`
+- **Teacher**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/teacher.py`
 
 ### Nim Implementations
 
