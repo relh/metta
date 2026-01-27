@@ -31,13 +31,23 @@ from metta.tools.train import TrainTool
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
+def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
+    """Normalize reward variants to a list of variant names."""
+    if variants is None:
+        return ["objective"]
+    if isinstance(variants, str):
+        return [variants]
+    variant_list = list(variants)
+    return variant_list or ["objective"]
+
+
 def make_env(
     num_agents: int = 10,
     max_steps: int = 10000,
-    variants: Sequence[str] | None = None,
+    variants: str | Sequence[str] | None = None,
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
-    variants = variants or ["objective"]
+    variants = _normalize_variants(variants)
     env = make_cogsguard_mission(num_agents, max_steps).make_env()
     apply_reward_variants(env, variants=variants)
     return env
@@ -46,9 +56,9 @@ def make_env(
 def make_curriculum(
     env: Optional[MettaGridConfig] = None,
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
-    variants: Sequence[str] | None = None,
+    variants: str | Sequence[str] | None = None,
 ) -> CurriculumConfig:
-    variant_list = list(variants) if variants else ["objective"]
+    variant_list = _normalize_variants(variants)
 
     if variant_list:
         task_generators = []
@@ -72,9 +82,9 @@ def make_curriculum(
 
 def simulations(
     env: Optional[MettaGridConfig] = None,
-    variants: Sequence[str] | None = None,
+    variants: str | Sequence[str] | None = None,
 ) -> list[SimulationConfig]:
-    selected_variant = list(variants)[0] if variants else "objective"
+    selected_variant = _normalize_variants(variants)[0]
 
     env = env or make_env(variants=[selected_variant] if selected_variant is not None else None)
 
@@ -87,7 +97,7 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    variants: Sequence[str] | None = None,
+    variants: str | Sequence[str] | None = None,
     use_default_teacher: bool = False,
 ) -> TrainTool:
     if teacher is None and use_default_teacher:
@@ -134,7 +144,7 @@ def train(
 
 def evaluate(
     policy_uris: str | Sequence[str] | None = None,
-    variants: Sequence[str] | None = None,
+    variants: str | Sequence[str] | None = None,
 ) -> EvaluateTool:
     resolved_policy_uris: str | list[str]
     if policy_uris is None:
@@ -149,11 +159,11 @@ def evaluate(
     )
 
 
-def play(policy_uri: Optional[str] = None, variants: Sequence[str] | None = None) -> PlayTool:
+def play(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> PlayTool:
     """Interactive play with a policy."""
     return PlayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
 
 
-def replay(policy_uri: Optional[str] = None, variants: Sequence[str] | None = None) -> ReplayTool:
+def replay(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> ReplayTool:
     """Generate replay from a policy."""
     return ReplayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
