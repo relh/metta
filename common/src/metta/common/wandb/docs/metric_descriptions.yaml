@@ -53,6 +53,13 @@ metrics:
     unit: steps/second
     interpretation: Higher is better. Drops may indicate resource contention or environment complexity changes.
 
+  overview/steps_per_second:
+    description: |
+      Steps per second computed from the most recent epoch's wall-clock time. This mirrors the
+      legacy per-epoch throughput metric.
+    unit: steps/second
+    interpretation: Use for per-epoch throughput comparisons; compare against overview/sps when diagnosing timing drift.
+
   # Core tracking metrics (x-axis values)
   metric/agent_step:
     description: |
@@ -73,9 +80,19 @@ metrics:
     unit: seconds
 
   metric/train_time:
-    description: Time spent in the training/optimization phase, excluding environment rollouts.
+    description: Time spent in the training/optimization phase during the most recent epoch.
     unit: seconds
     interpretation: Compare with total_time to understand training vs rollout balance.
+
+  metric/rollout_time:
+    description: Time spent collecting environment rollouts during the most recent epoch.
+    unit: seconds
+    interpretation: Compare with metric/train_time to understand data collection vs optimization balance.
+
+  metric/stats_time:
+    description: Time spent processing stats during the most recent epoch.
+    unit: seconds
+    interpretation: Spikes may indicate heavy logging, large payloads, or expensive aggregation.
 
   # Loss metrics
   losses/policy_loss:

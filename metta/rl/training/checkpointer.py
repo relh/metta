@@ -144,8 +144,6 @@ class Checkpointer(TrainerComponent):
         if wandb_run is not None:
             wandb_run.log(
                 {
-                    "metric/agent_step": float(self.context.agent_step),
-                    "metric/epoch": float(epoch),
                     "checkpoint/latest_uri": uri,
                     "checkpoint/latest_epoch": float(epoch),
                 },

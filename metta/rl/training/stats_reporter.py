@@ -12,6 +12,7 @@ from pydantic import Field
 from metta.common.wandb.context import WandbRun
 from metta.rl.stats import accumulate_rollout_stats, compute_timing_stats, process_training_stats
 from metta.rl.training.component import TrainerComponent
+from metta.rl.wandb import log_model_parameters, setup_wandb_metrics
 from mettagrid.base_config import Config
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,8 @@ class StatsReporter(TrainerComponent):
         self._state = StatsReporterState()
         self._latest_payload: dict[str, float] | None = None
         self._state.rolling_stats = {}
+        self._last_agent_step = 0
+        self._prev_elapsed: dict[str, float] = {}
 
     @property
     def config(self) -> StatsReporterConfig:
@@ -184,6 +187,9 @@ class StatsReporter(TrainerComponent):
     def register(self, context) -> None:  # type: ignore[override]
         super().register(context)
         context.stats_reporter = self
+        if self._wandb_run is not None:
+            setup_wandb_metrics(self._wandb_run)
+            log_model_parameters(self.context.policy, self._wandb_run)
 
     @property
     def state(self) -> StatsReporterState:
@@ -280,10 +286,15 @@ class StatsReporter(TrainerComponent):
         )
 
     def on_training_complete(self) -> None:
-        pass
+        self._log_status("completed")
 
     def on_failure(self) -> None:
-        pass
+        self._log_status("failed")
+
+    def _log_status(self, status: str) -> None:
+        if self._wandb_run is None:
+            return
+        self._wandb_run.summary["training/status"] = status
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -355,7 +366,7 @@ class StatsReporter(TrainerComponent):
         memory_stats = self._collect_memory_stats()
         hyperparameters = self._collect_hyperparameters(optimizer=optimizer)
 
-        return build_wandb_payload(
+        payload = build_wandb_payload(
             processed_stats=processed,
             timing_info=timing_info,
             grad_stats=self._state.grad_stats,
@@ -365,6 +376,43 @@ class StatsReporter(TrainerComponent):
             agent_step=agent_step,
             epoch=epoch,
         )
+        self._augment_payload_with_epoch_timing(payload, timing_info, agent_step)
+        return payload
+
+    def _augment_payload_with_epoch_timing(
+        self,
+        payload: dict[str, float],
+        timing_info: dict[str, Any],
+        agent_step: int,
+    ) -> None:
+        """Emit per-epoch timing metrics matching legacy WandbLogger behavior."""
+        lap_times = timing_info.get("lap_times")
+        if not isinstance(lap_times, dict):
+            lap_times = {}
+
+        train_time = float(lap_times.get("_train", 0.0))
+        rollout_time = float(lap_times.get("_rollout", 0.0))
+        stats_time = float(lap_times.get("_process_stats", 0.0))
+
+        payload["metric/train_time"] = train_time
+        payload["metric/rollout_time"] = rollout_time
+        payload["metric/stats_time"] = stats_time
+
+        elapsed_times = timing_info.get("elapsed_times")
+        if isinstance(elapsed_times, dict):
+            for timer_name, current_elapsed in elapsed_times.items():
+                if timer_name.startswith("_rollout."):
+                    prev_elapsed = self._prev_elapsed.get(timer_name, 0.0)
+                    delta = max(0.0, float(current_elapsed) - float(prev_elapsed))
+                    metric_name = f"metric/rollout_{timer_name[9:].replace('.', '_')}_time"
+                    payload[metric_name] = delta
+            self._prev_elapsed = {name: float(value) for name, value in elapsed_times.items()}
+
+        total_time = train_time + rollout_time + stats_time
+        steps_delta = agent_step - self._last_agent_step
+        if total_time > 0 and steps_delta > 0:
+            payload["overview/steps_per_second"] = float(steps_delta / total_time)
+        self._last_agent_step = agent_step
 
     def _augment_with_rolling_averages(self, processed: dict[str, Any]) -> None:
         env_stats = processed.get("environment_stats")

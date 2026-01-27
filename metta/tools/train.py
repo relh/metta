@@ -43,7 +43,6 @@ from metta.rl.training import (
     VectorizedTrainingEnvironment,
     WandbAborter,
     WandbAborterConfig,
-    WandbLogger,
 )
 from metta.rl.training.scheduler import LossScheduler, SchedulerConfig
 from metta.sim.simulation_config import SimulationConfig
@@ -380,9 +379,6 @@ class TrainTool(Tool):
 
         for component in components:
             trainer.register(component)
-
-        if wandb_run is not None and distributed_helper.is_master():
-            trainer.register(WandbLogger(wandb_run))
 
         if self.scheduler is not None:
             trainer.register(LossScheduler(self.scheduler))
