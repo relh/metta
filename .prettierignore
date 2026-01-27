@@ -23,3 +23,6 @@ pnpm-lock.yaml
 # cogames markdown files are auto-generated from notebooks
 packages/cogames/README.md
 packages/cogames/tutorials/
+
+**/prisma/migrations/migration_lock.toml
+web/softmax.com/scripts/db-migrate.sh

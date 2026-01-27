@@ -1,0 +1,28 @@
+{{ if .Values.cronjobs }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "{{ .Release.Name }}-update-softmax-team"
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          name: "{{ .Release.Name }}-update-softmax-team"
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: nextjs
+              image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "image.tag" .Values.image.tag }}"
+              imagePullPolicy: Always
+              command: ["node", "scripts/update-softmax-team.js"]
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.frontend.secret_name }}
+              resources:
+                requests:
+                  memory: "128Mi"
+                limits:
+                  memory: "1Gi"
+{{ end }}

@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
-from rich.console import Console
 
 from metta.app_backend.clients.base_client import get_machine_token
 from metta.common.util.constants import PROD_STATS_SERVER_URI
@@ -15,7 +14,6 @@ from metta.setup.tools.observatory.local_k8s import local_k8s_app
 from metta.setup.tools.observatory.utils import LOCAL_METTA_POLICY_EVAL_IMG_NAME
 from metta.setup.utils import error, info
 
-console = Console()
 repo_root = get_repo_root()
 
 # Local dev configuration

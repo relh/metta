@@ -1,0 +1,37 @@
+name: Build and deploy Softmax.com site
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, closed]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+
+    uses: ./.github/workflows/_build-and-deploy.yml
+    secrets: inherit
+    with:
+      code_paths: |
+        - 'web/softmax.com/**'
+      image_name: softmax-com
+      dockerfile: web/softmax.com/Dockerfile
+      namespace: softmax-com
+      release: softmax-com
+      chart: ./devops/charts/softmax-com
+      preview_helm_values: |
+        --set host=${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('softmax-com-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }} \
+        --set resources.requests.cpu=100m \
+        --set resources.requests.memory=64Mi \
+        --set resources.limits.cpu=1000m \
+        --set resources.limits.memory=512Mi \
+        --set frontend.replicas=1 \
+        --set frontend.min_available=0 \
+        --set cronjobs=false \
+        --set db_migrate=false
+      preview_host: "${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('softmax-com-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}"

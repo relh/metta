@@ -36,6 +36,7 @@ from metta.setup.tools.code_formatters import app as code_formatters_app
 from metta.setup.tools.codebase import app as codebase_app
 from metta.setup.tools.observatory.cli import app as observatory_app
 from metta.setup.tools.publish import cmd_publish
+from metta.setup.tools.softmax_com.cli import app as softmax_com_app
 from metta.setup.tools.test_runner.test_cpp import app as cpp_test_runner_app
 from metta.setup.tools.test_runner.test_nim import app as nim_test_runner_app
 from metta.setup.tools.test_runner.test_python import app as python_test_runner_app
@@ -700,6 +701,7 @@ def cmd_run_monitor(ctx: typer.Context) -> None:
 
 
 app.add_typer(observatory_app, name="observatory")
+app.add_typer(softmax_com_app, name="softmax-com")
 app.add_typer(book_app, name="book")
 app.add_typer(codebase_app, name="codebase")
 app.add_typer(python_test_runner_app, name="pytest")

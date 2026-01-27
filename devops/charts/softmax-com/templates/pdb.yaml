@@ -1,0 +1,11 @@
+{{ if .Values.frontend.min_available }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-frontend
+spec:
+  minAvailable: {{ .Values.frontend.min_available }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-frontend
+{{ end }}

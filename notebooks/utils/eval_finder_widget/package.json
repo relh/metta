@@ -12,11 +12,11 @@
     "vite-plugin-node-polyfills": "^0.24.0"
   },
   "dependencies": {
+    "@anywidget/react": "^0.2.0",
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.1.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "@types/react": "^19.1.10",
-    "@types/react-dom": "^19.1.7",
-    "typescript": "^5.9.2",
-    "@anywidget/react": "^0.2.0"
+    "typescript": "^5.9.2"
   }
 }

@@ -1,0 +1,20 @@
+image:
+  registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
+  name: softmax-com
+  tag: "" # will be set by CI/CD pipeline
+
+host: softmax.com
+internal_host: softmax-com.softmax-research.net
+
+cert_manager_issuer: letsencrypt
+
+frontend:
+  secret_name: softmax-com-frontend-secrets
+  replicas: 2
+  min_available: 1
+
+# internal service endpoint - trusts "X-Auth-Request-Email" header
+observatory_api_url: http://observatory-backend.observatory.svc.cluster.local:8000
+
+db_migrate: true
+cronjobs: true

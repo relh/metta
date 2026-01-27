@@ -1,0 +1,28 @@
+{{ if .Values.db_migrate }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ .Release.Name }}-db-migrate"
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+spec:
+  template:
+    metadata:
+      name: "{{ .Release.Name }}-db-migrate"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: nextjs
+          image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "image.tag" .Values.image.tag }}"
+          imagePullPolicy: Always
+          command: ["npx", "prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
+          workingDir: /metta/web/softmax.com
+          envFrom:
+          - secretRef:
+              name: {{ .Values.frontend.secret_name }}
+          resources:
+            requests:
+              memory: "128Mi"
+            limits:
+              memory: "1Gi"
+{{ end }}

@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --breakpoint-xs: 480px;
+  --breakpoint-sm: 600px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+
+  --font-sans: "ABC Marfa Variable", sans-serif;
+  /* default font */
+  --font-mono: "Marfa Mono", sans-serif;
+
+  --shadow-button: 0 4px 12px 0 rgba(30, 39, 120, 0.1);
+  --link-text-shadow: 0 1px 2px rgba(39, 129, 239, 0.3);
+
+  --color-softblue-300: #bacbf5;
+  --color-softblue-400: #859fbe;
+  --color-softblue-800: #1a3875;
+  --color-softblue-900: #0e2758;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@font-face {
+  font-family: "ABC Marfa Variable";
+  src: url("/Assets/Fonts/ABCMarfa-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Marfa Mono";
+  src: url("/Assets/Fonts/ABCMarfaMono-Regular.woff2") format("woff2");
+}
