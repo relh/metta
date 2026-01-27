@@ -1,8 +1,8 @@
 import functools
+import json
 import logging
-from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import urlparse
-from uuid import UUID
 
 import boto3
 from kubernetes import client
@@ -62,34 +62,36 @@ def create_episode_job(job: JobRequest) -> str:
     env_vars: list[client.V1EnvVar] = []
 
     if cfg.EVAL_S3_BUCKET:
-        job_spec = job.job
-        original_policy_uris: list[str] = job_spec.get("policy_uris", [])
+        if not (cfg.EVAL_ROLE_ARN and cfg.POLICY_S3_BUCKET):
+            raise ValueError("EVAL_ROLE_ARN and POLICY_S3_BUCKET must be set")
+        job_spec = job.job.copy()
+        original_policy_uris: list[str] = job_spec.pop("policy_uris", [])
 
         stats_client = StatsClient.create(cfg.STATS_SERVER_URI)
         policy_s3_keys = [resolve_policy_uri_to_s3_key(uri, stats_client) for uri in original_policy_uris]
 
-        urls = generate_job_presigned_urls(
-            job_id=job.id,
-            policy_s3_keys=policy_s3_keys,
-            eval_bucket=cfg.EVAL_S3_BUCKET,
-            policy_bucket=cfg.POLICY_S3_BUCKET,
-            expiration=cfg.PRESIGNED_URL_EXPIRATION,
+        exp = cfg.PRESIGNED_URL_EXPIRATION
+        endpoint = cfg.S3_PRESIGNED_ENDPOINT
+        job_spec["policy_uris"] = [
+            presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in policy_s3_keys
+        ]
+
+        prefix = f"jobs/{job.id}"
+        s3_client = boto3.client("s3")
+        spec_key = f"{prefix}/spec.json"
+        s3_client.put_object(
+            Bucket=cfg.EVAL_S3_BUCKET,
+            Key=spec_key,
+            Body=json.dumps(job_spec).encode("utf-8"),
+            ContentType="application/json",
         )
-
-        import requests
-
-        spec_to_write = {**job_spec, "policy_uris": urls.policy_uris}
-        response = requests.put(
-            urls.spec_put_uri,
-            json=spec_to_write,
-            headers={"Content-Type": "application/json"},
-        )
-        response.raise_for_status()
-
+        spec_uri = presign_operation("get", cfg.EVAL_S3_BUCKET, spec_key, exp, endpoint)
+        results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/results.json", exp, endpoint)
+        replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/replay.json.z", exp, endpoint)
         env_vars = [
-            client.V1EnvVar(name="JOB_SPEC_URI", value=urls.spec_get_uri),
-            client.V1EnvVar(name="RESULTS_URI", value=urls.results_uri),
-            client.V1EnvVar(name="REPLAY_URI", value=urls.replay_uri),
+            client.V1EnvVar(name="JOB_SPEC_URI", value=spec_uri),
+            client.V1EnvVar(name="RESULTS_URI", value=results_uri),
+            client.V1EnvVar(name="REPLAY_URI", value=replay_uri),
         ]
     else:
         env_vars = [
@@ -234,61 +236,12 @@ def create_episode_job(job: JobRequest) -> str:
     return job_name
 
 
-@dataclass
-class JobPresignedUrls:
-    spec_put_uri: str
-    spec_get_uri: str
-    results_uri: str
-    replay_uri: str
-    policy_uris: list[str]
-
-
-def generate_job_presigned_urls(
-    job_id: UUID,
-    policy_s3_keys: list[str],
-    eval_bucket: str,
-    policy_bucket: str,
-    expiration: int = 3600,
-) -> JobPresignedUrls:
-    s3_client = boto3.client("s3")
-    job_prefix = f"jobs/{job_id}"
-
-    spec_put_uri = s3_client.generate_presigned_url(
-        "put_object",
-        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/spec.json", "ContentType": "application/json"},
+def presign_operation(
+    operation: Literal["get", "put"], bucket: str, key: str, expiration: int, endpoint: str | None
+) -> str:
+    s3_client = boto3.client("s3", **({"endpoint_url": endpoint} if endpoint else {}))
+    return s3_client.generate_presigned_url(
+        f"{operation}_object",
+        Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expiration,
-    )
-    spec_get_uri = s3_client.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/spec.json"},
-        ExpiresIn=expiration,
-    )
-
-    results_uri = s3_client.generate_presigned_url(
-        "put_object",
-        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/results.json", "ContentType": "application/json"},
-        ExpiresIn=expiration,
-    )
-
-    replay_uri = s3_client.generate_presigned_url(
-        "put_object",
-        Params={"Bucket": eval_bucket, "Key": f"{job_prefix}/replay.json.z", "ContentType": "application/x-compress"},
-        ExpiresIn=expiration,
-    )
-
-    policy_uris = [
-        s3_client.generate_presigned_url(
-            "get_object",
-            Params={"Bucket": policy_bucket, "Key": key},
-            ExpiresIn=expiration,
-        )
-        for key in policy_s3_keys
-    ]
-
-    return JobPresignedUrls(
-        spec_put_uri=spec_put_uri,
-        spec_get_uri=spec_get_uri,
-        results_uri=results_uri,
-        replay_uri=replay_uri,
-        policy_uris=policy_uris,
     )

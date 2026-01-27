@@ -1,34 +1,9 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 from metta.app_backend.job_runner.dispatcher import (
-    generate_job_presigned_urls,
     resolve_policy_uri_to_s3_key,
 )
-
-
-def test_generate_job_presigned_urls():
-    job_id = uuid4()
-    policy_s3_keys = ["policies/v1.pt", "policies/v2.pt"]
-
-    with patch("metta.app_backend.job_runner.dispatcher.boto3.client") as mock_boto:
-        mock_s3 = MagicMock()
-        mock_s3.generate_presigned_url.return_value = "https://signed-url"
-        mock_boto.return_value = mock_s3
-
-        urls = generate_job_presigned_urls(
-            job_id=job_id,
-            policy_s3_keys=policy_s3_keys,
-            eval_bucket="eval-bucket",
-            policy_bucket="policy-bucket",
-            expiration=3600,
-        )
-
-    assert urls.spec_put_uri == "https://signed-url"
-    assert urls.spec_get_uri == "https://signed-url"
-    assert urls.results_uri == "https://signed-url"
-    assert urls.replay_uri == "https://signed-url"
-    assert len(urls.policy_uris) == 2
 
 
 def test_resolve_policy_uri_s3():

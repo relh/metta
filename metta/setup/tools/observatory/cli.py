@@ -26,6 +26,10 @@ POSTGRES_PASSWORD = "password"
 POSTGRES_DB = "metta"
 SERVER_PORT = 8000
 PROCESS_COMPOSE_PORT = 8090
+LOCALSTACK_PORT = 4566
+LOCALSTACK_ENDPOINT_HOST = f"http://{LOCALHOST}:{LOCALSTACK_PORT}"
+LOCALSTACK_ENDPOINT_K8S = f"http://host.docker.internal:{LOCALSTACK_PORT}"
+LOCAL_EVAL_BUCKET = "eval-bucket"
 
 LOCAL_DB_URI = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{LOCALHOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 LOCAL_BACKEND_URL = f"http://{LOCALHOST}:{SERVER_PORT}"
@@ -66,9 +70,9 @@ Observatory local development.
 
 [bold]Individual services:[/bold]
   metta observatory postgres up -d   # Backgrounded postgres for api server
-  metta observatory server           # API server
+  metta observatory server           # API server (uses LocalStack for S3)
   metta observatory frontend         # Observatory frontend
-  metta observatory watcher          # Watches k8s jobs and updates status via api server
+  metta observatory watcher          # Watches k8s jobs, reads results from S3
   metta observatory tournament       # Tournament commissioner (creates matches, updates scores)
 
 [bold]Upload policy:[/bold]
@@ -175,6 +179,12 @@ def server():
     env["HOST"] = "0.0.0.0"
     env["PORT"] = str(SERVER_PORT)
     env["STATS_SERVER_URI"] = LOCAL_BACKEND_URL_FROM_K8S
+    # Server uses localhost for direct S3 operations (uploading job specs)
+    env["AWS_ENDPOINT_URL"] = LOCALSTACK_ENDPOINT_HOST
+    # Presigned URLs use host.docker.internal so pods can access them
+    env["S3_PRESIGNED_ENDPOINT"] = LOCALSTACK_ENDPOINT_K8S
+    env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
+    env["POLICY_S3_BUCKET"] = LOCAL_EVAL_BUCKET
 
     info("Starting backend server...")
     subprocess.run(
@@ -189,6 +199,8 @@ def server():
 def watcher():
     env = _local_dev_env()
     env["STATS_SERVER_URI"] = LOCAL_BACKEND_URL
+    env["AWS_ENDPOINT_URL"] = LOCALSTACK_ENDPOINT_HOST
+    env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
 
     info("Starting watcher...")
     subprocess.run(
