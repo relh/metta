@@ -17,19 +17,33 @@ def k8s_deployment_replicas_monitor() -> dict:
     rotation (typically <2 minutes) won't trigger false alarms.
 
     Excludes:
-    - observatory-pr-*: PR preview deployments that may be scaled down or transient
+    - observatory-pr-*: PR preview for observatory
+    - softmax-com-pr-*: PR preview for softmax.com
     """
+
+    tags = ", ".join(
+        [
+            "env:production",
+            "kube_cluster_name:main",
+            "!kube_deployment:observatory-pr-*",
+            "!kube_deployment:softmax-com-pr-*",
+        ]
+    )
+    group_by = ", ".join(
+        [
+            "kube_cluster_name",
+            "kube_namespace",
+            "kube_deployment",
+        ]
+    )
     return {
         "name": "[Kubernetes] Deployment Replicas Down",
         "type": "query alert",
         "query": (
             "min(last_10m):"
-            "avg:kubernetes_state.deployment.replicas_desired{"
-            "env:production, kube_cluster_name:main, !kube_deployment:observatory-pr-*} "
-            "by {kube_cluster_name,kube_namespace,kube_deployment} - "
-            "avg:kubernetes_state.deployment.replicas_available{"
-            "env:production, kube_cluster_name:main, !kube_deployment:observatory-pr-*} "
-            "by {kube_cluster_name,kube_namespace,kube_deployment} >= 1"
+            "avg:kubernetes_state.deployment.replicas_desired{" + tags + "} by {" + group_by + "} - "
+            "avg:kubernetes_state.deployment.replicas_available{" + tags + "} by {" + group_by + "}"
+            " >= 1"
         ),
         "message": (
             "Deployment {{kube_namespace.name}}/{{kube_deployment.name}} has had "
@@ -59,16 +73,23 @@ def k8s_crashloopbackoff_monitor() -> dict:
     - skypilot-monitor*: expected to crash when no skypilot cluster exists
     - pr-similarity-cache-*: transient job pods
     """
+
+    exclude_tags = ", ".join(
+        [
+            "!pod_name:skypilot-monitor*",
+            "!pod_name:pr-similarity-cache-*",
+            "!pod_name:observatory-pr-*",
+            "!pod_name:softmax-com-pr-*",
+        ]
+    )
+
     return {
         "name": "[Kubernetes] Pod {{pod_name.name}} is CrashloopBackOff on namespace {{kube_namespace.name}}",
         "type": "query alert",
         "query": (
             "max(last_10m):default_zero("
             "max:kubernetes_state.container.status_report.count.waiting{"
-            "reason:crashloopbackoff, "
-            "!pod_name:skypilot-monitor*, "
-            "!pod_name:pr-similarity-cache-*"
-            "} by {kube_cluster_name,kube_namespace,pod_name}"
+            "reason:crashloopbackoff, " + exclude_tags + "} by {kube_cluster_name,kube_namespace,pod_name}"
             ") >= 1"
         ),
         "message": (
