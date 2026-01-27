@@ -39,7 +39,8 @@ class _JobRequestBase(SQLModel):
 
 
 class JobRequestCreate(_JobRequestBase):
-    pass
+    # TODO: this is a feature flag; remove this once it functions
+    use_tournament_account: bool = Field(default=False, description="Whether to use the tournament account")
 
 
 class JobRequestUpdate(SQLModel):

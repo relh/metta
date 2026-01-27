@@ -39,50 +39,51 @@ def resolve_policy_uri_to_s3_key(uri: str, stats_client: StatsClient) -> str:
     raise ValueError(f"Unsupported policy URI scheme: {uri}")
 
 
-def get_k8s_client() -> client.BatchV1Api:
+def get_k8s_client(use_tournament_account: bool = False) -> client.BatchV1Api:
+    if not use_tournament_account:
+        return _get_local_or_incluster_client()
+
     cfg = get_dispatch_config()
+    if not cfg.EVAL_CLUSTER_ROLE_ARN or not cfg.EVAL_CLUSTER_NAME:
+        raise ValueError("EVAL_CLUSTER_ROLE_ARN and EVAL_CLUSTER_NAME must be set")
+    assumed = boto3.client("sts").assume_role(
+        RoleArn=cfg.EVAL_CLUSTER_ROLE_ARN,
+        RoleSessionName="dispatcher-eval-access",
+        ExternalId=cfg.EVAL_CLUSTER_EXTERNAL_ID,
+    )
+    creds = assumed["Credentials"]
 
-    if cfg.EVAL_CLUSTER_ROLE_ARN and cfg.EVAL_CLUSTER_NAME:
-        assumed = boto3.client("sts").assume_role(
-            RoleArn=cfg.EVAL_CLUSTER_ROLE_ARN,
-            RoleSessionName="dispatcher-eval-access",
-            ExternalId=cfg.EVAL_CLUSTER_EXTERNAL_ID,
-        )
-        creds = assumed["Credentials"]
+    eks = boto3.client(
+        "eks",
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"],
+    )
+    cluster = eks.describe_cluster(name=cfg.EVAL_CLUSTER_NAME)["cluster"]
 
-        eks = boto3.client(
-            "eks",
-            aws_access_key_id=creds["AccessKeyId"],
-            aws_secret_access_key=creds["SecretAccessKey"],
-            aws_session_token=creds["SessionToken"],
-        )
-        cluster = eks.describe_cluster(name=cfg.EVAL_CLUSTER_NAME)["cluster"]
+    result = subprocess.run(
+        ["aws", "eks", "get-token", "--cluster-name", cfg.EVAL_CLUSTER_NAME, "--output", "json"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={
+            **os.environ,
+            "AWS_ACCESS_KEY_ID": creds["AccessKeyId"],
+            "AWS_SECRET_ACCESS_KEY": creds["SecretAccessKey"],
+            "AWS_SESSION_TOKEN": creds["SessionToken"],
+        },
+    )
+    token = json.loads(result.stdout)["status"]["token"]
 
-        result = subprocess.run(
-            ["aws", "eks", "get-token", "--cluster-name", cfg.EVAL_CLUSTER_NAME, "--output", "json"],
-            capture_output=True,
-            text=True,
-            check=True,
-            env={
-                **os.environ,
-                "AWS_ACCESS_KEY_ID": creds["AccessKeyId"],
-                "AWS_SECRET_ACCESS_KEY": creds["SecretAccessKey"],
-                "AWS_SESSION_TOKEN": creds["SessionToken"],
-            },
-        )
-        token = json.loads(result.stdout)["status"]["token"]
+    ca_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
+    ca_file.write(base64.b64decode(cluster["certificateAuthority"]["data"]))
+    ca_file.close()
 
-        ca_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
-        ca_file.write(base64.b64decode(cluster["certificateAuthority"]["data"]))
-        ca_file.close()
-
-        configuration = Configuration()
-        configuration.host = cluster["endpoint"]
-        configuration.ssl_ca_cert = ca_file.name  # type: ignore
-        configuration.api_key = {"authorization": f"Bearer {token}"}
-        return client.BatchV1Api(ApiClient(configuration))
-
-    return _get_local_or_incluster_client()
+    configuration = Configuration()
+    configuration.host = cluster["endpoint"]
+    configuration.ssl_ca_cert = ca_file.name  # type: ignore
+    configuration.api_key = {"authorization": f"Bearer {token}"}
+    return client.BatchV1Api(ApiClient(configuration))
 
 
 @functools.cache
@@ -99,21 +100,21 @@ def _get_local_or_incluster_client() -> client.BatchV1Api:
     return client.BatchV1Api()
 
 
-def dispatch_job(job: JobRequest) -> str:
+def dispatch_job(job: JobRequest, use_tournament_account: bool = False) -> str:
     if job.job_type == JobType.episode:
-        return create_episode_job(job)
+        return create_episode_job(job, use_tournament_account)
     raise ValueError(f"Unknown job type: {job.job_type}")
 
 
-def create_episode_job(job: JobRequest) -> str:
+def create_episode_job(job: JobRequest, use_tournament_account: bool = False) -> str:
     cfg = get_dispatch_config()
-    batch_v1 = get_k8s_client()
+    batch_v1 = get_k8s_client(use_tournament_account)
     job_name = f"job-{job.id.hex[:8]}"
 
     env_vars: list[client.V1EnvVar] = []
 
-    if cfg.EVAL_S3_BUCKET:
-        if not cfg.POLICY_S3_BUCKET:
+    if use_tournament_account:
+        if not cfg.POLICY_S3_BUCKET or not cfg.EVAL_S3_BUCKET:
             raise ValueError("POLICY_S3_BUCKET must be set when EVAL_S3_BUCKET is configured")
         job_spec = job.job.copy()
         original_policy_uris: list[str] = job_spec.pop("policy_uris", [])

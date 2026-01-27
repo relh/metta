@@ -98,7 +98,9 @@ def create_job_router() -> APIRouter:
         dispatch_results: dict[UUID, _DispatchResult] = {}
         for job_id, db_job in job_data:
             try:
-                dispatch_results[job_id] = _DispatchResult(k8s_job_name=dispatch_job(db_job), time=datetime.now(UTC))
+                dispatch_results[job_id] = _DispatchResult(
+                    k8s_job_name=dispatch_job(db_job, use_tournament_account=True), time=datetime.now(UTC)
+                )
             except Exception as e:
                 logger.error(f"Failed to dispatch job {job_id}: {e}", exc_info=True)
                 dispatch_results[job_id] = _DispatchResult(error=str(e), time=datetime.now(UTC))
