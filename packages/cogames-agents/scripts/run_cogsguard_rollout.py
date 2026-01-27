@@ -7,6 +7,12 @@ import argparse
 from typing import Iterable
 
 from cogames_agents.policy.scripted_agent.cogsguard.debug_agent import DebugHarness
+from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
+    TRACE_RESOURCES,
+    format_resource_trace_line,
+    inventory_delta,
+    inventory_snapshot,
+)
 from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
@@ -45,6 +51,9 @@ def run_rollout(
     recipe_module: str,
     policy_uri: str,
     allow_missing_roles: bool,
+    trace_resources: bool,
+    trace_resource_every: int,
+    trace_resource_limit: int,
 ) -> int:
     harness = DebugHarness.from_recipe(
         recipe_module=recipe_module,
@@ -114,6 +123,11 @@ def run_rollout(
     last_gear: dict[int, dict[str, int]] = {}
     gear_resource_windows = {role: 0 for role in COGSGUARD_GEAR_COSTS}
     gear_resource_windows_with_adjacent = {role: 0 for role in COGSGUARD_GEAR_COSTS}
+    last_collective_snapshot: dict[str, int] | None = None
+    resource_trace_lines: list[str] = []
+
+    if trace_resources and trace_resource_every <= 0:
+        raise ValueError("trace_resource_every must be >= 1")
 
     for _ in range(steps):
         harness.step(1)
@@ -129,6 +143,8 @@ def run_rollout(
                 gear_resource_windows[role] += 1
 
         adjacent_by_role = {role: False for role in COGSGUARD_GEAR_COSTS}
+        station_uses_step = {role: 0 for role in COGSGUARD_GEAR_COSTS}
+        station_uses_with_resources_step = {role: 0 for role in COGSGUARD_GEAR_COSTS}
         for agent_id in range(harness.num_agents):
             policy = harness.agent_policies[agent_id]
             base_policy = policy._base_policy if hasattr(policy, "_base_policy") else policy
@@ -170,8 +186,10 @@ def run_rollout(
                     station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
                     if station and target == station:
                         role_stats[role]["gear_station_uses"] += 1
+                        station_uses_step[role] += 1
                         if gear_resources_available.get(role, False):
                             role_stats[role]["gear_attempts_with_resources"] += 1
+                            station_uses_with_resources_step[role] += 1
                         else:
                             role_stats[role]["gear_attempts_without_resources"] += 1
 
@@ -269,6 +287,24 @@ def run_rollout(
             if adjacent and gear_resources_available.get(role, False):
                 gear_resource_windows_with_adjacent[role] += 1
 
+        if trace_resources:
+            if harness.step_count % trace_resource_every == 0:
+                if trace_resource_limit <= 0 or len(resource_trace_lines) < trace_resource_limit:
+                    snapshot = inventory_snapshot(collective_inv, TRACE_RESOURCES)
+                    delta = inventory_delta(last_collective_snapshot, snapshot)
+                    resource_trace_lines.append(
+                        format_resource_trace_line(
+                            step=harness.step_count,
+                            inventory=snapshot,
+                            delta=delta,
+                            station_uses=station_uses_step,
+                            station_uses_with_resources=station_uses_with_resources_step,
+                            adjacent_roles=adjacent_by_role,
+                            available_roles=gear_resources_available,
+                        )
+                    )
+                    last_collective_snapshot = snapshot
+
     print("Cogsguard rollout sanity check")
     print(f"- steps: {steps}")
     print(f"- assembler seen: {assembler_seen}")
@@ -320,6 +356,10 @@ def run_rollout(
         )
     print(f"- gear resource windows: {gear_resource_windows}")
     print(f"- gear resource windows with role adjacent: {gear_resource_windows_with_adjacent}")
+    if trace_resources:
+        print("Resource trace (cogs collective inventory)")
+        for line in resource_trace_lines:
+            print(f"- {line}")
 
     if assembler_seen and assembler_missing:
         return 1
@@ -359,6 +399,9 @@ def main() -> int:
         default="metta://policy/role?miner=4&scout=2&aligner=2&scrambler=2",
     )
     parser.add_argument("--allow-missing-roles", action="store_true")
+    parser.add_argument("--trace-resources", action="store_true")
+    parser.add_argument("--trace-resource-every", type=int, default=1)
+    parser.add_argument("--trace-resource-limit", type=int, default=0)
     args = parser.parse_args()
 
     return run_rollout(
@@ -369,6 +412,9 @@ def main() -> int:
         recipe_module=args.recipe,
         policy_uri=args.policy_uri,
         allow_missing_roles=args.allow_missing_roles,
+        trace_resources=args.trace_resources,
+        trace_resource_every=args.trace_resource_every,
+        trace_resource_limit=args.trace_resource_limit,
     )
 
 
