@@ -78,3 +78,10 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
     @episode_id.expression  # type: ignore[no-redef]
     def episode_id(cls):
         return cls.result["episode_id"].astext  # type: ignore[union-attr]
+
+
+class JobPolicyVersion(SQLModel, table=True):
+    __tablename__ = "job_policy_versions"  # type: ignore[assignment]
+    job_id: UUID = Field(foreign_key="job_requests.id", primary_key=True)
+    position: int = Field(primary_key=True)
+    policy_version_id: UUID = Field(foreign_key="policy_versions.id")

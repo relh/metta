@@ -7,7 +7,6 @@ class TestEpisodeJobRoutes:
         job_1 = JobRequestCreate(
             job_type=JobType.episode,
             job={
-                "policy_uris": ["file:///tmp/policy1", "file:///tmp/policy2"],
                 "assignments": [0, 1, 0, 1],
                 "env": {"game": {"num_agents": 4}},
                 "results_uri": None,
@@ -16,7 +15,7 @@ class TestEpisodeJobRoutes:
                 "max_action_time_ms": 5000,
             },
         )
-        job_2 = job_1.model_copy(update={"job": {"policy_uris": ["file:///tmp/policy3", "file:///tmp/policy4"]}})
+        job_2 = job_1.model_copy(deep=True)
 
         jobs = [job_1, job_2]
 

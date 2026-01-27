@@ -4,7 +4,6 @@ import json
 import logging
 import tempfile
 from typing import Literal
-from urllib.parse import urlparse
 
 import boto3
 from botocore.signers import RequestSigner
@@ -13,29 +12,15 @@ from kubernetes.client import ApiClient, Configuration
 from kubernetes.config.incluster_config import load_incluster_config
 from kubernetes.config.kube_config import load_kube_config
 
-from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.job_runner.config import (
     LABEL_APP,
     LABEL_APP_VALUE,
     LABEL_JOB_ID,
     get_dispatch_config,
 )
-from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.models.job_request import JobRequest, JobType
 
 logger = logging.getLogger(__name__)
-
-
-def resolve_policy_uri_to_s3_key(uri: str, stats_client: StatsClient) -> str:
-    if uri.startswith("metta://"):
-        resolver = MettaSchemeResolver(stats_client=stats_client)
-        return resolver.get_s3_key(uri)
-
-    if uri.startswith("s3://"):
-        parsed = urlparse(uri)
-        return parsed.path.lstrip("/")
-
-    raise ValueError(f"Unsupported policy URI scheme: {uri}")
 
 
 # Generates an EKS-compatible bearer token by creating a presigned STS GetCallerIdentity URL.
@@ -116,13 +101,17 @@ def _get_local_or_incluster_client() -> client.BatchV1Api:
     return client.BatchV1Api()
 
 
-def dispatch_job(job: JobRequest, use_tournament_account: bool = False) -> str:
+def dispatch_job(
+    job: JobRequest, use_tournament_account: bool = False, policy_s3_keys: dict[int, str] | None = None
+) -> str:
     if job.job_type == JobType.episode:
-        return create_episode_job(job, use_tournament_account)
+        return create_episode_job(job, use_tournament_account, policy_s3_keys or {})
     raise ValueError(f"Unknown job type: {job.job_type}")
 
 
-def create_episode_job(job: JobRequest, use_tournament_account: bool = False) -> str:
+def create_episode_job(
+    job: JobRequest, use_tournament_account: bool = False, policy_s3_keys: dict[int, str] | None = None
+) -> str:
     cfg = get_dispatch_config()
     batch_v1 = get_k8s_client(use_tournament_account)
     job_name = f"job-{job.id.hex[:8]}"
@@ -135,13 +124,17 @@ def create_episode_job(job: JobRequest, use_tournament_account: bool = False) ->
         job_spec = job.job.copy()
         original_policy_uris: list[str] = job_spec.pop("policy_uris", [])
 
-        stats_client = StatsClient(cfg.STATS_SERVER_URI, machine_token=cfg.MACHINE_TOKEN)
-        policy_s3_keys = [resolve_policy_uri_to_s3_key(uri, stats_client) for uri in original_policy_uris]
+        resolved_s3_keys: list[str] = []
+        for i, uri in enumerate(original_policy_uris):
+            key = (policy_s3_keys or {}).get(i)
+            if key is None:
+                raise ValueError(f"Missing pre-resolved S3 key for policy URI at index {i}: {uri}")
+            resolved_s3_keys.append(key)
 
         exp = cfg.PRESIGNED_URL_EXPIRATION
         endpoint = cfg.S3_PRESIGNED_ENDPOINT
         job_spec["policy_uris"] = [
-            presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in policy_s3_keys
+            presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
         ]
 
         prefix = f"jobs/{job.id}"

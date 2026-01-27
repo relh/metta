@@ -1,11 +1,14 @@
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 import boto3
 from botocore.config import Config
 from fastapi import APIRouter, HTTPException, Query
+from metta_alo.policy import parse_policy_identifier
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import col, select
@@ -13,8 +16,17 @@ from sqlmodel import col, select
 from metta.app_backend.auth import CheckUser
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.dispatcher import dispatch_job
-from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobRequestUpdate, JobStatus, JobType
+from metta.app_backend.models.job_request import (
+    JobPolicyVersion,
+    JobRequest,
+    JobRequestCreate,
+    JobRequestUpdate,
+    JobStatus,
+    JobType,
+)
+from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.otel.metrics import get_job_metrics
+from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
@@ -54,6 +66,45 @@ VALID_TRANSITIONS = {
 }
 
 
+async def _resolve_policy_uris(policy_uris: list[str]) -> list[tuple[int, UUID, str]]:
+    resolved: list[tuple[int, UUID, str]] = []
+    for i, uri in enumerate(policy_uris):
+        if not uri.startswith("metta://"):
+            raise ValueError(f"Only metta:// policy URIs are supported, got: {uri}")
+        pv = await _resolve_metta_policy_uri(uri)
+        if not pv.s3_path:
+            raise ValueError(f"Policy version {pv.id} has no s3_path")
+        s3_key = urlparse(pv.s3_path).path.lstrip("/")
+        resolved.append((i, pv.id, s3_key))
+    return resolved
+
+
+async def _resolve_metta_policy_uri(uri: str) -> PolicyVersion:
+    path = uri[len("metta://") :]
+    parts = path.split("/")
+    if len(parts) < 2 or parts[0] != "policy":
+        raise ValueError(f"Unsupported metta:// URI format: {uri}")
+
+    identifier = parts[1]
+    try:
+        pv_id = UUID(identifier)
+    except ValueError:
+        pv_id = None
+
+    if pv_id is not None:
+        pv = await policy_queries.get_policy_version_with_name(pv_id)
+        if pv is None:
+            raise ValueError(f"Policy version {identifier} not found")
+        return pv
+
+    name, version = parse_policy_identifier(identifier)
+    versions, _ = await policy_queries.get_policy_versions(name_exact=name, version=version, limit=1)
+    if not versions:
+        version_str = f":v{version}" if version is not None else ""
+        raise ValueError(f"No policy found with name '{name}{version_str}'")
+    return versions[0]
+
+
 def create_job_router() -> APIRouter:
     router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -76,6 +127,12 @@ def create_job_router() -> APIRouter:
                     detail=f"Too many outstanding jobs ({outstanding_count}). Max allowed: {MAX_OUTSTANDING_JOBS}",
                 )
 
+        # Resolve metta:// policy URIs -> (position, policy_version_id, s3_key)
+        job_resolved: list[list[tuple[int, UUID, str]]] = []
+        for job_create in jobs:
+            policy_uris = job_create.job.get("policy_uris", [])
+            job_resolved.append(await _resolve_policy_uris(policy_uris) if policy_uris else [])
+
         # Create all jobs in db as pending
         db_jobs: list[JobRequest] = []
         async with db_session() as session:
@@ -85,10 +142,18 @@ def create_job_router() -> APIRouter:
                     _fixup_episode_job(db_job)
                 session.add(db_job)
                 db_jobs.append(db_job)
+            await session.flush()
+
+            # Create junction table entries
+            for db_job, resolved in zip(db_jobs, job_resolved, strict=True):
+                for position, pv_id, _ in resolved:
+                    session.add(JobPolicyVersion(job_id=db_job.id, position=position, policy_version_id=pv_id))
+
             await session.commit()
             # Capture IDs before session closes
             job_data = [
-                (j.id, j, job_create.use_tournament_account) for j, job_create in zip(db_jobs, jobs, strict=True)
+                (j.id, j, job_create.use_tournament_account, {pos: key for pos, _, key in resolved})
+                for j, job_create, resolved in zip(db_jobs, jobs, job_resolved, strict=True)
             ]
 
         class _DispatchResult(BaseModel):
@@ -97,11 +162,15 @@ def create_job_router() -> APIRouter:
             time: datetime
 
         # Dispatch each job (outside DB session)
+        # Run in a thread so sync I/O (boto3, httpx) doesn't block the event loop
         dispatch_results: dict[UUID, _DispatchResult] = {}
-        for job_id, db_job, use_tournament_account in job_data:
+        for job_id, db_job, use_tournament_account, s3_keys in job_data:
             try:
+                k8s_job_name = await asyncio.to_thread(
+                    dispatch_job, db_job, use_tournament_account=use_tournament_account, policy_s3_keys=s3_keys
+                )
                 dispatch_results[job_id] = _DispatchResult(
-                    k8s_job_name=dispatch_job(db_job, use_tournament_account=use_tournament_account),
+                    k8s_job_name=k8s_job_name,
                     time=datetime.now(UTC),
                 )
             except Exception as e:
@@ -152,6 +221,7 @@ def create_job_router() -> APIRouter:
         job_type: JobType | None = Query(default=None),
         statuses: list[JobStatus] | None = Query(default=None),
         job_id: UUID | None = Query(default=None),
+        policy_version_id: UUID | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
     ) -> list[JobRequest]:
@@ -163,6 +233,8 @@ def create_job_router() -> APIRouter:
                 query = query.where(col(JobRequest.status).in_(statuses))
             if job_type:
                 query = query.where(col(JobRequest.job_type) == job_type)
+            if policy_version_id:
+                query = query.join(JobPolicyVersion).where(JobPolicyVersion.policy_version_id == policy_version_id)
             result = await session.execute(query)
             return list(result.scalars().all())
 

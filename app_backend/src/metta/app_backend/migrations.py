@@ -242,4 +242,17 @@ MIGRATIONS = [
             """ALTER TABLE job_requests ADD COLUMN error_type TEXT""",
         ],
     ),
+    SqlMigration(
+        version=8,
+        description="Add job_policy_versions junction table for efficient policy-based job queries",
+        sql_statements=[
+            """CREATE TABLE job_policy_versions (
+                job_id UUID NOT NULL REFERENCES job_requests(id) ON DELETE CASCADE,
+                policy_version_id UUID NOT NULL REFERENCES policy_versions(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL,
+                PRIMARY KEY (job_id, position)
+            )""",
+            """CREATE INDEX idx_job_policy_versions_policy_version_id ON job_policy_versions (policy_version_id)""",
+        ],
+    ),
 ]
