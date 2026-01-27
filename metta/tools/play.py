@@ -45,6 +45,7 @@ class PlayTool(Tool):
     #   simulator rollout is deterministic as well.
     seed: int | None = None
     render: RenderMode = "gui"
+    autostart: bool = False
     stats_server_uri: str | None = auto_stats_server_uri()
 
     _explicit_seed_overrides: set[str] = PrivateAttr(default_factory=set)
@@ -131,6 +132,7 @@ class PlayTool(Tool):
             replay_uri=None,
             seed=seed,
             max_action_time_ms=10000,
+            autostart=self.autostart,
             device=str(device),
             render_mode=self.render,
         )
