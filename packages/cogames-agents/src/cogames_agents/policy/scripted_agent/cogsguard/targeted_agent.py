@@ -333,7 +333,11 @@ class TargetedMinerAgentPolicyImpl(MinerAgentPolicyImpl):
         self._shared_state = shared_state
         self._preferred_resource = RESOURCE_CYCLE[agent_id % len(RESOURCE_CYCLE)]
 
-    def _get_safe_extractor(self, s: CogsguardAgentState) -> Optional[StructureInfo]:
+    def _get_safe_extractor(
+        self,
+        s: CogsguardAgentState,
+        preferred_resource: str | None = None,
+    ) -> Optional[StructureInfo]:
         target = self._shared_state.assigned_extractors.get(s.agent_id)
         if target:
             current = s.get_structure_at(target)
@@ -348,7 +352,8 @@ class TargetedMinerAgentPolicyImpl(MinerAgentPolicyImpl):
                     round_trip = dist_to_ext * 2
                 if round_trip <= max_safe_dist:
                     return current
-        preferred = [ext for ext in s.get_usable_extractors() if ext.resource_type == self._preferred_resource]
+        resource = preferred_resource or self._preferred_resource
+        preferred = [ext for ext in s.get_usable_extractors() if ext.resource_type == resource]
         if preferred:
             nearest_depot = self._get_nearest_aligned_depot(s)
             max_safe_dist = self._get_max_safe_distance(s)
@@ -373,7 +378,7 @@ class TargetedMinerAgentPolicyImpl(MinerAgentPolicyImpl):
                 candidates.sort(key=lambda x: (-x[0], x[1], x[2]))
                 return candidates[0][3]
 
-        return super()._get_safe_extractor(s)
+        return super()._get_safe_extractor(s, preferred_resource=preferred_resource)
 
 
 class CogsguardTargetedAgent(CogsguardPolicy):
