@@ -31,22 +31,30 @@ from metta.common.tool.schema import get_pydantic_field_info
 from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker
 from metta.common.util.log_config import init_logging, init_mettagrid_system_environment
 from metta.common.util.text_styles import bold, cyan, green, red, yellow
-from metta.rl.torch_init import (
-    configure_torch_for_determinism,
-    configure_torch_globally_for_performance,
-    seed_everything_distributed_aware,
-)
 
 logger = logging.getLogger(__name__)
 
 _KNOWN_TOOLS = {"train", "evaluate", "evaluate_remote", "play", "replay", "sweep"}
 
-# --------------------------------------------------------------------------------------
-# Environment setup
-# --------------------------------------------------------------------------------------
+# Lazy torch initialization flag - only initialize when actually running a tool
+_torch_initialized = False
 
-# This should be called early.
-configure_torch_globally_for_performance()
+
+def _ensure_torch_initialized() -> None:
+    """Lazily initialize torch configuration for performance.
+
+    This is called just before running a tool, not at module import time.
+    This makes tests that don't actually run tools (dry-run, validation) faster.
+    """
+    global _torch_initialized
+    if _torch_initialized:
+        return
+    _torch_initialized = True
+
+    from metta.rl.torch_init import configure_torch_globally_for_performance
+
+    configure_torch_globally_for_performance()
+
 
 # --------------------------------------------------------------------------------------
 # Output handling
@@ -662,6 +670,11 @@ constructor/function vs configuration overrides based on introspection.
     # ----------------------------------------------------------------------------------
     # Seed & Run
     # ----------------------------------------------------------------------------------
+
+    # Lazily initialize torch - only when actually running a tool (not for --dry-run)
+    _ensure_torch_initialized()
+
+    from metta.rl.torch_init import configure_torch_for_determinism, seed_everything_distributed_aware
 
     seed_everything_distributed_aware(tool_cfg.system.seed)
     if tool_cfg.system.torch_deterministic:
