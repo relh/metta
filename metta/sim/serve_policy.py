@@ -56,15 +56,12 @@ def parse_triplet_v1(data: bytes, features: dict[int, ObservationFeatureSpec]) -
         loc_byte, feature_id, value = data[i], data[i + 1], data[i + 2]
         if loc_byte == 0xFF:
             continue
-        row = (loc_byte >> 4) & 0x0F
-        col = loc_byte & 0x0F
         feature = features.get(feature_id)
         if feature is None:
             continue
         tokens.append(
             ObservationToken(
                 feature=feature,
-                location=(row, col),
                 value=value,
                 raw_token=(loc_byte, feature_id, value),
             )

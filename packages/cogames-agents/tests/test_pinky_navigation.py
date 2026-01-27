@@ -17,6 +17,7 @@ from cogames_agents.policy.scripted_agent.pinky.state import AgentState
 from cogames_agents.policy.scripted_agent.pinky.types import CellType
 
 from mettagrid.config.id_map import ObservationFeatureSpec
+from mettagrid.mettagrid_c import PackedCoordinate
 from mettagrid.simulator.interface import AgentObservation, ObservationToken
 
 
@@ -44,13 +45,16 @@ class MockPolicyEnvInfo:
 
 
 def make_token(feature_name: str, row: int, col: int, value: int) -> ObservationToken:
-    """Create a mock observation token."""
+    """Create a mock observation token.
+
+    Location is extracted from raw_token[0] via PackedCoordinate.unpack().
+    """
     feature = ObservationFeatureSpec(id=0, name=feature_name, normalization=255.0)
+    packed_location = PackedCoordinate.pack(row, col)
     return ObservationToken(
         feature=feature,
-        location=(row, col),
         value=value,
-        raw_token=(0, 0, 0),
+        raw_token=(packed_location, 0, value),
     )
 
 

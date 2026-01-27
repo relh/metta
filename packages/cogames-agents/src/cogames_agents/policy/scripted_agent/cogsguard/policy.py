@@ -40,7 +40,7 @@ from cogames_agents.policy.scripted_agent.utils import (
     parse_observation as utils_parse_observation,
 )
 from mettagrid.config.mettagrid_config import CardinalDirection
-from mettagrid.mettagrid_c import PackedCoordinate, dtype_actions
+from mettagrid.mettagrid_c import dtype_actions
 from mettagrid.policy.policy import MultiAgentPolicy, StatefulAgentPolicy, StatefulPolicyImpl
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action, AgentObservation, ObservationToken
@@ -1418,12 +1418,10 @@ class CogsguardPolicy(MultiAgentPolicy):
             if feature is None:
                 continue
             location_packed = int(token[0])
-            location = PackedCoordinate.unpack(location_packed) or (0, 0)
             value = int(token[2])
             tokens.append(
                 ObservationToken(
                     feature=feature,
-                    location=location,
                     value=value,
                     raw_token=(location_packed, feature_id, value),
                 )
