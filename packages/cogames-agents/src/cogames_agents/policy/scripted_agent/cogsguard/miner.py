@@ -316,12 +316,18 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         if extractor is None:
             # No usable extractors known - explore to find more
-            total_known = len(s.get_usable_extractors())
-            total_extractors = len(s.get_structures_by_type(StructureType.EXTRACTOR))
+            all_extractors = s.get_structures_by_type(StructureType.EXTRACTOR)
+            usable_extractors = s.get_usable_extractors()
+            total_extractors = len(all_extractors)
+            total_usable = len(usable_extractors)
             if total_extractors > 0 and DEBUG:
+                # Log why extractors are not usable (empty, clipped, etc.)
+                empty_count = sum(1 for e in all_extractors if e.inventory_amount <= 0)
+                clipped_count = sum(1 for e in all_extractors if e.clipped)
                 print(
                     f"[A{s.agent_id}] GATHER: {total_extractors} extractors known, "
-                    f"{total_known} usable, exploring for more"
+                    f"{total_usable} usable (empty={empty_count}, clipped={clipped_count}), "
+                    f"exploring for more"
                 )
             return self._explore_for_extractors(s)
 
@@ -338,13 +344,27 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         # At extractor - get CURRENT state from structures map (updated from observation)
         current_extractor = s.get_structure_at(extractor.position)
-        # Debug: log when extractor is depleted
-        if DEBUG and current_extractor and current_extractor.inventory_amount == 0:
-            print(f"[A{s.agent_id}] GATHER: EXTRACTOR_EMPTY at {extractor.position}! Will switch.")
+
+        # Check if extractor is still usable (might have been depleted since we started moving)
         if current_extractor is None or not current_extractor.is_usable_extractor():
+            # Log why extractor is not usable
+            if DEBUG and current_extractor:
+                reason = []
+                if current_extractor.inventory_amount <= 0:
+                    reason.append(f"empty(inv={current_extractor.inventory_amount})")
+                if current_extractor.clipped:
+                    reason.append("clipped")
+                if current_extractor.remaining_uses <= 0:
+                    reason.append(f"depleted(uses={current_extractor.remaining_uses})")
+                print(
+                    f"[A{s.agent_id}] GATHER: Extractor at {extractor.position} not usable: "
+                    f"{', '.join(reason) if reason else 'unknown'}. Switching."
+                )
             # Find another extractor
             other = s.get_nearest_usable_extractor(exclude=extractor.position)
             if other is not None:
+                if DEBUG:
+                    print(f"[A{s.agent_id}] GATHER: Switching to extractor at {other.position}")
                 return self._move_towards(s, other.position, reach_adjacent=True)
             # No usable extractors - explore to find more
             if DEBUG:

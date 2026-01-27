@@ -105,11 +105,24 @@ class StructureInfo:
     resource_type: Optional[str] = None  # carbon, oxygen, germanium, silicon
     remaining_uses: int = 999
     cooldown_remaining: int = 0
-    inventory_amount: int = 999  # Current resource amount
+    inventory_amount: int = -1  # -1 = unknown (protocol-based), 0+ = chest-based with that amount
+    has_inventory: bool = False  # True once we've seen inv: tokens for this extractor
 
     def is_usable_extractor(self) -> bool:
-        """Check if this is a usable extractor (not depleted, has resources)."""
-        return self.structure_type == StructureType.EXTRACTOR and self.remaining_uses > 0 and self.inventory_amount > 0
+        """Check if this is a usable extractor (not depleted, has resources).
+
+        Protocol-based extractors: Only check remaining_uses > 0
+        Chest-based extractors: Also check inventory_amount > 0
+        """
+        if self.structure_type != StructureType.EXTRACTOR:
+            return False
+        if self.remaining_uses <= 0:
+            return False
+        # If we've never seen inventory tokens, assume protocol-based (usable if remaining_uses > 0)
+        if not self.has_inventory:
+            return True
+        # Chest-based: must have inventory > 0
+        return self.inventory_amount > 0
 
     def is_cogs_aligned(self) -> bool:
         """Check if this structure is aligned to cogs."""

@@ -32,7 +32,13 @@ class MinerBehavior:
     risk_tolerance = RiskTolerance.CONSERVATIVE
 
     # How many steps to explore before mining without gear
-    EXPLORATION_STEPS = 50
+    EXPLORATION_STEPS = 100
+
+    # How many ticks to mine/explore before retrying gear station
+    GEAR_RETRY_INTERVAL = 100
+
+    # How many ticks at same position before switching to explore
+    STUCK_THRESHOLD = 5  # Fast detection to avoid wasting time on blocked paths
 
     def act(self, state: AgentState, services: Services) -> Action:
         """Execute miner behavior - move toward extractors.
@@ -58,6 +64,24 @@ class MinerBehavior:
         # Update prev_total_cargo for next step
         state.prev_total_cargo = state.total_cargo
 
+        # Track stuck detection: count consecutive steps at same position
+        if state.pos == state.last_position:
+            state.steps_at_same_position += 1
+        else:
+            state.steps_at_same_position = 0
+            state.last_position = state.pos
+
+        # Priority 0: If stuck for too long, try random direction to break out
+        if state.steps_at_same_position >= self.STUCK_THRESHOLD:
+            if DEBUG:
+                print(f"[A{state.agent_id}] MINER: STUCK for {state.steps_at_same_position} ticks, random break")
+            state.debug_info = DebugInfo(mode="explore", goal="unstuck", target_object="-", signal="stuck")
+            state.steps_at_same_position = 0
+            # Try random direction to escape - rotate through based on step
+            directions = ["north", "south", "east", "west"]
+            direction = directions[(state.step + state.agent_id) % 4]
+            return Action(name=f"move_{direction}")
+
         # Priority 1: Critical HP retreat
         if state.hp <= 15:
             if DEBUG:
@@ -66,38 +90,50 @@ class MinerBehavior:
             return self._retreat_to_safety(state, services)
 
         # Priority 2: Get miner gear if we don't have it
+        # Track gear state for detecting gear loss
+        has_gear_now = state.miner_gear
+        just_lost_gear = state.had_gear_last_step and not has_gear_now
+        state.had_gear_last_step = has_gear_now
+
         if not state.miner_gear:
-            # First try visible miner_station in current observation
-            if state.last_obs is not None:
-                result = services.map_tracker.get_direction_to_nearest(
-                    state, state.last_obs, frozenset({"miner_station"})
-                )
-                if result:
-                    direction, target_pos = result
-                    if DEBUG:
-                        print(f"[A{state.agent_id}] MINER: Station visible at {target_pos}, moving {direction}")
-                    state.debug_info = DebugInfo(
-                        mode="get_gear", goal="miner_station", target_object="miner_station", target_pos=target_pos
+            # Check if we should try to get gear now
+            ticks_since_last_attempt = state.step - state.last_gear_attempt_step
+
+            # Try to get gear if:
+            # 1. Just lost gear (immediately go home)
+            # 2. Initial exploration period
+            # 3. 200 ticks have passed since last attempt
+            should_try_gear = (
+                just_lost_gear
+                or state.step < self.EXPLORATION_STEPS
+                or ticks_since_last_attempt >= self.GEAR_RETRY_INTERVAL
+            )
+
+            if should_try_gear:
+                # First try visible miner_station in current observation
+                if state.last_obs is not None:
+                    result = services.map_tracker.get_direction_to_nearest(
+                        state, state.last_obs, frozenset({"miner_station"})
                     )
-                    return Action(name=f"move_{direction}")
+                    if result:
+                        direction, target_pos = result
+                        if DEBUG:
+                            print(f"[A{state.agent_id}] MINER: Station visible at {target_pos}, moving {direction}")
+                        state.debug_info = DebugInfo(
+                            mode="get_gear", goal="miner_station", target_object="miner_station", target_pos=target_pos
+                        )
+                        return Action(name=f"move_{direction}")
 
-            # Use accumulated map knowledge if station was found
-            gear_action = self._get_gear(state, services)
-            if gear_action:
-                return gear_action
+                # Use accumulated map knowledge if station was found
+                gear_action = self._get_gear(state, services)
+                if gear_action:
+                    return gear_action
 
-            # During first N steps, explore to find the station before mining
-            # After exploration, give up on gear and mine without it
-            if state.step < self.EXPLORATION_STEPS:
+                # Station not found - explore for it
                 if DEBUG and state.step % 10 == 0:
-                    print(
-                        f"[A{state.agent_id}] MINER: Exploring for station (step {state.step}/{self.EXPLORATION_STEPS})"
-                    )
+                    print(f"[A{state.agent_id}] MINER: Exploring for station (step {state.step})")
                 state.debug_info = DebugInfo(mode="explore", goal="find_station", target_object="miner_station")
                 return self._explore_for_station(state, services)
-            else:
-                if DEBUG and state.step == self.EXPLORATION_STEPS:
-                    print(f"[A{state.agent_id}] MINER: Giving up on gear, mining without it")
 
         # Priority 3: Deposit when cargo is FULL
         cargo_full_reason = self._cargo_full_reason(state)
@@ -114,11 +150,18 @@ class MinerBehavior:
 
         # Priority 4: Keep mining - move toward extractors
         # First try to find extractor in current observation (most accurate)
+        # Build set of known-empty extractor positions to exclude
+        empty_extractors: set[tuple[int, int]] = set()
+        for pos, struct in state.map.structures.items():
+            if struct.structure_type == StructureType.EXTRACTOR and not struct.is_usable_extractor():
+                empty_extractors.add(pos)
+
         if state.last_obs is not None:
             result = services.map_tracker.get_direction_to_nearest(
                 state,
                 state.last_obs,
                 frozenset({"carbon_extractor", "oxygen_extractor", "germanium_extractor", "silicon_extractor"}),
+                exclude_positions=empty_extractors,
             )
             if result:
                 direction, target_pos = result
@@ -135,10 +178,14 @@ class MinerBehavior:
                     f"[A{state.agent_id}] MINER: No extractor visible, navigating to known {known_extractor.name} "
                     f"at {known_extractor.position}"
                 )
+            # Format: "carbon:100" or "extractor" if no resource type
+            res_type = known_extractor.resource_type or "extractor"
+            inv_amt = known_extractor.inventory_amount
+            target_name = f"{res_type}:{inv_amt}" if inv_amt >= 0 else res_type
             state.debug_info = DebugInfo(
                 mode="mine",
                 goal="navigate_to_known_extractor",
-                target_object=known_extractor.resource_type or "extractor",
+                target_object=target_name,
                 target_pos=known_extractor.position,
             )
             return services.navigator.move_to(state, known_extractor.position, reach_adjacent=True)
@@ -208,38 +255,27 @@ class MinerBehavior:
     def _explore_for_station(self, state: AgentState, services: Services) -> Action:
         """Explore systematically to find the miner station.
 
-        Explores in a small box pattern around spawn to find nearby station.
-        Pattern stays within ~5 steps of spawn to avoid wandering too far.
+        Uses an expanding spiral pattern, offset by agent_id to spread agents out.
         """
-        # Small exploration pattern: 3 steps in each direction, then return
-        # This keeps the agent close to spawn while checking all directions
-        pattern = [
-            "east",
-            "east",
-            "east",  # Check east (stations often near spawn)
-            "west",
-            "west",
-            "west",
-            "south",
-            "south",
-            "south",  # Go back and check south
-            "north",
-            "north",
-            "north",
-            "west",
-            "west",
-            "west",  # Go back and check west
-            "east",
-            "east",
-            "east",
-            "north",
-            "north",
-            "north",  # Go back and check north
-            "south",
-            "south",
-            "south",  # Return to spawn area
+        # Direction sequences for different starting directions
+        direction_orders = [
+            ["east", "south", "west", "north"],
+            ["south", "west", "north", "east"],
+            ["west", "north", "east", "south"],
+            ["north", "east", "south", "west"],
         ]
-        # Start exploration index from step 2 (step 1 is vibe change)
+        # Pick direction order based on agent_id to spread agents out
+        dirs = direction_orders[state.agent_id % 4]
+
+        # Expanding spiral pattern with agent-specific offset
+        pattern: list[str] = []
+        for ring in range(1, 8):
+            steps = ring * 2
+            pattern.extend([dirs[0]] * steps)
+            pattern.extend([dirs[1]] * steps)
+            pattern.extend([dirs[2]] * (steps + 2))
+            pattern.extend([dirs[3]] * (steps + 2))
+
         explore_step = max(0, state.step - 2)
         idx = explore_step % len(pattern)
         return Action(name=f"move_{pattern[idx]}")
@@ -256,15 +292,17 @@ class MinerBehavior:
         dist = manhattan_distance(state.pos, station_pos)
 
         # If ON the station (dist=0), we should have received gear from walking in.
-        # If gear not received yet, noop to let the game state update.
+        # If gear not received yet, record this attempt and let miner continue mining.
+        # After GEAR_RETRY_INTERVAL ticks, they'll try again.
         if state.pos == station_pos:
             if DEBUG:
-                print(f"[A{state.agent_id}] MINER: ON station at {station_pos}, waiting for gear")
+                print(f"[A{state.agent_id}] MINER: ON station at {station_pos}, no gear - will mine and retry later")
             state.debug_info = DebugInfo(
-                mode="get_gear", goal="on_station", target_object="miner_station", target_pos=station_pos
+                mode="get_gear", goal="on_station_no_gear", target_object="miner_station", target_pos=station_pos
             )
-            # Return None to let the miner continue with other priorities (explore/mine)
-            # The gear should have been granted when we walked onto the station
+            # Record this attempt - miner will mine for GEAR_RETRY_INTERVAL ticks then retry
+            state.last_gear_attempt_step = state.step
+            # Return None to let the miner continue with mining
             return None
 
         if is_adjacent(state.pos, station_pos):
@@ -382,15 +420,17 @@ class MinerBehavior:
     def _find_nearest_extractor(
         self, state: AgentState, services: Services, exclude: Optional[tuple[int, int]] = None
     ) -> Optional[StructureInfo]:
-        """Find nearest usable extractor - no overly conservative distance limits."""
+        """Find nearest usable extractor within step-based range limit."""
         extractors = state.map.get_usable_extractors()
 
         if not extractors:
             return None
 
-        # Use a generous max distance based on HP
-        # Allow traveling up to HP/2 steps (one way), leaving buffer for return
-        max_dist = max(50, state.hp // 2)
+        # Use step-based range limit (encourages gradual expansion)
+        # Also cap by HP to avoid stranding
+        step_limit = services.safety.step_based_range_limit(state.step)
+        hp_limit = max(50, state.hp // 2)
+        max_dist = min(step_limit, hp_limit)
 
         if DEBUG and state.step % 50 == 0:
             struct_types = {}
@@ -399,8 +439,8 @@ class MinerBehavior:
                 struct_types[t] = struct_types.get(t, 0) + 1
             print(
                 f"[A{state.agent_id}] MINER: _find_nearest_extractor: "
-                f"max_dist={max_dist}, extractors={len(extractors)}, hp={state.hp}, "
-                f"structures={len(state.map.structures)}, types={struct_types}"
+                f"max_dist={max_dist} (step_limit={step_limit}, hp_limit={hp_limit}), "
+                f"extractors={len(extractors)}, hp={state.hp}"
             )
 
         # Filter and sort by distance

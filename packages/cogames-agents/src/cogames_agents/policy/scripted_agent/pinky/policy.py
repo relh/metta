@@ -48,11 +48,13 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
         agent_id: int,
         initial_vibe: Optional[str] = None,
         debug: bool = False,
+        lazy: bool = False,
     ):
         self._agent_id = agent_id
         self._policy_env_info = policy_env_info
         self._initial_vibe = initial_vibe or "miner"
         self._debug = debug
+        self._lazy = lazy  # If True, don't auto-activate on step 1; wait for gear vibe
 
         # Track previous debug output to avoid duplicate prints
         self._prev_debug_output: Optional[str] = None
@@ -84,7 +86,7 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
         """Process observation and return action with updated state.
 
         Vibe behavior:
-        - Step 1 with default vibe → change to assigned role vibe (auto-activate)
+        - Step 1 with default vibe → change to assigned role vibe (auto-activate, unless lazy=True)
         - "gear" vibe → change to assigned role vibe
         - Role vibe (miner/scout/aligner/scrambler) → execute role behavior
         - Other vibes (heart, etc.) → noop
@@ -117,8 +119,12 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
         # Step 1 with default vibe OR "gear" vibe → change to assigned role vibe
         # This must happen BEFORE the "noop if not role vibe" check!
         # (but only if agent has an assigned role, not if they're meant to stay default)
+        # In lazy mode, skip step 1 auto-activation; only activate on gear vibe
         if self._initial_vibe != "default":
-            if state.vibe == GEAR_VIBE or (state.step == 1 and state.vibe == "default"):
+            should_activate = state.vibe == GEAR_VIBE or (
+                not self._lazy and state.step == 1 and state.vibe == "default"
+            )
+            if should_activate:
                 role_vibe = self._initial_vibe  # The assigned role (miner/scout/etc.)
                 action = change_vibe_action(role_vibe, services)
                 state.nav.last_action = action
@@ -223,8 +229,21 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
                 target_info = f"({state.debug_info.target_object or '-'})"
             role = state.role.value
             mode = state.debug_info.mode
+
+            # Build gear string - show which gear the agent has
+            gear_list = []
+            if state.miner_gear:
+                gear_list.append("miner")
+            if state.scout_gear:
+                gear_list.append("scout")
+            if state.aligner_gear:
+                gear_list.append("aligner")
+            if state.scrambler_gear:
+                gear_list.append("scrambler")
+            gear_str = ",".join(gear_list) if gear_list else "-"
+
             print(
-                f"[pinky][Step {state.step}][A{state.agent_id}] [{role}] [{mode}] "
+                f"[pinky][Step {state.step}][A{state.agent_id}] [{role}] [g:{gear_str}] [h:{state.heart}] [{mode}] "
                 f"{pos_str}->{dest_str} {target_info} : {action.name}"
             )
             self._prev_debug_output = debug_output
@@ -245,13 +264,15 @@ class PinkyPolicy(MultiAgentPolicy):
         self,
         policy_env_info: PolicyEnvInterface,
         device: str = "cpu",
-        # URI parameters for vibe counts (default to 0 = no agents with that role)
-        miner: int = 0,
+        # URI parameters for vibe counts (default: 4 miners, 2 aligners, 4 scramblers)
+        miner: int = 4,
         scout: int = 0,
-        aligner: int = 0,
-        scrambler: int = 0,
+        aligner: int = 2,
+        scrambler: int = 4,
         # Debug flag - print structured intent info each step
         debug: int = 0,
+        # Lazy mode - don't auto-activate on step 1; wait for gear vibe
+        lazy: int = 0,
         # Accept any extra kwargs to be flexible
         **kwargs: object,
     ):
@@ -259,6 +280,8 @@ class PinkyPolicy(MultiAgentPolicy):
 
         # Debug mode from URI param (?debug=1)
         self._debug = bool(debug)
+        # Lazy mode from URI param (?lazy=1) - wait for gear vibe instead of auto-activating
+        self._lazy = bool(lazy)
 
         # Build vibe distribution from counts - agents beyond this list stay default
         self._vibe_distribution: list[str] = []
@@ -268,7 +291,8 @@ class PinkyPolicy(MultiAgentPolicy):
         self._vibe_distribution.extend(["scrambler"] * scrambler)
 
         if DEBUG or self._debug:
-            print(f"[PINKY] Vibe distribution: {self._vibe_distribution} (agents beyond this stay default)")
+            lazy_str = " (lazy mode - wait for gear)" if self._lazy else ""
+            print(f"[PINKY] Vibe distribution: {self._vibe_distribution}{lazy_str} (agents beyond this stay default)")
             if self._debug:
                 print("[PINKY] Debug mode enabled - will print: role:mode:goal:target:action")
 
@@ -293,6 +317,7 @@ class PinkyPolicy(MultiAgentPolicy):
                 agent_id=agent_id,
                 initial_vibe=initial_vibe,
                 debug=self._debug,
+                lazy=self._lazy,
             )
 
             # Wrap in StatefulAgentPolicy

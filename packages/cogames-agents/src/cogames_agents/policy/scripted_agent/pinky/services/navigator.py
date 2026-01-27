@@ -2,12 +2,13 @@
 Navigator service for Pinky policy.
 
 Handles pathfinding, movement, stuck detection, and exploration.
+Uses A* pathfinding with dynamic agent avoidance.
 """
 
 from __future__ import annotations
 
+import heapq
 import random
-from collections import deque
 from typing import TYPE_CHECKING, Optional
 
 from cogames_agents.policy.scripted_agent.pinky.types import DEBUG, CellType
@@ -42,7 +43,8 @@ class Navigator:
     ) -> Action:
         """Pathfind toward a target position using the internal map.
 
-        Uses the map built from previous observations. First tries to find a path
+        Uses A* pathfinding with the map built from previous observations.
+        Navigates around other agents dynamically. First tries to find a path
         through known (explored) terrain. If no known path exists, allows traversal
         through unknown cells to reach the target.
 
@@ -71,19 +73,29 @@ class Navigator:
                 print(f"[A{state.agent_id}] NAV: No goal cells for {target}")
             return Action(name="noop")
 
-        # Check cached path (invalidate if path goes through now-blocked cells)
+        # Check cached path (invalidate if path goes through now-blocked cells or agents)
         path = self._get_cached_path(state, target, reach_adjacent)
 
         # Compute new path if needed
         if path is None:
-            # First try to find path through known terrain only
-            path = self._shortest_path(state, start, goal_cells, allow_unknown=False)
+            # First try to find path through known terrain, avoiding agents
+            path = self._shortest_path(state, start, goal_cells, allow_unknown=False, avoid_agents=True)
 
-            # If no known path, try allowing unknown cells (exploration)
+            # If no path avoiding agents, try allowing agent cells (they may move)
+            if not path and state.map.agent_occupancy:
+                if DEBUG:
+                    print(f"[A{state.agent_id}] NAV: No path avoiding agents, trying through agent cells")
+                path = self._shortest_path(state, start, goal_cells, allow_unknown=False, avoid_agents=False)
+
+            # If still no known path, try allowing unknown cells (exploration)
             if not path:
                 if DEBUG:
                     print(f"[A{state.agent_id}] NAV: No known path to {target}, trying through unknown")
-                path = self._shortest_path(state, start, goal_cells, allow_unknown=True)
+                path = self._shortest_path(state, start, goal_cells, allow_unknown=True, avoid_agents=True)
+
+            # Last resort: allow both unknown and agent cells
+            if not path and state.map.agent_occupancy:
+                path = self._shortest_path(state, start, goal_cells, allow_unknown=True, avoid_agents=False)
 
             state.nav.cached_path = path.copy() if path else None
             state.nav.cached_path_target = target
@@ -96,6 +108,23 @@ class Navigator:
 
         next_pos = path[0]
 
+        # Check if next position is blocked by an agent
+        if next_pos in state.map.agent_occupancy:
+            # Try to find an immediate sidestep around the blocking agent
+            sidestep = self._find_sidestep(state, next_pos, target)
+            if sidestep:
+                if DEBUG:
+                    print(f"[A{state.agent_id}] NAV: Agent at {next_pos}, sidestepping to {sidestep}")
+                # Clear cached path since we're deviating
+                state.nav.cached_path = None
+                state.nav.cached_path_target = None
+                return self._move_toward(state, sidestep)
+            else:
+                # No sidestep available, wait by doing noop (agent may move next step)
+                if DEBUG:
+                    print(f"[A{state.agent_id}] NAV: Agent blocking at {next_pos}, waiting")
+                return Action(name="noop")
+
         # Advance cached path
         if state.nav.cached_path:
             state.nav.cached_path = state.nav.cached_path[1:]
@@ -105,10 +134,69 @@ class Navigator:
 
         return self._move_toward(state, next_pos)
 
-    def explore(self, state: AgentState) -> Action:
-        """Systematic exploration - prioritize moving toward unknown areas.
+    def _find_sidestep(
+        self, state: AgentState, blocked_pos: tuple[int, int], target: tuple[int, int]
+    ) -> Optional[tuple[int, int]]:
+        """Find an immediate sidestep around a blocking agent.
 
-        Uses the internal map to prefer directions that lead to unexplored territory.
+        Tries to find an adjacent free cell that still makes progress toward the target.
+
+        Args:
+            state: Agent state
+            blocked_pos: The position blocked by an agent
+            target: Ultimate target we're trying to reach
+
+        Returns:
+            A position to sidestep to, or None if no good sidestep available
+        """
+        current = state.pos
+        current_dist = abs(target[0] - current[0]) + abs(target[1] - current[1])
+
+        candidates: list[tuple[int, tuple[int, int]]] = []
+
+        for direction in self.DIRECTIONS:
+            dr, dc = self.MOVE_DELTAS[direction]
+            nr, nc = current[0] + dr, current[1] + dc
+            neighbor = (nr, nc)
+
+            # Skip the blocked position
+            if neighbor == blocked_pos:
+                continue
+
+            # Check if this cell is traversable
+            if not self._is_traversable(state, nr, nc, allow_unknown=True, check_agents=True):
+                continue
+
+            # Calculate distance to target from this position
+            new_dist = abs(target[0] - nr) + abs(target[1] - nc)
+
+            # Prefer cells that maintain or improve distance to target
+            # Score: lower is better (distance increase as cost)
+            score = new_dist - current_dist
+            candidates.append((score, neighbor))
+
+        if not candidates:
+            return None
+
+        # Sort by score (prefer cells that don't increase distance much)
+        candidates.sort(key=lambda x: x[0])
+
+        # Only take sidesteps that don't increase distance by more than 2
+        # (otherwise we might be going backwards)
+        if candidates[0][0] <= 2:
+            return candidates[0][1]
+
+        return None
+
+    def explore(self, state: AgentState, direction_bias: Optional[str] = None) -> Action:
+        """Explore by navigating toward unexplored frontier cells.
+
+        Uses the map's explored grid to find the nearest unexplored cell
+        adjacent to known territory, then pathfinds toward it.
+
+        Args:
+            state: Agent state with map knowledge
+            direction_bias: Optional direction preference to spread agents
         """
         # Check for stuck loop
         if self._is_stuck(state):
@@ -116,76 +204,152 @@ class Navigator:
             if action:
                 return action
 
-        # Continue in current direction if set and heading toward unknown
-        if state.nav.exploration_direction:
-            steps_in_direction = state.step - state.nav.exploration_direction_step
-            if steps_in_direction < 8:  # Explore 8 steps before turning (covers observation radius)
-                dr, dc = self.MOVE_DELTAS.get(state.nav.exploration_direction, (0, 0))
-                next_r, next_c = state.row + dr, state.col + dc
-                # Allow moving into unknown cells during exploration
-                if self._is_traversable(state, next_r, next_c, allow_unknown=True):
-                    return Action(name=f"move_{state.nav.exploration_direction}")
+        # Find nearest unexplored frontier cell
+        # Use agent_id to bias direction so agents spread out
+        if direction_bias is None:
+            directions = ["north", "east", "south", "west"]
+            direction_bias = directions[state.agent_id % 4]
 
-        # Pick next direction - prioritize directions leading to unknown territory
-        direction_cycle = ["east", "south", "west", "north"]
-        current_dir = state.nav.exploration_direction
-        if current_dir in direction_cycle:
-            idx = direction_cycle.index(current_dir)
-            next_idx = (idx + 1) % 4
+        frontier = state.map.find_nearest_unexplored(state.pos, max_dist=50, direction_bias=direction_bias)
+
+        if frontier is not None:
+            # Navigate toward the frontier cell
+            return self.move_to(state, frontier)
+
+        # No frontier found - fall back to expanding box pattern
+        if state.nav.explore_origin is None:
+            state.nav.explore_origin = state.pos
+            state.nav.explore_start_step = state.step
+
+        origin = state.nav.explore_origin
+        explore_step = state.step - state.nav.explore_start_step
+
+        # Calculate target position using expanding box pattern
+        target = self._get_explore_target(origin, explore_step)
+
+        # Move toward target
+        dr = target[0] - state.row
+        dc = target[1] - state.col
+
+        # If at target, advance to next step
+        if dr == 0 and dc == 0:
+            state.nav.explore_start_step = state.step - explore_step - 1
+            return self.explore(state, direction_bias)
+
+        # Pick direction toward target, prioritizing larger delta
+        direction = None
+        if abs(dr) >= abs(dc):
+            if dr > 0:
+                direction = "south"
+            elif dr < 0:
+                direction = "north"
+            elif dc > 0:
+                direction = "east"
+            elif dc < 0:
+                direction = "west"
         else:
-            next_idx = 0
+            if dc > 0:
+                direction = "east"
+            elif dc < 0:
+                direction = "west"
+            elif dr > 0:
+                direction = "south"
+            elif dr < 0:
+                direction = "north"
 
-        # Score each direction by how much unknown territory it leads to
-        direction_scores: list[tuple[int, str]] = []
-        for direction in direction_cycle:
-            dr, dc = self.MOVE_DELTAS[direction]
-            next_r, next_c = state.row + dr, state.col + dc
-
-            if not self._is_traversable(state, next_r, next_c, allow_unknown=True):
-                continue
-
-            # Count unknown cells in this direction (look ahead several cells)
-            unknown_count = 0
-            for dist in range(1, 6):
-                check_r, check_c = state.row + dr * dist, state.col + dc * dist
-                if self._is_in_bounds(state, check_r, check_c):
-                    if state.map.occupancy[check_r][check_c] == CellType.UNKNOWN.value:
-                        unknown_count += 1
-
-            direction_scores.append((unknown_count, direction))
-
-        # Sort by unknown count (descending) - prefer directions with more unknown territory
-        direction_scores.sort(key=lambda x: -x[0])
-
-        if DEBUG and state.step == 10 and state.agent_id == 0:
-            print(f"[NAV] Exploration scores: {direction_scores}")
-
-        # Try directions in order of score, then fall back to cycle order
-        tried_directions = {d for _, d in direction_scores}
-        for _, direction in direction_scores:
-            dr, dc = self.MOVE_DELTAS[direction]
-            next_r, next_c = state.row + dr, state.col + dc
-            if self._is_traversable(state, next_r, next_c, allow_unknown=True):
-                state.nav.exploration_direction = direction
-                state.nav.exploration_direction_step = state.step
+        if direction:
+            move_dr, move_dc = self.MOVE_DELTAS[direction]
+            next_r, next_c = state.row + move_dr, state.col + move_dc
+            if self._is_traversable(state, next_r, next_c, allow_unknown=True, check_agents=True):
                 return Action(name=f"move_{direction}")
 
-        # Fall back to cycle order for any remaining directions
-        for i in range(4):
-            direction = direction_cycle[(next_idx + i) % 4]
-            if direction in tried_directions:
-                continue
-            dr, dc = self.MOVE_DELTAS[direction]
-            next_r, next_c = state.row + dr, state.col + dc
-            traversable = self._is_traversable(state, next_r, next_c)
-            if DEBUG and state.step == 10 and state.agent_id == 0:
-                print(f"[NAV] Trying {direction}: pos={state.pos}+({dr},{dc})={next_r},{next_c} trav={traversable}")
-            if traversable:
-                state.nav.exploration_direction = direction
-                state.nav.exploration_direction_step = state.step
-                return Action(name=f"move_{direction}")
+            # Primary direction blocked (possibly by agent) - try perpendicular directions
+            if direction in ("north", "south"):
+                alternatives = ["east", "west"]
+            else:
+                alternatives = ["north", "south"]
 
+            for alt_dir in alternatives:
+                alt_dr, alt_dc = self.MOVE_DELTAS[alt_dir]
+                alt_r, alt_c = state.row + alt_dr, state.col + alt_dc
+                if self._is_traversable(state, alt_r, alt_c, allow_unknown=True, check_agents=True):
+                    return Action(name=f"move_{alt_dir}")
+
+        # All directions blocked by obstacles or agents - try any traversable direction
+        for fallback_dir in self.DIRECTIONS:
+            fb_dr, fb_dc = self.MOVE_DELTAS[fallback_dir]
+            fb_r, fb_c = state.row + fb_dr, state.col + fb_dc
+            if self._is_traversable(state, fb_r, fb_c, allow_unknown=True, check_agents=True):
+                return Action(name=f"move_{fallback_dir}")
+
+        # Completely blocked - wait (agents may move)
+        if DEBUG:
+            print(f"[A{state.agent_id}] NAV: Explore blocked, waiting")
         return Action(name="noop")
+
+    def _get_explore_target(self, origin: tuple[int, int], step: int) -> tuple[int, int]:
+        """Calculate target position for expanding box exploration.
+
+        Creates waypoints in a clockwise expanding box pattern:
+        Ring 1: E(5) → S(5) → W(10) → N(10)
+        Ring 2: E(10) → S(10) → W(15) → N(15)
+        etc.
+        """
+        segment_base = 5  # Base segment length (accounts for movement cooldowns)
+        ring = 1
+        cumulative_steps = 0
+
+        while True:
+            seg_len = segment_base * ring
+            # Each ring has 4 segments: E, S, W, N
+            # E and S use seg_len, W and N use seg_len + segment_base (to complete the box)
+            ring_segments = [
+                ("east", seg_len),
+                ("south", seg_len),
+                ("west", seg_len + segment_base),
+                ("north", seg_len + segment_base),
+            ]
+
+            for direction, length in ring_segments:
+                if cumulative_steps + length > step:
+                    # We're in this segment
+                    progress = step - cumulative_steps
+                    dr, dc = self.MOVE_DELTAS[direction]
+                    # Calculate position at start of this segment
+                    # then add progress along segment
+                    seg_start = self._get_segment_start(origin, ring, direction, segment_base)
+                    return (seg_start[0] + dr * progress, seg_start[1] + dc * progress)
+                cumulative_steps += length
+
+            ring += 1
+            if ring > 10:  # Safety limit - reset to ring 1
+                ring = 1
+                cumulative_steps = 0
+
+    def _get_segment_start(
+        self, origin: tuple[int, int], ring: int, direction: str, segment_base: int
+    ) -> tuple[int, int]:
+        """Get starting position for a segment in the expanding box."""
+        # Calculate corner positions for this ring
+        # After completing rings 1..ring-1, we're at the start of ring `ring`
+        offset = segment_base * ring
+        r, c = origin
+
+        if direction == "east":
+            # Start of E segment: NE corner of previous ring (or origin for ring 1)
+            if ring == 1:
+                return origin
+            return (r - offset + segment_base, c + offset - segment_base)
+        elif direction == "south":
+            # Start of S segment: after going E
+            return (r - offset + segment_base, c + offset)
+        elif direction == "west":
+            # Start of W segment: SE corner
+            return (r + offset, c + offset)
+        elif direction == "north":
+            # Start of N segment: SW corner
+            return (r + offset, c - offset)
+        return origin
 
     def use_object_at(self, state: AgentState, target: tuple[int, int]) -> Action:
         """Move toward an object cell to interact with it.
@@ -228,25 +392,36 @@ class Navigator:
             state.nav.position_history.pop(0)
 
     def _is_stuck(self, state: AgentState) -> bool:
-        """Detect if agent is oscillating between positions (A→B→A→B).
+        """Detect if agent is oscillating or revisiting positions frequently.
 
-        Only detects oscillation (exactly 2 positions), not staying still.
-        Staying at 1 position might be intentional (using object repeatedly).
+        Detects:
+        1. Oscillation between 2 positions (A→B→A→B)
+        2. Larger oscillation patterns where agent revisits same positions
         """
         history = state.nav.position_history
         if len(history) < 6:
             return False
 
-        # Check last 6 positions for oscillation
+        # Check last 6 positions for tight oscillation (2 positions)
         recent = history[-6:]
-        unique_positions = set(recent)
-
-        # Only consider stuck if oscillating between exactly 2 positions
-        # 1 position = intentional (using object), 3+ = making progress
-        if len(unique_positions) == 2:
+        unique_recent = set(recent)
+        if len(unique_recent) == 2:
             if DEBUG:
-                print(f"[A{state.agent_id}] NAV: Stuck! Oscillating between {unique_positions}")
+                print(f"[A{state.agent_id}] NAV: Stuck! Oscillating between {unique_recent}")
             return True
+
+        # Check for larger oscillation pattern - revisiting positions we were at earlier
+        # (catches the east-west ping-pong over 8+ steps)
+        if len(history) >= 20:
+            current_pos = history[-1]
+            # Check if current position appeared earlier in history (not just recently)
+            earlier_history = history[:-10]  # Positions from 10+ steps ago
+            revisit_count = earlier_history.count(current_pos)
+            if revisit_count >= 2:
+                if DEBUG:
+                    print(f"[A{state.agent_id}] NAV: Stuck loop! Revisited {current_pos} {revisit_count}x")
+                return True
+
         return False
 
     def _break_stuck(self, state: AgentState) -> Optional[Action]:
@@ -259,13 +434,13 @@ class Navigator:
         state.nav.cached_path_target = None
         state.nav.position_history.clear()
 
-        # Try random direction, allowing unknown cells to escape
+        # Try random direction, allowing unknown cells to escape, avoiding agents
         directions = list(self.DIRECTIONS)
         random.shuffle(directions)
         for direction in directions:
             dr, dc = self.MOVE_DELTAS[direction]
             nr, nc = state.row + dr, state.col + dc
-            if self._is_traversable(state, nr, nc, allow_unknown=True):
+            if self._is_traversable(state, nr, nc, allow_unknown=True, check_agents=True):
                 return Action(name=f"move_{direction}")
         return None
 
@@ -295,16 +470,26 @@ class Navigator:
         return Action(name="noop")
 
     def _try_alternative_direction(self, state: AgentState, target: tuple[int, int]) -> Action:
-        """Try to move around an obstacle toward target using internal map."""
-        # Try directions, allowing unknown cells for exploration
-        directions = list(self.DIRECTIONS)
-        random.shuffle(directions)
-        for direction in directions:
+        """Try to move around an obstacle or agent toward target.
+
+        Prefers directions that maintain progress toward the target.
+        """
+        # Collect valid moves with their distance to target
+        candidates: list[tuple[int, str]] = []
+
+        for direction in self.DIRECTIONS:
             dr, dc = self.MOVE_DELTAS[direction]
             nr, nc = state.row + dr, state.col + dc
-            if self._is_traversable(state, nr, nc, allow_unknown=True):
-                return Action(name=f"move_{direction}")
-        return Action(name="noop")
+            if self._is_traversable(state, nr, nc, allow_unknown=True, check_agents=True):
+                new_dist = abs(target[0] - nr) + abs(target[1] - nc)
+                candidates.append((new_dist, direction))
+
+        if not candidates:
+            return Action(name="noop")
+
+        # Sort by distance to target (prefer moves that get closer)
+        candidates.sort(key=lambda x: x[0])
+        return Action(name=f"move_{candidates[0][1]}")
 
     def _compute_goal_cells(
         self, state: AgentState, target: tuple[int, int], reach_adjacent: bool
@@ -328,8 +513,9 @@ class Navigator:
         start: tuple[int, int],
         goals: list[tuple[int, int]],
         allow_unknown: bool = False,
+        avoid_agents: bool = True,
     ) -> list[tuple[int, int]]:
-        """BFS to find shortest path from start to any goal.
+        """A* pathfinding from start to any goal, navigating around agents.
 
         Uses the internal map built from previous observations. Prefers known paths
         but can traverse unknown cells if allow_unknown=True.
@@ -339,26 +525,54 @@ class Navigator:
             start: Starting position
             goals: List of goal positions
             allow_unknown: If True, treat UNKNOWN cells as potentially traversable
+            avoid_agents: If True, treat agent positions as obstacles (default True)
 
         Note: Goal cells are reachable even if they are obstacles (for walking into objects).
         """
         goal_set = set(goals)
-        queue: deque[tuple[int, int]] = deque([start])
-        came_from: dict[tuple[int, int], Optional[tuple[int, int]]] = {start: None}
+        if not goals:
+            return []
 
-        while queue:
-            current = queue.popleft()
+        # Use minimum manhattan distance to any goal as heuristic
+        def heuristic(pos: tuple[int, int]) -> int:
+            return min(abs(pos[0] - g[0]) + abs(pos[1] - g[1]) for g in goals)
+
+        # Priority queue: (f_score, tie_breaker, position)
+        # tie_breaker ensures consistent ordering when f_scores are equal
+        tie_breaker = 0
+        open_set: list[tuple[int, int, tuple[int, int]]] = [(heuristic(start), tie_breaker, start)]
+        came_from: dict[tuple[int, int], Optional[tuple[int, int]]] = {start: None}
+        g_score: dict[tuple[int, int], int] = {start: 0}
+
+        while open_set:
+            _, _, current = heapq.heappop(open_set)
+
             if current in goal_set:
                 return self._reconstruct_path(came_from, current)
 
+            # Skip if we've found a better path to this node already
+            current_g = g_score.get(current, float("inf"))
+            if isinstance(current_g, float):
+                continue
+
             for nr, nc in self._get_neighbors(state, current):
-                if (nr, nc) in came_from:
-                    continue
+                neighbor = (nr, nc)
+
                 # Allow reaching goal cells even if they're obstacles (objects to use)
-                is_goal = (nr, nc) in goal_set
-                if is_goal or self._is_traversable(state, nr, nc, allow_unknown=allow_unknown):
-                    came_from[(nr, nc)] = current
-                    queue.append((nr, nc))
+                is_goal = neighbor in goal_set
+                if not is_goal and not self._is_traversable(
+                    state, nr, nc, allow_unknown=allow_unknown, check_agents=avoid_agents
+                ):
+                    continue
+
+                tentative_g = current_g + 1
+
+                if tentative_g < g_score.get(neighbor, float("inf")):
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g
+                    f_score = tentative_g + heuristic(neighbor)
+                    tie_breaker += 1
+                    heapq.heappush(open_set, (f_score, tie_breaker, neighbor))
 
         return []
 
@@ -385,7 +599,9 @@ class Navigator:
         """Check if position is within map bounds."""
         return 0 <= r < state.map.grid_size and 0 <= c < state.map.grid_size
 
-    def _is_traversable(self, state: AgentState, r: int, c: int, allow_unknown: bool = False) -> bool:
+    def _is_traversable(
+        self, state: AgentState, r: int, c: int, allow_unknown: bool = False, check_agents: bool = True
+    ) -> bool:
         """Check if a cell is traversable.
 
         Args:
@@ -393,6 +609,7 @@ class Navigator:
             r: Row coordinate
             c: Column coordinate
             allow_unknown: If True, treat UNKNOWN cells as potentially traversable (for exploration)
+            check_agents: If True, treat cells with agents as non-traversable (default True)
 
         Returns:
             True if the cell can be moved into
@@ -401,10 +618,24 @@ class Navigator:
             if DEBUG and state.step == 10 and state.agent_id == 0:
                 print(f"[NAV] ({r},{c}) out of bounds")
             return False
-        if (r, c) in state.map.agent_occupancy:
-            if DEBUG and state.step == 10 and state.agent_id == 0:
-                print(f"[NAV] ({r},{c}) has agent")
-            return False
+
+        if check_agents:
+            pos = (r, c)
+            # Check current observation (definite agent position)
+            if pos in state.map.agent_occupancy:
+                if DEBUG and state.step == 10 and state.agent_id == 0:
+                    print(f"[NAV] ({r},{c}) has agent (current obs)")
+                return False
+
+            # Check recently-seen agents (may still be there)
+            # Only block if agent was seen very recently (within 5 steps)
+            if pos in state.map.recent_agents:
+                sighting = state.map.recent_agents[pos]
+                if state.step - sighting.last_seen_step <= 5:
+                    if DEBUG and state.step == 10 and state.agent_id == 0:
+                        print(f"[NAV] ({r},{c}) recent agent ({state.step - sighting.last_seen_step} ago)")
+                    return False
+
         occ = state.map.occupancy[r][c]
         is_free = occ == CellType.FREE.value
         is_unknown = occ == CellType.UNKNOWN.value
@@ -419,12 +650,27 @@ class Navigator:
     def _get_cached_path(
         self, state: AgentState, target: tuple[int, int], reach_adjacent: bool
     ) -> Optional[list[tuple[int, int]]]:
-        """Get cached path if still valid."""
+        """Get cached path if still valid.
+
+        Invalidates the cached path if:
+        - Target changed
+        - reach_adjacent mode changed
+        - Next step in path is blocked (by obstacle or agent)
+        - Any cell in the path is now occupied by an agent
+        """
         if (
             state.nav.cached_path
             and state.nav.cached_path_target == target
             and state.nav.cached_path_reach_adjacent == reach_adjacent
         ):
+            # Check if any cell in the path is blocked by an agent
+            for pos in state.nav.cached_path:
+                if pos in state.map.agent_occupancy:
+                    if DEBUG:
+                        print(f"[A{state.agent_id}] NAV: Cached path blocked by agent at {pos}")
+                    return None
+
+            # Check if next step is traversable
             next_pos = state.nav.cached_path[0]
             if self._is_traversable(state, next_pos[0], next_pos[1]):
                 return state.nav.cached_path

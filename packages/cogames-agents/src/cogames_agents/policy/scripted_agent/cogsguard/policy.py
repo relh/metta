@@ -712,23 +712,30 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Calculate inventory amount for extractors
         # Key insight: empty dict {} on FIRST observation = no info yet (assume full)
         # Empty dict {} on SUBSEQUENT observation = depleted (0 resources)
-        inventory_amount = 999  # Default: unknown/full
         is_new_structure = pos not in s.structures
 
         if structure_type == StructureType.EXTRACTOR:
+            # For extractors, track resource counts carefully
             if resource_type and resource_type in obj_state.inventory:
-                # We have actual inventory info
+                # We have actual inventory info for this resource type
                 inventory_amount = obj_state.inventory[resource_type]
             elif obj_state.inventory:
                 # Sum all inventory if resource type not specified
                 inventory_amount = sum(obj_state.inventory.values())
-            elif not is_new_structure:
-                # Empty dict for KNOWN extractor = depleted
-                # (For new extractors, keep default 999)
+            elif is_new_structure:
+                # First time seeing this extractor with no inventory info
+                # Assume it has resources (we don't know yet)
+                inventory_amount = 999
+            else:
+                # Known extractor with empty inventory dict = depleted (0 resources)
                 inventory_amount = 0
+            if DEBUG and inventory_amount == 0:
+                print(f"[A{s.agent_id}] EXTRACTOR_EMPTY: {pos} resource={resource_type} inv={obj_state.inventory}")
         elif obj_state.inventory:
-            # Non-extractors: use inventory if present
+            # Non-extractors: use inventory sum if present
             inventory_amount = sum(obj_state.inventory.values())
+        else:
+            inventory_amount = 999  # Default: unknown/full
 
         if pos in s.structures:
             # Update existing structure

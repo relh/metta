@@ -59,7 +59,7 @@ class MapTracker:
 
     def update(self, state: AgentState, obs: AgentObservation) -> None:
         """Parse observation and update map knowledge."""
-        # Clear agent occupancy each step
+        # Clear current-step agent occupancy
         state.map.agent_occupancy.clear()
 
         # Read inventory from observation
@@ -74,17 +74,23 @@ class MapTracker:
         # Mark observed cells as explored and FREE
         self._mark_explored(state)
 
+        # Track which positions in observation window have agents
+        observed_agent_positions: set[tuple[int, int]] = set()
+
         # Process discovered objects
         for pos, features in position_features.items():
             if "tags" not in features:
                 continue
 
             obj_name = self._get_object_name(features)
-            if DEBUG and state.step <= 10 and pos == (101, 108) and state.agent_id == 0:
-                tags = features.get("tags", [])
-                tag_names = [self._tag_names.get(t, f"?{t}") for t in tags]
-                print(f"[A{state.agent_id}] MAP: FOUND pos={pos} tags={tag_names} -> '{obj_name}'")
             self._process_object(state, pos, obj_name, features)
+
+            # Track agent positions
+            if obj_name.lower() == "agent":
+                observed_agent_positions.add(pos)
+
+        # Update recent agents tracking
+        self._update_recent_agents(state, observed_agent_positions)
 
     def _read_inventory(self, state: AgentState, obs: AgentObservation) -> None:
         """Read inventory and vibe from observation center cell."""
@@ -278,11 +284,25 @@ class MapTracker:
                     position_features[pos][feature_name] = value
 
             # Handle inventory features (for extractors)
+            # Multi-token encoding: inv:{resource} = base, inv:{resource}:p1 = power1, etc.
+            # We accumulate: base + p1*256 + p2*256^2 + ... (token_value_base=256 is default)
             elif feature_name.startswith("inv:"):
-                resource = feature_name[4:]
+                suffix = feature_name[4:]  # e.g., "carbon" or "carbon:p1"
+                # Parse resource name and power
+                if ":p" in suffix:
+                    resource, power_str = suffix.rsplit(":p", 1)
+                    power = int(power_str)
+                else:
+                    resource = suffix
+                    power = 0
+
                 inventory = position_features[pos].setdefault("inventory", {})
                 if isinstance(inventory, dict):
-                    inventory[resource] = value
+                    # Accumulate multi-token value (token_value_base=256 is mettagrid default)
+                    # inv:X = amount % 256, inv:X:p1 = (amount // 256) % 256, etc.
+                    token_base = 256
+                    current = inventory.get(resource, 0)
+                    inventory[resource] = current + value * (token_base**power)
 
         return position_features
 
@@ -379,8 +399,16 @@ class MapTracker:
         clipped = clipped_val if isinstance(clipped_val, int) else 0
         remaining_val = features.get("remaining_uses", 999)
         remaining = remaining_val if isinstance(remaining_val, int) else 999
-        inventory = features.get("inventory", {})
-        inv_amount = sum(inventory.values()) if isinstance(inventory, dict) else 999
+        inventory = features.get("inventory")
+        # Inventory handling:
+        # - If inv: tokens present (non-empty dict), this is a chest-based object with that inventory
+        # - If no inv: tokens, we need to check if this object was previously known to have inventory
+        # - For new objects without inv: tokens, assume protocol-based (inv_amount = -1)
+        has_inv_tokens = isinstance(inventory, dict) and bool(inventory)
+        if has_inv_tokens:
+            inv_amount = sum(inventory.values())
+        else:
+            inv_amount = -1  # Will be updated in _update_structure if we knew it had inventory before
 
         # Extract collective ID for alignment detection
         collective_val = features.get("collective")
@@ -394,6 +422,8 @@ class MapTracker:
         # Check if it's another agent
         if obj_lower == "agent":
             state.map.agent_occupancy.add(pos)
+            # Don't return - we still want to track the agent in recent_agents
+            # but no other processing needed
             return
 
         # Check for gear stations
@@ -452,16 +482,61 @@ class MapTracker:
         for resource in resources:
             if f"{resource}_extractor" in obj_lower or f"{resource}_chest" in obj_lower:
                 state.map.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
+                # Get specific resource amount from inventory if available
                 res_amount = inventory.get(resource, inv_amount) if isinstance(inventory, dict) else inv_amount
-                self._update_structure(
-                    state, pos, obj_name, StructureType.EXTRACTOR, None, cooldown, remaining, res_amount, resource
-                )
-                if DEBUG:
+                self._update_extractor(state, pos, obj_name, cooldown, remaining, res_amount, resource, has_inv_tokens)
+                if DEBUG and state.step < 10:
                     print(
                         f"[A{state.agent_id}] MAP: Found {resource} extractor at {pos} "
-                        f"(remaining={remaining}, inv_amount={res_amount}, inventory={inventory})"
+                        f"(remaining={remaining}, inv={res_amount}, has_inv={has_inv_tokens})"
                     )
                 return
+
+    def _update_extractor(
+        self,
+        state: AgentState,
+        pos: tuple[int, int],
+        obj_name: str,
+        cooldown: int,
+        remaining: int,
+        inv_amount: int,
+        resource_type: str,
+        has_inv_tokens: bool,
+    ) -> None:
+        """Update or create an extractor structure with proper inventory tracking.
+
+        Handles the distinction between:
+        - Chest-based extractors (have inventory, emit inv: tokens when non-empty)
+        - Protocol-based extractors (no inventory, use remaining_uses for depletion)
+        """
+        if pos in state.map.structures:
+            struct = state.map.structures[pos]
+            struct.last_seen_step = state.step
+            struct.cooldown_remaining = cooldown
+            struct.remaining_uses = remaining
+
+            if has_inv_tokens:
+                # We saw inventory tokens - this is a chest-based extractor with resources
+                struct.has_inventory = True
+                struct.inventory_amount = inv_amount
+            elif struct.has_inventory:
+                # We've seen inventory before but not now - extractor is depleted
+                struct.inventory_amount = 0
+            # else: Never seen inventory, keep as protocol-based (inventory_amount stays -1)
+        else:
+            # New extractor
+            state.map.structures[pos] = StructureInfo(
+                position=pos,
+                structure_type=StructureType.EXTRACTOR,
+                name=obj_name,
+                last_seen_step=state.step,
+                alignment=None,
+                resource_type=resource_type,
+                cooldown_remaining=cooldown,
+                remaining_uses=remaining,
+                inventory_amount=inv_amount if has_inv_tokens else -1,
+                has_inventory=has_inv_tokens,
+            )
 
     def _update_structure(
         self,
@@ -475,7 +550,7 @@ class MapTracker:
         inv_amount: int,
         resource_type: Optional[str] = None,
     ) -> None:
-        """Update or create a structure in the map."""
+        """Update or create a non-extractor structure in the map."""
         if pos in state.map.structures:
             struct = state.map.structures[pos]
             # Check if alignment changed
@@ -522,6 +597,49 @@ class MapTracker:
             return "clips"
         return None
 
+    def _update_recent_agents(self, state: AgentState, observed_agent_positions: set[tuple[int, int]]) -> None:
+        """Update tracking of recently-seen agents.
+
+        - Add/update agents we see this step
+        - Remove agents from positions in our observation window where we no longer see them
+        - Keep agents at positions outside our current observation (they might still be there)
+        """
+        from cogames_agents.policy.scripted_agent.pinky.state import AgentSighting
+
+        # Calculate current observation window bounds
+        min_r = state.row - self._obs_hr
+        max_r = state.row + self._obs_hr
+        min_c = state.col - self._obs_wr
+        max_c = state.col + self._obs_wr
+
+        # Update/add agents we see
+        for pos in observed_agent_positions:
+            state.map.recent_agents[pos] = AgentSighting(position=pos, last_seen_step=state.step)
+
+        # Remove agents from positions in our observation window that we don't see anymore
+        # (they moved or we were wrong about their position)
+        positions_to_remove: list[tuple[int, int]] = []
+        for pos in state.map.recent_agents:
+            # Check if position is in current observation window
+            if min_r <= pos[0] <= max_r and min_c <= pos[1] <= max_c:
+                # We can see this position - if no agent there, remove from tracking
+                if pos not in observed_agent_positions:
+                    positions_to_remove.append(pos)
+
+        for pos in positions_to_remove:
+            del state.map.recent_agents[pos]
+
+        # Also remove very stale agents (not seen for many steps and outside observation)
+        # This prevents memory buildup from agents that moved far away
+        stale_threshold = 50  # Remove if not seen for 50 steps
+        stale_positions: list[tuple[int, int]] = []
+        for pos, sighting in state.map.recent_agents.items():
+            if state.step - sighting.last_seen_step > stale_threshold:
+                stale_positions.append(pos)
+
+        for pos in stale_positions:
+            del state.map.recent_agents[pos]
+
     def _is_wall(self, obj_name: str) -> bool:
         """Check if object is a wall."""
         return "wall" in obj_name or "#" in obj_name
@@ -545,10 +663,16 @@ class MapTracker:
         state: AgentState,
         obs: AgentObservation,
         target_types: frozenset[str],
+        exclude_positions: Optional[set[tuple[int, int]]] = None,
     ) -> Optional[tuple[str, tuple[int, int]]]:
         """Get the direction to move toward nearest target in current observation.
 
         Uses A* pathfinding within the observation window.
+        Args:
+            state: Agent state
+            obs: Current observation
+            target_types: Set of object type names to target
+            exclude_positions: Optional set of world positions to exclude from targets
         Returns: (direction, world_pos) tuple or None if no path found.
             direction: "north", "south", "east", "west"
             world_pos: (row, col) in world coordinates
@@ -574,9 +698,15 @@ class MapTracker:
             # Check if this is a target (use substring matching for flexibility)
             is_target = match_name in target_types or any(t in match_name for t in target_types)
             if is_target:
-                target_cells.append((dr, dc))
-                if DEBUG and state.agent_id == 0 and state.step % 50 == 0:
-                    print(f"[A{state.agent_id}] DIR: Found target '{match_name}' at ({dr},{dc})")
+                # Check if this position should be excluded
+                world_pos = (state.row + dr, state.col + dc)
+                if exclude_positions and world_pos in exclude_positions:
+                    if DEBUG and state.agent_id == 0 and state.step % 50 == 0:
+                        print(f"[A{state.agent_id}] DIR: Excluding target '{match_name}' at {world_pos}")
+                else:
+                    target_cells.append((dr, dc))
+                    if DEBUG and state.agent_id == 0 and state.step % 50 == 0:
+                        print(f"[A{state.agent_id}] DIR: Found target '{match_name}' at ({dr},{dc})")
 
             # All objects block movement (except self at center)
             if dr != 0 or dc != 0:

@@ -102,10 +102,24 @@ class SafetyManager:
         candidates.sort(key=lambda x: x[0])
         return candidates[0][1]
 
+    def step_based_range_limit(self, step: int) -> int:
+        """Calculate exploration range limit based on current step.
+
+        - First 1000 ticks: limit range to 50
+        - After 1000 ticks: start at 100, increase by 10 every 100 ticks
+        """
+        if step < 1000:
+            return 50
+        else:
+            # Start at 100 at step 1000, increase by 10 every 100 steps
+            extra_hundreds = (step - 1000) // 100
+            return 100 + extra_hundreds * 10
+
     def max_safe_distance(self, state: AgentState, risk: RiskTolerance) -> int:
-        """Calculate max round-trip distance based on HP and risk tolerance.
+        """Calculate max round-trip distance based on HP, risk tolerance, and step.
 
         Returns the maximum total distance (to target + back to healing) that's safe.
+        Also applies step-based range limits to encourage gradual expansion.
         """
         # Reserve HP based on risk tolerance
         threshold = self.RETREAT_THRESHOLDS[risk]
@@ -114,13 +128,17 @@ class SafetyManager:
         # Calculate drain rate
         drain_rate = self._get_hp_drain_rate(state)
         if drain_rate <= 0:
-            return 999  # No drain, unlimited range
+            hp_based_dist = 999  # No drain, unlimited HP-based range
+        else:
+            # Max steps we can take before HP runs out
+            max_steps = available_hp // drain_rate
+            # Round trip, so divide by 2
+            hp_based_dist = max_steps // 2
 
-        # Max steps we can take before HP runs out
-        max_steps = available_hp // drain_rate
+        # Apply step-based range limit
+        step_limit = self.step_based_range_limit(state.step)
 
-        # Round trip, so divide by 2
-        return max_steps // 2
+        return min(hp_based_dist, step_limit)
 
     def can_reach_safely(self, state: AgentState, target: tuple[int, int], risk: RiskTolerance) -> bool:
         """Check if agent can reach target AND return to safety."""

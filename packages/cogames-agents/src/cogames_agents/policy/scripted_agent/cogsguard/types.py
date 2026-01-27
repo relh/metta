@@ -70,13 +70,23 @@ class StructureInfo:
     inventory_amount: int = 999  # Current resource amount in extractor inventory
 
     def is_usable_extractor(self) -> bool:
-        """Check if this is a usable extractor (not depleted, not clipped, has resources)."""
-        return (
-            self.structure_type == StructureType.EXTRACTOR
-            and self.remaining_uses > 0
-            and self.inventory_amount > 0
-            and not self.clipped
-        )
+        """Check if this is a usable extractor (not depleted, not clipped, has resources).
+
+        An extractor is usable if:
+        - It's an extractor structure type
+        - It has remaining uses (not permanently depleted)
+        - It has resources to extract (inventory_amount > 0)
+        - It's not owned by clips (clipped)
+        """
+        if self.structure_type != StructureType.EXTRACTOR:
+            return False
+        if self.remaining_uses <= 0:
+            return False
+        if self.inventory_amount <= 0:
+            return False
+        if self.clipped:
+            return False
+        return True
 
 
 # Map roles to their gear station names
