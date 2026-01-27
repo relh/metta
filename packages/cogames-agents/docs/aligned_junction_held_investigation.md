@@ -143,6 +143,75 @@ sim = Simulator().new_simulation(cfg, seed=42)
 "
 ```
 
+## 2026-01-27 Follow-up: 1000-step scripted runs (seed 42)
+
+This follow-up rechecked scripted agents on a single 1000-step `recipes.experiment.cogsguard` episode and compared the
+full evaluation pipeline (`tools/run.py evaluate`) with the debug harness
+(`packages/cogames-agents/scripts/run_cogsguard_rollout.py`).
+
+### 1) EvaluateTool results (max_steps=1000, max_workers=1)
+
+For each policy, we extracted `collective.cogs["aligned.junction.held"]` and `collective.clips["aligned.junction.held"]`
+from the episode stats. The cogs key is missing and effectively zero in all cases, while clips continues to accumulate
+junction hold time.
+
+| policy_uri              | cogs.aligned.junction.held | clips.aligned.junction.held |
+| ----------------------- | -------------------------- | --------------------------- |
+| metta://policy/wombo    | 0.00                       | 35033.00                    |
+| metta://policy/role     | 0.00                       | 37000.00                    |
+| metta://policy/role_py  | 0.00                       | 29023.00                    |
+| metta://policy/alignall | 0.00                       | 28021.00                    |
+| metta://policy/teacher  | 0.00                       | 36022.00                    |
+
+### 2) Debug harness instrumentation
+
+The debug harness gives role/gear/structure visibility that the eval pipeline does not.
+
+#### wombo (metta://policy/wombo)
+
+- aligner: 0 align attempts
+- scrambler: 3 scramble attempts
+- gear station use is mostly without resources (e.g., aligner 1055 uses, 1 with resources)
+- gear resource windows are rare (8-16 steps total), and even rarer when a role is adjacent (0-4 steps)
+
+#### role_py with miner-heavy ratio
+
+Command:
+
+```bash
+uv run packages/cogames-agents/scripts/run_cogsguard_rollout.py \
+  --steps 1000 --max-steps 1000 --seed 42 --agents 10 \
+  --policy-uri 'metta://policy/role_py?miner=5&scout=1&aligner=2&scrambler=2' \
+  --allow-missing-roles
+```
+
+Findings:
+
+- miners: 32 mine attempts, 29 deposits
+- aligner: 29 align attempts, 0 mismatches
+- scrambler: 4 scramble attempts
+- gear station use is still mostly without resources (aligner 970 uses, 1 with resources)
+- resource windows are short (17-21 steps) with limited adjacency (0-4 steps)
+
+#### Note on Nim role policy
+
+The Nim `metta://policy/role` policy does not expose per-agent `_state` to the harness, so role-level instrumentation
+appears empty. Use `role_py` for detailed instrumentation.
+
+### 3) Interpretation
+
+These 1000-step runs still point to resource/coordination starvation (gear resource windows and adjacency are rare),
+rather than purely insufficient miner counts.
+
+### 4) Future plans / next debug targets
+
+- Instrument why resource windows are so brief (collective inventory deltas vs gear costs) and whether miners are
+  depositing in the right chest/collective bucket.
+- Check if role agents are reaching the right stations when resources are available (trace adjacency timing).
+- Verify whether align/scramble actions require additional prerequisites (hearts/influence) that remain starved.
+- Compare 1000-step vs 3000-step runs to see if longer horizons meaningfully increase cogs alignment.
+- Add a small experiment that forces fixed role ratios in `wombo` (or a targeted policy) to isolate role-mix effects.
+
 ## Related Files
 
 - `packages/cogames/src/cogames/cogs_vs_clips/mission.py` - CogsGuard mission config
