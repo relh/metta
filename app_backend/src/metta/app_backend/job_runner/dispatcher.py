@@ -135,7 +135,7 @@ def create_episode_job(job: JobRequest, use_tournament_account: bool = False) ->
         job_spec = job.job.copy()
         original_policy_uris: list[str] = job_spec.pop("policy_uris", [])
 
-        stats_client = StatsClient.create(cfg.STATS_SERVER_URI)
+        stats_client = StatsClient(cfg.STATS_SERVER_URI, machine_token=cfg.MACHINE_TOKEN)
         policy_s3_keys = [resolve_policy_uri_to_s3_key(uri, stats_client) for uri in original_policy_uris]
 
         exp = cfg.PRESIGNED_URL_EXPIRATION
