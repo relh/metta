@@ -10,14 +10,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-
-class Role(Enum):
-    """Agent roles in CogsGuard."""
-
-    MINER = "miner"
-    SCOUT = "scout"
-    ALIGNER = "aligner"
-    SCRAMBLER = "scrambler"
+from cogames_agents.policy.scripted_agent.common.roles import (
+    Role,
+)
 
 
 class RiskTolerance(Enum):
@@ -34,33 +29,6 @@ ROLE_RISK_TOLERANCE: dict[Role, RiskTolerance] = {
     Role.SCOUT: RiskTolerance.AGGRESSIVE,
     Role.ALIGNER: RiskTolerance.MODERATE,
     Role.SCRAMBLER: RiskTolerance.AGGRESSIVE,
-}
-
-# Map roles to their gear station names
-ROLE_TO_STATION: dict[Role, str] = {
-    Role.MINER: "miner_station",
-    Role.SCOUT: "scout_station",
-    Role.ALIGNER: "aligner_station",
-    Role.SCRAMBLER: "scrambler_station",
-}
-
-# Map roles to the gear item name in inventory
-ROLE_TO_GEAR: dict[Role, str] = {
-    Role.MINER: "miner",
-    Role.SCOUT: "scout",
-    Role.ALIGNER: "aligner",
-    Role.SCRAMBLER: "scrambler",
-}
-
-# Role vibes that can be assigned
-ROLE_VIBES = ["miner", "scout", "aligner", "scrambler"]
-
-# Map vibe names to roles
-VIBE_TO_ROLE: dict[str, Role] = {
-    "miner": Role.MINER,
-    "scout": Role.SCOUT,
-    "aligner": Role.ALIGNER,
-    "scrambler": Role.SCRAMBLER,
 }
 
 

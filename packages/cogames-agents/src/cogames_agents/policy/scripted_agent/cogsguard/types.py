@@ -10,19 +10,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
+from cogames_agents.policy.scripted_agent.common.roles import ROLE_TO_GEAR, ROLE_TO_STATION, Role
 from mettagrid.simulator import Action
 
 if TYPE_CHECKING:
     from mettagrid.simulator.interface import AgentObservation
-
-
-class Role(Enum):
-    """Agent roles in CoGsGuard."""
-
-    MINER = "miner"
-    SCOUT = "scout"
-    ALIGNER = "aligner"
-    SCRAMBLER = "scrambler"
 
 
 class CogsguardPhase(Enum):
@@ -89,28 +81,12 @@ class StructureInfo:
         return True
 
 
-# Map roles to their gear station names
-ROLE_TO_STATION = {
-    Role.MINER: "miner_station",
-    Role.SCOUT: "scout_station",
-    Role.ALIGNER: "aligner_station",
-    Role.SCRAMBLER: "scrambler_station",
-}
-
 # Map roles to their gear station structure types
 ROLE_TO_STRUCTURE_TYPE = {
     Role.MINER: StructureType.MINER_STATION,
     Role.SCOUT: StructureType.SCOUT_STATION,
     Role.ALIGNER: StructureType.ALIGNER_STATION,
     Role.SCRAMBLER: StructureType.SCRAMBLER_STATION,
-}
-
-# Map roles to the gear item name in inventory
-ROLE_TO_GEAR = {
-    Role.MINER: "miner",
-    Role.SCOUT: "scout",
-    Role.ALIGNER: "aligner",
-    Role.SCRAMBLER: "scrambler",
 }
 
 

@@ -4,6 +4,7 @@ from mettagrid.policy.policy import MultiAgentPolicy, StatefulAgentPolicy, State
 from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
 
+from .common.geometry import manhattan
 from .types import BaselineHyperparameters, CellType, SimpleAgentState
 from .utils import (
     change_vibe_action,
@@ -14,10 +15,6 @@ from .utils import (
     update_agent_position,
     use_object_at,
 )
-
-
-def manhattan(a, b):
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
 class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):

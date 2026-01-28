@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING, Optional, Union
 
+from cogames_agents.policy.scripted_agent.common.tag_utils import derive_alignment, select_primary_tag
 from cogames_agents.policy.scripted_agent.pinky.types import (
     DEBUG,
     ROLE_TO_STATION,
@@ -361,7 +362,7 @@ class MapTracker:
     def _get_object_name(self, features: dict[str, Union[int, list[int], dict[str, int]]]) -> str:
         """Get object name from features - prioritize type: tags over collective: tags.
 
-        Priority order (matching utils.py _select_primary_tag):
+        Priority order (matching common.tag_utils.select_primary_tag):
         1. type:* tags (strip prefix and return the type name)
         2. Non-collective tags that are PRIORITY_OBJECTS
         3. Any non-collective tag
@@ -371,30 +372,8 @@ class MapTracker:
         if not isinstance(tags_value, list) or not tags_value:
             return "unknown"
 
-        # Resolve all tag names
         resolved_tags = [self._tag_names.get(tag_id, "") for tag_id in tags_value]
-
-        # First priority: type:* tags (preferred for identifying game objects)
-        for tag in resolved_tags:
-            if tag.startswith("type:"):
-                return tag[5:]  # Strip "type:" prefix
-
-        # Second priority: PRIORITY_OBJECTS among non-collective tags
-        for tag in resolved_tags:
-            if tag and not tag.startswith("collective:") and tag in self.PRIORITY_OBJECTS:
-                return tag
-
-        # Third priority: any non-collective tag
-        for tag in resolved_tags:
-            if tag and not tag.startswith("collective:"):
-                return tag
-
-        # Fallback: first non-empty tag
-        for tag in resolved_tags:
-            if tag:
-                return tag
-
-        return "unknown"
+        return select_primary_tag(resolved_tags, priority_objects=set(self.PRIORITY_OBJECTS))
 
     def _process_object(
         self,
@@ -590,26 +569,13 @@ class MapTracker:
             )
 
     def _derive_alignment(self, obj_name: str, clipped: int, collective_id: Optional[int] = None) -> Optional[str]:
-        """Derive alignment from collective ID, object name, and clipped status.
-
-        Priority:
-        1. Collective ID from observation (most reliable)
-        2. Object name containing "cogs" or "clips"
-        3. Clipped flag (clips territory marker)
-        """
-        # First check collective ID from observation (most reliable)
-        if collective_id is not None:
-            if collective_id == self._cogs_collective_id:
-                return "cogs"
-            elif collective_id == self._clips_collective_id:
-                return "clips"
-
-        # Fall back to name-based detection
-        if "cogs" in obj_name:
-            return "cogs"
-        if "clips" in obj_name or clipped > 0:
-            return "clips"
-        return None
+        return derive_alignment(
+            obj_name,
+            clipped,
+            collective_id,
+            cogs_collective_id=self._cogs_collective_id,
+            clips_collective_id=self._clips_collective_id,
+        )
 
     def _update_recent_agents(self, state: AgentState, observed_agent_positions: set[tuple[int, int]]) -> None:
         """Update tracking of recently-seen agents.

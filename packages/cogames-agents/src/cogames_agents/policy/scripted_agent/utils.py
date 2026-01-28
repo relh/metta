@@ -11,14 +11,14 @@ from typing import Any, Iterable, cast
 from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
 
+from .common.geometry import is_adjacent as geometry_is_adjacent
+from .common.tag_utils import select_primary_tag
 from .types import ObjectState, ParsedObservation, SimpleAgentState
 
 
 def is_adjacent(pos1: tuple[int, int], pos2: tuple[int, int]) -> bool:
     """Check if two positions are adjacent (4-way cardinal directions)."""
-    dr = abs(pos1[0] - pos2[0])
-    dc = abs(pos1[1] - pos2[1])
-    return (dr == 1 and dc == 0) or (dr == 0 and dc == 1)
+    return geometry_is_adjacent(pos1, pos2)
 
 
 def is_wall(obj_name: str) -> bool:
@@ -105,16 +105,6 @@ def process_feature_at_position(
         return
 
 
-def _select_primary_tag(tags: list[str]) -> str:
-    for tag in tags:
-        if tag.startswith("type:"):
-            return tag.split(":", 1)[1]
-    for tag in tags:
-        if not tag.startswith("collective:"):
-            return tag
-    return tags[0]
-
-
 def has_type_tag(tags: Iterable[str], tokens: Iterable[str]) -> bool:
     for tag in tags:
         if not tag.startswith("type:"):
@@ -147,7 +137,7 @@ def create_object_state(
     # Pick a primary object name with tag precedence.
     if tag_ids:
         tags = [tag_names.get(tag_id, f"unknown_tag_{tag_id}") for tag_id in tag_ids]
-        obj_name = _select_primary_tag(tags)
+        obj_name = select_primary_tag(tags)
     else:
         tags = []
         obj_name = "unknown"

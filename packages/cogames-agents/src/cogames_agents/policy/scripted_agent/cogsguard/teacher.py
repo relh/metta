@@ -6,11 +6,12 @@ import numpy as np
 
 from cogames_agents.policy.nim_agents.agents import CogsguardAgentsMultiPolicy
 from cogames_agents.policy.scripted_agent.cogsguard.types import Role as CogsguardRole
+from cogames_agents.policy.scripted_agent.common.roles import ROLE_VIBES
 from mettagrid.policy.policy import AgentPolicy, MultiAgentPolicy
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action, AgentObservation
 
-DEFAULT_ROLE_VIBES = ("miner", "scout", "aligner", "scrambler")
+DEFAULT_ROLE_VIBES = tuple(ROLE_VIBES)
 
 
 class CogsguardTeacherPolicy(MultiAgentPolicy):

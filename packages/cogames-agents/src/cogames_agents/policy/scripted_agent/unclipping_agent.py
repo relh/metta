@@ -21,7 +21,7 @@ from .types import (
     Phase,
     SimpleAgentState,
 )
-from .utils import use_object_at
+from .utils import is_adjacent, use_object_at
 
 if TYPE_CHECKING:
     pass
@@ -375,11 +375,7 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
             return Action(name="noop")
 
         ar, ac = assembler
-        dr = abs(s.row - ar)
-        dc = abs(s.col - ac)
-        is_adjacent = (dr == 1 and dc == 0) or (dr == 0 and dc == 1)
-
-        if is_adjacent:
+        if is_adjacent((s.row, s.col), assembler):
             return use_object_at(s, assembler)
 
         return self._move_towards(s, assembler, reach_adjacent=True)
@@ -407,17 +403,14 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
         # Navigate to clipped extractor
         target = s.blocked_by_clipped_extractor
         tr, tc = target
-        dr = abs(s.row - tr)
-        dc = abs(s.col - tc)
-        is_at_target = dr == 0 and dc == 0
-        is_adjacent = (dr == 1 and dc == 0) or (dr == 0 and dc == 1)
+        is_at_target = s.row == tr and s.col == tc
 
         if is_at_target:
             # Already on the extractor - it should be unclipped now
             # Wait for next step to verify and clear state
             return Action(name="noop")
 
-        if is_adjacent:
+        if is_adjacent((s.row, s.col), target):
             # Adjacent to clipped extractor - use it to unclip (like using any other object)
             action = use_object_at(s, target)
             # Don't clear unclip state yet - wait until next step to verify it worked

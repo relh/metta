@@ -7,7 +7,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from cogames_agents.policy.scripted_agent.common.geometry import (
+    is_adjacent as geometry_is_adjacent,
+)
+from cogames_agents.policy.scripted_agent.common.geometry import (
+    manhattan_distance as geometry_manhattan_distance,
+)
 from cogames_agents.policy.scripted_agent.pinky.types import RiskTolerance, Role
+from cogames_agents.policy.scripted_agent.utils import change_vibe_action as utils_change_vibe_action
 from mettagrid.simulator import Action
 
 if TYPE_CHECKING:
@@ -46,22 +53,17 @@ class RoleBehavior(Protocol):
 
 def is_adjacent(pos1: tuple[int, int], pos2: tuple[int, int]) -> bool:
     """Check if two positions are adjacent (4-way)."""
-    dr = abs(pos1[0] - pos2[0])
-    dc = abs(pos1[1] - pos2[1])
-    return (dr == 1 and dc == 0) or (dr == 0 and dc == 1)
+    return geometry_is_adjacent(pos1, pos2)
 
 
 def manhattan_distance(pos1: tuple[int, int], pos2: tuple[int, int]) -> int:
     """Calculate Manhattan distance."""
-    return abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1])
+    return geometry_manhattan_distance(pos1, pos2)
 
 
 def change_vibe_action(vibe_name: str, services: Services) -> Action:
     """Return action to change vibe."""
-    change_vibe_actions = [a for a in services.action_names if a.startswith("change_vibe_")]
-    if len(change_vibe_actions) <= 1:
-        return Action(name="noop")
-    return Action(name=f"change_vibe_{vibe_name}")
+    return utils_change_vibe_action(vibe_name, action_names=services.action_names)
 
 
 # Steps to aggressively explore before falling back to navigator
