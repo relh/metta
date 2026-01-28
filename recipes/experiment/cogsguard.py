@@ -18,7 +18,6 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
     DiscreteRandomConfig,
 )
-from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
@@ -32,13 +31,15 @@ from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
 def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
-    """Normalize reward variants to a list of variant names."""
+    """Normalize reward variants to a list of variant names.
+
+    Note: an empty list means "no variants" (use mission defaults).
+    """
     if variants is None:
-        return ["objective"]
+        return []
     if isinstance(variants, str):
         return [variants]
-    variant_list = list(variants)
-    return variant_list or ["objective"]
+    return list(variants)
 
 
 def make_env(
@@ -58,21 +59,10 @@ def make_curriculum(
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
     variants: str | Sequence[str] | None = None,
 ) -> CurriculumConfig:
-    variant_list = _normalize_variants(variants)
-
-    if variant_list:
-        task_generators = []
-        for variant in variant_list:
-            env_variant = make_env(variants=[variant])
-            tasks_cfg = cc.bucketed(env_variant)
-            task_generators.append(tasks_cfg)
-
-        merged_tasks = cc.merge(task_generators) if len(task_generators) > 1 else task_generators[0]
-        algorithm_config = algorithm_config or LearningProgressConfig()
-        return merged_tasks.to_curriculum(algorithm_config=algorithm_config)
-
-    env = env or make_env(variants=None)
-    tasks = cc.bucketed(env)
+    # Reward variants are stackable, so we keep a single env/curriculum and pass
+    # the full variant list through.
+    env = env or make_env(variants=variants)
+    tasks = cc.single_task(env)
 
     if algorithm_config is None:
         algorithm_config = DiscreteRandomConfig()
@@ -84,9 +74,7 @@ def simulations(
     env: Optional[MettaGridConfig] = None,
     variants: str | Sequence[str] | None = None,
 ) -> list[SimulationConfig]:
-    selected_variant = _normalize_variants(variants)[0]
-
-    env = env or make_env(variants=[selected_variant] if selected_variant is not None else None)
+    env = env or make_env(variants=variants)
 
     return [
         SimulationConfig(suite="cogsguard", name="basic", env=env),
