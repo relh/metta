@@ -66,5 +66,11 @@ The `recipes.experiment.scripted_agents` recipe accepts the same scripted policy
 ## Included policies
 
 - Short names map to the fastest implementation (Nim when available, otherwise Python).
+- `_nim` aliases exist when there is a Nim implementation alongside Python.
 - See `docs/scripted-agent-registry.md` for the canonical short-name list.
-- Teacher wrapper: `teacher` forces an initial role/vibe, then delegates to the Nim policy.
+- Teacher wrapper: `teacher` (`teacher_nim`) forces an initial role/vibe, then delegates to the Nim policy.
+
+## Docs
+
+- `docs/mettaboxes.md` (mettabox usage guide)
+- `docs/aws-sso-on-mettabox.md` (AWS SSO login from inside mettabox containers)
