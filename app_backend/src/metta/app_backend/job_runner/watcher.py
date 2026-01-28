@@ -1,6 +1,7 @@
 import functools
 import json
 import logging
+import threading
 import time
 from typing import Literal, Optional, TypedDict, cast
 from urllib.parse import urlparse
@@ -26,6 +27,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.job_runner.episode_recording import record_job_episode
+from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
@@ -48,6 +50,17 @@ def _get_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
     return client.CoreV1Api(), client.BatchV1Api()
 
 
+def _get_eval_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api] | None:
+    cfg = get_dispatch_config()
+    if not cfg.EVAL_CLUSTER_ROLE_ARN:
+        return None
+    try:
+        return get_tournament_clients()
+    except Exception as e:
+        logger.error(f"Failed to create eval cluster clients: {e}", exc_info=True)
+        return None
+
+
 # ADDED: Pod created (usually starts in Pending phase)
 # MODIFIED: Pod state changed (phase transitions, container status updates)
 # DELETED: Pod removed from cluster
@@ -61,49 +74,22 @@ class K8sPodWatchEvent(TypedDict):
     object: client.V1Pod
 
 
-def run_watcher():
-    cfg = get_dispatch_config()
-    _get_k8s_clients()
-
-    start_health_server()
-
-    stats_client = StatsClient(backend_url=cfg.STATS_SERVER_URI, machine_token=cfg.MACHINE_TOKEN)
-    stats_client._validate_authenticated()
-    logger.info(f"Watcher started: stats_server_uri={cfg.STATS_SERVER_URI}, namespace={cfg.JOB_NAMESPACE}")
-
-    last_reconcile = 0.0
-
-    try:
-        while True:
-            try:
-                _watch_pods(stats_client)
-
-                now = time.monotonic()
-                if now - last_reconcile >= RECONCILE_INTERVAL_SECONDS:
-                    _reconcile_stale_jobs(stats_client)
-                    last_reconcile = now
-            except Exception as e:
-                logger.error(f"Watch error, restarting: {e}", exc_info=True)
-                time.sleep(1)
-    finally:
-        stats_client.close()
-
-
-def _watch_pods(stats_client: StatsClient):
+def _watch_pods_with_client(
+    stats_client: StatsClient, core_v1: client.CoreV1Api, batch_v1: client.BatchV1Api, cluster_name: str
+):
     cfg = get_dispatch_config()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
-    core_v1, _ = _get_k8s_clients()
 
     pod_list = core_v1.list_namespaced_pod(namespace=cfg.JOB_NAMESPACE, label_selector=label_selector)
     if not pod_list.metadata or not pod_list.metadata.resource_version:
-        logger.error(f"Invalid pod list: {pod_list}")
+        logger.error(f"Invalid pod list on cluster={cluster_name}: {pod_list}")
         return
 
     for pod in pod_list.items:
-        _handle_pod_state(stats_client, pod)
+        _handle_pod_state(stats_client, batch_v1, pod)
 
     resource_version = pod_list.metadata.resource_version
-    logger.info(f"Starting pod watch from resourceVersion={resource_version}")
+    logger.info(f"Starting pod watch on cluster={cluster_name} from resourceVersion={resource_version}")
     update_heartbeat()
 
     w = watch.Watch()
@@ -118,9 +104,61 @@ def _watch_pods(stats_client: StatsClient):
         update_heartbeat()
         event_type, pod = event["type"], event["object"]
         if event_type in ("ADDED", "MODIFIED"):
-            _handle_pod_state(stats_client, pod)
+            _handle_pod_state(stats_client, batch_v1, pod)
         elif event_type == "DELETED":
             _handle_pod_deleted(stats_client, pod)
+
+
+def _watch_loop(
+    stats_client: StatsClient,
+    cluster_name: str,
+    get_clients: callable,  # type: ignore[valid-type]
+):
+    logger.info(f"Watch loop starting for cluster={cluster_name}")
+    while True:
+        try:
+            clients = get_clients()
+            if clients is None:
+                logger.warning("Eval cluster clients unavailable, retrying in 30s")
+                time.sleep(30)
+                continue
+            core_v1, batch_v1 = clients
+            _watch_pods_with_client(stats_client, core_v1, batch_v1, cluster_name)
+        except Exception as e:
+            logger.error(f"Watch error on cluster={cluster_name}, restarting: {e}", exc_info=True)
+            time.sleep(1)
+
+
+def run_watcher():
+    cfg = get_dispatch_config()
+    _get_k8s_clients()
+
+    start_health_server()
+
+    stats_client = StatsClient(backend_url=cfg.STATS_SERVER_URI, machine_token=cfg.MACHINE_TOKEN)
+    stats_client._validate_authenticated()
+    logger.info(f"Watcher started: stats_server_uri={cfg.STATS_SERVER_URI}, namespace={cfg.JOB_NAMESPACE}")
+
+    eval_clients = _get_eval_k8s_clients()
+    if eval_clients is not None:
+        logger.info("Eval cluster configured, starting eval watch thread")
+        t = threading.Thread(
+            target=_watch_loop,
+            args=(stats_client, "eval", _get_eval_k8s_clients),
+            daemon=True,
+        )
+        t.start()
+    else:
+        logger.info("Eval cluster not configured, watching main cluster only")
+
+    # TODO: Reconciliation disabled — tournament jobs run on the eval cluster,
+    # so the main-cluster-only pod check would incorrectly mark them as failed.
+    # Re-enable once we consolidate back to a single cluster.
+
+    try:
+        _watch_loop(stats_client, "main", _get_k8s_clients)
+    finally:
+        stats_client.close()
 
 
 @trace("tournament.job.reconcile")
@@ -295,7 +333,7 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
 
 
 @trace("tournament.job.status_update")
-def _handle_pod_state(stats_client: StatsClient, pod: client.V1Pod):
+def _handle_pod_state(stats_client: StatsClient, batch_v1: client.BatchV1Api, pod: client.V1Pod):
     info = _get_job_info(pod)
     if not info or not pod.status:
         return
@@ -312,12 +350,12 @@ def _handle_pod_state(stats_client: StatsClient, pod: client.V1Pod):
 
     if phase == "Succeeded":
         _handle_pod_succeeded(stats_client, job_id, pod_name, pod)
-        _delete_k8s_job_for_pod(pod)
+        _delete_k8s_job_for_pod(batch_v1, pod)
     elif phase == "Failed":
-        error = _get_pod_error(pod)
+        error = _get_pod_error(batch_v1, pod)
         error_type = _classify_error(error)
         _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
-        _delete_k8s_job_for_pod(pod)
+        _delete_k8s_job_for_pod(batch_v1, pod)
         logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
     elif phase == "Running" and _is_container_running(pod):
         _update_job_status(stats_client, job_id, JobStatus.running, worker=pod_name)
@@ -344,8 +382,8 @@ def _is_container_running(pod: client.V1Pod) -> bool:
     return any(cs.state and cs.state.running for cs in pod.status.container_statuses)
 
 
-def _get_pod_error(pod: client.V1Pod) -> str:
-    job_error = _get_job_failure_reason(pod)
+def _get_pod_error(batch_v1: client.BatchV1Api, pod: client.V1Pod) -> str:
+    job_error = _get_job_failure_reason(batch_v1, pod)
     if job_error:
         return job_error
     if pod.status:
@@ -381,14 +419,13 @@ def _classify_error(error: str) -> str:
     return "unknown"
 
 
-def _get_job_failure_reason(pod: client.V1Pod) -> str | None:
+def _get_job_failure_reason(batch_v1: client.BatchV1Api, pod: client.V1Pod) -> str | None:
     """Get failure reason from the parent Job's conditions (e.g., DeadlineExceeded, BackoffLimitExceeded)."""
     job_name = _get_job_name_for_pod(pod)
     if not job_name:
         return None
     try:
         cfg = get_dispatch_config()
-        _, batch_v1 = _get_k8s_clients()
         job = cast(client.V1Job, batch_v1.read_namespaced_job(name=job_name, namespace=cfg.JOB_NAMESPACE))
         if job.status and job.status.conditions:
             for cond in job.status.conditions:
@@ -405,13 +442,12 @@ def _get_job_name_for_pod(pod: client.V1Pod) -> str | None:
     return next((ref.name for ref in pod.metadata.owner_references if ref.kind == "Job"), None)
 
 
-def _delete_k8s_job_for_pod(pod: client.V1Pod):
+def _delete_k8s_job_for_pod(batch_v1: client.BatchV1Api, pod: client.V1Pod):
     job_name = _get_job_name_for_pod(pod)
     if not job_name:
         return
     try:
         cfg = get_dispatch_config()
-        _, batch_v1 = _get_k8s_clients()
         batch_v1.delete_namespaced_job(name=job_name, namespace=cfg.JOB_NAMESPACE, propagation_policy="Background")
     except ApiException as e:
         if e.status == 404:

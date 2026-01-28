@@ -25,6 +25,7 @@ _cluster_endpoint: str | None = None
 _ca_path: str | None = None
 _config: Configuration | None = None
 _batch_api: client.BatchV1Api | None = None
+_core_api: client.CoreV1Api | None = None
 
 
 # Generates an EKS-compatible bearer token by creating a presigned STS GetCallerIdentity URL.
@@ -101,8 +102,8 @@ def _get_cluster_info(assumed_creds: dict[str, str]) -> tuple[str, str]:
     return endpoint, ca_path
 
 
-def get_tournament_client() -> client.BatchV1Api:
-    global _config, _batch_api
+def _ensure_config() -> Configuration:
+    global _config, _batch_api, _core_api
 
     cfg = get_dispatch_config()
     if not cfg.EVAL_CLUSTER_ROLE_ARN or not cfg.EVAL_CLUSTER_NAME:
@@ -112,14 +113,31 @@ def get_tournament_client() -> client.BatchV1Api:
     endpoint, ca_path = _get_cluster_info(assumed_creds)
     token = _get_eks_bearer_token(_sts_client, cfg.EVAL_CLUSTER_NAME)
 
-    if _batch_api is None or _config is None:
+    if _config is None:
         config = Configuration()
         config.host = endpoint
         config.ssl_ca_cert = ca_path  # type: ignore
         config.api_key = {"authorization": f"Bearer {token}"}
         _config = config
-        _batch_api = client.BatchV1Api(ApiClient(config))
+        _batch_api = None
+        _core_api = None
     else:
         _config.api_key = {"authorization": f"Bearer {token}"}
 
-    return _batch_api
+    return _config
+
+
+def get_tournament_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
+    global _core_api, _batch_api
+
+    config = _ensure_config()
+    if _core_api is None:
+        _core_api = client.CoreV1Api(ApiClient(config))
+    if _batch_api is None:
+        _batch_api = client.BatchV1Api(ApiClient(config))
+    return _core_api, _batch_api
+
+
+def get_tournament_client() -> client.BatchV1Api:
+    _, batch = get_tournament_clients()
+    return batch
