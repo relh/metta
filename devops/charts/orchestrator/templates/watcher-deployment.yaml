@@ -61,6 +61,8 @@ spec:
           value: {{ .Values.watcher.evalClusterRoleArn | quote }}
         - name: EVAL_CLUSTER_NAME
           value: {{ .Values.watcher.evalClusterName | quote }}
+        - name: EVAL_S3_BUCKET
+          value: {{ .Values.watcher.evalS3Bucket | quote }}
         resources:
           {{- toYaml .Values.watcher.resources | nindent 10 }}
 {{- end }}
