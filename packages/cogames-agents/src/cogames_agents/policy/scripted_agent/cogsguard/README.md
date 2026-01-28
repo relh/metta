@@ -6,15 +6,15 @@ A vibe-based multi-agent policy for the Cogs vs Clips arena game.
 
 Agents use **vibes** to determine their behavior dynamically:
 
-| Vibe        | Behavior                                                   |
-| ----------- | ---------------------------------------------------------- |
-| `default`   | Do nothing (noop) - agent is idle                          |
-| `gear`      | Pick a role via the smart coordinator, change vibe         |
-| `miner`     | Get miner gear if needed, then mine resources              |
-| `scout`     | Get scout gear if needed, then explore the map             |
-| `aligner`   | Get aligner gear if needed, then align chargers to cogs    |
-| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers |
-| `heart`     | Do nothing (noop)                                          |
+| Vibe        | Behavior                                                        |
+| ----------- | --------------------------------------------------------------- |
+| `default`   | Do nothing (noop) - agent is idle                               |
+| `gear`      | Pick a role via the smart/evolutionary coordinator, change vibe |
+| `miner`     | Get miner gear if needed, then mine resources                   |
+| `scout`     | Get scout gear if needed, then explore the map                  |
+| `aligner`   | Get aligner gear if needed, then align chargers to cogs         |
+| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers      |
+| `heart`     | Do nothing (noop)                                               |
 
 This allows external systems (like training policies) to control agent behavior by setting their vibe.
 
@@ -195,13 +195,14 @@ You can control how many agents start with each role using URI query parameters:
 
 **Supported vibe parameters:**
 
-| Parameter   | Description                                      |
-| ----------- | ------------------------------------------------ |
-| `miner`     | Number of agents starting as miners              |
-| `scout`     | Number of agents starting as scouts              |
-| `aligner`   | Number of agents starting as aligners            |
-| `scrambler` | Number of agents starting as scramblers          |
-| `gear`      | Number of agents starting with gear (smart role) |
+| Parameter   | Description                                                                           |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `miner`     | Number of agents starting as miners                                                   |
+| `scout`     | Number of agents starting as scouts                                                   |
+| `aligner`   | Number of agents starting as aligners                                                 |
+| `scrambler` | Number of agents starting as scramblers                                               |
+| `gear`      | Number of agents starting with gear (smart role)                                      |
+| `evolution` | Use evolutionary role selection for `gear` agents (aliases: `evolutionary`, `evolve`) |
 
 **Assignment order:** `scrambler → aligner → miner → scout → gear`
 

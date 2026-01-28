@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from cogames_agents.policy.evolution.cogsguard.evolutionary_coordinator import (
+    EvolutionaryRoleCoordinator,
+)
 from cogames_agents.policy.scripted_agent.pathfinding import (
     compute_goal_cells,
     shortest_path,
@@ -368,11 +371,15 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         agent_id: int,
         role: Role,
         smart_role_coordinator: Optional[SmartRoleCoordinator] = None,
+        evolutionary_role_coordinator: Optional[EvolutionaryRoleCoordinator] = None,
+        use_evolutionary_roles: bool = False,
     ):
         self._agent_id = agent_id
         self._role = role
         self._policy_env_info = policy_env_info
         self._smart_role_coordinator = smart_role_coordinator
+        self._evolutionary_role_coordinator = evolutionary_role_coordinator
+        self._use_evolutionary_roles = use_evolutionary_roles
         # Some env configs omit move_energy_cost; default to 1 to match simulator fallback.
         self._move_energy_cost = getattr(policy_env_info, "move_energy_cost", 1)
 
@@ -407,6 +414,13 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
     def _has_vibe(self, vibe_name: str) -> bool:
         return vibe_name in self._vibe_names
+
+    def _choose_role_vibe(self, s: CogsguardAgentState) -> str:
+        if self._use_evolutionary_roles and self._evolutionary_role_coordinator is not None:
+            return self._evolutionary_role_coordinator.choose_vibe(s.agent_id, s.step_count)
+        if self._smart_role_coordinator is None:
+            return random.choice(ROLE_VIBES)
+        return self._smart_role_coordinator.choose_role(s.agent_id)
 
     def _move(self, direction: str) -> Action:
         action_name = f"move_{direction}"
@@ -869,10 +883,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
         # Gear vibe: pick a role and change vibe to it
         if vibe == "gear":
-            if self._smart_role_coordinator is None:
-                selected_role = random.choice(ROLE_VIBES)
-            else:
-                selected_role = self._smart_role_coordinator.choose_role(s.agent_id)
+            selected_role = self._choose_role_vibe(s)
             if DEBUG:
                 print(f"[A{s.agent_id}] GEAR_VIBE: Picking role vibe: {selected_role}")
             return change_vibe_action(selected_role, action_names=self._action_names)
@@ -1297,7 +1308,7 @@ class CogsguardPolicy(MultiAgentPolicy):
 
     Agents use vibes to determine their behavior:
     - default: do nothing
-    - gear: pick a role via smart coordinator, change vibe to that role
+    - gear: pick a role via smart or evolutionary coordinator, change vibe to that role
     - miner/scout/aligner/scrambler: get gear then execute role
     - heart: do nothing
 
@@ -1327,6 +1338,25 @@ class CogsguardPolicy(MultiAgentPolicy):
         self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
         self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
+
+        def _parse_flag(value: object) -> bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, int):
+                return value != 0
+            if isinstance(value, str):
+                return value.strip().lower() in {"1", "true", "yes", "on"}
+            return False
+
+        self._use_evolutionary_roles = (
+            _parse_flag(vibe_counts.pop("evolution", None))
+            or _parse_flag(vibe_counts.pop("evolutionary", None))
+            or _parse_flag(vibe_counts.pop("evolve", None))
+        )
+        self._evolutionary_role_coordinator = (
+            EvolutionaryRoleCoordinator(policy_env_info.num_agents) if self._use_evolutionary_roles else None
+        )
+        self._evolutionary_hooks_configured = False
 
         available_vibes = {
             name[len("change_vibe_") :] for name in policy_env_info.action_names if name.startswith("change_vibe_")
@@ -1391,7 +1421,14 @@ class CogsguardPolicy(MultiAgentPolicy):
                 agent_id,
                 initial_target_vibe=target_vibe,
                 smart_role_coordinator=self._smart_role_coordinator,
+                evolutionary_role_coordinator=self._evolutionary_role_coordinator,
+                use_evolutionary_roles=self._use_evolutionary_roles,
             )
+            if self._evolutionary_role_coordinator is not None and not self._evolutionary_hooks_configured:
+                from .behavior_hooks import build_cogsguard_behavior_hooks
+
+                self._evolutionary_role_coordinator.behavior_hooks.update(build_cogsguard_behavior_hooks(impl))
+                self._evolutionary_hooks_configured = True
             self._agent_policies[agent_id] = StatefulAgentPolicy(impl, self._policy_env_info, agent_id=agent_id)
 
         return self._agent_policies[agent_id]
@@ -1434,9 +1471,18 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
         agent_id: int,
         initial_target_vibe: Optional[str] = None,
         smart_role_coordinator: Optional[SmartRoleCoordinator] = None,
+        evolutionary_role_coordinator: Optional[EvolutionaryRoleCoordinator] = None,
+        use_evolutionary_roles: bool = False,
     ):
         # Initialize with MINER as default, but role will be updated based on vibe
-        super().__init__(policy_env_info, agent_id, Role.MINER, smart_role_coordinator=smart_role_coordinator)
+        super().__init__(
+            policy_env_info,
+            agent_id,
+            Role.MINER,
+            smart_role_coordinator=smart_role_coordinator,
+            evolutionary_role_coordinator=evolutionary_role_coordinator,
+            use_evolutionary_roles=use_evolutionary_roles,
+        )
 
         # Target vibe to switch to at start (if specified)
         self._initial_target_vibe = initial_target_vibe
@@ -1489,10 +1535,7 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
 
         # Gear vibe: pick a role and change vibe to it
         if vibe == "gear":
-            if self._smart_role_coordinator is None:
-                selected_role = random.choice(ROLE_VIBES)
-            else:
-                selected_role = self._smart_role_coordinator.choose_role(s.agent_id)
+            selected_role = self._choose_role_vibe(s)
             if DEBUG:
                 print(f"[A{s.agent_id}] GEAR_VIBE: Picking role vibe: {selected_role}")
             if not self._has_vibe(selected_role):
