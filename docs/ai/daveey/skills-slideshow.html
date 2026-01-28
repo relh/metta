@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daveey's AI Skills</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .slide {
+    display: none;
+    height: 100vh;
+    padding: 60px 80px;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+  }
+
+  .slide.active { display: flex; }
+
+  /* Title slide */
+  .slide.title-slide {
+    align-items: center;
+    text-align: center;
+    justify-content: center;
+  }
+
+  .slide.title-slide h1 {
+    font-size: 4rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #6366f1, #a855f7, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+  }
+
+  .slide.title-slide .subtitle {
+    font-size: 1.5rem;
+    color: #888;
+    margin-bottom: 40px;
+  }
+
+  .slide.title-slide .tagline {
+    font-size: 1.1rem;
+    color: #555;
+    max-width: 600px;
+    line-height: 1.6;
+  }
+
+  /* Section divider */
+  .slide.section-slide {
+    align-items: center;
+    text-align: center;
+  }
+
+  .slide.section-slide .tier-label {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+
+  .slide.section-slide h2 {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+
+  .slide.section-slide .section-desc {
+    font-size: 1.2rem;
+    color: #888;
+    max-width: 600px;
+    line-height: 1.6;
+  }
+
+  /* Skill slides */
+  .skill-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .skill-badge {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .badge-meta { background: #1e1b4b; color: #818cf8; }
+  .badge-test { background: #14532d; color: #4ade80; }
+  .badge-repo { background: #422006; color: #fb923c; }
+  .badge-graphite { background: #172554; color: #60a5fa; }
+  .badge-orchestration { background: #4a1d5e; color: #c084fc; }
+  .badge-control { background: #581c34; color: #f472b6; }
+
+  .skill-name {
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  .skill-title {
+    font-size: 1.4rem;
+    color: #999;
+    margin-bottom: 40px;
+  }
+
+  .skill-body {
+    display: flex;
+    gap: 60px;
+    flex: 1;
+    align-items: flex-start;
+  }
+
+  .skill-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .skill-right {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .skill-description {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: #ccc;
+    margin-bottom: 32px;
+  }
+
+  .flow-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #666;
+    margin-bottom: 12px;
+  }
+
+  .flow-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+
+  .flow-step {
+    background: #1a1a2e;
+    border: 1px solid #2a2a4e;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    color: #a5b4fc;
+  }
+
+  .flow-arrow {
+    color: #444;
+    font-size: 1.2rem;
+  }
+
+  .detail-box {
+    background: #111118;
+    border: 1px solid #222;
+    border-radius: 12px;
+    padding: 24px;
+  }
+
+  .detail-box h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+
+  .detail-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .detail-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #1a1a1a;
+    color: #bbb;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .detail-list li:last-child { border-bottom: none; }
+
+  .detail-list li::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: #4f46e5;
+    border-radius: 50%;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+    transition: width 0.3s ease;
+    z-index: 100;
+  }
+
+  /* Controls */
+  .controls {
+    position: fixed;
+    bottom: 20px;
+    right: 30px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .controls button {
+    background: #1a1a2e;
+    border: 1px solid #333;
+    color: #999;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    transition: all 0.2s;
+  }
+
+  .controls button:hover {
+    background: #2a2a4e;
+    color: #fff;
+    border-color: #555;
+  }
+
+  .slide-counter {
+    position: fixed;
+    bottom: 24px;
+    left: 30px;
+    font-size: 0.85rem;
+    color: #444;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    z-index: 100;
+  }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .arch-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .arch-node {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.85rem;
+    text-align: center;
+    min-width: 140px;
+  }
+
+  .arch-node.orchestrator { background: #2d1b4e; color: #c084fc; border: 1px solid #4a2d6e; }
+  .arch-node.agent { background: #1b2d4e; color: #60a5fa; border: 1px solid #2d4a6e; }
+  .arch-node.tool { background: #1b4e2d; color: #4ade80; border: 1px solid #2d6e4a; }
+
+  .arch-arrow {
+    color: #444;
+    font-size: 1.5rem;
+  }
+
+  /* Complexity indicator */
+  .complexity {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .complexity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #333;
+  }
+
+  .complexity-dot.filled { background: #6366f1; }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 0: Title -->
+<div class="slide title-slide active">
+  <h1>I &hearts; Skills</h1>
+  <div class="subtitle">A toolkit for autonomous code authoring & review</div>
+  <div class="tagline">16 composable skills that handle everything from running tests to fixing entire PR stacks &mdash; from the core loop through orchestration to skill management.</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION: The Core Loop                                       -->
+<!-- ============================================================ -->
+
+<div class="slide section-slide">
+  <div class="tier-label">Part 1</div>
+  <h2 style="color: #4ade80;">The Core Loop</h2>
+  <div class="section-desc">Test, clean, submit. The foundation every other skill builds on.</div>
+</div>
+
+<!-- t:run-tests -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-test">Testing</span>
+    <span class="skill-name">t:run-tests</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Run tests progressively with fast feedback loops</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Progressive test runner: starts with the fastest feedback (known failures from context), expands to pytest, then full CI. Stops at first failure to fix incrementally.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Failed from context</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">pytest --changed</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">metta ci</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Key Details</h3>
+        <ul class="detail-list">
+          <li>Step 1: Re-run specific tests from error messages in conversation</li>
+          <li>Step 2: Run pytest on changed files</li>
+          <li>Step 3: Full CI validation (lint + types + tests)</li>
+          <li>Stops at first failure &mdash; fix then re-run</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:cool -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:cool</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Clean Out Old Leftovers &mdash; remove backwards compat cruft</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Two-phase cleanup: first verifies the branch scope matches its PR description, then hunts and removes backwards-compatibility patterns &mdash; aliases, defensive fallbacks, and shims.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Worktree</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Verify scope</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Find compat</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Fix each</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Test</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Submit</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Patterns Removed</h3>
+        <ul class="detail-list">
+          <li><code>OldName = NewName</code> &rarr; update callsites, delete alias</li>
+          <li><code>x or default</code> &rarr; assert x, use directly</li>
+          <li><code>getattr(o, "a", d)</code> &rarr; o.a directly</li>
+          <li><code>dict.get(k, d)</code> &rarr; dict[k] directly</li>
+          <li>Wrapper shims &rarr; inline at callsites</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:submit -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:submit</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">The full submit pipeline &mdash; clean, test, submit, verify</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        The workhorse skill. Runs <code>/gt:cool</code>, checks for disabled tests, lints, commits, submits to Graphite (starting CI), then runs tests locally in parallel. Fixes and re-submits if tests fail.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">/gt:cool</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Disabled tests</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Lint</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Commit</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Submit</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Test (parallel w/ CI)</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Why Submit Before Testing?</h3>
+        <ul class="detail-list">
+          <li>CI starts immediately &mdash; no waiting for local tests</li>
+          <li>Local tests and CI run in parallel</li>
+          <li>If local tests fail, fix and re-submit</li>
+          <li>Net time savings on branches likely to pass</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION: The Fix Pipeline                                    -->
+<!-- ============================================================ -->
+
+<div class="slide section-slide">
+  <div class="tier-label">Part 2</div>
+  <h2 style="color: #f59e0b;">The Fix Pipeline</h2>
+  <div class="section-desc">Reactive skills that diagnose and fix problems &mdash; from individual comments up to entire stacks.</div>
+</div>
+
+<!-- gt:fix-comments -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:fix-comments</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Address PR review comments with regression tests</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        For each unresolved review thread: reads the full conversation, classifies the issue (behavioral vs style), writes a regression test that fails, makes the fix, verifies the test passes, replies, and resolves.
+      </div>
+      <div class="flow-label">Flow per comment</div>
+      <div class="flow-steps">
+        <span class="flow-step">Understand</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Classify</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Write test</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Verify fails</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Fix code</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Verify passes</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Resolve</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Comment Classification</h3>
+        <ul class="detail-list">
+          <li>Behavioral bug &rarr; write test, then fix</li>
+          <li>Edge case &rarr; write test, then fix</li>
+          <li>Style/naming &rarr; fix directly</li>
+          <li>Documentation &rarr; fix directly</li>
+          <li>Design disagreement &rarr; ask user</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:fix-ci -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:fix-ci</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Find and fix CI failures on a branch</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Fetches CI status using commit SHA (never <code>gh pr checks</code> &mdash; it returns stale data), downloads failure logs, classifies the failure type, fixes, verifies locally, and submits the update.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Worktree</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Check CI (SHA)</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Get logs</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Analyze</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Fix</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Verify</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">/gt:submit</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Failure Classification</h3>
+        <ul class="detail-list">
+          <li>Test failures &rarr; fix test or code</li>
+          <li>Lint errors &rarr; <code>metta lint</code></li>
+          <li>Type errors &rarr; fix annotations</li>
+          <li>Build errors &rarr; fix imports/deps</li>
+          <li>Timeout &rarr; optimize or increase limit</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:fix-branch -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-orchestration">Orchestration</span>
+    <span class="skill-name">gt:fix-branch</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+    </div>
+  </div>
+  <div class="skill-title">Full branch fix &mdash; sync, restack, comments, CI, submit</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Orchestrates the complete fix cycle for a single branch. Dispatches three sub-agents for the heavy lifting (fix-comments, fix-ci, submit), keeping the orchestrator lightweight.
+      </div>
+      <div class="flow-label">Architecture</div>
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-node orchestrator">fix-branch (orchestrator)</div>
+        </div>
+        <div class="arch-arrow">&darr;</div>
+        <div class="arch-row">
+          <div class="arch-node tool">sync + restack</div>
+        </div>
+        <div class="arch-arrow">&darr;</div>
+        <div class="arch-row">
+          <div class="arch-node agent">Sub: fix-comments</div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-node agent">Sub: fix-ci</div>
+          <div class="arch-arrow">&rarr;</div>
+          <div class="arch-node agent">Sub: submit</div>
+        </div>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Why Sub-Agents?</h3>
+        <ul class="detail-list">
+          <li>Each step reads lots of logs/comments</li>
+          <li>Multiple fix-verify cycles per step</li>
+          <li>Significant context accumulation</li>
+          <li>Sub-agents start fresh &mdash; no context overflow</li>
+          <li>Failed sub-agents can be retried independently</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:fix-stack -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-orchestration">Orchestration</span>
+    <span class="skill-name">gt:fix-stack</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+    </div>
+  </div>
+  <div class="skill-title">Fix an entire stack &mdash; sub-agent per branch, bottom-up</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Parses the entire Graphite stack, orders branches bottom-up, then dispatches a <code>gt:fix-branch</code> sub-agent for each. Sequential &mdash; lower branches must complete first.
+      </div>
+      <div class="flow-label">Architecture</div>
+      <div class="arch-diagram">
+        <div class="arch-row">
+          <div class="arch-node orchestrator">fix-stack (orchestrator)</div>
+        </div>
+        <div class="arch-arrow">&darr; sequential</div>
+        <div class="arch-row">
+          <div class="arch-node agent">fix-branch (branch-1)</div>
+        </div>
+        <div class="arch-arrow">&darr;</div>
+        <div class="arch-row">
+          <div class="arch-node agent">fix-branch (branch-2)</div>
+        </div>
+        <div class="arch-arrow">&darr;</div>
+        <div class="arch-row">
+          <div class="arch-node agent">fix-branch (branch-N)</div>
+        </div>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Key Details</h3>
+        <ul class="detail-list">
+          <li>Each branch gets its own worktree</li>
+          <li>Lower branches affect upper &rarr; sequential</li>
+          <li>Each branch submitted immediately after fixing</li>
+          <li>Orchestrator tracks success/failure per branch</li>
+          <li>No risk of context limits on large stacks</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION: Branch Manipulation                                 -->
+<!-- ============================================================ -->
+
+<div class="slide section-slide">
+  <div class="tier-label">Part 3</div>
+  <h2 style="color: #f472b6;">Branch Manipulation</h2>
+  <div class="section-desc">Restructure branches &mdash; route changes, split, extract, and stack for optimal reviewability.</div>
+</div>
+
+<!-- gt:apply -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:apply</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Route uncommitted changes to the correct stack branches</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        When you have uncommitted changes that belong to different branches in your stack, this skill analyzes, groups, and routes each change to its correct branch using stash/patch/checkout workflows.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Analyze changes</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Identify targets</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Group by branch</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Confirm</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Apply each</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Verify</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Routing Patterns</h3>
+        <ul class="detail-list">
+          <li>Single file &rarr; different branch</li>
+          <li>Mixed hunks in one file &rarr; <code>git add -p</code></li>
+          <li>Accidental changes on wrong branch</li>
+          <li>Creates new branches for unrelated changes</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:split -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:split</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Split a branch into sequential branches in-place</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Splits one branch into multiple sequential branches occupying the same stack position. Preserves the stack: upstack branches are restacked onto the new top, and the original PR is closed.
+      </div>
+      <div class="flow-label">Example: splitting c into x, y</div>
+      <div class="flow-steps">
+        <span class="flow-step">a &rarr; b &rarr; c &rarr; d</span>
+      </div>
+      <div class="flow-label" style="margin-top: 8px;">becomes</div>
+      <div class="flow-steps">
+        <span class="flow-step">a &rarr; b &rarr; x &rarr; y &rarr; d</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Key Details</h3>
+        <ul class="detail-list">
+          <li>Records parent and upstack branches first</li>
+          <li>Creates new branches from parent</li>
+          <li>Restacks upstack onto new top</li>
+          <li>Closes original PR with cross-references</li>
+          <li>Runs /gt:submit for each new branch</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:extract + gt:extract-copy -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:extract</span>
+    <span style="color: #555; font-size: 1.5rem; font-weight: 300;">+</span>
+    <span class="skill-name">gt:extract-copy</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Pull features out of a branch into new parallel branches</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Two flavors of extraction. <strong>extract</strong> moves changes out (destructive &mdash; original is modified). <strong>extract-copy</strong> copies changes out (original unchanged, for early landing).
+        Both review code quality and tests before acting.
+      </div>
+      <div class="flow-label">Shared Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Analyze</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Identify feature</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Review &amp; improve</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Create branch</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Move / Copy</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Test &amp; submit</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>extract vs extract-copy</h3>
+        <ul class="detail-list">
+          <li><strong>extract:</strong> original modified (feature removed)</li>
+          <li><strong>extract-copy:</strong> original unchanged</li>
+          <li><strong>extract:</strong> clean separation, no overlap</li>
+          <li><strong>extract-copy:</strong> branches overlap, git reconciles later</li>
+          <li>Both: review code quality + tests before acting</li>
+        </ul>
+      </div>
+      <div class="detail-box" style="margin-top: 16px;">
+        <h3>Shared Dependencies</h3>
+        <ul class="detail-list">
+          <li>Small (&lt;50 lines): duplicate in both branches</li>
+          <li>Significant: extract to foundation branch first</li>
+          <li>Will diverge: accept merge conflict later</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- gt:make-stack -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-graphite">Graphite</span>
+    <span class="skill-name">gt:make-stack</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+    </div>
+  </div>
+  <div class="skill-title">Break a large branch into a reviewable Graphite stack</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Analyzes a large branch, groups changes into logical ~200-400 line chunks with proper dependency ordering, gets user approval, then creates/tests/submits each branch. Restacks upstack branches afterward.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Analyze + stack position</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Group logically</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Propose</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Approve</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Create each</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Restack upstack</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Grouping Principles</h3>
+        <ul class="detail-list">
+          <li>Dependencies first (infra before features)</li>
+          <li>One concern per branch</li>
+          <li>Tests with implementation</li>
+          <li>~200-400 lines per branch</li>
+          <li>Each branch must pass tests independently</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION: Persistence                                         -->
+<!-- ============================================================ -->
+
+<div class="slide section-slide">
+  <div class="tier-label">Part 4</div>
+  <h2 style="color: #c084fc;">Persistence</h2>
+  <div class="section-desc">The meta-skill that wraps any other skill in a retry loop until it succeeds.</div>
+</div>
+
+<!-- cf:really -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-control">Control Flow</span>
+    <span class="skill-name">cf:really</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+    </div>
+  </div>
+  <div class="skill-title">Run any skill until it succeeds &mdash; the persistence layer</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Meta-skill that wraps any other skill in a retry loop. Determines success criteria from the skill's domain, handles async waits (CI polling), tracks progress across iterations, and only gives up when truly stuck.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Determine success</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Run skill</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Wait for async</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Check success</span>
+        <span class="flow-arrow">&circlearrowleft;</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>When to Stop</h3>
+        <ul class="detail-list">
+          <li>Keep going: fewer failures than last time</li>
+          <li>Keep going: different failures (peeling the onion)</li>
+          <li>Keep going: first time seeing this failure</li>
+          <li>Stop: exact same failures 3x in a row</li>
+          <li>Stop: failures increasing for 3+ iterations</li>
+          <li>Stop: infrastructure issue (not a code problem)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION: Skill Management                                    -->
+<!-- ============================================================ -->
+
+<div class="slide section-slide">
+  <div class="tier-label">Part 5</div>
+  <h2 style="color: #818cf8;">Skill Management</h2>
+  <div class="section-desc">Skills for creating, submitting, syncing, and updating other skills.</div>
+</div>
+
+<!-- m:make-skill -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-meta">Meta</span>
+    <span class="skill-name">m:make-skill</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Create a new skill with quality review and submission</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Full skill authoring workflow. Gathers intent, scans existing skills for composition opportunities, writes the skill, reviews against a quality checklist, sets up files and symlinks, then submits.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Gather intent</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Scan related</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Write</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Review</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Setup</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">/m:submit-skill</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Quality Checklist</h3>
+        <ul class="detail-list">
+          <li>Description = triggering conditions only</li>
+          <li>Concrete bash/code, not pseudocode</li>
+          <li>Integration section (uses/called-by/pairs)</li>
+          <li>Quick Reference table for scanning</li>
+          <li>Under 500 words for most skills</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- m:submit-skill -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-meta">Meta</span>
+    <span class="skill-name">m:submit-skill</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Commit, submit, publish, and merge skill changes</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        The submission pipeline for skills. Creates a worktree, lints, commits to Graphite, enables merge-when-ready, then monitors the PR &mdash; running <code>/gt:fix-branch</code> if CI fails or review comments appear.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Worktree</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Lint</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Commit</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Submit</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Publish</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Monitor</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Key Details</h3>
+        <ul class="detail-list">
+          <li>Lint is mandatory &mdash; never skipped</li>
+          <li>Enables GitHub auto-merge via <code>gh pr merge --auto</code></li>
+          <li>Polls every 30s until merged</li>
+          <li>Auto-runs /gt:fix-branch if issues appear</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- m:sync-skills -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-meta">Meta</span>
+    <span class="skill-name">m:sync-skills</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Symlink skills to Claude Code and Codex</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        The simplest skill. Takes a directory of skills and creates symlinks so Claude Code and Codex can discover them. Run after switching worktrees or repos.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Resolve dir</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Symlink each</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Report</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Key Details</h3>
+        <ul class="detail-list">
+          <li>Targets: ~/.claude/skills/ and ~/.codex/skills/</li>
+          <li>Finds dirs containing SKILL.md</li>
+          <li>Creates symlinks (not copies)</li>
+          <li>Restart session for new skills to appear</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- m:update-skill -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-badge badge-meta">Meta</span>
+    <span class="skill-name">m:update-skill</span>
+    <div class="complexity">
+      <div class="complexity-dot filled"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+      <div class="complexity-dot"></div>
+    </div>
+  </div>
+  <div class="skill-title">Apply changes to an existing skill and submit</div>
+  <div class="skill-body">
+    <div class="skill-left">
+      <div class="skill-description">
+        Lightweight wrapper: locate a skill, apply the requested edits, then hand off to <code>m:submit-skill</code> for the commit/submit/publish flow.
+      </div>
+      <div class="flow-label">Flow</div>
+      <div class="flow-steps">
+        <span class="flow-step">Locate SKILL.md</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">Apply changes</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-step">/m:submit-skill</span>
+      </div>
+    </div>
+    <div class="skill-right">
+      <div class="detail-box">
+        <h3>Key Details</h3>
+        <ul class="detail-list">
+          <li>Preserves existing structure unless asked otherwise</li>
+          <li>Updates Integration section if deps changed</li>
+          <li>Keeps skills under 500 words</li>
+          <li>Delegates all git/submit work to m:submit-skill</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- COMPOSITION MAP + END                                        -->
+<!-- ============================================================ -->
+
+<!-- Composition Map -->
+<div class="slide">
+  <div class="skill-header">
+    <span class="skill-name" style="font-size: 2rem;">Composition Map</span>
+  </div>
+  <div class="skill-title">How the skills connect</div>
+  <div class="skill-body" style="flex-direction: column; gap: 24px;">
+    <div class="arch-diagram" style="align-items: flex-start;">
+      <div class="arch-row" style="flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <div class="arch-node orchestrator" style="min-width: 200px;">cf:really<br><small style="color:#888">wraps any skill</small></div>
+      </div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-row" style="flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <div class="arch-node orchestrator" style="min-width: 200px;">gt:fix-stack<br><small style="color:#888">per-branch sub-agents</small></div>
+      </div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-row" style="flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <div class="arch-node orchestrator" style="min-width: 200px;">gt:fix-branch<br><small style="color:#888">3 sub-agents</small></div>
+        <div class="arch-node agent" style="min-width: 160px;">gt:make-stack</div>
+        <div class="arch-node agent" style="min-width: 160px;">gt:split</div>
+      </div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-row" style="flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <div class="arch-node agent" style="min-width: 150px;">gt:fix-comments</div>
+        <div class="arch-node agent" style="min-width: 130px;">gt:fix-ci</div>
+        <div class="arch-node agent" style="min-width: 130px;">gt:submit</div>
+        <div class="arch-node agent" style="min-width: 130px;">gt:extract</div>
+        <div class="arch-node agent" style="min-width: 150px;">gt:extract-copy</div>
+      </div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-row" style="flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <div class="arch-node tool" style="min-width: 120px;">gt:cool</div>
+        <div class="arch-node tool" style="min-width: 120px;">gt:apply</div>
+        <div class="arch-node tool" style="min-width: 120px;">t:run-tests</div>
+      </div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-row" style="flex-wrap: wrap; justify-content: center; gap: 12px;">
+        <div class="arch-node tool" style="min-width: 120px;">m:make-skill</div>
+        <div class="arch-node tool" style="min-width: 130px;">m:submit-skill</div>
+        <div class="arch-node tool" style="min-width: 130px;">m:sync-skills</div>
+        <div class="arch-node tool" style="min-width: 140px;">m:update-skill</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- End -->
+<div class="slide title-slide">
+  <h1>16 Skills</h1>
+  <div class="subtitle">From tests to stack orchestration</div>
+  <div class="tagline" style="max-width: 700px;">
+    The core loop (test, clean, submit) feeds the fix pipeline (comments, CI, branch, stack).
+    Branch manipulation reshapes work for review. cf:really adds persistence.
+    Skill management keeps the system growing.
+    <br><br>
+    <span style="color: #666;">Use <code style="background: #1a1a2e; padding: 2px 8px; border-radius: 4px; color: #a5b4fc;">/skill-name</code> to invoke any skill.</span>
+  </div>
+</div>
+
+<!-- Progress bar -->
+<div class="progress-bar" id="progress"></div>
+
+<!-- Controls -->
+<div class="controls">
+  <button onclick="prevSlide()" title="Previous (Left arrow)">&larr;</button>
+  <button onclick="nextSlide()" title="Next (Right arrow)">&rarr;</button>
+</div>
+
+<div class="slide-counter" id="counter"></div>
+
+<script>
+  let currentSlide = 0;
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+
+  function showSlide(n) {
+    slides[currentSlide].classList.remove('active');
+    currentSlide = ((n % total) + total) % total;
+    slides[currentSlide].classList.add('active');
+    document.getElementById('counter').textContent = `${currentSlide + 1} / ${total}`;
+    document.getElementById('progress').style.width = `${((currentSlide + 1) / total) * 100}%`;
+  }
+
+  function nextSlide() { showSlide(currentSlide + 1); }
+  function prevSlide() { showSlide(currentSlide - 1); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); nextSlide(); }
+    if (e.key === 'ArrowLeft' || e.key === 'Backspace') { e.preventDefault(); prevSlide(); }
+    if (e.key === 'Home') { e.preventDefault(); showSlide(0); }
+    if (e.key === 'End') { e.preventDefault(); showSlide(total - 1); }
+  });
+
+  let touchStartX = 0;
+  document.addEventListener('touchstart', (e) => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', (e) => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? nextSlide() : prevSlide(); }
+  });
+
+  showSlide(0);
+</script>
+
+</body>
+</html>
