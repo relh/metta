@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -12,7 +11,7 @@ from fastapi.responses import PlainTextResponse
 from metta_alo.policy import parse_policy_identifier
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
 from metta.app_backend.auth import CheckUser
@@ -28,21 +27,16 @@ from metta.app_backend.models.job_request import (
     JobStatus,
     JobType,
 )
-from metta.app_backend.models.policies import Policy, PolicyVersion
+from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.otel.metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.routes.tournament_routes import PolicyVersionSummary
 from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
 MAX_OUTSTANDING_JOBS = 200
-
-
-class PolicyVersionSummary(BaseModel):
-    id: UUID
-    name: str | None
-    version: int | None
 
 
 class JobPolicyVersionSummary(BaseModel):
@@ -67,38 +61,15 @@ class JobRequestResponse(BaseModel):
     policy_versions: list[JobPolicyVersionSummary] = []
 
     @classmethod
-    def from_job(cls, job: JobRequest, policy_versions: list[JobPolicyVersionSummary]) -> "JobRequestResponse":
-        return cls(**job.model_dump(), policy_versions=sorted(policy_versions, key=lambda entry: entry.position))
-
-
-async def _load_job_policy_versions(
-    session: AsyncSession, job_ids: list[UUID]
-) -> dict[UUID, list[JobPolicyVersionSummary]]:
-    if not job_ids:
-        return {}
-
-    result = await session.execute(
-        select(  # pyright: ignore[reportCallIssue]
-            JobPolicyVersion.job_id,
-            JobPolicyVersion.position,
-            PolicyVersion.id,
-            PolicyVersion.version,
-            Policy.name,
-        )
-        .join(PolicyVersion, PolicyVersion.id == JobPolicyVersion.policy_version_id)
-        .join(Policy, Policy.id == PolicyVersion.policy_id)
-        .where(col(JobPolicyVersion.job_id).in_(job_ids))
-    )
-
-    policy_versions: dict[UUID, list[JobPolicyVersionSummary]] = defaultdict(list)
-    for job_id, position, pv_id, pv_version, policy_name in result.all():
-        policy_versions[job_id].append(
+    def from_job(cls, job: JobRequest) -> "JobRequestResponse":
+        pvs = [
             JobPolicyVersionSummary(
-                position=position,
-                policy=PolicyVersionSummary(id=pv_id, name=policy_name, version=pv_version),
+                position=jpv.position,
+                policy=PolicyVersionSummary.from_model(jpv.policy_version),
             )
-        )
-    return policy_versions
+            for jpv in job.policy_versions
+        ]
+        return cls(**job.model_dump(exclude={"policy_versions"}), policy_versions=sorted(pvs, key=lambda e: e.position))
 
 
 def _fixup_episode_job(job: JobRequest) -> None:
@@ -297,7 +268,17 @@ def create_job_router() -> APIRouter:
             except ValueError:
                 return []
         async with db_session() as session:
-            query = select(JobRequest).order_by(col(JobRequest.created_at).desc()).offset(offset).limit(limit)
+            query = (
+                select(JobRequest)
+                .options(
+                    selectinload(JobRequest.policy_versions)  # type: ignore[arg-type]
+                    .joinedload(JobPolicyVersion.policy_version)  # type: ignore[arg-type]
+                    .joinedload(PolicyVersion.policy)  # type: ignore[arg-type]
+                )
+                .order_by(col(JobRequest.created_at).desc())
+                .offset(offset)
+                .limit(limit)
+            )
             if job_id_uuid:
                 query = query.where(JobRequest.id == job_id_uuid)
             if statuses:
@@ -311,8 +292,7 @@ def create_job_router() -> APIRouter:
                 query = query.where(col(JobRequest.id).in_(policy_job_ids))
             result = await session.execute(query)
             jobs = list(result.scalars().all())
-            policy_versions = await _load_job_policy_versions(session, [job.id for job in jobs])
-            return [JobRequestResponse.from_job(job, policy_versions.get(job.id, [])) for job in jobs]
+            return [JobRequestResponse.from_job(job) for job in jobs]
 
     @router.get("/{job_id}/logs")
     @timed_http_handler
@@ -344,12 +324,20 @@ def create_job_router() -> APIRouter:
     @timed_http_handler
     async def get_job(job_id: UUID, _user: CheckUser) -> JobRequestResponse:
         async with db_session() as session:
-            result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
+            query = (
+                select(JobRequest)
+                .options(
+                    selectinload(JobRequest.policy_versions)  # type: ignore[arg-type]
+                    .joinedload(JobPolicyVersion.policy_version)  # type: ignore[arg-type]
+                    .joinedload(PolicyVersion.policy)  # type: ignore[arg-type]
+                )
+                .where(JobRequest.id == job_id)
+            )
+            result = await session.execute(query)
             row = result.scalar_one_or_none()
             if not row:
                 raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-            policy_versions = await _load_job_policy_versions(session, [row.id])
-            return JobRequestResponse.from_job(row, policy_versions.get(row.id, []))
+            return JobRequestResponse.from_job(row)
 
     @router.post("/{job_id}")
     @timed_http_handler

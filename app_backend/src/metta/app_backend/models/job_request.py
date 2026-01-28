@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import Column, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 # SQLModel + Pydantic multiple-models pattern for FastAPI.
 # See: https://sqlmodel.tiangolo.com/tutorial/fastapi/multiple-models/
@@ -68,6 +68,8 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
     running_at: datetime | None = None
     completed_at: datetime | None = None
 
+    policy_versions: list["JobPolicyVersion"] = Relationship(back_populates="job")
+
     @hybrid_property
     def episode_id(self) -> str | None:  # type: ignore[no-redef]
         if self.result and isinstance(self.result, dict):
@@ -90,3 +92,10 @@ class JobPolicyVersion(SQLModel, table=True):
     job_id: UUID = Field(foreign_key="job_requests.id", primary_key=True)
     position: int = Field(primary_key=True)
     policy_version_id: UUID = Field(foreign_key="policy_versions.id")
+
+    job: JobRequest = Relationship(back_populates="policy_versions")
+    policy_version: "PolicyVersion" = Relationship()
+
+
+# Import after classes are defined to avoid circular imports
+from metta.app_backend.models.policies import PolicyVersion as PolicyVersion  # noqa: E402, F401
