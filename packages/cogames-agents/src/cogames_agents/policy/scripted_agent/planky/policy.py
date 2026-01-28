@@ -144,6 +144,27 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             step=agent_state.step,
         )
 
+        # Detect failed moves: if last action was a move but position didn't change
+        last_pos = agent_state.blackboard.get("_last_pos")
+        last_action = agent_state.blackboard.get("_last_action", "")
+        if last_pos is not None and last_action.startswith("move_") and state.position == last_pos:
+            # Move failed - track consecutive failures
+            fail_count = agent_state.blackboard.get("_move_fail_count", 0) + 1
+            agent_state.blackboard["_move_fail_count"] = fail_count
+
+            # After 3 consecutive failed moves, clear navigation cache and targets
+            if fail_count >= 3:
+                agent_state.navigator._cached_path = None
+                agent_state.navigator._cached_target = None
+                # Clear any target resource selection to force re-evaluation
+                if fail_count >= 6:
+                    agent_state.blackboard.pop("target_resource", None)
+                    agent_state.blackboard["_move_fail_count"] = 0
+        else:
+            agent_state.blackboard["_move_fail_count"] = 0
+
+        agent_state.blackboard["_last_pos"] = state.position
+
         # Handle vibe activation — same pattern as Pinky
         # Step 1 with default vibe → change to assigned role vibe
         if agent_state.step == 1 and state.vibe == "default" and self._role in VIBE_TO_ROLE:
@@ -180,8 +201,20 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             step=agent_state.step,
         )
 
-        # Evaluate goals
-        action = evaluate_goals(agent_state.goals, ctx)
+        # If we're stuck (many failed moves), force exploration to discover terrain
+        fail_count = agent_state.blackboard.get("_move_fail_count", 0)
+        if fail_count >= 3:
+            action = agent_state.navigator.explore(
+                state.position,
+                agent_state.entity_map,
+                direction_bias=["north", "east", "south", "west"][self._agent_id % 4],
+            )
+            if trace:
+                trace.active_goal_chain = f"ForceExplore(stuck={fail_count})"
+                trace.action_name = action.name
+        else:
+            # Evaluate goals normally
+            action = evaluate_goals(agent_state.goals, ctx)
 
         # Emit trace
         if trace:
@@ -194,6 +227,9 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
                 level=self._trace_level,
             )
             print(f"[planky] {line}")
+
+        # Track action for failed-move detection
+        agent_state.blackboard["_last_action"] = action.name
 
         return action, agent_state
 

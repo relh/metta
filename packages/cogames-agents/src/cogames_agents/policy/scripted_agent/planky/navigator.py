@@ -162,7 +162,7 @@ class Navigator:
         map: EntityMap,
         allow_unknown: bool,
     ) -> list[tuple[int, int]]:
-        """A* pathfinding."""
+        """A* pathfinding with iteration limit to prevent hanging."""
         goal_set = set(goals)
         if not goals:
             return []
@@ -171,11 +171,15 @@ class Navigator:
             return min(_manhattan(pos, g) for g in goals)
 
         tie = 0
+        iterations = 0
+        max_iterations = 5000  # Prevent infinite search on large unknown maps
+
         open_set: list[tuple[int, int, tuple[int, int]]] = [(h(start), tie, start)]
         came_from: dict[tuple[int, int], Optional[tuple[int, int]]] = {start: None}
         g_score: dict[tuple[int, int], int] = {start: 0}
 
-        while open_set:
+        while open_set and iterations < max_iterations:
+            iterations += 1
             _, _, current = heapq.heappop(open_set)
 
             if current in goal_set:

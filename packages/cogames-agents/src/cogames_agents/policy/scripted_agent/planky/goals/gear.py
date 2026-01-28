@@ -16,12 +16,12 @@ class GetGearGoal(Goal):
     """Navigate to a station to acquire gear for a role.
 
     If the team lacks resources to produce gear, the station won't give any.
-    This goal will give up after MAX_ADJACENT_ATTEMPTS bumps and let the agent
+    This goal will give up after MAX_TOTAL_ATTEMPTS steps and let the agent
     continue with other goals (mining). It will retry after RETRY_INTERVAL steps.
     """
 
-    # How many times to bump the station before giving up
-    MAX_ADJACENT_ATTEMPTS = 5
+    # How many total steps trying to get gear before giving up
+    MAX_TOTAL_ATTEMPTS = 50
     # How many steps to wait before trying again
     RETRY_INTERVAL = 100
 
@@ -29,12 +29,14 @@ class GetGearGoal(Goal):
         self.name = goal_name
         self._gear_attr = gear_attr  # e.g. "miner_gear"
         self._station_type = station_type  # e.g. "miner_station"
-        self._bb_attempts_key = f"{goal_name}_adjacent_attempts"
+        self._bb_attempts_key = f"{goal_name}_total_attempts"
         self._bb_giveup_step_key = f"{goal_name}_giveup_step"
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
         # Satisfied if we have the gear
         if getattr(ctx.state, self._gear_attr, False):
+            # Got gear - reset attempts for next time
+            ctx.blackboard[self._bb_attempts_key] = 0
             return True
         # Also "satisfied" (skip) if we gave up recently
         giveup_step = ctx.blackboard.get(self._bb_giveup_step_key, -9999)
@@ -43,6 +45,18 @@ class GetGearGoal(Goal):
         return False
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
+        # Track total attempts regardless of distance
+        attempts = ctx.blackboard.get(self._bb_attempts_key, 0) + 1
+        ctx.blackboard[self._bb_attempts_key] = attempts
+
+        if attempts > self.MAX_TOTAL_ATTEMPTS:
+            # Give up - team probably lacks resources or station unreachable
+            ctx.blackboard[self._bb_giveup_step_key] = ctx.step
+            ctx.blackboard[self._bb_attempts_key] = 0
+            if ctx.trace:
+                ctx.trace.activate(self.name, "giving up after max attempts")
+            return None  # Skip to next goal
+
         # Find station by type (stations are near team spawn, so we find our own first)
         result = ctx.map.find_nearest(ctx.state.position, type=self._station_type)
         if result is None:
@@ -62,24 +76,12 @@ class GetGearGoal(Goal):
         # Navigate to station (reach adjacent, then bump into it)
         dist = _manhattan(ctx.state.position, station_pos)
         if dist <= 1:
-            # Adjacent or on it — track attempts and bump
-            attempts = ctx.blackboard.get(self._bb_attempts_key, 0) + 1
-            ctx.blackboard[self._bb_attempts_key] = attempts
-
-            if attempts > self.MAX_ADJACENT_ATTEMPTS:
-                # Give up - team probably lacks resources
-                ctx.blackboard[self._bb_giveup_step_key] = ctx.step
-                ctx.blackboard[self._bb_attempts_key] = 0
-                if ctx.trace:
-                    ctx.trace.activate(self.name, "giving up, will retry later")
-                return None  # Skip to next goal
-
+            # Adjacent or on it — bump into it
             if ctx.trace:
-                ctx.trace.activate(self.name, f"bump {attempts}/{self.MAX_ADJACENT_ATTEMPTS}")
+                ctx.trace.activate(self.name, f"bump {attempts}/{self.MAX_TOTAL_ATTEMPTS}")
             return _move_toward(ctx.state.position, station_pos)
 
-        # Not adjacent yet - reset attempts counter and navigate
-        ctx.blackboard[self._bb_attempts_key] = 0
+        # Navigate toward station
         return ctx.navigator.get_action(ctx.state.position, station_pos, ctx.map, reach_adjacent=True)
 
 
