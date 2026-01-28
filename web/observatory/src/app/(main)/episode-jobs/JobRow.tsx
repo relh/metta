@@ -68,15 +68,17 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
           )}
         </TD>
         <TD>
-          <a
-            href={`/api/jobs/${job.id}/logs`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-xs"
-            onClick={(e) => e.stopPropagation()}
-          >
-            Logs
-          </a>
+          {(job.status === 'completed' || job.status === 'failed') && (
+            <a
+              href={`/api/jobs/${job.id}/logs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline text-xs"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Logs
+            </a>
+          )}
         </TD>
       </TR>
       {expanded && hasExpandableContent && (

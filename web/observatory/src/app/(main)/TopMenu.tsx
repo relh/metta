@@ -33,9 +33,6 @@ export const TopMenu: FC<{ currentUser: string }> = ({ currentUser }) => {
           <MenuLink href="/tournament" isActive={pathname.startsWith('/tournament')}>
             Tournament
           </MenuLink>
-          <MenuLink href="/eval-tasks" isActive={pathname.startsWith('/eval-task')}>
-            Remote Jobs
-          </MenuLink>
           <MenuLink href="/episode-jobs" isActive={pathname.startsWith('/episode-job')}>
             Episode Jobs
           </MenuLink>
@@ -44,6 +41,9 @@ export const TopMenu: FC<{ currentUser: string }> = ({ currentUser }) => {
           </MenuLink>
           <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
             Smart Plugs
+          </MenuLink>
+          <MenuLink href="/eval-tasks" isActive={pathname.startsWith('/eval-task')}>
+            Remote Jobs
           </MenuLink>
         </div>
       </div>
