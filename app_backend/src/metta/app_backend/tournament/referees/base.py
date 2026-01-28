@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from uuid import UUID
 
 from metta_alo.scoring import Scorer, WeightedScorer
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import col, select
 
 # pyright: reportArgumentType=false
+from metta.app_backend.models.episodes import Episode, EpisodePolicy
+from metta.app_backend.models.job_request import JobRequest
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
@@ -33,6 +36,7 @@ class ScoredMatchData(BaseModel):
     policy_scores: dict[UUID, float]
     assignments: list[int]
     policy_version_ids: list[UUID]
+    policy_agent_counts: dict[UUID, int]
     episode_tags: dict[str, str] = {}
 
 
@@ -59,9 +63,14 @@ class RefereeBase(ABC):
             (
                 await session.execute(
                     select(Match)
+                    .join(Match.job)
                     .where(Match.pool_id == pool_id)
                     .where(Match.status == MatchStatus.completed)
-                    .options(selectinload(Match.players).selectinload(MatchPlayer.pool_player))
+                    .where(JobRequest.episode_id.is_not(None))
+                    .options(
+                        selectinload(Match.players).selectinload(MatchPlayer.pool_player),
+                        selectinload(Match.job),
+                    )
                 )
             )
             .scalars()
@@ -75,9 +84,32 @@ class RefereeBase(ABC):
         scored_matches: list[ScoredMatchData] = []
         match_counts: dict[UUID, int] = {}
 
+        episode_ids: list[UUID] = []
+        for match in matches:
+            job = match.job
+            if job is None:
+                raise ValueError(f"Match {match.id} is missing job data.")
+            episode_id = job.episode_id_uuid
+            if episode_id is None:
+                raise ValueError(f"Match {match.id} is missing a valid episode_id.")
+            episode_ids.append(episode_id)
+        agent_counts_by_episode: dict[UUID, dict[UUID, int]] = defaultdict(dict)
+        if episode_ids:
+            counts_result = await session.execute(
+                select(Episode.id, EpisodePolicy.policy_version_id, EpisodePolicy.num_agents)
+                .join(EpisodePolicy, EpisodePolicy.episode_id == Episode.id)
+                .where(col(Episode.id).in_(episode_ids))
+            )
+            for row in counts_result.all():
+                agent_counts_by_episode[row.id][row.policy_version_id] = row.num_agents
+
         for match in matches:
             if not match.players or any(mp.score is None for mp in match.players):
                 continue
+
+            job = match.job
+            if job is None:
+                raise ValueError(f"Match {match.id} is missing job data.")
 
             policy_scores: dict[UUID, float] = {}
             policy_version_ids: list[UUID] = []
@@ -89,12 +121,17 @@ class RefereeBase(ABC):
                 all_policy_ids.add(pv_id)
                 match_counts[pv_id] = match_counts.get(pv_id, 0) + 1
 
+            episode_agent_counts = agent_counts_by_episode.get(job.episode_id_uuid)
+            if not episode_agent_counts:
+                continue
+
             scored_matches.append(
                 ScoredMatchData(
                     match_id=match.id,
                     policy_scores=policy_scores,
                     assignments=match.assignments,
                     policy_version_ids=policy_version_ids,
+                    policy_agent_counts=episode_agent_counts,
                 )
             )
 

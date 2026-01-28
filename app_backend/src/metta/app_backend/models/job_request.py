@@ -74,6 +74,12 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
             return self.result.get("episode_id")
         return None
 
+    @property
+    def episode_id_uuid(self) -> UUID | None:
+        if self.episode_id is None:
+            return None
+        return UUID(self.episode_id)
+
     @episode_id.expression  # type: ignore[no-redef]
     def episode_id(cls):
         return cls.result["episode_id"].astext  # type: ignore[union-attr]

@@ -23,7 +23,7 @@ import gitta
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.database import get_db, with_db
 from metta.app_backend.health_server import update_heartbeat
-from metta.app_backend.models.episodes import Episode, EpisodePolicyMetric
+from metta.app_backend.models.episodes import Episode, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobStatus, JobType
 from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.models.tournament import (
@@ -272,19 +272,29 @@ class CommissionerBase(ABC):
                 col(Episode.id).label("episode_id"),
                 col(PolicyVersion.id).label("policy_version_id"),
                 col(EpisodePolicyMetric.value).label("reward"),
+                col(EpisodePolicy.num_agents).label("num_agents"),
             )
-            .join(EpisodePolicyMetric, EpisodePolicyMetric.episode_internal_id == Episode.internal_id)
-            .join(PolicyVersion, PolicyVersion.internal_id == EpisodePolicyMetric.pv_internal_id)
+            .join(EpisodePolicy, EpisodePolicy.episode_id == Episode.id)
+            .join(PolicyVersion, PolicyVersion.id == EpisodePolicy.policy_version_id)
+            .join(
+                EpisodePolicyMetric,
+                (EpisodePolicyMetric.episode_internal_id == Episode.internal_id)
+                & (EpisodePolicyMetric.pv_internal_id == PolicyVersion.internal_id),
+            )
             .where(EpisodePolicyMetric.metric_name == "reward")
             .where(col(Episode.id).in_(episode_ids))
         )
 
         scores_by_episode: dict[str, dict[UUID, float]] = defaultdict(dict)
+        agent_counts_by_episode: dict[str, dict[UUID, int]] = defaultdict(dict)
         for row in scores_result.all():
             ep_id = str(row.episode_id) if row.episode_id else None
             pv_id = row.policy_version_id
+            num_agents = row.num_agents
             if ep_id and pv_id:
                 scores_by_episode[ep_id][pv_id] = row.reward
+                if num_agents is not None:
+                    agent_counts_by_episode[ep_id][pv_id] = num_agents
 
         if not scores_by_episode:
             return False
@@ -292,15 +302,10 @@ class CommissionerBase(ABC):
         updated = 0
         for match, episode_id in matches_needing_scores:
             episode_scores = scores_by_episode.get(episode_id, {})
-            sorted_players = sorted(match.players, key=lambda x: x.policy_index)
-            policy_version_ids: list[UUID] = []
-            for mp in sorted_players:
-                if mp.policy_index >= len(policy_version_ids):
-                    policy_version_ids.append(mp.pool_player.policy_version_id)
+            episode_agent_counts = agent_counts_by_episode.get(episode_id, {})
             per_agent_scores = compute_average_scores_per_agent(
                 episode_scores,
-                assignments=match.assignments or [],
-                policy_version_ids=policy_version_ids,
+                agent_counts=episode_agent_counts,
             )
             for mp in match.players:
                 if mp.score is not None:
