@@ -1,5 +1,6 @@
 import re
 import subprocess
+import sys
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Optional
@@ -260,7 +261,7 @@ def _push_git_history_to_child_repo(*, package: str, dry_run: bool) -> None:
     dry_run_prefix = "[DRY RUN] " if dry_run else ""
     info(f"{dry_run_prefix}Pushing filtered git history for {package} to child repo...")
 
-    cmd = [f"{get_repo_root()}/devops/git/push_child_repo.py", package, "-y"]
+    cmd = [sys.executable, f"{get_repo_root()}/devops/git/push_child_repo.py", package, "-y"]
     if dry_run:
         cmd.append("--dry-run")
 
