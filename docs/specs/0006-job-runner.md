@@ -1,16 +1,17 @@
 # Job Runner
 
-> **Status:** Draft **Author:** Rhys, Nishad **Created:** 2026-01-15 **Updated:** 2026-01-16
+> **Status:** Implemented **Author:** Rhys, Nishad **Created:** 2026-01-15 **Updated:** 2026-01-28
 
 ## Summary
 
-Define the job runner architecture for executing evaluation jobs with untrusted user-submitted policy code.
+Define the job runner architecture for executing evaluation jobs with untrusted user-submitted policy code in a
+dedicated AWS account, using presigned S3 GET/PUT URLs for all job I/O.
 
 ## Problem
 
-### Current status
+### Previous system (pre-2026-01-28)
 
-Recently, we moved to a Job running system like so:
+We initially moved to a job running system like so:
 
 - Client submits job request to Observatory Backend
   - Postgres. See current (job params, status, timestamps, results)
@@ -36,7 +37,7 @@ The python socket disabling is only to catch accidental regressions; sidesteppin
 ## Goals
 
 - Run evaluation jobs in a dedicated AWS account separate from primary infrastructure
-- Jobs don't submit their own results or pull inputs from Observatory
+- Jobs don't submit their own results or pull inputs from Observatory APIs
 - Hot pool of pre-warmed nodes with per-job pod teardown (~5-10s startup target, one node per pod)
 
 ## Non-goals
@@ -63,9 +64,12 @@ Primary Account                                    Eval Account
 │       │                           ▼        │    │    │ runs episode        │
 │       │                    ┌──────────┐    │    │    │                     │
 │       │                    │ S3       │◄───────────(presigned GET/PUT)     │
-│       │                    │ policies/│    │    │    │                     │
-│       │                    │ specs/   │    │    │    │                     │
-│       │                    │ results/ │    │    │    │                     │
+│       │                    │ policies │    │    │    │                     │
+│       │                    │ specs    │    │    │    │                     │
+│       │                    │ results  │    │    │    │                     │
+│       │                    │ replays  │    │    │    │                     │
+│       │                    │ logs     │    │    │    │                     │
+│       │                    │ debug    │    │    │    │                     │
 │       │                    └────┬─────┘    │    │                          │
 │       │                         │          │    │                          │
 │       │         watches pods    │          │    │                          │
@@ -78,40 +82,46 @@ Primary Account                                    Eval Account
 
 ### Component Responsibilities
 
-**Dispatcher** (primary account, part of Observatory)
+**Dispatcher** (primary account, Observatory backend)
 
-- Creates k8s jobs in eval cluster via cross-account kubeconfig
+- Creates k8s jobs in eval cluster via cross-account EKS API auth
+- Resolves metta:// policy URIs to policy S3 keys
 - Generates presigned S3 URIs for job spec, results, replay, and policy files
-- Writes job spec to S3
+- Job creation path adds `debug_uri` to the job spec
+- Writes job spec to the eval artifacts bucket
 - No longer passes `MACHINE_TOKEN` to jobs
 
 **single_episode_runner** (eval account, in job pod)
 
 - Reads job spec from presigned GET URL (env var `JOB_SPEC_URI`)
-- Downloads policies from presigned GET URLs
+- Downloads policies from presigned GET URLs (policy bucket)
 - Runs pure episode runner
-- Writes results/replay to presigned PUT URLs
-- No Observatory access, no AWS credentials, no network to primary account
+- Writes results/replay to presigned PUT URLs (env vars `RESULTS_URI`, `REPLAY_URI`)
+- If `debug_uri` is provided in the job spec, a debug.zip can be uploaded (TODO: wire into presigned flow)
+- No Observatory access, no AWS credentials
 
 **Watcher** (primary account)
 
-- Watches k8s pod events in eval cluster via cross-account kubeconfig
-- On job completion: reads results from S3, updates Observatory
+- Watches k8s pod events in eval cluster via cross-account EKS API auth
+- On job completion: reads results from S3, updates Observatory and episode metrics
 - On job failure: records error reason (OOMKilled, etc.), updates Observatory
+- Uploads pod logs to S3 (`jobs/<job_id>/logs.txt`)
 - Deletes completed k8s jobs
 
 ### Cross-Account Access
 
 **K8s API access** (Dispatcher and Watcher → Eval EKS):
 
-- Kubeconfig with exec credential plugin (`aws eks get-token` with cross-account role assumption)
-- Same pattern works locally and in prod
+- Primary account assumes `PrimaryAccountEKSAccess` with external ID `tournament-eval-access`
+- EKS bearer token generated from a presigned STS `GetCallerIdentity` URL
+- Access entry grants `AmazonEKSClusterAdminPolicy` scoped to `jobs` namespace
 
 **S3 access**:
 
-- All inputs and outputs live in primary account S3 bucket
+- Policies live in `POLICY_S3_BUCKET` (primary account)
+- Job artifacts live in `EVAL_S3_BUCKET` (primary account)
 - Dispatcher generates presigned GET URLs for job spec and policy files
-- Dispatcher generates presigned PUT URLs for results and replay files
+- Job creation path generates presigned PUT URLs for results, replay, and debug files
 - Job pods have no AWS credentials; all S3 access via presigned URLs
 - Watcher reads results directly (no cross-account access needed)
 
@@ -124,15 +134,16 @@ Primary Account                                    Eval Account
 
 1. **Job Creation** (primary account)
    - Observatory creates job row in Postgres (status=pending)
-   - Dispatcher generates presigned S3 URIs
-   - Dispatcher writes job spec to S3
+   - Backend resolves metta:// policy URIs to policy S3 keys, adds `debug_uri`
+   - Dispatcher generates presigned S3 URIs for spec/policies/results/replay
+   - Dispatcher writes job spec to `EVAL_S3_BUCKET`
    - Dispatcher creates k8s job in eval cluster with env vars: `JOB_SPEC_URI`, `RESULTS_URI`, `REPLAY_URI`
    - Job status → dispatched
 
 2. **Job Execution** (eval account)
    - Pod starts, reads spec from `JOB_SPEC_URI`
    - Downloads policies from presigned URIs
-   - Runs episode (network-isolated from Observatory)
+   - Runs episode (no Observatory API access)
    - Writes results to `RESULTS_URI`, replay to `REPLAY_URI`
    - Exits
 
@@ -140,12 +151,13 @@ Primary Account                                    Eval Account
    - Watcher sees pod phase change
    - On completion: fetches results from S3, writes to Observatory, marks job completed
    - On failure: records error from k8s event, marks job failed
+   - Uploads pod logs to S3 for debugging
    - Deletes k8s job
 
 ### v1 Simplifications
 
-- Watcher handles both event watching and result processing (no SQS queue)
-- Single eval cluster
+- Watcher handles event watching, reconciliation, log capture, and result processing (no SQS queue)
+- Single eval cluster (`tournament`)
 
 ### Future Enhancements
 
@@ -159,4 +171,3 @@ Primary Account                                    Eval Account
 
 1. Hot pool sizing strategy?
 2. Memory limits for models (100m params × 8 agents)?
-3. Terraform multi-account management patterns?

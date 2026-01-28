@@ -1,11 +1,12 @@
 # Tournament AWS Account
 
-> **Status:** Implemented **Author:** Nishad **Created:** 2026-01-26
+> **Status:** Implemented **Author:** Nishad **Created:** 2026-01-26 **Updated:** 2026-01-28
 
 ## Summary
 
 Dedicated AWS account (583928386201) for running tournament evaluation jobs, isolated from primary infrastructure
-(751442549699). See [0006-job-runner](./0006-job-runner.md) for the job lifecycle this supports.
+(751442549699). Primary account dispatches jobs to the tournament EKS cluster and processes results via presigned S3
+URLs. See [0006-job-runner](./0006-job-runner.md) for the job lifecycle this supports.
 
 ## Problem
 
@@ -26,18 +27,18 @@ services, or credentials.
 
 Three interactions cross the account boundary:
 
-#### 1. Observatory backend -> Tournament EKS (dispatch and watch jobs)
+#### 1. Observatory backend + Watcher -> Tournament EKS (dispatch and watch jobs)
 
 ```
-Observatory pod (primary EKS)
-  -> IRSA role: observatory-backend
+Observatory backend + watcher pods (primary EKS)
+  -> IRSA roles: observatory-backend, orchestrator-eval-worker
   -> sts:AssumeRole (ExternalId: "tournament-eval-access")
   -> PrimaryAccountEKSAccess role (tournament account)
   -> EKS access: AmazonEKSClusterAdminPolicy scoped to "jobs" namespace
 ```
 
-Terraform: `eks/observatory.tf` (IRSA + assume permission), `tournament/cross-account.tf` (trust policy + EKS access
-entry).
+Terraform: `eks/observatory.tf`, `eks/orchestrator.tf` (IRSA + assume permission), `tournament/cross-account.tf` (trust
+policy + EKS access entry).
 
 #### 2. CI -> Tournament ECR (push images)
 
@@ -54,8 +55,9 @@ Terraform: `tournament/ecr.tf` (repo + cross-account policy).
 
 #### 3. Job pods -> Primary S3 (presigned URLs)
 
-Job pods have no AWS credentials. The dispatcher generates presigned S3 URLs for spec, policy, result, and replay files.
-Pods use these URLs directly. No IAM role or cross-account trust needed.
+Job pods have no AWS credentials. The dispatcher generates presigned S3 URLs for job specs and policies (GET) and for
+results/replays/debug outputs (PUT). Pods use these URLs directly. No IAM role or cross-account trust needed. Watcher
+uploads pod logs to the eval artifacts bucket from the primary account.
 
 ### Tournament Account Resources
 
@@ -64,6 +66,7 @@ Pods use these URLs directly. No IAM role or cross-account trust needed.
 | EKS cluster     | `tournament`, auto mode, `general-purpose` node pool, public endpoint |
 | VPC             | `10.1.0.0/16`, 3 AZs, single NAT gateway                              |
 | Namespace       | `jobs`                                                                |
+| Node pool       | `jobs-nodepool` with `workload-type=jobs` (system chart)              |
 | Service account | `episode-runner` (no IRSA, pods use presigned URLs)                   |
 | ECR             | `episode-runner`, mutable tags, 30-image lifecycle                    |
 | IAM role        | `PrimaryAccountEKSAccess` (trust: primary account with external ID)   |
@@ -71,9 +74,9 @@ Pods use these URLs directly. No IAM role or cross-account trust needed.
 
 ### Terraform Stacks
 
-| Stack                  | Path                              | Account                                                    |
-| ---------------------- | --------------------------------- | ---------------------------------------------------------- |
-| `tournament-bootstrap` | `devops/tf/tournament-bootstrap/` | Tournament (bootstraps Spacelift role)                     |
-| `tournament`           | `devops/tf/tournament/`           | Tournament (EKS, ECR, cross-account role)                  |
-| `eks`                  | `devops/tf/eks/`                  | Primary (includes observatory IRSA with assume permission) |
-| `spacelift`            | `devops/tf/spacelift/`            | Primary (registers tournament AWS integration)             |
+| Stack                  | Path                              | Account                                               |
+| ---------------------- | --------------------------------- | ----------------------------------------------------- |
+| `tournament-bootstrap` | `devops/tf/tournament-bootstrap/` | Tournament (bootstraps Spacelift role)                |
+| `tournament`           | `devops/tf/tournament/`           | Tournament (EKS, ECR, cross-account role)             |
+| `eks`                  | `devops/tf/eks/`                  | Primary (observatory + orchestrator IRSA assume role) |
+| `spacelift`            | `devops/tf/spacelift/`            | Primary (registers tournament AWS integration)        |
