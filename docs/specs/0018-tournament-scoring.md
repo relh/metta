@@ -32,6 +32,16 @@ Between rounds, new teams are generated from prior teams using evolutionary samp
 For team evolution, teams are sampled from existing teams in proportion to their score. Each member is replaced with
 probability p, with replacements sampled from policies in proportion to their score.
 
+Identical team compositions may exist. For efficiency we can model these as a single team with a multiplier on its
+weight.
+
+**Note** with the above scoring, it can take many generations for winning policies to fully dominate, depending on how
+_much_ they dominate. If team A regularly scores 10% more points than team B, and teams are re-sampled without any
+mutation between generations (so you might go from 10 copies of A to 12 copies of A, but there's no mixing), then B's
+population will shrink by ~10% per turn, but have a variance proportional to its current representation. This means B's
+standard deviation can be much larger than its average decline, and it can take many generations for it to be wiped out.
+It's unclear if this is a feature or a bug.
+
 ### Final scoring
 
 After M rounds, the top K policies (according to their score) are declared winners.
@@ -108,6 +118,10 @@ successful team, rather that it also being part of a bunch of failed teams.
 | Weighted sampling with mutation | Teams sampled relative to weight, then mutated. Sample a team, for each member swap with probability lambda, replace with policy sampled proportionally to weight. Could limit duplication. Allows successful teams to mostly survive. |
 | Breeding                        | Two teams chosen relative to weight, component policies mixed. Allows successful pairings to persist and merge. Could use chromosomes for clumped transfer.                                                                            |
 
+Note that when creating teams, it matters whether we allow copies of the same team to exist in the tournament.
+Disallowing multiple copies of teams forces diversity in a hard-to-reason-about way, and limits to ability for high
+performing policies / teams to ensure victory in later rounds.
+
 ### Team Seeding
 
 | Method                                                | Description                                                                                                                                                                                                       |
@@ -140,5 +154,6 @@ minimax of (team_activity_skill / activity_difficulty). Results:
 2. How do we adapt this end-of-season tournament to continuous mid-season evaluation?
 3. Should we support agent memory persistence across team evolution?
 4. What constraints on team duplication are appropriate?
-5. How many rounds do we need to run in order to get appropriate mixing?
+5. How many rounds do we need to run in order to get appropriate mixing? Right now we expect we can run 50 generations
+   in ~2 days. This seems perfectly sufficient given our modeling so far.
 6. How do we ensure that dead weight is eliminated?
