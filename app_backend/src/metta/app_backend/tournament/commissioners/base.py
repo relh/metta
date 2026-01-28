@@ -16,6 +16,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
+import gitta
+
 # pyright: reportArgumentType=false
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
 from metta.app_backend.clients.stats_client import StatsClient
@@ -501,7 +503,7 @@ class CommissionerBase(ABC):
                 env=request.env,
                 replay_uri=replay_uri,
                 seed=request.seed,
-                episode_tags=request.episode_tags,
+                episode_tags={**request.episode_tags, "scheduler_git_ref": gitta.get_current_commit()},
             ).model_dump()
 
             stats_client = StatsClient(settings.STATS_SERVER_URI, machine_token=settings.MACHINE_TOKEN)
