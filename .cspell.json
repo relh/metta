@@ -63,6 +63,7 @@
     "cpplint",
     "cpptest",
     "cpus",
+    "creds",
     "crictl",
     "cstdarg",
     "cstddef",
