@@ -6,8 +6,8 @@ from metta_alo.rollout import SingleEpisodeJob
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestCreate, JobType
+from metta.app_backend.tournament.referees.envs import make_cogsguard_env
 from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI, SOFTMAX_S3_REPLAYS_PREFIX
-from mettagrid import MettaGridConfig
 from mettagrid.util.file import http_url
 
 SERVERS = {
@@ -32,10 +32,10 @@ def main():
     server_url = SERVERS[args.server]
 
     policy_uris = [args.policy_uri]
-    env = MettaGridConfig.EmptyRoom(num_agents=args.num_agents, width=20, height=20)
 
     jobs = []
     for seed in range(args.num_jobs):
+        env = make_cogsguard_env(seed=seed, num_agents=args.num_agents)
         replay_uri = None if args.no_replay else http_url(f"{SOFTMAX_S3_REPLAYS_PREFIX}/{uuid.uuid4()}.json.z")
         job = SingleEpisodeJob(
             policy_uris=policy_uris,

@@ -4,6 +4,7 @@ import logging
 from typing import Literal
 
 import boto3
+from botocore.config import Config as BotoConfig
 from kubernetes import client
 from kubernetes.config.incluster_config import load_incluster_config
 from kubernetes.config.kube_config import load_kube_config
@@ -240,7 +241,11 @@ def create_episode_job(
 def presign_operation(
     operation: Literal["get", "put"], bucket: str, key: str, expiration: int, endpoint: str | None
 ) -> str:
-    s3_client = boto3.client("s3", **({"endpoint_url": endpoint} if endpoint else {}))
+    s3_client = boto3.client(
+        "s3",
+        config=BotoConfig(signature_version="s3v4"),
+        **({"endpoint_url": endpoint} if endpoint else {}),
+    )
     return s3_client.generate_presigned_url(
         f"{operation}_object",
         Params={"Bucket": bucket, "Key": key},
