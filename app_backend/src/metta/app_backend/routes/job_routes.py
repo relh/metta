@@ -5,7 +5,9 @@ from typing import Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
+import boto3
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from metta_alo.policy import parse_policy_identifier
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -229,6 +231,32 @@ def create_job_router() -> APIRouter:
                 query = query.join(JobPolicyVersion).where(JobPolicyVersion.policy_version_id == policy_version_id)
             result = await session.execute(query)
             return list(result.scalars().all())
+
+    @router.get("/{job_id}/logs")
+    @timed_http_handler
+    async def get_job_logs(job_id: UUID, _user: CheckUser) -> PlainTextResponse:
+        async with db_session() as session:
+            result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
+            if not result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+        cfg = get_dispatch_config()
+        if not cfg.EVAL_S3_BUCKET:
+            raise HTTPException(status_code=501, detail="Log storage not configured")
+
+        def _read_logs() -> str:
+            s3 = boto3.client("s3")
+            resp = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=f"jobs/{job_id}/logs.txt")
+            return resp["Body"].read().decode("utf-8")
+
+        try:
+            logs = await asyncio.to_thread(_read_logs)
+            return PlainTextResponse(content=logs)
+        except Exception as e:
+            if "NoSuchKey" in type(e).__name__ or "NoSuchKey" in str(e):
+                raise HTTPException(status_code=404, detail=f"No logs found for job {job_id}") from None
+            logger.error(f"Failed to read logs for job {job_id}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to read logs") from e
 
     @router.get("/{job_id}")
     @timed_http_handler

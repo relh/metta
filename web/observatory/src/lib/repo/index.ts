@@ -641,6 +641,16 @@ export class Repo {
     return this.apiCall<JobRequest[]>(`/jobs${query ? `?${query}` : ''}`)
   }
 
+  async getJobLogs(jobId: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/jobs/${jobId}/logs`, {
+      headers: this.getHeaders(),
+    })
+    if (!response.ok) {
+      await this.handleErrorResponse(response)
+    }
+    return response.text()
+  }
+
   // Tournament methods
   async getSeasons(): Promise<SeasonDetail[]> {
     return this.apiCall<SeasonDetail[]>('/tournament/seasons')

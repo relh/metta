@@ -67,10 +67,21 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
             '-'
           )}
         </TD>
+        <TD>
+          <a
+            href={`/api/jobs/${job.id}/logs`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:underline text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            Logs
+          </a>
+        </TD>
       </TR>
       {expanded && hasExpandableContent && (
         <tr className="bg-gray-50">
-          <td colSpan={6} className="px-3 py-2 space-y-2">
+          <td colSpan={7} className="px-3 py-2 space-y-2">
             {lifecycleError && (
               <div>
                 <div className="text-xs font-medium text-gray-500 mb-1">Job lifecycle error:</div>

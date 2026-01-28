@@ -40,6 +40,7 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
           <TH style={{ width: 200 }}>Tags</TH>
           <TH style={{ width: 280 }}>Timeline</TH>
           <TH style={{ width: 100 }}>Result</TH>
+          <TH style={{ width: 60 }}>Logs</TH>
         </TableHeader>
         <TableBody>
           {jobs.map((job) => (

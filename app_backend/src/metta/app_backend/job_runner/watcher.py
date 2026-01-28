@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, TypedDict, cast
 from uuid import UUID
 
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 WATCH_TIMEOUT_SECONDS = 30
 RECONCILE_INTERVAL_SECONDS = 60
+_terminal_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="pod-terminal")
 
 
 def _get_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
@@ -57,6 +59,41 @@ class K8sPodWatchEvent(TypedDict):
     object: client.V1Pod
 
 
+def _capture_pod_logs(core_v1: client.CoreV1Api, pod: client.V1Pod, job_id: UUID):
+    cfg = get_dispatch_config()
+    pod_name = pod.metadata.name if pod.metadata else None
+    if not pod_name:
+        return
+    try:
+        logs = core_v1.read_namespaced_pod_log(
+            name=pod_name,
+            namespace=cfg.JOB_NAMESPACE,
+            container="worker",
+            tail_lines=10000,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to read logs for job {job_id} pod {pod_name}: {e}")
+        return
+    if not logs:
+        return
+    try:
+        s3_client = boto3.client("s3")
+        s3_client.put_object(
+            Bucket=cfg.EVAL_S3_BUCKET,
+            Key=f"jobs/{job_id}/logs.txt",
+            Body=logs.encode("utf-8"),
+            ContentType="text/plain",
+        )
+        logger.info(f"Captured logs for job {job_id} ({len(logs)} bytes)")
+    except Exception as e:
+        logger.error(f"Failed to upload logs for job {job_id}: {e}")
+
+
+def _cleanup_terminated_pod(core_v1: client.CoreV1Api, batch_v1: client.BatchV1Api, pod: client.V1Pod, job_id: UUID):
+    _capture_pod_logs(core_v1, pod, job_id)
+    _delete_k8s_job_for_pod(batch_v1, pod)
+
+
 def _watch_pods_with_client(
     stats_client: StatsClient, core_v1: client.CoreV1Api, batch_v1: client.BatchV1Api, cluster_name: str
 ):
@@ -69,7 +106,7 @@ def _watch_pods_with_client(
         return
 
     for pod in pod_list.items:
-        _handle_pod_state(stats_client, batch_v1, pod)
+        _handle_pod_state(stats_client, core_v1, batch_v1, pod)
 
     resource_version = pod_list.metadata.resource_version
     logger.info(f"Starting pod watch on cluster={cluster_name} from resourceVersion={resource_version}")
@@ -87,7 +124,7 @@ def _watch_pods_with_client(
         update_heartbeat()
         event_type, pod = event["type"], event["object"]
         if event_type in ("ADDED", "MODIFIED"):
-            _handle_pod_state(stats_client, batch_v1, pod)
+            _handle_pod_state(stats_client, core_v1, batch_v1, pod)
         elif event_type == "DELETED":
             _handle_pod_deleted(stats_client, pod)
 
@@ -207,16 +244,20 @@ def read_results_from_s3(job_id: UUID, bucket: str, key: str) -> PureSingleEpiso
 
 
 def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> PureSingleEpisodeResult | None:
-    for attempt in range(1, 4):
+    # The episode runner uploads results via a presigned PUT from inside the pod.
+    # The k8s Succeeded event can arrive before the PUT is visible in S3, so we
+    # retry with exponential backoff (~15s window) to avoid false "results missing" failures.
+    delays = [1, 2, 4, 8]
+    for i, delay in enumerate(delays):
         results = read_results_from_s3(job_id, bucket, key)
         if results is not None:
             return results
-        if attempt < 3:
-            time.sleep(attempt)
+        if i < len(delays) - 1:
+            time.sleep(delay)
     return None
 
 
-def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str, pod: client.V1Pod):
+def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str):
     cfg = get_dispatch_config()
     results = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, f"jobs/{job_id}/results.json")
     if not results:
@@ -224,7 +265,7 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
             stats_client,
             job_id,
             JobStatus.failed,
-            error="Results missing in S3 after retries",
+            error="Pod exited with code 0 but results not found in S3",
             error_type="result_missing",
         )
         logger.warning(f"Job {job_id} completed (pod {pod_name}), no results in S3")
@@ -242,8 +283,32 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
         logger.info(f"Job {job_id} completed (pod {pod_name}), episode recording failed")
 
 
+def _handle_pod_terminal(
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    pod: client.V1Pod,
+    job_id: UUID,
+    pod_name: str,
+):
+    try:
+        phase = pod.status.phase if pod.status else None
+        if phase == "Succeeded":
+            _handle_pod_succeeded(stats_client, job_id, pod_name)
+        elif phase == "Failed":
+            error = _get_pod_error(batch_v1, pod)
+            error_type = _classify_error(error)
+            _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
+            logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
+        _cleanup_terminated_pod(core_v1, batch_v1, pod, job_id)
+    except Exception:
+        logger.error(f"Unhandled error processing terminal pod {pod_name} for job {job_id}", exc_info=True)
+
+
 @trace("tournament.job.status_update")
-def _handle_pod_state(stats_client: StatsClient, batch_v1: client.BatchV1Api, pod: client.V1Pod):
+def _handle_pod_state(
+    stats_client: StatsClient, core_v1: client.CoreV1Api, batch_v1: client.BatchV1Api, pod: client.V1Pod
+):
     info = _get_job_info(pod)
     if not info or not pod.status:
         return
@@ -259,14 +324,9 @@ def _handle_pod_state(stats_client: StatsClient, batch_v1: client.BatchV1Api, po
             span.set_attribute("pod.phase", phase)
 
     if phase == "Succeeded":
-        _handle_pod_succeeded(stats_client, job_id, pod_name, pod)
-        _delete_k8s_job_for_pod(batch_v1, pod)
+        _terminal_executor.submit(_handle_pod_terminal, stats_client, core_v1, batch_v1, pod, job_id, pod_name)
     elif phase == "Failed":
-        error = _get_pod_error(batch_v1, pod)
-        error_type = _classify_error(error)
-        _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
-        _delete_k8s_job_for_pod(batch_v1, pod)
-        logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
+        _terminal_executor.submit(_handle_pod_terminal, stats_client, core_v1, batch_v1, pod, job_id, pod_name)
     elif phase == "Running" and _is_container_running(pod):
         _update_job_status(stats_client, job_id, JobStatus.running, worker=pod_name)
         logger.debug(f"Job {job_id} running (pod {pod_name})")
