@@ -2,7 +2,8 @@ import functools
 import json
 import logging
 import time
-from typing import Literal, TypedDict, cast
+from typing import Literal, Optional, TypedDict, cast
+from urllib.parse import urlparse
 from uuid import UUID
 
 import boto3
@@ -194,9 +195,36 @@ def _get_pod_env_var(pod: client.V1Pod, name: str) -> str | None:
     return None
 
 
-def read_results_from_s3(job_id: UUID, bucket: str) -> PureSingleEpisodeResult | None:
+def _parse_results_s3_location(
+    results_uri: str,
+    fallback_bucket: Optional[str],
+    job_id: UUID,
+) -> Optional[tuple[str, str]]:
+    parsed = urlparse(results_uri)
+    if parsed.scheme == "s3":
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+        if bucket and key:
+            return bucket, key
+    if parsed.scheme in ("http", "https"):
+        host = parsed.netloc
+        path = parsed.path.lstrip("/")
+        if host.startswith("s3.") or host.startswith("s3-") or host == "s3.amazonaws.com":
+            if "/" in path:
+                bucket, key = path.split("/", 1)
+                if bucket and key:
+                    return bucket, key
+        if ".s3" in host:
+            bucket = host.split(".s3")[0]
+            if bucket and path:
+                return bucket, path
+    if fallback_bucket:
+        return fallback_bucket, f"jobs/{job_id}/results.json"
+    return None
+
+
+def read_results_from_s3(job_id: UUID, bucket: str, key: str) -> PureSingleEpisodeResult | None:
     s3_client = boto3.client("s3")
-    key = f"jobs/{job_id}/results.json"
 
     try:
         response = s3_client.get_object(Bucket=bucket, Key=key)
@@ -210,19 +238,48 @@ def read_results_from_s3(job_id: UUID, bucket: str) -> PureSingleEpisodeResult |
         return None
 
 
+def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> PureSingleEpisodeResult | None:
+    for attempt in range(1, 4):
+        results = read_results_from_s3(job_id, bucket, key)
+        if results is not None:
+            return results
+        if attempt < 3:
+            time.sleep(attempt)
+    return None
+
+
 def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str, pod: client.V1Pod):
     cfg = get_dispatch_config()
     results_uri = _get_pod_env_var(pod, "RESULTS_URI")
 
-    if not results_uri or not cfg.EVAL_S3_BUCKET:
+    if not results_uri:
         _update_job_status(stats_client, job_id, JobStatus.completed)
         logger.info(f"Job {job_id} completed (pod {pod_name}), no S3 pathway configured")
         return
 
-    results = read_results_from_s3(job_id, cfg.EVAL_S3_BUCKET)
+    location = _parse_results_s3_location(results_uri, cfg.EVAL_S3_BUCKET, job_id)
+    if location is None:
+        _update_job_status(
+            stats_client,
+            job_id,
+            JobStatus.failed,
+            error="Failed to parse results URI for S3 download",
+            error_type="result_missing",
+        )
+        logger.warning(f"Job {job_id} completed (pod {pod_name}), invalid results URI")
+        return
+
+    bucket, key = location
+    results = _read_results_with_retry(job_id, bucket, key)
     if not results:
-        _update_job_status(stats_client, job_id, JobStatus.completed)
-        logger.info(f"Job {job_id} completed (pod {pod_name}), no results in S3")
+        _update_job_status(
+            stats_client,
+            job_id,
+            JobStatus.failed,
+            error="Results missing in S3 after retries",
+            error_type="result_missing",
+        )
+        logger.warning(f"Job {job_id} completed (pod {pod_name}), no results in S3")
         return
 
     try:

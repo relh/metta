@@ -57,7 +57,7 @@ def _upload_debug_dir(local_debug_dir: str | None, debug_uri: str | None) -> Non
 
 
 def _download_presigned_policy(url: str) -> Path:
-    response = requests.get(url)
+    response = requests.get(url, timeout=30)
     response.raise_for_status()
     temp_dir = tempfile.mkdtemp()
     local_path = Path(temp_dir) / "policy.zip"
@@ -185,7 +185,7 @@ def run_episode(
 def run_with_presigned_urls(job_spec_uri: str, results_uri: str | None, replay_uri: str | None):
     logger.info(f"Running with presigned URLs: spec={job_spec_uri[:50]}...")
 
-    response = requests.get(job_spec_uri)
+    response = requests.get(job_spec_uri, timeout=30)
     response.raise_for_status()
     job = SingleEpisodeJob.model_validate(response.json())
 

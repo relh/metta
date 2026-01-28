@@ -44,8 +44,6 @@ HP_DRAIN_BASE = 1
 HP_DRAIN_ENEMY_AOE = 1
 # Enemy AOE range
 ENEMY_AOE_RANGE = 10
-# Avoid extractors within this radius of enemy chargers.
-ENEMY_DANGER_RANGE = 6
 # Safety margin - return home with this much HP buffer
 HP_SAFETY_MARGIN = 5
 
@@ -448,8 +446,8 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         2. Distance from clips chargers (enemy AOE damage)
         3. HP-based range limit - only select extractors we can reach and return from safely
         """
-        # Avoid extractors too close to enemy chargers.
-        danger_range = ENEMY_DANGER_RANGE
+        # Avoid extractors within enemy AOE so "safe" picks never drain faster than expected.
+        danger_range = ENEMY_AOE_RANGE
 
         # Get all clips chargers
         chargers = s.get_structures_by_type(StructureType.CHARGER)

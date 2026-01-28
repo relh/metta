@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib
 from collections import Counter
+from typing import Any, Optional
 
 from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (
     diff_action_counts,
@@ -18,6 +19,26 @@ from mettagrid.policy.loader import initialize_or_load_policy
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator.rollout import Rollout
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
+
+
+class RecordingPolicy:
+    def __init__(self, policy: Any) -> None:
+        self._policy = policy
+        self.last_action_name: Optional[str] = None
+
+    def reset(self, simulation: Optional[Any] = None) -> None:
+        if simulation is None:
+            self._policy.reset()
+            return
+        self._policy.reset(simulation)
+
+    def step(self, obs: Any) -> Any:
+        action = self._policy.step(obs)
+        self.last_action_name = action if isinstance(action, str) else action.name
+        return action
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._policy, name)
 
 
 def _run_policy(
@@ -35,7 +56,7 @@ def _run_policy(
     policy_env_info = PolicyEnvInterface.from_mg_cfg(env_cfg)
     policy_spec = policy_spec_from_uri(policy_uri)
     multi_policy = initialize_or_load_policy(policy_env_info, policy_spec)
-    agent_policies = [multi_policy.agent_policy(i) for i in range(num_agents)]
+    agent_policies = [RecordingPolicy(multi_policy.agent_policy(i)) for i in range(num_agents)]
     rollout = Rollout(config=env_cfg, policies=agent_policies, render_mode=None, seed=seed)
 
     action_counts: Counter[str] = Counter()
@@ -45,16 +66,18 @@ def _run_policy(
         rollout.step()
         sim = rollout._sim
         action_names = sim.action_names
-        for agent in rollout._agents:
+        for idx, agent in enumerate(rollout._agents):
+            action_name = agent_policies[idx].last_action_name
+            if action_name is not None:
+                update_move_stats(move_stats, action_name, agent.last_action_success)
             last_action_id = agent.global_observations.get("last_action")
             if last_action_id is None:
                 continue
             action_id = int(last_action_id)
             if action_id < 0 or action_id >= len(action_names):
                 continue
-            action_name = action_names[action_id]
-            update_action_counts(action_counts, action_name)
-            update_move_stats(move_stats, action_name, agent.last_action_success)
+            executed_action_name = action_names[action_id]
+            update_action_counts(action_counts, executed_action_name)
 
     return {
         "policy_uri": policy_uri,

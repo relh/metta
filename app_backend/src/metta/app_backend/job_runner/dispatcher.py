@@ -19,6 +19,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.models.job_request import JobRequest, JobType
+from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -246,7 +247,7 @@ def create_episode_job(
         ),
         spec=client.V1JobSpec(
             backoff_limit=0,
-            active_deadline_seconds=3600,
+            active_deadline_seconds=JOB_TIMEOUT_SECONDS,
             ttl_seconds_after_finished=3600,
             template=client.V1PodTemplateSpec(
                 metadata=client.V1ObjectMeta(
