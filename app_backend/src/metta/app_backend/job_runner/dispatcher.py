@@ -13,6 +13,11 @@ from metta.app_backend.job_runner.config import (
     LABEL_JOB_ID,
     get_dispatch_config,
 )
+from metta.app_backend.job_runner.job_artifacts import (
+    job_replay_key,
+    job_results_key,
+    job_spec_key,
+)
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_client
 from metta.app_backend.models.job_request import JobRequest, JobType
 from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
@@ -59,9 +64,8 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
     ]
 
-    prefix = f"jobs/{job.id}"
     s3_client = boto3.client("s3")
-    spec_key = f"{prefix}/spec.json"
+    spec_key = job_spec_key(job.id)
     s3_client.put_object(
         Bucket=cfg.EVAL_S3_BUCKET,
         Key=spec_key,
@@ -69,13 +73,13 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         ContentType="application/json",
     )
     spec_uri = presign_operation("get", cfg.EVAL_S3_BUCKET, spec_key, exp, endpoint)
-    results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/results.json", exp, endpoint)
+    results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_results_key(job.id), exp, endpoint)
     env_vars: list[client.V1EnvVar] = [
         client.V1EnvVar(name="JOB_SPEC_URI", value=spec_uri),
         client.V1EnvVar(name="RESULTS_URI", value=results_uri),
     ]
     if job.job.get("replay_uri") is not None:
-        replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/replay.json.z", exp, endpoint)
+        replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_replay_key(job.id), exp, endpoint)
         env_vars.append(client.V1EnvVar(name="REPLAY_URI", value=replay_uri))
 
     if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE:

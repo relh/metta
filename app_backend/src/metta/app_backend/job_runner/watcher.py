@@ -26,6 +26,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.job_runner.episode_recording import record_job_episode
+from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_results_key
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -93,7 +94,7 @@ def _capture_pod_logs(core_v1: client.CoreV1Api, pod: client.V1Pod, job_id: UUID
     try:
         _get_s3_client().put_object(
             Bucket=cfg.EVAL_S3_BUCKET,
-            Key=f"jobs/{job_id}/logs.txt",
+            Key=job_logs_key(job_id),
             Body=logs.encode("utf-8"),
             ContentType="text/plain",
         )
@@ -275,7 +276,7 @@ def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> tuple[PureS
 
 def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str):
     cfg = get_dispatch_config()
-    results, read_error = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, f"jobs/{job_id}/results.json")
+    results, read_error = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, job_results_key(job_id))
     if not results:
         detail = f" (last error: {read_error})" if read_error else ""
         error_type = "result_missing" if not read_error or "NoSuchKey" in read_error else "result_error"

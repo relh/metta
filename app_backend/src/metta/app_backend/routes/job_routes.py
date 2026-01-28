@@ -17,6 +17,7 @@ from metta.app_backend.auth import CheckUser
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
+from metta.app_backend.job_runner.job_artifacts import job_debug_key, job_logs_key
 from metta.app_backend.models.job_request import (
     JobPolicyVersion,
     JobRequest,
@@ -44,7 +45,7 @@ def _fixup_episode_job(job: JobRequest) -> None:
         debug_uri = presign_operation(
             "put",
             cfg.EVAL_S3_BUCKET,
-            f"jobs/{job.id}/debug.zip",
+            job_debug_key(job.id),
             JOB_TIMEOUT_SECONDS + 60 * 60,
             cfg.S3_PRESIGNED_ENDPOINT,
         )
@@ -246,7 +247,7 @@ def create_job_router() -> APIRouter:
 
         def _read_logs() -> str:
             s3 = boto3.client("s3")
-            resp = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=f"jobs/{job_id}/logs.txt")
+            resp = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=job_logs_key(job_id))
             return resp["Body"].read().decode("utf-8")
 
         try:
