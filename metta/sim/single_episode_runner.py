@@ -184,7 +184,13 @@ def run_with_presigned_urls(job_spec_uri: str, results_uri: str | None, replay_u
     response.raise_for_status()
     job = SingleEpisodeJob.model_validate(response.json())
 
-    run_episode(job, upload_results_uri=results_uri, upload_replay_uri=replay_uri, upload_debug_uri=job.debug_uri)
+    run_episode(
+        job,
+        upload_results_uri=results_uri,
+        upload_replay_uri=replay_uri,
+        upload_debug_uri=job.debug_uri,
+        use_profiler=True,
+    )
     logger.info("Job completed successfully")
 
 
