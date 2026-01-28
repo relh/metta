@@ -44,6 +44,15 @@ resource "aws_iam_policy" "orchestrator_s3" {
         Resource = [
           "arn:aws:secretsmanager:us-east-1:751442549699:secret:github/metta-deploy-key*",
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sts:AssumeRole",
+        ]
+        Resource = [
+          "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess",
+        ]
       }
     ]
   })
