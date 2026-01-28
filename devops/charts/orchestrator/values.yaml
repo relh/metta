@@ -41,6 +41,8 @@ datadog:
 
 watcher:
   enabled: true
+  evalClusterRoleArn: "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
+  evalClusterName: "tournament"
   resources:
     requests:
       cpu: 10m

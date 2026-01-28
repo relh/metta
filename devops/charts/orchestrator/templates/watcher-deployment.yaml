@@ -57,6 +57,10 @@ spec:
           value: "true"
         - name: OTEL_SERVICE_NAME
           value: "episode-job-watcher"
+        - name: EVAL_CLUSTER_ROLE_ARN
+          value: {{ .Values.watcher.evalClusterRoleArn | quote }}
+        - name: EVAL_CLUSTER_NAME
+          value: {{ .Values.watcher.evalClusterName | quote }}
         resources:
           {{- toYaml .Values.watcher.resources | nindent 10 }}
 {{- end }}
