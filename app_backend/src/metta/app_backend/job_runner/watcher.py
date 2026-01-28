@@ -228,53 +228,59 @@ def _get_job_info(pod: client.V1Pod) -> tuple[UUID, str] | None:
     return UUID(job_id_str), pod.metadata.name or "unknown"
 
 
-def read_results_from_s3(job_id: UUID, bucket: str, key: str) -> PureSingleEpisodeResult | None:
+def read_results_from_s3(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
     s3_client = boto3.client("s3")
 
     try:
         response = s3_client.get_object(Bucket=bucket, Key=key)
         data = json.loads(response["Body"].read().decode("utf-8"))
-        return PureSingleEpisodeResult.model_validate(data)
+        return PureSingleEpisodeResult.model_validate(data), None
     except s3_client.exceptions.NoSuchKey:
-        logger.warning(f"No results found in S3 for job {job_id}")
-        return None
+        msg = f"NoSuchKey s3://{bucket}/{key}"
+        logger.warning(f"No results found in S3 for job {job_id}: {msg}")
+        return None, msg
     except Exception as e:
-        logger.error(f"Failed to read results from S3 for job {job_id}: {e}")
-        return None
+        msg = f"{type(e).__name__}: {e}"
+        logger.error(f"Failed to read results from S3 for job {job_id}: {msg}")
+        return None, msg
 
 
-def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> PureSingleEpisodeResult | None:
+def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
     # The episode runner uploads results via a presigned PUT from inside the pod.
     # The k8s Succeeded event can arrive before the PUT is visible in S3, so we
     # retry with exponential backoff (~15s window) to avoid false "results missing" failures.
     delays = [1, 2, 4, 8]
+    last_error: str | None = None
     for i, delay in enumerate(delays):
-        results = read_results_from_s3(job_id, bucket, key)
+        results, err = read_results_from_s3(job_id, bucket, key)
         if results is not None:
-            return results
+            return results, None
+        last_error = err
         if i < len(delays) - 1:
             time.sleep(delay)
-    return None
+    return None, last_error
 
 
 def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str):
     cfg = get_dispatch_config()
-    results = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, f"jobs/{job_id}/results.json")
+    results, read_error = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, f"jobs/{job_id}/results.json")
     if not results:
+        detail = f" (last error: {read_error})" if read_error else ""
+        error_type = "result_missing" if not read_error or "NoSuchKey" in read_error else "result_error"
         _update_job_status(
             stats_client,
             job_id,
             JobStatus.failed,
-            error="Pod exited with code 0 but results not found in S3",
-            error_type="result_missing",
+            error=f"Pod exited with code 0 but results not found in S3{detail}",
+            error_type=error_type,
         )
-        logger.warning(f"Job {job_id} completed (pod {pod_name}), no results in S3")
+        logger.warning(f"Job {job_id} completed (pod {pod_name}), no results in S3{detail}")
         return
 
     try:
         job_request = stats_client.get_job(job_id)
         job = SingleEpisodeJob.model_validate(job_request.job)
-        record_job_episode(job_id, job, results, stats_client)
+        record_job_episode(job_id, job, results, stats_client)  # pyright: ignore[reportArgumentType]
         _update_job_status(stats_client, job_id, JobStatus.completed)
         logger.info(f"Job {job_id} completed (pod {pod_name})")
     except Exception as e:

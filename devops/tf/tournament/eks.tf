@@ -43,6 +43,20 @@ module "eks" {
   tags = local.tags
 }
 
+data "aws_eks_cluster" "tournament" {
+  name = var.cluster_name
+}
+
+resource "aws_security_group_rule" "kubelet_logs_from_control_plane" {
+  description              = "Allow EKS control plane to read kubelet logs"
+  type                     = "ingress"
+  protocol                 = "tcp"
+  from_port                = 10250
+  to_port                  = 10250
+  security_group_id        = module.eks.node_security_group_id
+  source_security_group_id = data.aws_eks_cluster.tournament.vpc_config[0].cluster_security_group_id
+}
+
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"
