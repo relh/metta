@@ -26,7 +26,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.job_runner.episode_recording import record_job_episode
-from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_results_key
+from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_replay_key, job_results_key
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -274,6 +274,55 @@ def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> tuple[PureS
     return None, last_error
 
 
+def _copy_replay_to_public(job_id: UUID, replay_uri: str | None) -> bool:
+    if not replay_uri or not replay_uri.startswith("s3://"):
+        return True
+
+    cfg = get_dispatch_config()
+    if not cfg.EVAL_S3_BUCKET:
+        return False
+
+    source_key = job_replay_key(job_id)
+    s3 = _get_s3_client()
+
+    # Retry with backoff similar to _read_results_with_retry - the replay upload
+    # may complete slightly after the results upload
+    delays = [1, 2, 4, 8]
+    replay_exists = False
+    for i, delay in enumerate(delays):
+        try:
+            s3.head_object(Bucket=cfg.EVAL_S3_BUCKET, Key=source_key)
+            replay_exists = True
+            break
+        except s3.exceptions.ClientError:
+            if i < len(delays) - 1:
+                time.sleep(delay)
+
+    if not replay_exists:
+        logger.warning(f"Replay not found in EVAL bucket for job {job_id}, skipping copy")
+        return True
+
+    parts = replay_uri.removeprefix("s3://").split("/", 1)
+    if len(parts) != 2:
+        logger.warning(f"Invalid replay_uri format: {replay_uri}")
+        return False
+    dest_bucket, dest_key = parts
+
+    try:
+        s3.copy_object(
+            Bucket=dest_bucket,
+            Key=dest_key,
+            CopySource={"Bucket": cfg.EVAL_S3_BUCKET, "Key": source_key},
+            ACL="public-read",
+            MetadataDirective="COPY",
+        )
+        logger.info(f"Copied replay to s3://{dest_bucket}/{dest_key} for job {job_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to copy replay for job {job_id}: {e}")
+        return False
+
+
 def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str):
     cfg = get_dispatch_config()
     results, read_error = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, job_results_key(job_id))
@@ -293,6 +342,7 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
     try:
         job_request = stats_client.get_job(job_id)
         job = SingleEpisodeJob.model_validate(job_request.job)
+        _copy_replay_to_public(job_id, job.replay_uri)
         record_job_episode(job_id, job, results, stats_client)  # pyright: ignore[reportArgumentType]
         _update_job_status(stats_client, job_id, JobStatus.completed)
         logger.info(f"Job {job_id} completed (pod {pod_name})")
