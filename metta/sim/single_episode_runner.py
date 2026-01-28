@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def _is_presigned_url(url: str) -> bool:
     parsed = urlparse(url)
-    if parsed.scheme != "https":
+    if parsed.scheme not in ("https", "http"):
         return False
     query_params = parse_qs(parsed.query)
     return "X-Amz-Algorithm" in query_params or "AWSAccessKeyId" in query_params
