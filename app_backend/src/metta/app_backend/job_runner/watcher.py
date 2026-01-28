@@ -1,11 +1,13 @@
 import json
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal, TypedDict, cast
 from uuid import UUID
 
 import boto3
+from botocore.client import BaseClient
 from kubernetes import (
     client,
     watch,  # type: ignore[attr-defined]
@@ -34,6 +36,18 @@ logger = logging.getLogger(__name__)
 WATCH_TIMEOUT_SECONDS = 30
 RECONCILE_INTERVAL_SECONDS = 60
 _terminal_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="pod-terminal")
+
+_s3_client: BaseClient | None = None
+_s3_client_lock = threading.Lock()
+
+
+def _get_s3_client() -> BaseClient:
+    global _s3_client
+    if _s3_client is None:
+        with _s3_client_lock:
+            if _s3_client is None:
+                _s3_client = boto3.client("s3")
+    return _s3_client
 
 
 def _get_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
@@ -77,8 +91,7 @@ def _capture_pod_logs(core_v1: client.CoreV1Api, pod: client.V1Pod, job_id: UUID
     if not logs:
         return
     try:
-        s3_client = boto3.client("s3")
-        s3_client.put_object(
+        _get_s3_client().put_object(
             Bucket=cfg.EVAL_S3_BUCKET,
             Key=f"jobs/{job_id}/logs.txt",
             Body=logs.encode("utf-8"),
@@ -229,13 +242,12 @@ def _get_job_info(pod: client.V1Pod) -> tuple[UUID, str] | None:
 
 
 def read_results_from_s3(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
-    s3_client = boto3.client("s3")
-
+    s3 = _get_s3_client()
     try:
-        response = s3_client.get_object(Bucket=bucket, Key=key)
+        response = s3.get_object(Bucket=bucket, Key=key)
         data = json.loads(response["Body"].read().decode("utf-8"))
         return PureSingleEpisodeResult.model_validate(data), None
-    except s3_client.exceptions.NoSuchKey:
+    except s3.exceptions.NoSuchKey:
         msg = f"NoSuchKey s3://{bucket}/{key}"
         logger.warning(f"No results found in S3 for job {job_id}: {msg}")
         return None, msg
