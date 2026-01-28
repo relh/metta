@@ -9,6 +9,8 @@ on:
       - "metta/sim/**"
       - "common/**"
       - "packages/mettagrid/**"
+      - "packages/cogames/**"
+      - "packages/cogames-agents/**"
       - "devops/docker/Dockerfile.policy_evaluator"
       - ".github/workflows/build-policy-evaluator-image.yml"
   workflow_dispatch: {}
