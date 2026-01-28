@@ -223,15 +223,6 @@ hardcoding a mix like 3 aligners, 3 miners, 2 scramblers, 2 scouts when running 
     sim.env.game.map_builder.instance.spawn_count=10
 ```
 
-You can also use the short-name policy that hardcodes the same cycle:
-
-```bash
-./tools/run.py recipes.experiment.cogsguard.play \
-    policy_uri="metta://policy/wombo_mix" \
-    sim.env.game.num_agents=10 \
-    sim.env.game.map_builder.instance.spawn_count=10
-```
-
 For a one-off explicit ordering, use `role_order` (comma-separated) to list the exact vibes per agent id.
 
 ## File Structure

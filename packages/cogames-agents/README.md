@@ -17,11 +17,14 @@ python -c "from cogames_agents.policy.scripted_registry import list_scripted_age
 Common scripted policy names include:
 
 - Baselines: `baseline`, `tiny_baseline`, `ladybug_py`
-- CogsGuard core: `role` (`role_nim`), `role_py`, `wombo` (`swiss`)
-- Teaching/roles: `teacher` (`teacher_nim`), `miner`, `scout`, `aligner`, `scrambler`
+- Nim baselines: `thinky`, `race_car`, `ladybug`, `nim_random`
+- CogsGuard core: `role`, `role_py`, `wombo`
+- CogsGuard variants: `alignall`, `cogsguard_control`, `cogsguard_targeted`, `cogsguard_v2`
+- CogsGuard roles: `miner`, `scout`, `aligner`, `scrambler`
+- Teacher: `teacher`
 - Pinky: `pinky`
 
-For the full registry snapshot (including aliases), see `docs/scripted-agent-registry.md`.
+For the full registry snapshot, see `docs/scripted-agent-registry.md`.
 
 Role-specific policies are exposed via role names (miner/scout/aligner/scrambler). For the teacher policy, you can pass
 `role_vibes` as a comma-separated list:
@@ -30,17 +33,13 @@ Role-specific policies are exposed via role names (miner/scout/aligner/scrambler
 metta://policy/teacher?role_vibes=miner,scout
 ```
 
-Roster/mix policies:
-
-- `role_roster` (`role_mix`) supports `roster=` or `pattern=` to assign initial vibes.
-- `wombo_mix` (`wombo10`) assigns a fixed role cycle (`aligner,miner,scrambler,scout`) by agent index.
+Fixed-role mixes and explicit orderings are configured via `role_py` parameters:
 
 Examples:
 
 ```
-metta://policy/role_roster?roster=aligner,miner,scrambler,scout
-metta://policy/role_roster?pattern=aligner,miner,scrambler,scout
-metta://policy/wombo_mix
+metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
+metta://policy/role_py?role_order=aligner,miner,aligner,miner,scout
 ```
 
 Pinky role counts are applied in a different order than CogsGuard:
@@ -67,5 +66,5 @@ The `recipes.experiment.scripted_agents` recipe accepts the same scripted policy
 ## Included policies
 
 - Short names map to the fastest implementation (Nim when available, otherwise Python).
-- `_nim` aliases exist when there is a Nim implementation alongside Python.
-- Teacher wrapper: `teacher` (`teacher_nim`) forces an initial role/vibe, then delegates to the Nim policy.
+- See `docs/scripted-agent-registry.md` for the canonical short-name list.
+- Teacher wrapper: `teacher` forces an initial role/vibe, then delegates to the Nim policy.

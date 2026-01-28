@@ -1,7 +1,7 @@
 """CoGsGuard scripted agent with role-based behavior."""
 
 from .control_agent import CogsguardControlAgent
-from .policy import CogsguardPolicy, CogsguardRosterPolicy, CogsguardWomboMixPolicy, CogsguardWomboPolicy
+from .policy import CogsguardPolicy, CogsguardWomboPolicy
 from .roles import AlignerPolicy, MinerPolicy, ScoutPolicy, ScramblerPolicy
 from .targeted_agent import CogsguardTargetedAgent
 from .v2_agent import CogsguardV2Agent
@@ -17,8 +17,6 @@ except ModuleNotFoundError as exc:  # pragma: no cover - optional for environmen
 __all__ = [
     "CogsguardControlAgent",
     "CogsguardPolicy",
-    "CogsguardRosterPolicy",
-    "CogsguardWomboMixPolicy",
     "CogsguardWomboPolicy",
     "CogsguardTargetedAgent",
     "CogsguardV2Agent",

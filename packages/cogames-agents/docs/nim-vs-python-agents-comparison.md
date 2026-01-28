@@ -112,10 +112,9 @@ Python `SmartRoleCoordinator` implementation.
 
 The default depends on how the policy is invoked:
 
-1. **`metta://policy/role`** (or `role_nim`) - Uses **Nim** implementation (`CogsguardAgentsMultiPolicy`)
+1. **`metta://policy/role`** - Uses **Nim** implementation (`CogsguardAgentsMultiPolicy`)
 2. **`metta://policy/role_py`** - Uses **Python** implementation (`CogsguardPolicy`)
-3. **`metta://policy/teacher`** (or `teacher_nim`) - Uses **Nim** implementation via `CogsguardAgentsMultiPolicy`
-   wrapped by Python teacher
+3. **`metta://policy/teacher`** - Uses **Nim** implementation via `CogsguardAgentsMultiPolicy` wrapped by Python teacher
 4. **`metta://policy/miner`**, **`scout`**, **`aligner`**, **`scrambler`** - Uses **Python** role-specific
    implementations
 
@@ -123,19 +122,12 @@ The default depends on how the policy is invoked:
 
 ```
 role          -> Nim (CogsguardAgentsMultiPolicy)
-role_nim      -> Nim (CogsguardAgentsMultiPolicy)
 role_py       -> Python (CogsguardPolicy)
-role_roster   -> Python (CogsguardRosterPolicy)
-role_mix      -> Python (CogsguardRosterPolicy alias)
 wombo         -> Python (CogsguardWomboPolicy)
-swiss         -> Python (CogsguardWomboPolicy alias)
-wombo_mix     -> Python (CogsguardWomboMixPolicy)
-wombo10       -> Python (CogsguardWomboMixPolicy alias)
 cogsguard_control  -> Python (CogsguardControlAgent)
 cogsguard_targeted -> Python (CogsguardTargetedAgent)
 cogsguard_v2       -> Python (CogsguardV2Agent)
 teacher       -> Python wrapper over Nim
-teacher_nim   -> Python wrapper over Nim
 miner         -> Python (MinerPolicy)
 scout         -> Python (ScoutPolicy)
 aligner       -> Python (AlignerPolicy)
