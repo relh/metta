@@ -23,7 +23,6 @@ def main():
     parser.add_argument("--num-jobs", type=int, default=1, help="Number of jobs to submit")
     parser.add_argument("--policy-uri", help="Policy URI")
     parser.add_argument("--no-replay", action="store_true", help="Skip replay generation")
-    parser.add_argument("--use-tournament-account", action="store_true", help="Dispatch to tournament eval cluster")
     args = parser.parse_args()
 
     if not args.policy_uri:
@@ -50,7 +49,6 @@ def main():
             JobRequestCreate(
                 job_type=JobType.episode,
                 job=job.model_dump(),
-                use_tournament_account=args.use_tournament_account,
             )
         )
 

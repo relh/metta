@@ -7,7 +7,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import uuid
 import zipfile
 from contextlib import nullcontext
 from pathlib import Path
@@ -16,10 +15,6 @@ from urllib.parse import parse_qs, urlparse
 import requests
 from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
 
-from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.job_runner.episode_recording import record_job_episode
-from metta.app_backend.models.job_request import JobRequestUpdate
-from metta.common.auth.auth_config_reader_writer import observatory_auth_config
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.common.util.perf_profiler import PerfProfiler
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
@@ -193,35 +188,6 @@ def run_with_presigned_urls(job_spec_uri: str, results_uri: str | None, replay_u
     logger.info("Job completed successfully")
 
 
-def run_with_observatory(job_id: uuid.UUID):
-    observatory_auth_config.save_token(os.environ["MACHINE_TOKEN"], os.environ["STATS_SERVER_URI"])
-    stats_client = StatsClient.create(os.environ["STATS_SERVER_URI"])
-
-    try:
-        job_data = stats_client.get_job(job_id)
-        logger.info(f"Started job {job_id}")
-
-        job = SingleEpisodeJob.model_validate(job_data.job)
-
-        results = run_episode(
-            job,
-            upload_results_uri=job.results_uri,
-            upload_replay_uri=job.replay_uri,
-            upload_debug_uri=job.debug_uri,
-            use_profiler=True,
-        )
-
-        record_job_episode(job_id, job, results, stats_client)
-        logger.info(f"Completed job {job_id}")
-
-    except Exception as e:
-        logger.exception(f"Job {job_id} failed")
-        stats_client.update_job(job_id, JobRequestUpdate(result={"error": str(e)}))
-        raise
-    finally:
-        stats_client.close()
-
-
 def main():
     job_spec_uri = os.environ.get("JOB_SPEC_URI")
     results_uri = os.environ.get("RESULTS_URI")
@@ -231,13 +197,8 @@ def main():
         run_with_presigned_urls(job_spec_uri, results_uri, replay_uri)
         return
 
-    if len(sys.argv) < 2:
-        print("Usage: python -m metta.sim.single_episode_runner <job_id>")
-        print("Or set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
-        sys.exit(1)
-
-    job_id = uuid.UUID(sys.argv[1])
-    run_with_observatory(job_id)
+    print("Set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

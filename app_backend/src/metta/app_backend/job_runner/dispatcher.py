@@ -1,4 +1,3 @@
-import functools
 import json
 import logging
 from typing import Literal
@@ -6,7 +5,6 @@ from typing import Literal
 import boto3
 from botocore.config import Config as BotoConfig
 from kubernetes import client
-from kubernetes.config.incluster_config import load_incluster_config
 from kubernetes.config.kube_config import load_kube_config
 
 from metta.app_backend.job_runner.config import (
@@ -22,84 +20,63 @@ from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 logger = logging.getLogger(__name__)
 
 
-def get_k8s_client(use_tournament_account: bool = False) -> client.BatchV1Api:
-    if not use_tournament_account:
-        return _get_local_or_incluster_client()
-    return get_tournament_client()
-
-
-@functools.cache
-def _get_local_or_incluster_client() -> client.BatchV1Api:
+def get_k8s_client() -> client.BatchV1Api:
     cfg = get_dispatch_config()
-
     if cfg.LOCAL_DEV:
         if not cfg.LOCAL_DEV_K8S_CONTEXT:
             raise ValueError("LOCAL_DEV=true requires LOCAL_DEV_K8S_CONTEXT to be set")
         load_kube_config(context=cfg.LOCAL_DEV_K8S_CONTEXT)
-    else:
-        load_incluster_config()
-
-    return client.BatchV1Api()
+        return client.BatchV1Api()
+    return get_tournament_client()
 
 
-def dispatch_job(
-    job: JobRequest, use_tournament_account: bool = False, policy_s3_keys: dict[int, str] | None = None
-) -> str:
+def dispatch_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = None) -> str:
     if job.job_type == JobType.episode:
-        return create_episode_job(job, use_tournament_account, policy_s3_keys or {})
+        return create_episode_job(job, policy_s3_keys or {})
     raise ValueError(f"Unknown job type: {job.job_type}")
 
 
-def create_episode_job(
-    job: JobRequest, use_tournament_account: bool = False, policy_s3_keys: dict[int, str] | None = None
-) -> str:
+def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = None) -> str:
     cfg = get_dispatch_config()
-    batch_v1 = get_k8s_client(use_tournament_account)
+    batch_v1 = get_k8s_client()
     job_name = f"job-{job.id.hex[:8]}"
 
-    env_vars: list[client.V1EnvVar] = []
+    if not cfg.POLICY_S3_BUCKET or not cfg.EVAL_S3_BUCKET:
+        raise ValueError("POLICY_S3_BUCKET and EVAL_S3_BUCKET must be set")
+    job_spec = job.job.copy()
+    original_policy_uris: list[str] = job_spec.pop("policy_uris", [])
 
-    if use_tournament_account:
-        if not cfg.POLICY_S3_BUCKET or not cfg.EVAL_S3_BUCKET:
-            raise ValueError("POLICY_S3_BUCKET must be set when EVAL_S3_BUCKET is configured")
-        job_spec = job.job.copy()
-        original_policy_uris: list[str] = job_spec.pop("policy_uris", [])
+    resolved_s3_keys: list[str] = []
+    for i, uri in enumerate(original_policy_uris):
+        key = (policy_s3_keys or {}).get(i)
+        if key is None:
+            raise ValueError(f"Missing pre-resolved S3 key for policy URI at index {i}: {uri}")
+        resolved_s3_keys.append(key)
 
-        resolved_s3_keys: list[str] = []
-        for i, uri in enumerate(original_policy_uris):
-            key = (policy_s3_keys or {}).get(i)
-            if key is None:
-                raise ValueError(f"Missing pre-resolved S3 key for policy URI at index {i}: {uri}")
-            resolved_s3_keys.append(key)
+    exp = cfg.PRESIGNED_URL_EXPIRATION
+    endpoint = cfg.S3_PRESIGNED_ENDPOINT
+    job_spec["policy_uris"] = [
+        presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
+    ]
 
-        exp = cfg.PRESIGNED_URL_EXPIRATION
-        endpoint = cfg.S3_PRESIGNED_ENDPOINT
-        job_spec["policy_uris"] = [
-            presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
-        ]
-
-        prefix = f"jobs/{job.id}"
-        s3_client = boto3.client("s3")
-        spec_key = f"{prefix}/spec.json"
-        s3_client.put_object(
-            Bucket=cfg.EVAL_S3_BUCKET,
-            Key=spec_key,
-            Body=json.dumps(job_spec).encode("utf-8"),
-            ContentType="application/json",
-        )
-        spec_uri = presign_operation("get", cfg.EVAL_S3_BUCKET, spec_key, exp, endpoint)
-        results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/results.json", exp, endpoint)
+    prefix = f"jobs/{job.id}"
+    s3_client = boto3.client("s3")
+    spec_key = f"{prefix}/spec.json"
+    s3_client.put_object(
+        Bucket=cfg.EVAL_S3_BUCKET,
+        Key=spec_key,
+        Body=json.dumps(job_spec).encode("utf-8"),
+        ContentType="application/json",
+    )
+    spec_uri = presign_operation("get", cfg.EVAL_S3_BUCKET, spec_key, exp, endpoint)
+    results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/results.json", exp, endpoint)
+    env_vars: list[client.V1EnvVar] = [
+        client.V1EnvVar(name="JOB_SPEC_URI", value=spec_uri),
+        client.V1EnvVar(name="RESULTS_URI", value=results_uri),
+    ]
+    if job.job.get("replay_uri") is not None:
         replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, f"{prefix}/replay.json.z", exp, endpoint)
-        env_vars = [
-            client.V1EnvVar(name="JOB_SPEC_URI", value=spec_uri),
-            client.V1EnvVar(name="RESULTS_URI", value=results_uri),
-            client.V1EnvVar(name="REPLAY_URI", value=replay_uri),
-        ]
-    else:
-        env_vars = [
-            client.V1EnvVar(name="STATS_SERVER_URI", value=cfg.STATS_SERVER_URI),
-            client.V1EnvVar(name="MACHINE_TOKEN", value=cfg.MACHINE_TOKEN),
-        ]
+        env_vars.append(client.V1EnvVar(name="REPLAY_URI", value=replay_uri))
 
     if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE:
         env_vars.append(client.V1EnvVar(name="AWS_PROFILE", value=cfg.LOCAL_DEV_AWS_PROFILE))
@@ -218,7 +195,6 @@ def create_episode_job(
                                 "python",
                                 "-m",
                                 "metta.sim.single_episode_runner",
-                                str(job.id),
                             ],
                             env=env_vars,
                             volume_mounts=volume_mounts,

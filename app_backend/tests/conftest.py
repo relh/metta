@@ -126,7 +126,7 @@ def mock_k8s_client(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def mock_dispatch_job(monkeypatch):
-    def stub_dispatch(job, use_tournament_account: bool = False, policy_s3_keys: dict | None = None):
+    def stub_dispatch(job, policy_s3_keys: dict | None = None):
         return f"mock-k8s-job-{job.id.hex[:8]}"
 
     monkeypatch.setattr("metta.app_backend.routes.job_routes.dispatch_job", stub_dispatch)

@@ -146,8 +146,8 @@ def create_job_router() -> APIRouter:
             await session.commit()
             # Capture IDs before session closes
             job_data = [
-                (j.id, j, job_create.use_tournament_account, {pos: key for pos, _, key in resolved})
-                for j, job_create, resolved in zip(db_jobs, jobs, job_resolved, strict=True)
+                (j.id, j, {pos: key for pos, _, key in resolved})
+                for j, resolved in zip(db_jobs, job_resolved, strict=True)
             ]
 
         class _DispatchResult(BaseModel):
@@ -158,11 +158,9 @@ def create_job_router() -> APIRouter:
         # Dispatch each job (outside DB session)
         # Run in a thread so sync I/O (boto3, httpx) doesn't block the event loop
         dispatch_results: dict[UUID, _DispatchResult] = {}
-        for job_id, db_job, use_tournament_account, s3_keys in job_data:
+        for job_id, db_job, s3_keys in job_data:
             try:
-                k8s_job_name = await asyncio.to_thread(
-                    dispatch_job, db_job, use_tournament_account=use_tournament_account, policy_s3_keys=s3_keys
-                )
+                k8s_job_name = await asyncio.to_thread(dispatch_job, db_job, policy_s3_keys=s3_keys)
                 dispatch_results[job_id] = _DispatchResult(
                     k8s_job_name=k8s_job_name,
                     time=datetime.now(UTC),

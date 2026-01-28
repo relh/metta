@@ -1,10 +1,7 @@
-import functools
 import json
 import logging
-import threading
 import time
-from typing import Literal, Optional, TypedDict, cast
-from urllib.parse import urlparse
+from typing import Literal, TypedDict, cast
 from uuid import UUID
 
 import boto3
@@ -13,7 +10,6 @@ from kubernetes import (
     watch,  # type: ignore[attr-defined]
 )
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
-from kubernetes.config.incluster_config import load_incluster_config
 from kubernetes.config.kube_config import load_kube_config
 from metta_alo.rollout import PureSingleEpisodeResult, SingleEpisodeJob
 from opentelemetry import trace as otel_trace
@@ -38,27 +34,14 @@ WATCH_TIMEOUT_SECONDS = 30
 RECONCILE_INTERVAL_SECONDS = 60
 
 
-@functools.cache
 def _get_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
     cfg = get_dispatch_config()
     if cfg.LOCAL_DEV:
         if not cfg.LOCAL_DEV_K8S_CONTEXT:
             raise ValueError("LOCAL_DEV=true requires LOCAL_DEV_K8S_CONTEXT to be set")
         load_kube_config(context=cfg.LOCAL_DEV_K8S_CONTEXT)
-    else:
-        load_incluster_config()
-    return client.CoreV1Api(), client.BatchV1Api()
-
-
-def _get_eval_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api] | None:
-    cfg = get_dispatch_config()
-    if not cfg.EVAL_CLUSTER_ROLE_ARN:
-        return None
-    try:
-        return get_tournament_clients()
-    except Exception as e:
-        logger.error(f"Failed to create eval cluster clients: {e}", exc_info=True)
-        return None
+        return client.CoreV1Api(), client.BatchV1Api()
+    return get_tournament_clients()
 
 
 # ADDED: Pod created (usually starts in Pending phase)
@@ -115,6 +98,7 @@ def _watch_loop(
     get_clients: callable,  # type: ignore[valid-type]
 ):
     logger.info(f"Watch loop starting for cluster={cluster_name}")
+    last_reconcile = 0.0
     while True:
         try:
             clients = get_clients()
@@ -124,6 +108,11 @@ def _watch_loop(
                 continue
             core_v1, batch_v1 = clients
             _watch_pods_with_client(stats_client, core_v1, batch_v1, cluster_name)
+
+            now = time.monotonic()
+            if now - last_reconcile >= RECONCILE_INTERVAL_SECONDS:
+                _reconcile_stale_jobs(stats_client)
+                last_reconcile = now
         except Exception as e:
             logger.error(f"Watch error on cluster={cluster_name}, restarting: {e}", exc_info=True)
             time.sleep(1)
@@ -131,39 +120,20 @@ def _watch_loop(
 
 def run_watcher():
     cfg = get_dispatch_config()
-    _get_k8s_clients()
-
     start_health_server()
 
     stats_client = StatsClient(backend_url=cfg.STATS_SERVER_URI, machine_token=cfg.MACHINE_TOKEN)
     stats_client._validate_authenticated()
     logger.info(f"Watcher started: stats_server_uri={cfg.STATS_SERVER_URI}, namespace={cfg.JOB_NAMESPACE}")
 
-    eval_clients = _get_eval_k8s_clients()
-    if eval_clients is not None:
-        logger.info("Eval cluster configured, starting eval watch thread")
-        t = threading.Thread(
-            target=_watch_loop,
-            args=(stats_client, "eval", _get_eval_k8s_clients),
-            daemon=True,
-        )
-        t.start()
-    else:
-        logger.info("Eval cluster not configured, watching main cluster only")
-
-    # TODO: Reconciliation disabled — tournament jobs run on the eval cluster,
-    # so the main-cluster-only pod check would incorrectly mark them as failed.
-    # Re-enable once we consolidate back to a single cluster.
-
     try:
-        _watch_loop(stats_client, "main", _get_k8s_clients)
+        _watch_loop(stats_client, "eval", _get_k8s_clients)
     finally:
         stats_client.close()
 
 
 @trace("tournament.job.reconcile")
 def _reconcile_stale_jobs(stats_client: StatsClient):
-    """Check for jobs marked running/dispatched that have no corresponding pod."""
     cfg = get_dispatch_config()
     core_v1, _ = _get_k8s_clients()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
@@ -221,46 +191,6 @@ def _get_job_info(pod: client.V1Pod) -> tuple[UUID, str] | None:
     return UUID(job_id_str), pod.metadata.name or "unknown"
 
 
-def _get_pod_env_var(pod: client.V1Pod, name: str) -> str | None:
-    if not pod.spec or not pod.spec.containers:
-        return None
-    for container in pod.spec.containers:
-        if not container.env:
-            continue
-        for env_var in container.env:
-            if env_var.name == name:
-                return env_var.value
-    return None
-
-
-def _parse_results_s3_location(
-    results_uri: str,
-    fallback_bucket: Optional[str],
-    job_id: UUID,
-) -> Optional[tuple[str, str]]:
-    parsed = urlparse(results_uri)
-    if parsed.scheme == "s3":
-        bucket = parsed.netloc
-        key = parsed.path.lstrip("/")
-        if bucket and key:
-            return bucket, key
-    if parsed.scheme in ("http", "https"):
-        host = parsed.netloc
-        path = parsed.path.lstrip("/")
-        if host.startswith("s3.") or host.startswith("s3-") or host == "s3.amazonaws.com":
-            if "/" in path:
-                bucket, key = path.split("/", 1)
-                if bucket and key:
-                    return bucket, key
-        if ".s3" in host:
-            bucket = host.split(".s3")[0]
-            if bucket and path:
-                return bucket, path
-    if fallback_bucket:
-        return fallback_bucket, f"jobs/{job_id}/results.json"
-    return None
-
-
 def read_results_from_s3(job_id: UUID, bucket: str, key: str) -> PureSingleEpisodeResult | None:
     s3_client = boto3.client("s3")
 
@@ -288,27 +218,7 @@ def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> PureSingleE
 
 def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str, pod: client.V1Pod):
     cfg = get_dispatch_config()
-    results_uri = _get_pod_env_var(pod, "RESULTS_URI")
-
-    if not results_uri:
-        _update_job_status(stats_client, job_id, JobStatus.completed)
-        logger.info(f"Job {job_id} completed (pod {pod_name}), no S3 pathway configured")
-        return
-
-    location = _parse_results_s3_location(results_uri, cfg.EVAL_S3_BUCKET, job_id)
-    if location is None:
-        _update_job_status(
-            stats_client,
-            job_id,
-            JobStatus.failed,
-            error="Failed to parse results URI for S3 download",
-            error_type="result_missing",
-        )
-        logger.warning(f"Job {job_id} completed (pod {pod_name}), invalid results URI")
-        return
-
-    bucket, key = location
-    results = _read_results_with_retry(job_id, bucket, key)
+    results = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, f"jobs/{job_id}/results.json")
     if not results:
         _update_job_status(
             stats_client,
