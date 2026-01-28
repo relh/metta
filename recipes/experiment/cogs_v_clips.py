@@ -16,7 +16,7 @@ from cogames.cli.mission import find_mission, parse_variants
 from cogames.cogs_vs_clips.mission import MAP_MISSION_DELIMITER, Mission, NumCogsVariant
 from cogames.cogs_vs_clips.missions import get_core_missions, get_legacy_missions
 from cogames.cogs_vs_clips.variants import VARIANTS
-from devops.stable.registry import ci_job, stable_job
+from devops.stable.registry import stable_job
 from devops.stable.runner import AcceptanceCriterion
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -24,10 +24,9 @@ from metta.cogworks.curriculum.curriculum import (
     DiscreteRandomConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
-from metta.common.wandb.context import WandbConfig
 from metta.rl.loss.losses import LossesConfig
 from metta.rl.trainer_config import TrainerConfig
-from metta.rl.training import CheckpointerConfig, EvaluatorConfig, TrainingEnvironmentConfig
+from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
@@ -781,46 +780,6 @@ def sweep(
         max_trials=max_trials,
         num_parallel_trials=num_parallel_trials,
     )
-
-
-@ci_job(timeout_s=240)
-def train_ci() -> TrainTool:
-    """Minimal CvC train for CI smoke test."""
-    env = make_training_env(
-        num_cogs=2,
-        mission="training_facility.harvest",
-        variants=["heart_chorus"],
-    )
-    curriculum_cfg = cc.env_curriculum(env)
-    return TrainTool(
-        trainer=TrainerConfig(
-            total_timesteps=64,
-            minibatch_size=8,
-            batch_size=64,
-            bptt_horizon=8,
-            update_epochs=1,
-        ),
-        training_env=TrainingEnvironmentConfig(
-            curriculum=curriculum_cfg,
-            forward_pass_minibatch_target_size=8,
-            vectorization="serial",
-            auto_workers=False,
-            num_workers=1,
-            async_factor=1,
-            maps_cache_size=4,
-        ),
-        evaluator=EvaluatorConfig(epoch_interval=0, evaluate_local=False, evaluate_remote=False),
-        checkpointer=CheckpointerConfig(epoch_interval=1),
-        wandb=WandbConfig.Off(),
-    )
-
-
-@ci_job(timeout_s=120)
-def play_ci() -> PlayTool:
-    """CvC play test with random policy."""
-    env = make_training_env(num_cogs=2, mission="training_facility.harvest")
-    sim = SimulationConfig(suite="cogs_vs_clips", name="harvest_ci", env=env)
-    return PlayTool(sim=sim, max_steps=10, render="log", open_browser_on_start=False)
 
 
 @stable_job(

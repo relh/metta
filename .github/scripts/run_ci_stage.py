@@ -85,7 +85,7 @@ def _summarize(stage: str, success: bool, output: str) -> List[str]:
     if success:
         return lines
 
-    if stage == "python-tests-and-benchmarks":
+    if stage in {"python-tests", "python-tests-and-benchmarks"}:
         failures = _extract_python_failures(output)
         commands = _extract_re_run_commands(output)
         if failures:

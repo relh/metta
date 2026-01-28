@@ -18,6 +18,7 @@ from mettagrid.config.mettagrid_config import (
 )
 from mettagrid.map_builder.random_map import RandomMapBuilder
 from mettagrid.simulator import Simulation
+from recipes.experiment import cogsguard
 
 
 class TestComprehensiveEnvironmentIntegration:
@@ -181,16 +182,16 @@ class TestComprehensiveEnvironmentIntegration:
     def test_environment_integration_with_new_recipes(self):
         """Test that environments work with the new recipe system."""
         # Test creating environments similar to those used in recipes
-        arena_env = eb.make_arena(num_agents=4)
+        cogsguard_env = cogsguard.make_env(num_agents=4, max_steps=100)
         nav_env = eb.make_navigation(num_agents=2)
 
-        assert arena_env.game.num_agents == 4
+        assert cogsguard_env.game.num_agents == 4
         assert nav_env.game.num_agents == 2
 
         # Test that they have expected components
-        assert "assembler" in arena_env.game.objects
+        assert "aligner_station" in cogsguard_env.game.objects
         assert "assembler" in nav_env.game.objects
-        assert arena_env.game.actions.move is not None
+        assert cogsguard_env.game.actions.move is not None
         assert nav_env.game.actions.move is not None
 
     def test_programmatic_env_with_mettagrid(self):
@@ -300,7 +301,7 @@ class TestComprehensiveEnvironmentIntegration:
         }
 
         train_args = [
-            "recipes.experiment.arena.train",
+            "recipes.experiment.cogsguard.train",
             f"run={run_name}",
             "trainer.total_timesteps=100",
             "wandb=off",
@@ -317,7 +318,7 @@ class TestComprehensiveEnvironmentIntegration:
 
         # Test simulation tool configuration
         sim_args = [
-            "recipes.experiment.arena.evaluate",
+            "recipes.experiment.cogsguard.evaluate",
             "policy_uri=mock://test",  # Use mock policy
             "--dry-run",
         ]

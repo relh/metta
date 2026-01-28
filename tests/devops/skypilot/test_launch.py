@@ -35,7 +35,7 @@ def test_launch_dry_run_success():
     result = runner.invoke(
         app,
         [
-            "arena.train",
+            "cogsguard.train",
             "run=test_dry_run",
             "--dry-run",
             "--skip-git-check",
@@ -60,13 +60,13 @@ def test_launch_dry_run_success():
 
 
 def test_launch_two_token_syntax():
-    """Test that launch.py supports two-token syntax like 'train arena'."""
+    """Test that launch.py supports two-token syntax like 'train cogsguard'."""
     # Test two-token syntax
     result = runner.invoke(
         app,
         [
             "train",
-            "arena",
+            "cogsguard",
             "run=test_two_token",
             "--dry-run",
             "--skip-git-check",
@@ -93,7 +93,7 @@ def test_launch_invalid_run_name():
     result = runner.invoke(
         app,
         [
-            "arena.train",
+            "cogsguard.train",
             "run=123invalid",
             "--dry-run",
             "--skip-git-check",
@@ -133,7 +133,7 @@ def test_launch_dump_config():
     result = runner.invoke(
         app,
         [
-            "arena.train",
+            "cogsguard.train",
             "run=test_dump",
             "--dump-config=yaml",
             "--skip-git-check",

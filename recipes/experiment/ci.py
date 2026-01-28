@@ -1,3 +1,4 @@
+from devops.stable.registry import ci_job
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.play import PlayTool
 from metta.tools.replay import ReplayTool
@@ -60,4 +61,12 @@ def play_null() -> PlayTool:
     """Play with no policy (null agent) for testing."""
     cfg = play()
     cfg.policy_uri = None
+    return cfg
+
+
+@ci_job(timeout_s=120)
+def play_smoke() -> PlayTool:
+    cfg = play_null()
+    cfg.render = "log"
+    cfg.max_steps = 10
     return cfg

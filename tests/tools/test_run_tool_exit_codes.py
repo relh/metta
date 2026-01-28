@@ -42,7 +42,7 @@ def test_run_tool_returns_exit_code_0_on_success():
 
     # Run a --dry-run which should succeed
     result = subprocess.run(
-        ["uv", "run", "./tools/run.py", "train", "arena_basic_easy_shaped", "--dry-run"],
+        ["uv", "run", "./tools/run.py", "train", "cogsguard", "--dry-run"],
         cwd=get_repo_root(),
         capture_output=True,
         timeout=120,

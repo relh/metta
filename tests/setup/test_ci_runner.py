@@ -23,11 +23,12 @@ def test_ci_help_shows_all_stages() -> None:
     )
 
     assert result.returncode == 0
-    # Check that all 4 stages are mentioned in help
+    # Check that key stages are mentioned in help
     assert "lint" in result.stdout
-    assert "python-tests-and-benchmarks" in result.stdout
+    assert "python-tests" in result.stdout
     assert "cpp-tests" in result.stdout
     assert "cpp-benchmarks" in result.stdout
+    assert "python-tests-and-benchmarks" not in result.stdout
 
 
 def test_ci_invalid_stage_fails() -> None:

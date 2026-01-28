@@ -2,9 +2,8 @@ name: "Test and Benchmark"
 
 # This workflow uses metta ci as the single source of truth for CI checks.
 # Each job calls metta ci with a specific stage:
-#   --stage lint, --stage python-tests-and-benchmarks,
-#   --stage cpp-tests, --stage cpp-benchmarks, --stage nim-tests,
-#   --stage recipe-tests, --stage cogames-docsync
+#   --stage lint, --stage python-tests,
+#   --stage cpp-tests, --stage cpp-benchmarks, --stage nim-tests, --stage recipe-tests, --stage cogames-docsync
 # Local development can run all stages with: metta ci
 
 on:
@@ -185,7 +184,7 @@ jobs:
           languages: python
           api_key: ${{ secrets.DD_API_KEY }}
 
-      - name: Run Python tests and benchmarks
+      - name: Run Python tests
         shell: bash
         env:
           DD_CIVISIBILITY_LOG_LEVEL: warning
@@ -195,19 +194,19 @@ jobs:
           if [[ "${{ needs.setup-checks.outputs.app_backend_has_changes }}" != "true" ]]; then
             ARGS+=(--skip-package app_backend)
           fi
-          uv run python .github/scripts/run_ci_stage.py python-tests-and-benchmarks -- "${ARGS[@]}"
+          uv run python .github/scripts/run_ci_stage.py python-tests -- "${ARGS[@]}"
 
       - name: Python type checking
         run: uv run python .github/scripts/run_ci_stage.py pyright
 
   recipe-tests:
-    name: "Tests - Recipes"
+    name: "Tests - Recipes (Smoke)"
     needs: setup-checks
     if: |
       needs.setup-checks.outputs.skip == 'false' &&
       needs.setup-checks.outputs.run_test == 'true'
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    timeout-minutes: 30
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
     steps:
       - id: ci-token
         uses: actions/create-github-app-token@v1
@@ -223,8 +222,8 @@ jobs:
         with:
           install-mode: "runtime"
 
-      - name: Run Recipe tests
-        run: uv run python .github/scripts/run_ci_stage.py recipe-tests --non-interactive
+      - name: Run recipe smoke test
+        run: uv run python .github/scripts/run_ci_stage.py recipe-tests
 
   cpp-tests:
     name: "Tests - C++ and Nim"

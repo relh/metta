@@ -14,9 +14,9 @@ from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import CheckpointerConfig, EvaluatorConfig, TrainingEnvironmentConfig
 from metta.tools.train import TrainTool
-from mettagrid.builder.envs import make_arena
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
+from recipes.experiment import cogsguard
 
 
 class DummyPolicyArchitecture(PolicyArchitecture):
@@ -115,7 +115,7 @@ def create_minimal_training_setup(
     data_dir: Path,
 ) -> tuple[TrainerConfig, TrainingEnvironmentConfig, FastConfig, SystemConfig]:
     """Create the minimal training configuration used in fast checkpoint tests."""
-    curriculum = env_curriculum(make_arena(num_agents=1))
+    curriculum = env_curriculum(cogsguard.make_env(num_agents=1, max_steps=50))
 
     trainer_cfg = TrainerConfig(
         total_timesteps=16,

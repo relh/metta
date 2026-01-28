@@ -16,6 +16,7 @@ from metta.tools.play import PlayTool
 from metta.tools.replay import ReplayTool
 from mettagrid import PufferMettaGridEnv, dtype_observations
 from mettagrid.simulator import Simulator
+from recipes.experiment import cogsguard
 
 
 class TestBasicPolicyEnvironment:
@@ -65,7 +66,7 @@ class TestBasicPolicyEnvironment:
     def test_multiple_environments(self):
         """Test creating multiple different environment types."""
         environments = {
-            "arena": eb.make_arena(num_agents=4),
+            "cogsguard": cogsguard.make_env(num_agents=4),
             "navigation": eb.make_navigation(num_agents=2),
         }
 
@@ -92,7 +93,7 @@ class TestBasicPolicyEnvironment:
                 "uv",
                 "run",
                 "./tools/run.py",
-                "recipes.experiment.arena.train",
+                "recipes.experiment.cogsguard.train",
                 f"run={run_name}",
                 "trainer.total_timesteps=100",  # Very minimal training
                 "wandb=off",
@@ -113,19 +114,19 @@ class TestBasicPolicyEnvironment:
 
         assert captured_runs, "Training command was not invoked"
         train_cmd, kwargs = captured_runs[0]
-        assert train_cmd[:4] == ["uv", "run", "./tools/run.py", "recipes.experiment.arena.train"]
+        assert train_cmd[:4] == ["uv", "run", "./tools/run.py", "recipes.experiment.cogsguard.train"]
         assert kwargs["cwd"] == Path.cwd()
         assert kwargs["env"]["AWS_ACCESS_KEY_ID"] == "dummy_for_test"
 
     def test_eval_tool_config_with_policy_uri(self):
         """Test that EvaluateTool accepts policy URIs."""
 
-        env_config = eb.make_arena(num_agents=4)
-        sim_config = SimulationConfig(suite="test", name="test_arena", env=env_config)
+        env_config = cogsguard.make_env(num_agents=4)
+        sim_config = SimulationConfig(suite="test", name="test_cogsguard", env=env_config)
 
         eval_tool = EvaluateTool(simulations=[sim_config], policy_uris=["mock://test_policy"])
 
-        assert eval_tool.simulations[0].name == "test_arena"
+        assert eval_tool.simulations[0].name == "test_cogsguard"
         assert eval_tool.policy_uris == ["mock://test_policy"]
 
     def test_play_and_replay_tools_share_run_configuration(self):

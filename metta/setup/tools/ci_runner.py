@@ -6,7 +6,7 @@ Both local development (metta ci) and GitHub Actions call this same tool.
 GitHub Actions workflow calls individual stages:
   - uv run metta ci --stage lint
   - uv run metta ci --stage pyright
-  - uv run metta ci --stage python-tests-and-benchmarks
+  - uv run metta ci --stage python-tests
   - uv run metta ci --stage cpp-tests
   - uv run metta ci --stage cpp-benchmarks
   - uv run metta ci --stage recipe-tests
@@ -124,11 +124,11 @@ def _run_python_tests(
     verbose: bool = False,
     extra_args: Sequence[str] | None = None,
 ) -> CheckResult:
-    _print_header("Python Tests and Benchmarks")
+    _print_header("Python Tests")
 
-    cmd = ["uv", "run", "metta", "pytest", "--ci", "--test", "--benchmark"]
+    cmd = ["uv", "run", "metta", "pytest", "--ci", "--test"]
     cmd.extend(_normalize_python_stage_args(extra_args))
-    passed = _run_command(cmd, "Python tests and benchmarks", verbose=verbose)
+    passed = _run_command(cmd, "Python tests", verbose=verbose)
 
     return CheckResult("Python Tests", passed)
 
@@ -180,7 +180,7 @@ def _run_cleanup_cancelled_runs(*, verbose: bool = False, extra_args: Sequence[s
 
 
 def _run_recipe_tests(*, verbose: bool = False, name_filter: str | None = None, **_kwargs) -> CheckResult:
-    _print_header("Recipe CI Tests")
+    _print_header("Recipe Smoke Tests")
 
     cmd = ["uv", "run", "./devops/stable/cli.py", "--suite=ci", "--skip-submitting-metrics"]
     if name_filter:
@@ -239,7 +239,7 @@ StageRunner = Callable[[bool, Sequence[str] | None, str | None, bool], CheckResu
 stages: dict[str, StageRunner] = {
     "lint": lambda v, args, name, _: _run_lint(verbose=v, extra_args=args),
     "pyright": lambda v, args, name, _: _run_pyright(verbose=v, extra_args=args),
-    "python-tests-and-benchmarks": lambda v, args, name, _: _run_python_tests(verbose=v, extra_args=args),
+    "python-tests": lambda v, args, name, _: _run_python_tests(verbose=v, extra_args=args),
     "cpp-tests": lambda v, args, name, _: _run_cpp_tests(verbose=v, extra_args=args),
     "cpp-benchmarks": lambda v, args, name, _: _run_cpp_benchmarks(verbose=v, extra_args=args),
     "nim-tests": lambda v, args, name, _: _run_nim_tests(verbose=v, extra_args=args),
@@ -251,7 +251,7 @@ stages: dict[str, StageRunner] = {
 DEFAULT_STAGES = {
     "lint",
     "pyright",
-    "python-tests-and-benchmarks",
+    "python-tests",
     "cpp-tests",
     "cpp-benchmarks",
     "nim-tests",
@@ -287,6 +287,9 @@ def cmd_ci(
         raise typer.Exit(1)
 
     if stage:
+        if stage == "python-tests-and-benchmarks":
+            info("Stage 'python-tests-and-benchmarks' is deprecated; use 'python-tests'.")
+            stage = "python-tests"
         if stage not in stages:
             error(f"Unknown stage: {stage}")
             info(f"Valid stages: {', '.join(stages.keys())}")

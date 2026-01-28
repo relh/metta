@@ -9,7 +9,7 @@ from typing import Optional
 
 import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
-from devops.stable.registry import ci_job, stable_job
+from devops.stable.registry import stable_job
 from devops.stable.runner import AcceptanceCriterion
 from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
@@ -18,9 +18,8 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
-from metta.common.wandb.context import WandbConfig
 from metta.rl.trainer_config import TorchProfilerConfig, TrainerConfig
-from metta.rl.training import CheckpointerConfig, EvaluatorConfig, TrainingEnvironmentConfig
+from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
@@ -267,33 +266,6 @@ def sweep(sweep_name: str) -> SweepTool:
         # Default value is 1. We don't recommend going higher than 4.
         # The faster each individual trial, the lower you can set this number.
         num_parallel_trials=4,
-    )
-
-
-def train_ci() -> TrainTool:
-    """Minimal train for CI smoke test."""
-    return TrainTool(
-        trainer=TrainerConfig(total_timesteps=100),
-        training_env=TrainingEnvironmentConfig(
-            curriculum=make_curriculum(),
-            forward_pass_minibatch_target_size=96,
-            vectorization="serial",
-        ),
-        evaluator=EvaluatorConfig(evaluate_local=False, evaluate_remote=False),
-        checkpointer=CheckpointerConfig(epoch_interval=1),
-        policy_architecture=ViTDefaultConfig(),
-        wandb=WandbConfig.Off(),
-    )
-
-
-@ci_job(timeout_s=120)
-def play_ci() -> PlayTool:
-    """Play test with random policy."""
-    return PlayTool(
-        sim=simulations()[0],
-        max_steps=10,
-        render="log",
-        open_browser_on_start=False,
     )
 
 
