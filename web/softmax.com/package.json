@@ -16,8 +16,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
-    "update-softmax-team": "tsx src/scripts/update-softmax-team.ts",
-    "build:scripts": "esbuild src/scripts/update-softmax-team.ts --bundle --platform=node --outfile=scripts/update-softmax-team.js --external:@prisma/client --alias:@=./src"
+    "update-softmax-team": "tsx src/scripts/update-softmax-team.ts"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
@@ -56,7 +55,6 @@
     "@types/node": "^20",
     "@types/react": "^19.2.9",
     "@types/react-dom": "^19.2.3",
-    "esbuild": "^0.27.2",
     "tailwindcss": "^4.1.17",
     "tsx": "^4.21.0",
     "typescript": "^5"

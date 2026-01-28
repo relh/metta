@@ -47,35 +47,26 @@ WORKDIR /metta/web/softmax.com
 
 RUN pnpm run db:generate
 RUN pnpm run build
-RUN pnpm run build:scripts
 
 # ================================ Serve the Next.js app ================================
 FROM base AS runtime
 
-WORKDIR /metta/web/softmax.com
+WORKDIR /metta
 ENV NODE_ENV=production
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /metta/web/softmax.com/public ./public
-COPY --from=builder --chown=nextjs:nodejs /metta/web/softmax.com/.next/standalone/web/softmax.com ./
-COPY --from=builder --chown=nextjs:nodejs /metta/web/softmax.com/.next/static ./.next/static
+# Copy the entire built workspace from builder
+COPY --from=builder --chown=nextjs:nodejs /metta .
 
-# Prisma files for database migrations
-COPY --from=builder /metta/web/softmax.com/prisma prisma
-COPY --from=builder /metta/web/softmax.com/package.json .
+# Set corepack home to a shared location and prepare pnpm (version from root package.json)
+ENV COREPACK_HOME=/opt/corepack
+RUN mkdir -p /opt/corepack && \
+    corepack prepare --activate && \
+    chown -R nextjs:nodejs /opt/corepack
 
-# Install Prisma (CLI + client) for migrations and update-softmax-team script.
-#
-# TODO - installing this with npm instead of pnpm is inconsistent and slower than pnpm;
-# but naive pnpm results in 2.2GB image instead of 1.4GB because of pnpm caches. It's probably possible to optimize this.
-RUN PRISMA_VERSION=$(node -p "require('./package.json').dependencies['@prisma/client'].replace(/^[\^~]/, '')") && \
-    npm install @prisma/client@$PRISMA_VERSION prisma@$PRISMA_VERSION && \
-    npx prisma generate
-
-# Pre-compiled script for update-softmax-team cronjob
-COPY --from=builder /metta/web/softmax.com/scripts/update-softmax-team.js ./scripts/
+WORKDIR /metta/web/softmax.com
 
 USER nextjs
 
@@ -83,5 +74,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-# Start the Next.js server
-CMD ["node", "server.js"]
+CMD ["pnpm", "start"]

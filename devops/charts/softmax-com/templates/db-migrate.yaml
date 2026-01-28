@@ -15,8 +15,7 @@ spec:
         - name: nextjs
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "image.tag" .Values.image.tag }}"
           imagePullPolicy: Always
-          command: ["npx", "prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
-          workingDir: /metta/web/softmax.com
+          command: ["pnpm", "db:migrate:deploy"]
           envFrom:
           - secretRef:
               name: {{ .Values.frontend.secret_name }}

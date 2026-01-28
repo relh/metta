@@ -16,7 +16,7 @@ spec:
             - name: nextjs
               image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "image.tag" .Values.image.tag }}"
               imagePullPolicy: Always
-              command: ["node", "scripts/update-softmax-team.js"]
+              command: ["pnpm", "update-softmax-team"]
               envFrom:
                 - secretRef:
                     name: {{ .Values.frontend.secret_name }}
