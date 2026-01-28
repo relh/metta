@@ -29,6 +29,14 @@ class NavigationState:
     # Exploration state (expanding box pattern)
     explore_origin: Optional[tuple[int, int]] = None
     explore_start_step: int = 0
+    explore_radius: int = 15  # Initial exploration radius, grows by 10% when area exhausted
+    explore_last_mineral_step: int = 0  # Last step we saw a mineral
+    # Resource rotation for miners - track recently gathered resources
+    last_resource_types: list[str] = field(default_factory=list)  # Most recent first, max 4
+    # Current extractor target - track to detect stuck/empty situations
+    current_extractor_target: Optional[tuple[int, int]] = None
+    steps_at_current_extractor: int = 0  # Steps spent at/near current target without cargo gain
+    failed_extractors: set[tuple[int, int]] = field(default_factory=set)  # Extractors that gave nothing
     # Legacy fields (kept for compatibility)
     exploration_direction: Optional[str] = None
     exploration_direction_step: int = 0
@@ -213,6 +221,12 @@ class AgentState:
     heart: int = 0
     influence: int = 0
 
+    # Collective inventory (observed from stats tokens)
+    collective_carbon: int = 0
+    collective_oxygen: int = 0
+    collective_germanium: int = 0
+    collective_silicon: int = 0
+
     # Gear (presence = equipped)
     miner_gear: bool = False
     scout_gear: bool = False
@@ -240,6 +254,13 @@ class AgentState:
     # Stuck detection: track consecutive steps at same position
     last_position: tuple[int, int] = (100, 100)
     steps_at_same_position: int = 0
+
+    # Escape mode: when stuck, commit to escaping for several steps
+    escape_direction: Optional[str] = None  # Direction to escape (north/south/east/west)
+    escape_until_step: int = 0  # Keep escaping until this step
+
+    # Aligner target tracking: current junction being targeted
+    aligner_target: Optional[tuple[int, int]] = None
 
     # Last observation (for relative direction calculations)
     last_obs: Optional["AgentObservation"] = None

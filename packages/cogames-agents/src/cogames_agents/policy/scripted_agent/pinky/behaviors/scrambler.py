@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from cogames_agents.policy.scripted_agent.pinky.behaviors.base import Services, is_adjacent, manhattan_distance
+from cogames_agents.policy.scripted_agent.pinky.behaviors.base import (
+    Services,
+    explore_for_station,
+    get_explore_direction_for_agent,
+    is_adjacent,
+    manhattan_distance,
+)
 from cogames_agents.policy.scripted_agent.pinky.types import (
     DEBUG,
     JUNCTION_AOE_RANGE,
@@ -37,33 +43,30 @@ class ScramblerBehavior:
     # How many ticks to explore before retrying gear station
     GEAR_RETRY_INTERVAL = 100
 
-    # How many ticks at same position before switching to explore
-    STUCK_THRESHOLD = 5  # Fast detection to avoid wasting time on blocked paths
+    # How many steps before junction alignment data is considered stale
+    # Since alignment can change (e.g., enemy aligners convert junctions),
+    # scramblers should revisit old junctions to check for new targets
+    JUNCTION_STALE_THRESHOLD = 50
 
     def act(self, state: AgentState, services: Services) -> Action:
-        """Execute scrambler behavior."""
-        # Track gear state for detecting gear loss
-        has_gear_now = state.scrambler_gear
-        just_lost_gear = state.had_gear_last_step and not has_gear_now
-        state.had_gear_last_step = has_gear_now
+        """Execute scrambler behavior.
 
-        # Track stuck detection: count consecutive steps at same position
-        if state.pos == state.last_position:
-            state.steps_at_same_position += 1
-        else:
-            state.steps_at_same_position = 0
-            state.last_position = state.pos
+        Priority order:
+        1. Stuck detection - break out of stuck loops (using navigator's escape handling)
+        2. Critical HP retreat - survive first
+        3. Get gear (REQUIRED) - must have scrambler gear to scramble effectively
+        4. Get hearts (REQUIRED) - must have hearts to scramble
+        5. Hunt and scramble enemy junctions
+        """
+        # Track gear state
+        state.had_gear_last_step = state.scrambler_gear
 
-        # Priority 0: If stuck for too long, try random direction to break out
-        if state.steps_at_same_position >= self.STUCK_THRESHOLD:
-            if DEBUG:
-                print(f"[A{state.agent_id}] SCRAMBLER: STUCK for {state.steps_at_same_position} ticks, random break")
-            state.debug_info = DebugInfo(mode="explore", goal="unstuck", target_object="-", signal="stuck")
-            state.steps_at_same_position = 0
-            # Try random direction to escape - rotate through based on step
-            directions = ["north", "south", "east", "west"]
-            direction = directions[(state.step + state.agent_id) % 4]
-            return Action(name=f"move_{direction}")
+        # Priority 0: Check for stuck patterns and handle escape mode (via navigator)
+        escape_action = services.navigator.check_and_handle_escape(state)
+        if escape_action:
+            debug_info = services.navigator.get_escape_debug_info(state)
+            state.debug_info = DebugInfo(**debug_info)
+            return escape_action
 
         # Priority 1: Retreat only if critically low (scramblers are tanky)
         # Only retreat when HP drops below 30 (they start with 50)
@@ -73,27 +76,24 @@ class ScramblerBehavior:
             state.debug_info = DebugInfo(mode="retreat", goal="safety", target_object="safe_zone", signal="hp_low")
             return self._retreat_to_safety(state, services)
 
-        # Priority 2: Get hearts if empty (needed to scramble)
-        # Hearts are more important than gear - can scramble without gear
+        # Priority 2: Get gear (REQUIRED) - scrambler gear is needed to scramble effectively
+        # Gear gives +200 HP which is essential for surviving in enemy territory
+        if self.needs_gear(state):
+            return self._get_gear(state, services)
+
+        # Priority 3: Get hearts (REQUIRED) - hearts are needed to scramble junctions
         if not self.has_resources_to_act(state):
             return self._get_hearts(state, services)
-
-        # Priority 3: Get gear if missing AND station is very close
-        # Gear gives +200 HP but isn't essential
-        if self.needs_gear(state):
-            station_name = ROLE_TO_STATION[Role.SCRAMBLER]
-            station_pos = state.map.stations.get(station_name)
-            if station_pos is not None:
-                dist = manhattan_distance(state.pos, station_pos)
-                # Only get gear if very close (< 5 steps) or just lost it
-                if dist < 5 or just_lost_gear:
-                    return self._get_gear(state, services)
 
         # Priority 4: Hunt and scramble enemy junctions
         return self._scramble_junction(state, services)
 
     def needs_gear(self, state: AgentState) -> bool:
-        """Scramblers need scrambler gear for +200 HP."""
+        """Scramblers MUST have scrambler gear to scramble effectively.
+
+        Gear provides +200 HP which is essential for surviving enemy territory.
+        Without gear, scramblers would die too quickly to be effective.
+        """
         return not state.scrambler_gear
 
     def has_resources_to_act(self, state: AgentState) -> bool:
@@ -161,41 +161,92 @@ class ScramblerBehavior:
         return self._explore_for_station(state, services)
 
     def _explore_for_station(self, state: AgentState, services: Services) -> Action:
-        """Explore systematically to find the scrambler station.
+        """Explore to find the scrambler station."""
+        # Spread scramblers out by giving each agent a different primary direction
+        direction = get_explore_direction_for_agent(state.agent_id)
+        return explore_for_station(state, services, primary_direction=direction)
 
-        Uses an expanding spiral pattern, offset by agent_id to spread agents out.
-        """
-        # Direction sequences for different starting directions
-        direction_orders = [
-            ["east", "south", "west", "north"],
-            ["south", "west", "north", "east"],
-            ["west", "north", "east", "south"],
-            ["north", "east", "south", "west"],
-        ]
-        dirs = direction_orders[state.agent_id % 4]
-
-        pattern: list[str] = []
-        for ring in range(1, 8):
-            steps = ring * 2
-            pattern.extend([dirs[0]] * steps)
-            pattern.extend([dirs[1]] * steps)
-            pattern.extend([dirs[2]] * (steps + 2))
-            pattern.extend([dirs[3]] * (steps + 2))
-
-        explore_step = max(0, state.step - 2)
-        idx = explore_step % len(pattern)
-        return Action(name=f"move_{pattern[idx]}")
+    # How often to cycle exploration direction (in steps)
+    EXPLORE_DIRECTION_CYCLE = 100
 
     def _explore_for_enemy_junctions(self, state: AgentState, services: Services) -> Action:
-        """Explore aggressively to find clips junctions.
+        """Explore to find clips junctions, ensuring whole-map coverage.
 
-        Uses random direction selection (similar to random policy which navigates better).
+        Strategy:
+        1. Revisit stale junctions (alignment data may be outdated) - least recently seen first
+        2. If no stale junctions, patrol the map by cycling through different directions
+        3. Reset exploration origin periodically to cover new areas
         """
-        import random
+        # Find junctions that haven't been visited recently (alignment could have changed)
+        # Prioritize least recently seen - these are most likely to have outdated alignment info
+        stale_junctions: list[tuple[int, int, StructureInfo]] = []  # (steps_since_seen, dist, junction)
 
-        directions = ["north", "south", "east", "west"]
-        direction = random.choice(directions)
-        return Action(name=f"move_{direction}")
+        for junction in state.map.get_junctions():
+            steps_since_seen = state.step - junction.last_seen_step
+
+            # Only consider junctions we haven't seen recently
+            if steps_since_seen < self.JUNCTION_STALE_THRESHOLD:
+                continue
+
+            # Skip known clips junctions (we already found them, _find_best_target handles them)
+            # Focus on neutral and unknown junctions that could have become clips
+            if junction.is_clips_aligned():
+                continue
+
+            dist = manhattan_distance(state.pos, junction.position)
+            stale_junctions.append((steps_since_seen, dist, junction))
+
+        if stale_junctions:
+            # Sort by: most stale first (highest steps_since_seen), then by distance
+            stale_junctions.sort(key=lambda x: (-x[0], x[1]))
+            target = stale_junctions[0][2]
+
+            if DEBUG and state.step % 50 == 0:
+                print(
+                    f"[A{state.agent_id}] SCRAMBLER: Revisiting stale junction at {target.position} "
+                    f"(last_seen={target.last_seen_step}, age={state.step - target.last_seen_step})"
+                )
+
+            state.debug_info = DebugInfo(
+                mode="explore",
+                goal=f"revisit_stale(age={state.step - target.last_seen_step})",
+                target_object="junction",
+                target_pos=target.position,
+            )
+            return services.navigator.move_to(state, target.position, reach_adjacent=True)
+
+        # No stale junctions - patrol the map to find enemy territory
+        # Cycle through directions over time to ensure whole-map coverage
+        # Each scrambler starts at a different direction (agent_id offset) and cycles through all 4
+        directions = ["north", "east", "south", "west"]
+        current_cycle = state.step // self.EXPLORE_DIRECTION_CYCLE
+        cycle_index = (current_cycle + state.agent_id) % 4
+        direction_bias = directions[cycle_index]
+
+        # Reset exploration origin when we've been exploring from the same origin for too long
+        # This prevents getting stuck in one area - forces movement to new regions
+        if state.nav.explore_origin is not None:
+            steps_at_origin = state.step - state.nav.explore_start_step
+            if steps_at_origin >= self.EXPLORE_DIRECTION_CYCLE:
+                # Time to move to a new area - reset origin to current position
+                state.nav.explore_origin = state.pos
+                state.nav.explore_start_step = state.step
+                if DEBUG:
+                    print(
+                        f"[A{state.agent_id}] SCRAMBLER: Resetting patrol origin to {state.pos}, "
+                        f"direction={direction_bias}"
+                    )
+
+        if DEBUG and state.step % 50 == 0:
+            clips_count = len(state.map.get_clips_junctions())
+            all_count = len(state.map.get_junctions())
+            print(
+                f"[A{state.agent_id}] SCRAMBLER: Patrolling (clips={clips_count}, "
+                f"all={all_count}, direction={direction_bias}, cycle={current_cycle})"
+            )
+
+        state.debug_info = DebugInfo(mode="explore", goal=f"patrol_{direction_bias}", target_object="junction")
+        return services.navigator.explore(state, direction_bias=direction_bias)
 
     def _get_hearts(self, state: AgentState, services: Services) -> Action:
         """Get hearts from chest."""
@@ -243,9 +294,22 @@ class ScramblerBehavior:
     def _scramble_junction(self, state: AgentState, services: Services) -> Action:
         """Find and scramble an enemy (clips) junction.
 
-        Strategy: Only target clips-aligned junctions (save hearts for real scrambles).
+        Strategy: ONLY target clips-aligned junctions (save hearts for real scrambles).
+        Always verify alignment AND resources before using - both can change at any time.
         """
-        # First try to find junction in current observation
+        # SAFETY CHECK: Verify we still have the required resources
+        # This is a defensive check - act() should have already verified this
+        if self.needs_gear(state):
+            if DEBUG:
+                print(f"[A{state.agent_id}] SCRAMBLER: In _scramble_junction but missing gear, getting gear")
+            return self._get_gear(state, services)
+
+        if not self.has_resources_to_act(state):
+            if DEBUG:
+                print(f"[A{state.agent_id}] SCRAMBLER: In _scramble_junction but no hearts, getting hearts")
+            return self._get_hearts(state, services)
+
+        # First try to find CLIPS junction in current observation
         if state.last_obs is not None:
             result = services.map_tracker.get_direction_to_nearest(
                 state, state.last_obs, frozenset({"junction", "charger", "supply_depot"})
@@ -254,7 +318,8 @@ class ScramblerBehavior:
                 direction, target_pos = result
                 struct = state.map.get_structure_at(target_pos)
 
-                # ONLY target clips-aligned junctions (don't waste hearts on neutral)
+                # ONLY target confirmed clips-aligned junctions
+                # Don't waste time on neutral/unknown - let exploration handle discovery
                 if struct is not None and struct.is_clips_aligned():
                     if DEBUG:
                         print(f"[A{state.agent_id}] SCRAMBLER: Enemy junction at {target_pos}, moving {direction}")
@@ -262,46 +327,78 @@ class ScramblerBehavior:
                         mode="scramble", goal="enemy_junction", target_object="junction", target_pos=target_pos
                     )
                     return Action(name=f"move_{direction}")
-                elif struct is None or struct.alignment is None:
-                    # Unknown alignment - move toward to discover
-                    state.debug_info = DebugInfo(
-                        mode="explore", goal="check_junction", target_object="junction", target_pos=target_pos
-                    )
-                    return Action(name=f"move_{direction}")
+                # If not clips-aligned, don't target it - fall through to map knowledge or explore
 
         # Fall back to map knowledge - find known clips junctions
         target = self._find_best_target(state, services)
 
-        if target is None:
-            # No known enemy junctions - explore toward map edges to find them
-            if DEBUG and state.step % 50 == 0:
-                clips_count = len(state.map.get_clips_junctions())
-                all_count = len(state.map.get_junctions())
-                print(f"[A{state.agent_id}] SCRAMBLER: No enemy junctions found (clips={clips_count}, all={all_count})")
-            state.debug_info = DebugInfo(mode="explore", goal="find_enemy_junction", target_object="junction")
-            # Explore toward map edges where clips junctions likely are
-            return self._explore_for_enemy_junctions(state, services)
+        if target is not None:
+            dist = manhattan_distance(state.pos, target.position)
 
-        dist = manhattan_distance(state.pos, target.position)
+            if is_adjacent(state.pos, target.position):
+                # IMPORTANT: Re-verify alignment before using!
+                # Alignment could have changed while we were moving toward it
+                current_struct = state.map.get_structure_at(target.position)
+                if current_struct is None or not current_struct.is_clips_aligned():
+                    if DEBUG:
+                        alignment = current_struct.alignment if current_struct else "unknown"
+                        print(
+                            f"[A{state.agent_id}] SCRAMBLER: Target at {target.position} no longer clips "
+                            f"(now {alignment}), finding new target"
+                        )
+                    state.debug_info = DebugInfo(
+                        mode="scramble",
+                        goal="target_alignment_changed",
+                        target_object="junction",
+                        signal="alignment_changed",
+                    )
+                    # Target is no longer clips - explore to find a new one
+                    return self._explore_for_enemy_junctions(state, services)
 
-        if is_adjacent(state.pos, target.position):
-            if DEBUG:
-                print(f"[A{state.agent_id}] SCRAMBLER: Scrambling junction at {target.position}")
+                # CRITICAL: Final check before spending hearts - verify we have resources
+                if not self.has_resources_to_act(state):
+                    if DEBUG:
+                        print(
+                            f"[A{state.agent_id}] SCRAMBLER: Adjacent to junction but no hearts! Getting hearts first."
+                        )
+                    return self._get_hearts(state, services)
+
+                if DEBUG:
+                    print(f"[A{state.agent_id}] SCRAMBLER: Scrambling junction at {target.position}")
+                state.debug_info = DebugInfo(
+                    mode="scramble", goal="use_junction", target_object="junction", target_pos=target.position
+                )
+                return services.navigator.use_object_at(state, target.position)
+
+            # Not adjacent yet - verify target is still clips before continuing to move toward it
+            current_struct = state.map.get_structure_at(target.position)
+            if current_struct is None or not current_struct.is_clips_aligned():
+                if DEBUG:
+                    alignment = current_struct.alignment if current_struct else "unknown"
+                    print(
+                        f"[A{state.agent_id}] SCRAMBLER: Target at {target.position} no longer clips "
+                        f"(now {alignment}), finding new target"
+                    )
+                # Target changed - find a new one next tick
+                return self._explore_for_enemy_junctions(state, services)
+
             state.debug_info = DebugInfo(
-                mode="scramble", goal="use_junction", target_object="junction", target_pos=target.position
+                mode="scramble",
+                goal=f"move_to_junction(dist={dist})",
+                target_object="junction",
+                target_pos=target.position,
             )
-            return services.navigator.use_object_at(state, target.position)
+            return services.navigator.move_to(state, target.position, reach_adjacent=True)
 
-        state.debug_info = DebugInfo(
-            mode="scramble", goal=f"move_to_junction(dist={dist})", target_object="junction", target_pos=target.position
-        )
-        return services.navigator.move_to(state, target.position, reach_adjacent=True)
+        # No known clips junctions - explore to find them or revisit stale junctions
+        # Since alignment can change, revisit old junctions (least recently seen first)
+        return self._explore_for_enemy_junctions(state, services)
 
     def _find_best_target(self, state: AgentState, services: Services) -> Optional[StructureInfo]:
         """Find enemy junction to scramble.
 
-        Prioritizes junctions that are blocking neutral territory
-        (i.e., junctions whose AOE covers neutral junctions).
+        ONLY returns confirmed clips-aligned junctions.
+        Stale/neutral junctions are handled by exploration, not targeting.
         """
         max_dist = services.safety.max_safe_distance(state, self.risk_tolerance)
 

@@ -9,7 +9,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from cogames_agents.policy.scripted_agent.pinky.behaviors.base import Services, is_adjacent, manhattan_distance
+from cogames_agents.policy.scripted_agent.pinky.behaviors.base import (
+    Services,
+    explore_for_station,
+    is_adjacent,
+    manhattan_distance,
+)
 from cogames_agents.policy.scripted_agent.pinky.types import (
     DEBUG,
     ROLE_TO_STATION,
@@ -37,8 +42,8 @@ class MinerBehavior:
     # How many ticks to mine/explore before retrying gear station
     GEAR_RETRY_INTERVAL = 100
 
-    # How many ticks at same position before switching to explore
-    STUCK_THRESHOLD = 5  # Fast detection to avoid wasting time on blocked paths
+    # How often to clear the failed extractors list (allow retry)
+    FAILED_EXTRACTOR_RETRY_INTERVAL = 200
 
     def act(self, state: AgentState, services: Services) -> Action:
         """Execute miner behavior - move toward extractors.
@@ -46,14 +51,21 @@ class MinerBehavior:
         Mining happens automatically when walking into extractor cells.
         Uses observation-relative coordinates to avoid position drift issues.
         """
-        import random
+
+        # Periodically clear failed extractors to allow retry (they may have replenished)
+        if state.step % self.FAILED_EXTRACTOR_RETRY_INTERVAL == 0:
+            state.nav.failed_extractors.clear()
 
         # Track cargo changes to detect when extraction stops working (inventory full).
         # If cargo doesn't increase for several steps while we have energy to move,
         # the inventory is likely full. This is more robust than tracking cargo capacity.
-        if state.total_cargo > state.prev_total_cargo:
-            # Cargo increased - reset counter
+        cargo_gained = state.total_cargo > state.prev_total_cargo
+        if cargo_gained:
+            # Cargo increased - reset counter and clear current target (successfully mined)
             state.steps_without_cargo_gain = 0
+            state.nav.steps_at_current_extractor = 0
+            # Clear the current target - we'll pick a new one next step
+            state.nav.current_extractor_target = None
         elif state.total_cargo == state.prev_total_cargo and state.total_cargo > 0:
             # Cargo unchanged but we have some cargo - increment counter
             state.steps_without_cargo_gain += 1
@@ -61,26 +73,32 @@ class MinerBehavior:
             # Cargo decreased (deposit) - reset counter
             state.steps_without_cargo_gain = 0
 
+        # Track time at current extractor target to detect empty/stuck extractors
+        if state.nav.current_extractor_target is not None:
+            target = state.nav.current_extractor_target
+            dist = manhattan_distance(state.pos, target)
+            if dist <= 1:  # At or adjacent to target
+                state.nav.steps_at_current_extractor += 1
+                # If we've been at this extractor for 5+ steps without cargo gain, mark it as failed
+                if state.nav.steps_at_current_extractor >= 5 and not cargo_gained:
+                    if DEBUG:
+                        print(
+                            f"[A{state.agent_id}] MINER: Extractor at {target} appears empty/blocked, "
+                            f"marking as failed after {state.nav.steps_at_current_extractor} steps"
+                        )
+                    state.nav.failed_extractors.add(target)
+                    state.nav.current_extractor_target = None
+                    state.nav.steps_at_current_extractor = 0
+
         # Update prev_total_cargo for next step
         state.prev_total_cargo = state.total_cargo
 
-        # Track stuck detection: count consecutive steps at same position
-        if state.pos == state.last_position:
-            state.steps_at_same_position += 1
-        else:
-            state.steps_at_same_position = 0
-            state.last_position = state.pos
-
-        # Priority 0: If stuck for too long, try random direction to break out
-        if state.steps_at_same_position >= self.STUCK_THRESHOLD:
-            if DEBUG:
-                print(f"[A{state.agent_id}] MINER: STUCK for {state.steps_at_same_position} ticks, random break")
-            state.debug_info = DebugInfo(mode="explore", goal="unstuck", target_object="-", signal="stuck")
-            state.steps_at_same_position = 0
-            # Try random direction to escape - rotate through based on step
-            directions = ["north", "south", "east", "west"]
-            direction = directions[(state.step + state.agent_id) % 4]
-            return Action(name=f"move_{direction}")
+        # Priority 0: Check for stuck patterns and handle escape mode (via navigator)
+        escape_action = services.navigator.check_and_handle_escape(state)
+        if escape_action:
+            debug_info = services.navigator.get_escape_debug_info(state)
+            state.debug_info = DebugInfo(**debug_info)
+            return escape_action
 
         # Priority 1: Critical HP retreat
         if state.hp <= 15:
@@ -150,38 +168,79 @@ class MinerBehavior:
 
         # Priority 4: Keep mining - move toward extractors
         # First try to find extractor in current observation (most accurate)
-        # Build set of known-empty extractor positions to exclude
-        empty_extractors: set[tuple[int, int]] = set()
+        # Build set of positions to exclude: known-empty + recently failed extractors
+        excluded_extractors: set[tuple[int, int]] = set(state.nav.failed_extractors)
         for pos, struct in state.map.structures.items():
             if struct.structure_type == StructureType.EXTRACTOR and not struct.is_usable_extractor():
-                empty_extractors.add(pos)
+                excluded_extractors.add(pos)
 
         if state.last_obs is not None:
-            result = services.map_tracker.get_direction_to_nearest(
-                state,
-                state.last_obs,
-                frozenset({"carbon_extractor", "oxygen_extractor", "germanium_extractor", "silicon_extractor"}),
-                exclude_positions=empty_extractors,
-            )
+            # Get the resource type with the lowest communal amount
+            lowest_resource = self._get_lowest_communal_resource(state)
+            all_extractor_types = {"carbon_extractor", "oxygen_extractor", "germanium_extractor", "silicon_extractor"}
+
+            # Build preferred types (lowest communal resource)
+            if lowest_resource:
+                preferred_types = {f"{lowest_resource}_extractor"}
+            else:
+                preferred_types = set()
+
+            # Try preferred types first (lowest communal resource)
+            result = None
+            if preferred_types:
+                result = services.map_tracker.get_direction_to_nearest(
+                    state,
+                    state.last_obs,
+                    frozenset(preferred_types),
+                    exclude_positions=excluded_extractors,
+                )
+
+            # Fall back to any extractor type
+            if not result:
+                result = services.map_tracker.get_direction_to_nearest(
+                    state,
+                    state.last_obs,
+                    frozenset(all_extractor_types),
+                    exclude_positions=excluded_extractors,
+                )
+
             if result:
                 direction, target_pos = result
+                # Track this as our current target
+                if state.nav.current_extractor_target != target_pos:
+                    state.nav.current_extractor_target = target_pos
+                    state.nav.steps_at_current_extractor = 0
+                # Found a visible mineral - remember this step
+                state.nav.explore_last_mineral_step = state.step
                 state.debug_info = DebugInfo(
                     mode="mine", goal="find_extractor", target_object="extractor", target_pos=target_pos
                 )
                 return Action(name=f"move_{direction}")
 
         # No extractor visible - use internal map knowledge to navigate to known extractors
-        known_extractor = self._find_nearest_extractor(state, services)
+        known_extractor = self._find_nearest_extractor(state, services, excluded_extractors)
         if known_extractor:
+            # Track this as our current target
+            if state.nav.current_extractor_target != known_extractor.position:
+                state.nav.current_extractor_target = known_extractor.position
+                state.nav.steps_at_current_extractor = 0
+            # Found a mineral - remember this step
+            state.nav.explore_last_mineral_step = state.step
+
+            # Track this resource type for rotation
+            res_type = known_extractor.resource_type
+            if res_type:
+                self._record_resource_gathered(state, res_type)
+
             if DEBUG:
                 print(
                     f"[A{state.agent_id}] MINER: No extractor visible, navigating to known {known_extractor.name} "
                     f"at {known_extractor.position}"
                 )
             # Format: "carbon:100" or "extractor" if no resource type
-            res_type = known_extractor.resource_type or "extractor"
+            res_type_name = res_type or "extractor"
             inv_amt = known_extractor.inventory_amount
-            target_name = f"{res_type}:{inv_amt}" if inv_amt >= 0 else res_type
+            target_name = f"{res_type_name}:{inv_amt}" if inv_amt >= 0 else res_type_name
             state.debug_info = DebugInfo(
                 mode="mine",
                 goal="navigate_to_known_extractor",
@@ -190,10 +249,8 @@ class MinerBehavior:
             )
             return services.navigator.move_to(state, known_extractor.position, reach_adjacent=True)
 
-        # Fallback: random walk exploration to find new extractors
-        state.debug_info = DebugInfo(mode="explore", goal="random_walk", target_object="-")
-        directions = ["north", "south", "east", "west"]
-        return Action(name=f"move_{random.choice(directions)}")
+        # No minerals found - explore with expanding radius
+        return self._explore_for_minerals(state, services)
 
     def needs_gear(self, state: AgentState) -> bool:
         """Miners need miner gear for +40 cargo capacity."""
@@ -202,6 +259,20 @@ class MinerBehavior:
     def has_resources_to_act(self, state: AgentState) -> bool:
         """Miners don't need resources to mine."""
         return True
+
+    def _record_resource_gathered(self, state: AgentState, resource_type: str) -> None:
+        """Record that we gathered a resource type for rotation tracking.
+
+        Maintains a list of the last 4 resource types gathered.
+        When the miner fills up on one type, it will prefer other types.
+        """
+        recent = state.nav.last_resource_types
+        # Only add if different from the most recent one (avoid duplicates from same extractor)
+        if not recent or recent[0] != resource_type:
+            recent.insert(0, resource_type)
+            # Keep only the last 4 types
+            if len(recent) > 4:
+                recent.pop()
 
     # How many steps without cargo gain before assuming inventory is full
     STEPS_TO_ASSUME_FULL = 3
@@ -253,32 +324,43 @@ class MinerBehavior:
         return services.navigator.move_to(state, safe_pos, reach_adjacent=True)
 
     def _explore_for_station(self, state: AgentState, services: Services) -> Action:
-        """Explore systematically to find the miner station.
+        """Explore to find the miner station."""
+        # Miners explore south since stations are south of spawn in the hub
+        return explore_for_station(state, services, primary_direction="south")
 
-        Uses an expanding spiral pattern, offset by agent_id to spread agents out.
+    def _explore_for_minerals(self, state: AgentState, services: Services) -> Action:
+        """Explore to find new mineral extractors.
+
+        Uses the navigator's explore method with direction bias to spread out
+        from the base and find new resources. Tracks exploration direction to
+        avoid circling.
         """
-        # Direction sequences for different starting directions
-        direction_orders = [
-            ["east", "south", "west", "north"],
-            ["south", "west", "north", "east"],
-            ["west", "north", "east", "south"],
-            ["north", "east", "south", "west"],
-        ]
-        # Pick direction order based on agent_id to spread agents out
-        dirs = direction_orders[state.agent_id % 4]
+        # Pick a consistent exploration direction based on agent ID to spread miners out
+        # Agent 0 explores south, 1 explores east, 2 explores west, etc.
+        directions = ["south", "east", "west", "north"]
+        base_direction = directions[state.agent_id % len(directions)]
 
-        # Expanding spiral pattern with agent-specific offset
-        pattern: list[str] = []
-        for ring in range(1, 8):
-            steps = ring * 2
-            pattern.extend([dirs[0]] * steps)
-            pattern.extend([dirs[1]] * steps)
-            pattern.extend([dirs[2]] * (steps + 2))
-            pattern.extend([dirs[3]] * (steps + 2))
+        # If we've been exploring the same direction for a while without finding minerals,
+        # switch to a different direction
+        steps_since_mineral = state.step - state.nav.explore_last_mineral_step
+        if steps_since_mineral > 100:
+            # Rotate to next direction
+            dir_idx = (directions.index(base_direction) + (steps_since_mineral // 100)) % len(directions)
+            base_direction = directions[dir_idx]
+            if DEBUG:
+                print(
+                    f"[A{state.agent_id}] MINER: No minerals for {steps_since_mineral} steps, "
+                    f"exploring {base_direction}"
+                )
 
-        explore_step = max(0, state.step - 2)
-        idx = explore_step % len(pattern)
-        return Action(name=f"move_{pattern[idx]}")
+        state.debug_info = DebugInfo(
+            mode="explore",
+            goal=base_direction,
+            target_object="-",
+        )
+
+        # Use navigator's explore which handles pathfinding around obstacles
+        return services.navigator.explore(state, direction_bias=base_direction)
 
     def _get_gear(self, state: AgentState, services: Services) -> Optional[Action]:
         """Go get miner gear from station."""
@@ -417,20 +499,58 @@ class MinerBehavior:
         random.shuffle(directions)
         return Action(name=f"move_{directions[0]}")
 
+    def _get_lowest_communal_resource(self, state: AgentState) -> Optional[str]:
+        """Get the resource type with the lowest communal amount.
+
+        Returns:
+            Resource type name (carbon, oxygen, germanium, silicon) or None if all are 0.
+        """
+        resources = {
+            "carbon": state.collective_carbon,
+            "oxygen": state.collective_oxygen,
+            "germanium": state.collective_germanium,
+            "silicon": state.collective_silicon,
+        }
+        # Find the minimum (break ties alphabetically for consistency)
+        min_amount = min(resources.values())
+        for name in sorted(resources.keys()):
+            if resources[name] == min_amount:
+                return name
+        return None
+
     def _find_nearest_extractor(
-        self, state: AgentState, services: Services, exclude: Optional[tuple[int, int]] = None
+        self,
+        state: AgentState,
+        services: Services,
+        exclude_positions: Optional[set[tuple[int, int]]] = None,
     ) -> Optional[StructureInfo]:
-        """Find nearest usable extractor within step-based range limit."""
+        """Find nearest usable extractor, preferring the resource with lowest communal amount.
+
+        Resource prioritization logic:
+        - Check communal resource levels and prefer the resource type with the lowest amount
+        - Among preferred types, pick the nearest one
+        - Fall back to nearest of any type if no preferred available
+
+        Args:
+            exclude_positions: Set of extractor positions to exclude (empty/failed ones)
+        """
         extractors = state.map.get_usable_extractors()
 
         if not extractors:
             return None
+
+        # Combine with failed extractors to exclude
+        excluded = exclude_positions or set()
+        excluded = excluded | state.nav.failed_extractors
 
         # Use step-based range limit (encourages gradual expansion)
         # Also cap by HP to avoid stranding
         step_limit = services.safety.step_based_range_limit(state.step)
         hp_limit = max(50, state.hp // 2)
         max_dist = min(step_limit, hp_limit)
+
+        # Get the resource type with the lowest communal amount
+        lowest_resource = self._get_lowest_communal_resource(state)
 
         if DEBUG and state.step % 50 == 0:
             struct_types = {}
@@ -440,33 +560,55 @@ class MinerBehavior:
             print(
                 f"[A{state.agent_id}] MINER: _find_nearest_extractor: "
                 f"max_dist={max_dist} (step_limit={step_limit}, hp_limit={hp_limit}), "
-                f"extractors={len(extractors)}, hp={state.hp}"
+                f"extractors={len(extractors)}, hp={state.hp}, "
+                f"lowest_communal={lowest_resource} "
+                f"(C={state.collective_carbon}, O={state.collective_oxygen}, "
+                f"G={state.collective_germanium}, S={state.collective_silicon})"
             )
 
-        # Filter and sort by distance
-        candidates: list[tuple[int, StructureInfo]] = []
+        # Filter extractors by distance and categorize by preference
+        # Prefer extractors that produce the lowest communal resource
+        preferred_candidates: list[tuple[int, StructureInfo]] = []  # Lowest communal resource type
+        fallback_candidates: list[tuple[int, StructureInfo]] = []  # Other resource types
+
         for ext in extractors:
-            if exclude and ext.position == exclude:
+            if ext.position in excluded:
                 continue
             dist = manhattan_distance(state.pos, ext.position)
-            if dist <= max_dist:
-                candidates.append((dist, ext))
+            if dist > max_dist:
+                continue
 
-        if not candidates:
-            # If no extractors in range, return the closest one anyway
-            all_candidates = []
-            for ext in extractors:
-                if exclude and ext.position == exclude:
-                    continue
-                dist = manhattan_distance(state.pos, ext.position)
-                all_candidates.append((dist, ext))
-            if all_candidates:
-                all_candidates.sort(key=lambda x: x[0])
-                return all_candidates[0][1]
-            return None
+            res_type = ext.resource_type
+            if res_type and res_type == lowest_resource:
+                preferred_candidates.append((dist, ext))
+            else:
+                fallback_candidates.append((dist, ext))
 
-        candidates.sort(key=lambda x: x[0])
-        return candidates[0][1]
+        # Return nearest preferred, or nearest fallback
+        if preferred_candidates:
+            preferred_candidates.sort(key=lambda x: x[0])
+            return preferred_candidates[0][1]
+
+        if fallback_candidates:
+            fallback_candidates.sort(key=lambda x: x[0])
+            return fallback_candidates[0][1]
+
+        # No extractors in range - return the closest one anyway (any type)
+        all_candidates = []
+        for ext in extractors:
+            if ext.position in excluded:
+                continue
+            dist = manhattan_distance(state.pos, ext.position)
+            res_type = ext.resource_type
+            # Still prefer lowest communal resource type even when out of range
+            priority = 0 if (res_type and res_type == lowest_resource) else 1
+            all_candidates.append((priority, dist, ext))
+
+        if all_candidates:
+            all_candidates.sort(key=lambda x: (x[0], x[1]))  # Sort by priority, then distance
+            return all_candidates[0][2]
+
+        return None
 
     def _get_nearest_depot(self, state: AgentState, services: Services) -> Optional[tuple[int, int]]:
         """Get nearest COGS-ALIGNED hub/junction for deposit."""

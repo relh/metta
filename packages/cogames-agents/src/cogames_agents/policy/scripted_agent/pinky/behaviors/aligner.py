@@ -2,17 +2,23 @@
 Aligner behavior for Pinky policy.
 
 Aligners convert neutral junctions to expand cogs territory.
-Strategy: Get gear, get hearts, target neutral junctions OUTSIDE enemy AOE only.
+Strategy: Find viable target first, then get gear + hearts, then align.
+A viable target is a neutral junction that is 10+ tiles away from any clips junction.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from cogames_agents.policy.scripted_agent.pinky.behaviors.base import Services, is_adjacent, manhattan_distance
+from cogames_agents.policy.scripted_agent.pinky.behaviors.base import (
+    Services,
+    explore_for_station,
+    get_explore_direction_for_agent,
+    is_adjacent,
+    manhattan_distance,
+)
 from cogames_agents.policy.scripted_agent.pinky.types import (
     DEBUG,
-    JUNCTION_AOE_RANGE,
     ROLE_TO_STATION,
     DebugInfo,
     RiskTolerance,
@@ -24,6 +30,9 @@ from mettagrid.simulator import Action
 if TYPE_CHECKING:
     from cogames_agents.policy.scripted_agent.pinky.state import AgentState
 
+# Minimum distance from clips junctions for a valid aligner target
+MIN_DISTANCE_FROM_CLIPS = 8
+
 
 class AlignerBehavior:
     """Aligner agent: convert neutral junctions to cogs."""
@@ -31,39 +40,31 @@ class AlignerBehavior:
     role = Role.ALIGNER
     risk_tolerance = RiskTolerance.MODERATE
 
-    # Maximum distance from spawn to explore (stay within 50x50 area)
-    MAX_EXPLORE_RADIUS = 25
-
     # How many ticks to explore before retrying gear station
     GEAR_RETRY_INTERVAL = 100
 
-    # How many ticks at same position before switching to explore
-    STUCK_THRESHOLD = 5  # Fast detection to avoid wasting time on blocked paths
-
     def act(self, state: AgentState, services: Services) -> Action:
-        """Execute aligner behavior."""
+        """Execute aligner behavior.
+
+        Flow:
+        1. Handle stuck/escape
+        2. Retreat if low HP
+        3. Find viable target (neutral junction 10+ from clips junctions)
+        4. If no target -> explore
+        5. If has target -> get gear -> get hearts -> align
+        """
         # Track gear state for detecting gear loss
         has_gear_now = state.aligner_gear
         just_lost_gear = state.had_gear_last_step and not has_gear_now
         state.had_gear_last_step = has_gear_now
 
-        # Track stuck detection: count consecutive steps at same position
-        if state.pos == state.last_position:
-            state.steps_at_same_position += 1
-        else:
-            state.steps_at_same_position = 0
-            state.last_position = state.pos
-
-        # Priority 0: If stuck for too long, force explore to break out
-        if state.steps_at_same_position >= self.STUCK_THRESHOLD:
-            if DEBUG:
-                print(f"[A{state.agent_id}] ALIGNER: STUCK for {state.steps_at_same_position} ticks, random break")
-            state.debug_info = DebugInfo(mode="explore", goal="unstuck", target_object="-", signal="stuck")
-            state.steps_at_same_position = 0
-            # Try random direction to escape - rotate through based on step
-            directions = ["north", "south", "east", "west"]
-            direction = directions[(state.step + state.agent_id) % 4]
-            return Action(name=f"move_{direction}")
+        # Priority 0: Check for stuck patterns and handle escape mode
+        escape_action = services.navigator.check_and_handle_escape(state)
+        if escape_action:
+            state.aligner_target = None  # Clear target when escaping
+            debug_info = services.navigator.get_escape_debug_info(state)
+            state.debug_info = DebugInfo(**debug_info)
+            return escape_action
 
         # Priority 1: Retreat if HP is getting low (be more conservative to avoid dying)
         # Aligners are valuable - retreat at 50 HP to stay alive
@@ -73,7 +74,22 @@ class AlignerBehavior:
             state.debug_info = DebugInfo(mode="retreat", goal="safety", target_object="safe_zone", signal="hp_low")
             return self._retreat_to_safety(state, services)
 
-        # Priority 2: Get gear if missing (required for aligning)
+        # Priority 2: Find or validate a viable target
+        # Re-validate current target each step (it may have been aligned by someone else or become invalid)
+        target = self._get_or_find_target(state, services)
+
+        # If no viable target, explore to find junctions
+        if target is None:
+            state.aligner_target = None
+            if DEBUG:
+                print(f"[A{state.agent_id}] ALIGNER: No viable target, exploring")
+            state.debug_info = DebugInfo(mode="explore", goal="find_junction", target_object="junction")
+            return self._explore_for_junctions(state, services)
+
+        # Store the target
+        state.aligner_target = target.position
+
+        # Priority 3: Get gear if missing (required for aligning)
         if self.needs_gear(state):
             # Check if we should try to get gear now
             ticks_since_last_attempt = state.step - state.last_gear_attempt_step
@@ -90,18 +106,18 @@ class AlignerBehavior:
                 # Between retries, get hearts so we're ready when we get gear
                 if not self.has_resources_to_act(state):
                     return self._get_hearts(state, services)
-                # Otherwise explore to find junctions
-                state.debug_info = DebugInfo(mode="explore", goal="find_junction", target_object="junction")
-                return services.navigator.explore(state)
+                # Otherwise explore toward target
+                state.debug_info = DebugInfo(
+                    mode="explore", goal="toward_target", target_object="junction", target_pos=target.position
+                )
+                return self._move_toward_target(state, target.position)
 
-        # Priority 3: Get hearts if empty (needed to align)
+        # Priority 4: Get hearts if empty (needed to align)
         if not self.has_resources_to_act(state):
             return self._get_hearts(state, services)
 
-        # Priority 4: Find and align best target junction
-        # Note: Can only align neutral junctions OUTSIDE clips AOE
-        # Scramblers must neutralize clips junctions first to expand alignable area
-        return self._align_junction(state, services)
+        # Priority 5: Move to and align the target junction
+        return self._align_junction(state, services, target)
 
     def needs_gear(self, state: AgentState) -> bool:
         """Aligners need aligner gear for +20 influence."""
@@ -117,6 +133,44 @@ class AlignerBehavior:
         if safe_pos is None:
             return services.navigator.explore(state)
         return services.navigator.move_to(state, safe_pos, reach_adjacent=True)
+
+    def _is_valid_target(self, pos: tuple[int, int], state: AgentState) -> bool:
+        """Check if a position is a valid aligner target.
+
+        Valid target = neutral junction that is 10+ tiles from any clips junction.
+        """
+        struct = state.map.get_structure_at(pos)
+        if struct is None:
+            return False
+
+        # Must be neutral (not already aligned)
+        if not struct.is_neutral():
+            return False
+
+        # Must be 10+ tiles from any clips junction
+        clips_junctions = state.map.get_clips_junctions()
+        for clips_j in clips_junctions:
+            if manhattan_distance(pos, clips_j.position) < MIN_DISTANCE_FROM_CLIPS:
+                return False
+
+        return True
+
+    def _get_or_find_target(self, state: AgentState, services: Services) -> Optional[StructureInfo]:
+        """Get current target if still valid, otherwise find a new one.
+
+        Returns None if no valid targets exist.
+        """
+        # Check if current target is still valid
+        current_target = getattr(state, "aligner_target", None)
+        if current_target is not None and self._is_valid_target(current_target, state):
+            struct = state.map.get_structure_at(current_target)
+            if struct is not None:
+                if DEBUG:
+                    print(f"[A{state.agent_id}] ALIGNER: Keeping target at {current_target}")
+                return struct
+
+        # Current target invalid or missing, find a new one
+        return self._find_best_target(state, services)
 
     def _get_gear(self, state: AgentState, services: Services) -> Action:
         """Get aligner gear from station."""
@@ -183,58 +237,10 @@ class AlignerBehavior:
         return self._explore_for_station(state, services)
 
     def _explore_for_station(self, state: AgentState, services: Services) -> Action:
-        """Explore using expanding box pattern to cover more map area.
-
-        Uses agent_id to offset starting direction, spreading agents out.
-        """
-        # Get spawn position (default to 100,100 if not tracked)
-        spawn = getattr(state, "spawn_pos", None) or (100, 100)
-
-        # Calculate current distance from spawn
-        dr = state.pos[0] - spawn[0]
-        dc = state.pos[1] - spawn[1]
-        dist_from_spawn = max(abs(dr), abs(dc))
-
-        # If too far from spawn, move back toward it
-        if dist_from_spawn > self.MAX_EXPLORE_RADIUS:
-            if abs(dr) > abs(dc):
-                return Action(name="move_north" if dr > 0 else "move_south")
-            else:
-                return Action(name="move_west" if dc > 0 else "move_east")
-
-        # Direction sequences for different starting directions
-        direction_orders = [
-            ["east", "south", "west", "north"],
-            ["south", "west", "north", "east"],
-            ["west", "north", "east", "south"],
-            ["north", "east", "south", "west"],
-        ]
-        # Pick direction order based on agent_id to spread agents out
-        dirs = direction_orders[state.agent_id % 4]
-
-        explore_step = max(0, state.step - 2)
-        segment_base = 10
-
-        # Build expanding pattern with agent-specific directions
-        segments: list[tuple[str, int]] = []
-        ring = 1
-        while len(segments) < 100:
-            seg_len = segment_base * ring
-            segments.append((dirs[0], seg_len))
-            segments.append((dirs[1], seg_len))
-            segments.append((dirs[2], seg_len + segment_base))
-            segments.append((dirs[3], seg_len + segment_base))
-            ring += 1
-            if ring > 5:
-                ring = 1
-
-        step_count = 0
-        for direction, seg_len in segments:
-            if step_count + seg_len > explore_step:
-                return Action(name=f"move_{direction}")
-            step_count += seg_len
-
-        return Action(name=f"move_{dirs[0]}")
+        """Explore to find the aligner station."""
+        # Spread aligners out by giving each agent a different primary direction
+        direction = get_explore_direction_for_agent(state.agent_id)
+        return explore_for_station(state, services, primary_direction=direction)
 
     def _get_hearts(self, state: AgentState, services: Services) -> Action:
         """Get hearts from chest."""
@@ -283,44 +289,8 @@ class AlignerBehavior:
         # when the internal map hasn't been fully explored
         return self._move_toward_target(state, chest_pos)
 
-    def _align_junction(self, state: AgentState, services: Services) -> Action:
-        """Find and align a neutral junction."""
-        # First try to find a junction in current observation
-        if state.last_obs is not None:
-            result = services.map_tracker.get_direction_to_nearest(
-                state, state.last_obs, frozenset({"junction", "charger", "supply_depot"})
-            )
-            if result:
-                direction, target_pos = result
-                # Check if this junction is alignable (not cogs-aligned, not in enemy AOE)
-                struct = state.map.get_structure_at(target_pos)
-
-                # Skip if we KNOW it's already cogs-aligned
-                if struct is not None and struct.is_cogs_aligned():
-                    pass  # Don't target our own junctions
-                else:
-                    # Target it if: neutral, unknown, or clips (to check when we arrive)
-                    # All junctions start neutral, so safe to assume alignable
-                    enemy_junctions = state.map.get_clips_junctions()
-                    in_enemy_aoe = any(
-                        manhattan_distance(target_pos, ej.position) <= JUNCTION_AOE_RANGE for ej in enemy_junctions
-                    )
-                    if not in_enemy_aoe:
-                        alignment = struct.alignment if struct else "unknown"
-                        if DEBUG:
-                            print(f"[A{state.agent_id}] ALIGNER: Junction at {target_pos} ({alignment}), {direction}")
-                        state.debug_info = DebugInfo(
-                            mode="align", goal="junction", target_object="junction", target_pos=target_pos
-                        )
-                        return Action(name=f"move_{direction}")
-
-        # Fall back to map knowledge for best target
-        target = self._find_best_target(state, services)
-
-        if target is None:
-            state.debug_info = DebugInfo(mode="explore", goal="find_junction", target_object="junction")
-            return self._explore_for_junctions(state, services)
-
+    def _align_junction(self, state: AgentState, services: Services, target: StructureInfo) -> Action:
+        """Move to and align the target junction."""
         dist = manhattan_distance(state.pos, target.position)
 
         if is_adjacent(state.pos, target.position):
@@ -373,7 +343,7 @@ class AlignerBehavior:
         return Action(name="noop")  # Already at target
 
     def _find_best_target(self, state: AgentState, services: Services) -> Optional[StructureInfo]:
-        """Find alignable junction - must be neutral AND outside enemy AOE.
+        """Find alignable junction - must be neutral AND 10+ tiles from clips junctions.
 
         Prioritizes junctions near the hub (strategic value).
         """
@@ -382,17 +352,18 @@ class AlignerBehavior:
         # Get hub position for prioritization
         hub_pos = state.map.stations.get("assembler") or state.map.stations.get("hub")
 
-        # Get all enemy junction positions for AOE check
-        enemy_junctions = state.map.get_clips_junctions()
+        # Get all clips junction positions for distance check
+        clips_junctions = state.map.get_clips_junctions()
 
-        def is_in_enemy_aoe(pos: tuple[int, int]) -> bool:
-            return any(manhattan_distance(pos, ej.position) <= JUNCTION_AOE_RANGE for ej in enemy_junctions)
+        def is_too_close_to_clips(pos: tuple[int, int]) -> bool:
+            """Target must be 10+ tiles from any clips junction."""
+            return any(manhattan_distance(pos, ej.position) < MIN_DISTANCE_FROM_CLIPS for ej in clips_junctions)
 
-        # Find alignable junctions: neutral AND outside enemy AOE
+        # Find alignable junctions: neutral AND 10+ from clips junctions
         alignable: list[tuple[int, int, StructureInfo]] = []  # (hub_dist, agent_dist, junction)
         for junction in state.map.get_neutral_junctions():
-            if is_in_enemy_aoe(junction.position):
-                continue  # Can't align - in enemy AOE
+            if is_too_close_to_clips(junction.position):
+                continue  # Can't align - too close to clips junction
 
             agent_dist = manhattan_distance(state.pos, junction.position)
             if agent_dist > max_dist:
@@ -403,6 +374,13 @@ class AlignerBehavior:
             alignable.append((hub_dist, agent_dist, junction))
 
         if not alignable:
+            if DEBUG:
+                neutral_count = len(state.map.get_neutral_junctions())
+                clips_count = len(clips_junctions)
+                print(
+                    f"[A{state.agent_id}] ALIGNER: No valid targets. "
+                    f"Neutral junctions: {neutral_count}, Clips junctions: {clips_count}"
+                )
             return None
 
         # Sort by: 1) distance to hub (closer is better), 2) distance to agent

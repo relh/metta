@@ -93,8 +93,9 @@ class MapTracker:
         self._update_recent_agents(state, observed_agent_positions)
 
     def _read_inventory(self, state: AgentState, obs: AgentObservation) -> None:
-        """Read inventory and vibe from observation center cell."""
+        """Read inventory, vibe, and collective stats from observation center cell."""
         inv: dict[str, int] = {}
+        collective_inv: dict[str, int] = {}
         vibe_id = 0
 
         center_r, center_c = self._obs_hr, self._obs_wr
@@ -106,6 +107,13 @@ class MapTracker:
                     inv[resource_name] = tok.value
                 elif feature_name == "vibe":
                     vibe_id = tok.value
+                elif feature_name.startswith("stat:collective:collective.") and feature_name.endswith(".amount"):
+                    # Parse collective resource amount from "stat:collective:collective.{resource}.amount"
+                    # Extract resource name between "collective." and ".amount"
+                    prefix = "stat:collective:collective."
+                    suffix = ".amount"
+                    resource_name = feature_name[len(prefix) : -len(suffix)]
+                    collective_inv[resource_name] = tok.value
 
         # Update inventory
         state.energy = inv.get("energy", 0)
@@ -122,6 +130,12 @@ class MapTracker:
         state.scout_gear = inv.get("scout", 0) > 0
         state.aligner_gear = inv.get("aligner", 0) > 0
         state.scrambler_gear = inv.get("scrambler", 0) > 0
+
+        # Update collective inventory
+        state.collective_carbon = collective_inv.get("carbon", 0)
+        state.collective_oxygen = collective_inv.get("oxygen", 0)
+        state.collective_germanium = collective_inv.get("germanium", 0)
+        state.collective_silicon = collective_inv.get("silicon", 0)
 
         # Update vibe
         state.vibe = self._get_vibe_name(vibe_id)

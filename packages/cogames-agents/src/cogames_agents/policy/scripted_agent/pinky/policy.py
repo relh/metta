@@ -52,18 +52,23 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
         initial_vibe: Optional[str] = None,
         debug: bool = False,
         lazy: bool = False,
+        change_role: int = 0,
     ):
         self._agent_id = agent_id
         self._policy_env_info = policy_env_info
         self._initial_vibe = initial_vibe or "miner"
         self._debug = debug
         self._lazy = lazy  # If True, don't auto-activate on step 1; wait for gear vibe
+        self._change_role = change_role  # If > 0, consider role changes every N steps
 
         # Track previous debug output to avoid duplicate prints
         self._prev_debug_output: Optional[str] = None
 
         # Determine initial role from vibe
         self._role = VIBE_TO_ROLE.get(self._initial_vibe, Role.MINER)
+
+        # Track the "base" role for role changes (what they started as)
+        self._base_role = self._role
 
         # Create services
         self._navigator = Navigator(policy_env_info)
@@ -119,15 +124,47 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
             action_names=self._action_names,
         )
 
-        # Step 1 with default vibe OR "gear" vibe → change to assigned role vibe
+        # Step 1 with default vibe OR "gear" vibe → activate role
         # This must happen BEFORE the "noop if not role vibe" check!
         # (but only if agent has an assigned role, not if they're meant to stay default)
         # In lazy mode, skip step 1 auto-activation; only activate on gear vibe
         if self._initial_vibe != "default":
-            should_activate = state.vibe == GEAR_VIBE or (
-                not self._lazy and state.step == 1 and state.vibe == "default"
-            )
-            if should_activate:
+            # Gear vibe handling: pick a role based on agent_id
+            # Best: 2 miners, 5 aligners, 3 scramblers
+            if state.vibe == GEAR_VIBE or (self._initial_vibe == GEAR_VIBE and state.step == 1):
+                # Distribution: 2 miners, 5 aligners, 3 scramblers
+                role_order = [
+                    "aligner",
+                    "aligner",
+                    "scrambler",
+                    "miner",
+                    "aligner",
+                    "scrambler",
+                    "aligner",
+                    "scrambler",
+                    "aligner",
+                    "miner",
+                ]
+                initial_role = role_order[state.agent_id % len(role_order)]
+
+                action = change_vibe_action(initial_role, services)
+                state.nav.last_action = action
+                state.debug_info = DebugInfo(
+                    mode="activate",
+                    goal=f"gear_to_{initial_role}",
+                    target_object="vibe",
+                )
+                if self._debug:
+                    self._print_debug_if_changed(state, action)
+                elif DEBUG and state.step <= 20:
+                    print(
+                        f"[A{state.agent_id}] Step {state.step}: gear vibe, becoming {initial_role}, "
+                        f"pos={state.pos}, hp={state.hp}"
+                    )
+                return action, state
+
+            # Step 1 with default vibe (non-lazy mode) → change to role vibe
+            if not self._lazy and state.step == 1 and state.vibe == "default":
                 role_vibe = self._initial_vibe  # The assigned role (miner/scout/etc.)
                 action = change_vibe_action(role_vibe, services)
                 state.nav.last_action = action
@@ -153,6 +190,13 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
             self._behavior = behavior_class()
             if DEBUG:
                 print(f"[A{state.agent_id}] Vibe changed to {state.vibe}, switching to role {new_role.value}")
+
+        # Check for dynamic role changes based on communal resources
+        if self._change_role > 0 and state.step % self._change_role == 0 and state.step > 0:
+            role_change_action = self._check_role_change(state, services)
+            if role_change_action:
+                state.nav.last_action = role_change_action
+                return role_change_action, state
 
         # If vibe is "default" or not a role vibe, do nothing (noop)
         if state.vibe not in VIBE_TO_ROLE:
@@ -251,6 +295,152 @@ class PinkyAgentBrain(StatefulPolicyImpl[AgentState]):
             )
             self._prev_debug_output = debug_output
 
+    def _check_role_change(self, state: AgentState, services: Services) -> Optional[Action]:
+        """Check if agent should change roles based on communal resource levels.
+
+        Role change rules:
+        - Miners: if all communal resources > 20, become aligner or scrambler
+        - Aligners/Scramblers: if any communal resource < 5, become miner (after grace period)
+
+        Returns:
+            Action to change vibe if role change is needed, None otherwise.
+        """
+        # Threshold constants
+        RESOURCE_HIGH_THRESHOLD = 25  # All resources must be above this for miner->other
+        RESOURCE_LOW_THRESHOLD = 3  # Any resource below this triggers other->miner
+        ALIGNER_GRACE_PERIOD = 100  # Protect aligners early game
+
+        # Get communal resource levels
+        resources = [
+            state.collective_carbon,
+            state.collective_oxygen,
+            state.collective_germanium,
+            state.collective_silicon,
+        ]
+
+        all_resources_high = all(r > RESOURCE_HIGH_THRESHOLD for r in resources)
+        any_resource_low = any(r < RESOURCE_LOW_THRESHOLD for r in resources)
+
+        current_role = state.role
+        new_vibe: Optional[str] = None
+
+        if current_role == Role.MINER:
+            # Miner with abundant resources -> become aligner or scrambler
+            if all_resources_high:
+                # Alternate between aligner and scrambler based on agent_id
+                if state.agent_id % 2 == 0:
+                    new_vibe = "aligner"
+                else:
+                    new_vibe = "scrambler"
+                if DEBUG or self._debug:
+                    print(
+                        f"[A{state.agent_id}] ROLE_CHANGE: miner -> {new_vibe} "
+                        f"(all resources > {RESOURCE_HIGH_THRESHOLD}: "
+                        f"C={state.collective_carbon}, O={state.collective_oxygen}, "
+                        f"G={state.collective_germanium}, S={state.collective_silicon})"
+                    )
+
+        elif current_role in (Role.ALIGNER, Role.SCRAMBLER):
+            # Aligner/Scrambler with scarce resources -> become miner
+            # But give them a grace period at the start to get established
+            if any_resource_low and state.step > ALIGNER_GRACE_PERIOD:
+                new_vibe = "miner"
+                if DEBUG or self._debug:
+                    print(
+                        f"[A{state.agent_id}] ROLE_CHANGE: {current_role.value} -> miner "
+                        f"(some resource < {RESOURCE_LOW_THRESHOLD}: "
+                        f"C={state.collective_carbon}, O={state.collective_oxygen}, "
+                        f"G={state.collective_germanium}, S={state.collective_silicon})"
+                    )
+
+        if new_vibe:
+            state.debug_info = DebugInfo(
+                mode="role_change",
+                goal=f"become_{new_vibe}",
+                target_object="vibe",
+            )
+            return change_vibe_action(new_vibe, services)
+
+        return None
+
+    def _get_any_gear(self, state: AgentState, services: Services) -> Action:
+        """Go get gear from a gear station when agent has "gear" vibe but no physical gear.
+
+        Strategy: Distribute agents across gear stations based on agent_id for balanced team.
+        - More miners (resource gathering is critical)
+        - Some aligners/scramblers (territory control)
+        - Some scouts (optional)
+
+        Distribution for first 10 agents: 4 miners, 2 aligners, 2 scramblers, 2 scouts
+        Then cycle continues.
+        """
+        from .behaviors.base import is_adjacent, manhattan_distance
+
+        # Determine which gear station this agent should go to based on agent_id
+        # Distribution: miner, miner, aligner, scrambler, miner, miner, aligner, scrambler, scout, scout
+        # This gives 4 miners : 2 aligners : 2 scramblers : 2 scouts for 10 agents
+        role_order = [
+            "miner",
+            "miner",
+            "aligner",
+            "scrambler",
+            "miner",
+            "miner",
+            "aligner",
+            "scrambler",
+            "scout",
+            "scout",
+        ]
+        target_role = role_order[state.agent_id % len(role_order)]
+        target_station = f"{target_role}_station"
+
+        # First try to find the target station in current observation
+        if state.last_obs is not None:
+            result = services.map_tracker.get_direction_to_nearest(state, state.last_obs, frozenset({target_station}))
+            if result:
+                direction, target_pos = result
+                state.debug_info = DebugInfo(
+                    mode="get_gear",
+                    goal=f"visible_{target_role}",
+                    target_object=target_station,
+                    target_pos=target_pos,
+                )
+                return Action(name=f"move_{direction}")
+
+        # Check map knowledge for the target station
+        station_pos = state.map.stations.get(target_station)
+
+        if station_pos is not None:
+            dist = manhattan_distance(state.pos, station_pos)
+
+            # If adjacent or on the station, try to use it
+            if is_adjacent(state.pos, station_pos) or state.pos == station_pos:
+                state.debug_info = DebugInfo(
+                    mode="get_gear",
+                    goal=f"use_{target_role}",
+                    target_object=target_station,
+                    target_pos=station_pos,
+                )
+                return services.navigator.use_object_at(state, station_pos)
+
+            # Navigate to the station
+            state.debug_info = DebugInfo(
+                mode="get_gear",
+                goal=f"to_{target_role}(dist={dist})",
+                target_object=target_station,
+                target_pos=station_pos,
+            )
+            return services.navigator.move_to(state, station_pos, reach_adjacent=True)
+
+        # Target station not known yet - explore to find it
+        # Explore south since gear stations are typically south of spawn in the hub
+        state.debug_info = DebugInfo(
+            mode="get_gear",
+            goal=f"find_{target_role}",
+            target_object=target_station,
+        )
+        return services.navigator.explore(state, direction_bias="south")
+
 
 class PinkyPolicy(MultiAgentPolicy):
     """Multi-agent policy with URI-based vibe distribution.
@@ -259,6 +449,7 @@ class PinkyPolicy(MultiAgentPolicy):
     - ?miner=1 → agent 0 is miner, rest are default (noop)
     - ?miner=2&scout=1 → agents 0,1 are miners, agent 2 is scout, rest are default
     - Agents beyond the specified count stay neutral (default vibe, noop)
+    - ?change_role=100 → agents consider role changes every 100 steps based on communal resources
     """
 
     short_names = ["pinky"]
@@ -267,15 +458,20 @@ class PinkyPolicy(MultiAgentPolicy):
         self,
         policy_env_info: PolicyEnvInterface,
         device: str = "cpu",
-        # URI parameters for vibe counts (default: 4 miners, 2 aligners, 4 scramblers)
-        miner: int = 4,
+        # URI parameters for vibe counts (unspecified = 0, agents beyond specified stay default/noop)
+        miner: int = 0,
         scout: int = 0,
-        aligner: int = 2,
-        scrambler: int = 4,
+        aligner: int = 0,
+        scrambler: int = 0,
+        gear: int = 0,  # Agents with "gear" vibe use change_role action to get assigned a role
         # Debug flag - print structured intent info each step
         debug: int = 0,
         # Lazy mode - don't auto-activate on step 1; wait for gear vibe
         lazy: int = 0,
+        # Role change interval - if > 0, agents consider changing roles every N steps
+        # Miners become aligners/scramblers when all communal resources > 30
+        # Aligners/Scramblers become miners when any communal resource < 10
+        change_role: int = 0,
         # Accept any extra kwargs to be flexible
         **kwargs: object,
     ):
@@ -288,6 +484,8 @@ class PinkyPolicy(MultiAgentPolicy):
         self._debug = bool(debug)
         # Lazy mode from URI param (?lazy=1) - wait for gear vibe instead of auto-activating
         self._lazy = bool(lazy)
+        # Role change interval from URI param (?change_role=100)
+        self._change_role = change_role
 
         # Build vibe distribution from counts - agents beyond this list stay default
         self._vibe_distribution: list[str] = []
@@ -295,10 +493,15 @@ class PinkyPolicy(MultiAgentPolicy):
         self._vibe_distribution.extend(["scout"] * scout)
         self._vibe_distribution.extend(["aligner"] * aligner)
         self._vibe_distribution.extend(["scrambler"] * scrambler)
+        self._vibe_distribution.extend(["gear"] * gear)  # Gear vibe triggers change_role action
 
         if DEBUG or self._debug:
             lazy_str = " (lazy mode - wait for gear)" if self._lazy else ""
-            print(f"[PINKY] Vibe distribution: {self._vibe_distribution}{lazy_str} (agents beyond this stay default)")
+            change_role_str = f" (role changes every {self._change_role} steps)" if self._change_role > 0 else ""
+            print(
+                f"[PINKY] Vibe distribution: {self._vibe_distribution}{lazy_str}{change_role_str} "
+                f"(agents beyond this stay default)"
+            )
             if self._debug:
                 print("[PINKY] Debug mode enabled - will print: role:mode:goal:target:action")
 
@@ -324,6 +527,7 @@ class PinkyPolicy(MultiAgentPolicy):
                 initial_vibe=initial_vibe,
                 debug=self._debug,
                 lazy=self._lazy,
+                change_role=self._change_role,
             )
 
             # Wrap in StatefulAgentPolicy

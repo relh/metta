@@ -31,6 +31,16 @@ class Navigator:
 
     DIRECTIONS = ["north", "south", "east", "west"]
 
+    # Stuck detection thresholds (balanced)
+    STUCK_THRESHOLD = 10  # Consecutive steps at same position
+    POSITION_HISTORY_SIZE = 20  # How many positions to track for circular detection
+    CIRCULAR_STUCK_THRESHOLD = 5  # Revisiting same position this many times = stuck
+    TIGHT_LOOP_HISTORY = 15  # Check this many recent positions for tight loops
+    TIGHT_LOOP_UNIQUE_MIN = 4  # If fewer unique positions than this, we're stuck
+
+    # Escape mode settings
+    ESCAPE_COMMITMENT_STEPS = 4  # When stuck, commit to escaping for this many steps
+
     def __init__(self, policy_env_info: PolicyEnvInterface):
         # Store action names for potential validation
         self._action_names = policy_env_info.action_names
@@ -675,3 +685,180 @@ class Navigator:
             if self._is_traversable(state, next_pos[0], next_pos[1]):
                 return state.nav.cached_path
         return None
+
+    # === Escape Mode Handling ===
+    # Generalized stuck detection and escape for all behaviors
+
+    def check_and_handle_escape(self, state: AgentState) -> Optional[Action]:
+        """Check if agent is stuck and handle escape mode.
+
+        This should be called at the start of each behavior's act() method.
+        Returns an escape action if in escape mode or stuck, None otherwise.
+
+        When stuck is detected:
+        1. Calculates escape direction away from center of recent positions
+        2. Enters escape mode, committing to escape for several steps
+        3. Clears navigation state and position history
+
+        Args:
+            state: Agent state
+
+        Returns:
+            Action if escaping, None if not stuck and not in escape mode
+        """
+        # Track stuck detection: count consecutive steps at same position
+        if state.pos == state.last_position:
+            state.steps_at_same_position += 1
+        else:
+            state.steps_at_same_position = 0
+            state.last_position = state.pos
+
+        # Check if we're already in escape mode
+        if state.escape_direction is not None and state.step < state.escape_until_step:
+            escape_action = self._execute_escape(state)
+            if escape_action:
+                return escape_action
+            # Escape blocked, end escape mode early
+            state.escape_direction = None
+
+        # Check for stuck patterns
+        stuck_reason = self._check_stuck_patterns(state)
+
+        if stuck_reason:
+            if DEBUG:
+                print(f"[A{state.agent_id}] NAV: STUCK ({stuck_reason}), entering escape mode")
+            state.steps_at_same_position = 0
+
+            # Clear navigation state to force fresh pathfinding
+            state.nav.cached_path = None
+            state.nav.cached_path_target = None
+
+            # Calculate escape direction - move AWAY from center of recent positions
+            escape_direction = self._calculate_escape_direction(state)
+
+            # Enter escape mode
+            state.escape_direction = escape_direction
+            state.escape_until_step = state.step + self.ESCAPE_COMMITMENT_STEPS
+
+            # Clear position history for fresh stuck detection after escape
+            state.nav.position_history.clear()
+
+            if DEBUG:
+                print(f"[A{state.agent_id}] NAV: Escaping {escape_direction} for {self.ESCAPE_COMMITMENT_STEPS} steps")
+
+            # Execute the first escape step
+            escape_action = self._execute_escape(state)
+            if escape_action:
+                return escape_action
+
+            # Escape direction completely blocked, clear escape mode
+            state.escape_direction = None
+
+        return None
+
+    def _check_stuck_patterns(self, state: AgentState) -> Optional[str]:
+        """Check for various stuck patterns.
+
+        Returns a reason string if stuck, None otherwise.
+        """
+        # Check 1: Same position for too long
+        if state.steps_at_same_position >= self.STUCK_THRESHOLD:
+            return f"same_pos_{state.steps_at_same_position}"
+
+        # Check 2: Circular pattern - revisiting positions in recent history
+        if len(state.nav.position_history) >= 10:
+            recent_history = state.nav.position_history[-self.POSITION_HISTORY_SIZE :]
+            current_pos = state.pos
+            revisit_count = recent_history.count(current_pos)
+            if revisit_count >= self.CIRCULAR_STUCK_THRESHOLD:
+                return f"circular_{revisit_count}x"
+
+        # Check 3: Too few unique positions in recent history (tight circles)
+        if len(state.nav.position_history) >= self.TIGHT_LOOP_HISTORY:
+            recent = state.nav.position_history[-self.TIGHT_LOOP_HISTORY :]
+            unique_positions = len(set(recent))
+            if unique_positions <= self.TIGHT_LOOP_UNIQUE_MIN:
+                return f"tight_loop_{unique_positions}_unique"
+
+        return None
+
+    def _execute_escape(self, state: AgentState) -> Optional[Action]:
+        """Execute one step of escape movement.
+
+        Tries to move in the escape direction, with fallbacks to perpendicular directions.
+        Returns None if completely blocked.
+        """
+        if state.escape_direction is None:
+            return None
+
+        escape_dir = state.escape_direction
+        dr, dc = self.MOVE_DELTAS[escape_dir]
+
+        # Try primary escape direction
+        nr, nc = state.row + dr, state.col + dc
+        if self._is_traversable(state, nr, nc, allow_unknown=True, check_agents=True):
+            return Action(name=f"move_{escape_dir}")
+
+        # Primary blocked - try perpendicular directions
+        if escape_dir in ("north", "south"):
+            perpendicular = ["east", "west"]
+        else:
+            perpendicular = ["north", "south"]
+
+        random.shuffle(perpendicular)
+        for alt_dir in perpendicular:
+            alt_dr, alt_dc = self.MOVE_DELTAS[alt_dir]
+            alt_r, alt_c = state.row + alt_dr, state.col + alt_dc
+            if self._is_traversable(state, alt_r, alt_c, allow_unknown=True, check_agents=True):
+                return Action(name=f"move_{alt_dir}")
+
+        # Try opposite direction as last resort
+        opposite = {"north": "south", "south": "north", "east": "west", "west": "east"}
+        opp_dir = opposite[escape_dir]
+        opp_dr, opp_dc = self.MOVE_DELTAS[opp_dir]
+        opp_r, opp_c = state.row + opp_dr, state.col + opp_dc
+        if self._is_traversable(state, opp_r, opp_c, allow_unknown=True, check_agents=True):
+            # Switch escape direction since we're blocked
+            state.escape_direction = opp_dir
+            return Action(name=f"move_{opp_dir}")
+
+        return None
+
+    def _calculate_escape_direction(self, state: AgentState) -> str:
+        """Calculate the best direction to escape from a stuck position.
+
+        Strategy: Move AWAY from the center of mass of recent positions.
+        This prevents oscillating back into the same area.
+        """
+        history = state.nav.position_history
+        if len(history) < 3:
+            return random.choice(self.DIRECTIONS)
+
+        # Calculate center of mass of recent positions
+        recent = history[-min(len(history), 15) :]
+        avg_row = sum(pos[0] for pos in recent) / len(recent)
+        avg_col = sum(pos[1] for pos in recent) / len(recent)
+
+        # Calculate direction away from center of mass
+        dr = state.row - avg_row
+        dc = state.col - avg_col
+
+        # Escape perpendicular to our oscillation axis
+        if abs(dr) < abs(dc):
+            # Oscillating more east-west, escape north or south
+            return "south" if dr >= 0 else "north"
+        else:
+            # Oscillating more north-south, escape east or west
+            return "east" if dc >= 0 else "west"
+
+    def get_escape_debug_info(self, state: AgentState, stuck_reason: str = "") -> dict:
+        """Get debug info dict for escape mode.
+
+        Useful for behaviors to populate their debug_info when escaping.
+        """
+        return {
+            "mode": "escape",
+            "goal": f"escape_{state.escape_direction}" if state.escape_direction else "escape",
+            "target_object": "-",
+            "signal": stuck_reason or f"until_step_{state.escape_until_step}",
+        }
