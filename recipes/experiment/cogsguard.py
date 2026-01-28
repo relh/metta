@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 import metta.cogworks.curriculum as cc
+import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_reward_variants import apply_reward_variants
 from cogames.cogs_vs_clips.missions import make_cogsguard_mission
-from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -23,10 +23,6 @@ from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
-from metta.tools.eval import EvaluateTool
-from metta.tools.play import PlayTool
-from metta.tools.replay import ReplayTool
-from metta.tools.train import TrainTool
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
@@ -87,7 +83,7 @@ def train(
     teacher: Optional[TeacherConfig] = None,
     variants: str | Sequence[str] | None = None,
     use_default_teacher: bool = False,
-) -> TrainTool:
+) -> tools.TrainTool:
     if teacher is None and use_default_teacher:
         teacher = TeacherConfig(
             mode="supervisor",
@@ -97,6 +93,7 @@ def train(
             anneal_start_step=2_500_000_000,
             ppo_begin_step=0,
         )
+    from metta.agent.policies.vit import ViTDefaultConfig
 
     resolved_curriculum = curriculum or make_curriculum(variants=variants)
     trainer_cfg = TrainerConfig()
@@ -116,7 +113,7 @@ def train(
         )
         scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
 
-    tt = TrainTool(
+    tt = tools.TrainTool(
         trainer=trainer_cfg,
         training_env=training_env_cfg,
         evaluator=evaluator_cfg,
@@ -133,7 +130,7 @@ def train(
 def evaluate(
     policy_uris: str | Sequence[str] | None = None,
     variants: str | Sequence[str] | None = None,
-) -> EvaluateTool:
+) -> tools.EvaluateTool:
     resolved_policy_uris: str | list[str]
     if policy_uris is None:
         resolved_policy_uris = []
@@ -141,17 +138,17 @@ def evaluate(
         resolved_policy_uris = policy_uris
     else:
         resolved_policy_uris = list(policy_uris)
-    return EvaluateTool(
+    return tools.EvaluateTool(
         simulations=simulations(variants=variants),
         policy_uris=resolved_policy_uris,
     )
 
 
-def play(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> PlayTool:
+def play(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> tools.PlayTool:
     """Interactive play with a policy."""
-    return PlayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
+    return tools.PlayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
 
 
-def replay(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> ReplayTool:
+def replay(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> tools.ReplayTool:
     """Generate replay from a policy."""
-    return ReplayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
+    return tools.ReplayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)

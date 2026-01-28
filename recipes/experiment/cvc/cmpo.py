@@ -1,10 +1,12 @@
 """CMPO CoGs vs Clips training entry points."""
 
+from __future__ import annotations
+
 from typing import Optional, Sequence
 
+import metta.tools as tools
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.rl.training.teacher import TeacherConfig
-from metta.tools.train import TrainTool
 from recipes.experiment import cogs_v_clips
 from recipes.experiment.losses.cmpo import cmpo_losses
 
@@ -25,7 +27,7 @@ def train(
     dr_rewards: bool = True,
     dr_misc: bool = False,
     maps_cache_size: Optional[int] = 30,
-) -> TrainTool:
+) -> tools.TrainTool:
     tool = cogs_v_clips.train(
         num_cogs=num_cogs,
         curriculum=curriculum,

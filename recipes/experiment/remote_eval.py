@@ -1,5 +1,7 @@
+from __future__ import annotations
+
+import metta.tools as tools
 from metta.sim.remote import SimulationList
-from metta.tools.eval import EvalWithResultTool
 
 
 # Used by eval_task_worker.py
@@ -8,7 +10,7 @@ def eval(
     result_file_path: str,
     policy_version_id: str | None = None,
     policy_uri: str | None = None,
-) -> EvalWithResultTool:
+) -> tools.EvalWithResultTool:
     with open(task_data_path, "rb") as f:
         task_data = SimulationList.model_validate_json(f.read())
 
@@ -18,7 +20,7 @@ def eval(
     if not policy_uri:
         raise ValueError("policy_uri is required")
 
-    return EvalWithResultTool(
+    return tools.EvalWithResultTool(
         simulations=task_data.simulations,
         policy_uris=[policy_uri],
         push_metrics_to_wandb=True,

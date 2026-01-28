@@ -5,36 +5,28 @@ from typing import Any, KeysView
 import torch
 from tensordict import TensorDict
 
-
 class TensorSpec:
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
-
     def __getattr__(self, name: str) -> Any: ...
-
 
 class UnboundedContinuous(TensorSpec):
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
 
-
 class UnboundedDiscrete(TensorSpec):
     def __init__(self, *args: Any, **kwargs: Any) -> None: ...
 
-
 class Composite(TensorSpec):
     def __init__(self, source: dict[str, Any] | None = None, **kwargs: Any) -> None: ...
-
     def keys(
         self,
         include_nested: bool = False,
         leaves_only: bool = False,
         is_leaf: Any = None,
     ) -> KeysView[str]: ...
-
     def expand(self, *shape: int) -> "Composite": ...
     def to(self, device: torch.device | str) -> "Composite": ...
     def zero(self, size: Any = None) -> TensorDict: ...
     def update(self, other: dict[str, Any] | "Composite") -> "Composite": ...
     def clone(self) -> "Composite": ...
-
 
 __all__ = ["Composite", "TensorSpec", "UnboundedContinuous", "UnboundedDiscrete"]

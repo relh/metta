@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Callable
 
+import metta.tools as tools
 from metta.agent.policies.agalite import AGaLiTeConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.rl.trainer_config import OptimizerConfig
-from metta.tools.train import TrainTool
 from recipes.prod.arena_basic_easy_shaped import (
     evaluate,
     evaluate_in_sweep,
@@ -42,7 +42,7 @@ def train(
     enable_detailed_slice_logging: bool = False,
     policy_architecture: PolicyArchitecture | None = None,
     agent: str | None = None,
-) -> TrainTool:
+) -> tools.TrainTool:
     if policy_architecture is None:
         if agent is not None:
             policy_architecture = _policy_from_name(agent)

@@ -1,8 +1,10 @@
 """Arena recipe with regular Adam optimizer for comparison testing."""
 
+from __future__ import annotations
+
+import metta.tools as tools
 from metta.rl.trainer_config import OptimizerConfig, TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
-from metta.tools.train import TrainTool
 from recipes.experiment.arena import (
     make_curriculum,
     simulations,
@@ -13,7 +15,7 @@ DEFAULT_LR = OptimizerConfig.model_fields["learning_rate"].default
 
 def train(
     enable_detailed_slice_logging: bool = False,
-) -> TrainTool:
+) -> tools.TrainTool:
     """Train with regular Adam optimizer.
 
     This uses the same configuration as ScheduleFree recipe but with
@@ -36,14 +38,14 @@ def train(
         total_timesteps=50_000_000_000,
     )
 
-    return TrainTool(
+    return tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         trainer=trainer_config,
         evaluator=EvaluatorConfig(simulations=simulations()),
     )
 
 
-def train_shaped(rewards: bool = True) -> TrainTool:
+def train_shaped(rewards: bool = True) -> tools.TrainTool:
     """Train with regular Adam optimizer on shaped rewards task.
 
     This provides easier training with reward shaping and converters enabled.
@@ -70,7 +72,7 @@ def train_shaped(rewards: bool = True) -> TrainTool:
     )
 
     # Return a new TrainTool with the shaped environment but regular Adam optimizer
-    return TrainTool(
+    return tools.TrainTool(
         training_env=base_tool.training_env,
         trainer=trainer_config,
         evaluator=base_tool.evaluator,

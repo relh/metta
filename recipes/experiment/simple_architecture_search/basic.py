@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from typing import Optional, Sequence
 
 import metta.cogworks.curriculum as cc
+import metta.tools as tools
 import mettagrid.builder.envs as eb
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -12,9 +15,6 @@ from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
 from metta.sweep.core import SweepParameters as SP
 from metta.sweep.core import grid_search
-from metta.tools.eval import EvaluateTool
-from metta.tools.sweep import SweepTool
-from metta.tools.train import TrainTool
 from mettagrid import MettaGridConfig
 from recipes.experiment.architectures import architecture_names, get_architecture
 
@@ -89,7 +89,7 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     enable_detailed_slice_logging: bool = False,
     arch_type: str = "fast",
-) -> TrainTool:
+) -> tools.TrainTool:
     curriculum = curriculum or make_curriculum(enable_detailed_slice_logging=enable_detailed_slice_logging)
 
     eval_simulations = simulations()
@@ -97,7 +97,7 @@ def train(
         raise ValueError(f"Unknown arch_type={arch_type!r} (expected one of: {', '.join(architecture_names())})")
     policy_architecture = get_architecture(arch_type)
 
-    return TrainTool(
+    return tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         evaluator=EvaluatorConfig(simulations=eval_simulations),
         policy_architecture=policy_architecture,
@@ -105,12 +105,12 @@ def train(
     )
 
 
-def evaluate(policy_uris: Optional[Sequence[str]] = None) -> EvaluateTool:
+def evaluate(policy_uris: Optional[Sequence[str]] = None) -> tools.EvaluateTool:
     """Evaluate policies on arena simulations."""
-    return EvaluateTool(simulations=simulations(), policy_uris=policy_uris or [])
+    return tools.EvaluateTool(simulations=simulations(), policy_uris=policy_uris or [])
 
 
-def evaluate_in_sweep(policy_uri: str) -> EvaluateTool:
+def evaluate_in_sweep(policy_uri: str) -> tools.EvaluateTool:
     """Evaluation tool for sweep runs.
 
     Uses 10 episodes per simulation with a 4-minute time limit to get
@@ -144,13 +144,13 @@ def evaluate_in_sweep(policy_uri: str) -> EvaluateTool:
         ),
     ]
 
-    return EvaluateTool(
+    return tools.EvaluateTool(
         simulations=simulations,
         policy_uris=[policy_uri],
     )
 
 
-def sweep_architecture(sweep_name: str) -> SweepTool:
+def sweep_architecture(sweep_name: str) -> tools.SweepTool:
     # NB: arch_type matches the corresponding input to "train", the train_entrypoint.
     architecture_parameter = SP.categorical("arch_type", architecture_names())
     return grid_search(

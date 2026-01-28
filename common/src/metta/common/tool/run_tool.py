@@ -7,7 +7,6 @@ invokes the function, and then runs the tool defined by the config."""
 from metta.common.util.log_config import suppress_noisy_logs
 
 suppress_noisy_logs()
-
 # Standard library + non-tool imports
 import argparse
 import copy
