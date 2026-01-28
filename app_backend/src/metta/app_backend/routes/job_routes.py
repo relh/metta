@@ -5,8 +5,6 @@ from typing import Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
-import boto3
-from botocore.config import Config
 from fastapi import APIRouter, HTTPException, Query
 from metta_alo.policy import parse_policy_identifier
 from pydantic import BaseModel
@@ -15,7 +13,8 @@ from sqlmodel import col, select
 
 from metta.app_backend.auth import CheckUser
 from metta.app_backend.database import db_session
-from metta.app_backend.job_runner.dispatcher import dispatch_job
+from metta.app_backend.job_runner.config import get_dispatch_config
+from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
 from metta.app_backend.models.job_request import (
     JobPolicyVersion,
     JobRequest,
@@ -34,25 +33,20 @@ logger = logging.getLogger(__name__)
 
 MAX_OUTSTANDING_JOBS = 200
 
-DEBUG_S3_BUCKET = "observatory-private"
-DEBUG_S3_PREFIX = "replays/tournament"
-
 
 def _fixup_episode_job(job: JobRequest) -> None:
     if job.job.get("debug_uri") is None:
-        s3 = boto3.client("s3", region_name="us-east-1", config=Config(signature_version="s3v4"))
-        job.job = {
-            **job.job,
-            "debug_uri": s3.generate_presigned_url(
-                "put_object",
-                Params={
-                    "Bucket": DEBUG_S3_BUCKET,
-                    "Key": f"{DEBUG_S3_PREFIX}/{job.id}.debug.zip",
-                    "ContentType": "application/zip",
-                },
-                ExpiresIn=JOB_TIMEOUT_SECONDS + 60 * 60,
-            ),
-        }
+        cfg = get_dispatch_config()
+        if not cfg.EVAL_S3_BUCKET:
+            return
+        debug_uri = presign_operation(
+            "put",
+            cfg.EVAL_S3_BUCKET,
+            f"jobs/{job.id}/debug.zip",
+            JOB_TIMEOUT_SECONDS + 60 * 60,
+            cfg.S3_PRESIGNED_ENDPOINT,
+        )
+        job.job = {**job.job, "debug_uri": debug_uri}
 
 
 VALID_TRANSITIONS = {

@@ -108,6 +108,10 @@ def fake_aws_credentials(monkeypatch):
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("EVAL_S3_BUCKET", "test-bucket")
+    from metta.app_backend.job_runner.config import get_dispatch_config
+
+    get_dispatch_config.cache_clear()
 
 
 @pytest.fixture(autouse=True)

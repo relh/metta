@@ -177,8 +177,10 @@ def server():
     env["HOST"] = "0.0.0.0"
     env["PORT"] = str(SERVER_PORT)
     env["STATS_SERVER_URI"] = LOCAL_BACKEND_URL_FROM_K8S
-    # Server uses localhost for direct S3 operations (uploading job specs)
-    env["AWS_ENDPOINT_URL"] = LOCALSTACK_ENDPOINT_HOST
+    # S3-specific endpoint so only S3 calls go to localstack.
+    # Using the global AWS_ENDPOINT_URL would also route SSO credential refresh
+    # through localstack, which breaks presigning.
+    env["AWS_ENDPOINT_URL_S3"] = LOCALSTACK_ENDPOINT_HOST
     # Presigned URLs use host.docker.internal so pods can access them
     env["S3_PRESIGNED_ENDPOINT"] = LOCALSTACK_ENDPOINT_K8S
     env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
@@ -197,7 +199,7 @@ def server():
 def watcher():
     env = _local_dev_env()
     env["STATS_SERVER_URI"] = LOCAL_BACKEND_URL
-    env["AWS_ENDPOINT_URL"] = LOCALSTACK_ENDPOINT_HOST
+    env["AWS_ENDPOINT_URL_S3"] = LOCALSTACK_ENDPOINT_HOST
     env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
 
     info("Starting watcher...")

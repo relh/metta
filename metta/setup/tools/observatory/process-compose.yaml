@@ -4,15 +4,20 @@ processes:
   localstack:
     command: docker run --rm --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack:latest
     readiness_probe:
-      exec:
-        command: 'curl -s http://localhost:4566/_localstack/health | grep -q ''"s3": "available"'''
-      initial_delay_seconds: 2
-      period_seconds: 2
+      http_get:
+        host: localhost
+        port: 4566
+        path: /_localstack/health
+      initial_delay_seconds: 5
+      period_seconds: 3
+      failure_threshold: 10
 
   localstack-init:
     command: |
       aws --endpoint-url=http://localhost:4566 s3 mb s3://eval-bucket 2>/dev/null || true
       echo "LocalStack S3 bucket ready"
+    availability:
+      exit_on_end: false
     depends_on:
       localstack:
         condition: process_healthy
