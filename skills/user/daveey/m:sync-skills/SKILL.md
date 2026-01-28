@@ -20,10 +20,11 @@ Symlink all skills from a directory to both Claude Code (`~/.claude/skills/`) an
 
 ```bash
 # Use arg if provided, otherwise default to current repo
-SKILLS_DIR="${1:-$(git rev-parse --show-toplevel)/docs/ai/daveey/skills}"
+SKILLS_DIR="${1:-$(git rev-parse --show-toplevel)/skills}"
 ```
 
-Verify the directory exists and contains skill subdirectories (dirs with `SKILL.md` inside).
+Verify the directory exists and contains skill subdirectories (dirs with `SKILL.md` inside). Any skill directory with a
+`.private` file is skipped.
 
 ## Step 2: Sync Symlinks
 
@@ -34,15 +35,16 @@ CLAUDE_SKILLS="$HOME/.claude/skills"
 CODEX_SKILLS="$HOME/.codex/skills"
 mkdir -p "$CLAUDE_SKILLS" "$CODEX_SKILLS"
 
-for skill_path in "$SKILLS_DIR"/*/; do
-  [ -f "$skill_path/SKILL.md" ] || continue
+while IFS= read -r skill_file; do
+  skill_path=$(dirname "$skill_file")
+  [ -f "$skill_path/.private" ] && continue
   skill_name=$(basename "$skill_path")
 
   for target_dir in "$CLAUDE_SKILLS" "$CODEX_SKILLS"; do
     rm -rf "$target_dir/$skill_name"
     ln -s "$skill_path" "$target_dir/$skill_name"
   done
-done
+done < <(find "$SKILLS_DIR" -maxdepth 4 -name "SKILL.md" -type f)
 ```
 
 ## Step 3: Report

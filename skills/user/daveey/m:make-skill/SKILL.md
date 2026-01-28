@@ -63,7 +63,7 @@ Read existing skills to find:
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-SKILLS_DIR="$REPO_ROOT/docs/ai/daveey/skills"
+SKILLS_DIR="$REPO_ROOT/skills"
 ls "$SKILLS_DIR"
 ```
 
@@ -173,22 +173,20 @@ Fix issues before proceeding to Step 5. Loop back to Step 3 if needed.
 ```bash
 SKILL_NAME="<skill-name>"
 REPO_ROOT=$(git rev-parse --show-toplevel)
-SKILLS_DIR="$REPO_ROOT/docs/ai/daveey/skills"
+SKILLS_DIR="$REPO_ROOT/skills"
 mkdir -p "$SKILLS_DIR/$SKILL_NAME"
 # Write the SKILL.md (done in Step 3)
 ```
 
-### 5b: Create symlink
+### 5b: Sync skills
 
 ```bash
-CLAUDE_SKILLS="$HOME/.claude/skills"
-rm -f "$CLAUDE_SKILLS/$SKILL_NAME"
-ln -s "$SKILLS_DIR/$SKILL_NAME/" "$CLAUDE_SKILLS/$SKILL_NAME"
+./scripts/skills-sync.sh
 ```
 
 ### 5c: Update README
 
-Edit `$REPO_ROOT/docs/ai/daveey/README.md`:
+Edit the shared skills catalog at `$REPO_ROOT/docs/ai/skills.md`:
 
 - Add row to the appropriate table based on prefix
 - If prefix is new, create a new section heading and table

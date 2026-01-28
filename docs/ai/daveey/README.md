@@ -1,23 +1,39 @@
 # Daveey's AI Skills
 
-Personal AI skills and commands for use with Claude Code and Cursor.
+Personal AI skills for Daveey. Shared skills live in `docs/ai/skills.md`.
+
+## Location
+
+- Personal skills: `skills/user/daveey/`
+- Shared skills: `skills/`
 
 ## Setup
 
-### For Claude Code
+### For Claude Code + Codex
 
-Run the setup script to symlink skills to `~/.claude/skills/`:
+In this repo, `.claude/skills` and `.codex/skills` point at `skills/` (shared only). To sync personal skills into your
+local tools, run:
 
 ```bash
-./docs/ai/daveey/setup.sh
+./scripts/skills-sync.sh
 ```
 
-This creates symlinks from `~/.claude/skills/` to `docs/ai/daveey/skills/`, allowing Claude Code to discover them
-automatically.
+That command only syncs shared skills. If you only want Daveey's personal skills, run:
+
+```bash
+./scripts/skills-sync.sh skills/user/daveey
+```
+
+To sync shared + all user skills, run:
+
+```bash
+./scripts/skills-sync.sh --include-user
+```
 
 ### For Cursor
 
-The skills are automatically available via `.cursor/rules/daveey_skills.mdc`.
+If you want Cursor to surface these skills, add a rule file under `.cursor/rules/` that points at `skills/user/daveey/`
+(see `docs/ai/skills.md` for the shared catalog).
 
 ## Available Skills
 
@@ -37,12 +53,7 @@ These skills help manage Graphite PR stacks:
 | `gt:extract`      | Extract a feature into a separate parallel branch                           |
 | `gt:extract-copy` | Copy a feature to a new branch without modifying original                   |
 | `gt:split`        | Split a branch into multiple sequential branches in the same stack position |
-
-### Worktrunk
-
-| Skill       | Description                                                                   |
-| ----------- | ----------------------------------------------------------------------------- |
-| `worktrunk` | Worktrunk configuration, hooks, LLM commits, and troubleshooting (via plugin) |
+| `gt:apply`        | Route uncommitted changes to the correct branches in a Graphite stack       |
 
 ### Repo Scaffolding
 
@@ -60,7 +71,12 @@ These skills help manage Graphite PR stacks:
 | `m:submit-skill` | Commit and submit skill changes (worktree, lint, submit, publish, merge)        |
 | `m:sync-skills`  | Sync skills to Claude Code and Codex (symlinks from a skills directory)         |
 | `m:learn-skills` | Import skills from a path (symlink if in-repo, copy via m:make-skill otherwise) |
-| `t:run-tests`    | Run tests progressively: failed tests → pytest → metta ci                       |
+
+### Testing
+
+| Skill         | Description                                                 |
+| ------------- | ----------------------------------------------------------- |
+| `t:run-tests` | Run tests progressively: failed tests -> pytest -> metta ci |
 
 ## Usage
 
@@ -84,5 +100,4 @@ Use the gt:fix-branch skill to fix the current branch
 
 ## Editing Skills
 
-Edit the skills directly in `docs/ai/daveey/skills/`. Changes are automatically picked up by Claude Code (via symlinks)
-and Cursor (via the rule file).
+Edit the skills directly in `skills/user/daveey/`.

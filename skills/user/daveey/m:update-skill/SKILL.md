@@ -23,7 +23,11 @@ Apply user-requested changes to an existing skill and submit via `/m:submit-skil
 ```bash
 SKILL_NAME="<skill-name>"
 REPO_ROOT=$(git rev-parse --show-toplevel)
-SKILL_PATH="$REPO_ROOT/docs/ai/daveey/skills/$SKILL_NAME/SKILL.md"
+SKILL_PATH="$REPO_ROOT/skills/$SKILL_NAME/SKILL.md"
+
+if [ ! -f "$SKILL_PATH" ]; then
+  SKILL_PATH=$(find "$REPO_ROOT/skills/user" -maxdepth 3 -path "*/$SKILL_NAME/SKILL.md" -print -quit)
+fi
 ```
 
 Read the current SKILL.md to understand context.

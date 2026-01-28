@@ -122,7 +122,7 @@ After importing, summarize:
 | Name | Method | Location |
 |------|--------|----------|
 | gt:fix-ci | symlink | ~/.claude/skills/gt:fix-ci → /path/to/source |
-| deploy | copied | docs/ai/daveey/skills/deploy/SKILL.md |
+| deploy | copied | skills/deploy/SKILL.md |
 
 <N> skills imported. Use /<name> to invoke them.
 ```
@@ -141,4 +141,4 @@ After importing, summarize:
 ## Integration
 
 **Uses:** `m:make-skill` (for copying external skills) **Called by:** User directly when discovering new skills **Pairs
-with:** `setup.sh` (bulk symlink of in-repo skills)
+with:** `scripts/skills-sync.sh` (bulk symlink of in-repo skills)

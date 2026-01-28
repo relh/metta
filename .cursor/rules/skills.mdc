@@ -1,0 +1,39 @@
+---
+description: Shared AI skills for this repo
+globs: []
+alwaysApply: true
+---
+
+# Shared Skills
+
+Skill files live in `skills/`. Personal skills live in `skills/user/<username>/`.
+
+## Shared Skill List
+
+- address-review
+- check-ci
+- checkpoint-find
+- cleanup-refactor
+- cogames-command
+- cogames-variant-debug
+- fix-traceback
+- graphite-stack
+- lint-fix
+- mettabox-ops
+- policy-save-load-audit
+- pr-summary
+- recipe-curriculum-audit
+- review-main
+- run-and-triage
+- simplify-diff
+- sync-main
+- sync-nim-python
+- test-triage
+
+## How to Use
+
+When the user asks to use a skill (e.g., "use review-main" or "fix CI using check-ci"):
+
+1. Read the full skill file from `skills/<skill-name>/SKILL.md`
+2. Follow the instructions in the skill file
+3. Announce the skill being used as specified in the skill file

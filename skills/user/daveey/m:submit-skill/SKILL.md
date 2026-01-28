@@ -27,7 +27,8 @@ merge-when-ready, and prints the Graphite URL.
 
 ```bash
 SKILL_NAME="<skill-name>"
-BRANCH_NAME="daveey/skill-$SKILL_NAME"
+USER_NAME="$(whoami)"
+BRANCH_NAME="$USER_NAME/skill-$SKILL_NAME"
 
 # Create worktree on a new branch off main
 wt switch --create "$BRANCH_NAME"
@@ -48,7 +49,7 @@ wt switch "$BRANCH_NAME" || wt switch --create "$BRANCH_NAME"
 metta lint
 
 # If metta lint fails on markdown/prettier, use npx:
-npx prettier --write docs/ai/daveey/skills/
+npx prettier --write skills/ docs/ai/skills.md
 ```
 
 **Do NOT proceed to Step 3 until lint passes.** Fix all errors first.
@@ -56,7 +57,7 @@ npx prettier --write docs/ai/daveey/skills/
 ## Step 3: Commit and Submit
 
 ```bash
-git add docs/ai/daveey/skills/ docs/ai/daveey/README.md
+git add skills/ docs/ai/skills.md
 gt create "$BRANCH_NAME" -m "feat(skills): $SKILL_NAME skill
 
 Co-Authored-By: Claude <noreply@anthropic.com>"

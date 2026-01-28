@@ -1,23 +1,34 @@
 # Subho's AI Skills
 
-Personal AI skills and commands for use with Claude Code and Cursor.
+Personal AI skills for Subho. Shared skills live in `docs/ai/skills.md`.
+
+## Location
+
+- Personal skills: `skills/user/subho/`
+- Shared skills: `skills/`
 
 ## Setup
 
-### For Claude Code
+### For Claude Code + Codex
 
-Run the setup script to symlink skills to `~/.claude/skills/`:
+In this repo, `.claude/skills` and `.codex/skills` point at `skills/` (shared only). To sync personal skills into your
+local tools, run:
 
 ```bash
-./docs/ai/subho/setup.sh
+./scripts/skills-sync.sh
 ```
 
-This creates symlinks from `~/.claude/skills/` to `docs/ai/subho/skills/`, allowing Claude Code to discover them
-automatically.
+That command only syncs shared skills. If you only want Subho's personal skills, run:
 
-### For Codex
+```bash
+./scripts/skills-sync.sh skills/user/subho
+```
 
-The same setup script also creates symlinks to `~/.codex/skills/` for Codex integration.
+To sync shared + all user skills, run:
+
+```bash
+./scripts/skills-sync.sh --include-user
+```
 
 ## Available Skills
 
@@ -45,5 +56,4 @@ Use the worktrunk skill to configure worktrunk
 
 ## Editing Skills
 
-Edit the skills directly in `docs/ai/subho/skills/`. Changes are automatically picked up by Claude Code and Codex (via
-symlinks).
+Edit the skills directly in `skills/user/subho/`.
