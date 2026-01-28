@@ -16,7 +16,6 @@ spec:
         - name: nextjs
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "image.tag" .Values.image.tag }}"
           imagePullPolicy: Always
-          command: ["pnpm", "run", "start"]
           env:
             - name: AUTH_TRUST_HOST
               value: "true"

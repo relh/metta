@@ -58,20 +58,20 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-COPY --from=builder /metta/web/softmax.com/public ./
-COPY --from=builder --chown=nextjs:nodejs /metta/web/softmax.com/.next/standalone /metta/
-COPY --from=builder --chown=nextjs:nodejs /metta/web/softmax.com/.next/static .next/
+COPY --from=builder /metta/web/softmax.com/public ./public
+COPY --from=builder --chown=nextjs:nodejs /metta/web/softmax.com/.next/standalone/web/softmax.com ./
+COPY --from=builder --chown=nextjs:nodejs /metta/web/softmax.com/.next/static ./.next/static
 
 # Prisma files for database migrations
-COPY --from=builder /metta/web/softmax.com/prisma ./
-COPY --from=builder /metta/web/softmax.com/package.json ./
+COPY --from=builder /metta/web/softmax.com/prisma prisma
+COPY --from=builder /metta/web/softmax.com/package.json .
 
 # Install Prisma (CLI + client) for migrations and update-softmax-team script.
 #
 # TODO - installing this with npm instead of pnpm is inconsistent and slower than pnpm;
 # but naive pnpm results in 2.2GB image instead of 1.4GB because of pnpm caches. It's probably possible to optimize this.
 RUN PRISMA_VERSION=$(node -p "require('./package.json').dependencies['@prisma/client'].replace(/^[\^~]/, '')") && \
-    npm install @prisma/client@$PRISMA_VERSION prisma@$PRISMA_VERSION --silent && \
+    npm install @prisma/client@$PRISMA_VERSION prisma@$PRISMA_VERSION && \
     npx prisma generate
 
 # Pre-compiled script for update-softmax-team cronjob
@@ -84,4 +84,4 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
 # Start the Next.js server
-CMD ["node", "web/softmax.com/server.js"]
+CMD ["node", "server.js"]
