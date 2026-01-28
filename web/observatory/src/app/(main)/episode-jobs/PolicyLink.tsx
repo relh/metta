@@ -1,6 +1,7 @@
 import { FC } from 'react'
 
 import { StyledLink } from '@/components/StyledLink'
+import { PolicyVersionSummary } from '@/lib/repo'
 
 export function parsePolicyUri(uri: string): { uuid: string } | null {
   const match = uri.match(/^metta:\/\/policy\/([0-9a-fA-F-]{36})$/)
@@ -10,12 +11,20 @@ export function parsePolicyUri(uri: string): { uuid: string } | null {
   return null
 }
 
-export const PolicyLink: FC<{ uri: string }> = ({ uri }) => {
+export const PolicyLink: FC<{ uri: string; policy?: PolicyVersionSummary | null }> = ({ uri, policy }) => {
+  if (policy) {
+    const label = policy.name && policy.version !== null ? `${policy.name}:v${policy.version}` : policy.id.slice(0, 8)
+    return (
+      <StyledLink href={`/policies/versions/${policy.id}`} className="font-mono text-xs" title={uri}>
+        {label}
+      </StyledLink>
+    )
+  }
   const parsed = parsePolicyUri(uri)
   if (parsed) {
     return (
       <StyledLink href={`/policies/versions/${parsed.uuid}`} className="font-mono text-xs" title={uri}>
-        {uri}
+        {parsed.uuid.slice(0, 8)}
       </StyledLink>
     )
   }

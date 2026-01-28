@@ -10,6 +10,7 @@ import { getRepo } from '@/lib/repo/server'
 import { formatDate } from '@/utils/datetime'
 import { formatPolicyVersion } from '@/utils/format'
 
+import { PolicyVersionJobsCard } from './PolicyVersionJobsCard'
 import { PolicyVersionTournamentMembershipsCard } from './PolicyVersionTournamentMembershipsCard'
 import { VersionEpisodesCard } from './VersionEpisodesCard'
 
@@ -47,6 +48,10 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
 
       <Suspense fallback={<Spinner />}>
         <VersionEpisodesCard policyVersionId={policyVersionId} />
+      </Suspense>
+
+      <Suspense fallback={<Spinner />}>
+        <PolicyVersionJobsCard policyVersionId={policyVersionId} />
       </Suspense>
 
       <Suspense fallback={<Spinner />}>

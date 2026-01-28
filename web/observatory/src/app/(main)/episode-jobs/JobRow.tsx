@@ -13,6 +13,8 @@ import { Timeline } from './Timeline'
 export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const [expanded, setExpanded] = useState(false)
   const policyUris = job.job?.policy_uris as string[] | undefined
+  const policyVersionEntries = job.policy_versions
+  const policyByPosition = new Map(policyVersionEntries.map((entry) => [entry.position, entry.policy]))
   const episodeTags = job.job?.episode_tags as Record<string, string> | undefined
   const episodeId = job.result?.episode_id as string | undefined
   const resultError = job.result?.error as string | undefined
@@ -34,11 +36,21 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
           </div>
         </TD>
         <TD>
-          {policyUris?.map((uri, i) => (
-            <div key={i}>
-              <PolicyLink uri={uri} />
-            </div>
-          ))}
+          {policyUris && policyUris.length > 0 ? (
+            policyUris.map((uri, i) => (
+              <div key={`${uri}-${i}`}>
+                <PolicyLink uri={uri} policy={policyByPosition.get(i)} />
+              </div>
+            ))
+          ) : policyVersionEntries.length > 0 ? (
+            policyVersionEntries.map((entry) => (
+              <div key={`${entry.policy.id}-${entry.position}`}>
+                <PolicyLink uri={`metta://policy/${entry.policy.id}`} policy={entry.policy} />
+              </div>
+            ))
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
         </TD>
         <TD>
           {episodeTags && Object.keys(episodeTags).length > 0 ? (

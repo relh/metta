@@ -257,6 +257,11 @@ export type PolicyVersionSummary = {
   version: number | null
 }
 
+export type JobPolicyVersionSummary = {
+  position: number
+  policy: PolicyVersionSummary
+}
+
 export type LeaderboardEntry = {
   rank: number
   policy: PolicyVersionSummary
@@ -316,10 +321,12 @@ export type JobRequest = {
   worker: string | null
   result: Record<string, any> | null
   error: string | null
+  error_type?: string | null
   created_at: string
   dispatched_at: string | null
   running_at: string | null
   completed_at: string | null
+  policy_versions: JobPolicyVersionSummary[]
 }
 
 export type PolicyRow = {
@@ -624,12 +631,14 @@ export class Repo {
     job_type?: string
     statuses?: JobStatus[]
     job_id?: string
+    policy_version_id?: string
     limit?: number
     offset?: number
   }): Promise<JobRequest[]> {
     const searchParams = new URLSearchParams()
     if (params?.job_type) searchParams.append('job_type', params.job_type)
     if (params?.job_id) searchParams.append('job_id', params.job_id)
+    if (params?.policy_version_id) searchParams.append('policy_version_id', params.policy_version_id)
     if (params?.statuses) {
       for (const status of params.statuses) {
         searchParams.append('statuses', status)

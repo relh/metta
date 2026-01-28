@@ -14,9 +14,12 @@ export default function EpisodeJobsLayout({ children }: PropsWithChildren) {
       <AutoRefresh />
       <Card title="Episode Jobs">
         <ResetErrorProvider>
-          <div className="mb-4 flex gap-4 items-center">
+          <div className="mb-4 flex flex-wrap gap-4 items-center">
             <div className="w-80">
               <SearchParamInput paramName="jobId" placeholder="Filter by Job ID..." />
+            </div>
+            <div className="w-80">
+              <SearchParamInput paramName="policyVersionId" placeholder="Filter by Policy Version ID..." />
             </div>
             <StatusDropdown />
             <RefreshButton />
