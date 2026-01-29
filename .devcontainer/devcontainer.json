@@ -1,3 +1,34 @@
+// =============================================================================
+// METTA DEVCONTAINER CONFIGURATION
+// =============================================================================
+//
+// This configuration enables development inside a container while maintaining
+// access to host resources (Docker, K8s, credentials).
+//
+// KEY DESIGN DECISIONS FOR OBSERVATORY SUPPORT:
+//
+// 1. PORT FORWARDING (runArgs with -p flags)
+//    We use explicit -p flags instead of forwardPorts because:
+//    - forwardPorts only works with VS Code's port forwarding
+//    - -p flags work universally (CLI, Cursor, etc.)
+//    Ports: 5173 (frontend), 8000 (backend), 8090 (process-compose)
+//
+// 2. DOCKER SOCKET MOUNT (/var/run/docker.sock)
+//    Allows docker commands inside the container to control host Docker.
+//    This means `metta observatory postgres up` starts postgres on the HOST,
+//    not nested inside the devcontainer. See Dockerfile comments.
+//
+// 3. KUBECONFIG MOUNT (~/.kube) + HOSTNAME OVERRIDE (--add-host)
+//    Provides access to host's kubeconfig (OrbStack context).
+//    We add --add-host=orbstack:host-gateway so that "orbstack" resolves to
+//    the host IP. This allows proper TLS verification since "orbstack" is in
+//    OrbStack's K8s API server certificate SANs. local_k8s.py modifies the
+//    kubeconfig to use https://orbstack:26443 instead of https://127.0.0.1:26443.
+//
+// 4. AWS CREDENTIALS MOUNT (~/.aws)
+//    Observatory job pods need AWS access for S3 storage.
+//
+// =============================================================================
 {
   "name": "Metta Dev",
   "build": {
@@ -5,29 +36,71 @@
     "context": "..",
     "options": ["--platform=linux/amd64"]
   },
-  "runArgs": ["--platform=linux/amd64"],
+  // PORT FORWARDING: Use -p flags for universal compatibility.
+  // Note: We don't forward 5432 (postgres) because postgres runs on the host's
+  // Docker, not in the devcontainer. The devcontainer accesses it via
+  // host.docker.internal:5432.
+  //
+  // HOSTNAME OVERRIDE: --add-host=orbstack:host-gateway makes "orbstack" resolve
+  // to the host IP inside the container. This enables proper TLS verification
+  // for OrbStack's K8s API since "orbstack" is in the certificate's SANs.
+  "runArgs": [
+    "--platform=linux/amd64",
+    "-p",
+    "5173:5173",
+    "-p",
+    "8000:8000",
+    "-p",
+    "8090:8090",
+    "--add-host",
+    "orbstack:host-gateway"
+  ],
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  // Create directories before mounting to avoid errors if they don't exist.
+  // Each directory here corresponds to a mount below - they must stay in sync.
   "initializeCommand": [
     "bash",
     "-c",
-    "mkdir -p ~/.claude   && mkdir -p ~/.codex   && mkdir -p ~/.config/gh   && mkdir -p ~/.config/gcloud   && mkdir -p ~/.config/wandb   && mkdir -p ~/.config/graphite   && mkdir -p ~/.config/devdotfiles   && mkdir -p ~/.sky   && touch ~/.netrc"
+    "mkdir -p ~/.claude && mkdir -p ~/.codex && mkdir -p ~/.metta && mkdir -p ~/.config/gh && mkdir -p ~/.config/gcloud && mkdir -p ~/.config/wandb && mkdir -p ~/.config/graphite && mkdir -p ~/.config/devdotfiles && mkdir -p ~/.sky && mkdir -p ~/.kube && mkdir -p ~/.aws && touch ~/.netrc"
   ],
   "mounts": [
+    // AI assistant configs
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind,consistency=cached",
+    // METTA TOKENS - Contains auth tokens for prod/local observatory API
+    "source=${localEnv:HOME}/.metta,target=/root/.metta,type=bind,consistency=cached",
+    // Git and cloud configs
     "source=${localEnv:HOME}/.config/gh,target=/root/.config/gh,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.config/gcloud,target=/root/.config/gcloud,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.config/wandb,target=/root/.config/wandb,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.config/graphite,target=/root/.config/graphite,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.config/devdotfiles,target=/root/.config/devdotfiles,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.netrc,target=/root/.netrc,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.sky,target=/root/.sky,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.sky,target=/root/.sky,type=bind,consistency=cached",
+    // KUBERNETES CONFIG - Required for metta observatory
+    // local_k8s.py reads this and creates a modified version for container access
+    "source=${localEnv:HOME}/.kube,target=/root/.kube,type=bind,consistency=cached",
+    // AWS CREDENTIALS - Required for Observatory job pods to access S3
+    "source=${localEnv:HOME}/.aws,target=/root/.aws,type=bind,consistency=cached",
+    // DOCKER SOCKET - Critical for metta observatory
+    // Allows docker commands to control host's Docker daemon
+    // This means postgres runs on host, accessible via host.docker.internal
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
   "postCreateCommand": ".devcontainer/usersetup.sh",
+  // forwardPorts is kept for VS Code UI integration but runArgs -p flags do the actual work
+  "forwardPorts": [5173, 8000, 8090],
+  "portsAttributes": {
+    "5173": { "label": "Observatory Frontend", "onAutoForward": "notify" },
+    "8000": { "label": "Observatory Backend API", "onAutoForward": "notify" },
+    "8090": { "label": "Process Compose UI", "onAutoForward": "silent" }
+  },
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+      // Extensions should match those used in metta.code-workspace
+      // emeraldwalk.runonsave is used for lint-on-save (runs metta's code_formatters)
+      "extensions": ["ms-python.python", "emeraldwalk.runonsave"]
     }
   }
 }

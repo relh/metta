@@ -1,4 +1,37 @@
 #!/usr/bin/env -S uv run
+"""Observatory CLI - Local development environment for the Observatory web app.
+
+This module orchestrates all Observatory services for local development:
+- PostgreSQL database
+- FastAPI backend server
+- Next.js frontend
+- K8s job watcher
+- Tournament commissioner
+
+=============================================================================
+DEVCONTAINER SUPPORT
+=============================================================================
+
+This CLI supports running inside a devcontainer on macOS. The key challenges:
+
+1. DATABASE CONNECTION
+   PostgreSQL runs via docker-compose on the HOST's Docker (not in devcontainer).
+   From inside the container, we connect via host.docker.internal:5432.
+   See _get_db_uri() for the implementation.
+
+2. KUBERNETES ACCESS
+   The devcontainer connects to the host's OrbStack K8s cluster.
+   See local_k8s.py for how we modify the kubeconfig.
+
+3. PORT FORWARDING
+   Services bind to 0.0.0.0 so they're accessible from the host browser.
+   Ports are forwarded via devcontainer.json runArgs (-p flags).
+
+4. PROCESS-COMPOSE ENVIRONMENT
+   The _process_compose_env() function sets up all the environment variables
+   needed for services to communicate correctly when in a container.
+"""
+
 import functools
 import os
 import subprocess
@@ -10,13 +43,25 @@ import typer
 from metta.app_backend.clients.base_client import get_machine_token
 from metta.common.util.constants import PROD_STATS_SERVER_URI
 from metta.common.util.fs import get_repo_root
-from metta.setup.tools.observatory.local_k8s import local_k8s_app
+from metta.setup.tools.observatory.local_k8s import (
+    K3D_CLUSTER_NAME,
+    detect_k8s_runtime,
+    get_host_address,
+    get_k8s_context,
+    local_k8s_app,
+)
 from metta.setup.tools.observatory.utils import LOCAL_METTA_POLICY_EVAL_IMG_NAME
 from metta.setup.utils import error, info
 
 repo_root = get_repo_root()
 
-# Local dev configuration
+# =============================================================================
+# LOCAL DEV CONFIGURATION
+# =============================================================================
+# These values are used for the local development environment.
+# LOCALHOST is used for services binding and health checks.
+# For container->host communication, we use host.docker.internal (see _get_db_uri).
+
 LOCALHOST = "127.0.0.1"
 POSTGRES_PORT = 5432
 POSTGRES_USER = "postgres"
@@ -29,12 +74,43 @@ LOCALSTACK_ENDPOINT_HOST = f"http://{LOCALHOST}:{LOCALSTACK_PORT}"
 LOCALSTACK_ENDPOINT_K8S = f"http://host.docker.internal:{LOCALSTACK_PORT}"
 LOCAL_EVAL_BUCKET = "eval-bucket"
 
+# LOCAL_DB_URI is for direct Mac development (127.0.0.1 works).
+# For container development, _get_db_uri() returns a different URI.
 LOCAL_DB_URI = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{LOCALHOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 LOCAL_BACKEND_URL = f"http://{LOCALHOST}:{SERVER_PORT}"
-LOCAL_BACKEND_URL_FROM_K8S = f"http://host.docker.internal:{SERVER_PORT}"
 LOCAL_MACHINE_TOKEN = "local-dev-user@example.com"
-LOCAL_K8S_CONTEXT = "orbstack"
 LOCAL_AWS_PROFILE = "softmax"
+
+
+def _get_backend_url_from_k8s() -> str:
+    """Get the URL that K8s pods should use to reach the backend server.
+
+    K8s pods run in a different network namespace and can't use 127.0.0.1
+    to reach the host. Each K8s runtime provides a DNS name for host access:
+    - OrbStack: host.docker.internal
+    - k3d: host.k3d.internal
+
+    This URL is passed to job pods as STATS_SERVER_URI so they can report
+    results back to the Observatory backend.
+    """
+    runtime = detect_k8s_runtime()
+    if runtime is None:
+        # Fallback for when no runtime is detected yet
+        return f"http://host.docker.internal:{SERVER_PORT}"
+    host_addr = get_host_address(runtime)
+    return f"http://{host_addr}:{SERVER_PORT}"
+
+
+def _get_k8s_context() -> str:
+    """Get the kubectl context for the detected runtime.
+
+    This is passed to process-compose as K8S_CONTEXT so all services
+    use the correct context for kubectl commands.
+    """
+    runtime = detect_k8s_runtime()
+    if runtime is None:
+        return "orbstack"  # Fallback
+    return get_k8s_context(runtime)
 
 
 def handle_errors(fn):
@@ -54,10 +130,12 @@ def handle_errors(fn):
 HELP_TEXT = f"""
 Observatory local development.
 
-[bold]Prerequisites (one-time OrbStack setup):[/bold]
-  OrbStack is installed via 'metta install' (profile=softmax).
-  Enable Kubernetes: orb config set k8s.enable true
-  Then restart OrbStack (or: orbctl stop && orbctl start)
+[bold]Prerequisites:[/bold]
+  On macOS: OrbStack is installed via 'metta install' (profile=softmax).
+    Enable Kubernetes: orb config set k8s.enable true
+    Then restart OrbStack (or: orbctl stop && orbctl start)
+
+  In devcontainer/Linux: k3d is pre-installed. The setup command creates the cluster.
 
 [bold]Quick start:[/bold]
   metta observatory local-k8s setup  # One-time: build image and create jobs namespace
@@ -80,8 +158,9 @@ Observatory local development.
   uv run python app_backend/scripts/submit_test_jobs.py --policy-uri metta://policy/<your-policy-name>
 
 [bold]Monitor:[/bold]
-  kubectl --context orbstack get pods -n jobs -w
-  kubectl --context orbstack logs -n jobs -l app=episode-runner -f
+  metta observatory local-k8s status   # Show K8s runtime and context
+  metta observatory local-k8s get-pods # List job pods
+  metta observatory local-k8s logs     # Follow job logs
 
 [bold]Teardown:[/bold]
   metta observatory postgres down
@@ -104,15 +183,41 @@ def _base_env() -> dict[str, str]:
     return env
 
 
+def _get_db_uri() -> str:
+    """Get the database URI, using host.docker.internal when in a container.
+
+    CONTAINER NETWORKING EXPLAINED:
+    When running in a devcontainer, PostgreSQL runs via docker-compose on the
+    HOST's Docker daemon (not inside the devcontainer). This is because:
+    1. We mount /var/run/docker.sock from the host
+    2. docker-compose commands run against the host's Docker
+    3. The postgres container runs in the host's Docker network
+
+    From inside the devcontainer, 127.0.0.1:5432 refers to the devcontainer
+    itself, not the host. We use Docker's host.docker.internal DNS name
+    which resolves to the host machine from any container.
+
+    DIRECT MAC DEVELOPMENT:
+    When running directly on macOS (not in a container), 127.0.0.1 works
+    because postgres runs on the same machine.
+    """
+    from metta.setup.tools.observatory.local_k8s import _is_running_in_container
+
+    if _is_running_in_container():
+        # Postgres runs on the host's Docker, so use host.docker.internal
+        return f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@host.docker.internal:{POSTGRES_PORT}/{POSTGRES_DB}"
+    return LOCAL_DB_URI
+
+
 def _local_dev_env() -> dict[str, str]:
     env = _base_env()
-    env["STATS_DB_URI"] = LOCAL_DB_URI
+    env["STATS_DB_URI"] = _get_db_uri()
     env["RUN_MIGRATIONS"] = "true"
     env["EPISODE_RUNNER_IMAGE"] = LOCAL_METTA_POLICY_EVAL_IMG_NAME
     env["MACHINE_TOKEN"] = LOCAL_MACHINE_TOKEN
     env["DEBUG_USER_EMAIL"] = LOCAL_MACHINE_TOKEN
     env["LOCAL_DEV"] = "true"
-    env["LOCAL_DEV_K8S_CONTEXT"] = LOCAL_K8S_CONTEXT
+    env["LOCAL_DEV_K8S_CONTEXT"] = _get_k8s_context()
     env["LOCAL_DEV_AWS_PROFILE"] = LOCAL_AWS_PROFILE
 
     aws_path = os.path.expanduser("~/.aws")
@@ -136,6 +241,60 @@ def _postgres_env() -> dict[str, str]:
     return env
 
 
+def _process_compose_env() -> dict[str, str]:
+    """Environment for process-compose including K8s runtime detection.
+
+    This function sets up all environment variables needed by process-compose.yaml.
+    It handles the differences between direct Mac development and devcontainer.
+
+    KEY ENVIRONMENT VARIABLES:
+    - K8S_CONTEXT: kubectl context (orbstack or k3d-metta-local)
+    - K8S_RUNTIME: Runtime type for conditional behavior
+    - KUBECONFIG: Path to kubeconfig (modified for container access if needed)
+    - POSTGRES_PROBE_HOST: Where to check for postgres (host.docker.internal in container)
+
+    CONTAINER-SPECIFIC HANDLING:
+    1. KUBECONFIG is set to the modified config with host.docker.internal
+    2. POSTGRES_PROBE_HOST is set to host.docker.internal for readiness probes
+
+    These allow process-compose services to work identically whether running
+    directly on Mac or inside a devcontainer.
+    """
+    from metta.setup.tools.observatory.local_k8s import (
+        _get_orbstack_kubeconfig_for_container,
+        _is_running_in_container,
+    )
+
+    env = _postgres_env()
+    env["SERVER_HOST"] = LOCALHOST
+    env["SERVER_PORT"] = str(SERVER_PORT)
+
+    # Pass K8s context for kubectl commands in process-compose.yaml
+    env["K8S_CONTEXT"] = _get_k8s_context()
+
+    # Detect runtime for any conditional behavior
+    runtime = detect_k8s_runtime()
+    env["K8S_RUNTIME"] = runtime.value if runtime else "none"
+    env["K3D_CLUSTER_NAME"] = K3D_CLUSTER_NAME
+
+    # CONTAINER-TO-HOST KUBECONFIG:
+    # When running in a container with OrbStack on the host, we need the
+    # modified kubeconfig that uses host.docker.internal and skips TLS
+    # verification. See local_k8s._get_orbstack_kubeconfig_for_container().
+    modified_kubeconfig = _get_orbstack_kubeconfig_for_container()
+    if modified_kubeconfig:
+        env["KUBECONFIG"] = modified_kubeconfig
+
+    # POSTGRES READINESS PROBE:
+    # The postgres readiness probe in process-compose.yaml checks if postgres
+    # is accepting connections. In a container, postgres runs on the host's
+    # Docker, so we probe host.docker.internal instead of 127.0.0.1.
+    if _is_running_in_container():
+        env["POSTGRES_PROBE_HOST"] = "host.docker.internal"
+
+    return env
+
+
 @app.command(name="up", help="Start all observatory services (postgres, server, frontend, watcher)")
 @handle_errors
 def up(
@@ -143,9 +302,7 @@ def up(
     tui: Annotated[bool, typer.Option("-t", "--tui", help="Enable TUI mode")] = False,
 ):
     compose_file = Path(__file__).parent / "process-compose.yaml"
-    env = _postgres_env()
-    env["SERVER_HOST"] = LOCALHOST
-    env["SERVER_PORT"] = str(SERVER_PORT)
+    env = _process_compose_env()
     cmd = ["process-compose", "-f", str(compose_file), "-p", str(PROCESS_COMPOSE_PORT)]
     if not tui:
         cmd.append("-t=false")
@@ -176,7 +333,7 @@ def server():
     env = _local_dev_env()
     env["HOST"] = "0.0.0.0"
     env["PORT"] = str(SERVER_PORT)
-    env["STATS_SERVER_URI"] = LOCAL_BACKEND_URL_FROM_K8S
+    env["STATS_SERVER_URI"] = _get_backend_url_from_k8s()
     # S3-specific endpoint so only S3 calls go to localstack.
     # Using the global AWS_ENDPOINT_URL would also route SSO credential refresh
     # through localstack, which breaks presigning.

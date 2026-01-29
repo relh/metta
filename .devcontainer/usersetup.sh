@@ -30,6 +30,40 @@ UV_HTTP_TIMEOUT=300 uv sync --frozen 2>&1 | tee -a "$LOG_FILE"
 end_time=$(date +%s)
 log "uv sync completed in $((end_time - start_time)) seconds"
 
+# Rebuild mettagrid_c.so for Linux
+# The workspace is mounted from the host, so if developed on Mac, the .so file
+# will be a Mach-O binary that won't work in the Linux container. We need to
+# rebuild it for the container's architecture.
+METTAGRID_SO="/workspace/packages/mettagrid/python/src/mettagrid/mettagrid_c.so"
+METTAGRID_DIR="/workspace/packages/mettagrid"
+if [ -d "$METTAGRID_DIR" ]; then
+  # Check if .so exists and is not a Linux ELF binary
+  NEEDS_REBUILD=false
+  if [ ! -f "$METTAGRID_SO" ]; then
+    NEEDS_REBUILD=true
+    log "mettagrid_c.so not found, will build"
+  elif ! head -c 4 "$METTAGRID_SO" | grep -q "ELF"; then
+    NEEDS_REBUILD=true
+    log "mettagrid_c.so is not an ELF binary (likely Mac), will rebuild"
+  fi
+
+  if [ "$NEEDS_REBUILD" = true ]; then
+    log "Building mettagrid_c.so for Linux..."
+    start_time=$(date +%s)
+    cd "$METTAGRID_DIR"
+    if bazel build //:mettagrid_c 2>&1 | tee -a "$LOG_FILE"; then
+      cp bazel-bin/cpp/mettagrid_c.so "$METTAGRID_SO"
+      end_time=$(date +%s)
+      log "mettagrid_c.so built in $((end_time - start_time)) seconds"
+    else
+      log "WARNING: Failed to build mettagrid_c.so - some features may not work"
+    fi
+    cd /workspace
+  else
+    log "mettagrid_c.so is already a Linux binary, skipping rebuild"
+  fi
+fi
+
 # Install Nim packages for mettascope.
 # The bootstrap process installs nimby (Nim package manager) and nim, but not the
 # project-specific packages like opengl, fidget2, boxy, etc. that mettascope depends on.

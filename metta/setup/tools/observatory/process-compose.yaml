@@ -1,6 +1,38 @@
+# =============================================================================
+# OBSERVATORY PROCESS-COMPOSE CONFIGURATION
+# =============================================================================
+#
+# This file orchestrates all Observatory services for local development.
+# It works in two environments:
+#
+# 1. DIRECT MAC DEVELOPMENT
+#    - K8s via OrbStack (context: orbstack)
+#    - Postgres at 127.0.0.1:5432
+#    - All services communicate via localhost
+#
+# 2. DEVCONTAINER DEVELOPMENT
+#    - K8s via host's OrbStack (accessed through modified kubeconfig)
+#    - Postgres at host.docker.internal:5432 (runs on host's Docker)
+#    - KUBECONFIG env var points to modified config
+#    - POSTGRES_PROBE_HOST set to host.docker.internal
+#
+# Environment variables are set by cli.py's _process_compose_env() function.
+# Key variables:
+#   K8S_CONTEXT - kubectl context to use (orbstack or k3d-metta-local)
+#   KUBECONFIG - path to kubeconfig (may be modified for container access)
+#   POSTGRES_PROBE_HOST - where to probe for postgres readiness
+#   POSTGRES_HOST, POSTGRES_PORT - postgres connection details
+#   SERVER_HOST, SERVER_PORT - backend server binding
+# =============================================================================
+
 version: "0.5"
 
 processes:
+  # ===========================================================================
+  # LOCALSTACK (S3 EMULATION)
+  # ===========================================================================
+  # Provides local S3 storage for evaluation results and policies.
+  # Used by server and watcher for storing/retrieving job artifacts.
   localstack:
     command: docker run --rm --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack:latest
     readiness_probe:
@@ -12,6 +44,7 @@ processes:
       period_seconds: 3
       failure_threshold: 10
 
+  # Creates the S3 bucket needed for evaluation results
   localstack-init:
     command: |
       aws --endpoint-url=http://localhost:4566 s3 mb s3://eval-bucket 2>/dev/null || true
@@ -22,25 +55,58 @@ processes:
       localstack:
         condition: process_healthy
 
-  orbstack:
-    command: orbctl start && echo "OrbStack is running" && tail -f /dev/null
+  # ===========================================================================
+  # K8S HEALTHCHECK
+  # ===========================================================================
+  # Waits for the Kubernetes cluster to be reachable before starting other services.
+  # Uses K8S_CONTEXT env var which is set by cli.py based on detected runtime.
+  #
+  # In devcontainer: Uses modified kubeconfig (via KUBECONFIG env var) that
+  # replaces 127.0.0.1 with orbstack hostname for proper TLS verification.
+  k8s:
+    command: |
+      echo "Waiting for K8s cluster (context: ${K8S_CONTEXT:-orbstack})..."
+      until kubectl --context ${K8S_CONTEXT:-orbstack} cluster-info >/dev/null 2>&1; do
+        sleep 2
+      done
+      echo "K8s cluster is ready"
+      tail -f /dev/null
     readiness_probe:
       exec:
-        command: orbctl status
+        command: kubectl --context ${K8S_CONTEXT:-orbstack} cluster-info
       initial_delay_seconds: 0
       period_seconds: 2
 
+  # ===========================================================================
+  # POSTGRESQL DATABASE
+  # ===========================================================================
+  # Runs postgres via docker-compose. In a devcontainer, this runs on the HOST's
+  # Docker daemon (because we mount /var/run/docker.sock), not inside the container.
+  #
+  # READINESS PROBE:
+  # Uses POSTGRES_PROBE_HOST which is set by cli.py:
+  # - Direct Mac: defaults to POSTGRES_HOST (127.0.0.1)
+  # - Devcontainer: set to host.docker.internal (postgres runs on host)
   postgres:
     command: metta observatory postgres up
     depends_on:
-      orbstack:
+      k8s:
         condition: process_healthy
     readiness_probe:
       exec:
-        command: python -c "import socket; socket.create_connection(('${POSTGRES_HOST}', ${POSTGRES_PORT}), timeout=1)"
+        # Use POSTGRES_PROBE_HOST which is set to host.docker.internal in containers
+        command: python -c "import socket; socket.create_connection(('${POSTGRES_PROBE_HOST:-${POSTGRES_HOST}}', ${POSTGRES_PORT}), timeout=1)"
       initial_delay_seconds: 1
       period_seconds: 2
 
+  # ===========================================================================
+  # BACKEND SERVER (FastAPI)
+  # ===========================================================================
+  # The Observatory API server. Binds to 0.0.0.0:8000 so it's accessible
+  # from the host browser when running in a devcontainer.
+  #
+  # The server uses _get_db_uri() which returns the appropriate postgres URI
+  # (127.0.0.1 for direct Mac, host.docker.internal for devcontainer).
   server:
     command: metta observatory server
     depends_on:
@@ -56,9 +122,19 @@ processes:
       initial_delay_seconds: 2
       period_seconds: 2
 
+  # ===========================================================================
+  # FRONTEND (Next.js)
+  # ===========================================================================
+  # The Observatory web UI. Runs on port 5173.
+  # Port forwarding is configured in devcontainer.json runArgs.
   frontend:
     command: metta observatory frontend
 
+  # ===========================================================================
+  # JOB WATCHER
+  # ===========================================================================
+  # Watches K8s pods in the "jobs" namespace and reports status to the backend.
+  # Uses the K8S_CONTEXT and KUBECONFIG env vars for kubectl access.
   watcher:
     command: metta observatory watcher
     depends_on:
@@ -67,14 +143,24 @@ processes:
       localstack:
         condition: process_healthy
 
+  # ===========================================================================
+  # TOURNAMENT RUNNER
+  # ===========================================================================
+  # Runs tournament commissioners (one per season) that create matches and update scores.
   tournament:
     command: metta observatory tournament
     depends_on:
       server:
         condition: process_healthy
 
+  # ===========================================================================
+  # JOB LOGS
+  # ===========================================================================
+  # Tails logs from all episode-runner pods in the jobs namespace.
+  # Uses K8S_CONTEXT for the correct kubectl context.
+  # The while loop handles pods coming and going.
   jobs:
-    command: bash -c "while true; do kubectl --context orbstack logs -n jobs -l app=episode-runner -f --all-containers 2>/dev/null; sleep 2; done"
+    command: bash -c "while true; do kubectl --context ${K8S_CONTEXT:-orbstack} logs -n jobs -l app=episode-runner -f --all-containers 2>/dev/null; sleep 2; done"
     depends_on:
-      orbstack:
+      k8s:
         condition: process_healthy

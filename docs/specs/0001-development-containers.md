@@ -32,6 +32,7 @@ multiple failure modes that can leave developers stuck with a broken environment
 - [ ] **Reproducible debugging**: "Works in the devcontainer" becomes a reliable baseline for reproducing issues
 - [ ] **CI/CD parity**: Local development environment matches the build pipeline, catching issues before they hit CI
 - [ ] **Remote dev containers**: enables remote container development when different hardware is necessary e.g. GPU
+- [ ] **Multiple local dev containers**: enable parallel work on laptop
 - [ ] **Make devcontainer for cogs**: maybe build and host the docker image as part of CD --- with uv, is this
       necessary?
 
@@ -42,7 +43,7 @@ multiple failure modes that can leave developers stuck with a broken environment
 - [x] user config shell other tools shell customizations
 - [x] install - Install or update components logs into services add llm login?
 - [x] pytest - Python test runner CI calls
-- [ ] observatory - Observatory local development run tournament locally will need port forwarding
+- [x] observatory - Observatory local development (connects to host's OrbStack on Mac, uses k3d on Linux/remote)
 - [x] cpptest - MettaGrid C++ test runner CI calls
 - [x] nimtest - MettaGrid Nim test runner CI calls
 - [ ] codebase - Codebase management tools generate protobuf generate mermaid

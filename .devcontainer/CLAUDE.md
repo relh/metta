@@ -15,6 +15,16 @@ gt restack                # Rebase current stack on updated parents
 gt move --onto main       # Move branch to stack on main (use when parent was merged)
 ```
 
+### Before Submitting a PR
+
+**ALWAYS run the full lint before pushing:**
+
+```bash
+metta lint
+```
+
+This checks Python (ruff), JSON, Markdown, and other file types. Fix any issues before running `gt submit`.
+
 ### After Rebases and Conflict Resolution
 
 1. Resolve conflict markers in files
