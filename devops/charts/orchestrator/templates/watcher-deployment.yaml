@@ -6,6 +6,11 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-watcher
     app.kubernetes.io/instance: {{ .Release.Name }}
+    {{- if .Values.datadog.enabled }}
+    tags.datadoghq.com/env: {{ .Values.datadog.env | quote }}
+    tags.datadoghq.com/service: "job-watcher"
+    tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+    {{- end }}
 spec:
   replicas: 1
   selector:
@@ -15,6 +20,12 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ .Release.Name }}-watcher
+        {{- if .Values.datadog.enabled }}
+        tags.datadoghq.com/env: {{ .Values.datadog.env | quote }}
+        tags.datadoghq.com/service: "job-watcher"
+        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+        admission.datadoghq.com/enabled: true
+        {{- end }}
     spec:
       serviceAccountName: {{ include "orchestrator.serviceAccountName" . }}
       initContainers:

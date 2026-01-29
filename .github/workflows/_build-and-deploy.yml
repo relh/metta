@@ -40,6 +40,11 @@ on:
         required: false
         type: string
         default: ""
+      production_helm_values:
+        description: "Additional Helm values for production deployment."
+        required: false
+        type: string
+        default: ""
       preview_helm_values:
         description: "Additional Helm values for PR preview. If not provided, the preview will not be deployed."
         required: false
@@ -134,7 +139,8 @@ jobs:
             -n ${{ inputs.namespace }} \
             ${{ inputs.release }} \
             ${{ inputs.chart }} \
-            --set image.tag=${{ steps.build-image.outputs.tag }}
+            --set image.tag=${{ steps.build-image.outputs.tag }} \
+            ${{ inputs.production_helm_values }}
 
       - name: Deploy PR preview
         if: env.BUILD_PREVIEW == 'true'

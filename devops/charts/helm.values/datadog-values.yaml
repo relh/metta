@@ -41,10 +41,6 @@ datadog:
   orchestratorExplorer:
     enabled: true
 
-  # Global tags applied to all metrics
-  tags:
-    - "env:production"
-
   # Exclude ephemeral eval workers from infrastructure metrics to reduce billing
   # Logs and APM traces are still collected for all containers
   # https://docs.datadoghq.com/containers/guide/container-discovery-management/

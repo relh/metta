@@ -18,3 +18,7 @@ resources:
   limits:
     cpu: 2000m
     memory: 1Gi
+
+datadog:
+  enabled: true
+  env: "" # will be set by CI/CD pipeline

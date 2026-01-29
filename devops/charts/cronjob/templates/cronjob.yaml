@@ -16,8 +16,15 @@ spec:
         metadata:
           labels:
             {{- include "cronjob.selectorLabels" . | nindent 12 }}
+            {{- if .Values.datadog.enabled }}
+            tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
+            # each cronjob gets its own release name
+            tags.datadoghq.com/service: {{ .Release.Name | quote }}
+            tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+            admission.datadoghq.com/enabled: true
+            {{- end }}
         spec:
-        
+
           serviceAccountName: {{ include "cronjob.serviceAccountName" . }}
           restartPolicy: {{ .Values.restartPolicy }}
           containers:
@@ -25,16 +32,6 @@ spec:
             image: "{{ if .Values.image.registry }}{{ .Values.image.registry }}/{{ end }}{{ .Values.image.name }}:{{ required "tag is required" .Values.image.tag }}"
             imagePullPolicy: {{ .Values.image.pullPolicy }}
             # Command comes from Dockerfile CMD
-            env:
-            # Datadog configuration
-            - name: DD_ENV
-              value: {{ .Values.datadog.env | quote }}
-            - name: DD_SERVICE
-              value: {{ .Values.datadog.service | quote }}
-            - name: DD_VERSION
-              value: {{ .Values.image.tag | quote }}
-            - name: DD_SITE
-              value: {{ .Values.datadog.site | quote }}
             # Secrets are fetched from AWS Secrets Manager at runtime via the serviceAccount IAM role
             resources:
               {{- toYaml .Values.resources | nindent 14 }}

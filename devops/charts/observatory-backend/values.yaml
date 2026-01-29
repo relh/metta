@@ -36,3 +36,7 @@ env:
 
 secrets:
   machineToken: "machine-token-secret"
+
+datadog:
+  enabled: true
+  env: production # no previews for now

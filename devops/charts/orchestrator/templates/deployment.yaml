@@ -5,6 +5,11 @@ metadata:
   name: {{ include "orchestrator.fullname" . }}
   labels:
     {{- include "orchestrator.labels" . | nindent 4 }}
+    {{- if .Values.datadog.enabled }}
+    tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
+    tags.datadoghq.com/service: "eval-orchestrator"
+    tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+    {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -14,6 +19,12 @@ spec:
     metadata:
       labels:
         {{- include "orchestrator.selectorLabels" . | nindent 8 }}
+        {{- if .Values.datadog.enabled }}
+        tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
+        tags.datadoghq.com/service: "eval-orchestrator"
+        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+        admission.datadoghq.com/enabled: true
+        {{- end }}
     spec:
       serviceAccountName: {{ include "orchestrator.serviceAccountName" . }}
       containers:
@@ -59,12 +70,6 @@ spec:
               fieldPath: status.hostIP
         - name: DD_TRACE_ENABLED
           value: {{ .Values.env.DD_TRACE_ENABLED | quote }}
-        - name: DD_ENV
-          value: {{ .Values.datadog.env | quote }}
-        - name: DD_SERVICE
-          value: "eval-orchestrator"
-        - name: DD_VERSION
-          value: {{ .Values.image.tag | quote }}
         - name: DD_TAGS
           value: "kube_pod_name:$(KUBERNETES_POD_NAME)"
         {{- end }}
