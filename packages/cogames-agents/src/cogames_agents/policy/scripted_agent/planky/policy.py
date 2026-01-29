@@ -357,7 +357,7 @@ class PlankyPolicy(MultiAgentPolicy):
         miner: int = -1,
         scout: int = 0,
         aligner: int = -1,
-        scrambler: int = 0,
+        scrambler: int = -1,
         stem: int = 0,
         # Tracing
         trace: int = 0,
@@ -376,17 +376,21 @@ class PlankyPolicy(MultiAgentPolicy):
         self._trace_level = trace_level
         self._trace_agent = trace_agent
 
-        # Resolve defaults: if stem > 0 and miner/aligner not explicitly set, zero them
+        # Resolve defaults: if stem > 0 and miner/aligner/scrambler not explicitly set, zero them
         if stem > 0:
             if miner == -1:
                 miner = 0
             if aligner == -1:
                 aligner = 0
+            if scrambler == -1:
+                scrambler = 0
         else:
             if miner == -1:
-                miner = 6
+                miner = 2
             if aligner == -1:
-                aligner = 4
+                aligner = 3
+            if scrambler == -1:
+                scrambler = 0
 
         # Build role distribution
         self._role_distribution: list[str] = []

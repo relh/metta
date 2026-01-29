@@ -29,7 +29,12 @@ class GetMinerGearGoal(GetGearGoal):
         )
 
     def _collective_can_afford(self, ctx: "PlankyContext") -> bool:
-        """Miners always get gear — they're the resource producers."""
+        """Miners always get gear — they're the resource producers.
+
+        But skip if collective is already well-stocked (no need to mine).
+        """
+        if _collective_resources_sufficient(ctx):
+            return False
         if not self._gear_cost:
             return True
         s = ctx.state
@@ -45,6 +50,20 @@ class GetMinerGearGoal(GetGearGoal):
 
 # Resource types that can be mined
 RESOURCE_TYPES = ["carbon", "oxygen", "germanium", "silicon"]
+
+# When the collective has more than this amount of every resource, stop mining.
+COLLECTIVE_SUFFICIENT_THRESHOLD = 100
+
+
+def _collective_resources_sufficient(ctx: "PlankyContext") -> bool:
+    """Return True when the collective has >COLLECTIVE_SUFFICIENT_THRESHOLD of every resource."""
+    s = ctx.state
+    return (
+        s.collective_carbon > COLLECTIVE_SUFFICIENT_THRESHOLD
+        and s.collective_oxygen > COLLECTIVE_SUFFICIENT_THRESHOLD
+        and s.collective_germanium > COLLECTIVE_SUFFICIENT_THRESHOLD
+        and s.collective_silicon > COLLECTIVE_SUFFICIENT_THRESHOLD
+    )
 
 
 class ExploreHubGoal(Goal):
@@ -100,6 +119,10 @@ class PickResourceGoal(Goal):
     REEVALUATE_INTERVAL = 50
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
+        # Don't bother picking a resource if collective is well-stocked
+        if _collective_resources_sufficient(ctx):
+            return True
+
         if "target_resource" not in ctx.blackboard:
             return False
 
@@ -246,7 +269,11 @@ class MineResourceGoal(Goal):
     MAX_ATTEMPTS_PER_EXTRACTOR = 3  # Reduced from 5 - fail faster
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # Never satisfied while we have cargo space — keep mining
+        # Stop mining when the collective is well-stocked
+        if _collective_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
+            if ctx.trace:
+                ctx.trace.skip(self.name, "collective resources sufficient, idling")
+            return True
         return False
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:

@@ -26,7 +26,7 @@ def miner_episode() -> EpisodeResult:
 def aligner_episode() -> EpisodeResult:
     """Aligner needs miners to fund gear + hearts."""
     return run_planky_episode(
-        policy_uri="metta://policy/planky?miner=5&aligner=1&scrambler=0&trace=1&trace_level=2&trace_agent=5",
+        policy_uri="metta://policy/planky?miner=4&aligner=1&scrambler=0&trace=1&trace_level=2&trace_agent=4",
         mission=MISSION,
         steps=DEFAULT_STEPS,
         seed=DEFAULT_SEED,
@@ -37,7 +37,7 @@ def aligner_episode() -> EpisodeResult:
 def scrambler_episode() -> EpisodeResult:
     """Scrambler needs miners to fund gear + hearts."""
     return run_planky_episode(
-        policy_uri="metta://policy/planky?miner=5&aligner=0&scrambler=1&trace=1&trace_level=2&trace_agent=5",
+        policy_uri="metta://policy/planky?miner=4&aligner=0&scrambler=1&trace=1&trace_level=2&trace_agent=4",
         mission=MISSION,
         steps=DEFAULT_STEPS,
         seed=DEFAULT_SEED,
@@ -48,7 +48,7 @@ def scrambler_episode() -> EpisodeResult:
 def scout_episode() -> EpisodeResult:
     """Scout needs miners to fund gear."""
     return run_planky_episode(
-        policy_uri="metta://policy/planky?miner=5&aligner=0&scout=1&trace=1&trace_level=2&trace_agent=5",
+        policy_uri="metta://policy/planky?miner=4&aligner=0&scout=1&trace=1&trace_level=2&trace_agent=4",
         mission=MISSION,
         steps=DEFAULT_STEPS,
         seed=DEFAULT_SEED,
@@ -57,9 +57,9 @@ def scout_episode() -> EpisodeResult:
 
 @pytest.fixture(scope="module")
 def stem_episode() -> EpisodeResult:
-    """Full stem=10 run — tests dynamic role selection + pipeline."""
+    """Full stem=5 run — tests dynamic role selection + pipeline."""
     return run_planky_episode(
-        policy_uri="metta://policy/planky?stem=10&trace=1&trace_level=2",
+        policy_uri="metta://policy/planky?stem=5&trace=1&trace_level=2",
         mission=MISSION,
         steps=DEFAULT_STEPS,
         seed=DEFAULT_SEED,
