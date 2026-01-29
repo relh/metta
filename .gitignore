@@ -122,6 +122,9 @@ packages/mettagrid/nim/mettascope/dist/
 packages/mettagrid/nim/mettascope/bindings/generated/
 mettascope.out
 !packages/mettagrid/nim/mettascope/data/resources/
+!packages/mettagrid/nim/vibescope/data/resources/
+!packages/mettagrid/nim/vibescope/data/replays/
+!packages/mettagrid/nim/vibescope/data/replays/pens.json.z
 packages/mettagrid/nim/mettascope/src/tmp
 packages/mettagrid/python/src/mettagrid/nim/mettascope/
 packages/mettagrid/nim/mettascope/nim.cfg

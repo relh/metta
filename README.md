@@ -335,6 +335,13 @@ allows taking over an agent and controlling it manually.
 For more information, see
 [./packages/mettagrid/nim/mettascope/README.md](./packages/mettagrid/nim/mettascope/README.md).
 
+### Vibescope: mettascope2 fork
+
+Vibescope is a forked copy of MettaScope that lives as its own package so it can evolve independently. Use
+`render=vibescope` (or `cogames play -r vibescope`) to launch it.
+
+For more information, see [./packages/mettagrid/nim/vibescope/README.md](./packages/mettagrid/nim/vibescope/README.md).
+
 #### Run the interactive simulation
 
 ```bash

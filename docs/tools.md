@@ -245,6 +245,7 @@ Generate replay files for detailed post-hoc analysis in MettaScope.
 - Generates `.replay` files for MettaScope
 - Automatic browser launch on macOS
 - Local server for replay viewing
+- The same replay format is compatible with Vibescope
 
 ### run.py play
 
@@ -265,6 +266,7 @@ Interactive gameplay interface allowing humans to control Metta agents.
 - WebSocket-based real-time control
 - Browser-based interface via MettaScope
 - Human-in-the-loop testing
+- To use Vibescope in tools that accept a render option, set `render=vibescope`
 
 ### renderer.py (Legacy)
 
