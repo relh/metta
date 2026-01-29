@@ -17,6 +17,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
+    # libgl1 provides libGL.so.1, required by metta nimtest. The Nim mettascope tests
+    # (validation, pathfinding, replay loading) don't render anything, but they import
+    # modules that transitively depend on OpenGL via boxy/windy/silky. Without this
+    # library, tests fail at runtime with "could not load: libGL.so.1".
+    libgl1 \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 

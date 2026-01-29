@@ -30,6 +30,22 @@ UV_HTTP_TIMEOUT=300 uv sync --frozen 2>&1 | tee -a "$LOG_FILE"
 end_time=$(date +%s)
 log "uv sync completed in $((end_time - start_time)) seconds"
 
+# Install Nim packages for mettascope.
+# The bootstrap process installs nimby (Nim package manager) and nim, but not the
+# project-specific packages like opengl, fidget2, boxy, etc. that mettascope depends on.
+# These are defined in nimby.lock and installed to ~/.nimby/pkgs/. Without this step,
+# `metta nimtest` fails with "cannot open file: opengl" because nim can't find the packages.
+METTASCOPE_DIR="/workspace/packages/mettagrid/nim/mettascope"
+if [ -d "$METTASCOPE_DIR" ] && command -v nimby &> /dev/null; then
+  log "Installing Nim packages for mettascope..."
+  cd "$METTASCOPE_DIR"
+  nimby sync -g nimby.lock 2>&1 | tee -a "$LOG_FILE"
+  cd /workspace
+  log "Nim packages installed"
+else
+  log "Skipping Nim package installation (nimby not found or mettascope dir missing)"
+fi
+
 # Run dotfiles setup if present (mounted from host ~/.config/devdotfiles)
 DOTFILES_DIR="$HOME/.config/devdotfiles"
 if [ -d "$DOTFILES_DIR" ]; then

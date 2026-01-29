@@ -41,17 +41,17 @@ multiple failure modes that can leave developers stuck with a broken environment
 
 - [x] user config shell other tools shell customizations
 - [x] install - Install or update components logs into services add llm login?
-- [ ] pytest - Python test runner CI calls
+- [x] pytest - Python test runner CI calls
 - [ ] observatory - Observatory local development run tournament locally will need port forwarding
-- [ ] cpptest - MettaGrid C++ test runner CI calls
-- [ ] nimtest - MettaGrid Nim test runner CI calls
+- [x] cpptest - MettaGrid C++ test runner CI calls
+- [x] nimtest - MettaGrid Nim test runner CI calls
 - [ ] codebase - Codebase management tools generate protobuf generate mermaid
-- [ ] lint - Code formatters CI calls
+- [x] lint - Code formatters CI calls
 - [ ] ci - Run CI checks locally stages - get in merge queue CI - push to main (not part of ci) CD -- build containers,
       restart kub (web site, tourney) Training
 - [ ] run - Run component-specific commands used by git hooks and filter repo support git hooks
 - [ ] configure - Configure Metta settings githooks
-- [ ] meeta help - change
+- [ ] metta help - change
 
 #### Lower priority
 
