@@ -1,10 +1,12 @@
-name: Auto-approve AI docs
+name: Auto-approve AI docs and skills
 
 on:
   pull_request:
     types: [opened, synchronize]
     paths:
       - "docs/ai/**/*.md"
+      - "docs/skills.md"
+      - "skills/**/*.md"
 
 jobs:
   auto-approve:
@@ -14,7 +16,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - name: Check if PR only touches docs/ai .md files
+      - name: Check if PR only touches AI docs and skills
         id: check
         run: |
           mapfile -t FILES < <(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path')
@@ -24,7 +26,7 @@ jobs:
           fi
           ALL_MATCH=true
           for f in "${FILES[@]}"; do
-            if [[ ! "$f" =~ ^docs/ai/.*\.md$ ]]; then
+            if [[ ! "$f" =~ ^(docs/ai/.*\.md|docs/skills\.md|skills/.*\.md)$ ]]; then
               ALL_MATCH=false
               break
             fi
