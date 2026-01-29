@@ -11,6 +11,7 @@ from typing import Optional
 
 import numpy as np
 
+from cogames_agents.policy.scripted_agent.common.roles import VIBE_TO_ROLE
 from mettagrid.mettagrid_c import dtype_actions
 from mettagrid.policy.policy import MultiAgentPolicy, StatefulAgentPolicy, StatefulPolicyImpl
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
@@ -28,7 +29,7 @@ from .behaviors import (
 )
 from .services import MapTracker, Navigator, SafetyManager
 from .state import AgentState
-from .types import DEBUG, VIBE_TO_ROLE, DebugInfo, Role
+from .types import DEBUG, DebugInfo, Role
 
 # The "gear" vibe triggers changing to role vibe
 GEAR_VIBE = "gear"

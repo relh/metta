@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+from cogames_agents.policy.scripted_agent.common.roles import ROLE_TO_STATION
 from cogames_agents.policy.scripted_agent.pinky.behaviors.base import (
     Services,
     explore_for_station,
@@ -17,7 +18,6 @@ from cogames_agents.policy.scripted_agent.pinky.behaviors.base import (
 )
 from cogames_agents.policy.scripted_agent.pinky.types import (
     DEBUG,
-    ROLE_TO_STATION,
     DebugInfo,
     RiskTolerance,
     Role,

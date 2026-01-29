@@ -10,8 +10,9 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING, Optional
 
+from cogames_agents.policy.scripted_agent.common.roles import ROLE_TO_STATION
 from cogames_agents.policy.scripted_agent.pinky.behaviors.base import Services, is_adjacent
-from cogames_agents.policy.scripted_agent.pinky.types import DEBUG, ROLE_TO_STATION, RiskTolerance, Role
+from cogames_agents.policy.scripted_agent.pinky.types import DEBUG, RiskTolerance, Role
 from mettagrid.simulator import Action
 
 if TYPE_CHECKING:

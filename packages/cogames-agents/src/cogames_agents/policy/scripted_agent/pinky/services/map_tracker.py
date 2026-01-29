@@ -9,10 +9,10 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING, Optional, Union
 
+from cogames_agents.policy.scripted_agent.common.roles import ROLE_TO_STATION
 from cogames_agents.policy.scripted_agent.common.tag_utils import derive_alignment, select_primary_tag
 from cogames_agents.policy.scripted_agent.pinky.types import (
     DEBUG,
-    ROLE_TO_STATION,
     CellType,
     StructureInfo,
     StructureType,
