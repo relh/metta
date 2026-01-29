@@ -32,6 +32,6 @@ jobs:
         --set resources.requests.memory=64Mi \
         --set resources.limits.cpu=1000m \
         --set resources.limits.memory=512Mi \
-        --set replicaCount=1
+        --set replicaCount=1 \
         --set datadog.env=preview
       preview_host: "${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('observatory-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}"
