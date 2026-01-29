@@ -33,6 +33,7 @@ Shared skills live in `skills/`:
 - `tr.cogames-variant-debug`
 - `db.fix-traceback`
 - `st.graphite-stack`
+- `st.issue-to-stack`
 - `st.apply`
 - `pr.cool`
 - `st.extract`
