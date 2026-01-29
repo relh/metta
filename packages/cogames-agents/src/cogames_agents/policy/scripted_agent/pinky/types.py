@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-from cogames_agents.policy.scripted_agent.common.roles import (
-    Role,
-)
+from cogames_agents.policy.scripted_agent.common import roles as common_roles
+
+Role = common_roles.Role
+ROLE_TO_STATION = common_roles.ROLE_TO_STATION
+VIBE_TO_ROLE = common_roles.VIBE_TO_ROLE
 
 
 class RiskTolerance(Enum):
