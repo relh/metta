@@ -12,4 +12,4 @@ class BetaCogsguardCommissioner(BetaCommissioner):
         "competition": CogsguardPairingReferee(),
     }
     summary = "CogsGuard season: policies start in qualifying; promoted to competition if score meets threshold"
-    validation_mission = "cogsguard_arena.basic"
+    validation_mission = "cogsguard_arena"

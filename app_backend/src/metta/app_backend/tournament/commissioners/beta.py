@@ -23,6 +23,7 @@ class BetaCommissioner(CommissionerBase):
     }
     summary = "Policies start in qualifying; promoted to competition if score meets threshold"
     validation_mission = "training_facility.harvest"
+    promotion_min_score = PROMOTION_MIN_SCORE
 
     def get_new_submission_membership_changes(self, policy_version_id: UUID) -> list[MembershipChangeRequest]:
         return [
@@ -61,14 +62,14 @@ class BetaCommissioner(CommissionerBase):
                     logger.info(f"Retiring {pv_id}: exhausted {MAX_FAILED_ATTEMPTS} retries")
                 continue
 
-            if avg_score is not None and avg_score >= PROMOTION_MIN_SCORE:
+            if avg_score is not None and avg_score >= self.promotion_min_score:
                 if pv_id not in existing_in_competition:
                     changes.append(
                         MembershipChangeRequest(
                             pool_name="competition",
                             policy_version_id=pv_id,
                             action="add",
-                            notes=f"Promoted: avg_score={avg_score:.3f} >= {PROMOTION_MIN_SCORE}",
+                            notes=f"Promoted: avg_score={avg_score:.3f} >= {self.promotion_min_score}",
                         )
                     )
                 changes.append(
