@@ -248,6 +248,7 @@ export type PoolInfo = {
 export type SeasonDetail = {
   name: string
   summary: string
+  is_default: boolean
   pools: PoolInfo[]
 }
 

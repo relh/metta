@@ -14,7 +14,8 @@ export default async function TournamentPage() {
     )
   }
 
-  redirect(`/tournament/${seasons[0].name}`)
+  const defaultSeason = seasons.find((s) => s.is_default) ?? seasons[0]
+  redirect(`/tournament/${defaultSeason.name}`)
 }
 
 export const metadata: Metadata = {
