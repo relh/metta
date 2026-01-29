@@ -14,3 +14,5 @@ SEASONS: dict[str, Callable[[], CommissionerBase]] = {
 }
 
 HIDDEN_SEASONS: list[str] = ["test-season"]
+
+DEFAULT_SEASON: str = "beta-cogsguard"

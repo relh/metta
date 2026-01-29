@@ -24,7 +24,7 @@ from metta.app_backend.models.tournament import (
     Season,
 )
 from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.tournament.registry import HIDDEN_SEASONS, SEASONS
+from metta.app_backend.tournament.registry import DEFAULT_SEASON, HIDDEN_SEASONS, SEASONS
 
 
 async def get_session():
@@ -104,17 +104,21 @@ class PoolInfo(BaseModel):
 class SeasonResponse(BaseModel):
     name: str
     summary: str
+    validation_mission: str
+    is_default: bool
     pools: list[PoolInfo]
 
     @classmethod
     def from_commissioner(cls, season_name: str) -> "SeasonResponse":
         if season_name not in SEASONS:
-            return cls(name=season_name, summary="", pools=[])
+            return cls(name=season_name, summary="", validation_mission="", is_default=False, pools=[])
         commissioner = SEASONS[season_name]()
         desc = commissioner.description
         return cls(
             name=season_name,
             summary=desc.summary,
+            validation_mission=desc.validation_mission,
+            is_default=season_name == DEFAULT_SEASON,
             pools=[PoolInfo(name=p.name, description=p.description) for p in desc.pools],
         )
 

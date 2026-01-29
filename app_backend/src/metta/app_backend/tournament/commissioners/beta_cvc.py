@@ -12,3 +12,4 @@ class BetaCvcCommissioner(BetaCommissioner):
         "competition": CvcPairingReferee(),
     }
     summary = "CvC season: policies start in qualifying; promoted to competition if score meets threshold"
+    validation_mission = "machina_1.open_world"

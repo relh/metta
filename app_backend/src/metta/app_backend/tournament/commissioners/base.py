@@ -65,6 +65,7 @@ class PoolDescription(BaseModel):
 
 class SeasonDescription(BaseModel):
     summary: str
+    validation_mission: str
     pools: list[PoolDescription]
 
 
@@ -73,11 +74,13 @@ class CommissionerBase(ABC):
     referees: dict[str, RefereeBase]
     leaderboard_pool: str
     summary: str = ""
+    validation_mission: str = ""
 
     @property
     def description(self) -> SeasonDescription:
         return SeasonDescription(
             summary=self.summary,
+            validation_mission=self.validation_mission,
             pools=[PoolDescription(name=name, description=ref.description) for name, ref in self.referees.items()],
         )
 
