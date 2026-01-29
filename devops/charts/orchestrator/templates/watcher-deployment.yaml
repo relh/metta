@@ -50,7 +50,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: {{ .Values.watcher.dbSecret }}
-              key: uri
+              key: STATS_DB_URI
         {{- end }}
         - name: HOST_IP
           valueFrom:
