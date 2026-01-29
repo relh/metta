@@ -1,4 +1,6 @@
-from typing import Literal, Optional, cast
+import importlib
+import importlib.util
+from typing import Any, Literal, Optional, cast
 
 import einops
 import torch
@@ -7,6 +9,19 @@ import torch.nn.functional as F
 from tensordict import TensorDict
 
 from metta.agent.components.component_config import ComponentConfig
+
+try:
+    _xops_spec = importlib.util.find_spec("xformers.ops")
+except (ImportError, ModuleNotFoundError):
+    _xops_spec = None
+
+if _xops_spec is not None:
+    try:
+        xops: Any | None = importlib.import_module("xformers.ops")
+    except (ImportError, ModuleNotFoundError):
+        xops = None
+else:
+    xops = None
 
 
 class ObsLatentAttnConfig(ComponentConfig):
@@ -157,7 +172,7 @@ class ObsLatentAttn(nn.Module):
         x_features = td[self.config.in_key]
         key_mask = None
         if self._use_mask:
-            key_mask = td["obs_mask"]
+            key_mask = td.get("obs_mask")
         BT = x_features.shape[0]
 
         queries = self._q_token.expand(BT, -1, -1)
@@ -251,8 +266,8 @@ class ObsPerceiverLatent(nn.Module):
         nn.init.trunc_normal_(self.latents, std=0.02)
 
         self.token_norm = nn.LayerNorm(self._feat_dim)
-        self.k_proj = nn.Linear(self._feat_dim, self._latent_dim, bias=False)
-        self.v_proj = nn.Linear(self._feat_dim, self._latent_dim, bias=False)
+        # Fuse key/value projections to reduce kernel launches
+        self.kv_proj = nn.Linear(self._feat_dim, 2 * self._latent_dim, bias=False)
 
         self.layers = nn.ModuleList([])
         for _ in range(self._num_layers):
@@ -273,21 +288,20 @@ class ObsPerceiverLatent(nn.Module):
             )
 
         self.final_norm = nn.LayerNorm(self._latent_dim)
+        self._xops: Any | None = xops
 
     def forward(self, td: TensorDict) -> TensorDict:
         x_features = td[self.config.in_key]
-        key_mask = td.get("obs_mask") if self._use_mask else None
+        key_mask = None
+        if self._use_mask:
+            key_mask = td.get("obs_mask")
+            if key_mask is not None:
+                key_mask = key_mask.to(torch.bool)
         tokens_norm = self.token_norm(x_features)
-        k = self.k_proj(tokens_norm)
-        v = self.v_proj(tokens_norm)
-
+        kv = self.kv_proj(tokens_norm)
+        k, v = kv.split(self._latent_dim, dim=-1)
         k = einops.rearrange(k, "b m (h d) -> b h m d", h=self._num_heads)
         v = einops.rearrange(v, "b m (h d) -> b h m d", h=self._num_heads)
-
-        attn_bias = None
-        if key_mask is not None:
-            mask_value = -torch.finfo(k.dtype).max
-            attn_bias = einops.rearrange(key_mask.to(torch.bool), "b m -> b 1 1 m").to(k.dtype) * mask_value
 
         latents = self.latents.expand(x_features.shape[0], -1, -1)
 
@@ -300,7 +314,7 @@ class ObsPerceiverLatent(nn.Module):
             q = layer["q_proj"](layer["latent_norm"](latents))
             q = einops.rearrange(q, "b n (h d) -> b h n d", h=self._num_heads)
 
-            attn_output = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_bias)
+            attn_output = self._attention(q, k, v, key_mask)
             attn_output = einops.rearrange(attn_output, "b h n d -> b n (h d)")
             latents = residual + layer["attn_out_proj"](attn_output)
 
@@ -319,6 +333,44 @@ class ObsPerceiverLatent(nn.Module):
 
         td[self.config.out_key] = latents
         return td
+
+    def _attention(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        key_mask: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        """Compute attention using xformers when available, otherwise SDPA."""
+        xops = self._xops
+        use_xops = q.is_cuda and xops is not None
+        attn_bias = None
+        if use_xops and key_mask is not None:
+            padding_mask = getattr(cast(Any, xops).fmha.attn_bias, "PaddingMask", None)
+            if padding_mask is None:
+                use_xops = False
+            else:
+                attn_bias = padding_mask(key_mask)
+
+        if use_xops:
+            # xformers expects [B, N, H, D]
+            q_x = q.permute(0, 2, 1, 3)
+            k_x = k.permute(0, 2, 1, 3)
+            v_x = v.permute(0, 2, 1, 3)
+            with torch.profiler.record_function("obs_perceiver_latent.xops"):
+                out = cast(Any, xops).memory_efficient_attention(q_x, k_x, v_x, attn_bias=attn_bias, p=0.0)
+            return out.permute(0, 2, 1, 3)
+
+        # Prefer flash attention when available; fall back to mem-efficient/math otherwise.
+        attn_mask = None
+        if key_mask is not None:
+            attn_mask = key_mask[:, None, None, :]
+        if q.is_cuda:
+            with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_mem_efficient=True, enable_math=True):
+                with torch.profiler.record_function("obs_perceiver_latent.sdpa"):
+                    return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
+        with torch.profiler.record_function("obs_perceiver_latent.sdpa"):
+            return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
 
 
 class ObsSelfAttnConfig(ComponentConfig):
@@ -387,14 +439,14 @@ class ObsSelfAttn(nn.Module):
 
         attn_bias = None
         if self._use_mask:
-            key_mask = td["obs_mask"].to(torch.bool)
-            if self._use_cls_token:
-                cls_pad = torch.zeros(key_mask.shape[0], 1, device=key_mask.device, dtype=torch.bool)
-                key_mask = torch.cat([cls_pad, key_mask], dim=1)
-
-            assert x_features.dtype is not None
-            mask_value = -torch.finfo(x_features.dtype).max
-            attn_bias = einops.rearrange(key_mask, "b m -> b 1 1 m").to(x_features.dtype) * mask_value
+            key_mask = td.get("obs_mask")
+            if key_mask is not None:
+                key_mask = key_mask.to(torch.bool)
+                if self._use_cls_token:
+                    cls_pad = torch.zeros(key_mask.shape[0], 1, device=key_mask.device, dtype=torch.bool)
+                    key_mask = torch.cat([cls_pad, key_mask], dim=1)
+                mask_value = -torch.finfo(x_features.dtype).max
+                attn_bias = einops.rearrange(key_mask, "b m -> b 1 1 m").to(x_features.dtype) * mask_value
 
         x = x_features
 
