@@ -23,7 +23,7 @@ Pick a short slug for the issue (e.g. `legacy-nim-agents`).
 git fetch origin
 
 SLUG="legacy-nim-agents"
-WIP_BRANCH="subho/${SLUG}-wip"
+WIP_BRANCH="${USER}/${SLUG}-wip"
 WORKTREE="../metta.${USER}.${SLUG}-wip"
 
 git worktree add -b "$WIP_BRANCH" "$WORKTREE" origin/main
@@ -78,7 +78,7 @@ If the commits already match the intended stack, create a branch per commit by c
 ```bash
 # Example: split 3 commits from the WIP branch
 COMMITS=(<sha1> <sha2> <sha3>) # oldest -> newest
-BRANCHES=("subho/${SLUG}-shim" "subho/${SLUG}-tooling" "subho/${SLUG}-tests")
+BRANCHES=("${USER}/${SLUG}-shim" "${USER}/${SLUG}-tooling" "${USER}/${SLUG}-tests")
 
 git checkout origin/main
 gt create "${BRANCHES[0]}" -m "fix: <PR 1 title>"
