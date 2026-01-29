@@ -6,33 +6,57 @@ alwaysApply: true
 
 # Shared Skills
 
-Skill files live in `skills/`. Personal skills live in `skills/user/<username>/`.
+Skill files live in `skills/`.
+Prefix conventions and namespaces live in `docs/skills.md`.
 
 ## Shared Skill List
 
-- address-review
-- check-ci
-- checkpoint-find
-- cleanup-refactor
-- cogames-command
-- cogames-variant-debug
-- fix-traceback
-- graphite-stack
-- lint-fix
-- mettabox-ops
-- policy-save-load-audit
-- pr-summary
-- recipe-curriculum-audit
-- review-main
-- run-and-triage
-- simplify-diff
-- sync-main
-- sync-nim-python
-- test-triage
+- pr.address-review
+- relh.cb.branch-hygiene
+- cf.really
+- pr.check-ci
+- tr.checkpoint-find
+- cb.cleanup-refactor
+- tr.cogames-command
+- tr.cogames-variant-debug
+- db.fix-traceback
+- st.graphite-stack
+- st.apply
+- pr.cool
+- st.extract
+- st.extract-copy
+- pr.fix-branch
+- pr.fix-ci
+- pr.fix-comments
+- st.fix-stack
+- st.make-stack
+- st.split
+- pr.submit
+- cb.lint-fix
+- sk.learn-skills
+- sk.make-skill
+- sk.submit-skill
+- sk.sync-skills
+- sk.update-skill
+- do.mettabox-ops
+- relh.pr.merge-conflicts
+- tr.policy-save-load-audit
+- pr.summary
+- r.make-package
+- tr.recipe-curriculum-audit
+- cb.review-main
+- relh.tr.run-recipe
+- db.run-and-triage
+- cb.simplify-diff
+- pr.sync-main
+- cb.sync-nim-python
+- t.run-tests
+- db.test-triage
+- do.worktrunk
 
 ## How to Use
 
-When the user asks to use a skill (e.g., "use review-main" or "fix CI using check-ci"):
+When the user asks to use a skill (e.g., "use cb.review-main" or "fix CI using pr.check-ci"):
 
 1. Read the full skill file from `skills/<skill-name>/SKILL.md`
 2. Follow the instructions in the skill file

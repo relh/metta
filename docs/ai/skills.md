@@ -2,7 +2,7 @@
 
 Shared AI skills and commands for use with Claude Code, Codex, and Cursor.
 
-Personal skill libraries live under `skills/user/<username>/` (see `docs/ai/daveey` and `docs/ai/subho`).
+Prefix conventions and namespaces live in `docs/skills.md`.
 
 ## Setup
 
@@ -15,12 +15,6 @@ the repo, run:
 ./scripts/skills-sync.sh
 ```
 
-This syncs shared skills only. To include personal skills under `skills/user/`, run:
-
-```bash
-./scripts/skills-sync.sh --include-user
-```
-
 ### For Cursor
 
 The shared skills catalog is described in `.cursor/rules/skills.mdc`.
@@ -29,28 +23,51 @@ The shared skills catalog is described in `.cursor/rules/skills.mdc`.
 
 Shared skills live in `skills/`:
 
-- `address-review`
-- `check-ci`
-- `checkpoint-find`
-- `cleanup-refactor`
-- `cogames-command`
-- `cogames-variant-debug`
-- `fix-traceback`
-- `graphite-stack`
-- `lint-fix`
-- `mettabox-ops`
-- `policy-save-load-audit`
-- `pr-summary`
-- `recipe-curriculum-audit`
-- `review-main`
-- `run-and-triage`
-- `simplify-diff`
-- `sync-main`
-- `sync-nim-python`
-- `test-triage`
+- `pr.address-review`
+- `relh.cb.branch-hygiene`
+- `cf.really`
+- `pr.check-ci`
+- `tr.checkpoint-find`
+- `cb.cleanup-refactor`
+- `tr.cogames-command`
+- `tr.cogames-variant-debug`
+- `db.fix-traceback`
+- `st.graphite-stack`
+- `st.apply`
+- `pr.cool`
+- `st.extract`
+- `st.extract-copy`
+- `pr.fix-branch`
+- `pr.fix-ci`
+- `pr.fix-comments`
+- `st.fix-stack`
+- `st.make-stack`
+- `st.split`
+- `pr.submit`
+- `cb.lint-fix`
+- `sk.learn-skills`
+- `sk.make-skill`
+- `sk.submit-skill`
+- `sk.sync-skills`
+- `sk.update-skill`
+- `do.mettabox-ops`
+- `relh.pr.merge-conflicts`
+- `tr.policy-save-load-audit`
+- `pr.summary`
+- `r.make-package`
+- `tr.recipe-curriculum-audit`
+- `cb.review-main`
+- `relh.tr.run-recipe`
+- `db.run-and-triage`
+- `cb.simplify-diff`
+- `pr.sync-main`
+- `cb.sync-nim-python`
+- `t.run-tests`
+- `db.test-triage`
+- `do.worktrunk`
 
 See each `skills/<name>/SKILL.md` for the full workflow.
 
 ## Editing Skills
 
-Edit shared skills in `skills/`. Personal skills live in `skills/user/<username>/`.
+Edit shared skills in `skills/`.

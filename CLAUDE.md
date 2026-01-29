@@ -4,8 +4,7 @@ Guidance for AI assistants working on this codebase. See also `STYLE_GUIDE.md`.
 
 ## Skills
 
-Canonical skills live in `skills/`, with optional user-specific skills in `skills/user/<username>/`. In-repo tooling
-uses symlinks:
+Canonical skills live in `skills/`. In-repo tooling uses symlinks:
 
 - `.codex/skills` → `skills/`
 - `.claude/skills` → `skills/`

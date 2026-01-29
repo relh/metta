@@ -1,26 +1,21 @@
 #!/bin/bash
 # Sync repo skills into Claude Code and Codex skill directories.
-# Includes skills under skills/user/ unless a skill directory contains a .private file.
+# Skips any skill directory containing a .private file.
 #
 # Usage:
-#   ./scripts/skills-sync.sh                 # Safe mode - shared skills only
+#   ./scripts/skills-sync.sh
 #   ./scripts/skills-sync.sh --force         # Replace existing directories with symlinks
-#   ./scripts/skills-sync.sh --include-user  # Include skills/user in default sync
 #   ./scripts/skills-sync.sh <path>          # Sync from a specific skills directory
 
 set -e
 
 FORCE=false
-INCLUDE_USER=false
 SKILLS_DIR=""
 
 for arg in "$@"; do
   case "$arg" in
     --force | -f)
       FORCE=true
-      ;;
-    --include-user)
-      INCLUDE_USER=true
       ;;
     *)
       SKILLS_DIR="$arg"
@@ -31,9 +26,6 @@ done
 if [ -z "$SKILLS_DIR" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2> /dev/null || pwd)
   SKILLS_DIR="$REPO_ROOT/skills"
-  DEFAULT_SKILLS_DIR="$SKILLS_DIR"
-else
-  DEFAULT_SKILLS_DIR=""
 fi
 
 CLAUDE_SKILLS_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
@@ -45,17 +37,10 @@ echo "Syncing skills from $SKILLS_DIR"
 if $FORCE; then
   echo "(Force mode: replacing existing directories)"
 fi
-if [ -n "$DEFAULT_SKILLS_DIR" ] && ! $INCLUDE_USER; then
-  echo "(Shared only: use --include-user to include skills/user)"
-fi
 
 SEEN_SKILLS=""
 
-if [ -n "$DEFAULT_SKILLS_DIR" ] && ! $INCLUDE_USER; then
-  FIND_CMD=(find "$SKILLS_DIR" -path "$SKILLS_DIR/user" -prune -o -maxdepth 4 -name "SKILL.md" -type f -print)
-else
-  FIND_CMD=(find "$SKILLS_DIR" -maxdepth 4 -name "SKILL.md" -type f -print)
-fi
+FIND_CMD=(find "$SKILLS_DIR" -maxdepth 4 -name "SKILL.md" -type f -print)
 
 while IFS= read -r skill_file; do
   skill_path=$(dirname "$skill_file")

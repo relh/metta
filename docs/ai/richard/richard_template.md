@@ -11,7 +11,7 @@ Source notes:
 - Workspace filter: /Users/relh/Code/dummyspace/metta
 - Prompts observed: 1452 across 199 session files (user prompts only)
 
-### /review-main
+### /cb.review-main
 
 - Intent: Review branch changes against main with a merge-base diff and return prioritized findings.
 - Typical ask: "Review the code changes against the base branch 'main'... Run git diff <merge-base> and provide
@@ -21,7 +21,7 @@ Source notes:
   - Run: `git diff <merge-base>`
   - Output: prioritized findings, risks, and suggested fixes.
 
-### /pr-summary
+### /pr.summary
 
 - Intent: Audit branch vs main and write a short PR summary (what changed, why, tests, risks).
 - Typical ask: "Can you audit our branch vs main and write a PR summary for us?"
@@ -29,7 +29,7 @@ Source notes:
   - Summarize scope, key files, and behavior changes.
   - Note tests run or recommend targeted tests.
 
-### /merge-conflicts
+### /relh.pr.merge-conflicts
 
 - Intent: Resolve merge conflicts (often after main updates), preserve main where required, explain key resolutions.
 - Typical ask: "Can you resolve the merge conflicts... and explain what the diff is about?"
@@ -37,7 +37,7 @@ Source notes:
   - Resolve conflicts, highlight any non-trivial decisions.
   - Provide a short explanation of the final shape.
 
-### /lint-fix
+### /cb.lint-fix
 
 - Intent: Run lint auto-fix and address remaining issues.
 - Typical ask: "Can you run metta lint --fix and address the issues?"
@@ -45,7 +45,7 @@ Source notes:
   - Run: `metta lint --fix`
   - Fix any remaining lint errors and summarize changes.
 
-### /run-and-triage
+### /db.run-and-triage
 
 - Intent: Run one or more commands and report errors/root cause (often training or eval).
 - Typical ask: "Run ./devops/run.sh train ... and tell me what errors you see."
@@ -53,7 +53,7 @@ Source notes:
   - Execute the provided command(s).
   - Summarize failures, point to offending files, propose fixes.
 
-### /checkpoint-find
+### /tr.checkpoint-find
 
 - Intent: Locate a checkpoint for a run id and provide the next command to use it.
 - Typical ask: "Investigate this run and find a checkpoint for it; I think they save every N."
@@ -68,7 +68,7 @@ Source notes:
 - Template:
   - Use provided policy/run id, mission, cogs, and variant to build `cogames play`.
 
-### /sync-nim-python
+### /cb.sync-nim-python
 
 - Intent: Compare Nim vs Python scripted agent implementations and port missing behavior.
 - Typical ask: "Compare the python version with our nim version and port over any missing/different functionality."
@@ -78,7 +78,7 @@ Source notes:
 
 ## Metta (/Users/relh/Code/metta)
 
-### /review-main
+### /cb.review-main
 
 - Intent: Review the merge diff vs main and return prioritized, actionable findings.
 - Template: "Review the code changes against the base branch 'main'. Start by finding the merge diff between the current
@@ -86,7 +86,7 @@ Source notes:
   run `git diff` against that SHA to see what changes we would merge into the main branch. Provide prioritized,
   actionable findings."
 
-### /branch-hygiene
+### /relh.cb.branch-hygiene
 
 - Intent: Audit the branch for unintended changes vs main and call out cleanup or missing tests.
 - Template: "Audit this branch against origin/main. Show the merge-base SHA, list the files changed, and call out
@@ -98,25 +98,25 @@ Source notes:
 - Template: "Run this command and keep debugging until it works. If it fails, identify the root cause, fix it minimally,
   and re-run: <COMMAND>"
 
-### /fix-traceback
+### /db.fix-traceback
 
 - Intent: Analyze a traceback or error log and patch the minimal fix with a short root-cause summary.
 - Template: "Here is the traceback/error output. Identify the root cause and implement the smallest sensible fix.
   Summarize why it broke and why the fix works: <TRACEBACK_OR_LOG>"
 
-### /simplify-diff
+### /cb.simplify-diff
 
 - Intent: Make a change more concise while preserving behavior.
 - Template: "Make this change more concise while preserving behavior. Prefer inlining or removing redundant
   code/comments and keep the diff minimal: <FILE_OR_SNIPPET>"
 
-### /cogames-command
+### /tr.cogames-command
 
 - Intent: Craft or adjust `cogames`/`uv run` commands for missions, variants, and policies.
 - Template: "I want to run or modify this cogames command. Please adjust it to fit the goal and explain the final
   command: <COMMAND_AND_GOAL>"
 
-### /lint-fix
+### /cb.lint-fix
 
 - Intent: Run `metta lint --fix`, address remaining issues, and summarize changes.
 - Template: "Run `metta lint --fix`, fix any remaining lint failures, and summarize what changed."
@@ -135,17 +135,17 @@ Notes:
 - Workspace filter: /home/relh/Code/metta (and related /home/relh/Code/\*/metta workspaces)
 - Prompts observed: included in combined totals in richard.md; per-workspace counts are not broken out here.
 
-### /review-main
+### /cb.review-main
 
 - Intent: Review the merge diff vs origin/main and return prioritized, actionable findings.
 - Template: "Review the code changes vs origin/main using the merge base and list prioritized findings."
 
-### /branch-hygiene
+### /relh.cb.branch-hygiene
 
 - Intent: Audit the branch for unintended changes or simplification opportunities.
 - Template: "Audit this branch vs origin/main and call out any unintended changes or cleanup opportunities."
 
-### /run-recipe
+### /relh.tr.run-recipe
 
 - Intent: Run ./tools/run.py recipes (train/play/evaluate) with timeouts and summarize results.
 - Template: "Run ./tools/run.py <recipe>.<mode> with these args, capture failures, and summarize results."
@@ -155,32 +155,32 @@ Notes:
 - Intent: Run a command (metta/uv/cogames) and debug until it succeeds.
 - Template: "Run this command and debug until it works. If it fails, identify the root cause and fix it: <COMMAND>"
 
-### /fix-traceback
+### /db.fix-traceback
 
 - Intent: Analyze a traceback or error log and implement the smallest fix.
 - Template: "Identify the root cause in this traceback and implement the minimal fix: <TRACEBACK_OR_LOG>"
 
-### /simplify-diff
+### /cb.simplify-diff
 
 - Intent: Make a change more concise while preserving behavior.
 - Template: "Make this more concise without changing behavior; keep the diff minimal: <FILE_OR_SNIPPET>"
 
-### /cogames-command
+### /tr.cogames-command
 
 - Intent: Craft or adjust cogames commands (train/play/eval) for missions/variants/policies.
 - Template: "Adjust this cogames command to meet the goal and explain key flags: <COMMAND_AND_GOAL>"
 
-### /lint-fix
+### /cb.lint-fix
 
 - Intent: Run metta lint --fix and address remaining lint errors.
 - Template: "Run metta lint --fix, fix remaining lint issues, and summarize changes."
 
-### /check-ci
+### /pr.check-ci
 
 - Intent: Check CI status with gh/gt and summarize failures (optionally fix).
 - Template: "Check CI for this PR/branch with gh/gt and summarize failures. Fix if needed."
 
-### /graphite-stack
+### /st.graphite-stack
 
 - Intent: Split changes into a Graphite stack with titles/descriptions.
 - Template: "Split this branch into a Graphite stack and draft PR titles/descriptions."
@@ -200,7 +200,7 @@ Notes:
   - Run `git diff origin/main` (or merge-base as needed).
   - Call out extraneous files/changes and propose reductions.
 
-### /graphite-stack
+### /st.graphite-stack
 
 - Intent: Split the branch into a Graphite stack and draft titles/descriptions.
 - Typical ask: "Split our branch into a few separate stacked PR's a la Graphite."
@@ -208,7 +208,7 @@ Notes:
   - Propose stack boundaries.
   - Create/update PR titles and descriptions.
 
-### /check-ci
+### /pr.check-ci
 
 - Intent: Use gh/gt to check CI status and summarize failures (optionally fix).
 - Typical ask: "Check CI with gh/gt and fix whatever issues you find."
@@ -248,7 +248,7 @@ Notes:
   - Run `uv run packages/cogames/scripts/run_evaluation.py --agent <agent> --cogs <n> --repeats <n>`.
   - Summarize results/regressions.
 
-### /run-recipe
+### /relh.tr.run-recipe
 
 - Intent: Run a recipe via `./tools/run.py` (train/play/evaluate) and summarize outcome.
 - Typical ask: "Run ./tools/run.py <recipe>.<mode> and summarize the outcome."
@@ -266,7 +266,7 @@ Notes:
 
 ## Fourthspace Metta (/Users/relh/Code/fourthspace/metta)
 
-### /review-main
+### /cb.review-main
 
 Purpose: review branch changes vs main using merge-base diff and return prioritized findings. Inputs: base_branch=main
 (default), focus_paths (optional), output=prioritized_findings. Template:
@@ -274,14 +274,14 @@ Purpose: review branch changes vs main using merge-base diff and return prioriti
 - "Review the code changes against the base branch 'main'. Find the merge base, run git diff from that SHA, and list
   prioritized actionable findings."
 
-### /pr-summary
+### /pr.summary
 
 Purpose: generate PR title + description from branch diff vs main (optionally read current PR via gh/gt). Inputs:
 base_branch=main (default), include_tools={gh,gt} (optional), format=title+body. Template:
 
 - "Analyze our branch vs main and write a PR title and description that reflects what changed and why."
 
-### /lint-fix
+### /cb.lint-fix
 
 Purpose: run lint autofix and report the resulting changes. Inputs: lint_cmd="metta lint --fix", scope=touched_files
 (optional). Template:
@@ -303,21 +303,21 @@ Template:
 
 - "Run the evaluation command, compare results to origin/main, and summarize differences or fixes."
 
-### /run-recipe
+### /relh.tr.run-recipe
 
 Purpose: run tools/run.py recipes for training or evaluation, and summarize outcomes or failures. Inputs: recipe_cmd
 (required), timeout (optional), summary=short. Template:
 
 - "Run ./tools/run.py <recipe> with these args, capture failures, and summarize the outcome."
 
-### /cleanup-refactor
+### /cb.cleanup-refactor
 
 Purpose: remove legacy/backcompat shims and simplify code while keeping behavior stable. Inputs: target_paths
 (required), constraints="no legacy shims" (optional). Template:
 
 - "Refactor for conciseness and remove legacy shims/backcompat. Keep the diff tight and behavior unchanged."
 
-### /address-review
+### /pr.address-review
 
 Purpose: apply Graphite/PR review comments or "comment on lines" feedback and verify. Inputs: review_notes (required),
 verification=tests_or_lint (optional). Template:
@@ -372,21 +372,21 @@ These are candidate slash commands derived from Codex session logs where `cwd=/U
 - Actions: identify failing tests, locate source code, explain root cause, suggest minimal fix + rerun command.
 - Output: root cause + patch plan + verification command.
 
-### /cogames-variant-debug
+### /tr.cogames-variant-debug
 
 - Intent: Debug CoGames mission/variant behavior regressions.
 - Inputs: `uv run cogames play` command, expected vs observed behavior.
 - Actions: locate variant definitions, reward/assembler logic, and map setup; diff vs main to find regressions.
 - Output: cause + patch suggestion + repro/verify command.
 
-### /recipe-curriculum-audit
+### /tr.recipe-curriculum-audit
 
 - Intent: Explain which maps/variants/curriculum a training command uses.
 - Inputs: `./tools/run.py` train command or recipe path.
 - Actions: inspect recipe config, map lists, curriculum ordering, and cache usage; call out any overrides.
 - Output: concise curriculum/map breakdown + relevant file paths.
 
-### /policy-save-load-audit
+### /tr.policy-save-load-audit
 
 - Intent: Audit policy save/load and checkpoint handling across metta/cogames.
 - Inputs: affected files or error logs (PolicySpec, .mpt, safetensors).
