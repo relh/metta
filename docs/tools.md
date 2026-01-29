@@ -76,9 +76,10 @@ The runner supports flexible invocation syntax:
 # Override nested configuration
 ./tools/run.py train arena \
   run=my_experiment \
-  system.device=cpu \
+  system.device=mps \
   wandb.enabled=false \
   trainer.total_timesteps=1000000
+# Device options: cpu, cuda, mps
 
 # Show argument classification
 ./tools/run.py train arena run=test --verbose
@@ -158,8 +159,10 @@ metrics tracking.
 # With custom parameters
 ./tools/run.py train arena run=my_experiment \
   trainer.total_timesteps=1000000 \
-  system.device=cpu \
+  system.device=mps \
   wandb.enabled=false
+
+# Swap system.device=cpu or system.device=cuda as needed.
 ```
 
 ### sweep_init.py
@@ -450,14 +453,22 @@ Key environment variables used by tools:
 # Use CPU for testing
 ./tools/run.py train arena run=cpu_test system.device=cpu
 
+# Use MPS on Apple Silicon (falls back to CPU if unavailable)
+./tools/run.py train arena run=mps_test system.device=mps
+
 # Reduce training time for quick testing
 ./tools/run.py train arena run=quick_test trainer.total_timesteps=10000
 ```
 
+### MPS + Multiprocessing on macOS
+
+See `docs/mps_multiprocessing_debug.md` for a detailed walkthrough of experimenting with multiprocessing on MPS and
+where the serial guards live today.
+
 ### Local Testing Without External Services
 
 ```bash
-# Disable Wandb and use CPU
+# Disable Wandb and use CPU (swap system.device=mps on Apple Silicon)
 ./tools/run.py train arena run=local_test wandb.enabled=false system.device=cpu
 ```
 

@@ -118,6 +118,11 @@ class TrainTool(Tool):
         if platform.system() == "Darwin" and not self.disable_macbook_optimize:
             self._minimize_config_for_debugging()  # this overrides many config settings for local testings
 
+        if platform.system() == "Darwin" and str(self.system.device).startswith("mps"):
+            if self.training_env.vectorization == "serial":
+                logger.warning("MPS requested on macOS; switching to multiprocessing vectorization.")
+                self.training_env.vectorization = "multiprocessing"
+
         if self.sandbox:
             self._apply_sandbox_config()
             logger.info("Running in sandbox mode (fast validation: 1M steps, epoch-1 checkpoints/evals)")

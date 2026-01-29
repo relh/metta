@@ -12,7 +12,7 @@ from mettagrid.base_config import Config
 
 def guess_device() -> str:
     if platform.system() == "Darwin":
-        return "mps"
+        return "cpu"
 
     import torch  # Lazy import: torch is heavy and not needed at module load time
 

@@ -9,9 +9,9 @@ Define how runtime arguments are passed to policies across URI, storage, and ser
 ## Problem
 
 Today we pass args to policies as Python `**kwargs`. This creates ambiguity between policy-specific args and general
-ones like `device=cpu`. Additionally, when decomposing policy usage into multiple steps (upload, download, run as
-server, use in evaluation), it's unclear how args should be represented in URIs (string-only values, repeated keys) and
-how overrides work across layers.
+ones like `device=cpu` or `device=mps`. Additionally, when decomposing policy usage into multiple steps (upload,
+download, run as server, use in evaluation), it's unclear how args should be represented in URIs (string-only values,
+repeated keys) and how overrides work across layers.
 
 ## Solution
 

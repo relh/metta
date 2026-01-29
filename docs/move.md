@@ -64,5 +64,5 @@ uv run ./tools/run.py evaluate arena \
 - **Diagonal Control**: Use `allow_diagonals` flag to control whether `move` supports diagonal directions
 - **Override Syntax**: Use `++` for training (force override), `+` for evaluation (add override)
 - **Compatibility**: Policies must be evaluated with the same movement configuration they were trained with
-- **macOS**: Add `device=cpu` to avoid MPS issues
+- **macOS**: Prefer `device=mps` if available; use `device=cpu` if you hit MPS issues
 - **Migration**: Old `move_8way` and `move_cardinal` actions are deprecated; use `move` with `allow_diagonals`
