@@ -6,7 +6,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import torch.profiler
 import wandb
@@ -17,6 +17,8 @@ from metta.rl.utils import should_run
 from mettagrid.util.file import http_url, is_public_uri, write_file
 
 logger = logging.getLogger(__name__)
+# Large active window fallback so one schedule covers the full epoch while we step per minibatch.
+_PROFILE_ACTIVE_STEPS = 1_000_000_000
 
 
 class TorchProfileSession:
@@ -38,18 +40,24 @@ class TorchProfileSession:
         self._active = False
         self._start_epoch: int | None = None
         self._profile_filename_base: str | None = None
-        self._first_profile_epoch = 300  # allow torch warmup cycles before profiling
-        self._prev_epoch_for_setup: Optional[int] = None
+        # Allow overriding the first profile epoch via env for short runs; default to a warmup-friendly 300.
+        env_first_epoch = os.environ.get("TORCH_PROFILER_FIRST_EPOCH")
+        try:
+            self._first_profile_epoch = max(1, int(env_first_epoch)) if env_first_epoch else 300
+        except ValueError:
+            self._first_profile_epoch = 300
 
     def on_epoch_end(self, epoch: int) -> None:
         force = (epoch == self._first_profile_epoch) if not self._active else False
-        interval = int(getattr(self._profiler_config, "interval_epochs", 0))
-        if interval <= 0:
-            return
+        if should_run(epoch, getattr(self._profiler_config, "interval_epochs", 0), force=force):
+            self._setup_profiler(epoch)
 
-        should_setup = should_run(epoch, interval, previous=self._prev_epoch_for_setup, force=force)
-        self._prev_epoch_for_setup = epoch
-        if should_setup:
+    def ensure_armed_for_epoch(self, epoch: int, interval: int) -> None:
+        """Ensure the profiler is armed before the epoch starts."""
+        if self._active:
+            return
+        force = epoch == self._first_profile_epoch
+        if should_run(epoch, interval, force=force):
             self._setup_profiler(epoch)
 
     def _setup_profiler(self, epoch: int) -> None:
@@ -71,6 +79,7 @@ class TorchProfileSession:
             return self
 
         logger.info("Starting torch profiler for epoch %s", self._start_epoch)
+        active_steps = getattr(self._profiler_config, "active_steps", _PROFILE_ACTIVE_STEPS)
         self._profiler = torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
@@ -80,8 +89,10 @@ class TorchProfileSession:
             profile_memory=True,
             with_stack=True,
             with_modules=True,
+            schedule=torch.profiler.schedule(wait=0, warmup=0, active=active_steps, repeat=1),
         )
         self._profiler.start()
+        self.step()  # Prime the schedule so rollout is captured as well.
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -101,6 +112,12 @@ class TorchProfileSession:
             self._profile_filename_base = None
 
         return False
+
+    def step(self) -> None:
+        """Advance the profiler schedule for per-minibatch stepping."""
+        if not self._active or self._profiler is None:
+            return
+        self._profiler.step()
 
     # Internal helpers -------------------------------------------------
     def _save_profile(self, prof: torch.profiler.profile) -> None:
@@ -161,7 +178,7 @@ class TorchProfiler(TrainerComponent):
         is_master: bool = True,
     ) -> None:
         interval = getattr(profiler_config, "interval_epochs", 0)
-        super().__init__(epoch_interval=1 if interval else 0)
+        super().__init__(epoch_interval=max(1, interval) if interval else 0)
         self._config = profiler_config
         self._wandb_run = wandb_run
         self._run_dir = run_dir
@@ -169,6 +186,8 @@ class TorchProfiler(TrainerComponent):
         self._session: Optional[TorchProfileSession] = None
         self._original_train_epoch = None
         self._master_only = True
+        self._epoch_counter = 0
+        self._original_profiler_step: Callable[[], None] | None = None
 
     def register(self, context: ComponentContext) -> None:  # type: ignore[override]
         super().register(context)
@@ -186,10 +205,15 @@ class TorchProfiler(TrainerComponent):
             )
 
         original_train_epoch = context.get_train_epoch_callable()
+        self._original_profiler_step = context.profiler_step
+        context.profiler_step = self._session.step if self._session else None
 
         def wrapped_train_epoch():
             if self._session is None:
                 return original_train_epoch()
+            # Arm the profiler ahead of the epoch so short runs capture traces.
+            self._epoch_counter += 1
+            self._session.ensure_armed_for_epoch(self._epoch_counter, interval)
             with self._session:
                 return original_train_epoch()
 
@@ -201,5 +225,6 @@ class TorchProfiler(TrainerComponent):
             self._session.on_epoch_end(epoch)
 
     def on_training_complete(self) -> None:  # type: ignore[override]
+        self.context.profiler_step = self._original_profiler_step
         if self._original_train_epoch is not None:
             self.context.set_train_epoch_callable(self._original_train_epoch)

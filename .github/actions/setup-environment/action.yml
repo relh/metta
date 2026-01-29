@@ -76,11 +76,24 @@ runs:
       if: inputs.install-mode != 'minimal' && steps.cache-bazel.outputs.cache-hit != 'true'
       shell: bash
       run: |
-        BAZELISK_VERSION=$(cat .bazeliskversion)
-        BAZEL_URL="https://github.com/bazelbuild/bazelisk/releases/download/v${BAZELISK_VERSION}/bazelisk-linux-amd64"
+        BAZEL_VERSION=$(cat .bazelversion)
+        ARCH="$(uname -m)"
+        case "$ARCH" in
+          x86_64|amd64)
+            BAZEL_ARCH="x86_64"
+            ;;
+          aarch64|arm64)
+            BAZEL_ARCH="arm64"
+            ;;
+          *)
+            echo "Unsupported architecture: $ARCH"
+            exit 1
+            ;;
+        esac
+        BAZEL_URL="https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-linux-${BAZEL_ARCH}"
 
         for i in 1 2 3 4 5; do
-          echo "Attempt $i to download bazelisk..."
+          echo "Attempt $i to download bazel..."
           curl -fL "$BAZEL_URL" -o bazel || { sleep 10; continue; }
           # Validate it's actually an ELF binary, not an HTML error page
           if file bazel | grep -q "ELF"; then
