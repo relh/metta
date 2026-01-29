@@ -27,6 +27,7 @@ from metta.app_backend.job_runner.config import (
 )
 from metta.app_backend.job_runner.episode_recording import record_job_episode
 from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_replay_key, job_results_key
+from metta.app_backend.job_runner.k8s_event_store import store_k8s_event
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -109,7 +110,10 @@ def _cleanup_terminated_pod(core_v1: client.CoreV1Api, batch_v1: client.BatchV1A
 
 
 def _watch_pods_with_client(
-    stats_client: StatsClient, core_v1: client.CoreV1Api, batch_v1: client.BatchV1Api, cluster_name: str
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    cluster_name: str,
 ):
     cfg = get_dispatch_config()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
@@ -120,6 +124,7 @@ def _watch_pods_with_client(
         return
 
     for pod in pod_list.items:
+        _maybe_store_event(cluster_name, "ADDED", pod)
         _handle_pod_state(stats_client, core_v1, batch_v1, pod)
 
     resource_version = pod_list.metadata.resource_version
@@ -138,8 +143,10 @@ def _watch_pods_with_client(
         update_heartbeat()
         event_type, pod = event["type"], event["object"]
         if event_type in ("ADDED", "MODIFIED"):
+            _maybe_store_event(cluster_name, event_type, pod)
             _handle_pod_state(stats_client, core_v1, batch_v1, pod)
         elif event_type == "DELETED":
+            _maybe_store_event(cluster_name, event_type, pod)
             _handle_pod_deleted(stats_client, pod)
 
 
@@ -181,6 +188,13 @@ def run_watcher():
         _watch_loop(stats_client, "eval", _get_k8s_clients)
     finally:
         stats_client.close()
+
+
+def _maybe_store_event(cluster: str, event_type: str, pod: client.V1Pod) -> None:
+    try:
+        store_k8s_event(cluster, event_type, pod)
+    except Exception:
+        logger.error("Failed to persist k8s watch event", exc_info=True)
 
 
 @trace("tournament.job.reconcile")

@@ -45,6 +45,11 @@ spec:
             secretKeyRef:
               name: {{ .Values.secrets.machineToken }}
               key: token
+        - name: STATS_DB_URI
+          valueFrom:
+            secretKeyRef:
+              name: {{ required "watcher.dbSecret or tournament.dbSecret is required" (default .Values.tournament.dbSecret .Values.watcher.dbSecret) }}
+              key: STATS_DB_URI
         - name: HOST_IP
           valueFrom:
             fieldRef:

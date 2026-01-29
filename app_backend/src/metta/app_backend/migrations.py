@@ -255,4 +255,18 @@ MIGRATIONS = [
             """CREATE INDEX idx_job_policy_versions_policy_version_id ON job_policy_versions (policy_version_id)""",
         ],
     ),
+    SqlMigration(
+        version=9,
+        description="Store raw k8s watch events",
+        sql_statements=[
+            """CREATE TABLE k8s_events (
+                id BIGSERIAL PRIMARY KEY,
+                cluster TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                event_time TIMESTAMPTZ NOT NULL,
+                event JSONB NOT NULL
+            )""",
+            """CREATE INDEX idx_k8s_events_cluster_event_time ON k8s_events (cluster, event_time DESC)""",
+        ],
+    ),
 ]

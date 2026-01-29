@@ -41,6 +41,7 @@ datadog:
 
 watcher:
   enabled: true
+  dbSecret: "observatory-backend-env"
   evalClusterRoleArn: "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
   evalClusterName: "tournament"
   evalS3Bucket: "observatory-private"
