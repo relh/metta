@@ -13,6 +13,7 @@ from opentelemetry import trace as otel_trace
 from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
@@ -129,15 +130,7 @@ class CommissionerBase(ABC):
 
         status_changed = await self._sync_match_statuses()
 
-        all_matches = await self._get_season_matches()
-        matches_by_pool: dict[UUID, list[MatchData]] = {pool.id: [] for pool in pools.values()}
-        outstanding = 0
-        for m in all_matches:
-            if m.pool_id in matches_by_pool:
-                matches_by_pool[m.pool_id].append(m)
-            if m.status in (MatchStatus.pending, MatchStatus.scheduled, MatchStatus.running):
-                outstanding += 1
-
+        outstanding = await self._count_outstanding_matches()
         slots_available = max(0, MAX_OUTSTANDING_MATCHES - outstanding)
 
         total_scheduled = 0
@@ -146,7 +139,7 @@ class CommissionerBase(ABC):
                 break
             referee = self.referees[pool_name]
             players = await self._get_pool_players(pool.id)
-            matches = matches_by_pool[pool.id]
+            matches = await self._get_pool_matches(pool.id, {p.id for p in players})
 
             requests = referee.get_matches_to_schedule(players, matches)
             for req in requests[:slots_available]:
@@ -333,15 +326,32 @@ class CommissionerBase(ABC):
             (await session.execute(select(PoolPlayer).filter_by(pool_id=pool_id, retired=False))).scalars().all()
         )
 
-    async def _get_season_matches(self) -> list[MatchData]:
+    async def _count_outstanding_matches(self) -> int:
+        session = get_db()
+        result = await session.execute(
+            select(func.count())
+            .select_from(Match)
+            .join(Match.pool)
+            .join(Pool.season)
+            .where(Season.name == self.season_name)
+            .where(col(Match.status).in_([MatchStatus.pending, MatchStatus.scheduled, MatchStatus.running]))
+        )
+        return result.scalar_one()
+
+    async def _get_pool_matches(self, pool_id: UUID, active_player_ids: set[UUID]) -> list[MatchData]:
+        if not active_player_ids:
+            return []
         session = get_db()
         matches = list(
             (
                 await session.execute(
                     select(Match)
-                    .join(Match.pool)
-                    .join(Pool.season)
-                    .where(Season.name == self.season_name)
+                    .where(Match.pool_id == pool_id)
+                    .where(
+                        col(Match.id).in_(
+                            select(MatchPlayer.match_id).where(col(MatchPlayer.pool_player_id).in_(active_player_ids))
+                        )
+                    )
                     .options(selectinload(Match.players))
                 )
             )
