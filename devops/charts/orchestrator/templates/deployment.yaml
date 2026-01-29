@@ -23,7 +23,7 @@ spec:
         tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
         tags.datadoghq.com/service: "eval-orchestrator"
         tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
-        admission.datadoghq.com/enabled: true
+        admission.datadoghq.com/enabled: "true"
         {{- end }}
     spec:
       serviceAccountName: {{ include "orchestrator.serviceAccountName" . }}
