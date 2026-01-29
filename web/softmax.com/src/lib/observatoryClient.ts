@@ -20,6 +20,8 @@ export type PoolInfo = z.infer<typeof PoolInfoSchema>;
 const SeasonResponseSchema = z.object({
   name: z.string(),
   summary: z.string(),
+  validation_mission: z.string(),
+  is_default: z.boolean(),
   pools: z.array(PoolInfoSchema),
 });
 
@@ -129,6 +131,12 @@ async function fetchApi(url: string, userId?: string): Promise<unknown> {
 export async function getSeasons(): Promise<SeasonResponse[]> {
   const data = await fetchApi("/tournament/seasons");
   return z.array(SeasonResponseSchema).parse(data);
+}
+
+export function findDefaultSeason(
+  seasons: SeasonResponse[],
+): SeasonResponse | undefined {
+  return seasons.find((s) => s.is_default) ?? seasons[0];
 }
 
 export async function getLeaderboard(

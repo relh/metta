@@ -1,4 +1,3 @@
-export const DEFAULT_SEASON = "beta";
 export const METTASCOPE_BASE_URL =
   "https://metta-ai.github.io/metta/mettascope/mettascope.html";
 export const MATCHES_PAGE_SIZE = 10;

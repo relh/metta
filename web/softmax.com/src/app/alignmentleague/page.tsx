@@ -6,9 +6,14 @@ import { H2 } from "@/components/H2";
 import { HeroLayout } from "@/components/HeroLayout";
 import { ScrollToButton } from "@/components/ScrollToButton";
 import { auth } from "@/lib/auth";
-import { DEFAULT_SEASON, S3_IMAGE_BASE } from "@/lib/constants";
+import { S3_IMAGE_BASE } from "@/lib/constants";
 import { prisma } from "@/lib/db/prisma";
-import { getPolicies, type PolicySummary } from "@/lib/observatoryClient";
+import {
+  findDefaultSeason,
+  getPolicies,
+  getSeasons,
+  type PolicySummary,
+} from "@/lib/observatoryClient";
 import AlignmentLeague from "@/mdx/alignmentleague.mdx";
 
 import { LeaderboardWithFilters } from "./LeaderboardWithFilters";
@@ -41,11 +46,15 @@ export default async function AlignmentLeaguePage() {
   let myPolicies: PolicySummary[] = [];
   if (isLoggedIn && profileCompleted && session?.user?.id) {
     try {
-      myPolicies = await getPolicies({
-        seasonName: DEFAULT_SEASON,
-        userId: session.user.id,
-        mine: true,
-      });
+      const seasons = await getSeasons();
+      const defaultSeason = findDefaultSeason(seasons);
+      if (defaultSeason) {
+        myPolicies = await getPolicies({
+          seasonName: defaultSeason.name,
+          userId: session.user.id,
+          mine: true,
+        });
+      }
     } catch (error) {
       console.error("Failed to fetch policies:", error);
     }

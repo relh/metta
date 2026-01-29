@@ -18,7 +18,7 @@ export function LeaderboardWithFilters() {
   const searchParams = useSearchParams();
 
   const [seasons, setSeasons] = useState<SeasonResponse[]>([]);
-  const [selectedSeason, setSelectedSeason] = useState("beta");
+  const [selectedSeason, setSelectedSeason] = useState("");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,9 +30,9 @@ export function LeaderboardWithFilters() {
         if (!res.ok) throw new Error("Failed to fetch seasons");
         const data: SeasonResponse[] = await res.json();
         setSeasons(data);
-        const beta = data.find((s) => s.name === "beta");
-        if (!beta && data.length > 0) {
-          setSelectedSeason(data[0].name);
+        const defaultSeason = data.find((s) => s.is_default) ?? data[0];
+        if (defaultSeason) {
+          setSelectedSeason(defaultSeason.name);
         }
       } catch (err) {
         console.error(err);

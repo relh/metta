@@ -32,6 +32,7 @@ export function RecentMatches() {
   const tableRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const [seasonName, setSeasonName] = useState("");
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [pools, setPools] = useState<{ name: string; description: string }[]>(
     [],
@@ -60,9 +61,10 @@ export function RecentMatches() {
         const res = await fetch("/api/tournament/seasons");
         if (res.ok) {
           const seasons: SeasonResponse[] = await res.json();
-          const beta = seasons.find((s) => s.name === "beta");
-          if (beta) {
-            setPools(beta.pools);
+          const defaultSeason = seasons.find((s) => s.is_default) ?? seasons[0];
+          if (defaultSeason) {
+            setSeasonName(defaultSeason.name);
+            setPools(defaultSeason.pools);
           }
         }
       } catch (err) {
@@ -90,6 +92,7 @@ export function RecentMatches() {
 
   useEffect(() => {
     async function fetchMatches() {
+      if (!seasonName) return;
       setLoading(true);
       setError(null);
       try {
@@ -103,7 +106,7 @@ export function RecentMatches() {
           params.set("policies", selectedPolicyIds.join(","));
         }
         const res = await fetch(
-          `/api/tournament/seasons/beta/matches?${params.toString()}`,
+          `/api/tournament/seasons/${encodeURIComponent(seasonName)}/matches?${params.toString()}`,
         );
         if (!res.ok) throw new Error("Failed to fetch matches");
         const data: MatchSummary[] = await res.json();
@@ -156,7 +159,7 @@ export function RecentMatches() {
       }
     }
     fetchMatches();
-  }, [page, selectedPool, selectedPolicyIds.join(",")]);
+  }, [page, selectedPool, selectedPolicyIds.join(","), seasonName]);
 
   const updateFilters = useCallback(
     (pool: string | null, policyIds: string[]) => {
