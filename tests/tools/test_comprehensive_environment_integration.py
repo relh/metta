@@ -10,12 +10,12 @@ from mettagrid.builder import building
 from mettagrid.config.mettagrid_config import (
     ActionsConfig,
     AgentConfig,
-    AgentRewards,
     GameConfig,
     MettaGridConfig,
     MoveActionConfig,
     NoopActionConfig,
 )
+from mettagrid.config.reward_config import inventoryReward
 from mettagrid.map_builder.random_map import RandomMapBuilder
 from mettagrid.simulator import Simulation
 from recipes.experiment import cogsguard
@@ -44,11 +44,7 @@ class TestComprehensiveEnvironmentIntegration:
                         noop=NoopActionConfig(),
                     ),
                     agent=AgentConfig(
-                        rewards=AgentRewards(
-                            inventory={
-                                "heart": 1,
-                            },
-                        ),
+                        rewards={"heart": inventoryReward("heart")},
                     ),
                     map_builder=RandomMapBuilder.Config(
                         agents=2,
@@ -73,11 +69,7 @@ class TestComprehensiveEnvironmentIntegration:
                         noop=NoopActionConfig(),
                     ),
                     agent=AgentConfig(
-                        rewards=AgentRewards(
-                            inventory={
-                                "heart": 1,
-                            },
-                        ),
+                        rewards={"heart": inventoryReward("heart")},
                     ),
                     map_builder=RandomMapBuilder.Config(
                         agents=2,
@@ -104,13 +96,11 @@ class TestComprehensiveEnvironmentIntegration:
                         noop=NoopActionConfig(),
                     ),
                     agent=AgentConfig(
-                        rewards=AgentRewards(
-                            inventory={
-                                "heart": 1,
-                                "ore_red": 0.5,
-                                "battery_red": 0.8,
-                            },
-                        ),
+                        rewards={
+                            "heart": inventoryReward("heart"),
+                            "ore_red": inventoryReward("ore_red", weight=0.5),
+                            "battery_red": inventoryReward("battery_red", weight=0.8),
+                        },
                     ),
                     map_builder=RandomMapBuilder.Config(
                         agents=2,
@@ -138,13 +128,11 @@ class TestComprehensiveEnvironmentIntegration:
                         noop=NoopActionConfig(),
                     ),
                     agent=AgentConfig(
-                        rewards=AgentRewards(
-                            inventory={
-                                "heart": 1,
-                                "ore_red": 0.5,
-                                "battery_red": 0.8,
-                            },
-                        ),
+                        rewards={
+                            "heart": inventoryReward("heart"),
+                            "ore_red": inventoryReward("ore_red", weight=0.5),
+                            "battery_red": inventoryReward("battery_red", weight=0.8),
+                        },
                     ),
                     map_builder=RandomMapBuilder.Config(
                         agents=2,

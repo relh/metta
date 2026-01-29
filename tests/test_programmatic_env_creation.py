@@ -11,7 +11,6 @@ from mettagrid.builder import building
 from mettagrid.config.mettagrid_config import (
     ActionsConfig,
     AgentConfig,
-    AgentRewards,
     GameConfig,
     InventoryConfig,
     MettaGridConfig,
@@ -20,6 +19,7 @@ from mettagrid.config.mettagrid_config import (
     ResourceLimitsConfig,
     WallConfig,
 )
+from mettagrid.config.reward_config import inventoryReward
 from mettagrid.map_builder.random_map import RandomMapBuilder
 
 
@@ -41,11 +41,7 @@ class TestProgrammaticEnvironments:
                     noop=NoopActionConfig(),
                 ),
                 agent=AgentConfig(
-                    rewards=AgentRewards(
-                        inventory={
-                            "heart": 1,
-                        }
-                    ),
+                    rewards={"heart": inventoryReward("heart")},
                 ),
                 map_builder=RandomMapBuilder.Config(
                     agents=4,
@@ -104,13 +100,11 @@ class TestProgrammaticEnvironments:
                     noop=NoopActionConfig(),
                 ),
                 agent=AgentConfig(
-                    rewards=AgentRewards(
-                        inventory={
-                            "heart": 1.0,
-                            "ore_red": 0.5,
-                            "battery_red": 0.8,
-                        },
-                    ),
+                    rewards={
+                        "heart": inventoryReward("heart"),
+                        "ore_red": inventoryReward("ore_red", weight=0.5),
+                        "battery_red": inventoryReward("battery_red", weight=0.8),
+                    },
                     inventory=InventoryConfig(
                         limits={
                             "heart": ResourceLimitsConfig(min=255, resources=["heart"]),
@@ -130,10 +124,10 @@ class TestProgrammaticEnvironments:
         )
 
         # Verify custom rewards are set
-        rewards = config.game.agent.rewards.inventory
-        assert rewards["heart"] == 1.0
-        assert rewards["ore_red"] == 0.5
-        assert rewards["battery_red"] == 0.8
+        rewards = config.game.agent.rewards
+        assert rewards["heart"].weight == 1.0
+        assert rewards["ore_red"].weight == 0.5
+        assert rewards["battery_red"].weight == 0.8
 
         # Verify resource limits
         assert config.game.agent.inventory.get_limit("heart") == 255
@@ -149,11 +143,7 @@ class TestProgrammaticEnvironments:
             agents.append(
                 AgentConfig(
                     team_id=0,
-                    rewards=AgentRewards(
-                        inventory={
-                            "heart": 2,
-                        },
-                    ),
+                    rewards={"heart": inventoryReward("heart", weight=2)},
                 )
             )
         # Team 1: 3 agents with lower heart reward
@@ -161,11 +151,7 @@ class TestProgrammaticEnvironments:
             agents.append(
                 AgentConfig(
                     team_id=1,
-                    rewards=AgentRewards(
-                        inventory={
-                            "heart": 1,
-                        },
-                    ),
+                    rewards={"heart": inventoryReward("heart")},
                 )
             )
 
@@ -200,9 +186,9 @@ class TestProgrammaticEnvironments:
         assert team_1_count == 3
         # Check rewards are set correctly
         for agent in config.game.agents[:3]:
-            assert agent.rewards.inventory["heart"] == 2
+            assert agent.rewards["heart"].weight == 2
         for agent in config.game.agents[3:]:
-            assert agent.rewards.inventory["heart"] == 1
+            assert agent.rewards["heart"].weight == 1
 
         # This would be a good addition to the test, but we don't currently expose cpp_config.objects.
         # cpp_config = convert_to_cpp_game_config(config.game)

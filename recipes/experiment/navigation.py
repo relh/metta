@@ -15,6 +15,7 @@ from metta.map.terrain_from_numpy import NavigationFromNumpy
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.config.mettagrid_config import AsciiMapBuilder, MettaGridConfig
+from mettagrid.config.reward_config import inventoryReward
 from mettagrid.map_builder.random_map import RandomMapBuilder
 from mettagrid.mapgen.mapgen import MapGen
 from mettagrid.mapgen.scenes.mean_distance import MeanDistance
@@ -24,7 +25,7 @@ from recipes.experiment.cfg import NAVIGATION_EVALS
 
 def make_nav_eval_env(env: MettaGridConfig) -> MettaGridConfig:
     """Set the heart reward to 0.333 for normalization"""
-    env.game.agent.rewards.inventory["heart"] = 0.333
+    env.game.agent.rewards["heart"] = inventoryReward("heart", weight=0.333)
     return env
 
 
