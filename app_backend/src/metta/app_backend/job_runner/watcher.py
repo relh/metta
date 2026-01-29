@@ -327,7 +327,6 @@ def _copy_replay_to_public(job_id: UUID, replay_uri: str | None) -> bool:
             Bucket=dest_bucket,
             Key=dest_key,
             CopySource={"Bucket": cfg.EVAL_S3_BUCKET, "Key": source_key},
-            ACL="public-read",
             MetadataDirective="COPY",
         )
         logger.info(f"Copied replay to s3://{dest_bucket}/{dest_key} for job {job_id}")
