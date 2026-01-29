@@ -20,6 +20,17 @@ from recipes.experiment import cogsguard
 class TestCogsguardEnvironment:
     """Test cogsguard environment creation and basic operation."""
 
+    @pytest.mark.parametrize(
+        ("layout", "expected_label"),
+        [
+            ("machina_1", "cogsguard_machina_1.basic"),
+            ("arena", "cogsguard_arena.basic"),
+        ],
+    )
+    def test_make_env_layout_switches_map(self, layout: str, expected_label: str) -> None:
+        env_config = cogsguard.make_env(num_agents=4, max_steps=10, layout=layout)  # type: ignore[arg-type]
+        assert env_config.label == expected_label
+
     def test_make_env_creates_valid_config(self) -> None:
         """Test that make_env creates a valid MettaGridConfig."""
         env_config = cogsguard.make_env(num_agents=4, max_steps=100)

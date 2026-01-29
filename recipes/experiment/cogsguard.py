@@ -6,12 +6,13 @@ This recipe is automatically validated in CI and release processes.
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.missions import make_cogsguard_mission
+from cogames.cogs_vs_clips.mission import CogsGuardMission
+from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -24,6 +25,8 @@ from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRu
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.config.mettagrid_config import MettaGridConfig
+
+_CogsGuardLayout = Literal["machina_1", "arena"]
 
 
 def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
@@ -38,14 +41,34 @@ def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
     return list(variants)
 
 
+def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> CogsGuardMission:
+    if layout == "machina_1":
+        site = make_cogsguard_machina1_site(num_agents)
+        description = "Basic CogsGuard mission (Machina1 layout)"
+    elif layout == "arena":
+        site = make_cogsguard_arena_site(num_agents)
+        description = "Basic CogsGuard mission (arena layout)"
+    else:
+        raise ValueError(f"Unknown CogsGuard layout: {layout!r}")
+
+    return CogsGuardMission(
+        name="basic",
+        description=description,
+        site=site,
+        num_cogs=num_agents,
+        max_steps=max_steps,
+    )
+
+
 def make_env(
     num_agents: int = 10,
     max_steps: int = 10000,
     variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
     variants = _normalize_variants(variants)
-    env = make_cogsguard_mission(num_agents, max_steps).make_env()
+    env = _make_cogsguard_mission(layout=layout, num_agents=num_agents, max_steps=max_steps).make_env()
     apply_reward_variants(env, variants=variants)
     return env
 
@@ -54,10 +77,11 @@ def make_curriculum(
     env: Optional[MettaGridConfig] = None,
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
     variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
 ) -> CurriculumConfig:
     # Reward variants are stackable, so we keep a single env/curriculum and pass
     # the full variant list through.
-    env = env or make_env(variants=variants)
+    env = env or make_env(variants=variants, layout=layout)
     tasks = cc.single_task(env)
 
     if algorithm_config is None:
@@ -69,11 +93,12 @@ def make_curriculum(
 def simulations(
     env: Optional[MettaGridConfig] = None,
     variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
 ) -> list[SimulationConfig]:
-    env = env or make_env(variants=variants)
+    env = env or make_env(variants=variants, layout=layout)
 
     return [
-        SimulationConfig(suite="cogsguard", name="basic", env=env),
+        SimulationConfig(suite="cogsguard", name=f"basic_{layout}", env=env),
     ]
 
 
@@ -82,6 +107,7 @@ def train(
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
     variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
     use_default_teacher: bool = False,
 ) -> tools.TrainTool:
     if teacher is None and use_default_teacher:
@@ -95,10 +121,10 @@ def train(
         )
     from metta.agent.policies.vit import ViTDefaultConfig
 
-    resolved_curriculum = curriculum or make_curriculum(variants=variants)
+    resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
-    evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants))
+    evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
     scheduler = None
 
     if teacher and teacher.enabled:
@@ -130,6 +156,7 @@ def train(
 def evaluate(
     policy_uris: str | Sequence[str] | None = None,
     variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
 ) -> tools.EvaluateTool:
     resolved_policy_uris: str | list[str]
     if policy_uris is None:
@@ -139,16 +166,24 @@ def evaluate(
     else:
         resolved_policy_uris = list(policy_uris)
     return tools.EvaluateTool(
-        simulations=simulations(variants=variants),
+        simulations=simulations(variants=variants, layout=layout),
         policy_uris=resolved_policy_uris,
     )
 
 
-def play(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> tools.PlayTool:
+def play(
+    policy_uri: Optional[str] = None,
+    variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
+) -> tools.PlayTool:
     """Interactive play with a policy."""
-    return tools.PlayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
+    return tools.PlayTool(sim=simulations(variants=variants, layout=layout)[0], policy_uri=policy_uri)
 
 
-def replay(policy_uri: Optional[str] = None, variants: str | Sequence[str] | None = None) -> tools.ReplayTool:
+def replay(
+    policy_uri: Optional[str] = None,
+    variants: str | Sequence[str] | None = None,
+    layout: _CogsGuardLayout = "machina_1",
+) -> tools.ReplayTool:
     """Generate replay from a policy."""
-    return tools.ReplayTool(sim=simulations(variants=variants)[0], policy_uri=policy_uri)
+    return tools.ReplayTool(sim=simulations(variants=variants, layout=layout)[0], policy_uri=policy_uri)
