@@ -10,7 +10,7 @@ args: <skill-name> "<description>"
 
 Create a high-quality skill with proper structure, reviewing it against best practices and existing skills.
 
-**Usage:** `/sk.make-skill my:skill-name "Short description of what it does"`
+**Usage:** `/sk.make-skill my.skill-name "Short description of what it does"`
 
 **Announce at start:** "Creating new skill `<skill-name>`. I'll scan existing skills for related patterns first."
 
@@ -37,7 +37,7 @@ digraph make_skill {
 
 From the user's args or conversation, determine:
 
-- **Name**: `prefix:name` format (e.g., `pr.fix-ci`, `cf.really`, `t.run-tests`)
+- **Name**: `prefix.name` format (e.g., `pr.fix-ci`, `cf.really`, `t.run-tests`)
 - **Purpose**: What problem does this solve? When would someone invoke it?
 - **Trigger**: What situation or symptom causes someone to reach for this?
 
@@ -185,8 +185,7 @@ mkdir -p "$SKILLS_DIR/$SKILL_NAME"
 
 Edit the shared skills catalog at `$REPO_ROOT/docs/ai/skills.md`:
 
-- Add row to the appropriate table based on prefix
-- If prefix is new, create a new section heading and table
+- Add a bullet entry (e.g., `- \`pr.fix-ci\``) in alphabetical order within the list
 
 ## Step 6: Submit
 
