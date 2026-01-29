@@ -385,7 +385,10 @@ def create_tournament_router() -> APIRouter:
                     .join(PoolPlayer.pool)
                     .join(Pool.season)
                     .where(PoolPlayer.policy_version_id == policy_version_id)
-                    .order_by(col(MembershipChange.created_at).desc())
+                    .order_by(
+                        col(MembershipChange.created_at).desc(),
+                        col(MembershipChange.action).asc(),
+                    )
                     .options(
                         selectinload(MembershipChange.pool_player)
                         .selectinload(PoolPlayer.pool)

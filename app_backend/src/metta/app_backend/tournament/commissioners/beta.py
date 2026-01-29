@@ -88,10 +88,10 @@ class BetaCommissioner(CommissionerBase):
                         pool_name="qualifying",
                         policy_version_id=pv_id,
                         action="remove",
-                        notes=f"Score below threshold: avg_score={avg_str} < {PROMOTION_MIN_SCORE}",
+                        notes=f"Score below threshold: avg_score={avg_str} < {self.promotion_min_score}",
                     )
                 )
-                logger.info(f"Retiring {pv_id}: avg_score={avg_str} < {PROMOTION_MIN_SCORE}")
+                logger.info(f"Retiring {pv_id}: avg_score={avg_str} < {self.promotion_min_score}")
 
         return changes
 

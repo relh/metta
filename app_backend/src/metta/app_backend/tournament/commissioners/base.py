@@ -19,7 +19,7 @@ from sqlmodel import col, select
 
 import gitta
 
-# pyright: reportArgumentType=false
+# pyright: reportArgumentType=false, reportCallIssue=false
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.database import get_db, with_db
@@ -447,7 +447,10 @@ class CommissionerBase(ABC):
             for player in result.scalars().all():
                 existing_players[(player.pool_id, player.policy_version_id)] = player
 
-        for change in changes:
+        sorted_changes = sorted(changes, key=lambda c: (c.policy_version_id, c.action))
+        ts = datetime.now(UTC)
+
+        for change in sorted_changes:
             pool = pools.get(change.pool_name)
             if not pool:
                 continue
@@ -458,12 +461,12 @@ class CommissionerBase(ABC):
                     continue
                 player = PoolPlayer(pool_id=pool.id, policy_version_id=change.policy_version_id)
                 session.add(player)
-                await session.flush()
                 session.add(
                     MembershipChange(
-                        pool_player_id=player.id,
+                        pool_player=player,
                         action=MembershipAction.add,
                         notes=change.notes,
+                        created_at=ts,
                     )
                 )
                 existing_players[key] = player
@@ -478,6 +481,7 @@ class CommissionerBase(ABC):
                             pool_player_id=player.id,
                             action=MembershipAction.remove,
                             notes=change.notes,
+                            created_at=ts,
                         )
                     )
                     logger.info(f"Retired {change.policy_version_id} from pool '{change.pool_name}'")
