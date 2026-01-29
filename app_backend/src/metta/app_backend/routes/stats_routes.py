@@ -89,9 +89,6 @@ class PolicyVersionWithName(BaseModel):
         )
 
 
-OBSERVATORY_S3_BUCKET = "observatory-private"
-
-
 # Request/Response Models
 class UUIDResponse(BaseModel):
     id: uuid.UUID
@@ -187,10 +184,13 @@ class PolicyVersionsResponse(BaseModel):
 
 
 def create_stats_router() -> APIRouter:
+    from metta.app_backend.job_runner.config import get_dispatch_config
+
+    policy_s3_bucket = get_dispatch_config().POLICY_S3_BUCKET or "observatory-private"
     router = APIRouter(prefix="/stats", tags=["stats"])
 
     async def _create_policy_version_from_s3_key(name: str, user_id: str, s3_key: str) -> PolicyVersionResponse:
-        s3_path = f"s3://{OBSERVATORY_S3_BUCKET}/{s3_key}"
+        s3_path = f"s3://{policy_s3_bucket}/{s3_key}"
         try:
             policy_id = await policy_queries.upsert_policy(name=name, user_id=user_id, attributes={})
         except PolicyNameTakenError as e:
@@ -298,7 +298,7 @@ def create_stats_router() -> APIRouter:
             async with session.client("s3") as s3_client:  # type: ignore
                 await s3_client.upload_fileobj(
                     temp_file,
-                    OBSERVATORY_S3_BUCKET,
+                    policy_s3_bucket,
                     s3_key,
                     ExtraArgs={"ContentType": "application/zip"},
                 )
@@ -318,7 +318,7 @@ def create_stats_router() -> APIRouter:
             presigned_url = await s3_client.generate_presigned_url(
                 "put_object",
                 Params={
-                    "Bucket": OBSERVATORY_S3_BUCKET,
+                    "Bucket": policy_s3_bucket,
                     "Key": s3_key,
                     "ContentType": "application/zip",
                 },
@@ -335,7 +335,7 @@ def create_stats_router() -> APIRouter:
         try:
             session = aioboto3.Session()
             async with session.client("s3") as s3_client:  # type: ignore
-                await s3_client.head_object(Bucket=OBSERVATORY_S3_BUCKET, Key=s3_key)
+                await s3_client.head_object(Bucket=policy_s3_bucket, Key=s3_key)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Uploaded submission not found in S3: {str(e)}") from e
 
@@ -354,7 +354,7 @@ def create_stats_router() -> APIRouter:
             presigned_url = await s3_client.generate_presigned_url(
                 "put_object",
                 Params={
-                    "Bucket": OBSERVATORY_S3_BUCKET,
+                    "Bucket": policy_s3_bucket,
                     "Key": s3_key,
                     "ContentType": "application/octet-stream",
                 },
@@ -378,14 +378,14 @@ def create_stats_router() -> APIRouter:
 
         upload_id = request.upload_id
         s3_key = f"episodes/{upload_id}.duckdb"
-        s3_uri = f"s3://{OBSERVATORY_S3_BUCKET}/{s3_key}"
+        s3_uri = f"s3://{policy_s3_bucket}/{s3_key}"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".duckdb") as temp_file:
             temp_file_path = temp_file.name
 
         session = aioboto3.Session()
         async with session.client("s3") as s3_client:  # type: ignore
-            await s3_client.download_file(OBSERVATORY_S3_BUCKET, s3_key, temp_file_path)
+            await s3_client.download_file(policy_s3_bucket, s3_key, temp_file_path)
 
         conn = duckdb.connect(temp_file_path, read_only=True)
 
