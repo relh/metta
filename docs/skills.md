@@ -16,11 +16,12 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 | `t.`    | Testing                                              | t.run-tests                         |
 | `r.`    | Repo scaffolding / package creation                  | r.make-package                      |
 | `cf.`   | Control-flow / meta-execution                        | cf.really                           |
+| `n.`    | Nishad-specific variants (only when truly personal)  | n.debug-jobs                        |
 | `relh.` | Richard-specific variants (only when truly personal) | relh.cb.branch-hygiene              |
 
 ## Rules
 
-- Prefer the shared prefixes above; only use `relh.` for clearly personal skills.
+- Prefer the shared prefixes above; only use `n.`/`relh.` for clearly personal skills.
 - If a skill touches multiple domains, pick the most central intent.
 - If no prefix fits, propose a new prefix in this file before adding the skill.
 

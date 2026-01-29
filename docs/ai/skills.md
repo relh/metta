@@ -65,6 +65,7 @@ Shared skills live in `skills/`:
 - `t.run-tests`
 - `db.test-triage`
 - `do.worktrunk`
+- `n.debug-jobs`
 
 See each `skills/<name>/SKILL.md` for the full workflow.
 
