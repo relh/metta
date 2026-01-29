@@ -9,6 +9,17 @@ from metta.agent.policy import PolicyArchitecture
 from metta.rl.training.teacher import TeacherConfig
 
 
+def _apply_full_vibes(env_cfg) -> None:
+    from mettagrid.config import vibes
+
+    env_cfg.game.vibe_names = [v.name for v in vibes.VIBES]
+    change_vibe = getattr(env_cfg.game.actions, "change_vibe", None)
+    if change_vibe is not None:
+        change_vibe.vibes = list(vibes.VIBES)
+    if env_cfg.game.agent.vibe >= len(vibes.VIBES):
+        env_cfg.game.agent.vibe = 0
+
+
 def train(
     num_cogs: int = 4,
     variants: Optional[Sequence[str]] = None,
@@ -21,7 +32,6 @@ def train(
     """Train on machina_1.open_world with leaderboard-aligned defaults and single-map eval."""
     from metta.agent.policies.vit import ViTDefaultConfig
     from metta.sim.simulation_config import SimulationConfig
-    from mettagrid.config import vibes
     from recipes.experiment.cogs_v_clips import (
         _normalize_variant_names,
         make_training_env,
@@ -56,12 +66,7 @@ def train(
     # Explicitly keep full vibe/action definitions so saved checkpoints remain compatible.
     env_cfg = tt.training_env.curriculum.task_generator.env
     env_cfg.game.max_steps = 10000
-    env_cfg.game.vibe_names = [v.name for v in vibes.VIBES]
-    change_vibe = getattr(env_cfg.game.actions, "change_vibe", None)
-    if change_vibe is not None:
-        change_vibe.vibes = list(vibes.VIBES)
-    if env_cfg.game.agent.vibe >= len(vibes.VIBES):
-        env_cfg.game.agent.vibe = 0
+    _apply_full_vibes(env_cfg)
 
     eval_variant_names = _normalize_variant_names(
         initial=[eval_difficulty] if eval_difficulty else None,
@@ -73,6 +78,7 @@ def train(
         variants=eval_variant_names or None,
     )
     eval_env.game.max_steps = 10000
+    _apply_full_vibes(eval_env)
     tt.evaluator.simulations = [
         SimulationConfig(
             suite="cogs_vs_clips",
@@ -83,6 +89,46 @@ def train(
     # Run evals periodically during long runs
     tt.evaluator.epoch_interval = 150
     return tt
+
+
+def _make_play_sim(
+    num_cogs: int = 4,
+    variants: Optional[Sequence[str]] = None,
+):
+    from metta.sim.simulation_config import SimulationConfig
+    from recipes.experiment.cogs_v_clips import _normalize_variant_names, make_training_env
+
+    variant_names = _normalize_variant_names(variants=variants)
+    env_cfg = make_training_env(
+        num_cogs=num_cogs,
+        mission="machina_1.open_world",
+        variants=variant_names or None,
+    )
+    env_cfg.game.max_steps = 10000
+    _apply_full_vibes(env_cfg)
+    return SimulationConfig(
+        suite="cogs_vs_clips",
+        name=f"machina_1_open_world_{num_cogs}cogs",
+        env=env_cfg,
+    )
+
+
+def play(
+    policy_uri: str | None = None,
+    num_cogs: int = 4,
+    variants: Optional[Sequence[str]] = None,
+) -> tools.PlayTool:
+    """Interactive play on machina_1.open_world."""
+    return tools.PlayTool(sim=_make_play_sim(num_cogs=num_cogs, variants=variants), policy_uri=policy_uri)
+
+
+def replay(
+    policy_uri: str | None = None,
+    num_cogs: int = 4,
+    variants: Optional[Sequence[str]] = None,
+) -> tools.ReplayTool:
+    """Generate a replay for machina_1.open_world."""
+    return tools.ReplayTool(sim=_make_play_sim(num_cogs=num_cogs, variants=variants), policy_uri=policy_uri)
 
 
 def train_sweep(
