@@ -9,6 +9,7 @@ from typing_extensions import override
 from metta.common.util.collections import remove_falsey
 from metta.common.util.fs import get_repo_root
 from metta.setup.components.base import SetupModule
+from metta.setup.components.system_packages.installers.apt import AptInstaller
 from metta.setup.components.system_packages.installers.base import PackageInstaller
 from metta.setup.components.system_packages.installers.brew import BrewInstaller
 from metta.setup.components.system_packages.types import SystemDepsConfig
@@ -18,7 +19,7 @@ from metta.setup.utils import error, info, success, warning
 
 @functools.cache
 def get_package_installer() -> PackageInstaller | None:
-    for installer in [BrewInstaller()]:  # , AptInstaller()]:
+    for installer in [BrewInstaller(), AptInstaller()]:
         if installer.is_available():
             return installer
     return None
