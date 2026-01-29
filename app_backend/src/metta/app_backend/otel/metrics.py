@@ -6,8 +6,8 @@ from typing import Optional
 from opentelemetry import metrics as otel_metrics
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry.metrics import CallbackOptions, Observation
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics import Counter, Histogram, MeterProvider
+from opentelemetry.sdk.metrics.export import AggregationTemporality, PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
 from pydantic_settings import BaseSettings
 from sqlalchemy import func
@@ -37,7 +37,15 @@ class JobMetrics:
         settings = get_metrics_settings()
         if _metrics_enabled(settings):
             resource = Resource.create({"service.name": METRICS_SERVICE_NAME})
-            reader = PeriodicExportingMetricReader(OTLPMetricExporter())
+            # Use Delta temporality for counters/histograms - preferred by Datadog and avoids
+            # issues with cumulative counter resets on pod restarts causing metric loss
+            exporter = OTLPMetricExporter(
+                preferred_temporality={
+                    Counter: AggregationTemporality.DELTA,
+                    Histogram: AggregationTemporality.DELTA,
+                }
+            )
+            reader = PeriodicExportingMetricReader(exporter)
             provider = MeterProvider(resource=resource, metric_readers=[reader])
             otel_metrics.set_meter_provider(provider)
 
