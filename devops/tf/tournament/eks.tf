@@ -82,36 +82,25 @@ module "vpc" {
   tags = local.tags
 }
 
-resource "helm_release" "system" {
-  name      = "system"
-  namespace = "kube-system"
-  chart     = "${path.module}/../../charts/system"
-
-  values = [yamlencode({
-    pools = [
-      {
-        name     = "jobs-nodepool"
-        workload = "jobs"
-      }
-    ]
-  })]
-
-  depends_on = [module.eks]
-}
-
-resource "kubernetes_namespace" "jobs" {
-  metadata {
-    name = var.jobs_namespace
+# Resources removed from Terraform management but kept in cluster
+# (managed via helmfile-tournament.yaml instead)
+removed {
+  from = helm_release.system
+  lifecycle {
+    destroy = false
   }
-
-  depends_on = [module.eks]
 }
 
-# Service account for episode-runner pods
-# Jobs use presigned S3 URLs so no IAM role is needed
-resource "kubernetes_service_account" "episode_runner" {
-  metadata {
-    name      = "episode-runner"
-    namespace = kubernetes_namespace.jobs.metadata[0].name
+removed {
+  from = kubernetes_namespace.jobs
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = kubernetes_service_account.episode_runner
+  lifecycle {
+    destroy = false
   }
 }

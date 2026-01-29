@@ -1,0 +1,6 @@
+apiVersion: v2
+name: tournament
+description: Tournament cluster resources including namespaces and service accounts
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

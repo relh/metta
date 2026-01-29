@@ -1,0 +1,3 @@
+pools:
+  - name: jobs-nodepool
+    workload: jobs

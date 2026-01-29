@@ -1,0 +1,11 @@
+# Helmfile for tournament k8s cluster
+# This is a separate cluster from the main helmfile.yaml
+#
+# Usage:
+#   cd devops/charts && helmfile -f helmfile-tournament.yaml apply
+
+releases:
+  - name: tournament
+    chart: ./tournament
+    version: 0.1.1
+    namespace: jobs
