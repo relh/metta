@@ -49,7 +49,7 @@ def _is_in_safe_zone(ctx: PlankyContext) -> bool:
     """Check if agent is within AOE of any cogs structure."""
     pos = ctx.state.position
     # Check assembler
-    assemblers = ctx.map.find(type="assembler")
+    assemblers = ctx.map.find(type="hub")
     for apos, _ in assemblers:
         if _manhattan(pos, apos) <= JUNCTION_AOE_RANGE:
             return True
@@ -66,12 +66,24 @@ def _is_in_safe_zone(ctx: PlankyContext) -> bool:
     return False
 
 
+def _is_in_enemy_aoe(ctx: PlankyContext) -> bool:
+    """Check if agent is within AOE of any clips structure."""
+    pos = ctx.state.position
+    for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
+        if _manhattan(pos, jpos) <= JUNCTION_AOE_RANGE:
+            return True
+    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "clips"}):
+        if _manhattan(pos, cpos) <= JUNCTION_AOE_RANGE:
+            return True
+    return False
+
+
 def _nearest_safe_zone(ctx: PlankyContext) -> tuple[int, int] | None:
     """Find nearest cogs-aligned structure."""
     pos = ctx.state.position
     candidates: list[tuple[int, tuple[int, int]]] = []
 
-    for apos, _ in ctx.map.find(type="assembler"):
+    for apos, _ in ctx.map.find(type="hub"):
         candidates.append((_manhattan(pos, apos), apos))
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, jpos), jpos))

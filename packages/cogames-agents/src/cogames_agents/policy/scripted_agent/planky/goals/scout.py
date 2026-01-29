@@ -14,13 +14,14 @@ if TYPE_CHECKING:
 
 
 class GetScoutGearGoal(GetGearGoal):
-    """Get scout gear."""
+    """Get scout gear (costs C1 O1 G1 S3 from collective)."""
 
     def __init__(self) -> None:
         super().__init__(
             gear_attr="scout_gear",
             station_type="scout_station",
             goal_name="GetScoutGear",
+            gear_cost={"carbon": 1, "oxygen": 1, "germanium": 1, "silicon": 3},
         )
 
 

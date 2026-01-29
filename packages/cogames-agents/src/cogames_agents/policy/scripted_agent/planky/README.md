@@ -7,17 +7,17 @@ unsatisfied goal decomposes into preconditions, and the deepest unsatisfied leaf
 
 ```bash
 # Watch planky play a cogsguard match (GUI mode)
-cogames play --mission cogsguard_arena.basic \
-  --policy "metta://policy/planky?miner=4&aligner=2&scrambler=4"
+cogames play --mission cogsguard_machina_1.basic \
+  --policy "metta://policy/planky"
 
 # Terminal mode (no GUI needed)
-cogames play --mission cogsguard_arena.basic \
-  --policy "metta://policy/planky?miner=4&aligner=2&scrambler=4" \
+cogames play --mission cogsguard_machina_1.basic \
+  --policy "metta://policy/planky" \
   --render unicode
 
 # Run a multi-episode scrimmage
-cogames scrimmage --mission cogsguard_arena.basic \
-  --policy "metta://policy/planky?miner=4&aligner=2&scrambler=4" \
+cogames scrimmage --mission cogsguard_machina_1.basic \
+  --policy "metta://policy/planky" \
   --episodes 10
 ```
 
@@ -31,9 +31,9 @@ metta://policy/planky?miner=4&scout=0&aligner=2&scrambler=4&stem=0&trace=0
 
 | Parameter     | Default | Description                                   |
 | ------------- | ------- | --------------------------------------------- |
-| `miner`       | 4       | Number of miner agents                        |
+| `miner`       | 0       | Number of miner agents                        |
 | `scout`       | 0       | Number of scout agents                        |
-| `aligner`     | 2       | Number of aligner agents                      |
+| `aligner`     | 0       | Number of aligner agents                      |
 | `scrambler`   | 4       | Number of scrambler agents                    |
 | `stem`        | 0       | Number of stem agents (auto-select role)      |
 | `trace`       | 0       | Enable tracing (1=on)                         |
@@ -48,15 +48,15 @@ Agents beyond the total count stay on "default" vibe (inactive/noop).
 
 ```bash
 # Trace all agents at level 1 (one line per tick: goal chain + action)
-cogames play --mission cogsguard_arena.basic \
+cogames play --mission cogsguard_machina_1.basic \
   --policy "metta://policy/planky?miner=2&scrambler=2&trace=1"
 
 # Trace only agent 0 at level 2 (shows why each goal was skipped)
-cogames play --mission cogsguard_arena.basic \
+cogames play --mission cogsguard_machina_1.basic \
   --policy "metta://policy/planky?miner=2&scrambler=2&trace=1&trace_agent=0&trace_level=2"
 
 # Maximum detail — level 3
-cogames play --mission cogsguard_arena.basic \
+cogames play --mission cogsguard_machina_1.basic \
   --policy "metta://policy/planky?miner=1&trace=1&trace_agent=0&trace_level=3"
 ```
 
@@ -86,15 +86,15 @@ Pipe through grep to focus on specific events:
 
 ```bash
 # Only retreat events
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=2&trace=1&trace_level=2" 2>&1 | grep Survive
 
 # Only a specific agent
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=4&trace=1" 2>&1 | grep "a=2"
 
 # Watch goal transitions (when active goal changes)
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=2&trace=1" --render log 2>&1 | grep planky
 ```
 
@@ -103,35 +103,35 @@ cogames play -m cogsguard_arena.basic \
 ### Mining-heavy (resource gathering)
 
 ```bash
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=6&aligner=2&scrambler=2"
 ```
 
 ### Balanced (default)
 
 ```bash
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=4&aligner=2&scrambler=4"
 ```
 
 ### Combat-heavy (territory control)
 
 ```bash
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=2&aligner=3&scrambler=5"
 ```
 
 ### With scouting
 
 ```bash
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=3&scout=2&aligner=2&scrambler=3"
 ```
 
 ### Stem agents (auto-role selection)
 
 ```bash
-cogames play -m cogsguard_arena.basic \
+cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?stem=10"
 ```
 
@@ -141,12 +141,12 @@ Run both agents on the same mission and compare:
 
 ```bash
 # Planky scrimmage
-cogames scrimmage -m cogsguard_arena.basic \
+cogames scrimmage -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=4&aligner=2&scrambler=4" \
   --episodes 10
 
 # Pinky scrimmage
-cogames scrimmage -m cogsguard_arena.basic \
+cogames scrimmage -m cogsguard_machina_1.basic \
   -p "metta://policy/pinky?miner=4&aligner=2&scrambler=4" \
   --episodes 10
 ```
@@ -154,7 +154,7 @@ cogames scrimmage -m cogsguard_arena.basic \
 Or head-to-head with `cogames run`:
 
 ```bash
-cogames run -m cogsguard_arena.basic \
+cogames run -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?miner=4&aligner=2&scrambler=4" \
   -p "metta://policy/pinky?miner=4&aligner=2&scrambler=4" \
   --episodes 10

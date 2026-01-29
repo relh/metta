@@ -20,9 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from metta_alo.rollout import run_single_episode
-
-from cogames.cogs_vs_clips.evals.planky_evals import (
+from cogames_agents.evals.planky_evals import (
     PLANKY_BEHAVIOR_EVALS,
     PlankyAlignerAvoidAOE,
     PlankyAlignerFullCycle,
@@ -50,6 +48,8 @@ from cogames.cogs_vs_clips.evals.planky_evals import (
     PlankyStuckCorridor,
     PlankySurviveRetreat,
 )
+from metta_alo.rollout import run_single_episode
+
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
 
@@ -448,8 +448,14 @@ class TestPlankyFullCycle:
 
         agent_stats = stats["stats"].get("agent", [])
         if agent_stats:
-            carbon_gained = agent_stats[0].get("carbon.gained", 0)
-            assert carbon_gained > 0, f"Miner should have mined resources in chain. Got carbon.gained={carbon_gained}"
+            # Miner picks the resource the collective has least of, which may not be carbon
+            resources_gained = sum(
+                agent_stats[0].get(f"{r}.gained", 0) for r in ("carbon", "oxygen", "germanium", "silicon")
+            )
+            assert resources_gained > 0, (
+                f"Miner should have mined some resources in chain. Got total resources gained={resources_gained}. "
+                f"Stats: {agent_stats[0]}"
+            )
 
 
 # ==============================================================================

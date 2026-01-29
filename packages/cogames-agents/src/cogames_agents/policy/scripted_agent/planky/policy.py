@@ -17,15 +17,14 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action, ObservationToken
 from mettagrid.simulator.interface import AgentObservation
 
-from .context import PlankyContext
+from .context import PlankyContext, StateSnapshot
 from .entity_map import EntityMap
 from .goal import Goal, evaluate_goals
 from .goals.aligner import AlignJunctionGoal, GetAlignerGearGoal
-from .goals.gear import GetGearGoal
-from .goals.miner import DepositCargoGoal, MineResourceGoal, PickResourceGoal
+from .goals.miner import DepositCargoGoal, ExploreHubGoal, GetMinerGearGoal, MineResourceGoal, PickResourceGoal
 from .goals.scout import ExploreGoal, GetScoutGearGoal
 from .goals.scrambler import GetScramblerGearGoal, ScrambleJunctionGoal
-from .goals.shared import GetHeartsGoal
+from .goals.shared import FallbackMineGoal, GetHeartsGoal
 from .goals.stem import SelectRoleGoal
 from .goals.survive import SurviveGoal
 from .navigator import Navigator
@@ -44,7 +43,8 @@ def _make_goal_list(role: str) -> list[Goal]:
     if role == "miner":
         return [
             SurviveGoal(hp_threshold=15),
-            GetGearGoal("miner_gear", "miner_station", "GetMinerGear"),
+            ExploreHubGoal(),
+            GetMinerGearGoal(),
             PickResourceGoal(),
             DepositCargoGoal(),
             MineResourceGoal(),
@@ -56,29 +56,30 @@ def _make_goal_list(role: str) -> list[Goal]:
             ExploreGoal(),
         ]
     elif role == "aligner":
+        # Aligners NEED gear + heart to align junctions.
+        # Hearts require gear first — don't waste resources on hearts without gear.
+        # FallbackMine at end: mine resources when can't get gear/hearts.
         return [
             SurviveGoal(hp_threshold=50),
             GetAlignerGearGoal(),
             GetHeartsGoal(),
             AlignJunctionGoal(),
+            FallbackMineGoal(),
         ]
     elif role == "scrambler":
+        # Scramblers NEED gear + heart to scramble junctions.
+        # FallbackMine at end: mine resources when can't get gear/hearts.
         return [
             SurviveGoal(hp_threshold=30),
             GetScramblerGearGoal(),
             GetHeartsGoal(),
             ScrambleJunctionGoal(),
+            FallbackMineGoal(),
         ]
     elif role == "stem":
-        role_lists = {
-            "miner": _make_goal_list("miner"),
-            "scout": _make_goal_list("scout"),
-            "aligner": _make_goal_list("aligner"),
-            "scrambler": _make_goal_list("scrambler"),
-        }
         return [
             SurviveGoal(hp_threshold=20),
-            SelectRoleGoal(role_lists),
+            SelectRoleGoal(),
         ]
     else:
         # Default/inactive
@@ -144,6 +145,10 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             step=agent_state.step,
         )
 
+        # Detect useful actions by comparing state changes
+        # Useful = mined resources, deposited to collective, aligned/scrambled junction
+        self._detect_useful_action(state, agent_state)
+
         # Detect failed moves: if last action was a move but position didn't change
         last_pos = agent_state.blackboard.get("_last_pos")
         last_action = agent_state.blackboard.get("_last_action", "")
@@ -165,30 +170,62 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
 
         agent_state.blackboard["_last_pos"] = state.position
 
-        # Handle vibe activation — same pattern as Pinky
-        # Step 1 with default vibe → change to assigned role vibe
-        if agent_state.step == 1 and state.vibe == "default" and self._role in VIBE_TO_ROLE:
-            return Action(name=f"change_vibe_{self._role}"), agent_state
+        # Vibe-driven role system: agent's role IS their vibe
+        # "default" → set initial role vibe
+        # "gear" → stem mode (role selection)
+        # any valid role → run that role's goals
 
-        # "gear" vibe → change back to assigned role vibe
-        if state.vibe == "gear" and self._role in VIBE_TO_ROLE:
-            return Action(name=f"change_vibe_{self._role}"), agent_state
+        # Check if goals want to change role (via blackboard)
+        if "change_role" in agent_state.blackboard:
+            new_role = agent_state.blackboard.pop("change_role")
+            if new_role in VIBE_TO_ROLE:
+                return Action(name=f"change_vibe_{new_role}"), agent_state
 
-        # If vibe is not our role (inactive), noop
-        if self._role in VIBE_TO_ROLE and state.vibe != self._role:
-            return Action(name="noop"), agent_state
+        # Map vibe to role
+        current_vibe = state.vibe
+        if current_vibe == "default":
+            if self._role in VIBE_TO_ROLE:
+                # Non-stem agent: set initial role vibe
+                return Action(name=f"change_vibe_{self._role}"), agent_state
+            else:
+                # Stem agent: default vibe = stem mode
+                effective_role = "stem"
+        elif current_vibe == "gear":
+            # Gear vibe = stem mode (role selection)
+            effective_role = "stem"
+        elif current_vibe in VIBE_TO_ROLE:
+            effective_role = current_vibe
+        else:
+            if self._role in VIBE_TO_ROLE:
+                return Action(name=f"change_vibe_{self._role}"), agent_state
+            effective_role = "stem"
 
-        # Check if stem agent has selected a new role
-        if "goal_list" in agent_state.blackboard:
-            agent_state.goals = agent_state.blackboard.pop("goal_list")
-            selected = agent_state.blackboard.get("selected_role", "unknown")
-            agent_state.role = selected
+        # Update goals if role changed
+        if effective_role != agent_state.role:
             if self._should_trace(agent_state):
-                print(f"[planky][t={agent_state.step} a={self._agent_id}] stem→{selected}")
+                print(f"[planky][t={agent_state.step} a={self._agent_id}] role: {agent_state.role}→{effective_role}")
+            agent_state.role = effective_role
+            agent_state.goals = _make_goal_list(effective_role)
 
         # Build context
         should_trace = self._should_trace(agent_state)
         trace = TraceLog() if should_trace else None
+
+        # Calculate steps since last useful action
+        last_useful = agent_state.blackboard.get("_last_useful_step", 0)
+        steps_since_useful = agent_state.step - last_useful
+        if trace:
+            trace.steps_since_useful = steps_since_useful
+
+        # If we've been idle too long (100+ steps), force a reset of cached state
+        # This helps break out of stuck loops
+        if steps_since_useful >= 100 and steps_since_useful % 50 == 0:
+            # Clear cached navigation and target selections
+            agent_state.navigator._cached_path = None
+            agent_state.navigator._cached_target = None
+            agent_state.blackboard.pop("target_resource", None)
+            if trace:
+                trace.activate("IdleReset", f"clearing cache after {steps_since_useful} idle steps")
 
         ctx = PlankyContext(
             state=state,
@@ -203,7 +240,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
 
         # If we're stuck (many failed moves), force exploration to discover terrain
         fail_count = agent_state.blackboard.get("_move_fail_count", 0)
-        if fail_count >= 3:
+        if fail_count >= 6:
             action = agent_state.navigator.explore(
                 state.position,
                 agent_state.entity_map,
@@ -227,6 +264,15 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
                 level=self._trace_level,
             )
             print(f"[planky] {line}")
+            # Log collective resources and entity map info
+            if agent_state.step % 25 == 0 or agent_state.step == 3:
+                print(
+                    f"[planky][t={agent_state.step} a={self._agent_id}] "
+                    f"collective: C={state.collective_carbon} O={state.collective_oxygen} "
+                    f"G={state.collective_germanium} S={state.collective_silicon} "
+                    f"cargo={state.cargo_total}/{state.cargo_capacity} "
+                    f"energy={state.energy}"
+                )
 
         # Track action for failed-move detection
         agent_state.blackboard["_last_action"] = action.name
@@ -239,6 +285,58 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         if self._trace_agent >= 0 and self._agent_id != self._trace_agent:
             return False
         return True
+
+    def _detect_useful_action(self, state: StateSnapshot, agent_state: PlankyAgentState) -> None:
+        """Detect if a useful action occurred by comparing state changes.
+
+        Useful actions:
+        - Mine: cargo increased
+        - Deposit: cargo decreased AND collective increased
+        - Align/Scramble: heart decreased (spent on junction action)
+        - Got gear: gear flag changed
+        - Got heart: heart count increased
+        """
+        bb = agent_state.blackboard
+
+        # Get previous state values
+        prev_cargo = bb.get("_prev_cargo", 0)
+        prev_heart = bb.get("_prev_heart", 0)
+        prev_collective_total = bb.get("_prev_collective_total", 0)
+
+        # Calculate current values
+        current_cargo = state.cargo_total
+        current_heart = state.heart
+        current_collective = (
+            state.collective_carbon + state.collective_oxygen + state.collective_germanium + state.collective_silicon
+        )
+
+        # Detect useful actions
+        useful = False
+
+        # Mined resources (cargo increased)
+        if current_cargo > prev_cargo:
+            useful = True
+
+        # Deposited resources (cargo decreased, collective increased)
+        if current_cargo < prev_cargo and current_collective > prev_collective_total:
+            useful = True
+
+        # Got a heart (heart increased)
+        if current_heart > prev_heart:
+            useful = True
+
+        # Spent a heart on align/scramble (heart decreased)
+        if current_heart < prev_heart:
+            useful = True
+
+        # Update tracking
+        if useful:
+            bb["_last_useful_step"] = agent_state.step
+
+        # Store current values for next tick comparison
+        bb["_prev_cargo"] = current_cargo
+        bb["_prev_heart"] = current_heart
+        bb["_prev_collective_total"] = current_collective
 
 
 class PlankyPolicy(MultiAgentPolicy):
@@ -255,11 +353,11 @@ class PlankyPolicy(MultiAgentPolicy):
         self,
         policy_env_info: PolicyEnvInterface,
         device: str = "cpu",
-        # Role counts
-        miner: int = 4,
+        # Role counts — if stem > 0, defaults to all-stem unless explicit roles given
+        miner: int = -1,
         scout: int = 0,
-        aligner: int = 2,
-        scrambler: int = 4,
+        aligner: int = -1,
+        scrambler: int = 0,
         stem: int = 0,
         # Tracing
         trace: int = 0,
@@ -277,6 +375,18 @@ class PlankyPolicy(MultiAgentPolicy):
         self._trace_enabled = bool(trace)
         self._trace_level = trace_level
         self._trace_agent = trace_agent
+
+        # Resolve defaults: if stem > 0 and miner/aligner not explicitly set, zero them
+        if stem > 0:
+            if miner == -1:
+                miner = 0
+            if aligner == -1:
+                aligner = 0
+        else:
+            if miner == -1:
+                miner = 6
+            if aligner == -1:
+                aligner = 4
 
         # Build role distribution
         self._role_distribution: list[str] = []

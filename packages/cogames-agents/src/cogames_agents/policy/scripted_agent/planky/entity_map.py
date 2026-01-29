@@ -128,7 +128,7 @@ class EntityMap:
         # Structures are obstacles (stations, extractors, junctions, etc.)
         # But we don't block pathfinding through them — goals that need adjacency
         # handle that via reach_adjacent=True
-        return entity.type == "agent"  # only agents are passable obstacles? No.
+        return True  # Structures are passable for pathfinding
 
     def is_wall(self, pos: tuple[int, int]) -> bool:
         """Check if position is a wall."""

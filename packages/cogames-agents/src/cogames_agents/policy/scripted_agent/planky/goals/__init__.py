@@ -2,7 +2,7 @@
 
 from .aligner import AlignJunctionGoal, GetAlignerGearGoal
 from .gear import GetGearGoal
-from .miner import DepositCargoGoal, MineResourceGoal, PickResourceGoal
+from .miner import DepositCargoGoal, GetMinerGearGoal, MineResourceGoal, PickResourceGoal
 from .scout import ExploreGoal, GetScoutGearGoal
 from .scrambler import GetScramblerGearGoal, ScrambleJunctionGoal
 from .shared import GetHeartsGoal
@@ -13,6 +13,7 @@ __all__ = [
     "SurviveGoal",
     "GetGearGoal",
     "GetAlignerGearGoal",
+    "GetMinerGearGoal",
     "GetScoutGearGoal",
     "GetScramblerGearGoal",
     "GetHeartsGoal",

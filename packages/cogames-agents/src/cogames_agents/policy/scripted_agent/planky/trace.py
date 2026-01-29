@@ -24,6 +24,7 @@ class TraceLog:
     action_name: str = ""
     blackboard_summary: str = ""
     nav_target: Optional[tuple[int, int]] = None
+    steps_since_useful: int = 0  # Steps since last useful action (mine/deposit/align/scramble)
 
     def skip(self, goal_name: str, reason: str = "ok") -> None:
         """Record a satisfied (skipped) goal."""
@@ -43,7 +44,9 @@ class TraceLog:
         level: int,
     ) -> str:
         """Format the trace as a single line."""
-        prefix = f"[t={step} a={agent_id} {role} ({pos[0]},{pos[1]}) hp={hp}]"
+        # Include idle indicator if agent hasn't done anything useful recently
+        idle_str = f" IDLE={self.steps_since_useful}" if self.steps_since_useful >= 20 else ""
+        prefix = f"[t={step} a={agent_id} {role} ({pos[0]},{pos[1]}) hp={hp}{idle_str}]"
 
         if level == 1:
             return f"{prefix} {self.active_goal_chain} → {self.action_name}"
@@ -55,11 +58,12 @@ class TraceLog:
                 dist = abs(self.nav_target[0] - pos[0]) + abs(self.nav_target[1] - pos[1])
                 target_str = f" dist={dist}"
             bb = f" | bb={{{self.blackboard_summary}}}" if self.blackboard_summary else ""
-            return f"{prefix} {skips} → {self.active_goal_chain}{target_str} → {self.action_name}{bb}"
+            idle_detail = f" idle={self.steps_since_useful}" if self.steps_since_useful > 0 else ""
+            return f"{prefix} {skips} → {self.active_goal_chain}{target_str} → {self.action_name}{bb}{idle_detail}"
 
         # Level 3 — full detail
         all_entries = " ".join(f"{'skip' if e.satisfied else 'ACTIVE'}:{e.goal_name}({e.detail})" for e in self.entries)
         target_str = f" nav_target={self.nav_target}" if self.nav_target else ""
         bb = f" bb={{{self.blackboard_summary}}}" if self.blackboard_summary else ""
-        map_info = ""  # Could add map stats here
-        return f"{prefix} {all_entries}{target_str} → {self.action_name}{bb}{map_info}"
+        idle_detail = f" idle={self.steps_since_useful}"
+        return f"{prefix} {all_entries}{target_str} → {self.action_name}{bb}{idle_detail}"

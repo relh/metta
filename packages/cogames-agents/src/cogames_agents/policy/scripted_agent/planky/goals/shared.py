@@ -13,22 +13,48 @@ if TYPE_CHECKING:
 
 
 class GetHeartsGoal(Goal):
-    """Navigate to a chest to acquire hearts."""
+    """Navigate to a chest to acquire hearts.
+
+    Hearts cost 1 of each element from the collective. Skip if the
+    collective can't afford it to avoid wasting time at the chest.
+    """
 
     name = "GetHearts"
+    # Cost per heart: 1 of each element
+    HEART_COST = {"carbon": 1, "oxygen": 1, "germanium": 1, "silicon": 1}
 
     def __init__(self, min_hearts: int = 1) -> None:
         self._min_hearts = min_hearts
 
+    # Minimum collective resource reserve — don't consume below this level
+    RESOURCE_RESERVE = 3
+
+    def _collective_can_afford_heart(self, ctx: PlankyContext) -> bool:
+        s = ctx.state
+        r = self.RESOURCE_RESERVE
+        return (
+            s.collective_carbon >= 1 + r
+            and s.collective_oxygen >= 1 + r
+            and s.collective_germanium >= 1 + r
+            and s.collective_silicon >= 1 + r
+        )
+
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        return ctx.state.heart >= self._min_hearts
+        if ctx.state.heart >= self._min_hearts:
+            return True
+        # Skip if collective can't afford a heart
+        if not self._collective_can_afford_heart(ctx):
+            if ctx.trace:
+                ctx.trace.skip(self.name, "collective lacks resources for heart")
+            return True
+        return False
 
     def execute(self, ctx: PlankyContext) -> Action:
         # Find chest
         result = ctx.map.find_nearest(ctx.state.position, type="chest")
         if result is None:
             # Try assembler as fallback
-            result = ctx.map.find_nearest(ctx.state.position, type="assembler")
+            result = ctx.map.find_nearest(ctx.state.position, type="hub")
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
@@ -40,6 +66,78 @@ class GetHeartsGoal(Goal):
         if dist <= 1:
             return _move_toward(ctx.state.position, chest_pos)
         return ctx.navigator.get_action(ctx.state.position, chest_pos, ctx.map, reach_adjacent=True)
+
+
+class FallbackMineGoal(Goal):
+    """Fallback: mine resources when combat roles can't act.
+
+    Used at the bottom of aligner/scrambler goal lists so they contribute
+    to the economy instead of idling when they lack gear or hearts.
+    """
+
+    name = "FallbackMine"
+
+    def is_satisfied(self, ctx: PlankyContext) -> bool:
+        return False  # Always active as last resort
+
+    def execute(self, ctx: PlankyContext) -> Action:
+        from .miner import RESOURCE_TYPES, _extractor_recently_failed
+
+        # If carrying resources, deposit first
+        if ctx.state.cargo_total > 0:
+            depot_pos = _find_deposit(ctx)
+            if depot_pos is not None:
+                if ctx.trace:
+                    ctx.trace.nav_target = depot_pos
+                dist = _manhattan(ctx.state.position, depot_pos)
+                if dist <= 1:
+                    return _move_toward(ctx.state.position, depot_pos)
+                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
+
+        # Find nearest usable extractor (any resource type)
+        best: tuple[int, tuple[int, int]] | None = None
+        for resource in RESOURCE_TYPES:
+            for pos, e in ctx.map.find(type=f"{resource}_extractor"):
+                if e.properties.get("remaining_uses", 999) <= 0:
+                    continue
+                if e.properties.get("inventory_amount", -1) == 0:
+                    continue
+                if _extractor_recently_failed(ctx, pos):
+                    continue
+                d = _manhattan(ctx.state.position, pos)
+                if best is None or d < best[0]:
+                    best = (d, pos)
+
+        if best is not None:
+            if ctx.trace:
+                ctx.trace.nav_target = best[1]
+            dist = best[0]
+            if dist <= 1:
+                return _move_toward(ctx.state.position, best[1])
+            return ctx.navigator.get_action(ctx.state.position, best[1], ctx.map, reach_adjacent=True)
+
+        # No extractors known — explore
+        return ctx.navigator.explore(
+            ctx.state.position,
+            ctx.map,
+            direction_bias=["north", "east", "south", "west"][ctx.agent_id % 4],
+        )
+
+
+def _find_deposit(ctx: "PlankyContext") -> tuple[int, int] | None:
+    """Find nearest cogs-aligned depot for depositing resources."""
+    pos = ctx.state.position
+    candidates: list[tuple[int, tuple[int, int]]] = []
+    for apos, _ in ctx.map.find(type="hub"):
+        candidates.append((_manhattan(pos, apos), apos))
+    for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
+        candidates.append((_manhattan(pos, jpos), jpos))
+    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+        candidates.append((_manhattan(pos, cpos), cpos))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[0][1]
 
 
 def _move_toward(current: tuple[int, int], target: tuple[int, int]) -> Action:

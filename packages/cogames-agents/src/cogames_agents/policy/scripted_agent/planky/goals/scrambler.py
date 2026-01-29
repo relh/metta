@@ -17,13 +17,14 @@ JUNCTION_AOE_RANGE = 10
 
 
 class GetScramblerGearGoal(GetGearGoal):
-    """Get scrambler gear."""
+    """Get scrambler gear (costs C1 O3 G1 S1 from collective)."""
 
     def __init__(self) -> None:
         super().__init__(
             gear_attr="scrambler_gear",
             station_type="scrambler_station",
             goal_name="GetScramblerGear",
+            gear_cost={"carbon": 1, "oxygen": 3, "germanium": 1, "silicon": 1},
         )
 
 
@@ -35,16 +36,51 @@ class ScrambleJunctionGoal(Goal):
 
     name = "ScrambleJunction"
     MAX_ATTEMPTS_PER_TARGET = 5
+    MAX_NAV_STEPS_PER_TARGET = 40  # Give up navigating to a target after this many steps
     COOLDOWN_STEPS = 50
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # Never satisfied — always try to scramble more
+        # Can't scramble without gear and a heart
+        if not ctx.state.scrambler_gear:
+            if ctx.trace:
+                ctx.trace.skip(self.name, "no gear")
+            return True
+        if ctx.state.heart < 1:
+            if ctx.trace:
+                ctx.trace.skip(self.name, "no heart")
+            return True
         return False
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
+        # Track navigation steps toward current target to detect stuck
+        nav_key = "_scramble_nav_steps"
+        nav_target_key = "_scramble_nav_target"
+        nav_steps = ctx.blackboard.get(nav_key, 0) + 1
+        ctx.blackboard[nav_key] = nav_steps
+
         target = self._find_best_target(ctx)
         if target is None:
-            # Explore aggressively toward map edges
+            ctx.blackboard[nav_key] = 0
+            return ctx.navigator.explore(
+                ctx.state.position,
+                ctx.map,
+                direction_bias=["north", "east", "south", "west"][ctx.agent_id % 4],
+            )
+
+        # Reset nav counter if target changed
+        prev_target = ctx.blackboard.get(nav_target_key)
+        if prev_target != target:
+            ctx.blackboard[nav_key] = 0
+            nav_steps = 0
+        ctx.blackboard[nav_target_key] = target
+
+        # If we've been navigating too long, mark target as failed
+        if nav_steps > self.MAX_NAV_STEPS_PER_TARGET:
+            failed_key = f"scramble_failed_{target}"
+            ctx.blackboard[failed_key] = ctx.step
+            ctx.blackboard[nav_key] = 0
+            if ctx.trace:
+                ctx.trace.activate(self.name, f"nav timeout on {target}")
             return ctx.navigator.explore(
                 ctx.state.position,
                 ctx.map,

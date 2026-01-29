@@ -17,13 +17,14 @@ JUNCTION_AOE_RANGE = 10
 
 
 class GetAlignerGearGoal(GetGearGoal):
-    """Get aligner gear."""
+    """Get aligner gear (costs C3 O1 G1 S1 from collective)."""
 
     def __init__(self) -> None:
         super().__init__(
             gear_attr="aligner_gear",
             station_type="aligner_station",
             goal_name="GetAlignerGear",
+            gear_cost={"carbon": 3, "oxygen": 1, "germanium": 1, "silicon": 1},
         )
 
 
@@ -36,15 +37,50 @@ class AlignJunctionGoal(Goal):
 
     name = "AlignJunction"
     MAX_ATTEMPTS_PER_TARGET = 5
+    MAX_NAV_STEPS_PER_TARGET = 40
     COOLDOWN_STEPS = 50
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # Never satisfied — always try to align more
+        # Can't align without gear and a heart
+        if not ctx.state.aligner_gear:
+            if ctx.trace:
+                ctx.trace.skip(self.name, "no gear")
+            return True
+        if ctx.state.heart < 1:
+            if ctx.trace:
+                ctx.trace.skip(self.name, "no heart")
+            return True
         return False
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
+        nav_key = "_align_nav_steps"
+        nav_target_key = "_align_nav_target"
+        nav_steps = ctx.blackboard.get(nav_key, 0) + 1
+        ctx.blackboard[nav_key] = nav_steps
+
         target = self._find_best_target(ctx)
         if target is None:
+            ctx.blackboard[nav_key] = 0
+            return ctx.navigator.explore(
+                ctx.state.position,
+                ctx.map,
+                direction_bias=["north", "east", "south", "west"][ctx.agent_id % 4],
+            )
+
+        # Reset nav counter if target changed
+        prev_target = ctx.blackboard.get(nav_target_key)
+        if prev_target != target:
+            ctx.blackboard[nav_key] = 0
+            nav_steps = 0
+        ctx.blackboard[nav_target_key] = target
+
+        # Nav timeout — mark target as failed
+        if nav_steps > self.MAX_NAV_STEPS_PER_TARGET:
+            failed_key = f"align_failed_{target}"
+            ctx.blackboard[failed_key] = ctx.step
+            ctx.blackboard[nav_key] = 0
+            if ctx.trace:
+                ctx.trace.activate(self.name, f"nav timeout on {target}")
             return ctx.navigator.explore(
                 ctx.state.position,
                 ctx.map,
@@ -85,32 +121,20 @@ class AlignJunctionGoal(Goal):
         return ctx.navigator.get_action(ctx.state.position, target, ctx.map, reach_adjacent=True)
 
     def _find_best_target(self, ctx: PlankyContext) -> tuple[int, int] | None:
-        """Find nearest neutral junction NOT in enemy AOE and not recently failed."""
+        """Find nearest neutral junction, including contested ones."""
         pos = ctx.state.position
-
-        # Get enemy junctions for AOE check
-        clips_junctions = []
-        for jpos, _e in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
-            clips_junctions.append(jpos)
-        for cpos, _e in ctx.map.find(type_contains="charger", property_filter={"alignment": "clips"}):
-            clips_junctions.append(cpos)
-
-        def in_enemy_aoe(p: tuple[int, int]) -> bool:
-            return any(_manhattan(p, ej) <= JUNCTION_AOE_RANGE for ej in clips_junctions)
 
         def recently_failed(p: tuple[int, int]) -> bool:
             failed_step = ctx.blackboard.get(f"align_failed_{p}", -9999)
             return ctx.step - failed_step < self.COOLDOWN_STEPS
 
-        # Find neutral junctions
+        # Find neutral junctions (no AOE filter — aligners go where needed)
         candidates: list[tuple[int, tuple[int, int]]] = []
 
         for jpos, e in ctx.map.find(type_contains="junction"):
             alignment = e.properties.get("alignment")
             if alignment is not None:
                 continue  # Not neutral
-            if in_enemy_aoe(jpos):
-                continue
             if recently_failed(jpos):
                 continue
             candidates.append((_manhattan(pos, jpos), jpos))
@@ -118,8 +142,6 @@ class AlignJunctionGoal(Goal):
         for cpos, e in ctx.map.find(type_contains="charger"):
             alignment = e.properties.get("alignment")
             if alignment is not None:
-                continue
-            if in_enemy_aoe(cpos):
                 continue
             if recently_failed(cpos):
                 continue
