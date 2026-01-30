@@ -37,7 +37,7 @@ from metta.app_backend.models.tournament import (
     PoolPlayer,
     Season,
 )
-from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
 from metta.app_backend.tournament.settings import (
     MAX_OUTSTANDING_MATCHES,
     POLL_INTERVAL_FAST_SECONDS,
@@ -139,9 +139,10 @@ class CommissionerBase(ABC):
                 break
             referee = self.referees[pool_name]
             players = await self._get_pool_players(pool.id)
-            matches = await self._get_pool_matches(pool.id, {p.id for p in players})
+            active_ids = {p.id for p in players}
+            match_counts = await self._get_match_counts(pool.id, active_ids)
 
-            requests = referee.get_matches_to_schedule(players, matches)
+            requests = referee.get_matches_to_schedule(players, match_counts)
             for req in requests[:slots_available]:
                 success = await self._create_and_dispatch_match(pool.id, req)
                 if success:
@@ -338,40 +339,40 @@ class CommissionerBase(ABC):
         )
         return result.scalar_one()
 
-    async def _get_pool_matches(self, pool_id: UUID, active_player_ids: set[UUID]) -> list[MatchData]:
+    async def _get_match_counts(self, pool_id: UUID, active_player_ids: set[UUID]) -> MatchCounts:
         if not active_player_ids:
-            return []
+            return {}
         session = get_db()
-        matches = list(
-            (
-                await session.execute(
-                    select(Match)
-                    .where(Match.pool_id == pool_id)
-                    .where(
-                        col(Match.id).in_(
-                            select(MatchPlayer.match_id).where(col(MatchPlayer.pool_player_id).in_(active_player_ids))
-                        )
-                    )
-                    .options(selectinload(Match.players))
-                )
-            )
-            .scalars()
-            .all()
+
+        result = await session.execute(
+            select(Match.id, Match.assignments, Match.status, MatchPlayer.pool_player_id)
+            .join(MatchPlayer, MatchPlayer.match_id == Match.id)
+            .where(Match.pool_id == pool_id)
+            .where(col(MatchPlayer.pool_player_id).in_(active_player_ids))
         )
 
-        result = []
-        for m in matches:
-            sorted_players = sorted(m.players, key=lambda x: x.policy_index)
-            result.append(
-                MatchData(
-                    match_id=m.id,
-                    pool_id=m.pool_id,
-                    status=m.status,
-                    pool_player_ids=[mp.pool_player_id for mp in sorted_players],
-                    assignments=m.assignments or [],
-                )
-            )
-        return result
+        matches: dict[UUID, tuple[list[UUID], list[int], MatchStatus]] = {}
+        for row in result.all():
+            match_id, assignments, status, pp_id = row.id, row.assignments, row.status, row.pool_player_id
+            if match_id not in matches:
+                matches[match_id] = ([], assignments, status)
+            matches[match_id][0].append(pp_id)
+
+        counts: MatchCounts = {}
+        for players, assignments, status in matches.values():
+            if not all(p in active_player_ids for p in players):
+                continue
+            combo = tuple(sorted(players))
+            key = (combo, tuple(assignments))
+            completed, failed, in_progress = counts.get(key, (0, 0, 0))
+            if status == MatchStatus.completed:
+                completed += 1
+            elif status == MatchStatus.failed:
+                failed += 1
+            else:
+                in_progress += 1
+            counts[key] = (completed, failed, in_progress)
+        return counts
 
     @with_db
     async def submit(self, policy_version_id: UUID) -> list[str]:

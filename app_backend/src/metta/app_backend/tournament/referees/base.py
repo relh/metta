@@ -12,13 +12,8 @@ from metta.app_backend.models.job_request import JobRequest
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
-
-class MatchData(BaseModel):
-    match_id: UUID
-    pool_id: UUID
-    status: MatchStatus
-    pool_player_ids: list[UUID]
-    assignments: list[int] = []
+MatchCountKey = tuple[tuple[UUID, ...], tuple[int, ...]]
+MatchCounts = dict[MatchCountKey, tuple[int, int, int]]
 
 
 class MatchRequest(BaseModel):
@@ -48,7 +43,7 @@ class RefereeBase(ABC):
     def get_matches_to_schedule(
         self,
         players: list[PoolPlayer],
-        matches: list[MatchData],
+        match_counts: MatchCounts,
     ) -> list[MatchRequest]:
         pass
 

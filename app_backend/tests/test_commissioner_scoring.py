@@ -12,7 +12,7 @@ from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, Pool, PoolPlayer, Season
 from metta.app_backend.tournament.commissioners.base import CommissionerBase, MembershipChangeRequest
-from metta.app_backend.tournament.referees.base import MatchData, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.base import MatchRequest, RefereeBase
 
 
 class _TestCommissioner(CommissionerBase):
@@ -31,7 +31,7 @@ class _TestReferee(RefereeBase):
     def get_matches_to_schedule(
         self,
         players: list[PoolPlayer],
-        matches: list[MatchData],
+        match_counts: dict,
     ) -> list[MatchRequest]:
         return []
 
