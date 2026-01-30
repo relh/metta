@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 
 import { H2 } from "@/components/H2";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/Table";
@@ -20,6 +20,20 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
     MembershipHistoryEntry[]
   >([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedSeason, setSelectedSeason] = useState<string>("__all__");
+
+  const seasonOptions = useMemo(() => {
+    const unique = [...new Set(membershipHistory.map((m) => m.season_name))];
+    return unique.sort();
+  }, [membershipHistory]);
+
+  const filteredHistory = useMemo(
+    () =>
+      selectedSeason === "__all__"
+        ? membershipHistory
+        : membershipHistory.filter((m) => m.season_name === selectedSeason),
+    [membershipHistory, selectedSeason],
+  );
 
   const addPolicyFilter = useCallback(
     (policyId: string) => {
@@ -45,6 +59,7 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
       setExpandedPolicyId(policyId);
       setLoadingHistory(true);
       setMembershipHistory([]);
+      setSelectedSeason("__all__");
 
       try {
         const res = await fetch(
@@ -151,11 +166,31 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
                               </p>
                             ) : (
                               <div className="space-y-2">
-                                <p className="text-xs font-medium text-[#4a5f8c]">
-                                  Membership History
-                                </p>
+                                <div className="flex items-center gap-3">
+                                  <p className="text-xs font-medium text-[#4a5f8c]">
+                                    Membership History
+                                  </p>
+                                  {seasonOptions.length > 1 && (
+                                    <select
+                                      value={selectedSeason}
+                                      onChange={(e) =>
+                                        setSelectedSeason(e.target.value)
+                                      }
+                                      className="rounded border border-[#d8d2bf] bg-white px-2 py-0.5 text-xs text-[#4a5f8c]"
+                                    >
+                                      <option value="__all__">
+                                        All seasons
+                                      </option>
+                                      {seasonOptions.map((s) => (
+                                        <option key={s} value={s}>
+                                          {s}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
                                 <div className="space-y-1">
-                                  {membershipHistory.map((entry, i) => (
+                                  {filteredHistory.map((entry, i) => (
                                     <div
                                       key={i}
                                       className="flex items-center gap-3 text-sm"
