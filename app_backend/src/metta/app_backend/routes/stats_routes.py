@@ -1,3 +1,4 @@
+import logging
 import tempfile
 import uuid
 from datetime import datetime
@@ -14,6 +15,8 @@ from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
 from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
+
+logger = logging.getLogger(__name__)
 
 
 class PolicyRow(BaseModel):
@@ -98,6 +101,8 @@ class PolicyVersionResponse(BaseModel):
     id: uuid.UUID
     name: str
     version: int
+    pools: list[str] | None = None
+    submit_error: str | None = None
 
 
 class PolicyCreate(BaseModel):
@@ -155,6 +160,7 @@ class CompletePolicySubmitRequest(BaseModel):
 
     upload_id: uuid.UUID
     name: str
+    season: str | None = None
 
 
 class MyPolicyVersionsResponse(BaseModel):
@@ -339,7 +345,22 @@ def create_stats_router() -> APIRouter:
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Uploaded submission not found in S3: {str(e)}") from e
 
-        return await _create_policy_version_from_s3_key(name=request.name, user_id=user.id, s3_key=s3_key)
+        result = await _create_policy_version_from_s3_key(name=request.name, user_id=user.id, s3_key=s3_key)
+
+        if request.season:
+            from metta.app_backend.tournament.registry import SEASONS
+
+            if request.season not in SEASONS:
+                raise HTTPException(400, f"Season '{request.season}' not found")
+            try:
+                commissioner = SEASONS[request.season]()
+                pool_names = await commissioner.submit(result.id)
+                result.pools = pool_names
+            except Exception:
+                logger.warning("Failed to submit %s to season %r", result.id, request.season, exc_info=True)
+                result.submit_error = f"Failed to submit to season '{request.season}'"
+
+        return result
 
     @router.post("/episodes/bulk_upload/presigned-url")
     @timed_http_handler
