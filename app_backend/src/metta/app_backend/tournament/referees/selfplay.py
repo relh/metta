@@ -1,5 +1,3 @@
-from abc import abstractmethod
-
 from metta.app_backend.models.tournament import PoolPlayer
 from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
 from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
@@ -13,10 +11,6 @@ class SelfPlayRefereeBase(RefereeBase):
     matches_per_player: int = 2
     game_tag: str | None = None
     skip_replay: bool = False
-
-    @abstractmethod
-    def make_env(self, seed: int) -> MettaGridConfig:
-        pass
 
     def get_matches_to_schedule(
         self,

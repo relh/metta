@@ -243,6 +243,7 @@ export type MatchStatus = 'pending' | 'scheduled' | 'running' | 'completed' | 'f
 export type PoolInfo = {
   name: string
   description: string
+  config_id: string | null
 }
 
 export type SeasonDetail = {

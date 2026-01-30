@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -33,6 +35,7 @@ from metta.app_backend.models.tournament import (
     MatchStatus,
     MembershipAction,
     MembershipChange,
+    MettagridEnvConfig,
     Pool,
     PoolPlayer,
     Season,
@@ -213,7 +216,26 @@ class CommissionerBase(ABC):
             .scalars()
             .all()
         )
-        return {p.name: p for p in all_pools if p.name}
+        pools_by_name = {p.name: p for p in all_pools if p.name}
+
+        for pool_name, referee in self.referees.items():
+            pool = pools_by_name.get(pool_name)
+            if not pool:
+                continue
+            config_data = referee.make_env(seed=0).model_dump(mode="json")
+            config_hash = hashlib.sha256(json.dumps(config_data, sort_keys=True).encode()).hexdigest()
+            env_config = (
+                await session.execute(select(MettagridEnvConfig).filter_by(config_hash=config_hash))
+            ).scalar_one_or_none()
+            if not env_config:
+                env_config = MettagridEnvConfig(config_hash=config_hash, config=config_data)
+                session.add(env_config)
+                await session.flush()
+            if pool.env_config_id != env_config.id:
+                pool.env_config_id = env_config.id
+
+        await session.commit()
+        return pools_by_name
 
     @trace("commissioner.sync_match_statuses")
     async def _sync_match_statuses(self) -> bool:

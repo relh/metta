@@ -21,6 +21,19 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
           {season.pools.map((pool) => (
             <div key={pool.name}>
               <span className="font-medium text-gray-600">{pool.name}:</span> {pool.description}
+              {pool.config_id && (
+                <>
+                  {' '}
+                  <a
+                    href={`${repo.baseUrl}/tournament/configs/${pool.config_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-500 hover:text-blue-700"
+                  >
+                    [config]
+                  </a>
+                </>
+              )}
             </div>
           ))}
         </div>

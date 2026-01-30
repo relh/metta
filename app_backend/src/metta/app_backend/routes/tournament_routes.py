@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,6 +100,7 @@ class MembershipHistoryEntry(BaseModel):
 class PoolInfo(BaseModel):
     name: str
     description: str
+    config_id: str | None = None
 
 
 class SeasonResponse(BaseModel):
@@ -109,18 +111,33 @@ class SeasonResponse(BaseModel):
     pools: list[PoolInfo]
 
     @classmethod
-    def from_commissioner(cls, season_name: str) -> "SeasonResponse":
+    def from_commissioner(cls, season_name: str, pool_config_ids: dict[str, str] | None = None) -> "SeasonResponse":
         if season_name not in SEASONS:
             return cls(name=season_name, summary="", validation_mission="", is_default=False, pools=[])
         commissioner = SEASONS[season_name]()
         desc = commissioner.description
+        config_ids = pool_config_ids or {}
         return cls(
             name=season_name,
             summary=desc.summary,
             validation_mission=desc.validation_mission,
             is_default=season_name == DEFAULT_SEASON,
-            pools=[PoolInfo(name=p.name, description=p.description) for p in desc.pools],
+            pools=[
+                PoolInfo(name=p.name, description=p.description, config_id=config_ids.get(p.name)) for p in desc.pools
+            ],
         )
+
+
+async def _get_pool_config_ids(session: AsyncSession, season_name: str) -> dict[str, str]:
+    rows = (
+        await session.execute(
+            select(Pool.name, Pool.env_config_id)
+            .join(Pool.season)
+            .where(Season.name == season_name)
+            .where(Pool.env_config_id.is_not(None))  # type: ignore[union-attr]
+        )
+    ).all()
+    return {name: str(config_id) for name, config_id in rows}
 
 
 def create_tournament_router() -> APIRouter:
@@ -131,14 +148,47 @@ def create_tournament_router() -> APIRouter:
     async def list_seasons(session: AsyncSession = Depends(get_session)) -> list[SeasonResponse]:
         seasons = (await session.execute(select(Season).where(col(Season.name).not_in(HIDDEN_SEASONS)))).scalars().all()
 
-        return [SeasonResponse.from_commissioner(s.name) for s in seasons]
+        results = []
+        for s in seasons:
+            config_ids = await _get_pool_config_ids(session, s.name)
+            results.append(SeasonResponse.from_commissioner(s.name, config_ids))
+        return results
 
     @router.get("/seasons/{season_name}")
     @timed_http_handler
-    async def get_season(season_name: str) -> SeasonResponse:
+    async def get_season(season_name: str, session: AsyncSession = Depends(get_session)) -> SeasonResponse:
         if season_name not in SEASONS or season_name in HIDDEN_SEASONS:
             raise HTTPException(status_code=404, detail="Season not found")
-        return SeasonResponse.from_commissioner(season_name)
+        config_ids = await _get_pool_config_ids(session, season_name)
+        return SeasonResponse.from_commissioner(season_name, config_ids)
+
+    @router.get("/seasons/{season_name}/pools/{pool_name}/config")
+    @timed_http_handler
+    async def get_pool_config(
+        season_name: str, pool_name: str, session: AsyncSession = Depends(get_session)
+    ) -> JSONResponse:
+        pool = (
+            await session.execute(
+                select(Pool)
+                .join(Pool.season)
+                .where(Season.name == season_name)
+                .where(Pool.name == pool_name)
+                .options(selectinload(Pool.env_config))
+            )
+        ).scalar_one_or_none()
+        if not pool or not pool.env_config:
+            raise HTTPException(status_code=404, detail="Pool config not found")
+        return JSONResponse(content=pool.env_config.config)
+
+    @router.get("/configs/{config_id}")
+    @timed_http_handler
+    async def get_config(config_id: UUID, session: AsyncSession = Depends(get_session)) -> JSONResponse:
+        from metta.app_backend.models.tournament import MettagridEnvConfig
+
+        env_config = (await session.execute(select(MettagridEnvConfig).filter_by(id=config_id))).scalar_one_or_none()
+        if not env_config:
+            raise HTTPException(status_code=404, detail="Config not found")
+        return JSONResponse(content=env_config.config)
 
     @router.get("/seasons/{season_name}/leaderboard")
     @timed_http_handler

@@ -40,6 +40,10 @@ class RefereeBase(ABC):
     scorer: Scorer = WeightedScorer()
 
     @abstractmethod
+    def make_env(self, seed: int) -> MettaGridConfig:
+        pass
+
+    @abstractmethod
     def get_matches_to_schedule(
         self,
         players: list[PoolPlayer],

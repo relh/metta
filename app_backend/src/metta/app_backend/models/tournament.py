@@ -1,10 +1,10 @@
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, text
-from sqlalchemy.dialects.postgresql import ARRAY, INTEGER
+from sqlalchemy.dialects.postgresql import ARRAY, INTEGER, JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
 from metta.app_backend.models.policies import PolicyVersion
@@ -26,6 +26,17 @@ class MembershipAction(str, Enum):
     remove = "remove"
 
 
+class MettagridEnvConfig(SQLModel, table=True):
+    __tablename__ = "mettagrid_env_configs"  # type: ignore[assignment]
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    config_hash: str = Field(index=True, unique=True)
+    config: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("now()")}
+    )
+
+
 class Season(SQLModel, table=True):
     __tablename__ = "seasons"  # type: ignore[assignment]
 
@@ -44,12 +55,14 @@ class Pool(SQLModel, table=True):
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
     season_id: UUID | None = Field(foreign_key="seasons.id", nullable=True, index=True)
+    env_config_id: UUID | None = Field(foreign_key="mettagrid_env_configs.id", nullable=True, default=None)
     name: str | None = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("now()")}
     )
 
     season: Season | None = Relationship(back_populates="pools")
+    env_config: MettagridEnvConfig | None = Relationship()
     matches: list["Match"] = Relationship(back_populates="pool")
     players: list["PoolPlayer"] = Relationship(
         back_populates="pool",

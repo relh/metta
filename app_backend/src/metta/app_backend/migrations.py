@@ -269,4 +269,17 @@ MIGRATIONS = [
             """CREATE INDEX idx_k8s_events_cluster_event_time ON k8s_events (cluster, event_time DESC)""",
         ],
     ),
+    SqlMigration(
+        version=10,
+        description="Add mettagrid_env_configs table and link to pools",
+        sql_statements=[
+            """CREATE TABLE mettagrid_env_configs (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                config_hash TEXT NOT NULL UNIQUE,
+                config JSONB NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """ALTER TABLE pools ADD COLUMN env_config_id UUID REFERENCES mettagrid_env_configs(id)""",
+        ],
+    ),
 ]
