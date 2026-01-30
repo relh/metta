@@ -58,7 +58,6 @@ class TerrainFromNumpyConfig(MapBuilderConfig["TerrainFromNumpy"], WithMaxRetrie
     agents: int | dict[str, int] = Field(default=0, ge=0)
     dir: str
     file: Optional[str] = None
-    remove_assemblers: bool = False
     seed: Optional[int] = None  # Use seed instead of Random object for picklability
 
 
@@ -91,47 +90,31 @@ class TerrainFromNumpy(MapBuilder[TerrainFromNumpyConfig], ABC):
                 logger.info(f"Extracted {local_zipped_dir} to {root_dir}")
         return map_dir
 
-    def get_valid_positions(self, level: MapGrid, assemblers=False):
+    def get_valid_positions(self, level: MapGrid):
         # Create a boolean mask for empty cells
         empty_mask = level == "empty"
 
-        if assemblers:
-            has_empty_neighbor = (
-                np.roll(empty_mask, 1, axis=0)  # Check up
-                & np.roll(empty_mask, -1, axis=0)  # Check down
-                & np.roll(empty_mask, 1, axis=1)  # Check left
-                & np.roll(empty_mask, -1, axis=1)  # Check right
-            )
-            valid_mask = empty_mask & has_empty_neighbor
-        else:
-            # For non-assemblers, any empty cell is valid?
-            # But we should also check for connectivity or at least valid placement rules.
-            # For now, assuming same rules or simpler.
-            # Actually, let's use the same logic for safety:
+        has_empty_neighbor = (
+            np.roll(empty_mask, 1, axis=0)  # Check up
+            | np.roll(empty_mask, -1, axis=0)  # Check down
+            | np.roll(empty_mask, 1, axis=1)  # Check left
+            | np.roll(empty_mask, -1, axis=1)  # Check right
+        )
 
-            has_empty_neighbor = (
-                np.roll(empty_mask, 1, axis=0)  # Check up
-                | np.roll(empty_mask, -1, axis=0)  # Check down
-                | np.roll(empty_mask, 1, axis=1)  # Check left
-                | np.roll(empty_mask, -1, axis=1)  # Check right
-            )
-
-            # Valid positions are empty cells with at least one empty neighbor
-            # Exclude border cells (indices 0 and -1)
-            valid_mask = empty_mask & has_empty_neighbor
-            valid_mask[0, :] = False
-            valid_mask[-1, :] = False
-            valid_mask[:, 0] = False
-            valid_mask[:, -1] = False
+        # Valid positions are empty cells with at least one empty neighbor
+        # Exclude border cells (indices 0 and -1)
+        valid_mask = empty_mask & has_empty_neighbor
+        valid_mask[0, :] = False
+        valid_mask[-1, :] = False
+        valid_mask[:, 0] = False
+        valid_mask[:, -1] = False
 
         # Get coordinates of valid positions
         valid_positions = list(zip(*np.where(valid_mask), strict=False))
         return valid_positions
 
-    def clean_grid(self, grid: MapGrid, assemblers=True):
+    def clean_grid(self, grid: MapGrid):
         grid[grid == "agent.agent"] = "empty"
-        if self.config.remove_assemblers:
-            grid[grid == "altar"] = "empty"
 
         # Prepare agent labels
         if isinstance(self.config.agents, int):
@@ -139,7 +122,7 @@ class TerrainFromNumpy(MapBuilder[TerrainFromNumpyConfig], ABC):
         else:
             agent_labels = [f"agent.{name}" for name, count in self.config.agents.items() for _ in range(count)]
 
-        valid_positions = self.get_valid_positions(grid, assemblers)
+        valid_positions = self.get_valid_positions(grid)
         self.rng.shuffle(valid_positions)
         return grid, valid_positions, agent_labels
 
@@ -159,7 +142,6 @@ class NavigationFromNumpyConfig(MapBuilderConfig["NavigationFromNumpy"], WithMax
     agents: int | dict[str, int] = Field(default=0, ge=0)
     dir: str
     file: Optional[str] = None
-    remove_assemblers: bool = False
     seed: Optional[int] = None  # Use seed instead of Random object for picklability
 
 
@@ -189,44 +171,33 @@ class NavigationFromNumpy(MapBuilder[NavigationFromNumpyConfig]):
                 logger.info(f"Extracted {local_zipped_dir} to {root_dir}")
         return map_dir
 
-    def get_valid_positions(self, level: MapGrid, assemblers=False):
+    def get_valid_positions(self, level: MapGrid):
         """Get valid positions - copied from TerrainFromNumpy."""
         # Create a boolean mask for empty cells
         empty_mask = level == "empty"
 
-        if assemblers:
-            has_empty_neighbor = (
-                np.roll(empty_mask, 1, axis=0)  # Check up
-                & np.roll(empty_mask, -1, axis=0)  # Check down
-                & np.roll(empty_mask, 1, axis=1)  # Check left
-                & np.roll(empty_mask, -1, axis=1)  # Check right
-            )
-            valid_mask = empty_mask & has_empty_neighbor
-        else:
-            has_empty_neighbor = (
-                np.roll(empty_mask, 1, axis=0)  # Check up
-                | np.roll(empty_mask, -1, axis=0)  # Check down
-                | np.roll(empty_mask, 1, axis=1)  # Check left
-                | np.roll(empty_mask, -1, axis=1)  # Check right
-            )
+        has_empty_neighbor = (
+            np.roll(empty_mask, 1, axis=0)  # Check up
+            | np.roll(empty_mask, -1, axis=0)  # Check down
+            | np.roll(empty_mask, 1, axis=1)  # Check left
+            | np.roll(empty_mask, -1, axis=1)  # Check right
+        )
 
-            # Valid positions are empty cells with at least one empty neighbor
-            # Exclude border cells (indices 0 and -1)
-            valid_mask = empty_mask & has_empty_neighbor
-            valid_mask[0, :] = False
-            valid_mask[-1, :] = False
-            valid_mask[:, 0] = False
-            valid_mask[:, -1] = False
+        # Valid positions are empty cells with at least one empty neighbor
+        # Exclude border cells (indices 0 and -1)
+        valid_mask = empty_mask & has_empty_neighbor
+        valid_mask[0, :] = False
+        valid_mask[-1, :] = False
+        valid_mask[:, 0] = False
+        valid_mask[:, -1] = False
 
         # Get coordinates of valid positions
         valid_positions = list(zip(*np.where(valid_mask), strict=False))
         return valid_positions
 
-    def clean_grid(self, grid: MapGrid, assemblers=True):
+    def clean_grid(self, grid: MapGrid):
         """Clean grid - copied from TerrainFromNumpy."""
         grid[grid == "agent.agent"] = "empty"
-        if self.config.remove_assemblers:
-            grid[grid == "assembler"] = "empty"
 
         # Prepare agent labels
         if isinstance(self.config.agents, int):
@@ -234,7 +205,7 @@ class NavigationFromNumpy(MapBuilder[NavigationFromNumpyConfig]):
         else:
             agent_labels = [f"agent.{name}" for name, count in self.config.agents.items() for _ in range(count)]
 
-        valid_positions = self.get_valid_positions(grid, assemblers)
+        valid_positions = self.get_valid_positions(grid)
         self.rng.shuffle(valid_positions)
         return grid, valid_positions, agent_labels
 
@@ -247,11 +218,10 @@ class NavigationFromNumpy(MapBuilder[NavigationFromNumpyConfig]):
 
         grid = np.load(f"{map_dir}/{uri}", allow_pickle=True)
 
-        # Replace 'altar' with 'assembler' for CVC compatibility
-        # The terrain numpy files contain 'altar' but C++ only knows 'assembler'
-        grid[grid == "altar"] = "assembler"
+        # Remove legacy altar entries from terrain numpy files
+        grid[grid == "altar"] = "empty"
 
-        grid, valid_positions, agent_labels = self.clean_grid(grid, assemblers=False)
+        grid, valid_positions, agent_labels = self.clean_grid(grid)
         num_agents = len(agent_labels)
         # Place agents in first slice
         agent_positions = valid_positions[:num_agents]
@@ -270,7 +240,5 @@ class NavigationFromNumpy(MapBuilder[NavigationFromNumpyConfig]):
             for pos in positions:
                 grid[pos] = obj_name
                 valid_positions_set.remove(pos)
-
-        grid[grid == "altar"] = "assembler"
 
         return GameMap(grid=grid)

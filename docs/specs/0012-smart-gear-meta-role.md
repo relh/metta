@@ -46,7 +46,7 @@ Introduce a smart gear role that:
 
 Maintain a lightweight `SmartRoleCoordinator` in the multi-agent policy layer that aggregates:
 
-- Station discovery: `assembler`, `chest`, and gear stations known.
+- Station discovery: `hub`, `chest`, and gear stations known.
 - Charger alignment counts: `cogs`, `clips`, `neutral`, `unknown`.
 - Extractor discovery: total count and per-resource availability if known.
 - Gear possession counts by role.

@@ -29,7 +29,7 @@ class TestComprehensiveEnvironmentIntegration:
     @staticmethod
     def make_debug_env(name: str) -> MettaGridConfig:
         """Create debug environments programmatically using the new system."""
-        if name == "tiny_two_assemblers":
+        if name == "tiny_walls":
             return MettaGridConfig(
                 label=name,
                 game=GameConfig(
@@ -37,7 +37,6 @@ class TestComprehensiveEnvironmentIntegration:
                     max_steps=100,
                     objects={
                         "wall": building.wall,
-                        "assembler": building.assembler_assembler,
                     },
                     actions=ActionsConfig(
                         move=MoveActionConfig(),
@@ -88,8 +87,6 @@ class TestComprehensiveEnvironmentIntegration:
                     max_steps=100,
                     objects={
                         "wall": building.wall,
-                        "mine_red": building.assembler_mine_red,
-                        "generator_red": building.assembler_generator_red,
                     },
                     actions=ActionsConfig(
                         move=MoveActionConfig(),
@@ -98,8 +95,6 @@ class TestComprehensiveEnvironmentIntegration:
                     agent=AgentConfig(
                         rewards={
                             "heart": inventoryReward("heart"),
-                            "ore_red": inventoryReward("ore_red", weight=0.5),
-                            "battery_red": inventoryReward("battery_red", weight=0.8),
                         },
                     ),
                     map_builder=RandomMapBuilder.Config(
@@ -119,9 +114,6 @@ class TestComprehensiveEnvironmentIntegration:
                     max_steps=100,
                     objects={
                         "wall": building.wall,
-                        "assembler": building.assembler_assembler,
-                        "mine_red": building.assembler_mine_red,
-                        "generator_red": building.assembler_generator_red,
                     },
                     actions=ActionsConfig(
                         move=MoveActionConfig(),
@@ -130,8 +122,6 @@ class TestComprehensiveEnvironmentIntegration:
                     agent=AgentConfig(
                         rewards={
                             "heart": inventoryReward("heart"),
-                            "ore_red": inventoryReward("ore_red", weight=0.5),
-                            "battery_red": inventoryReward("battery_red", weight=0.8),
                         },
                     ),
                     map_builder=RandomMapBuilder.Config(
@@ -146,7 +136,7 @@ class TestComprehensiveEnvironmentIntegration:
 
     def test_programmatic_env_creation(self):
         """Test that debug environments can be created programmatically."""
-        for env_name in ["tiny_two_assemblers", "simple_obstacles", "resource_collection", "mixed_objects"]:
+        for env_name in ["tiny_walls", "simple_obstacles", "resource_collection", "mixed_objects"]:
             env_config = self.make_debug_env(env_name)
             assert env_config is not None, f"Failed to create environment {env_name}"
             assert env_config.game.num_agents == 2, f"Environment {env_name} should have 2 agents"
@@ -154,7 +144,7 @@ class TestComprehensiveEnvironmentIntegration:
 
     def test_debug_env_validation(self):
         """Test that programmatically created debug environments are valid."""
-        env_config = self.make_debug_env("tiny_two_assemblers")
+        env_config = self.make_debug_env("tiny_walls")
 
         # Validate essential components
         assert hasattr(env_config, "game"), "Environment missing game config"
@@ -178,14 +168,14 @@ class TestComprehensiveEnvironmentIntegration:
 
         # Test that they have expected components
         assert "aligner_station" in cogsguard_env.game.objects
-        assert "assembler" in nav_env.game.objects
+        assert "wall" in nav_env.game.objects
         assert cogsguard_env.game.actions.move is not None
         assert nav_env.game.actions.move is not None
 
     def test_programmatic_env_with_mettagrid(self):
         """Test that programmatically created environments work with MettaGridEnv."""
 
-        cfg = self.make_debug_env("tiny_two_assemblers")
+        cfg = self.make_debug_env("tiny_walls")
         sim = Simulation(cfg)
 
         assert len(sim.observations()) == 2, "Observation should be for 2 agents"
@@ -193,7 +183,7 @@ class TestComprehensiveEnvironmentIntegration:
     def test_simulation_config_creation(self):
         """Test creating simulation configs from environments."""
 
-        for env_name in ["tiny_two_assemblers", "simple_obstacles"]:
+        for env_name in ["tiny_walls", "simple_obstacles"]:
             env_config = self.make_debug_env(env_name)
             sim_config = SimulationConfig(suite="test", name=f"sim_{env_name}", env=env_config)
 
@@ -216,7 +206,7 @@ class TestComprehensiveEnvironmentIntegration:
 
     def test_agents_count_in_environments(self):
         """Test that each debug environment has exactly 2 agents."""
-        for env_name in ["tiny_two_assemblers", "simple_obstacles", "resource_collection", "mixed_objects"]:
+        for env_name in ["tiny_walls", "simple_obstacles", "resource_collection", "mixed_objects"]:
             env_config = self.make_debug_env(env_name)
             assert env_config.game.num_agents == 2, (
                 f"Environment {env_name} should have exactly 2 agents, but has {env_config.game.num_agents}"
@@ -227,9 +217,7 @@ class TestComprehensiveEnvironmentIntegration:
                 assert map_builder_agents == 2, f"Map builder for {env_name} should configure 2 agents"
 
     @pytest.mark.slow
-    @pytest.mark.parametrize(
-        "env_name", ["tiny_two_assemblers", "simple_obstacles", "resource_collection", "mixed_objects"]
-    )
+    @pytest.mark.parametrize("env_name", ["tiny_walls", "simple_obstacles", "resource_collection", "mixed_objects"])
     def test_recipe_based_training_validation(self, env_name, monkeypatch, capsys):
         """Test basic training validation with the new recipe-based system."""
         run_name = f"validation_{env_name}"

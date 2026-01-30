@@ -260,7 +260,7 @@ Most agents use a phase-based state machine defined in `types.py`:
 ```python
 class Phase(Enum):
     GATHER = "gather"          # Collect resources from extractors
-    ASSEMBLE = "assemble"      # Craft hearts at assembler
+    ASSEMBLE = "assemble"      # Craft hearts at hub
     DELIVER = "deliver"        # Deposit hearts to chest
     RECHARGE = "recharge"      # Restore energy at charger
     CRAFT_UNCLIP = "craft_unclip"  # Craft unclip items (UnclippingAgent)
@@ -284,7 +284,7 @@ The `_execute_phase` method dispatches to phase-specific handlers:
 
 ```
 GATHER   -> _do_gather()    — find extractors, navigate, use them
-ASSEMBLE -> _do_assemble()  — find assembler, navigate, use it
+ASSEMBLE -> _do_assemble()  — find hub, navigate, use it
 DELIVER  -> _do_deliver()   — find chest, navigate, use it
 RECHARGE -> _do_recharge()  — find charger, navigate, use it
 ```
@@ -323,7 +323,7 @@ state.
 A "vibe" is a string that the agent sends to the game engine via a `change_vibe` action. It determines:
 
 - **Visual appearance** in replays (glyph shown above agent)
-- **Protocol selection** at assemblers (different vibes activate different recipes)
+- **Protocol selection** at hubs (different vibes activate different recipes)
 - **Role identity** for team coordination
 
 ### Common vibes
@@ -418,7 +418,7 @@ uv run python packages/cogames/scripts/run_evaluation.py --policy my_agent
 
 - **No pathfinding** — uses greedy step-towards and random walks
 - **No persistent map** — only uses current observation
-- **Recipe discovery** — learns heart recipe from assembler observation
+- **Recipe discovery** — learns heart recipe from hub observation
 - **Simple priority**: deliver hearts > assemble > gather > wander
 
 ```python
@@ -427,7 +427,7 @@ uv run python packages/cogames/scripts/run_evaluation.py --policy my_agent
 # Learn recipe if visible
 if s.heart_recipe is None:
     for _pos, obj in parsed.nearby_objects.items():
-        if obj.name == "assembler" and obj.protocol_outputs.get("heart", 0) > 0:
+        if obj.name == "hub" and obj.protocol_outputs.get("heart", 0) > 0:
             s.heart_recipe = {k: v for k, v in obj.protocol_inputs.items() if k != "energy"}
 
 # Deliver hearts
@@ -440,7 +440,7 @@ if s.hearts > 0:
 
 # Assemble if have all resources
 if can_assemble:
-    assembler = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "assembler"))
+    hub = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "hub"))
     ...
 
 # Gather needed resources from nearest extractor

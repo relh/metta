@@ -64,7 +64,7 @@ Each hub contains (`sites.py:52-64`):
 | `G`    | Germanium extractor |
 | `I`    | Silicon extractor   |
 | `J`    | Charger (junction)  |
-| `&`    | Assembler (hub)     |
+| `&`    | Hub (hub)           |
 | `=`    | Chest               |
 
 ---
@@ -294,7 +294,7 @@ Shared coordinator aggregates team state and assigns roles:
 
 **Priority logic** (`choose_role`, `policy.py:278-311`):
 
-1. If assembler/chest unknown -> Scout (need exploration)
+1. If hub/chest unknown -> Scout (need exploration)
 2. If no scouts -> Scout
 3. If no miners -> Miner
 4. If no known chargers -> Scout
@@ -315,7 +315,7 @@ URI defaults (`policy.py:1394`): `scrambler=1, miner=4` plus remaining agents on
 
 `CogsguardGeneralistImpl` dynamically switches roles without vibe changes:
 
-- Early game (< 80 steps): Scout if assembler unknown or structures < 6
+- Early game (< 80 steps): Scout if hub unknown or structures < 6
 - Target role counts: Scout(1-2), Miner(max(4, N/2)), Scrambler(1-2), Aligner(1-2)
 - Priority order for deficits: Scrambler > Aligner > Scout > Miner
 
@@ -342,7 +342,7 @@ URI defaults (`policy.py:1394`): `scrambler=1, miner=4` plus remaining agents on
 - **Strategy:**
   - HP-aware: calculates safe operating distance based on HP and drain rate
   - Prefers extractors near aligned buildings (shorter/safer routes)
-  - Deposits at nearest aligned building (assembler or cogs-aligned charger)
+  - Deposits at nearest aligned building (hub or cogs-aligned charger)
   - Each miner prefers a different resource type (spreads across 4 elements)
   - Without gear: still mines (at 1/10 rate), checks for gear on each deposit cycle
 - **Key constants:** Move cost 3 energy, HP drain 1/step outside AOE, enemy AOE adds +1 drain
@@ -377,7 +377,7 @@ URI defaults (`policy.py:1394`): `scrambler=1, miner=4` plus remaining agents on
 
 ### Critical Path
 
-1. **Early game (steps 0-100):** Scout to discover assembler, chest, stations, extractors, and charger positions
+1. **Early game (steps 0-100):** Scout to discover hub, chest, stations, extractors, and charger positions
 2. **Economy bootstrap (steps 50-300):** Miners gather resources, deposit at hub; collective builds up elements for gear
    and hearts
 3. **Gear up (steps 100-200):** Scrambler(s) get gear first (25-step priority window), then aligners/miners

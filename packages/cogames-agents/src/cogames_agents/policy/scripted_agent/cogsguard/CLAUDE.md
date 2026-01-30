@@ -29,17 +29,17 @@ harness.diagnose_coordinate_system()
 
 ### Key Methods
 
-| Method                                  | Description                                |
-| --------------------------------------- | ------------------------------------------ |
-| `step(n)`                               | Run n simulation steps                     |
-| `print_agent_summary(ids)`              | Print state summary for agents             |
-| `print_simulation_info()`               | Print object types and assembler locations |
-| `diagnose_stuck_agents(threshold)`      | Find and diagnose stuck agents             |
-| `diagnose_coordinate_system()`          | Check for coordinate mismatches            |
-| `run_until_stuck(threshold, max_steps)` | Run until agent stuck                      |
-| `get_agent_state(id)`                   | Get internal policy state                  |
-| `get_grid_objects()`                    | Get all simulation objects                 |
-| `find_assemblers()`                     | Get actual assembler positions             |
+| Method                                  | Description                          |
+| --------------------------------------- | ------------------------------------ |
+| `step(n)`                               | Run n simulation steps               |
+| `print_agent_summary(ids)`              | Print state summary for agents       |
+| `print_simulation_info()`               | Print object types and hub locations |
+| `diagnose_stuck_agents(threshold)`      | Find and diagnose stuck agents       |
+| `diagnose_coordinate_system()`          | Check for coordinate mismatches      |
+| `run_until_stuck(threshold, max_steps)` | Run until agent stuck                |
+| `get_agent_state(id)`                   | Get internal policy state            |
+| `get_grid_objects()`                    | Get all simulation objects           |
+| `find_hubs()`                           | Get actual hub positions             |
 
 ### Common Diagnostic Patterns
 
@@ -52,13 +52,13 @@ from cogames_agents.policy.scripted_agent.cogsguard.types import StructureType
 state = harness.get_agent_state(0)
 print(f"Role: {state.role}, Phase: {state.phase}")
 print(f"Position: ({state.row}, {state.col})")
-print(f"Known assembler: {state.get_structure_position(StructureType.ASSEMBLER)}")
+print(f"Known hub: {state.get_structure_position(StructureType.ASSEMBLER)}")
 
-# Check actual vs believed assembler positions
-actual = harness.find_assemblers()
+# Check actual vs believed hub positions
+actual = harness.find_hubs()
 for i in range(harness.num_agents):
     info = harness.agent_info[i]
-    print(f"Agent {i}: believes assembler at {info.assembler_pos}, actual: {actual}")
+    print(f"Agent {i}: believes hub at {info.hub_pos}, actual: {actual}")
 
 # Run until issues appear
 harness.run_until_stuck(threshold=10, max_steps=200)
@@ -96,8 +96,8 @@ harness.step(50)
 harness.diagnose_coordinate_system()
 
 # Output will show:
-# - Actual assembler positions in simulation
-# - What each agent believes the assembler position is
+# - Actual hub positions in simulation
+# - What each agent believes the hub position is
 # - Whether there's a mismatch
 ```
 
@@ -321,12 +321,12 @@ This lag is expected and correct. To verify position tracking:
 harness.track_position_drift(num_steps=50)
 ```
 
-### Coordinate Mismatch (Agent Thinks Assembler is Elsewhere)
+### Coordinate Mismatch (Agent Thinks Hub is Elsewhere)
 
 **Symptom**: Agent tries to deposit but cargo never decreases. Debug harness shows:
 
 ```
-Agent X: believes assembler at (100, 102), actual: [(29, 29)]
+Agent X: believes hub at (100, 102), actual: [(29, 29)]
 ```
 
 **Note**: Internal coords are RELATIVE (centered at 100,100), simulation coords are ABSOLUTE. These will NOT match
@@ -423,7 +423,7 @@ if DEBUG and s.step_count <= 100:
 At episode end, the log shows game state:
 
 ```
-{'cogs': {'aligned.assembler': 1.0, ...},
+{'cogs': {'aligned.hub': 1.0, ...},
  'clips': {'aligned.charger': 42.0}}
 ```
 

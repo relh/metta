@@ -74,8 +74,8 @@ The evolutionary coordinator adjusts counts based on game-state signals:
 
 ### 3.1 Energy-Aware Pathing
 
-**Problem**: Move costs 3 energy. Agents exhaust energy after ~33 moves, then stall. Assembler AOE (+100 energy)
-requires standing near an aligned charger.
+**Problem**: Move costs 3 energy. Agents exhaust energy after ~33 moves, then stall. Hub AOE (+100 energy) requires
+standing near an aligned charger.
 
 **Solution**: The navigator maintains an **energy budget**. Before committing to a path, it checks
 `path_cost = len(path) * 3` against current energy. If the path exceeds budget, the agent detours to the nearest aligned
@@ -245,7 +245,7 @@ accumulation. The catalog tracks:
 3. `SelectResource` - Pick resource type based on team deficit (coordinator tracks)
 4. `NavigateToExtractor` - Path to selected extractor
 5. `MineResource` - Bump extractor to mine
-6. `DepositCargo` - Navigate to assembler/chest when cargo full
+6. `DepositCargo` - Navigate to hub/chest when cargo full
 
 **Aligner goals**:
 
@@ -329,8 +329,8 @@ accumulation. The catalog tracks:
 
 ### Risk Factors
 
-1. **Energy starvation not resolved at engine level**: If assembler AOE remains broken, energy-aware pathing is a
-   workaround, not a fix. Score ceiling is lower.
+1. **Energy starvation not resolved at engine level**: If hub AOE remains broken, energy-aware pathing is a workaround,
+   not a fix. Score ceiling is lower.
 2. **Procedural map variance**: Bad map seeds can place chargers far from hub, making early alignment slow. Mitigation:
    scout fast-path + flex agent.
 3. **Strong enemy scramblers**: If the opponent runs aggressive scramble strategies, our sentinel + re-align loop may

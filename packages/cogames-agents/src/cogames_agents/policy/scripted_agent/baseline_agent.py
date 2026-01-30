@@ -2,9 +2,9 @@
 Simple Baseline Scripted Agent - Minimal implementation for ablation studies.
 
 This agent only implements the core functionality needed to:
-1. Explore the map to find extractors, assembler, and chest
+1. Explore the map to find extractors, hub, and chest
 2. Gather resources from nearest extractors
-3. Deposit resources at the assembler
+3. Deposit resources at the hub
 4. Assemble hearts and deliver to chest
 
 No advanced features: no coordination, no caching, no probes, no visit scoring.
@@ -118,15 +118,9 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         map_size = 200  # Large enough for most missions
         center = map_size // 2  # Agent starts at center of this larger map
 
-        # Initialize heart recipe from protocols passed via PolicyEnvInterface
+        # Heart recipe is no longer available from PolicyEnvInterface (hub protocols removed).
+        # Agents discover recipes dynamically from observations instead.
         heart_recipe = None
-        for protocol in self._policy_env_info.assembler_protocols:
-            if protocol.output_resources.get("heart", 0) > 0:
-                # Use this protocol's input resources as the heart recipe
-                heart_recipe = dict(protocol.input_resources)
-                # Remove energy from the recipe if present (agents don't track energy as a gatherable resource)
-                heart_recipe.pop("energy", None)
-                break
 
         return SimpleAgentState(
             agent_id=self._agent_id,
@@ -235,10 +229,10 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
 
     def _update_occupancy_and_discover(self, s: SimpleAgentState, parsed: ParsedObservation) -> None:
         """Update occupancy map and discover objects from parsed observation."""
-        # Discover heart recipe from assembler protocol (if not yet discovered)
+        # Discover heart recipe from hub protocol (if not yet discovered)
         if s.heart_recipe is None:
             for _pos, obj_state in parsed.nearby_objects.items():
-                if obj_state.name == "assembler" and obj_state.protocol_inputs:
+                if obj_state.name == "hub" and obj_state.protocol_inputs:
                     # Check if this is the heart recipe (outputs "heart")
                     if obj_state.protocol_outputs.get("heart", 0) > 0:
                         s.heart_recipe = dict(obj_state.protocol_inputs)
@@ -316,7 +310,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
                 continue
 
             # Discover stations (all stations are obstacles - can't walk through them)
-            for station_name in ("assembler", "chest", "charger"):
+            for station_name in ("hub", "chest", "charger"):
                 if is_station(obj_name, station_name):
                     s.occupancy[r][c] = CellType.OBSTACLE.value
                     self._discover_station(s, pos, station_name)
@@ -457,7 +451,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         # Recipe must be discovered from observations - no hardcoded fallback
         if s.heart_recipe is None:
             raise RuntimeError(
-                "Heart recipe not discovered! Agent must observe assembler with correct vibe to learn recipe. "
+                "Heart recipe not discovered! Agent must observe hub with correct vibe to learn recipe. "
                 "Ensure protocol_details_obs=True in game config."
             )
 
@@ -489,28 +483,28 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         Uses move_towards for actual movement to benefit from collision detection and pathfinding checks.
 
         Anti-stuck mechanism: If stuck in a small area (configurable via hyperparameters) for
-        a configurable number of steps, navigates to assembler for a configurable duration
+        a configurable number of steps, navigates to hub for a configurable duration
         to escape, then continues exploring.
         """
         if s.row < 0:
             return Action(name="noop")
 
-        # Check if we're in escape mode (navigating to assembler)
+        # Check if we're in escape mode (navigating to hub)
         if s.exploration_escape_until_step > 0:
             if s.step_count >= s.exploration_escape_until_step:
                 # Done escaping, continue normal exploration
                 s.exploration_escape_until_step = 0
             else:
-                # Still in escape mode - navigate to assembler
-                if s.stations["assembler"] is not None:
-                    # Check if we've reached the assembler (adjacent)
-                    if is_adjacent((s.row, s.col), s.stations["assembler"]):
-                        # Reached assembler! Exit escape mode
+                # Still in escape mode - navigate to hub
+                if s.stations["hub"] is not None:
+                    # Check if we've reached the hub (adjacent)
+                    if is_adjacent((s.row, s.col), s.stations["hub"]):
+                        # Reached hub! Exit escape mode
                         s.exploration_escape_until_step = 0
                     else:
-                        return self._move_towards(s, s.stations["assembler"], reach_adjacent=True)
+                        return self._move_towards(s, s.stations["hub"], reach_adjacent=True)
                 else:
-                    # Don't know where assembler is yet, just continue exploring
+                    # Don't know where hub is yet, just continue exploring
                     s.exploration_escape_until_step = 0
 
         # Check if stuck in small area using last N positions from history
@@ -527,20 +521,20 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             if (
                 area_height <= self._hyperparams.exploration_area_size_threshold
                 and area_width <= self._hyperparams.exploration_area_size_threshold
-                and s.stations["assembler"] is not None
+                and s.stations["hub"] is not None
             ):
-                assembler_pos = s.stations["assembler"]
-                if assembler_pos is not None:
-                    dist = abs(s.row - assembler_pos[0]) + abs(s.col - assembler_pos[1])
-                    # Only trigger escape if far from assembler and not already in escape mode
+                hub_pos = s.stations["hub"]
+                if hub_pos is not None:
+                    dist = abs(s.row - hub_pos[0]) + abs(s.col - hub_pos[1])
+                    # Only trigger escape if far from hub and not already in escape mode
                     # Also prevent triggering too frequently (wait at least 25 steps since last escape ended)
                     if (
-                        dist > self._hyperparams.exploration_assembler_distance_threshold
+                        dist > self._hyperparams.exploration_hub_distance_threshold
                         and s.exploration_escape_until_step == 0
                     ):
-                        # Stuck in small area and far from assembler! Enter escape mode
+                        # Stuck in small area and far from hub! Enter escape mode
                         s.exploration_escape_until_step = s.step_count + self._hyperparams.exploration_escape_duration
-                        return self._move_towards(s, assembler_pos, reach_adjacent=True)
+                        return self._move_towards(s, hub_pos, reach_adjacent=True)
         # Check if we should keep current exploration direction
         if s.exploration_target_step is not None:
             steps_in_direction = s.step_count - s.exploration_target_step
@@ -607,7 +601,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             return None
 
         # For goal-directed exploration, disable escape mode
-        # so we can focus on finding the target object (extractor, assembler, etc.)
+        # so we can focus on finding the target object (extractor, hub, etc.)
         # Escape mode will resume during pure exploration if needed
         s.exploration_escape_until_step = 0
 
@@ -768,25 +762,23 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         return self._use_extractor_if_ready(s, extractor, resource_type)
 
     def _do_assemble(self, s: SimpleAgentState) -> Action:
-        """Assemble hearts at assembler."""
-        # Explore until we find assembler
-        explore_action = self._explore_until(
-            s, condition=lambda: s.stations["assembler"] is not None, reason="Need assembler"
-        )
+        """Assemble hearts at hub."""
+        # Explore until we find hub
+        explore_action = self._explore_until(s, condition=lambda: s.stations["hub"] is not None, reason="Need hub")
         if explore_action is not None:
             return explore_action
 
-        # Assembler is known, navigate to it and use it
-        assembler = s.stations["assembler"]
-        assert assembler is not None  # Guaranteed by _explore_until above
+        # Hub is known, navigate to it and use it
+        hub = s.stations["hub"]
+        assert hub is not None  # Guaranteed by _explore_until above
 
         # Navigate to adjacent cell
-        nav_action = self._navigate_to_adjacent(s, assembler, target_name="assembler")
+        nav_action = self._navigate_to_adjacent(s, hub, target_name="hub")
         if nav_action is not None:
             return nav_action
 
         # Adjacent - use it
-        return utils_use_object_at(s, assembler)
+        return utils_use_object_at(s, hub)
 
     def _do_deliver(self, s: SimpleAgentState) -> Action:
         """Deliver hearts to chest."""

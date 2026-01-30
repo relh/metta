@@ -26,12 +26,12 @@ from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
 from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
-from cogames.cogs_vs_clips.stations import COGSGUARD_GEAR_COSTS
+from cogames.cogs_vs_clips.stations import GEAR_COSTS
 
 
-def _is_assembler_tag(name: str, tags: Iterable[str]) -> bool:
+def _is_hub_tag(name: str, tags: Iterable[str]) -> bool:
     tag_set = set(tags)
-    return name in {"assembler", "main_nexus", "hub"} or bool({"assembler", "main_nexus", "hub"} & tag_set)
+    return name in {"hub", "main_nexus"} or bool({"hub", "main_nexus"} & tag_set)
 
 
 def _is_charger_tag(name: str, tags: Iterable[str]) -> bool:
@@ -77,8 +77,8 @@ def run_rollout(
         policy_uri=policy_uri,
     )
 
-    assembler_seen = False
-    assembler_missing = 0
+    hub_seen = False
+    hub_missing = 0
     charger_alignment_checks = 0
     charger_alignment_mismatches = 0
     neutral_charger_checks = 0
@@ -144,8 +144,8 @@ def run_rollout(
     last_pending_action: dict[int, str | None] = {}
     last_cargo: dict[int, int] = {}
     last_gear: dict[int, dict[str, int]] = {}
-    gear_resource_windows = {role: 0 for role in COGSGUARD_GEAR_COSTS}
-    gear_resource_windows_with_adjacent = {role: 0 for role in COGSGUARD_GEAR_COSTS}
+    gear_resource_windows = {role: 0 for role in GEAR_COSTS}
+    gear_resource_windows_with_adjacent = {role: 0 for role in GEAR_COSTS}
     last_collective_snapshot: dict[str, int] | None = None
     resource_trace_lines: list[str] = []
 
@@ -162,17 +162,17 @@ def run_rollout(
             collective_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
         gear_resources_available = {
             role: all(collective_inv.get(resource, 0) >= amount for resource, amount in cost.items())
-            for role, cost in COGSGUARD_GEAR_COSTS.items()
+            for role, cost in GEAR_COSTS.items()
         }
         for role, available in gear_resources_available.items():
             if available:
                 gear_resource_windows[role] += 1
 
-        adjacent_by_role = {role: False for role in COGSGUARD_GEAR_COSTS}
+        adjacent_by_role = {role: False for role in GEAR_COSTS}
         role_counts_step = {role: 0 for role in expected_roles}
         transition_events = 0
-        station_uses_step = {role: 0 for role in COGSGUARD_GEAR_COSTS}
-        station_uses_with_resources_step = {role: 0 for role in COGSGUARD_GEAR_COSTS}
+        station_uses_step = {role: 0 for role in GEAR_COSTS}
+        station_uses_with_resources_step = {role: 0 for role in GEAR_COSTS}
         for agent_id in range(harness.num_agents):
             policy = harness.agent_policies[agent_id]
             base_policy = policy._base_policy if hasattr(policy, "_base_policy") else policy
@@ -189,7 +189,7 @@ def run_rollout(
                 if state.has_gear():
                     role_stats[role]["gear_seen"] = True
 
-                if role in COGSGUARD_GEAR_COSTS and role_enum in ROLE_TO_STRUCTURE_TYPE:
+                if role in GEAR_COSTS and role_enum in ROLE_TO_STRUCTURE_TYPE:
                     station = state.get_structure_position(ROLE_TO_STRUCTURE_TYPE[role_enum])
                     if station and is_adjacent((state.row, state.col), station):
                         adjacent_by_role[role] = True
@@ -201,14 +201,14 @@ def run_rollout(
                     "miner": state.miner,
                     "scout": state.scout,
                 }
-                if role in COGSGUARD_GEAR_COSTS and current_gear.get(role, 0) > gear_snapshot.get(role, 0):
+                if role in GEAR_COSTS and current_gear.get(role, 0) > gear_snapshot.get(role, 0):
                     role_stats[role]["gear_acquired"] += 1
 
                 action_name = state.last_action.name if state.last_action else ""
                 if (
                     state.using_object_this_step
                     and action_name in MOVE_DELTAS
-                    and role in COGSGUARD_GEAR_COSTS
+                    and role in GEAR_COSTS
                     and role_enum in ROLE_TO_STRUCTURE_TYPE
                 ):
                     dr, dc = MOVE_DELTAS[action_name]
@@ -235,10 +235,10 @@ def run_rollout(
                 obj_name = obj_state.name.lower()
                 obj_tags = [tag.lower() for tag in obj_state.tags]
 
-                if _is_assembler_tag(obj_name, obj_tags):
-                    assembler_seen = True
-                    if state.get_structure_position(StructureType.ASSEMBLER) is None:
-                        assembler_missing += 1
+                if _is_hub_tag(obj_name, obj_tags):
+                    hub_seen = True
+                    if state.get_structure_position(StructureType.HUB) is None:
+                        hub_missing += 1
 
                 if not _is_charger_tag(obj_name, obj_tags):
                     continue
@@ -281,9 +281,9 @@ def run_rollout(
                 previous_cargo = last_cargo.get(agent_id, current_cargo)
                 if current_cargo < previous_cargo:
                     aligned_positions: list[tuple[int, int]] = []
-                    assembler_pos = state.get_structure_position(StructureType.ASSEMBLER)
-                    if assembler_pos is not None:
-                        aligned_positions.append(assembler_pos)
+                    hub_pos = state.get_structure_position(StructureType.HUB)
+                    if hub_pos is not None:
+                        aligned_positions.append(hub_pos)
                     for charger in state.get_structures_by_type(StructureType.CHARGER):
                         if charger.alignment == "cogs":
                             aligned_positions.append(charger.position)
@@ -403,8 +403,8 @@ def run_rollout(
 
     print("Cogsguard rollout sanity check")
     print(f"- steps: {steps}")
-    print(f"- assembler seen: {assembler_seen}")
-    print(f"- assembler missing in structures: {assembler_missing}")
+    print(f"- hub seen: {hub_seen}")
+    print(f"- hub missing in structures: {hub_missing}")
     print(f"- tagged/clipped chargers checked: {charger_alignment_checks}")
     print(f"- tagged/clipped charger mismatches: {charger_alignment_mismatches}")
     print(f"- neutral chargers checked: {neutral_charger_checks}")
@@ -491,7 +491,7 @@ def run_rollout(
         for line in resource_trace_lines:
             print(f"- {line}")
 
-    if assembler_seen and assembler_missing:
+    if hub_seen and hub_missing:
         return 1
     if charger_alignment_mismatches:
         return 1

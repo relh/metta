@@ -72,8 +72,8 @@ class CoordinatedGetHeartsGoal(Goal):
         # Find chest
         result = ctx.map.find_nearest(ctx.state.position, type="chest")
         if result is None:
-            # Try assembler as fallback
-            result = ctx.map.find_nearest(ctx.state.position, type="assembler")
+            # Try hub as fallback
+            result = ctx.map.find_nearest(ctx.state.position, type="hub")
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
@@ -237,8 +237,8 @@ def _find_nearest_charger(ctx: PlankyContext) -> Optional[tuple[int, int]]:
         if alignment is None:
             candidates.append((_manhattan(pos, cpos) + 5, cpos))  # Slight penalty for neutral
 
-    # Assembler also provides energy
-    for apos, _ in ctx.map.find(type="assembler"):
+    # Hub also provides energy
+    for apos, _ in ctx.map.find(type="hub"):
         candidates.append((_manhattan(pos, apos) + 3, apos))
 
     if not candidates:
@@ -456,12 +456,12 @@ class CoordinatedAlignGoal(Goal):
         """Score junction by distance + strategic value (lower is better).
 
         Key insight: influence comes from AOE of aligned buildings (hub,
-        assembler, already-aligned junctions). First junction should be
+        hub, already-aligned junctions). First junction should be
         near AOE sources to ensure the agent has influence when it arrives.
         """
         dist = float(_manhattan(pos, jpos))
 
-        # AOE source proximity bonus — agent needs influence (from hub/assembler/
+        # AOE source proximity bonus — agent needs influence (from hub/
         # aligned junctions AOE) to align. Junctions near AOE sources are easier
         # to align because the agent won't run out of influence walking there.
         aoe_bonus = 0.0
@@ -469,7 +469,7 @@ class CoordinatedAlignGoal(Goal):
             if _manhattan(jpos, hpos) <= 10:
                 aoe_bonus -= 8.0
             break
-        for apos, _ in ctx.map.find(type="assembler"):
+        for apos, _ in ctx.map.find(type="hub"):
             if _manhattan(jpos, apos) <= 10:
                 aoe_bonus -= 5.0
             break

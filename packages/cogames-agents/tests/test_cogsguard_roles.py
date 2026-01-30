@@ -26,7 +26,6 @@ def policy_env_info() -> PolicyEnvInterface:
         num_agents=1,
         observation_shape=(1, 1),
         egocentric_shape=(3, 3),
-        assembler_protocols=[],
     )
 
 
@@ -92,8 +91,8 @@ def test_aligner_requires_influence_before_aligning(policy_env_info: PolicyEnvIn
     state.influence = 0
     state.structures[(state.row, state.col + 1)] = StructureInfo(
         position=(state.row, state.col + 1),
-        structure_type=StructureType.ASSEMBLER,
-        name="assembler",
+        structure_type=StructureType.HUB,
+        name="hub",
         alignment="cogs",
     )
     state.structures[(state.row, state.col - 1)] = StructureInfo(
@@ -146,8 +145,8 @@ def test_miner_prefers_nearest_aligned_depot(policy_env_info: PolicyEnvInterface
 
     state.structures[(0, 5)] = StructureInfo(
         position=(0, 5),
-        structure_type=StructureType.ASSEMBLER,
-        name="assembler",
+        structure_type=StructureType.HUB,
+        name="hub",
         alignment="cogs",
     )
     state.structures[(0, 2)] = StructureInfo(

@@ -32,7 +32,7 @@ type
 
     bump: bool
     offsets4: seq[Location]  # 4 cardinal but random for each agent
-    seenAssembler: bool
+    seenHub: bool
     seenChest: bool
     exploreLocations: seq[Location]
 
@@ -63,10 +63,10 @@ const Offsets8 = [
 ]
 
 proc getActiveRecipe(agent: ThinkyAgent): RecipeInfo {.measure.} =
-  ## Get the recipes form the assembler protocol inputs.
-  let assemblerLocation = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-  if assemblerLocation.isSome():
-    let location = assemblerLocation.get()
+  ## Get the recipes form the hub protocol inputs.
+  let hubLocation = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+  if hubLocation.isSome():
+    let location = hubLocation.get()
     # Get the vibe key.
     result.pattern = @[]
     for offsets in Offsets8:
@@ -75,8 +75,8 @@ proc getActiveRecipe(agent: ThinkyAgent): RecipeInfo {.measure.} =
         result.pattern.add(vibeKey)
 
     # Get the required resources.
-    let assemblerFeatures = agent.map[location]
-    for feature in assemblerFeatures:
+    let hubFeatures = agent.map[location]
+    for feature in hubFeatures:
       updateRecipeFromProtocol(agent.cfg, feature, result)
 
 proc newThinkyAgent*(agentId: int, environmentConfig: string): ThinkyAgent =
@@ -382,17 +382,17 @@ proc step*(
 
       if vibe != agent.cfg.vibes.heartA:
         doAction(agent.cfg.actions.vibeHeartA.int32)
-        log "vibing heart for assembler"
+        log "vibing heart for hub"
         return
 
-      let assemblerNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-      if assemblerNearby.isSome():
-        measurePush("assembler nearby")
-        let action = agent.cfg.aStar(agent.location, assemblerNearby.get(), agent.map)
+      let hubNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+      if hubNearby.isSome():
+        measurePush("hub nearby")
+        let action = agent.cfg.aStar(agent.location, hubNearby.get(), agent.map)
         measurePop()
         if action.isSome():
           doAction(action.get().int32)
-          log "going to assembler to build heart"
+          log "going to hub to build heart"
           return
 
     # Dump excess resources.
@@ -556,12 +556,12 @@ proc step*(
       ):
         return
 
-    # Explore locations around the assembler.
+    # Explore locations around the hub.
     block:
-      if not agent.seenAssembler:
-        let assemblerNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-        if assemblerNearby.isSome():
-          agent.seenAssembler = true
+      if not agent.seenHub:
+        let hubNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+        if hubNearby.isSome():
+          agent.seenHub = true
           let keyLocations = [
             Location(x: -10, y: -10),
             Location(x: -10, y: +10),
@@ -569,7 +569,7 @@ proc step*(
             Location(x: +10, y: +10),
           ]
           for keyLocation in keyLocations:
-            let location = assemblerNearby.get() + keyLocation
+            let location = hubNearby.get() + keyLocation
             agent.exploreLocations.add(location)
       if not agent.seenChest:
         let chestNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.chest)
@@ -593,9 +593,9 @@ proc step*(
       var visited: HashSet[Location]
       block exploration:
         var seedLocation = agent.location
-        let assemblerNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-        if assemblerNearby.isSome():
-          seedLocation = assemblerNearby.get()
+        let hubNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+        if hubNearby.isSome():
+          seedLocation = hubNearby.get()
         var queue: Deque[Location]
         queue.addLast(seedLocation)
         visited.incl(seedLocation)

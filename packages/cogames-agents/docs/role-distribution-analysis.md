@@ -18,15 +18,15 @@ discovered. Pure static distributions (planky defaults, pinky defaults) leave pe
 ## 1. Roles in CoGsGuard Mechanics
 
 In CoGsGuard, the competitive objective is **junction alignment**: aligning chargers to your team ("cogs") while denying
-them to the opponent ("clips"). Hearts are produced from four resources (carbon, oxygen, germanium, silicon) via
-assembler recipes.
+them to the opponent ("clips"). Hearts are produced from four resources (carbon, oxygen, germanium, silicon) via hub
+recipes.
 
-| Role          | Primary Function                                       | Win Contribution                               |
-| ------------- | ------------------------------------------------------ | ---------------------------------------------- |
-| **Miner**     | Gather resources from extractors, deposit at assembler | Heart production (resource economy)            |
-| **Scout**     | Explore map, discover extractors/chargers/stations     | Enables all other roles by providing map intel |
-| **Aligner**   | Align neutral/enemy chargers to cogs                   | Direct scoring + team energy via AOE           |
-| **Scrambler** | Scramble enemy-aligned chargers                        | Denial + scoring (neutralize enemy chargers)   |
+| Role          | Primary Function                                   | Win Contribution                               |
+| ------------- | -------------------------------------------------- | ---------------------------------------------- |
+| **Miner**     | Gather resources from extractors, deposit at hub   | Heart production (resource economy)            |
+| **Scout**     | Explore map, discover extractors/chargers/stations | Enables all other roles by providing map intel |
+| **Aligner**   | Align neutral/enemy chargers to cogs               | Direct scoring + team energy via AOE           |
+| **Scrambler** | Scramble enemy-aligned chargers                    | Denial + scoring (neutralize enemy chargers)   |
 
 ---
 
@@ -119,7 +119,7 @@ assembler recipes.
 **Smart coordinator role selection (for `gear` agents):** The `SmartRoleCoordinator.choose_role()` method dynamically
 assigns roles based on team state:
 
-1. If assembler or chest not found → **scout**
+1. If hub or chest not found → **scout**
 2. If no scout in team → **scout**
 3. If no miner in team → **miner**
 4. If no scrambler → **scrambler**

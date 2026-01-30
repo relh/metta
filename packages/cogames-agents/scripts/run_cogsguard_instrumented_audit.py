@@ -21,7 +21,7 @@ from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
 from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
-from cogames.cogs_vs_clips.stations import COGSGUARD_GEAR_COSTS
+from cogames.cogs_vs_clips.stations import GEAR_COSTS
 
 MOVE_DELTAS = {
     "move_north": (-1, 0),
@@ -64,14 +64,14 @@ def run_audit(
     for _ in range(steps):
         harness.step(1)
         role_counts: Counter[str] = Counter()
-        adjacent_roles = {role: False for role in COGSGUARD_GEAR_COSTS}
+        adjacent_roles = {role: False for role in GEAR_COSTS}
 
         collective_inv = {}
         if hasattr(harness.sim, "_c_sim"):
             collective_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
         available_roles = {
             role: all(collective_inv.get(resource, 0) >= amount for resource, amount in cost.items())
-            for role, cost in COGSGUARD_GEAR_COSTS.items()
+            for role, cost in GEAR_COSTS.items()
         }
 
         for agent_id in range(harness.num_agents):
@@ -96,7 +96,7 @@ def run_audit(
             if (
                 state.using_object_this_step
                 and action_name in MOVE_DELTAS
-                and role in COGSGUARD_GEAR_COSTS
+                and role in GEAR_COSTS
                 and role_enum in ROLE_TO_STRUCTURE_TYPE
             ):
                 dr, dc = MOVE_DELTAS[action_name]
@@ -114,7 +114,7 @@ def run_audit(
                 format_role_trace_line(
                     step=harness.step_count,
                     role_counts=dict(role_counts),
-                    roles=COGSGUARD_GEAR_COSTS.keys(),
+                    roles=GEAR_COSTS.keys(),
                     transitions=len(role_transitions),
                 )
             )
@@ -144,7 +144,7 @@ def run_audit(
     for line in resource_trace_lines:
         print(line)
 
-    summary = summarize_role_counts(role_counts_history, COGSGUARD_GEAR_COSTS.keys())
+    summary = summarize_role_counts(role_counts_history, GEAR_COSTS.keys())
     print("Role count summary")
     for role, stats in summary.items():
         print(f"- {role}: min={stats['min']}, max={stats['max']}, avg={stats['avg']:.2f}")

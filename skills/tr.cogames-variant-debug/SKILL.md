@@ -10,6 +10,6 @@ description:
 ## Workflow
 
 - Reproduce with the provided `uv run cogames play` command.
-- Locate variant definitions, map setup, and reward/assembler logic.
+- Locate variant definitions, map setup, and reward/hub logic.
 - Diff against origin/main to isolate the regression.
 - Propose a minimal fix and a verification command.

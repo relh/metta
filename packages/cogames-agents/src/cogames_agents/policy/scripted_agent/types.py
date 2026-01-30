@@ -31,9 +31,9 @@ class BaselineHyperparameters:
     position_history_size: int = 30  # Size of position history buffer
     exploration_area_check_window: int = 30  # Steps to check for stuck area
     exploration_area_size_threshold: int = 7  # Max area size (height/width) to trigger escape
-    exploration_escape_duration: int = 10  # Steps to navigate to assembler when stuck
+    exploration_escape_duration: int = 10  # Steps to navigate to hub when stuck
     exploration_direction_persistence: int = 10  # Steps to persist in one direction
-    exploration_assembler_distance_threshold: int = 10  # Min distance from assembler to trigger escape
+    exploration_hub_distance_threshold: int = 10  # Min distance from hub to trigger escape
 
 
 # Hyperparameter Presets for Ensemble Creation
@@ -48,7 +48,7 @@ BASELINE_HYPERPARAMETER_PRESETS = {
         exploration_area_size_threshold=9,  # Thorough exploration: larger area tolerance
         exploration_escape_duration=8,  # Thorough exploration: shorter escape duration
         exploration_direction_persistence=18,  # Thorough exploration: longer persistence
-        exploration_assembler_distance_threshold=12,  # Thorough exploration: larger distance threshold
+        exploration_hub_distance_threshold=12,  # Thorough exploration: larger distance threshold
     ),
     "conservative": BaselineHyperparameters(
         recharge_threshold_low=50,  # Recharge early
@@ -60,7 +60,7 @@ BASELINE_HYPERPARAMETER_PRESETS = {
         exploration_area_size_threshold=7,
         exploration_escape_duration=10,
         exploration_direction_persistence=10,
-        exploration_assembler_distance_threshold=10,
+        exploration_hub_distance_threshold=10,
     ),
     "aggressive": BaselineHyperparameters(
         recharge_threshold_low=20,  # Low energy tolerance
@@ -72,7 +72,7 @@ BASELINE_HYPERPARAMETER_PRESETS = {
         exploration_area_size_threshold=7,
         exploration_escape_duration=10,
         exploration_direction_persistence=10,
-        exploration_assembler_distance_threshold=10,
+        exploration_hub_distance_threshold=10,
     ),
 }
 
@@ -88,10 +88,10 @@ class Phase(Enum):
     """Goal-driven phases for the baseline agent."""
 
     GATHER = "gather"  # Collect resources (explore if needed)
-    ASSEMBLE = "assemble"  # Make hearts at assembler
+    ASSEMBLE = "assemble"  # Make hearts at hub
     DELIVER = "deliver"  # Deposit hearts to chest
     RECHARGE = "recharge"  # Recharge energy at charger
-    CRAFT_UNCLIP = "craft_unclip"  # Craft unclip items at assembler
+    CRAFT_UNCLIP = "craft_unclip"  # Craft unclip items at hub
     UNCLIP = "unclip"  # Unclip extractors
 
 
@@ -125,7 +125,7 @@ class ObjectState:
     # Inventory (for chests/extractors - maps resource name to amount)
     inventory: dict[str, int] = field(default_factory=dict)
 
-    # Protocol details (recipes for assemblers/extractors)
+    # Protocol details (recipes for hubs/extractors)
     protocol_inputs: dict[str, int] = field(default_factory=dict)
     protocol_outputs: dict[str, int] = field(default_factory=dict)
 
@@ -178,7 +178,7 @@ class SimpleAgentState:
         default_factory=lambda: {"carbon": [], "oxygen": [], "germanium": [], "silicon": []}
     )
     stations: dict[str, tuple[int, int] | None] = field(
-        default_factory=lambda: {"assembler": None, "chest": None, "charger": None}
+        default_factory=lambda: {"hub": None, "chest": None, "charger": None}
     )
 
     # Inventory
@@ -204,10 +204,10 @@ class SimpleAgentState:
     # Track last action for position updates
     last_action: Action = field(default_factory=lambda: Action(name="noop"))
 
-    # Current glyph (vibe) for interacting with assembler
+    # Current glyph (vibe) for interacting with hub
     current_glyph: str = "default"
 
-    # Discovered assembler recipe (dynamically discovered from observations)
+    # Discovered hub recipe (dynamically discovered from observations)
     heart_recipe: Optional[dict[str, int]] = None
 
     # Extractor activation state

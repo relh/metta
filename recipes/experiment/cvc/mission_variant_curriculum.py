@@ -25,20 +25,12 @@ from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.config import vibes
-from mettagrid.config.mettagrid_config import AssemblerConfig, MettaGridConfig
+from mettagrid.config.mettagrid_config import MettaGridConfig
 from recipes.experiment import cogs_v_clips
 from recipes.experiment.architectures import get_architecture
 
 # Diagnostic missions where scripted agents can get reward
-DIAGNOSTIC_MISSIONS: tuple[str, ...] = (
-    "diagnostic_assemble_seeded_near",
-    "diagnostic_assemble_seeded_search",
-    "diagnostic_extract_missing_carbon",
-    "diagnostic_extract_missing_oxygen",
-    "diagnostic_extract_missing_germanium",
-    "diagnostic_extract_missing_silicon",
-    "diagnostic_radial",
-)
+DIAGNOSTIC_MISSIONS: tuple[str, ...] = ("diagnostic_radial",)
 
 # Training facility missions
 TRAINING_FACILITY_MISSIONS: tuple[str, ...] = (
@@ -186,28 +178,6 @@ def resolve_missions(
     return unique_resolved
 
 
-def _deduplicate_assembler_protocols(env: MettaGridConfig) -> None:
-    """Deduplicate assembler protocols to prevent C++ config errors.
-
-    Multiple variants can create duplicate protocols with the same vibes and min_agents.
-    This function removes duplicates, keeping the first occurrence of each unique combination.
-    """
-    assembler = env.game.objects.get("assembler")
-    if not isinstance(assembler, AssemblerConfig):
-        return
-
-    seen = set()
-    deduplicated = []
-    for protocol in assembler.protocols:
-        # Create a key from vibes (sorted for consistency) and min_agents
-        key = (tuple(sorted(protocol.vibes)), protocol.min_agents)
-        if key not in seen:
-            seen.add(key)
-            deduplicated.append(protocol)
-
-    assembler.protocols = deduplicated
-
-
 def _enforce_training_vibes(env: MettaGridConfig) -> None:
     """Enforce the training set of vibes and action space consistency."""
     env.game.vibe_names = [v.name for v in vibes.VIBES]
@@ -286,9 +256,6 @@ def make_curriculum(
 
                     # Enforce training vibes
                     _enforce_training_vibes(mission_env)
-
-                    # Deduplicate assembler protocols to avoid C++ config errors
-                    _deduplicate_assembler_protocols(mission_env)
 
                     # Give each environment a label so per-label rewards can be tracked in stats/W&B.
                     # Use mission:variant format to distinguish variant combinations.
@@ -371,9 +338,6 @@ def make_curriculum(
 
                 # Enforce training vibes
                 _enforce_training_vibes(mission_env)
-
-                # Deduplicate assembler protocols
-                _deduplicate_assembler_protocols(mission_env)
 
                 # Give each environment a label
                 try:

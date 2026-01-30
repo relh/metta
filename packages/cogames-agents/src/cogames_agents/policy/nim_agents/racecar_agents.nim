@@ -40,9 +40,9 @@ type
 
     bump: bool
     offsets4: seq[Location]  # 4 cardinal but random for each agent
-    seenAssembler: bool
+    seenHub: bool
     seenChest: bool
-    assemblerHome: Option[Location]
+    hubHome: Option[Location]
     chestHome: Option[Location]
     exploreLocations: seq[Location]
 
@@ -73,10 +73,10 @@ const Offsets8 = [
 ]
 
 proc getActiveRecipe(agent: RaceCarAgent): RecipeInfo {.measure.} =
-  ## Get the recipes form the assembler protocol inputs.
-  let assemblerLocation = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-  if assemblerLocation.isSome():
-    let location = assemblerLocation.get()
+  ## Get the recipes form the hub protocol inputs.
+  let hubLocation = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+  if hubLocation.isSome():
+    let location = hubLocation.get()
     # Get the vibe key.
     result.pattern = @[]
     for offsets in Offsets8:
@@ -85,8 +85,8 @@ proc getActiveRecipe(agent: RaceCarAgent): RecipeInfo {.measure.} =
         result.pattern.add(vibeKey)
 
     # Get the required resources.
-    let assemblerFeatures = agent.map[location]
-    for feature in assemblerFeatures:
+    let hubFeatures = agent.map[location]
+    for feature in hubFeatures:
       updateRecipeFromProtocol(agent.cfg, feature, result)
 
 proc newRaceCarAgent*(agentId: int, environmentConfig: string): RaceCarAgent =
@@ -113,7 +113,7 @@ proc newRaceCarAgent*(agentId: int, environmentConfig: string): RaceCarAgent =
   result.assignedVibe = none(int)
   result.needsPatternReapply = false
   result.steps = 0
-  result.assemblerHome = none(Location)
+  result.hubHome = none(Location)
   result.chestHome = none(Location)
   result.lastActions = @[]
   # Randomize the offsets4 for each agent, so they take different directions.
@@ -321,12 +321,12 @@ proc step*(
     agent.steps += 1
 
     # Track base infrastructure as soon as we see it and seed exploration around it
-    let assemblerNearbyNow = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-    if assemblerNearbyNow.isSome():
-      let asmLoc = assemblerNearbyNow.get()
-      agent.assemblerHome = some(asmLoc)
-      if not agent.seenAssembler:
-        agent.seenAssembler = true
+    let hubNearbyNow = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+    if hubNearbyNow.isSome():
+      let asmLoc = hubNearbyNow.get()
+      agent.hubHome = some(asmLoc)
+      if not agent.seenHub:
+        agent.seenHub = true
         let keyLocations = [
           Location(x: -10, y: -10),
           Location(x: -10, y: +10),
@@ -429,7 +429,7 @@ proc step*(
         agent.oxygenTarget = 0
         agent.germaniumTarget = 0
 
-    # Vibe-check support: assign and enforce a required vibe from the assembler pattern.
+    # Vibe-check support: assign and enforce a required vibe from the hub pattern.
     proc actionForVibe(cfg: Config, v: int): Option[int] =
       if v == cfg.vibes.default: return some(cfg.actions.vibeDefault)
       if v == cfg.vibes.charger: return some(cfg.actions.vibeCharger)
@@ -444,7 +444,7 @@ proc step*(
       if v == cfg.vibes.heartA: return some(cfg.actions.vibeHeartA)
       if v == cfg.vibes.heartB: return some(cfg.actions.vibeHeartB)
       if v == cfg.vibes.gear: return some(cfg.actions.vibeGear)
-      if v == cfg.vibes.assembler: return some(cfg.actions.vibeAssembler)
+      if v == cfg.vibes.hub: return some(cfg.actions.vibeHub)
       if v == cfg.vibes.chest: return some(cfg.actions.vibeChest)
       if v == cfg.vibes.wall: return some(cfg.actions.vibeWall)
       return none(int)
@@ -466,10 +466,10 @@ proc step*(
         agent.assignedVibe = some(activeRecipe.pattern[idx])
 
       proc patternSatisfied(agent: RaceCarAgent): bool =
-        # Check if all required vibes are present around the assembler location we know.
-        if agent.assemblerHome.isNone():
+        # Check if all required vibes are present around the hub location we know.
+        if agent.hubHome.isNone():
           return false
-        let asmLoc = agent.assemblerHome.get()
+        let asmLoc = agent.hubHome.get()
         var seenVibes: HashSet[int]
         for offset in Offsets8:
           let loc = asmLoc + offset
@@ -486,7 +486,7 @@ proc step*(
         let vibeAction = actionForVibe(agent.cfg, desiredVibe)
         if vibeAction.isSome():
           doAction(vibeAction.get().int32)
-          log "setting vibe to match assembler pattern: " & $desiredVibe
+          log "setting vibe to match hub pattern: " & $desiredVibe
           agent.needsPatternReapply = false
           return
 
@@ -549,17 +549,17 @@ proc step*(
       if vibe != agent.cfg.vibes.heartA:
         doAction(agent.cfg.actions.vibeHeartA.int32)
         markPatternReapply(agent.cfg.vibes.heartA)
-        log "vibing heart for assembler"
+        log "vibing heart for hub"
         return
 
-      let assemblerNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-      if assemblerNearby.isSome():
-        measurePush("assembler nearby")
-        let action = agent.cfg.aStar(agent.location, assemblerNearby.get(), agent.map)
+      let hubNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+      if hubNearby.isSome():
+        measurePush("hub nearby")
+        let action = agent.cfg.aStar(agent.location, hubNearby.get(), agent.map)
         measurePop()
         if action.isSome():
           doAction(action.get().int32)
-          log "going to assembler to build heart"
+          log "going to hub to build heart"
           return
 
     # Dump excess resources.
@@ -631,22 +631,22 @@ proc step*(
           return
 
     # Distance-aware late return: aim to arrive before the episode ends.
-    if agent.assemblerHome.isSome():
-      let distAsm = manhattan(agent.location, agent.assemblerHome.get())
+    if agent.hubHome.isSome():
+      let distAsm = manhattan(agent.location, agent.hubHome.get())
       let buffer = 30
       if stepsRemaining <= distAsm + buffer:
         if invHeart > 0:
-          let target = if agent.chestHome.isSome(): agent.chestHome.get() else: agent.assemblerHome.get()
+          let target = if agent.chestHome.isSome(): agent.chestHome.get() else: agent.hubHome.get()
           let action = agent.cfg.aStar(agent.location, target, agent.map)
           if action.isSome():
             doAction(action.get().int32)
             log "late return: delivering hearts"
             return
         elif invCarbon + invOxygen + invGermanium + invSilicon > 0:
-          let action = agent.cfg.aStar(agent.location, agent.assemblerHome.get(), agent.map)
+          let action = agent.cfg.aStar(agent.location, agent.hubHome.get(), agent.map)
           if action.isSome():
             doAction(action.get().int32)
-            log "late return: heading to assembler with resources"
+            log "late return: heading to hub with resources"
             return
 
     proc findAndTakeResource(
@@ -760,9 +760,9 @@ proc step*(
       var visited: HashSet[Location]
       block exploration:
         var seedLocation = agent.location
-        let assemblerNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.assembler)
-        if assemblerNearby.isSome():
-          seedLocation = assemblerNearby.get()
+        let hubNearby = agent.cfg.getNearby(agent.location, agent.map, agent.cfg.tags.hub)
+        if hubNearby.isSome():
+          seedLocation = hubNearby.get()
         var queue: Deque[Location]
         queue.addLast(seedLocation)
         visited.incl(seedLocation)

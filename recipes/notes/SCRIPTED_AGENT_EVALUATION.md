@@ -205,7 +205,7 @@ agents.
 **Recommended Fix**:
 
 - Debug single-agent UnclippingAgent on simplest clipped_carbon map with detailed logging
-- Verify decoder/scrambler crafting recipes in assembler
+- Verify decoder/scrambler crafting recipes in hub
 - Check carbon/germanium extractor positions and accessibility
 - Test unclip action execution on clipped carbon/germanium extractors
 
@@ -298,7 +298,7 @@ agents.
 ### 🔥 Immediate (P0)
 
 1. **Debug carbon/germanium unclipping**: Highest-value fix for coverage (104 tests = 10% of all tests)
-2. **Verify decoder/scrambler recipes**: Check assembler protocols for these gear types
+2. **Verify decoder/scrambler recipes**: Check hub protocols for these gear types
 
 ### 📋 High Priority (P1)
 

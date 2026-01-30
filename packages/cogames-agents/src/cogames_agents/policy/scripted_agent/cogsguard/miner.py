@@ -8,7 +8,7 @@ Strategy:
 - Extractors are in map corners, aligned buildings provide deposit points
 - Miners should quickly head to corners to find extractors
 - Once extractors are known, alternate between mining and depositing
-- Deposit to nearest aligned building (assembler or cogs-aligned chargers)
+- Deposit to nearest aligned building (hub or cogs-aligned chargers)
 - If gear is lost, collect resources without gear and check for gear on each dropoff
 - Retry failed mine actions up to MAX_RETRIES times
 - HP-aware: Never venture further than can safely return to healing territory
@@ -36,7 +36,7 @@ CORNER_OFFSETS = [
 MAX_RETRIES = 3
 
 # HP management constants
-# Assembler AOE range that provides healing (+100 HP to aligned agents)
+# Hub AOE range that provides healing (+100 HP to aligned agents)
 HEALING_AOE_RANGE = 10
 # Base HP drain per step outside healing AOE (from regen_amounts)
 HP_DRAIN_BASE = 1
@@ -61,16 +61,16 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
     def _get_nearest_aligned_depot(self, s: CogsguardAgentState) -> tuple[int, int] | None:
         """Find the nearest aligned building that accepts deposits.
 
-        Returns position of nearest cogs-aligned building (assembler or charger).
+        Returns position of nearest cogs-aligned building (hub or charger).
         These buildings have healing AOE and accept resource deposits.
         """
         candidates: list[tuple[int, tuple[int, int]]] = []
 
-        # Assembler is always aligned to cogs
-        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
-        if assembler_pos:
-            dist = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
-            candidates.append((dist, assembler_pos))
+        # Hub is always aligned to cogs
+        hub_pos = s.get_structure_position(StructureType.HUB)
+        if hub_pos:
+            dist = abs(hub_pos[0] - s.row) + abs(hub_pos[1] - s.col)
+            candidates.append((dist, hub_pos))
 
         # Check for cogs-aligned chargers
         chargers = s.get_structures_by_type(StructureType.CHARGER)
@@ -87,7 +87,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         return candidates[0][1]
 
     def execute_role(self, s: CogsguardAgentState) -> Action:
-        """Execute miner behavior: continuously gather resources and deposit at assembler.
+        """Execute miner behavior: continuously gather resources and deposit at hub.
 
         If gear is lost, collect resources without gear and check for gear on each dropoff.
         Retry failed mine actions up to MAX_RETRIES times.
@@ -238,7 +238,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         """Handle behavior when miner doesn't have gear.
 
         Strategy: Collect resources even without gear (reduced capacity/extraction rate).
-        Check for gear availability on each dropoff at the assembler.
+        Check for gear availability on each dropoff at the hub.
         """
         # If cargo is full (even with small capacity), deposit and check for gear
         if total_cargo >= cargo_capacity - 1:
@@ -438,7 +438,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
     ) -> "StructureInfo | None":
         """Get extractor prioritized by distance to aligned stations.
 
-        Prioritizes extractors nearest to aligned buildings (assembler/cogs chargers)
+        Prioritizes extractors nearest to aligned buildings (hub/cogs chargers)
         for shorter, safer mining routes.
 
         Considers:

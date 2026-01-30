@@ -9,7 +9,7 @@ const
   ExploreSteps = 8
   RoleNames = ["miner", "scout", "aligner", "scrambler"]
   DepotTags = ["charger", "junction", "supply_depot"]
-  HubTags = ["hub", "assembler", "main_nexus"]
+  HubTags = ["hub", "hub", "main_nexus"]
   StationTags = ["miner_station", "scout_station", "aligner_station", "scrambler_station"]
   ResourceNames = ["carbon", "oxygen", "germanium", "silicon"]
 

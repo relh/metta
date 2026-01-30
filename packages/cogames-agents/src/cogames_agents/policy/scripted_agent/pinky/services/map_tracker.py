@@ -168,7 +168,7 @@ class MapTracker:
             tag_name = self._tag_names.get(tok.value, "")
             obj_name = tag_name.removeprefix("type:")
 
-            # Only track unique identifiable objects (stations, junctions, assemblers)
+            # Only track unique identifiable objects (stations, junctions, hubs)
             if obj_name in self.MATCHABLE_OBJECTS:
                 obs_pos = (obs_r, obs_c)
                 # Keep the most specific name if multiple tags
@@ -226,7 +226,6 @@ class MapTracker:
             "scout_station",
             "aligner_station",
             "scrambler_station",
-            "assembler",
             "nexus",
             "hub",
             "junction",
@@ -447,16 +446,14 @@ class MapTracker:
                 )
             return
 
-        # Check for assembler/nexus/hub
-        if "assembler" in obj_lower or "nexus" in obj_lower or "hub" in obj_lower:
+        # Check for hub/nexus
+        if "hub" in obj_lower or "nexus" in obj_lower:
             state.map.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
-            self._update_structure(
-                state, pos, obj_name, StructureType.ASSEMBLER, "cogs", cooldown, remaining, inv_amount
-            )
-            if "assembler" not in state.map.stations:
-                state.map.stations["assembler"] = pos
+            self._update_structure(state, pos, obj_name, StructureType.HUB, "cogs", cooldown, remaining, inv_amount)
+            if "hub" not in state.map.stations:
+                state.map.stations["hub"] = pos
                 if DEBUG:
-                    print(f"[A{state.agent_id}] MAP: Found assembler at {pos}")
+                    print(f"[A{state.agent_id}] MAP: Found hub at {pos}")
             return
 
         # Check for chest (hearts)

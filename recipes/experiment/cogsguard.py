@@ -11,7 +11,7 @@ from typing import Literal, Optional, Sequence
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.mission import CogsGuardMission
+from cogames.cogs_vs_clips.mission import Mission
 from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -41,7 +41,7 @@ def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
     return list(variants)
 
 
-def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> CogsGuardMission:
+def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> Mission:
     if layout == "machina_1":
         site = make_cogsguard_machina1_site(num_agents)
         description = "Basic CogsGuard mission (Machina1 layout)"
@@ -51,7 +51,7 @@ def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_st
     else:
         raise ValueError(f"Unknown CogsGuard layout: {layout!r}")
 
-    return CogsGuardMission(
+    return Mission(
         name="basic",
         description=description,
         site=site,

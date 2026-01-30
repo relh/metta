@@ -44,7 +44,7 @@ class AgentDebugInfo:
     actual_inventory: dict[str, int] = field(default_factory=dict)
     # Navigation
     target_position: tuple[int, int] | None = None
-    assembler_pos: tuple[int, int] | None = None
+    hub_pos: tuple[int, int] | None = None
     # History
     position_history: list[tuple[int, int]] = field(default_factory=list)
     stuck_count: int = 0
@@ -158,7 +158,7 @@ class DebugHarness:
                 info.current_vibe = state.current_vibe
                 info.last_action = state.last_action.name if state.last_action else None
                 info.target_position = state.target_position
-                info.assembler_pos = state.get_structure_position(StructureType.ASSEMBLER)
+                info.hub_pos = state.get_structure_position(StructureType.HUB)
 
                 # Track position history
                 info.position_history.append(pos)
@@ -334,12 +334,12 @@ class DebugHarness:
             types[t] = types.get(t, 0) + 1
         return dict(sorted(types.items()))
 
-    def find_assemblers(self) -> list[tuple[int, int]]:
-        """Find actual assembler positions in simulation."""
+    def find_hubs(self) -> list[tuple[int, int]]:
+        """Find actual hub positions in simulation."""
         positions = []
         for obj in self.get_grid_objects().values():
             type_name = obj.get("type_name", "")
-            if "assembler" in type_name.lower() or "nexus" in type_name.lower():
+            if "hub" in type_name.lower() or "nexus" in type_name.lower():
                 # Use location tuple or r,c
                 loc = obj.get("location")
                 if loc:
@@ -367,7 +367,7 @@ class DebugHarness:
         """Print simulation state info."""
         print(f"\n=== Simulation Info (step {self.step_count}) ===")
         print(f"Object types: {self.get_object_types()}")
-        print(f"Assemblers at: {self.find_assemblers()}")
+        print(f"Hubs at: {self.find_hubs()}")
 
     def diagnose_stuck_agents(self, threshold: int = 5) -> list[int]:
         """Find and diagnose stuck agents.
@@ -400,11 +400,11 @@ class DebugHarness:
         print(f"Actual inventory: {info.actual_inventory}")
 
         if state:
-            print(f"\nStored assembler location: {info.assembler_pos}")
+            print(f"\nStored hub location: {info.hub_pos}")
 
-            # Find actual assemblers
-            actual_assemblers = self.find_assemblers()
-            print(f"Actual assemblers in sim: {actual_assemblers}")
+            # Find actual hubs
+            actual_hubs = self.find_hubs()
+            print(f"Actual hubs in sim: {actual_hubs}")
 
             # Check nearby structures from state
             if info.internal_pos and hasattr(state, "structures"):
@@ -430,30 +430,28 @@ class DebugHarness:
 
         This diagnosis checks if the internal coordinate system is consistent:
         - Are agents tracking their positions correctly?
-        - Can agents navigate to their believed assembler position?
+        - Can agents navigate to their believed hub position?
         """
         print("\n=== Coordinate System Diagnosis ===")
         print("Note: Internal coords are relative to starting position (centered at ~100,100)")
         print("      Simulation coords are absolute (different coordinate system)")
 
-        # Get actual assembler positions (for reference only)
-        actual_assemblers = self.find_assemblers()
-        print(f"\nActual assembler in simulation (absolute coords): {actual_assemblers}")
+        # Get actual hub positions (for reference only)
+        actual_hubs = self.find_hubs()
+        print(f"\nActual hub in simulation (absolute coords): {actual_hubs}")
 
         # Check what agents believe (internal coords)
         print("\nAgent beliefs (internal relative coords):")
         for i in range(self.num_agents):
             info = self.agent_info[i]
-            if info.assembler_pos:
+            if info.hub_pos:
                 if info.internal_pos:
-                    dx = abs(info.internal_pos[0] - info.assembler_pos[0])
-                    dy = abs(info.internal_pos[1] - info.assembler_pos[1])
-                    dist_to_assembler = dx + dy
+                    dx = abs(info.internal_pos[0] - info.hub_pos[0])
+                    dy = abs(info.internal_pos[1] - info.hub_pos[1])
+                    dist_to_hub = dx + dy
                 else:
-                    dist_to_assembler = "?"
-                print(
-                    f"  Agent {i}: at {info.internal_pos}, assembler at {info.assembler_pos}, dist={dist_to_assembler}"
-                )
+                    dist_to_hub = "?"
+                print(f"  Agent {i}: at {info.internal_pos}, hub at {info.hub_pos}, dist={dist_to_hub}")
 
         # Check for potential issues
         print("\nConsistency check:")
@@ -463,20 +461,17 @@ class DebugHarness:
             state = self.get_agent_state(i)
 
             if state and info.internal_pos:
-                # Check if agent has been stuck trying to deposit (full cargo, near assembler)
-                if info.assembler_pos and info.cargo >= info.cargo_capacity:
-                    dx = abs(info.internal_pos[0] - info.assembler_pos[0])
-                    dy = abs(info.internal_pos[1] - info.assembler_pos[1])
+                # Check if agent has been stuck trying to deposit (full cargo, near hub)
+                if info.hub_pos and info.cargo >= info.cargo_capacity:
+                    dx = abs(info.internal_pos[0] - info.hub_pos[0])
+                    dy = abs(info.internal_pos[1] - info.hub_pos[1])
                     dist = dx + dy
                     if dist <= 2 and info.stuck_count > 20:
                         issues.append(i)
-                        print(
-                            f"  Agent {i}: STUCK near assembler with full cargo! "
-                            f"(dist={dist}, stuck={info.stuck_count})"
-                        )
+                        print(f"  Agent {i}: STUCK near hub with full cargo! (dist={dist}, stuck={info.stuck_count})")
 
         if issues:
-            print(f"\n*** POTENTIAL ISSUE: Agents {issues} stuck near assembler ***")
+            print(f"\n*** POTENTIAL ISSUE: Agents {issues} stuck near hub ***")
             print("This could indicate deposits are failing or navigation issues.")
         else:
             print("  No obvious consistency issues detected.")

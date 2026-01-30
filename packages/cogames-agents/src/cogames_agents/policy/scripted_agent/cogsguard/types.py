@@ -28,7 +28,7 @@ class CogsguardPhase(Enum):
 class StructureType(Enum):
     """Types of structures in the game."""
 
-    ASSEMBLER = "assembler"  # Resource deposit point
+    HUB = "hub"  # Main hub / resource deposit point
     CHARGER = "charger"  # Supply depot
     MINER_STATION = "miner_station"
     SCOUT_STATION = "scout_station"
@@ -51,7 +51,7 @@ class StructureInfo:
     # Common attributes
     last_seen_step: int = 0
 
-    # Alignment (for depots/assemblers): "cogs", "clips", or None (neutral)
+    # Alignment (for depots/hubs): "cogs", "clips", or None (neutral)
     alignment: Optional[str] = None
 
     # Extractor-specific attributes

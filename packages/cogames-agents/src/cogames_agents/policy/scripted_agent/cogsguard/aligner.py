@@ -51,9 +51,9 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"heart={s.heart} energy={s.energy} gear={s.aligner} chargers_known={num_chargers} worked={num_worked}"
             )
 
-        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
-        if assembler_pos is not None:
-            dist_to_hub = abs(assembler_pos[0] - s.row) + abs(assembler_pos[1] - s.col)
+        hub_pos = s.get_structure_position(StructureType.HUB)
+        if hub_pos is not None:
+            dist_to_hub = abs(hub_pos[0] - s.row) + abs(hub_pos[1] - s.col)
             if s.hp <= dist_to_hub + HP_RETURN_BUFFER:
                 if DEBUG and s.step_count % 10 == 0:
                     print(f"[A{s.agent_id}] ALIGNER: Low HP ({s.hp}), returning to hub")
@@ -85,11 +85,11 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 if DEBUG:
                     print(f"[A{s.agent_id}] ALIGNER: Previous align succeeded!")
                 if target is not None and self._smart_role_coordinator is not None:
-                    assembler_pos = s.stations.get("assembler")
+                    hub_pos = s.stations.get("hub")
                     self._smart_role_coordinator.register_charger_alignment(
                         target,
                         "cogs",
-                        assembler_pos,
+                        hub_pos,
                         s.step_count,
                     )
             elif s.should_retry_action(MAX_RETRIES):
@@ -205,27 +205,27 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     return self._move_towards(s, chest_pos, reach_adjacent=True)
                 return self._use_object_at(s, chest_pos)
 
-            # Try assembler as fallback (may have heart AOE or deposit function)
-            assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
-            if assembler_pos is not None:
+            # Try hub as fallback (may have heart AOE or deposit function)
+            hub_pos = s.get_structure_position(StructureType.HUB)
+            if hub_pos is not None:
                 if DEBUG:
-                    print(f"[A{s.agent_id}] ALIGNER: No chest found, trying assembler at {assembler_pos}")
-                if not is_adjacent((s.row, s.col), assembler_pos):
-                    return self._move_towards(s, assembler_pos, reach_adjacent=True)
-                return self._use_object_at(s, assembler_pos)
+                    print(f"[A{s.agent_id}] ALIGNER: No chest found, trying hub at {hub_pos}")
+                if not is_adjacent((s.row, s.col), hub_pos):
+                    return self._move_towards(s, hub_pos, reach_adjacent=True)
+                return self._use_object_at(s, hub_pos)
 
             # Neither found - explore to find them
             if DEBUG:
-                print(f"[A{s.agent_id}] ALIGNER: No chest/assembler found, exploring")
+                print(f"[A{s.agent_id}] ALIGNER: No chest/hub found, exploring")
             s._heart_wait_start = 0
             return self._explore(s)
 
-        # Just need influence - wait for AOE regeneration near assembler
-        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
-        if assembler_pos is None:
+        # Just need influence - wait for AOE regeneration near hub
+        hub_pos = s.get_structure_position(StructureType.HUB)
+        if hub_pos is None:
             return self._explore(s)
-        if not is_adjacent((s.row, s.col), assembler_pos):
-            return self._move_towards(s, assembler_pos, reach_adjacent=True)
+        if not is_adjacent((s.row, s.col), hub_pos):
+            return self._move_towards(s, hub_pos, reach_adjacent=True)
         return self._noop()
 
     def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
@@ -242,8 +242,8 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         recent_candidates: list[tuple[int, tuple[int, int]]] = []
         if self._smart_role_coordinator is not None:
-            assembler_pos = s.stations.get("assembler")
-            recent_targets = self._smart_role_coordinator.recent_scramble_targets(assembler_pos, s.step_count)
+            hub_pos = s.stations.get("hub")
+            recent_targets = self._smart_role_coordinator.recent_scramble_targets(hub_pos, s.step_count)
             for pos in recent_targets:
                 last_worked = s.worked_chargers.get(pos, 0)
                 if last_worked > 0 and s.step_count - last_worked < cooldown:

@@ -57,11 +57,11 @@ class SafetyManager:
         return state.hp <= hp_needed
 
     def is_in_safe_zone(self, state: AgentState) -> bool:
-        """Check if agent is within AOE of any cogs-aligned junction or assembler."""
-        # Check assembler
-        assembler_pos = state.map.stations.get("assembler")
-        if assembler_pos:
-            dist = abs(state.row - assembler_pos[0]) + abs(state.col - assembler_pos[1])
+        """Check if agent is within AOE of any cogs-aligned junction or hub."""
+        # Check hub
+        hub_pos = state.map.stations.get("hub")
+        if hub_pos:
+            dist = abs(state.row - hub_pos[0]) + abs(state.col - hub_pos[1])
             if dist <= JUNCTION_AOE_RANGE:
                 return True
 
@@ -82,14 +82,14 @@ class SafetyManager:
         return False
 
     def nearest_safe_zone(self, state: AgentState) -> Optional[tuple[int, int]]:
-        """Find nearest cogs-aligned building (assembler or junction)."""
+        """Find nearest cogs-aligned building (hub or junction)."""
         candidates: list[tuple[int, tuple[int, int]]] = []
 
-        # Assembler is always cogs-aligned
-        assembler_pos = state.map.stations.get("assembler")
-        if assembler_pos:
-            dist = abs(assembler_pos[0] - state.row) + abs(assembler_pos[1] - state.col)
-            candidates.append((dist, assembler_pos))
+        # Hub is always cogs-aligned
+        hub_pos = state.map.stations.get("hub")
+        if hub_pos:
+            dist = abs(hub_pos[0] - state.row) + abs(hub_pos[1] - state.col)
+            candidates.append((dist, hub_pos))
 
         # Cogs junctions
         for junction in state.map.get_cogs_junctions():

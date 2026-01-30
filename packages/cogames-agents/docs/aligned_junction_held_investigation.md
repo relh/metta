@@ -35,13 +35,13 @@ The game is designed with an energy-based economy:
 - **Move action costs**: 3 energy per move
 - **Agent initial energy**: 100
 - **Base energy regen**: +1 energy/tick
-- **Assembler AOE (expected)**: +100 energy/tick to cogs agents within range 10
+- **Hub AOE (expected)**: +100 energy/tick to cogs agents within range 10
 
-**Problem**: The assembler's AOE energy buff is NOT being applied to agents.
+**Problem**: The hub's AOE energy buff is NOT being applied to agents.
 
 In testing, I observed:
 
-- Agent spawns at (26, 26), assembler at (29, 29) - distance 6 (within AOE range 10)
+- Agent spawns at (26, 26), hub at (29, 29) - distance 6 (within AOE range 10)
 - Agent starts with 100 energy
 - After 1 step: energy = 10 (dropped 90!)
 - Expected: energy should increase to 200+ from AOE
@@ -67,7 +67,7 @@ The game design creates a catch-22:
 - Agents need energy to move to junctions
 - Junctions provide energy AOE when aligned to cogs
 - But junctions start aligned to clips (enemy)
-- The assembler should provide energy, but its AOE isn't working
+- The hub should provide energy, but its AOE isn't working
 
 ## Configuration Details
 
@@ -85,7 +85,7 @@ inventory.regen_amounts = {'default': {'energy': 1, 'hp': -1, 'influence': -1}}
 actions.move = MoveActionConfig(consumed_resources={'energy': 3})
 ```
 
-### Assembler AOE (Hub)
+### Hub AOE (Hub)
 
 ```python
 aoes = [
@@ -104,15 +104,15 @@ aoes = [
 
 ### Junction AOE
 
-Same structure as assembler, but junctions are clips-aligned, so they:
+Same structure as hub, but junctions are clips-aligned, so they:
 
 - Give +100 energy to clips agents
 - Deal -1 hp to cogs agents
 
 ## Recommendations
 
-1. **Investigate AOE Application Bug**: The assembler's energy AOE is not being applied to cogs agents. Check if there's
-   a bug in the collective alignment matching for AOE effects.
+1. **Investigate AOE Application Bug**: The hub's energy AOE is not being applied to cogs agents. Check if there's a bug
+   in the collective alignment matching for AOE effects.
 
 2. **Reduce Move Energy Cost**: Consider lowering from 3 to 1 or 2 to make agents more mobile.
 

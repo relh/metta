@@ -18,14 +18,14 @@ is rebuilt each episode from a deterministic pipeline:
 3. **Dungeon zones** (DFS mazes, Kruskal mazes, radial mazes) overlay up to 20% of the area.
 4. **Asteroid boundary mask** carves the outer border into an irregular ring (enabled for maps >= 80x80).
 5. **Building placement** distributes extractors and chargers across the walkable area at 1.75% coverage.
-6. **Central hub** places the assembler, chest, spawn points, and role stations.
+6. **Central hub** places the hub, chest, spawn points, and role stations.
 7. **Connectivity pass** ensures all zones are reachable.
 
 ### Key Structures
 
 | Structure           | Role                                                   | Placement                          |
 | ------------------- | ------------------------------------------------------ | ---------------------------------- |
-| Assembler           | Craft hearts from 4 resources                          | Central hub                        |
+| Hub                 | Craft hearts from 4 resources                          | Central hub                        |
 | Chest               | Store/transfer resources and hearts                    | Central hub                        |
 | Charger             | Recharge agent energy (50 energy/use)                  | Distributed (weight 0.6)           |
 | Carbon extractor    | 2 carbon/use, 25 uses, no cooldown                     | Distributed (weight 0.3) + corners |
@@ -52,8 +52,8 @@ Higher tiers are more efficient (4 hearts for 2.5x the cost of 1 heart).
   into dead-end wall pockets near borders.
 - **Mixed biomes**: Cave regions have narrow corridors (chokepoints), forest regions have scattered obstacles, city
   regions have grid-like paths, desert regions are open. Agents need robust pathfinding.
-- **Central hub convergence**: All agents spawn near the assembler/chest. Early game is a scramble for nearby
-  extractors; mid/late game requires traversing biome zones to reach distant resources.
+- **Central hub convergence**: All agents spawn near the hub/chest. Early game is a scramble for nearby extractors;
+  mid/late game requires traversing biome zones to reach distant resources.
 - **Resource scarcity gradient**: Carbon is abundant (25 uses, no cooldown) but yields only 2 per use. Germanium is
   scarce (5 uses, 20k cooldown) but has synergy bonuses. Silicon is energy-expensive. Oxygen has long cooldowns.
   Germanium and silicon are the bottleneck resources.
@@ -229,7 +229,7 @@ charger access.
 
 3. **Prioritize tier-4 heart assembly.** Batch resources for tier-4 recipes (25C, 25O, 5Ge, 75Si -> 4 hearts) rather
    than crafting tier-1 hearts individually. This is 60% more efficient per resource unit. Agents should accumulate
-   resources (cargo capacity 100) before visiting the assembler.
+   resources (cargo capacity 100) before visiting the hub.
 
 4. **Germanium synergy exploitation.** Germanium extractors have synergy=50, meaning multiple agents extracting
    simultaneously get bonus yields. Coordinate 2+ miners to arrive at germanium extractors together. This is the single
@@ -238,7 +238,7 @@ charger access.
 ### Tier 2: Medium-Impact Improvements
 
 5. **Energy-aware silicon mining.** Silicon costs 20 energy per extraction. Miners should ensure charger access before
-   committing to silicon runs. Route planning: charger -> silicon extractor -> charger -> assembler.
+   committing to silicon runs. Route planning: charger -> silicon extractor -> charger -> hub.
 
 6. **Adaptive role switching mid-episode.** After the map is fully scouted (typically by step 2000-3000 on 88x88),
    convert the scout to a miner or aligner. The control agent's 40-step reassignment cycle enables this.
@@ -320,7 +320,7 @@ This would produce generation-over-generation shifts in the role population.
 ### Recommended Evolution Improvements for Machina1
 
 1. **Wire fitness scoring**: Connect `record_agent_performance()` to episode-end metrics (hearts produced, chargers
-   aligned, resources gathered). Use the `assembler.heart.created` metric that the sweep system already tracks.
+   aligned, resources gathered). Use the `hub.heart.created` metric that the sweep system already tracks.
 
 2. **Make evolved roles drive behavior**: Instead of mapping roles to vibe strings, use `materialize_role_behaviors()`
    to produce actual behavior sequences that the agent executes tier-by-tier.

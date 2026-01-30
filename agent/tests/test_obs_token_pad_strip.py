@@ -20,7 +20,6 @@ def _make_policy_env_info(feature_map) -> PolicyEnvInterface:
         num_agents=1,
         observation_shape=(100, 3),  # Not used in test
         egocentric_shape=(7, 7),  # Not used in test
-        assembler_protocols=[],
     )
 
 

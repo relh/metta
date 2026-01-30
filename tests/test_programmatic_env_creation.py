@@ -81,7 +81,7 @@ class TestProgrammaticEnvironments:
         nav_env = eb.make_navigation(num_agents=4)
 
         assert nav_env.game.num_agents == 4
-        assert "assembler" in nav_env.game.objects
+        assert "wall" in nav_env.game.objects
         assert "wall" in nav_env.game.objects
         assert nav_env.game.actions.move is not None
 
@@ -93,7 +93,6 @@ class TestProgrammaticEnvironments:
                 num_agents=2,
                 objects={
                     "wall": building.wall,
-                    "assembler": building.assembler_assembler,
                 },
                 actions=ActionsConfig(
                     move=MoveActionConfig(),

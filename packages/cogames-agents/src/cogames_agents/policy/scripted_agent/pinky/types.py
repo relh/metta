@@ -45,7 +45,7 @@ class CellType(Enum):
 class StructureType(Enum):
     """Types of structures in the game."""
 
-    ASSEMBLER = "assembler"  # Resource deposit point (cogs nexus)
+    HUB = "hub"  # Main hub / resource deposit point (cogs nexus)
     JUNCTION = "junction"  # Territory control point (charger/supply depot)
     MINER_STATION = "miner_station"
     SCOUT_STATION = "scout_station"

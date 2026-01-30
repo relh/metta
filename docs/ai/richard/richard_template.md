@@ -376,7 +376,7 @@ These are candidate slash commands derived from Codex session logs where `cwd=/U
 
 - Intent: Debug CoGames mission/variant behavior regressions.
 - Inputs: `uv run cogames play` command, expected vs observed behavior.
-- Actions: locate variant definitions, reward/assembler logic, and map setup; diff vs main to find regressions.
+- Actions: locate variant definitions, reward/hub logic, and map setup; diff vs main to find regressions.
 - Output: cause + patch suggestion + repro/verify command.
 
 ### /tr.recipe-curriculum-audit

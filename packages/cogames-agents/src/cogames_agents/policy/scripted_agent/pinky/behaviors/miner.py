@@ -418,11 +418,11 @@ class MinerBehavior:
             dist = manhattan_distance(state.pos, junction.position)
             candidates.append((dist, junction.position))
 
-        # Hub/assembler is always cogs-aligned
-        assembler_pos = state.map.stations.get("assembler")
-        if assembler_pos:
-            dist = manhattan_distance(state.pos, assembler_pos)
-            candidates.append((dist, assembler_pos))
+        # Hub is always cogs-aligned
+        hub_pos = state.map.stations.get("hub")
+        if hub_pos:
+            dist = manhattan_distance(state.pos, hub_pos)
+            candidates.append((dist, hub_pos))
 
         if not candidates:
             if DEBUG:
@@ -614,11 +614,11 @@ class MinerBehavior:
         """Get nearest COGS-ALIGNED hub/junction for deposit."""
         candidates: list[tuple[int, tuple[int, int]]] = []
 
-        # Assembler/hub (always cogs-aligned)
-        assembler_pos = state.map.stations.get("assembler")
-        if assembler_pos:
-            dist = manhattan_distance(state.pos, assembler_pos)
-            candidates.append((dist, assembler_pos))
+        # Hub (always cogs-aligned)
+        hub_pos = state.map.stations.get("hub")
+        if hub_pos:
+            dist = manhattan_distance(state.pos, hub_pos)
+            candidates.append((dist, hub_pos))
 
         # Only cogs-aligned junctions (NOT neutral, NOT clips)
         for junction in state.map.get_cogs_junctions():

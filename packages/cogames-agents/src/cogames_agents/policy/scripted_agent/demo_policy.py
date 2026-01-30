@@ -62,7 +62,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             and (
                 is_wall(obj.name)
                 or "extractor" in obj.name
-                or is_station(obj.name, "assembler")
+                or is_station(obj.name, "hub")
                 or is_station(obj.name, "chest")
                 or is_station(obj.name, "charger")
                 or (obj.name == "agent" and obj.agent_group != s.agent_id)
@@ -106,7 +106,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             and (
                 is_wall(obj.name)
                 or "extractor" in obj.name
-                or is_station(obj.name, "assembler")
+                or is_station(obj.name, "hub")
                 or is_station(obj.name, "chest")
                 or is_station(obj.name, "charger")
                 or (obj.name == "agent" and obj.agent_group != s.agent_id)
@@ -155,20 +155,20 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         # Learn recipe if visible
         if s.heart_recipe is None:
             for _pos, obj in parsed.nearby_objects.items():
-                if obj.name == "assembler" and obj.protocol_outputs.get("heart", 0) > 0:
+                if obj.name == "hub" and obj.protocol_outputs.get("heart", 0) > 0:
                     s.heart_recipe = {k: v for k, v in obj.protocol_inputs.items() if k != "energy"}
 
-        # ---------------- PRE-PHASE: find assembler to learn recipe ----------------
+        # ---------------- PRE-PHASE: find hub to learn recipe ----------------
         if s.heart_recipe is None:
             if s.current_glyph != "heart_a":
                 s.current_glyph = "heart_a"
                 return change_vibe_action("heart_a", action_names=self._action_names), s
 
-            assembler = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "assembler"))
-            if assembler:
-                if self._adjacent(s, assembler):
-                    return use_object_at(s, assembler), s
-                return self._step_towards(s, assembler, parsed), s
+            hub = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "hub"))
+            if hub:
+                if self._adjacent(s, hub):
+                    return use_object_at(s, hub), s
+                return self._step_towards(s, hub, parsed), s
 
             return self._random_step(s, parsed), s
 
@@ -192,14 +192,14 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             and s.germanium >= s.heart_recipe.get("germanium", 0)
             and s.silicon >= s.heart_recipe.get("silicon", 0)
         ):
-            assembler = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "assembler"))
-            if assembler:
+            hub = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "hub"))
+            if hub:
                 if s.current_glyph != "heart_a":
                     s.current_glyph = "heart_a"
                     return change_vibe_action("heart_a", action_names=self._action_names), s
-                if self._adjacent(s, assembler):
-                    return use_object_at(s, assembler), s
-                return self._step_towards(s, assembler, parsed), s
+                if self._adjacent(s, hub):
+                    return use_object_at(s, hub), s
+                return self._step_towards(s, hub, parsed), s
 
         # Gather needed resources
         deficits = {

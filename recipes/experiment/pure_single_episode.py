@@ -7,7 +7,7 @@ import uuid
 
 from metta_alo.rollout import PureSingleEpisodeJob
 
-from cogames.cogs_vs_clips.missions import Machina1OpenWorldSharedRewardsMission
+from cogames.cogs_vs_clips.missions import make_cogsguard_mission
 from metta.app_backend.clients.base_client import get_machine_token
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.tool import Tool
@@ -65,9 +65,7 @@ def run_example(
         num_agents = len(policy_uris)
         assignments = list(range(num_agents))  # agent i uses policy i
 
-    # Set num_cogs before make_env so SharedRewardsVariant uses the correct agent count
-    mission = Machina1OpenWorldSharedRewardsMission.model_copy(deep=True)
-    mission.num_cogs = num_agents
+    mission = make_cogsguard_mission(num_agents=num_agents)
     env = mission.make_env()
 
     return PureSingleEpisodeTool(

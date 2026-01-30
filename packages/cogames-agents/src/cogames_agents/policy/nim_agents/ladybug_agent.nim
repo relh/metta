@@ -55,12 +55,12 @@ const
   explorationAreaSizeThreshold = 9
   explorationEscapeDuration = 8
   explorationDirectionPersistence = 18
-  explorationAssemblerDistanceThreshold = 12
+  explorationHubDistanceThreshold = 12
   cellFree = 1
   cellObstacle = 2
   parentSentinel = (-9999, -9999)
   ResourceTypes = ["carbon", "oxygen", "germanium", "silicon"]
-  StationKeys = ["assembler", "chest", "charger"]
+  StationKeys = ["hub", "chest", "charger"]
   DirectionNames = ["north", "south", "east", "west"]
   CardinalNeighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
   DefaultHeartRecipe = [
@@ -143,8 +143,8 @@ proc clearCachedPath(agent: LadybugAgent) =
   agent.state.cachedPathReachAdjacent = false
 
 proc stationFromName(lowerName: string): string =
-  if lowerName.contains("assembler"):
-    "assembler"
+  if lowerName.contains("hub"):
+    "hub"
   elif lowerName.contains("chest"):
     "chest"
   elif lowerName.contains("charger"):
@@ -153,7 +153,7 @@ proc stationFromName(lowerName: string): string =
     ""
 
 proc initHeartRecipeFromConfig(agent: LadybugAgent) =
-  for protocol in agent.cfg.assemblerProtocols:
+  for protocol in agent.cfg.hubProtocols:
     if protocol.outputResources.getOrDefault("heart", 0) > 0:
       agent.state.heartRecipe = initTable[string, int]()
       for resource, amount in protocol.inputResources.pairs:
@@ -311,7 +311,7 @@ proc discoverObjects(agent: LadybugAgent, visible: Table[Location, seq[FeatureVa
     if stationKey.len > 0:
       agent.state.occupancy[world.y][world.x] = cellObstacle
       discoverStation(agent, stationKey, world)
-      if stationKey == "assembler" and (not agent.state.heartRecipeKnown) and
+      if stationKey == "hub" and (not agent.state.heartRecipeKnown) and
           obj.protocolOutputs.getOrDefault("heart", 0) > 0:
         agent.state.heartRecipe = initTable[string, int]()
         for resource, amount in obj.protocolInputs.pairs:
@@ -426,7 +426,7 @@ proc handleWaiting(agent: LadybugAgent): Option[int] =
 proc calculateDeficits(agent: LadybugAgent): Table[string, int] =
   if not agent.state.heartRecipeKnown:
     raise newException(ValueError,
-      "Heart recipe not discovered! Agent must observe assembler with correct vibe to learn recipe. Ensure protocol_details_obs=True in game config.")
+      "Heart recipe not discovered! Agent must observe hub with correct vibe to learn recipe. Ensure protocol_details_obs=True in game config.")
   result = initTable[string, int]()
   for resource in ResourceTypes:
     let required = agent.state.heartRecipe.getOrDefault(resource, 0)
@@ -632,21 +632,21 @@ proc explore(agent: LadybugAgent): int =
     if steps >= explorationDirectionPersistence:
       agent.state.explorationDirection = ""
 
-  # Escape mode: navigate toward assembler if stuck recently
+  # Escape mode: navigate toward hub if stuck recently
   if agent.state.explorationEscapeUntilStep > agent.state.stepCount:
     agent.state.explorationDirection = ""
-    if agent.state.stations["assembler"].isSome():
-      let assemblerLoc = agent.state.stations["assembler"].get()
-      if isAdjacent(agent.state.row, agent.state.col, assemblerLoc.y, assemblerLoc.x):
+    if agent.state.stations["hub"].isSome():
+      let hubLoc = agent.state.stations["hub"].get()
+      if isAdjacent(agent.state.row, agent.state.col, hubLoc.y, hubLoc.x):
         agent.state.explorationEscapeUntilStep = 0
       else:
-        return agent.moveTowards(assemblerLoc.y, assemblerLoc.x, reachAdjacent = true)
+        return agent.moveTowards(hubLoc.y, hubLoc.x, reachAdjacent = true)
     else:
       agent.state.explorationEscapeUntilStep = 0
   else:
     # Check if we've stayed within a small area recently; if so, trigger escape
     let historyLen = agent.state.positionHistory.len
-    if historyLen >= explorationAreaCheckWindow and agent.state.stations["assembler"].isSome():
+    if historyLen >= explorationAreaCheckWindow and agent.state.stations["hub"].isSome():
       var minRow = high(int)
       var maxRow = low(int)
       var minCol = high(int)
@@ -664,12 +664,12 @@ proc explore(agent: LadybugAgent): int =
       let areaHeight = maxRow - minRow + 1
       let areaWidth = maxCol - minCol + 1
       if areaHeight <= explorationAreaSizeThreshold and areaWidth <= explorationAreaSizeThreshold:
-        let assemblerLoc = agent.state.stations["assembler"].get()
-        let dist = abs(agent.state.row - assemblerLoc.y) + abs(agent.state.col - assemblerLoc.x)
-        if dist > explorationAssemblerDistanceThreshold:
+        let hubLoc = agent.state.stations["hub"].get()
+        let dist = abs(agent.state.row - hubLoc.y) + abs(agent.state.col - hubLoc.x)
+        if dist > explorationHubDistanceThreshold:
           agent.state.explorationEscapeUntilStep = agent.state.stepCount + explorationEscapeDuration
           agent.state.explorationDirection = ""
-          return agent.moveTowards(assemblerLoc.y, assemblerLoc.x, reachAdjacent = true)
+          return agent.moveTowards(hubLoc.y, hubLoc.x, reachAdjacent = true)
 
   if agent.state.explorationDirection.len > 0:
     let action = agent.stepInDirection(agent.state.explorationDirection)
@@ -793,7 +793,7 @@ proc vibeAction(agent: LadybugAgent, vibe: string): int =
   of "heart_b": agent.cfg.actions.vibeHeartB
   of "charger": agent.cfg.actions.vibeCharger
   of "gear": agent.cfg.actions.vibeGear
-  of "assembler": agent.cfg.actions.vibeAssembler
+  of "hub": agent.cfg.actions.vibeHub
   of "chest": agent.cfg.actions.vibeChest
   of "wall": agent.cfg.actions.vibeWall
   of "default": agent.cfg.actions.vibeDefault
@@ -836,12 +836,12 @@ proc doGather(agent: LadybugAgent): int =
 proc doAssemble(agent: LadybugAgent): int =
   agent.state.targetResource = ""
   let exploreAction = agent.exploreUntil(
-    proc (): bool = agent.state.stations["assembler"].isSome(),
-    "need assembler"
+    proc (): bool = agent.state.stations["hub"].isSome(),
+    "need hub"
   )
   if exploreAction.isSome():
     return exploreAction.get()
-  let loc = agent.state.stations["assembler"].get()
+  let loc = agent.state.stations["hub"].get()
   let nav = agent.navigateToAdjacent(loc.y, loc.x)
   if nav.isSome():
     return nav.get()

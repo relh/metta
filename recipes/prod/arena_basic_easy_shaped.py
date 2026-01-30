@@ -253,7 +253,7 @@ def sweep(sweep_name: str) -> SweepTool:
         # Evaluations in sweeps are currently being fixed.
         eval_entrypoint="evaluate_stub",
         # Typically, "evaluator/eval_{suite}/score"
-        metric_key="env_game/assembler.hearts.created",
+        metric_key="env_game/hub.hearts.created",
         search_space=parameters,
         max_trials=80,
         # Default value is 1. We don't recommend going higher than 4.

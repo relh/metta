@@ -98,7 +98,7 @@ def log_training_progress(
     stats_time: float,
     run_name: str | None,
     metrics: Dict[str, float],
-    metric_key: str = "env_game/assembler.heart.created",
+    metric_key: str = "reward",
 ) -> None:
     """Log training progress with timing breakdown and optional metrics."""
 
@@ -113,11 +113,7 @@ def log_training_progress(
 
     metric_value = metrics.get(f"{metric_key}.avg", metrics.get(metric_key, 0.0))
     metric_rate = metrics.get(f"{metric_key}.rate")
-    if metric_key == "env_game/assembler.heart.created":
-        metric_label_rich = "heart.c"
-        metric_label_plain = "heart.created"
-    else:
-        metric_label_rich = metric_label_plain = metric_key.split("/")[-1]
+    metric_label_rich = metric_label_plain = metric_key.split("/")[-1]
 
     if should_use_rich_console():
         log_rich_progress(
@@ -185,7 +181,7 @@ class ProgressLogger(TrainerComponent):
         metric_key = getattr(
             getattr(stats_reporter, "config", None),
             "progress_metric",
-            "env_game/assembler.heart.created",
+            "reward",
         )
         log_training_progress(
             epoch=ctx.epoch,

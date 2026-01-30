@@ -87,7 +87,7 @@ if TYPE_CHECKING:
 # Debug flag - set to True to see detailed agent behavior
 DEBUG = False
 GEAR_SEARCH_OFFSETS = [
-    # BaseHub places stations ~4-5 rows below the assembler, spaced by 2 columns.
+    # BaseHub places stations ~4-5 rows below the hub, spaced by 2 columns.
     # Search those slots first to capture early gear windows.
     (4, -4),
     (4, -2),
@@ -135,12 +135,12 @@ class SmartRoleCoordinator:
     recent_scrambles: dict[tuple[int, int], int] = field(default_factory=dict)
 
     def update_agent(self, s: CogsguardAgentState) -> None:
-        assembler_pos = s.stations.get("assembler")
-        if assembler_pos is not None:
-            self._record_known_chargers(s, assembler_pos)
-            self._record_known_stations(s, assembler_pos)
-            self._apply_alignment_overrides(s, assembler_pos)
-            self._apply_station_overrides(s, assembler_pos)
+        hub_pos = s.stations.get("hub")
+        if hub_pos is not None:
+            self._record_known_chargers(s, hub_pos)
+            self._record_known_stations(s, hub_pos)
+            self._apply_alignment_overrides(s, hub_pos)
+            self._apply_station_overrides(s, hub_pos)
         charger_counts = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
         for struct in s.get_structures_by_type(StructureType.CHARGER):
             bucket = self._normalize_alignment(struct.alignment)
@@ -162,12 +162,12 @@ class SmartRoleCoordinator:
         self,
         pos: tuple[int, int],
         alignment: Optional[str],
-        assembler_pos: Optional[tuple[int, int]],
+        hub_pos: Optional[tuple[int, int]],
         step: Optional[int] = None,
     ) -> None:
-        if assembler_pos is None:
+        if hub_pos is None:
             return
-        offset = (pos[0] - assembler_pos[0], pos[1] - assembler_pos[1])
+        offset = (pos[0] - hub_pos[0], pos[1] - hub_pos[1])
         self.charger_alignment_overrides[offset] = alignment
         if step is None:
             return
@@ -178,12 +178,12 @@ class SmartRoleCoordinator:
 
     def recent_scramble_targets(
         self,
-        assembler_pos: Optional[tuple[int, int]],
+        hub_pos: Optional[tuple[int, int]],
         step: int,
         *,
         max_age: int = 200,
     ) -> list[tuple[int, int]]:
-        if assembler_pos is None:
+        if hub_pos is None:
             return []
         targets: list[tuple[int, int]] = []
         stale_offsets: list[tuple[int, int]] = []
@@ -191,31 +191,31 @@ class SmartRoleCoordinator:
             if step - scramble_step > max_age:
                 stale_offsets.append(offset)
                 continue
-            targets.append((assembler_pos[0] + offset[0], assembler_pos[1] + offset[1]))
+            targets.append((hub_pos[0] + offset[0], hub_pos[1] + offset[1]))
         for offset in stale_offsets:
             self.recent_scrambles.pop(offset, None)
         return targets
 
-    def _record_known_chargers(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+    def _record_known_chargers(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
         for charger in s.get_structures_by_type(StructureType.CHARGER):
-            offset = (charger.position[0] - assembler_pos[0], charger.position[1] - assembler_pos[1])
+            offset = (charger.position[0] - hub_pos[0], charger.position[1] - hub_pos[1])
             if offset not in self.charger_alignment_overrides and charger.alignment is not None:
                 self.charger_alignment_overrides[offset] = charger.alignment
 
-    def _record_known_stations(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+    def _record_known_stations(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
         for name, pos in s.stations.items():
-            if pos is None or name in ("assembler", "charger"):
+            if pos is None or name in ("hub", "charger"):
                 continue
             if name not in self.station_offsets:
-                self.station_offsets[name] = (pos[0] - assembler_pos[0], pos[1] - assembler_pos[1])
+                self.station_offsets[name] = (pos[0] - hub_pos[0], pos[1] - hub_pos[1])
 
-    def _apply_station_overrides(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+    def _apply_station_overrides(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
         if not self.station_offsets:
             return
         for name, offset in self.station_offsets.items():
             if s.stations.get(name) is not None:
                 continue
-            pos = (assembler_pos[0] + offset[0], assembler_pos[1] + offset[1])
+            pos = (hub_pos[0] + offset[0], hub_pos[1] + offset[1])
             if not (0 <= pos[0] < s.map_height and 0 <= pos[1] < s.map_width):
                 continue
             s.stations[name] = pos
@@ -228,11 +228,11 @@ class SmartRoleCoordinator:
                 )
             s.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
 
-    def _apply_alignment_overrides(self, s: CogsguardAgentState, assembler_pos: tuple[int, int]) -> None:
+    def _apply_alignment_overrides(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
         if not self.charger_alignment_overrides:
             return
         for offset, alignment in self.charger_alignment_overrides.items():
-            pos = (assembler_pos[0] + offset[0], assembler_pos[1] + offset[1])
+            pos = (hub_pos[0] + offset[0], hub_pos[1] + offset[1])
             if not (0 <= pos[0] < s.map_height and 0 <= pos[1] < s.map_width):
                 continue
             struct = s.structures.get(pos)
@@ -253,7 +253,7 @@ class SmartRoleCoordinator:
 
         if s.supply_depots:
             for idx, (pos, _alignment) in enumerate(s.supply_depots):
-                offset = (pos[0] - assembler_pos[0], pos[1] - assembler_pos[1])
+                offset = (pos[0] - hub_pos[0], pos[1] - hub_pos[1])
                 if offset in self.charger_alignment_overrides:
                     s.supply_depots[idx] = (pos, self.charger_alignment_overrides[offset])
 
@@ -282,7 +282,7 @@ class SmartRoleCoordinator:
             return random.choice(ROLE_VIBES)
 
         structures_known = self._aggregate_structures()
-        if "assembler" not in structures_known or "chest" not in structures_known:
+        if "hub" not in structures_known or "chest" not in structures_known:
             return "scout"
 
         role_counts = self._aggregate_role_counts()
@@ -491,7 +491,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Debug logging
         if DEBUG and s.step_count <= 50:  # Only first 50 steps per agent
             gear_status = "HAS_GEAR" if s.has_gear() else "NO_GEAR"
-            nexus_pos = s.get_structure_position(StructureType.ASSEMBLER) or "NOT_FOUND"
+            nexus_pos = s.get_structure_position(StructureType.HUB) or "NOT_FOUND"
             print(
                 f"[A{s.agent_id}] Step {s.step_count}: vibe={s.current_vibe} role={s.role.value} | "
                 f"Phase={s.phase.value} | {gear_status} | "
@@ -664,16 +664,15 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHARGER, obj_state)
 
-            # Discover assembler (the resource deposit point)
-            # In cogsguard, the assembler object uses "hub" or "main_nexus" tags.
-            is_assembler = (
-                "assembler" in obj_name
-                or obj_name in {"main_nexus", "hub"}
-                or any("assembler" in tag or "main_nexus" in tag or "hub" in tag or "nexus" in tag for tag in obj_tags)
+            # Discover hub (the main base / resource deposit point)
+            is_hub = (
+                "hub" in obj_name
+                or obj_name in {"main_nexus"}
+                or any("hub" in tag or "main_nexus" in tag or "nexus" in tag for tag in obj_tags)
             )
-            if is_assembler:
+            if is_hub:
                 s.occupancy[r][c] = CellType.OBSTACLE.value
-                self._update_structure(s, pos, obj_name, StructureType.ASSEMBLER, obj_state)
+                self._update_structure(s, pos, obj_name, StructureType.HUB, obj_state)
 
             # Discover chest (for hearts) - exclude extractors which are ChestConfig-backed.
             resources = ["carbon", "oxygen", "germanium", "silicon"]
@@ -777,7 +776,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             )
 
         if structure_type in {
-            StructureType.ASSEMBLER,
+            StructureType.HUB,
             StructureType.CHEST,
             StructureType.MINER_STATION,
             StructureType.SCOUT_STATION,
@@ -809,7 +808,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         """Derive alignment from object name, tags, clipped status, and structure type.
 
         In CoGsGuard:
-        - Assembler/nexus = cogs-aligned
+        - Hub/nexus = cogs-aligned
         - Charger/supply_depot alignment comes from tags/collectives
         """
         obj_lower = obj_name.lower()
@@ -823,14 +822,12 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         if clipped:
             return "clips"
         # Structure type defaults:
-        # - Assembler/nexus defaults to cogs (main cogs building)
-        if structure_type == StructureType.ASSEMBLER:
+        # - Hub/nexus defaults to cogs (main cogs building)
+        if structure_type == StructureType.HUB:
             if (
                 "nexus" in obj_lower
-                or "assembler" in obj_lower
                 or "hub" in obj_lower
                 or any("nexus" in tag for tag in tag_lowers)
-                or any("assembler" in tag for tag in tag_lowers)
                 or any("hub" in tag for tag in tag_lowers)
             ):
                 return "cogs"
@@ -906,7 +903,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         """
         # The main_nexus is cogs-aligned and has AOE that gives energy to cogs agents
         # The supply_depot is clips-aligned and won't give energy to cogs agents
-        nexus_pos = s.get_structure_position(StructureType.ASSEMBLER)
+        nexus_pos = s.get_structure_position(StructureType.HUB)
         if nexus_pos is None:
             if DEBUG:
                 print(f"[A{s.agent_id}] RECHARGE: No nexus found, exploring")
@@ -973,7 +970,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                 return self._explore(s)
         station_name = s.get_gear_station_name()
         station_pos = s.get_structure_position(s.get_gear_station_type())
-        assembler_pos = s.get_structure_position(StructureType.ASSEMBLER)
+        hub_pos = s.get_structure_position(StructureType.HUB)
 
         if DEBUG and s.step_count <= 10:
             known_structures = sorted({struct.structure_type.value for struct in s.structures.values()})
@@ -987,9 +984,9 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     return self._move_towards(s, scout_station, reach_adjacent=True)
                 return self._use_object_at(s, scout_station)
 
-            if assembler_pos is not None:
+            if hub_pos is not None:
                 offset = GEAR_SEARCH_OFFSETS[(s.agent_id + s.step_count // 10) % len(GEAR_SEARCH_OFFSETS)]
-                target = (assembler_pos[0] + offset[0], assembler_pos[1] + offset[1])
+                target = (hub_pos[0] + offset[0], hub_pos[1] + offset[1])
                 return self._move_towards(s, target, reach_adjacent=True)
 
             if DEBUG:
@@ -1669,10 +1666,10 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         if s._pending_action_type is not None:
             return s.role
 
-        assembler_known = s.stations.get("assembler") is not None
+        hub_known = s.stations.get("hub") is not None
         chest_known = s.stations.get("chest") is not None
 
-        if not assembler_known:
+        if not hub_known:
             return Role.SCOUT
 
         if s._pending_alignment_target is not None:
@@ -1708,7 +1705,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
             num_agents=self._policy_env_info.num_agents,
             has_enemy_chargers=has_enemy_chargers,
             has_neutral_chargers=has_neutral_chargers,
-            assembler_known=assembler_known,
+            hub_known=hub_known,
             step_count=s.step_count,
         )
         deficit_role = self._pick_deficit_role(s, role_counts, target_counts)
@@ -1746,7 +1743,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         return True
 
     def _role_is_ready(self, s: CogsguardAgentState, role: Role) -> bool:
-        if role in (Role.ALIGNER, Role.SCRAMBLER) and s.stations.get("assembler") is None:
+        if role in (Role.ALIGNER, Role.SCRAMBLER) and s.stations.get("hub") is None:
             return False
         if role in (Role.MINER, Role.SCOUT):
             return True
@@ -1757,7 +1754,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         num_agents: int,
         has_enemy_chargers: bool,
         has_neutral_chargers: bool,
-        assembler_known: bool,
+        hub_known: bool,
         step_count: int,
     ) -> dict[Role, int]:
         targets: dict[Role, int] = {}
@@ -1766,7 +1763,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         else:
             targets[Role.SCOUT] = 1
         targets[Role.MINER] = max(4, num_agents // 2)
-        if assembler_known:
+        if hub_known:
             targets[Role.SCRAMBLER] = 2 if has_enemy_chargers else 1
             targets[Role.ALIGNER] = 2 if has_neutral_chargers else 1
         return targets
@@ -1799,7 +1796,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
             return False
         if s.energy >= s.MOVE_ENERGY_COST * self.MIN_ENERGY_BUFFER:
             return False
-        return s.stations.get("assembler") is not None
+        return s.stations.get("hub") is not None
 
     def _role_has_gear(self, s: CogsguardAgentState, role: Role) -> bool:
         return getattr(s, ROLE_TO_GEAR[role], 0) > 0
@@ -1884,7 +1881,7 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
         if aligned_count < self.TARGET_ALIGNED_JUNCTIONS:
             if s._pending_action_type is not None:
                 return s.role
-            if s.stations.get("assembler") is None:
+            if s.stations.get("hub") is None:
                 return Role.SCOUT
             if s.role in (Role.SCRAMBLER, Role.ALIGNER) and s.has_gear():
                 return s.role
@@ -1901,7 +1898,7 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
                 return False
             if s.energy >= s.MOVE_ENERGY_COST * self.MIN_ENERGY_BUFFER:
                 return False
-            return s.stations.get("assembler") is not None
+            return s.stations.get("hub") is not None
         return super()._should_recharge(s)
 
     def _target_role_counts(
@@ -1909,14 +1906,14 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
         num_agents: int,
         has_enemy_chargers: bool,
         has_neutral_chargers: bool,
-        assembler_known: bool,
+        hub_known: bool,
         step_count: int,
     ) -> dict[Role, int]:
         targets = super()._target_role_counts(
             num_agents=num_agents,
             has_enemy_chargers=has_enemy_chargers,
             has_neutral_chargers=has_neutral_chargers,
-            assembler_known=assembler_known,
+            hub_known=hub_known,
             step_count=step_count,
         )
 
@@ -1926,7 +1923,7 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
 
         if aligned_count < self.TARGET_ALIGNED_JUNCTIONS:
             targets[Role.SCOUT] = max(targets.get(Role.SCOUT, 0), self.JUNCTION_PUSH_SCOUTS)
-            if assembler_known:
+            if hub_known:
                 targets[Role.SCRAMBLER] = max(targets.get(Role.SCRAMBLER, 0), self.JUNCTION_PUSH_SCRAMBLERS)
                 targets[Role.ALIGNER] = max(targets.get(Role.ALIGNER, 0), self.JUNCTION_PUSH_ALIGNERS)
             targets[Role.MINER] = max(self.MIN_MINERS, num_agents // 2)

@@ -180,8 +180,8 @@ constant pressure requiring both expansion and defense.
 
 ### Heart Assembly
 
-Hearts are created at Assembler stations by combining 4 resources: carbon, oxygen, germanium, and silicon. Hearts are
-consumed when capturing (Aligner) or disrupting (Scrambler) junctions.
+Hearts are created at Hub stations by combining 4 resources: carbon, oxygen, germanium, and silicon. Hearts are consumed
+when capturing (Aligner) or disrupting (Scrambler) junctions.
 
 ## 5. Training Pipeline
 
@@ -321,7 +321,7 @@ heart_capacity: 1
 
 **Environmental:** DarkSide (no regen), SuperCharged (+2 regen), RoughTerrain (+2 move cost), SolarFlare (-50% charger)
 
-**Mechanic:** SharedRewards, HeartChorus, AssemblerDrawsFromChests, BalancedCorners
+**Mechanic:** SharedRewards, HeartChorus, HubDrawsFromChests, BalancedCorners
 
 **Evaluation sets:** diagnostic_evals (30+), integrated_evals (7), spanning_evals
 

@@ -102,11 +102,11 @@ class StatsReporterConfig(Config):
     """How often to report stats (in epochs)"""
     rolling_window: int = Field(default=5, ge=1, description="Number of epochs for metric rolling averages")
     default_zero_metrics: tuple[str, ...] = Field(
-        default_factory=lambda: ("env_game/assembler.heart.created",),
+        default_factory=tuple,
         description="Environment metrics that should be logged as 0 when missing.",
     )
     progress_metric: str = Field(
-        default="env_game/assembler.heart.created",
+        default="reward",
         description="Metric key to show in CLI progress output.",
     )
 
@@ -350,7 +350,7 @@ class StatsReporter(TrainerComponent):
         overview["avg_reward_estimate_min"] = float(avg_reward_tensor.min().item())
         overview["avg_reward_estimate_max"] = float(avg_reward_tensor.max().item())
 
-        # Ensure certain env metrics always exist (e.g., env_game/assembler.heart.created) so rolling
+        # Ensure certain env metrics always exist so rolling
         # averages and wandb logs see zeros instead of missing keys.
         env_stats = processed.setdefault("environment_stats", {})
         if isinstance(env_stats, dict):

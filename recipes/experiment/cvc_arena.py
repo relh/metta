@@ -19,22 +19,11 @@ from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgre
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
-from mettagrid.builder import building
-from mettagrid.config import AssemblerConfig, MettaGridConfig
+from mettagrid.config import MettaGridConfig
 
 
 def mettagrid(num_agents: int = 24) -> MettaGridConfig:
     arena_env = eb.make_arena(num_agents=num_agents)
-
-    arena_env.game.objects.update(
-        {
-            "assembler": building.assembler_assembler,
-            "mine_red": building.assembler_mine_red,
-            "generator_red": building.assembler_generator_red,
-            "lasery": building.assembler_lasery,
-            "armory": building.assembler_armory,
-        }
-    )
 
     return arena_env
 
@@ -101,48 +90,6 @@ def train(
         trainer=trainer_cfg,
         training_env=TrainingEnvironmentConfig(curriculum=resolved_curriculum),
         evaluator=evaluator_cfg,
-    )
-
-
-def train_shaped(rewards: bool = True, assemblers: bool = True) -> tools.TrainTool:
-    env_cfg = mettagrid()
-    env_cfg.game.agent.rewards.inventory["heart"] = 1
-    env_cfg.game.agent.rewards.inventory_max["heart"] = 100
-
-    if rewards:
-        env_cfg.game.agent.rewards.inventory.update(
-            {
-                "ore_red": 0.1,
-                "battery_red": 0.8,
-                "laser": 0.5,
-                "armor": 0.5,
-                "blueprint": 0.5,
-            }
-        )
-        env_cfg.game.agent.rewards.inventory_max.update(
-            {
-                "ore_red": 1,
-                "battery_red": 1,
-                "laser": 1,
-                "armor": 1,
-                "blueprint": 1,
-            }
-        )
-
-    if assemblers:
-        # Update assembler recipe to require battery_red input
-        assembler_config = env_cfg.game.objects["assembler"]
-        assert isinstance(assembler_config, AssemblerConfig)
-        assembler_config.protocols[0].input_resources["battery_red"] = 1
-
-    trainer_cfg = TrainerConfig()
-
-    curriculum = cc.env_curriculum(env_cfg)
-
-    return tools.TrainTool(
-        trainer=trainer_cfg,
-        training_env=TrainingEnvironmentConfig(curriculum=curriculum),
-        evaluator=EvaluatorConfig(simulations=simulations(env_cfg)),
     )
 
 

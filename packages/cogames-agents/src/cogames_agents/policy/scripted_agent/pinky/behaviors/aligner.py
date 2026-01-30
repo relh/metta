@@ -260,13 +260,13 @@ class AlignerBehavior:
         chest_pos = state.map.stations.get("chest")
 
         if chest_pos is None:
-            # Try assembler as fallback (can also give hearts)
-            assembler_pos = state.map.stations.get("assembler")
-            if assembler_pos is not None:
-                chest_pos = assembler_pos
+            # Try hub as fallback (can also give hearts)
+            hub_pos = state.map.stations.get("hub")
+            if hub_pos is not None:
+                chest_pos = hub_pos
             else:
                 if DEBUG and state.step % 20 == 0:
-                    print(f"[A{state.agent_id}] ALIGNER: No chest/assembler found, exploring")
+                    print(f"[A{state.agent_id}] ALIGNER: No chest/hub found, exploring")
                 state.debug_info = DebugInfo(mode="explore", goal="find_chest", target_object="chest")
                 return services.navigator.explore(state)
 
@@ -350,7 +350,7 @@ class AlignerBehavior:
         max_dist = services.safety.max_safe_distance(state, self.risk_tolerance)
 
         # Get hub position for prioritization
-        hub_pos = state.map.stations.get("assembler") or state.map.stations.get("hub")
+        hub_pos = state.map.stations.get("hub")
 
         # Get all clips junction positions for distance check
         clips_junctions = state.map.get_clips_junctions()

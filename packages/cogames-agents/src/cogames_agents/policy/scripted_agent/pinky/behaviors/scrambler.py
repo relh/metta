@@ -266,13 +266,13 @@ class ScramblerBehavior:
         chest_pos = state.map.stations.get("chest")
 
         if chest_pos is None:
-            # Try assembler as fallback
-            assembler_pos = state.map.stations.get("assembler")
-            if assembler_pos is not None:
-                chest_pos = assembler_pos
+            # Try hub as fallback
+            hub_pos = state.map.stations.get("hub")
+            if hub_pos is not None:
+                chest_pos = hub_pos
             else:
                 if DEBUG:
-                    print(f"[A{state.agent_id}] SCRAMBLER: No chest/assembler, exploring")
+                    print(f"[A{state.agent_id}] SCRAMBLER: No chest/hub, exploring")
                 state.debug_info = DebugInfo(mode="explore", goal="find_chest", target_object="chest")
                 return services.navigator.explore(state)
 

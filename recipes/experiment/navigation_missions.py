@@ -10,10 +10,10 @@ from cogames.cogs_vs_clips.mission import Mission
 from cogames.cogs_vs_clips.stations import (
     CarbonExtractorConfig,
     ChargerConfig,
-    CvCAssemblerConfig,
     CvCChestConfig,
     CvCWallConfig,
     GermaniumExtractorConfig,
+    HubConfig,
     OxygenExtractorConfig,
     SiliconExtractorConfig,
 )
@@ -41,12 +41,12 @@ def _cleanup_nav_env(env: MettaGridConfig) -> MettaGridConfig:
     charger_cfg = ChargerConfig()
     chest_cfg = CvCChestConfig()
     wall_cfg = CvCWallConfig()
-    assembler_cfg = CvCAssemblerConfig()
+    hub_cfg = HubConfig()
 
     env.game.objects.update(
         {
             "wall": wall_cfg.station_cfg(),
-            "assembler": assembler_cfg.station_cfg(),
+            "hub": hub_cfg.station_cfg(),
             "chest": chest_cfg.station_cfg(),
             "charger": charger_cfg.station_cfg(),
             "carbon_extractor": carbon_cfg.station_cfg(),
@@ -179,7 +179,7 @@ class NavigationDenseMission(Mission):
         if isinstance(default_instance, NavigationFromNumpy.Config):
             objects = default_instance.objects
         else:
-            objects = {"assembler": 10}
+            objects = {"hub": 10}
 
         map_builder.instance = NavigationFromNumpy.Config(
             agents=num_agents,

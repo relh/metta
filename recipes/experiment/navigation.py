@@ -37,7 +37,7 @@ def make_nav_ascii_env(
     border_width: int = 6,
     instance_border_width: int = 3,
 ) -> MettaGridConfig:
-    # we re-use nav sequence maps, but replace all objects with assemblers
+    # we re-use nav sequence maps, but replace all objects with hubs
     path = f"packages/mettagrid/configs/maps/navigation_sequence/{name}.map"
 
     env = eb.make_navigation(num_agents=num_agents * num_instances)
@@ -45,9 +45,9 @@ def make_nav_ascii_env(
 
     map_instance = AsciiMapBuilder.Config.from_uri(path)
 
-    # Replace objects with assemblers by setting char_to_map_name (char -> map_name, the stable ASCII map key).
-    map_instance.char_to_map_name["n"] = "assembler"
-    map_instance.char_to_map_name["m"] = "assembler"
+    # Replace objects with hubs by setting char_to_map_name (char -> map_name, the stable ASCII map key).
+    map_instance.char_to_map_name["n"] = "hub"
+    map_instance.char_to_map_name["m"] = "hub"
 
     env.game.map_builder = MapGen.Config(
         instances=num_instances,
@@ -70,7 +70,7 @@ def make_emptyspace_sparse_env() -> MettaGridConfig:
             border_width=3,
             instance=MeanDistance.Config(
                 mean_distance=30,
-                objects={"assembler": 3},
+                objects={"hub": 3},
             ),
         ),
     )
@@ -109,7 +109,7 @@ def mettagrid(num_agents: int = 1, num_instances: int = 4) -> MettaGridConfig:
         instance_border_width=3,
         instance=NavigationFromNumpy.Config(
             agents=num_agents,
-            objects={"assembler": 10},
+            objects={"hub": 10},
             dir="varied_terrain/dense_large",
         ),
     )
@@ -136,18 +136,18 @@ def make_curriculum(
             maps.append(f"varied_terrain/{terrain}_{size}")
 
     dense_tasks.add_bucket("game.map_builder.instance.dir", maps)
-    dense_tasks.add_bucket("game.map_builder.instance.objects.assembler", [Span(3, 50)])
+    dense_tasks.add_bucket("game.map_builder.instance.objects.hub", [Span(3, 50)])
 
     # sparse environments are just random maps
     sparse_nav_env = nav_env.model_copy()
     sparse_nav_env.game.map_builder = RandomMapBuilder.Config(
         agents=4,
-        objects={"assembler": 10},
+        objects={"hub": 10},
     )
     sparse_tasks = cc.bucketed(sparse_nav_env)
     sparse_tasks.add_bucket("game.map_builder.width", [Span(60, 120)])
     sparse_tasks.add_bucket("game.map_builder.height", [Span(60, 120)])
-    sparse_tasks.add_bucket("game.map_builder.objects.assembler", [Span(1, 10)])
+    sparse_tasks.add_bucket("game.map_builder.objects.hub", [Span(1, 10)])
 
     nav_tasks = cc.merge([dense_tasks, sparse_tasks])
 

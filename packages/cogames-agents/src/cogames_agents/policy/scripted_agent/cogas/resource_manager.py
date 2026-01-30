@@ -31,7 +31,7 @@ MAX_ROUTE_LENGTH = 5  # Max extractors in a planned route
 STALE_EXTRACTOR_AGE = 200  # Steps before extractor info is stale
 
 # Alignment gear resource priorities (resources needed for team gear crafting)
-# Assemblers convert deposited resources into gear -- prioritize balance
+# Hubs convert deposited resources into gear -- prioritize balance
 GEAR_RESOURCE_WEIGHTS = {
     "carbon": 1.0,
     "oxygen": 1.0,
@@ -59,7 +59,7 @@ class DepotInfo:
     """Tracked deposit location."""
 
     position: tuple[int, int]
-    depot_type: str  # "assembler", "junction", "charger"
+    depot_type: str  # "hub", "junction", "charger"
     alignment: Optional[str] = None
     last_seen_step: int = 0
 
@@ -129,11 +129,11 @@ class ResourceManager:
                     )
 
     def _update_depots(self, ctx: PlankyContext) -> None:
-        """Scan visible depots (assemblers, cogs junctions/chargers)."""
-        for pos, _ in ctx.map.find(type="assembler"):
+        """Scan visible depots (hubs, cogs junctions/chargers)."""
+        for pos, _ in ctx.map.find(type="hub"):
             self._depots[pos] = DepotInfo(
                 position=pos,
-                depot_type="assembler",
+                depot_type="hub",
                 alignment="cogs",
                 last_seen_step=ctx.step,
             )
@@ -367,7 +367,7 @@ class ResourceManager:
     def find_best_depot(self, ctx: PlankyContext) -> Optional[tuple[int, int]]:
         """Find nearest cogs-aligned depot for depositing.
 
-        Prefers assemblers over junctions (assemblers convert to gear).
+        Prefers hubs over junctions (hubs convert to gear).
         """
         pos = ctx.state.position
         candidates: list[tuple[float, tuple[int, int]]] = []
@@ -376,8 +376,8 @@ class ResourceManager:
             if depot.alignment != "cogs":
                 continue
             dist = float(_manhattan(pos, dpos))
-            # Assemblers are preferred (convert resources to gear)
-            if depot.depot_type == "assembler":
+            # Hubs are preferred (convert resources to gear)
+            if depot.depot_type == "hub":
                 dist -= 5.0
             candidates.append((dist, dpos))
 

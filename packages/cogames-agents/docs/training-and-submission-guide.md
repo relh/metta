@@ -281,7 +281,7 @@ uv run python scripts/run_cogsguard_rollout.py \
 
 What it checks:
 
-- Assembler discovery and structure registration
+- Hub discovery and structure registration
 - Charger alignment consistency (cogs vs clips tags)
 - All four roles observed (miner, scout, aligner, scrambler)
 - Miner deposits resources near aligned structures

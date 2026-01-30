@@ -14,7 +14,7 @@ from typing import Dict
 from pydantic import Field
 
 from cogames.cogs_vs_clips.cog import CogConfig
-from cogames.cogs_vs_clips.mission import CogsGuardMission, Site
+from cogames.cogs_vs_clips.mission import Mission, Site
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
@@ -62,7 +62,7 @@ def _get_planky_map(map_name: str) -> MapGenConfig:
 # ---------------------------------------------------------------------------
 
 
-class _PlankyDiagnosticBase(CogsGuardMission):
+class _PlankyDiagnosticBase(Mission):
     """Base class for Planky behavior evaluation missions.
 
     Provides:

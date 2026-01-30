@@ -2,7 +2,7 @@ import { TileSet, TileSetSource } from "./TileSet";
 import { TileSetCollection } from "./TileSetCollection";
 
 export const TILE_NAMES = [
-  "assembler",
+  "hub",
   "armory",
   "factory",
   "generator",
@@ -43,7 +43,7 @@ export const TILE_NAMES = [
 
 const objects = [...TILE_NAMES, "agent"].map((name) => {
   // TODO: Consolidate sizes or store them along with the name
-  const size = name === "assembler" ? 192 : name === "agent" ? 256 : 64;
+  const size = name === "hub" ? 192 : name === "agent" ? 256 : 64;
 
   return {
     src: `/mettascope-assets/objects/${name}.png`,

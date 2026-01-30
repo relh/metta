@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from cogames.cogs_vs_clips.stations import COGSGUARD_GEAR_COSTS
+from cogames.cogs_vs_clips.stations import GEAR_COSTS
 
-TRACE_RESOURCES = tuple(sorted({resource for costs in COGSGUARD_GEAR_COSTS.values() for resource in costs}))
+TRACE_RESOURCES = tuple(sorted({resource for costs in GEAR_COSTS.values() for resource in costs}))
 
 
 def inventory_snapshot(collective_inv: dict[str, int], resources: Iterable[str]) -> dict[str, int]:
@@ -29,8 +29,8 @@ def format_resource_trace_line(
 ) -> str:
     inv_str = " ".join(f"{resource}={inventory[resource]}" for resource in TRACE_RESOURCES)
     delta_str = " ".join(f"{resource}={delta[resource]:+d}" for resource in TRACE_RESOURCES)
-    uses_str = " ".join(f"{role}={station_uses.get(role, 0)}" for role in COGSGUARD_GEAR_COSTS)
-    uses_with_str = " ".join(f"{role}={station_uses_with_resources.get(role, 0)}" for role in COGSGUARD_GEAR_COSTS)
+    uses_str = " ".join(f"{role}={station_uses.get(role, 0)}" for role in GEAR_COSTS)
+    uses_with_str = " ".join(f"{role}={station_uses_with_resources.get(role, 0)}" for role in GEAR_COSTS)
     adjacent_str = ",".join(role for role, adjacent in adjacent_roles.items() if adjacent) or "-"
     available_str = ",".join(role for role, available in available_roles.items() if available) or "-"
     return (

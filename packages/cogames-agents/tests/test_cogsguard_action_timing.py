@@ -18,7 +18,6 @@ def policy_env_info() -> PolicyEnvInterface:
         num_agents=1,
         observation_shape=(1, 1),
         egocentric_shape=(3, 3),
-        assembler_protocols=[],
     )
 
 

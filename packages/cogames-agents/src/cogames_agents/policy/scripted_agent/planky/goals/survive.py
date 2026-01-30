@@ -48,9 +48,9 @@ class SurviveGoal(Goal):
 def _is_in_safe_zone(ctx: PlankyContext) -> bool:
     """Check if agent is within AOE of any cogs structure."""
     pos = ctx.state.position
-    # Check assembler
-    assemblers = ctx.map.find(type="hub")
-    for apos, _ in assemblers:
+    # Check hub
+    hubs = ctx.map.find(type="hub")
+    for apos, _ in hubs:
         if _manhattan(pos, apos) <= JUNCTION_AOE_RANGE:
             return True
     # Check cogs junctions

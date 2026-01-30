@@ -128,10 +128,10 @@ def _load_all_missions() -> Dict[str, Mission]:
 def _ensure_vibe_supports_gear(env_cfg) -> None:
     # Keep minimal and silent if anything fails
     try:
-        assembler = env_cfg.game.objects.get("assembler")
+        hub = env_cfg.game.objects.get("hub")
         uses_gear = False
-        if assembler is not None and hasattr(assembler, "protocols"):
-            for proto in assembler.protocols:
+        if hub is not None and hasattr(hub, "protocols"):
+            for proto in hub.protocols:
                 if any(v == "gear" for v in getattr(proto, "vibes", [])):
                     uses_gear = True
                     break

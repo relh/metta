@@ -53,7 +53,7 @@ class GetHeartsGoal(Goal):
         # Find chest
         result = ctx.map.find_nearest(ctx.state.position, type="chest")
         if result is None:
-            # Try assembler as fallback
+            # Try hub as fallback
             result = ctx.map.find_nearest(ctx.state.position, type="hub")
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)

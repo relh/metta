@@ -63,8 +63,7 @@ The current version of the game can be found [here](https://huggingface.co/metta
 with the following dynamics:
 
 - **Agents and Vision**: Agents can see a limited number of squares around them.
-- **Resources**: Agents harvest diamonds, convert them to energy at charger stations, and use energy to power the "heart
-  assembler" for rewards.
+- **Resources**: Agents harvest diamonds and convert them to energy at charger stations.
 - **Energy Management**: All actions cost energy, so agents learn to manage their energy budgets efficiently.
 - **Combat**: Agents can attack others, temporarily freezing the target and stealing resources.
 - **Defense**: Agents can toggle shields, which drain energy but absorb attacks.

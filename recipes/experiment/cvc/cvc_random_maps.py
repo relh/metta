@@ -16,7 +16,6 @@ import metta.tools as tools
 from cogames.cogs_vs_clips.evals.integrated_evals import EVAL_MISSIONS
 from cogames.cogs_vs_clips.mission import Mission, NumCogsVariant
 from cogames.cogs_vs_clips.sites import HELLO_WORLD
-from cogames.cogs_vs_clips.variants import TrainingVariant
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
     CurriculumConfig,
@@ -28,59 +27,9 @@ from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.config import vibes as vibes_module
-from mettagrid.config.mettagrid_config import ProtocolConfig
 from mettagrid.mapgen.mapgen import MapGen
 from mettagrid.mapgen.scenes.random import Random
 from recipes.experiment import cogs_v_clips
-
-
-def _make_assembler_protocols(
-    vibes_required: list[str],
-    first_heart_cost: int = 10,
-    additional_heart_cost: int = 5,
-) -> list[ProtocolConfig]:
-    """Create assembler protocols with configurable vibe requirements.
-
-    Args:
-        vibes_required: List of vibes that activate the heart-making protocol.
-                       E.g., ["heart_a"] means only heart_a works,
-                       ["default", "heart_a"] means either works.
-        first_heart_cost: Base resource cost for 1 heart
-        additional_heart_cost: Additional cost per extra heart
-    """
-    gear = [
-        ("carbon", "decoder"),
-        ("oxygen", "modulator"),
-        ("germanium", "scrambler"),
-        ("silicon", "resonator"),
-    ]
-
-    # Heart-making protocols (1-4 hearts)
-    heart_protocols = [
-        ProtocolConfig(
-            vibes=vibes_required * (i + 1),  # Need more vibes for more hearts
-            input_resources={
-                "carbon": first_heart_cost + additional_heart_cost * i,
-                "oxygen": first_heart_cost + additional_heart_cost * i,
-                "germanium": max(1, (first_heart_cost + additional_heart_cost * i) // 5),
-                "silicon": 3 * (first_heart_cost + additional_heart_cost * i),
-            },
-            output_resources={"heart": i + 1},
-        )
-        for i in range(4)
-    ]
-
-    # Gear-making protocols
-    gear_protocols = [
-        ProtocolConfig(
-            vibes=["gear", f"{g[0]}_a"],
-            input_resources={g[0]: 1},
-            output_resources={g[1]: 1},
-        )
-        for g in gear
-    ]
-
-    return heart_protocols + gear_protocols
 
 
 def make_random_maps_curriculum(
@@ -112,7 +61,7 @@ def make_random_maps_curriculum(
         description="Random procedural maps with varying dimensions and object counts",
         site=HELLO_WORLD,
         num_cogs=num_cogs,
-        variants=[TrainingVariant()],  # Apply training variant for better learnability
+        variants=[],
     )
 
     # Create base environment
@@ -134,8 +83,6 @@ def make_random_maps_curriculum(
         instance=Random.Config(
             agents=num_cogs,
             objects={
-                "assembler": 10,  # Default, will be bucketed
-                "charger": 5,  # Default, will be bucketed
                 "chest": 2,  # Default, will be bucketed
                 "carbon_extractor": 5,  # Default, will be bucketed
                 "oxygen_extractor": 5,  # Default, will be bucketed
@@ -156,49 +103,11 @@ def make_random_maps_curriculum(
     # Bucket over object counts (sparse to dense)
     # Using wide ranges that scale from small maps to large maps
     # too_many_is_ok=True ensures we don't error on small maps
-    tasks.add_bucket("game.map_builder.instance.objects.assembler", [Span(10, 30)])
-    tasks.add_bucket("game.map_builder.instance.objects.charger", [Span(10, 50)])
     tasks.add_bucket("game.map_builder.instance.objects.chest", [Span(10, 30)])
     tasks.add_bucket("game.map_builder.instance.objects.carbon_extractor", [Span(10, 50)])
     tasks.add_bucket("game.map_builder.instance.objects.oxygen_extractor", [Span(10, 50)])
     tasks.add_bucket("game.map_builder.instance.objects.germanium_extractor", [Span(10, 40)])
     tasks.add_bucket("game.map_builder.instance.objects.silicon_extractor", [Span(10, 50)])
-    # Bucket over extractor max_uses (resource scarcity)
-    # 0 = unlimited, higher = limited resource
-    tasks.add_bucket("game.objects.carbon_extractor.max_uses", [1, 3, 8, 10, 20])
-    tasks.add_bucket("game.objects.oxygen_extractor.max_uses", [1, 3, 8, 10, 20])
-    tasks.add_bucket("game.objects.germanium_extractor.max_uses", [1, 3, 8, 10, 20])
-    tasks.add_bucket("game.objects.silicon_extractor.max_uses", [1, 3, 8, 10, 20])
-
-    # Bucket over entire assembler protocols list (different vibe requirements)
-    tasks.add_bucket(
-        "game.objects.assembler.protocols",
-        [
-            # Hard: Only heart_a vibe works
-            _make_assembler_protocols(["heart_a"]),
-            # Medium: heart_a or heart_b works
-            _make_assembler_protocols(["heart_a", "heart_b"]),
-            # Easy: default vibe also works
-            _make_assembler_protocols(["default", "heart_a", "heart_b"]),
-            # All vibes work
-            _make_assembler_protocols(
-                [
-                    "default",
-                    "heart_a",
-                    "heart_b",
-                    "carbon_a",
-                    "carbon_b",
-                    "oxygen_a",
-                    "oxygen_b",
-                    "germanium_a",
-                    "germanium_b",
-                    "silicon_a",
-                    "silicon_b",
-                ]
-            ),
-        ],
-    )
-
     # Standard curriculum buckets
     tasks.add_bucket("game.max_steps", [750, 1000, 1250, 1500, 2000, 3000, 4000])
 
@@ -274,7 +183,6 @@ def make_training_eval_suite(
         mission = mission_template.with_variants(
             [
                 NumCogsVariant(num_cogs=num_cogs),
-                TrainingVariant(),
             ]
         )
 
@@ -411,7 +319,7 @@ def play_sparse(
         description=f"Sparse random map {room_size}x{room_size}",
         site=HELLO_WORLD,
         num_cogs=num_cogs,
-        variants=[TrainingVariant()],
+        variants=[],
     )
 
     env = mission.make_env()
@@ -430,8 +338,6 @@ def play_sparse(
         instance=Random.Config(
             agents=num_cogs,
             objects={
-                "assembler": 1,
-                "charger": 1,
                 "chest": 1,
                 "carbon_extractor": 2,
                 "oxygen_extractor": 2,
@@ -477,7 +383,7 @@ def play_dense(
         description=f"Dense random map {room_size}x{room_size}",
         site=HELLO_WORLD,
         num_cogs=num_cogs,
-        variants=[TrainingVariant()],
+        variants=[],
     )
 
     env = mission.make_env()
@@ -494,8 +400,6 @@ def play_dense(
         instance=Random.Config(
             agents=num_cogs,
             objects={
-                "assembler": 50,
-                "charger": 50,
                 "chest": 50,
                 "carbon_extractor": 50,
                 "oxygen_extractor": 50,
@@ -518,8 +422,6 @@ def replay_curriculum(
     policy_uri: str,
     num_cogs: int = 20,
     room_size: int = 80,
-    num_assemblers: int = 10,
-    num_chargers: int = 10,
     num_chests: int = 10,
     num_extractors: int = 10,
     max_steps: int = 2000,
@@ -530,8 +432,6 @@ def replay_curriculum(
         policy_uri: URI to the policy (S3 or local file)
         num_cogs: Number of agents
         room_size: Map width and height (creates square map)
-        num_assemblers: Number of assemblers
-        num_chargers: Number of chargers
         num_chests: Number of chests
         num_extractors: Number of extractors for each resource type
         max_steps: Maximum episode steps
@@ -553,7 +453,7 @@ def replay_curriculum(
         description=f"Replay on random map {room_size}x{room_size}",
         site=HELLO_WORLD,
         num_cogs=num_cogs,
-        variants=[TrainingVariant()],
+        variants=[],
     )
 
     env = mission.make_env()
@@ -570,8 +470,6 @@ def replay_curriculum(
         instance=Random.Config(
             agents=num_cogs,
             objects={
-                "assembler": num_assemblers,
-                "charger": num_chargers,
                 "chest": num_chests,
                 "carbon_extractor": num_extractors,
                 "oxygen_extractor": num_extractors,

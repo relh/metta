@@ -362,7 +362,7 @@ class MineResourceGoal(Goal):
 
 
 def _find_cogs_depot(ctx: PlankyContext) -> tuple[int, int] | None:
-    """Find nearest cogs-aligned depot, prioritizing assembler (at hub)."""
+    """Find nearest cogs-aligned depot, prioritizing hub."""
     from cogames_agents.policy.scripted_agent.planky.policy import SPAWN_POS
 
     pos = ctx.state.position
@@ -371,7 +371,7 @@ def _find_cogs_depot(ctx: PlankyContext) -> tuple[int, int] | None:
         failed_step = ctx.blackboard.get(f"deposit_failed_{p}", -9999)
         return ctx.step - failed_step < 100
 
-    # Prioritize assemblers (always at hub)
+    # Prioritize hubs
     for apos, _ in ctx.map.find(type="hub"):
         if not recently_failed(apos):
             return apos

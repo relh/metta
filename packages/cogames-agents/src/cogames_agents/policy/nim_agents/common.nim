@@ -10,7 +10,7 @@ type
     name*: string
     normalization*: float
 
-  AssemblerProtocol* = object
+  HubProtocol* = object
     inputResources*: Table[string, int]
     outputResources*: Table[string, int]
 
@@ -21,7 +21,7 @@ type
     actions*: seq[string]
     tags*: seq[string]
     obsFeatures*: seq[ConfigFeature]
-    assemblerProtocols*: seq[AssemblerProtocol]
+    hubProtocols*: seq[HubProtocol]
 
   Config* = object
     config*: PolicyConfig
@@ -30,7 +30,7 @@ type
     tags*: Tags
     vibes*: Vibes
     vibeNames*: seq[string]
-    assemblerProtocols*: seq[AssemblerProtocol]
+    hubProtocols*: seq[HubProtocol]
     inventoryTokenBase*: int
     inventoryPowerFeatures*: Table[int, array[2, int]]
 
@@ -67,13 +67,13 @@ type
     vibeHeartA*: int
     vibeHeartB*: int
     vibeGear*: int
-    vibeAssembler*: int
+    vibeHub*: int
     vibeChest*: int
     vibeWall*: int
 
   Tags* = object
     agent*: int
-    assembler*: int
+    hub*: int
     carbonExtractor*: int
     charger*: int
     chest*: int
@@ -97,7 +97,7 @@ type
     heartA*: int = 10
     heartB*: int = 11
     gear*: int = 12
-    assembler*: int = 13
+    hub*: int = 13
     chest*: int = 14
     wall*: int = 15
     paperclip*: int = 16
@@ -277,7 +277,7 @@ proc `$`*(recipe: RecipeInfo): string =
       result.add("Gear")
       result.add(", ")
     of 13:
-      result.add("Assembler")
+      result.add("Hub")
       result.add(", ")
     of 14:
       result.add("Chest")
@@ -495,7 +495,7 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
   try:
     var config = environmentConfig.fromJson(PolicyConfig)
     result = Config(config: config)
-    result.assemblerProtocols = config.assemblerProtocols
+    result.hubProtocols = config.hubProtocols
     result.inventoryPowerFeatures = initTable[int, array[2, int]]()
     var inventoryBaseIds = initTable[string, int]()
     var inventoryPowerIds = initTable[string, array[2, int]]()
@@ -691,8 +691,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.actions.vibeHeartA = id
       of "change_vibe_gear":
         result.actions.vibeGear = id
-      of "change_vibe_assembler":
-        result.actions.vibeAssembler = id
+      of "change_vibe_hub":
+        result.actions.vibeHub = id
       of "change_vibe_chest":
         result.actions.vibeChest = id
       of "change_vibe_wall":
@@ -704,8 +704,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
       case name:
       of "agent":
         result.tags.agent = id
-      of "assembler":
-        result.tags.assembler = id
+      of "hub":
+        result.tags.hub = id
       of "carbon_extractor":
         result.tags.carbonExtractor = id
       of "charger":
@@ -765,7 +765,7 @@ proc drawMap*(cfg: Config, map: Table[Location, seq[FeatureValue]], seen: HashSe
           if featureValue.featureId == cfg.features.tag:
             if featureValue.value == cfg.tags.agent:
               cell = "@@"
-            elif featureValue.value == cfg.tags.assembler:
+            elif featureValue.value == cfg.tags.hub:
               cell = "As"
             elif featureValue.value == cfg.tags.carbonExtractor:
               cell = "Ca"

@@ -53,7 +53,7 @@ class UnclippingAgentState(SimpleAgentState):
 
     # Craft recipes for unclip items (item_name -> craft_recipe)
     # e.g., "decoder" -> {"carbon": 1}
-    # Initialized from assembler protocols
+    # Initialized from hub protocols
     unclip_craft_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
 
 
@@ -82,10 +82,10 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
         # Get the base state from parent class
         base_state = super().initial_agent_state()
 
-        # Initialize unclip recipes from assembler protocols
+        # Initialize unclip recipes from hub protocols
         # Map: unclip_item -> craft_recipe (e.g., "decoder" -> {"carbon": 1})
         unclip_craft_recipes = {}
-        for protocol in self._policy_env_info.assembler_protocols:
+        for protocol in getattr(self._policy_env_info, "hub_protocols", []):
             for output_item, output_amount in protocol.output_resources.items():
                 if output_amount > 0 and output_item in ("decoder", "modulator", "resonator", "scrambler"):
                     craft_recipe = dict(protocol.input_resources)
@@ -105,7 +105,7 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
         Discover unclip recipes from clipped extractor observations.
 
         When we observe a clipped extractor, its protocol_outputs tell us what unclip item is needed.
-        We then need to observe the assembler with the correct vibe to learn how to craft that item.
+        We then need to observe the hub with the correct vibe to learn how to craft that item.
         """
         for _pos, obj_state in parsed_observation.nearby_objects.items():
             obj_name = obj_state.name.lower()
@@ -127,7 +127,7 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
                             s.unclip_recipes[resource_type] = (item_name, craft_recipe)
                             break
 
-            # No need to discover craft recipes from assembler - we already have them from init!
+            # No need to discover craft recipes from hub - we already have them from init!
 
     def _get_unclip_item_name(self, s: UnclippingAgentState, clipped_resource: str) -> Optional[str]:
         recipe = s.unclip_recipes.get(clipped_resource)
@@ -172,7 +172,7 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
 
     def _get_vibe_for_phase(self, phase: Phase, state: UnclippingAgentState) -> str:
         """Override to set correct vibe for CRAFT_UNCLIP and UNCLIP phases."""
-        # For crafting unclip items at the assembler, use "gear" vibe
+        # For crafting unclip items at the hub, use "gear" vibe
         if phase == Phase.CRAFT_UNCLIP:
             return "gear"
 
@@ -346,7 +346,7 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
         return super()._execute_phase(s)
 
     def _do_craft_unclip(self, s: UnclippingAgentState) -> Action:
-        """Craft unclip item at assembler."""
+        """Craft unclip item at hub."""
         info = self._get_unclip_info(s, s.unclip_target_resource)
         if info is None:
             self._clear_unclip_state(s)
@@ -361,24 +361,24 @@ class UnclippingAgentPolicyImpl(BaselineAgentPolicyImpl):
             s.phase = Phase.GATHER
             return Action(name="noop")
 
-        # Explore until we find assembler
+        # Explore until we find hub
         explore_action = self._explore_until(
-            s, condition=lambda: s.stations.get("assembler") is not None, reason="Need assembler for crafting"
+            s, condition=lambda: s.stations.get("hub") is not None, reason="Need hub for crafting"
         )
         if explore_action is not None:
             return explore_action
 
         # Vibe is automatically set by _get_vibe_for_phase to the input resource (e.g., "carbon" for decoder)
 
-        assembler = s.stations.get("assembler")
-        if assembler is None:
+        hub = s.stations.get("hub")
+        if hub is None:
             return Action(name="noop")
 
-        ar, ac = assembler
-        if is_adjacent((s.row, s.col), assembler):
-            return use_object_at(s, assembler)
+        ar, ac = hub
+        if is_adjacent((s.row, s.col), hub):
+            return use_object_at(s, hub)
 
-        return self._move_towards(s, assembler, reach_adjacent=True)
+        return self._move_towards(s, hub, reach_adjacent=True)
 
     def _do_unclip(self, s: UnclippingAgentState) -> Action:
         """Use unclip item on clipped extractor."""
