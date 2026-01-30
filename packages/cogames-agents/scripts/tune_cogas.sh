@@ -47,7 +47,7 @@ Options:
   --episodes N          Number of episodes per config (default: 10)
   --steps N             Max steps per episode (default: 1000)
   --mission MISSION     Mission (default: cogsguard_arena.basic)
-  --threshold N         Pass threshold for aligned.junction.held (default: 1500)
+  --threshold N         Pass threshold for junction.held (default: 1500)
   --seed SEED           RNG seed (default: 42)
   --configs FILE        File with one param string per line (overrides defaults)
   -h, --help            Show this help
@@ -145,13 +145,13 @@ for i in "${!CONFIGS[@]}"; do
     status="FAIL"
   fi
 
-  # Extract aligned.junction.held from output
+  # Extract junction.held from output
   score=$(grep -oP 'aligned\.junction\.held:\s+\K[0-9.]+' "$TMPLOG" 2> /dev/null | head -1 || true)
   if [[ -z "$score" ]]; then
     score="-"
   fi
 
-  echo "  aligned.junction.held = $score [$status]"
+  echo "  junction.held = $score [$status]"
   echo ""
 
   RESULT_PARAMS+=("$label")
@@ -185,7 +185,7 @@ echo "------------------------------------------------------------"
 if [[ -n "$best_idx" ]]; then
   echo ""
   echo "BEST: ${RESULT_PARAMS[$best_idx]}"
-  echo "  aligned.junction.held = $best_score"
+  echo "  junction.held = $best_score"
   if [[ "${RESULT_PARAMS[$best_idx]}" != "<default>" ]]; then
     echo "  URI: metta://policy/${POLICY}?${RESULT_PARAMS[$best_idx]}"
   else

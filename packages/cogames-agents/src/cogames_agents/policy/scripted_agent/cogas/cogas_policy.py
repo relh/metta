@@ -3,7 +3,7 @@ Cogas Policy v3 -- high-throughput junction alignment competitive agent.
 
 Combines Planky's declarative goal decomposition with game-phase awareness
 (EARLY -> MID -> LATE) and dynamic role switching for maximizing
-aligned.junction.held.
+junction.held.
 
 v3 throughput improvements:
   - More aggressive aligner-heavy defaults (5 aligners, 2 scramblers)
@@ -860,7 +860,7 @@ class CogasPolicy(MultiAgentPolicy):
             step=step,
         )
         # Score estimate: aligned junctions × steps remaining is a proxy
-        # for aligned.junction.held
+        # for junction.held
         self._debug_logger.record_score_estimate(  # type: ignore[union-attr]
             step=step,
             value=float(aligned),

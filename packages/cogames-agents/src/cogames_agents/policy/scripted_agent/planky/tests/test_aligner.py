@@ -20,6 +20,5 @@ def test_aligner_acquires_hearts(aligner_episode: EpisodeResult):
 def test_aligner_aligns_junctions(aligner_episode: EpisodeResult):
     aligned = aligner_episode.junctions_aligned()
     assert aligned > 0, (
-        f"Aligner did not align any junctions (aligned.junction.gained={aligned})\n"
-        f"Trace:\n{aligner_episode.trace.summary()}"
+        f"Aligner did not align any junctions (junction.gained={aligned})\nTrace:\n{aligner_episode.trace.summary()}"
     )

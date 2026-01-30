@@ -92,7 +92,7 @@ class EpisodeResult:
         return sum(self.resource_deposited(r) for r in ["carbon", "oxygen", "germanium", "silicon"])
 
     def junctions_aligned(self) -> int:
-        return int(self.cogs_stats.get("aligned.junction.gained", 0))
+        return int(self.cogs_stats.get("junction.gained", 0))
 
     def hearts_gained(self) -> int:
         return int(self.agent_stats.get("heart.gained", 0))

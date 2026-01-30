@@ -207,7 +207,7 @@ class DebugLogger:
         self._junction_history.append((step, snap))
 
     def record_score_estimate(self, step: int, value: float) -> None:
-        """Record an estimated score value (e.g. aligned.junction.held proxy)."""
+        """Record an estimated score value (e.g. junction.held proxy)."""
         self._score_estimate.record(step, value)
 
     # ------------------------------------------------------------------

@@ -32,6 +32,5 @@ def test_stem_economy_produces_resources(stem_episode: EpisodeResult):
 def test_stem_pipeline_aligns_junctions(stem_episode: EpisodeResult):
     aligned = stem_episode.junctions_aligned()
     assert aligned > 0, (
-        f"Stem team did not align any junctions (aligned.junction.gained={aligned})\n"
-        f"Trace:\n{stem_episode.trace.summary()}"
+        f"Stem team did not align any junctions (junction.gained={aligned})\nTrace:\n{stem_episode.trace.summary()}"
     )

@@ -24,8 +24,8 @@ METRICS = [
     ("reward", "agent_reward", None),
     ("heart.gained", "agent", "heart.gained"),
     ("heart.lost", "agent", "heart.lost"),
-    ("aligned.junction.held", "game", "aligned.junction.held"),
-    ("aligned.junction.gained", "game", "aligned.junction.gained"),
+    ("junction.held", "game", "junction.held"),
+    ("junction.gained", "game", "junction.gained"),
     ("action_timeouts", "timeouts", None),
 ]
 

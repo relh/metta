@@ -185,8 +185,8 @@ def fmt(v):
         return f"{v:.2f}"
     return str(v)
 
-ajh = game_stats.get("aligned.junction.held")
-ajg = game_stats.get("aligned.junction.gained")
+ajh = game_stats.get("junction.held")
+ajg = game_stats.get("junction.gained")
 hg = agent_metrics.get("heart.gained")
 hl = agent_metrics.get("heart.lost")
 timeouts = policy.get("action_timeouts")

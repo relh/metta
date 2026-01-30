@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # eval_cogas.sh — Run cogas agent through local evaluation and report
-# aligned.junction.held score.
+# junction.held score.
 #
 # Usage:
 #   ./scripts/eval_cogas.sh [OPTIONS]
@@ -35,7 +35,7 @@ Options:
   --steps N           Max steps per episode (default: 1000)
   --mission MISSION   Mission to evaluate (default: cogsguard_arena.basic)
   --params PARAMS     URI params (e.g. 'miner=2&aligner=4&scrambler=3')
-  --threshold N       aligned.junction.held threshold (default: 1500)
+  --threshold N       junction.held threshold (default: 1500)
   --seed SEED         RNG seed (default: 42)
   -h, --help          Show this help
 USAGE
@@ -92,7 +92,7 @@ echo "Mission:   $MISSION"
 echo "Episodes:  $EPISODES"
 echo "Steps:     $STEPS"
 echo "Seed:      $SEED"
-echo "Threshold: $THRESHOLD (aligned.junction.held)"
+echo "Threshold: $THRESHOLD (junction.held)"
 echo ""
 
 # Run cogames scrimmage and capture JSON output
@@ -136,8 +136,8 @@ agent_metrics = policy.get("avg_agent_metrics", {})
 per_ep = policy.get("per_episode_per_policy_avg_rewards", {})
 
 # Extract key metrics
-ajh = game_stats.get("aligned.junction.held")
-ajg = game_stats.get("aligned.junction.gained")
+ajh = game_stats.get("junction.held")
+ajg = game_stats.get("junction.gained")
 hg = agent_metrics.get("heart.gained")
 hl = agent_metrics.get("heart.lost")
 timeouts = policy.get("action_timeouts")
@@ -157,8 +157,8 @@ def fmt(v):
 
 # Print summary table
 print("=== Results ===")
-print(f"  aligned.junction.held:   {fmt(ajh)}")
-print(f"  aligned.junction.gained: {fmt(ajg)}")
+print(f"  junction.held:   {fmt(ajh)}")
+print(f"  junction.gained: {fmt(ajg)}")
 print(f"  heart.gained:            {fmt(hg)}")
 print(f"  heart.lost:              {fmt(hl)}")
 print(f"  reward:                  {fmt(reward)}")
@@ -167,11 +167,11 @@ print()
 
 # Threshold check
 if ajh is not None and ajh < threshold:
-    print(f"FAIL: aligned.junction.held ({fmt(ajh)}) < threshold ({threshold})")
+    print(f"FAIL: junction.held ({fmt(ajh)}) < threshold ({threshold})")
     sys.exit(1)
 elif ajh is None:
-    print("WARN: aligned.junction.held not found in output")
+    print("WARN: junction.held not found in output")
     sys.exit(1)
 else:
-    print(f"PASS: aligned.junction.held ({fmt(ajh)}) >= threshold ({threshold})")
+    print(f"PASS: junction.held ({fmt(ajh)}) >= threshold ({threshold})")
 PYEOF

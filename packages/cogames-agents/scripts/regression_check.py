@@ -24,8 +24,8 @@ from pathlib import Path
 # Metrics to track: (key, source, higher_is_better, regression_tolerance_pct)
 # source: "game" = avg_game_stats, "agent" = avg_agent_metrics, "policy" = policy-level
 TRACKED_METRICS = [
-    ("aligned.junction.held", "game", True, 5.0),
-    ("aligned.junction.gained", "game", True, 5.0),
+    ("junction.held", "game", True, 5.0),
+    ("junction.gained", "game", True, 5.0),
     ("reward", "reward", True, 10.0),
     ("heart.gained", "agent", True, 10.0),
     ("heart.lost", "agent", False, 10.0),  # lower is better
