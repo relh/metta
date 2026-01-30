@@ -121,6 +121,16 @@ Report:
 - Graphite PR URLs
 - The original WIP branch name (keep it until the stack is merged)
 
+## Step 7: Worktree Cleanup
+
+After the stack is submitted (or single PR merged), remove the WIP worktree:
+
+```bash
+WIP_WORKTREE="$WORKTREE"  # path from Step 1
+cd "$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME")"
+git worktree remove "$WIP_WORKTREE"
+```
+
 ## Quick Reference
 
 | Task                | Command                                        |

@@ -382,6 +382,22 @@ gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
 - Change would significantly affect architecture
 - You're unsure what the reviewer actually wants
 
+## Step 6: Worktree Cleanup
+
+After submission is complete, remove the worktree if one was created in Step 0:
+
+```bash
+BRANCH=$(git branch --show-current)
+MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+if [ "$(pwd)" != "$MAIN_WORKTREE" ]; then
+  WORKTREE_PATH=$(pwd)
+  cd "$MAIN_WORKTREE"
+  git worktree remove "$WORKTREE_PATH"
+fi
+```
+
+**Skip cleanup if** called from another skill (e.g., `/pr.fix-branch`) that manages its own worktree lifecycle.
+
 ## Integration
 
 **Uses:**

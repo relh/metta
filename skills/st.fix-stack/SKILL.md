@@ -228,13 +228,16 @@ By dispatching each branch as a sub-agent:
 - The stack structure is unclear or circular
 - Sub-agent repeatedly fails on the same branch
 
-## Worktree Cleanup
+## Step 5: Worktree Cleanup
 
-After the stack is fixed:
+After the entire stack is fixed, remove all worktrees created during the process:
 
-- Worktrees remain for each branch for future work
-- To remove all: `git worktree list | grep .worktrees | awk '{print $1}' | xargs -I{} git worktree remove {}`
-- Or use `finishing-a-development-branch` skill as each branch is merged
+```bash
+git worktree list | grep .worktrees | awk '{print $1}' | xargs -I{} git worktree remove {}
+```
+
+This runs after all branches are submitted. Each sub-agent's `/pr.fix-branch` will skip its own cleanup when called from
+this skill, so cleanup happens here at the end.
 
 ## Integration
 

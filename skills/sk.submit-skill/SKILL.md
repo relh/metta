@@ -141,6 +141,16 @@ Confirm the PR merged and print the Graphite URL:
 https://app.graphite.dev/github/pr/Metta-AI/metta/<PR_NUMBER>
 ```
 
+## Step 7: Worktree Cleanup
+
+After the PR merges, remove the worktree:
+
+```bash
+MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+cd "$MAIN_WORKTREE"
+wt remove "$BRANCH_NAME" 2>/dev/null || git worktree remove ".worktrees/$BRANCH_NAME" 2>/dev/null
+```
+
 ## Integration
 
 **Uses:**

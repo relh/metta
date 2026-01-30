@@ -361,13 +361,21 @@ gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
   --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'
 ```
 
-## Worktree Cleanup
+## Step 6: Worktree Cleanup
 
-After the branch is fixed and submitted:
+After the branch is fixed and submitted, remove the worktree:
 
-- The worktree remains for future work on this branch
-- To remove: `git worktree remove .worktrees/$BRANCH`
-- Or use `finishing-a-development-branch` skill when branch is merged
+```bash
+BRANCH=$(git branch --show-current)
+MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
+if [ "$(pwd)" != "$MAIN_WORKTREE" ]; then
+  WORKTREE_PATH=$(pwd)
+  cd "$MAIN_WORKTREE"
+  git worktree remove "$WORKTREE_PATH"
+fi
+```
+
+**Skip cleanup if** called from another skill (e.g., `/st.fix-stack`) that manages its own worktree lifecycle.
 
 ## Integration
 
