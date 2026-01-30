@@ -326,23 +326,23 @@ proc step*(
 
     # Are we running low on energy?
     if invEnergy < MaxEnergy div 4:
-      let chargerNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.charger)
-      if chargerNearby.isSome():
-        measurePush("charger nearby")
-        let action = agent.cfg.aStar(agent.location, chargerNearby.get(), agent.map)
+      let junctionNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.junction)
+      if junctionNearby.isSome():
+        measurePush("junction nearby")
+        let action = agent.cfg.aStar(agent.location, junctionNearby.get(), agent.map)
         measurePop()
         if action.isSome():
           doAction(action.get().int32)
-          log "going to charger"
+          log "going to junction"
           return
 
     # Charge opportunistically.
     if invEnergy < MaxEnergy - 20:
-      let chargerNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.charger)
-      if chargerNearby.isSome():
-        if manhattan(agent.location, chargerNearby.get()) < 2:
+      let junctionNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.junction)
+      if junctionNearby.isSome():
+        if manhattan(agent.location, junctionNearby.get()) < 2:
           measurePush("charge nearby")
-          let action = agent.cfg.aStar(agent.location, chargerNearby.get(), agent.map)
+          let action = agent.cfg.aStar(agent.location, junctionNearby.get(), agent.map)
           measurePop()
           if action.isSome():
             doAction(action.get().int32)

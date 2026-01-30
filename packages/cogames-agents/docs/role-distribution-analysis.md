@@ -10,23 +10,23 @@ strategy for distributing agents across these roles, ranging from static URI-con
 game-state-driven role switching.
 
 **Key Finding:** The highest-performing agents (CoGsGuard Control, Wombo) share a common pattern: they start with an
-explore-heavy distribution and dynamically shift toward aligner/scrambler-heavy distributions as chargers are
+explore-heavy distribution and dynamically shift toward aligner/scrambler-heavy distributions as junctions are
 discovered. Pure static distributions (planky defaults, pinky defaults) leave performance on the table.
 
 ---
 
 ## 1. Roles in CoGsGuard Mechanics
 
-In CoGsGuard, the competitive objective is **junction alignment**: aligning chargers to your team ("cogs") while denying
-them to the opponent ("clips"). Hearts are produced from four resources (carbon, oxygen, germanium, silicon) via hub
-recipes.
+In CoGsGuard, the competitive objective is **junction alignment**: aligning junctions to your team ("cogs") while
+denying them to the opponent ("clips"). Hearts are produced from four resources (carbon, oxygen, germanium, silicon) via
+hub recipes.
 
-| Role          | Primary Function                                   | Win Contribution                               |
-| ------------- | -------------------------------------------------- | ---------------------------------------------- |
-| **Miner**     | Gather resources from extractors, deposit at hub   | Heart production (resource economy)            |
-| **Scout**     | Explore map, discover extractors/chargers/stations | Enables all other roles by providing map intel |
-| **Aligner**   | Align neutral/enemy chargers to cogs               | Direct scoring + team energy via AOE           |
-| **Scrambler** | Scramble enemy-aligned chargers                    | Denial + scoring (neutralize enemy chargers)   |
+| Role          | Primary Function                                    | Win Contribution                               |
+| ------------- | --------------------------------------------------- | ---------------------------------------------- |
+| **Miner**     | Gather resources from extractors, deposit at hub    | Heart production (resource economy)            |
+| **Scout**     | Explore map, discover extractors/junctions/stations | Enables all other roles by providing map intel |
+| **Aligner**   | Align neutral/enemy junctions to cogs               | Direct scoring + team energy via AOE           |
+| **Scrambler** | Scramble enemy-aligned junctions                    | Denial + scoring (neutralize enemy junctions)  |
 
 ---
 
@@ -124,8 +124,8 @@ assigns roles based on team state:
 3. If no miner in team → **miner**
 4. If no scrambler → **scrambler**
 5. If no aligner → **aligner**
-6. If clips chargers exist and scramblers <= aligners → **scrambler**
-7. If neutral chargers exist → **aligner**
+6. If clips junctions exist and scramblers <= aligners → **scrambler**
+7. If neutral junctions exist → **aligner**
 8. If few structures discovered → **scout**
 9. Fallback → **miner**
 
@@ -191,10 +191,11 @@ assigns roles based on team state:
 **Key observations:**
 
 - **Phase-aware distribution** is the distinguishing feature. Early game heavily favors scouting and mining.
-- Control phase ramps up scramblers and aligners when chargers are discovered.
-- Sustain phase reduces combat roles as chargers stabilize.
+- Control phase ramps up scramblers and aligners when junctions are discovered.
+- Sustain phase reduces combat roles as junctions stabilize.
 - Commander (agent 0) re-plans every 40 steps based on aggregated game state.
-- Assigns **specific charger targets** to scrambler/aligner agents -- avoids wasting effort on already-aligned chargers.
+- Assigns **specific junction targets** to scrambler/aligner agents -- avoids wasting effort on already-aligned
+  junctions.
 - Default initial allocation uses same formula as V2.
 
 **Source:** `cogsguard/control_agent.py:113-146` (phase-based count selection).
@@ -330,7 +331,7 @@ For a standard 10-agent team:
 
 ### Junction Alignment is the Objective
 
-In competitive CoGsGuard, the primary scoring mechanism is **aligned junction held** -- the number of chargers aligned
+In competitive CoGsGuard, the primary scoring mechanism is **aligned junction held** -- the number of junctions aligned
 to your team at episode end. This makes aligner and scrambler roles disproportionately valuable for scoring.
 
 However, **miners fund the economy**: hearts are consumed by aligners (1 heart per alignment) and scramblers (1 heart
@@ -340,15 +341,15 @@ per scramble). Without miners producing hearts, combat roles starve.
 
 **Early game (steps 0-100):**
 
-- 2 scouts (map discovery is critical -- extractors and chargers are unknown)
-- 1 scrambler (deny early enemy charger claims; gets gear priority)
+- 2 scouts (map discovery is critical -- extractors and junctions are unknown)
+- 1 scrambler (deny early enemy junction claims; gets gear priority)
 - remainder miners (bootstrap resource economy)
 
 **Mid game (steps 100-500):**
 
 - 0-1 scout (map mostly discovered)
-- 2 scramblers (active charger denial)
-- 2 aligners (claim neutral/scrambled chargers)
+- 2 scramblers (active junction denial)
+- 2 aligners (claim neutral/scrambled junctions)
 - remainder miners (sustain heart production)
 
 **Late game (steps 500+):**
@@ -366,7 +367,7 @@ per scramble). Without miners producing hearts, combat roles starve.
 metta://policy/role_py?scrambler=2&aligner=3&miner=4&scout=1
 ```
 
-Prioritizes charger control. Works when opponent is passive.
+Prioritizes junction control. Works when opponent is passive.
 
 **Heavy scrambler strategy (denial-focused):**
 
@@ -414,7 +415,7 @@ Aggressive junction control with double scouts and generalist role switching.
    default. Map discovery is a prerequisite for all other roles to function effectively.
 
 4. **Aligner/scrambler balance matters more than total count.** Having 2 aligners and 2 scramblers outperforms 4 of
-   either, because alignment and denial are complementary operations on the same charger objects.
+   either, because alignment and denial are complementary operations on the same junction objects.
 
 5. **The "gear" meta-vibe is the most flexible mechanism** for dynamic distribution, but its effectiveness depends
    entirely on the SmartRoleCoordinator having sufficient information (which requires scouts or incidental discovery by

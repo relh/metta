@@ -139,7 +139,7 @@ class AlignJunctionGoal(Goal):
                 continue
             candidates.append((_manhattan(pos, jpos), jpos))
 
-        for cpos, e in ctx.map.find(type_contains="charger"):
+        for cpos, e in ctx.map.find(type_contains="junction"):
             alignment = e.properties.get("alignment")
             if alignment is not None:
                 continue

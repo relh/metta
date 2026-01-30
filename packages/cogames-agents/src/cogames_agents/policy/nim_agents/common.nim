@@ -75,7 +75,7 @@ type
     agent*: int
     hub*: int
     carbonExtractor*: int
-    charger*: int
+    junction*: int
     chest*: int
     germaniumExtractor*: int
     oxygenExtractor*: int
@@ -85,7 +85,7 @@ type
   Vibes* = object
     # TODO: Pass with vibes from config.
     default*: int = 0
-    charger*: int = 1
+    junction*: int = 1
     carbonA*: int = 2
     carbonB*: int = 3
     oxygenA*: int = 4
@@ -657,7 +657,7 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.actions.moveEast = id
       of "change_vibe_default":
         result.actions.vibeDefault = id
-      of "change_vibe_charger":
+      of "change_vibe_junction":
         result.actions.vibeCharger = id
       of "change_vibe_carbon_a":
         result.actions.vibeCarbonA = id
@@ -708,8 +708,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.tags.hub = id
       of "carbon_extractor":
         result.tags.carbonExtractor = id
-      of "charger":
-        result.tags.charger = id
+      of "junction":
+        result.tags.junction = id
       of "chest":
         result.tags.chest = id
       of "germanium_extractor":
@@ -769,7 +769,7 @@ proc drawMap*(cfg: Config, map: Table[Location, seq[FeatureValue]], seen: HashSe
               cell = "As"
             elif featureValue.value == cfg.tags.carbonExtractor:
               cell = "Ca"
-            elif featureValue.value == cfg.tags.charger:
+            elif featureValue.value == cfg.tags.junction:
               cell = "En"
             elif featureValue.value == cfg.tags.chest:
               cell = "Ch"

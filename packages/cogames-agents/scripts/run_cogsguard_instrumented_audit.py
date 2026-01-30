@@ -155,25 +155,25 @@ def run_audit(
         for (prev_role, next_role), count in sorted(transition_counts.items()):
             print(f"- {prev_role} -> {next_role}: {count}")
 
-    charger_counts: list[int] = []
+    junction_counts: list[int] = []
     extractor_counts: list[int] = []
     for i in range(harness.num_agents):
         state = harness.get_agent_state(i)
         if state is None:
             continue
-        chargers = [s for s in state.structures.values() if s.structure_type == StructureType.CHARGER]
+        junctions = [s for s in state.structures.values() if s.structure_type == StructureType.CHARGER]
         extractors = [s for s in state.structures.values() if s.structure_type == StructureType.EXTRACTOR]
-        charger_counts.append(len(chargers))
+        junction_counts.append(len(junctions))
         extractor_counts.append(len(extractors))
 
-    print(f"Charger counts per agent: {charger_counts}")
+    print(f"Charger counts per agent: {junction_counts}")
     print(f"Extractor counts per agent: {extractor_counts}")
-    if charger_counts:
+    if junction_counts:
         print(
             "Charger counts min/max/avg:",
-            min(charger_counts),
-            max(charger_counts),
-            sum(charger_counts) / len(charger_counts),
+            min(junction_counts),
+            max(junction_counts),
+            sum(junction_counts) / len(junction_counts),
         )
     if extractor_counts:
         print(

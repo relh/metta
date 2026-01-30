@@ -10,14 +10,14 @@ performance-optimized implementation, while the Python version offers more featu
 
 ## Comparison Table
 
-| Agent                 | Python | Nim     | Parity  | Notes                                                                                                   |
-| --------------------- | ------ | ------- | ------- | ------------------------------------------------------------------------------------------------------- |
-| **miner**             | ✓ Full | ✓ Basic | Partial | Python has HP-awareness, retry logic, safe extractor selection; Nim is a simpler gather/deposit loop    |
-| **scout**             | ✓ Full | ✓ Basic | Partial | Python has frontier-based BFS + patrol; Nim uses spiral unseen search + direction-based exploration     |
-| **aligner**           | ✓ Full | ✓ Basic | Partial | Python adds influence gating, retry logic, per-charger cooldown; Nim handles hearts + chest acquisition |
-| **scrambler**         | ✓ Full | ✓ Basic | Partial | Python adds retry logic; Nim handles hearts + chest acquisition                                         |
-| **role (multi-role)** | ✓ Full | ✓ Basic | Partial | Python has a smart-role coordinator + phase machine; Nim uses simple smart-role heuristics + vibes      |
-| **teacher**           | ✓ Full | ✗ None  | None    | Python-only wrapper that delegates to Nim and forces initial vibes                                      |
+| Agent                 | Python | Nim     | Parity  | Notes                                                                                                    |
+| --------------------- | ------ | ------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| **miner**             | ✓ Full | ✓ Basic | Partial | Python has HP-awareness, retry logic, safe extractor selection; Nim is a simpler gather/deposit loop     |
+| **scout**             | ✓ Full | ✓ Basic | Partial | Python has frontier-based BFS + patrol; Nim uses spiral unseen search + direction-based exploration      |
+| **aligner**           | ✓ Full | ✓ Basic | Partial | Python adds influence gating, retry logic, per-junction cooldown; Nim handles hearts + chest acquisition |
+| **scrambler**         | ✓ Full | ✓ Basic | Partial | Python adds retry logic; Nim handles hearts + chest acquisition                                          |
+| **role (multi-role)** | ✓ Full | ✓ Basic | Partial | Python has a smart-role coordinator + phase machine; Nim uses simple smart-role heuristics + vibes       |
+| **teacher**           | ✓ Full | ✗ None  | None    | Python-only wrapper that delegates to Nim and forces initial vibes                                       |
 
 ## File Locations
 
@@ -68,28 +68,28 @@ performance-optimized implementation, while the Python version offers more featu
 
 ### Aligner Agent
 
-| Feature                       | Python | Nim |
-| ----------------------------- | ------ | --- |
-| Align neutral chargers        | ✓      | ✓   |
-| Gear acquisition              | ✓      | ✓   |
-| Heart requirement check       | ✓      | ✓   |
-| Influence requirement check   | ✓      | ✗   |
-| Heart acquisition from chest  | ✓      | ✓   |
-| Action retry on failure       | ✓      | ✗   |
-| Cooldown tracking per charger | ✓      | ✗   |
+| Feature                        | Python | Nim |
+| ------------------------------ | ------ | --- |
+| Align neutral junctions        | ✓      | ✓   |
+| Gear acquisition               | ✓      | ✓   |
+| Heart requirement check        | ✓      | ✓   |
+| Influence requirement check    | ✓      | ✗   |
+| Heart acquisition from chest   | ✓      | ✓   |
+| Action retry on failure        | ✓      | ✗   |
+| Cooldown tracking per junction | ✓      | ✗   |
 
 **Python LOC**: ~330 **Nim LOC**: ~13 (actAligner function)
 
 ### Scrambler Agent
 
-| Feature                           | Python | Nim |
-| --------------------------------- | ------ | --- |
-| Scramble enemy chargers           | ✓      | ✓   |
-| Gear acquisition                  | ✓      | ✓   |
-| Heart requirement check           | ✓      | ✓   |
-| Heart acquisition from chest      | ✓      | ✓   |
-| Action retry on failure           | ✓      | ✗   |
-| Prioritize clips-aligned chargers | ✓      | ✓   |
+| Feature                            | Python | Nim |
+| ---------------------------------- | ------ | --- |
+| Scramble enemy junctions           | ✓      | ✓   |
+| Gear acquisition                   | ✓      | ✓   |
+| Heart requirement check            | ✓      | ✓   |
+| Heart acquisition from chest       | ✓      | ✓   |
+| Action retry on failure            | ✓      | ✗   |
+| Prioritize clips-aligned junctions | ✓      | ✓   |
 
 **Python LOC**: ~350 **Nim LOC**: ~13 (actScrambler function)
 

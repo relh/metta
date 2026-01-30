@@ -35,8 +35,8 @@ class TestEvolutionaryCoordinatorInit:
         behavior_names = [b.name for b in coordinator.catalog.behaviors]
         assert "explore" in behavior_names
         assert "mine_resource" in behavior_names
-        assert "align_charger" in behavior_names
-        assert "scramble_charger" in behavior_names
+        assert "align_junction" in behavior_names
+        assert "scramble_junction" in behavior_names
 
     def test_creates_default_roles(self, coordinator):
         """Test that default roles are created."""

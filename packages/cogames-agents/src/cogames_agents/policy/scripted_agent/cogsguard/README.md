@@ -12,8 +12,8 @@ Agents use **vibes** to determine their behavior dynamically:
 | `gear`      | Pick a role via the smart/evolutionary coordinator, change vibe |
 | `miner`     | Get miner gear if needed, then mine resources                   |
 | `scout`     | Get scout gear if needed, then explore the map                  |
-| `aligner`   | Get aligner gear if needed, then align chargers to cogs         |
-| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers      |
+| `aligner`   | Get aligner gear if needed, then align junctions to cogs        |
+| `scrambler` | Get scrambler gear if needed, then scramble enemy junctions     |
 | `heart`     | Do nothing (noop)                                               |
 
 This allows external systems (like training policies) to control agent behavior by setting their vibe.
@@ -126,7 +126,7 @@ When an agent has a role vibe (miner/scout/aligner/scrambler):
 
 ```
 1. Get hearts from nexus or chest
-2. Find clips-aligned supply depots (chargers)
+2. Find clips-aligned supply depots (junctions)
 3. Bump depot to scramble (remove alignment → neutral)
 4. Repeat
 ```

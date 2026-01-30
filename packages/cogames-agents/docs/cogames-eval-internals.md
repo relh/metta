@@ -192,7 +192,7 @@ This is a significant observability gap. Eval results are ephemeral unless captu
 | **No win/loss tracking**           | No explicit success/failure flag. Only raw rewards.                                                                                   | Must infer outcomes from reward thresholds.                 |
 | **No episode variance metrics**    | No std-dev, min/max, or confidence intervals on rewards.                                                                              | Cannot assess consistency of a policy.                      |
 | **No role transition tracking**    | No data on how agents change roles during episodes.                                                                                   | Cannot evaluate adaptive role-switching strategies.         |
-| **No structure interaction stats** | No data on charger/extractor/hub usage frequency.                                                                                     | Cannot diagnose bottlenecks in resource pipelines.          |
+| **No structure interaction stats** | No data on junction/extractor/hub usage frequency.                                                                                    | Cannot diagnose bottlenecks in resource pipelines.          |
 | **No wandb logging**               | Results disappear after terminal output.                                                                                              | No historical comparison across runs.                       |
 | **No cross-mission aggregation**   | Each mission reported independently. No composite score.                                                                              | Must manually aggregate for leaderboard ranking.            |
 

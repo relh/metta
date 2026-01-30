@@ -132,7 +132,7 @@ class ScrambleJunctionGoal(Goal):
         for jpos, e in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
             if not recently_failed(jpos):
                 enemy.append((jpos, e.properties))
-        for cpos, e in ctx.map.find(type_contains="charger", property_filter={"alignment": "clips"}):
+        for cpos, e in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
             if not recently_failed(cpos):
                 enemy.append((cpos, e.properties))
 
@@ -144,7 +144,7 @@ class ScrambleJunctionGoal(Goal):
         for jpos, e in ctx.map.find(type_contains="junction"):
             if e.properties.get("alignment") is None:
                 neutral_positions.append(jpos)
-        for cpos, e in ctx.map.find(type_contains="charger"):
+        for cpos, e in ctx.map.find(type_contains="junction"):
             if e.properties.get("alignment") is None:
                 neutral_positions.append(cpos)
 

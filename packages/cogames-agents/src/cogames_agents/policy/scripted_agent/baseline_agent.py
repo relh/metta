@@ -310,7 +310,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
                 continue
 
             # Discover stations (all stations are obstacles - can't walk through them)
-            for station_name in ("hub", "chest", "charger"):
+            for station_name in ("hub", "chest", "junction"):
                 if is_station(obj_name, station_name):
                     s.occupancy[r][c] = CellType.OBSTACLE.value
                     self._discover_station(s, pos, station_name)
@@ -440,7 +440,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
             Phase.GATHER: "carbon_a",  # Default fallback if no target resource
             Phase.ASSEMBLE: "heart_a",  # Red for assembly
             Phase.DELIVER: "default",  # Must be "default" to deposit hearts into chest
-            Phase.RECHARGE: "charger",  # Blue/electric for recharging
+            Phase.RECHARGE: "junction",  # Blue/electric for recharging
             Phase.CRAFT_UNCLIP: "gear",  # Gear icon for crafting unclip items
             Phase.UNCLIP: "gear",  # Gear icon for unclipping
         }
@@ -800,25 +800,25 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         return utils_use_object_at(s, chest)
 
     def _do_recharge(self, s: SimpleAgentState) -> Action:
-        """Recharge at charger."""
-        # Explore until we find charger
+        """Recharge at junction."""
+        # Explore until we find junction
         explore_action = self._explore_until(
-            s, condition=lambda: s.stations["charger"] is not None, reason="Need charger"
+            s, condition=lambda: s.stations["junction"] is not None, reason="Need junction"
         )
         if explore_action is not None:
             return explore_action
 
         # Charger is known, navigate to it and use it
-        charger = s.stations["charger"]
-        assert charger is not None  # Guaranteed by _explore_until above
+        junction = s.stations["junction"]
+        assert junction is not None  # Guaranteed by _explore_until above
 
         # Navigate to adjacent cell
-        nav_action = self._navigate_to_adjacent(s, charger, target_name="charger")
+        nav_action = self._navigate_to_adjacent(s, junction, target_name="junction")
         if nav_action is not None:
             return nav_action
 
         # Adjacent - use it
-        return utils_use_object_at(s, charger)
+        return utils_use_object_at(s, junction)
 
     def _do_unclip(self, s: SimpleAgentState) -> Action:
         """Unclip extractors - this is implemented in the UnclippingAgent."""

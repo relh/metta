@@ -111,8 +111,8 @@ Agents use **vibes** to determine their behavior:
 | `gear`      | Pick a smart role (scout/miner/aligner/scrambler), change vibe to that role |
 | `miner`     | Get miner gear if needed, then mine resources                               |
 | `scout`     | Get scout gear if needed, then explore                                      |
-| `aligner`   | Get aligner gear if needed, then align chargers to cogs                     |
-| `scrambler` | Get scrambler gear if needed, then scramble enemy chargers                  |
+| `aligner`   | Get aligner gear if needed, then align junctions to cogs                    |
+| `scrambler` | Get scrambler gear if needed, then scramble enemy junctions                 |
 | `heart`     | Do nothing (noop)                                                           |
 
 ## Quick Start
@@ -378,7 +378,7 @@ grep "ALIGNER_EXEC: influence=.*, heart="
 grep "scrambler.*heart="
 
 # Check if finding enemy depots
-grep "DISCOVERED.*charger"
+grep "DISCOVERED.*junction"
 ```
 
 ## Adding Debug Output
@@ -424,14 +424,14 @@ At episode end, the log shows game state:
 
 ```
 {'cogs': {'aligned.hub': 1.0, ...},
- 'clips': {'aligned.charger': 42.0}}
+ 'clips': {'aligned.junction': 42.0}}
 ```
 
 This helps verify:
 
 - Did cogs align any depots?
 - Are miners depositing resources?
-- Is the scrambler working (charger alignment decreasing)?
+- Is the scrambler working (junction alignment decreasing)?
 
 ## Action Failure Detection and Retry System
 

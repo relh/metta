@@ -229,7 +229,6 @@ class MapTracker:
             "nexus",
             "hub",
             "junction",
-            "charger",
             "chest",
             "carbon_extractor",
             "oxygen_extractor",
@@ -245,11 +244,11 @@ class MapTracker:
         # Direct match
         if obs_lower == known_lower:
             return True
-        # Substring match (e.g., "charger" matches "cogs_charger")
+        # Substring match (e.g., "junction" matches "cogs_junction")
         if obs_lower in known_lower or known_lower in obs_lower:
             return True
-        # Type match (e.g., "junction" matches "charger" which is a junction type)
-        junction_names = {"junction", "charger", "supply_depot"}
+        # Type match (e.g., "junction" matches "junction" which is a junction type)
+        junction_names = {"junction", "supply_depot"}
         if obs_lower in junction_names and known_lower in junction_names:
             return True
         return False
@@ -430,8 +429,8 @@ class MapTracker:
                         print(f"[A{state.agent_id}] MAP: Found {station_name} at {pos}")
                 return
 
-        # Check for junction (charger/supply_depot/junction)
-        if "charger" in obj_lower or "supply_depot" in obj_lower or obj_lower == "junction":
+        # Check for junction (junction/supply_depot/junction)
+        if "junction" in obj_lower or "supply_depot" in obj_lower or obj_lower == "junction":
             state.map.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
             alignment = self._derive_alignment(obj_lower, clipped, collective_id)
             self._update_structure(

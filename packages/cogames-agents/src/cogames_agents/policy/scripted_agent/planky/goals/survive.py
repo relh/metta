@@ -58,9 +58,9 @@ def _is_in_safe_zone(ctx: PlankyContext) -> bool:
     for jpos, _ in junctions:
         if _manhattan(pos, jpos) <= JUNCTION_AOE_RANGE:
             return True
-    # Check cogs chargers
-    chargers = ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"})
-    for cpos, _ in chargers:
+    # Check cogs junctions
+    junctions = ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"})
+    for cpos, _ in junctions:
         if _manhattan(pos, cpos) <= JUNCTION_AOE_RANGE:
             return True
     return False
@@ -72,7 +72,7 @@ def _is_in_enemy_aoe(ctx: PlankyContext) -> bool:
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
         if _manhattan(pos, jpos) <= JUNCTION_AOE_RANGE:
             return True
-    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "clips"}):
+    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
         if _manhattan(pos, cpos) <= JUNCTION_AOE_RANGE:
             return True
     return False
@@ -87,7 +87,7 @@ def _nearest_safe_zone(ctx: PlankyContext) -> tuple[int, int] | None:
         candidates.append((_manhattan(pos, apos), apos))
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, jpos), jpos))
-    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, cpos), cpos))
 
     if not candidates:

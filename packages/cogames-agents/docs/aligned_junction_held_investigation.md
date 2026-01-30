@@ -136,8 +136,8 @@ PPO.
   `last_action_executed`, but the observation's `last_action` appears to reflect the **previous** step. This creates
   persistent mismatches.
 - **Internal position drifts** for some agents (up to ~20 cells by ~200 steps), which corrupts the internal map.
-- **Map pollution** follows: agents believe there are ~40k chargers (nearly the entire 200x200 internal grid) and only 1
-  extractor, which collapses mining/gear loops.
+- **Map pollution** follows: agents believe there are ~40k junctions (nearly the entire 200x200 internal grid) and only
+  1 extractor, which collapses mining/gear loops.
 - **Economy stalls quickly**: carbon/oxygen/germanium never increase in the collective, only silicon drifts upward. Gear
   resource windows close at steps ~15-17 and never reopen, so miners never get gear and aligner/scrambler are starved
   for hearts.
@@ -181,7 +181,7 @@ PPO.
 
 The policy updates position only when `last_action_executed == last_action` (intended). If `last_action_executed` lags
 by one step, the policy effectively discards real movement and accumulates drift. That drift corrupts object locations,
-causing chargers to fill the map and extractors to be ignored as unsafe/unreachable.
+causing junctions to fill the map and extractors to be ignored as unsafe/unreachable.
 
 ### Suggested Fix Directions
 
@@ -200,7 +200,7 @@ causing chargers to fill the map and extractors to be ignored as unsafe/unreacha
   use explicit tag precedence to reduce misclassification.
 - Add a drift/mismatch counter to the debug harness that fails fast when mismatch rate exceeds a threshold.
 - Revisit extractor safety heuristics after fixing drift (danger radius 12 on a 50x50 map may be too conservative once
-  chargers are correctly localized).
+  junctions are correctly localized).
 - Re-run multi-seed audits (e.g., seeds 1–5) and longer rollouts (2–5k steps) to confirm resource accumulation, gear
   acquisition, and alignment/scramble loops are restored.
 
@@ -211,7 +211,7 @@ and what would definitively confirm or clear each one. These are ordered by impa
 
 1. **Action timing off-by-one in scripted agent tracking (position drift)**
    - **Symptom:** Large intended vs executed mismatch rates; internal position drift; map pollution.
-   - **Why it breaks everything:** Incorrect positions cause object coordinates to shift, so chargers/extractors are
+   - **Why it breaks everything:** Incorrect positions cause object coordinates to shift, so junctions/extractors are
      recorded in wrong places. This makes extractors appear unsafe/unreachable and stalls mining.
    - **Definitive test:** Log `(intended_action, last_action_executed)` with step index and compare to simulator action
      stream. If `last_action_executed` consistently matches the _previous_ intended action, this is confirmed.
@@ -219,17 +219,17 @@ and what would definitively confirm or clear each one. These are ordered by impa
 2. **Tag precedence / object naming misclassification**
    - **Symptom:** Objects are identified by first tag (e.g., `collective:*`), which can hide type tags; leads to
      incorrect structure typing and alignment inference.
-   - **Why it breaks everything:** Stations/extractors/chargers are misclassified, so role logic targets the wrong tiles
-     or never discovers the required structure types.
+   - **Why it breaks everything:** Stations/extractors/junctions are misclassified, so role logic targets the wrong
+     tiles or never discovers the required structure types.
    - **Definitive test:** Force tag precedence (`type:*` over `collective:*`) and re-run scripted audit. If extractor
      discovery and gear acquisition recover, this was a key blocker.
 
 3. **Charger over-discovery / map flooding**
-   - **Symptom:** 10s of thousands of chargers recorded in a 200x200 internal grid after a few hundred steps.
-   - **Why it breaks everything:** Safety heuristics see chargers everywhere (enemy danger zones), so miners avoid
+   - **Symptom:** 10s of thousands of junctions recorded in a 200x200 internal grid after a few hundred steps.
+   - **Why it breaks everything:** Safety heuristics see junctions everywhere (enemy danger zones), so miners avoid
      extractors; aligner/scrambler logic targets noise.
-   - **Definitive test:** After fixing action timing + tag precedence, chargers should localize to a small count. If
-     not, the charger discovery logic itself is faulty.
+   - **Definitive test:** After fixing action timing + tag precedence, junctions should localize to a small count. If
+     not, the junction discovery logic itself is faulty.
 
 4. **Extractor safety heuristics too conservative for Cogsguard map**
    - **Symptom:** Even with correct localization, miners reject extractors as “unsafe” and never gather resources.
@@ -251,7 +251,7 @@ and what would definitively confirm or clear each one. These are ordered by impa
 
 - **Action tracking drift**: already observed in audit; this is the primary suspect.
 - **Gear acquisition race**: scramblers spam gear stations without resources early; miners/scouts stay gearless.
-- **Map pollution**: chargers/extractors mislocalized if tag precedence + action timing are both off.
+- **Map pollution**: junctions/extractors mislocalized if tag precedence + action timing are both off.
 - **Definitive checks**: fix action timing; enforce tag precedence; re-run role_py audit.
 
 **Teacher (CogsguardTeacherPolicy + Nim backend)**
@@ -292,8 +292,8 @@ and what would definitively confirm or clear each one. These are ordered by impa
   - **Test:** log `obj_state.inventory` for extractors over time; if it is always empty, treat extractors as usable
     unless `remaining_uses == 0` or `clipped == True`.
 
-- **Junction/charger alignment inference**: alignment uses `obj_state.clipped` or tag heuristics. If `clipped` is not
-  reliable for junctions, chargers can appear neutral or misaligned, breaking align/scramble targeting and safety.
+- **Junction/junction alignment inference**: alignment uses `obj_state.clipped` or tag heuristics. If `clipped` is not
+  reliable for junctions, junctions can appear neutral or misaligned, breaking align/scramble targeting and safety.
   - **Test:** compare alignment inferred by tags vs. by simulator ground truth for a few steps.
 
 - **Vibe change reliability**: initial role assignment depends on successful `change_vibe_*` actions. If those actions
@@ -310,7 +310,7 @@ If we want the fastest route to clarity, do these in order:
 
 1. Fix/validate action timing (`last_action_executed`) and update position tracking accordingly.
 2. Enforce tag precedence (`type:*` > `collective:*`) when choosing object names/types.
-3. Re-run scripted audit; confirm charger counts and extractor discovery normalize.
+3. Re-run scripted audit; confirm junction counts and extractor discovery normalize.
 4. If still stalled, relax extractor danger radius or disable danger gating for early steps.
 5. If still stalled, provide minimal resource/gear bootstrap and re-test.
 

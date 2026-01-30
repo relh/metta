@@ -34,9 +34,9 @@ def _is_hub_tag(name: str, tags: Iterable[str]) -> bool:
     return name in {"hub", "main_nexus"} or bool({"hub", "main_nexus"} & tag_set)
 
 
-def _is_charger_tag(name: str, tags: Iterable[str]) -> bool:
+def _is_junction_tag(name: str, tags: Iterable[str]) -> bool:
     combined = {name, *tags}
-    return any("charger" in tag or "supply_depot" in tag or "junction" in tag for tag in combined)
+    return any("junction" in tag or "supply_depot" in tag or "junction" in tag for tag in combined)
 
 
 def _has_alignment_tag(name: str, tags: Iterable[str]) -> bool:
@@ -79,10 +79,10 @@ def run_rollout(
 
     hub_seen = False
     hub_missing = 0
-    charger_alignment_checks = 0
-    charger_alignment_mismatches = 0
-    neutral_charger_checks = 0
-    neutral_charger_mismatches = 0
+    junction_alignment_checks = 0
+    junction_alignment_mismatches = 0
+    neutral_junction_checks = 0
+    neutral_junction_mismatches = 0
     expected_roles = {"miner", "scout", "aligner", "scrambler"}
     observed_roles: set[str] = set()
     prereq_trace_lines: list[str] = []
@@ -240,7 +240,7 @@ def run_rollout(
                     if state.get_structure_position(StructureType.HUB) is None:
                         hub_missing += 1
 
-                if not _is_charger_tag(obj_name, obj_tags):
+                if not _is_junction_tag(obj_name, obj_tags):
                     continue
 
                 expected_alignment = None
@@ -259,14 +259,14 @@ def run_rollout(
                     continue
 
                 if expected_alignment is not None:
-                    charger_alignment_checks += 1
+                    junction_alignment_checks += 1
                     if struct.alignment != expected_alignment:
-                        charger_alignment_mismatches += 1
+                        junction_alignment_mismatches += 1
                     continue
 
-                neutral_charger_checks += 1
+                neutral_junction_checks += 1
                 if struct.alignment == "clips":
-                    neutral_charger_mismatches += 1
+                    neutral_junction_mismatches += 1
 
             if role == "scout":
                 positions = role_stats["scout"]["unique_positions"].setdefault(agent_id, set())
@@ -284,9 +284,9 @@ def run_rollout(
                     hub_pos = state.get_structure_position(StructureType.HUB)
                     if hub_pos is not None:
                         aligned_positions.append(hub_pos)
-                    for charger in state.get_structures_by_type(StructureType.CHARGER):
-                        if charger.alignment == "cogs":
-                            aligned_positions.append(charger.position)
+                    for junction in state.get_structures_by_type(StructureType.CHARGER):
+                        if junction.alignment == "cogs":
+                            aligned_positions.append(junction.position)
                     if aligned_positions:
                         dist = min(abs(state.row - pos[0]) + abs(state.col - pos[1]) for pos in aligned_positions)
                         if dist <= 1:
@@ -405,10 +405,10 @@ def run_rollout(
     print(f"- steps: {steps}")
     print(f"- hub seen: {hub_seen}")
     print(f"- hub missing in structures: {hub_missing}")
-    print(f"- tagged/clipped chargers checked: {charger_alignment_checks}")
-    print(f"- tagged/clipped charger mismatches: {charger_alignment_mismatches}")
-    print(f"- neutral chargers checked: {neutral_charger_checks}")
-    print(f"- neutral chargers flagged as clips: {neutral_charger_mismatches}")
+    print(f"- tagged/clipped junctions checked: {junction_alignment_checks}")
+    print(f"- tagged/clipped junction mismatches: {junction_alignment_mismatches}")
+    print(f"- neutral junctions checked: {neutral_junction_checks}")
+    print(f"- neutral junctions flagged as clips: {neutral_junction_mismatches}")
     print(f"- observed roles: {sorted(observed_roles)}")
     print("Role behavior checks")
     print(
@@ -493,9 +493,9 @@ def run_rollout(
 
     if hub_seen and hub_missing:
         return 1
-    if charger_alignment_mismatches:
+    if junction_alignment_mismatches:
         return 1
-    if neutral_charger_mismatches:
+    if neutral_junction_mismatches:
         return 1
     if not allow_missing_roles:
         if expected_roles - observed_roles:

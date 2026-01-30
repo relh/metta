@@ -55,11 +55,11 @@ EVALS: List[Tuple[str, str, int]] = [
     ("diagnostic_radial", "", 1),
     # Hello World evals
     ("distant_resources", "buggy", NUM_COGS),  # Not enough time for such distances.
-    ("quadrant_buildings", "buggy", NUM_COGS),  # Not enough charger for such distances.
+    ("quadrant_buildings", "buggy", NUM_COGS),  # Not enough junction for such distances.
     ("vibe_check", "", NUM_COGS),
     ("oxygen_bottleneck_easy", "", NUM_COGS),
     ("oxygen_bottleneck_standard", "", NUM_COGS),
-    ("oxygen_bottleneck_hard", "buggy", NUM_COGS),  # Not enough charger for such distances.
+    ("oxygen_bottleneck_hard", "buggy", NUM_COGS),  # Not enough junction for such distances.
     ("energy_starved_easy", "", NUM_COGS),
     ("energy_starved_standard", "buggy", NUM_COGS),  # E drain too high.
     ("energy_starved_hard", "buggy", NUM_COGS),  # E drain too high.
@@ -70,8 +70,8 @@ EVALS: List[Tuple[str, str, int]] = [
     ("distant_resources_standard", "flakey", NUM_COGS),  # Not enough time for such distances.
     ("distant_resources_hard", "buggy", NUM_COGS),  # Not enough time for such distances.
     ("quadrant_buildings_easy", "", NUM_COGS),
-    ("quadrant_buildings_standard", "buggy", NUM_COGS),  # Not enough charger for such distances.
-    ("quadrant_buildings_hard", "buggy", NUM_COGS),  # Not enough charger for such distances.
+    ("quadrant_buildings_standard", "buggy", NUM_COGS),  # Not enough junction for such distances.
+    ("quadrant_buildings_hard", "buggy", NUM_COGS),  # Not enough junction for such distances.
     ("single_use_swarm_easy", "buggy", NUM_COGS),
     ("single_use_swarm_standard", "buggy", NUM_COGS),  # Not enough time for such distances.
     ("single_use_swarm_hard", "buggy", NUM_COGS),  # E drain too high.

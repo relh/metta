@@ -8,7 +8,7 @@ const
   CargoPerMiner = 40
   ExploreSteps = 8
   RoleNames = ["miner", "scout", "aligner", "scrambler"]
-  DepotTags = ["charger", "junction", "supply_depot"]
+  DepotTags = ["junction", "junction", "supply_depot"]
   HubTags = ["hub", "hub", "main_nexus"]
   StationTags = ["miner_station", "scout_station", "aligner_station", "scrambler_station"]
   ResourceNames = ["carbon", "oxygen", "germanium", "silicon"]
@@ -80,7 +80,7 @@ proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy,
   var hasHub = false
   var hasChest = false
   var roleCounts = newSeq[int](RoleNames.len)
-  var chargerCounts: array[3, int] # cogs, clips, neutral/unknown
+  var junctionCounts: array[3, int] # cogs, clips, neutral/unknown
   var heartsTotal = 0
   var influenceTotal = 0
   var maxStructuresSeen = 0
@@ -110,8 +110,8 @@ proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy,
       else:
         agentCounts[2] += 1
     for i in 0 .. 2:
-      if agentCounts[i] > chargerCounts[i]:
-        chargerCounts[i] = agentCounts[i]
+      if agentCounts[i] > junctionCounts[i]:
+        junctionCounts[i] = agentCounts[i]
 
   if not hasHub or not hasChest:
     return roleIndex("scout")
@@ -120,13 +120,13 @@ proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy,
   if minerIdx >= 0 and roleCounts[minerIdx] == 0:
     return minerIdx
 
-  let knownChargers = chargerCounts[0] + chargerCounts[1] + chargerCounts[2]
+  let knownChargers = junctionCounts[0] + junctionCounts[1] + junctionCounts[2]
   if knownChargers == 0:
     return roleIndex("scout")
 
-  if chargerCounts[1] > 0 and heartsTotal > 0:
+  if junctionCounts[1] > 0 and heartsTotal > 0:
     return roleIndex("scrambler")
-  if chargerCounts[2] > 0 and heartsTotal > 0 and influenceTotal > 0:
+  if junctionCounts[2] > 0 and heartsTotal > 0 and influenceTotal > 0:
     return roleIndex("aligner")
 
   if maxStructuresSeen < 10:

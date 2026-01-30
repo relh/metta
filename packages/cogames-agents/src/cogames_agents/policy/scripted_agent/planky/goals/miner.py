@@ -376,12 +376,12 @@ def _find_cogs_depot(ctx: PlankyContext) -> tuple[int, int] | None:
         if not recently_failed(apos):
             return apos
 
-    # Fallback: nearest cogs junction/charger near hub
+    # Fallback: nearest cogs junction/junction near hub
     candidates: list[tuple[int, tuple[int, int]]] = []
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         if not recently_failed(jpos) and _manhattan(jpos, SPAWN_POS) <= 15:
             candidates.append((_manhattan(pos, jpos), jpos))
-    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         if not recently_failed(cpos) and _manhattan(cpos, SPAWN_POS) <= 15:
             candidates.append((_manhattan(pos, cpos), cpos))
 

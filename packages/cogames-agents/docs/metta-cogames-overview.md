@@ -319,7 +319,7 @@ heart_capacity: 1
 
 **Resource:** MinedOut, ResourceBottleneck, PackRat, Energized, Training
 
-**Environmental:** DarkSide (no regen), SuperCharged (+2 regen), RoughTerrain (+2 move cost), SolarFlare (-50% charger)
+**Environmental:** DarkSide (no regen), SuperCharged (+2 regen), RoughTerrain (+2 move cost), SolarFlare (-50% junction)
 
 **Mechanic:** SharedRewards, HeartChorus, HubDrawsFromChests, BalancedCorners
 

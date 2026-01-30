@@ -5,9 +5,9 @@ Scramblers find enemy-aligned supply depots and scramble them to take control.
 With scrambler gear, they get +200 HP.
 
 Strategy:
-- Find ALL chargers on the map
-- Prioritize scrambling enemy (clips) aligned chargers
-- Systematically work through all chargers to take them over
+- Find ALL junctions on the map
+- Prioritize scrambling enemy (clips) aligned junctions
+- Systematically work through all junctions to take them over
 - Check energy before moving to targets
 - Retry failed scramble actions up to MAX_RETRIES times
 """
@@ -28,7 +28,7 @@ from .types import CogsguardAgentState, Role, StructureType
 MAX_RETRIES = 3
 # HP buffer to start returning to the hub before gear is lost.
 HP_RETURN_BUFFER = 12
-# Scramblers should switch to aligner gear after making some neutral chargers.
+# Scramblers should switch to aligner gear after making some neutral junctions.
 SCRAMBLE_TO_ALIGN_THRESHOLD = 1
 
 
@@ -48,12 +48,14 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         - If gear acquisition fails repeatedly, get hearts first (gear may require hearts)
         """
         if DEBUG and s.step_count % 100 == 0:
-            num_chargers = len(s.get_structures_by_type(StructureType.CHARGER))
-            clips_chargers = len([c for c in s.get_structures_by_type(StructureType.CHARGER) if c.alignment == "clips"])
-            num_worked = len(s.worked_chargers)
+            num_junctions = len(s.get_structures_by_type(StructureType.CHARGER))
+            clips_junctions = len(
+                [c for c in s.get_structures_by_type(StructureType.CHARGER) if c.alignment == "clips"]
+            )
+            num_worked = len(s.worked_junctions)
             print(
                 f"[A{s.agent_id}] SCRAMBLER: step={s.step_count} heart={s.heart} energy={s.energy} gear={s.scrambler} "
-                f"chargers={num_chargers} clips={clips_chargers} scrambled={num_worked}"
+                f"junctions={num_junctions} clips={clips_junctions} scrambled={num_worked}"
             )
 
         hub_pos = s.get_structure_position(StructureType.HUB)
@@ -77,7 +79,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     print(f"[A{s.agent_id}] SCRAMBLER: Previous scramble succeeded!")
                 if target is not None and self._smart_role_coordinator is not None:
                     hub_pos = s.stations.get("hub")
-                    self._smart_role_coordinator.register_charger_alignment(
+                    self._smart_role_coordinator.register_junction_alignment(
                         target,
                         None,
                         hub_pos,
@@ -108,9 +110,9 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 print(f"[A{s.agent_id}] SCRAMBLER: Have gear but no heart, getting hearts first")
             return self._get_hearts(s)
 
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        enemy_chargers = [c for c in chargers if c.alignment == "clips" or c.clipped]
-        neutral_chargers = [c for c in chargers if c.alignment is None]
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        enemy_junctions = [c for c in junctions if c.alignment == "clips" or c.clipped]
+        neutral_junctions = [c for c in junctions if c.alignment is None]
 
         if has_gear and len(s.alignment_overrides) >= SCRAMBLE_TO_ALIGN_THRESHOLD:
             if DEBUG and s.step_count % 10 == 0:
@@ -119,22 +121,22 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             if action is not None:
                 return action
 
-        if has_gear and not enemy_chargers and neutral_chargers:
+        if has_gear and not enemy_junctions and neutral_junctions:
             if DEBUG and s.step_count % 10 == 0:
-                print(f"[A{s.agent_id}] SCRAMBLER: No enemy chargers; swapping to aligner gear")
+                print(f"[A{s.agent_id}] SCRAMBLER: No enemy junctions; swapping to aligner gear")
             action = self._switch_to_aligner_gear(s)
             if action is not None:
                 return action
 
-        # Find the best enemy depot to scramble (prioritize closest enemy charger)
+        # Find the best enemy depot to scramble (prioritize closest enemy junction)
         target_depot = self._find_best_target(s)
 
         if target_depot is None:
-            # No known enemy depots, explore to find more chargers
+            # No known enemy depots, explore to find more junctions
             if DEBUG:
-                chargers = s.get_structures_by_type(StructureType.CHARGER)
-                print(f"[A{s.agent_id}] SCRAMBLER: No targets (total chargers={len(chargers)}), exploring")
-            return self._explore_for_chargers(s)
+                junctions = s.get_structures_by_type(StructureType.CHARGER)
+                print(f"[A{s.agent_id}] SCRAMBLER: No targets (total junctions={len(junctions)}), exploring")
+            return self._explore_for_junctions(s)
 
         # Navigate to depot
         # Note: moves require energy. If move fails due to low energy,
@@ -143,21 +145,21 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         dist = abs(target_depot[0] - s.row) + abs(target_depot[1] - s.col)
         if not is_adjacent((s.row, s.col), target_depot):
             if DEBUG and s.step_count % 10 == 0:
-                print(f"[A{s.agent_id}] SCRAMBLER: Moving to charger at {target_depot} (dist={dist})")
+                print(f"[A{s.agent_id}] SCRAMBLER: Moving to junction at {target_depot} (dist={dist})")
             return self._move_towards(s, target_depot, reach_adjacent=True)
 
         # Scramble the depot by bumping it
-        # Mark this charger as worked
-        s.worked_chargers[target_depot] = s.step_count
+        # Mark this junction as worked
+        s.worked_junctions[target_depot] = s.step_count
 
         # Start tracking this scramble attempt
         s.start_action_attempt("scramble", target_depot)
 
         if DEBUG:
-            charger = s.get_structure_at(target_depot)
-            alignment = charger.alignment if charger else "unknown"
+            junction = s.get_structure_at(target_depot)
+            alignment = junction.alignment if junction else "unknown"
             print(
-                f"[A{s.agent_id}] SCRAMBLER: SCRAMBLING charger at {target_depot} "
+                f"[A{s.agent_id}] SCRAMBLER: SCRAMBLING junction at {target_depot} "
                 f"(alignment={alignment}, heart={s.heart}, energy={s.energy})!"
             )
         return self._use_object_at(s, target_depot)
@@ -213,7 +215,7 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             if DEBUG:
                 print(f"[A{s.agent_id}] SCRAMBLER: Waited 40+ steps for hearts, exploring instead")
             s._heart_wait_start = 0
-            return self._explore_for_chargers(s)
+            return self._explore_for_junctions(s)
 
         # Try chest first - it's the primary heart source
         chest_pos = s.get_structure_position(StructureType.CHEST)
@@ -241,61 +243,61 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         return self._explore(s)
 
     def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
-        """Find the best charger to scramble - prioritize enemy (clips) aligned ones.
+        """Find the best junction to scramble - prioritize enemy (clips) aligned ones.
 
-        Skips chargers that were recently worked on to ensure we visit multiple chargers.
+        Skips junctions that were recently worked on to ensure we visit multiple junctions.
         """
-        # Get all known chargers from structures map
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        # Get all known junctions from structures map
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
 
-        # How long to ignore a charger after working on it (steps)
+        # How long to ignore a junction after working on it (steps)
         cooldown = 50
 
-        # Collect chargers and sort by distance, skipping recently worked ones
-        enemy_chargers: list[tuple[int, tuple[int, int]]] = []
-        any_chargers: list[tuple[int, tuple[int, int]]] = []
+        # Collect junctions and sort by distance, skipping recently worked ones
+        enemy_junctions: list[tuple[int, tuple[int, int]]] = []
+        any_junctions: list[tuple[int, tuple[int, int]]] = []
 
         if DEBUG and s.step_count % 20 == 1:
-            print(f"[A{s.agent_id}] FIND_TARGET: {len(chargers)} chargers in structures map")
-            for ch in chargers:
+            print(f"[A{s.agent_id}] FIND_TARGET: {len(junctions)} junctions in structures map")
+            for ch in junctions:
                 print(f"  - {ch.position}: alignment={ch.alignment}, clipped={ch.clipped}")
 
-        for charger in chargers:
-            pos = charger.position
+        for junction in junctions:
+            pos = junction.position
             dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
 
             if DEBUG and s.step_count % 20 == 1:
-                print(f"  LOOP charger@{pos}: alignment='{charger.alignment}' clipped={charger.clipped} dist={dist}")
+                print(f"  LOOP junction@{pos}: alignment='{junction.alignment}' clipped={junction.clipped} dist={dist}")
 
-            # Skip recently worked chargers (only if actually worked before)
-            last_worked = s.worked_chargers.get(pos, 0)
+            # Skip recently worked junctions (only if actually worked before)
+            last_worked = s.worked_junctions.get(pos, 0)
             if last_worked > 0 and s.step_count - last_worked < cooldown:
                 if DEBUG and s.step_count % 20 == 1:
                     print(f"    SKIP: on cooldown (worked {s.step_count - last_worked} steps ago)")
                 continue
 
-            # Skip cogs-aligned chargers (already ours)
-            if charger.alignment == "cogs":
+            # Skip cogs-aligned junctions (already ours)
+            if junction.alignment == "cogs":
                 if DEBUG and s.step_count % 20 == 1:
                     print("    SKIP: cogs-aligned (ours)")
                 continue
 
-            # Check alignment - prioritize clips (enemy) chargers
-            if charger.alignment == "clips" or charger.clipped:
+            # Check alignment - prioritize clips (enemy) junctions
+            if junction.alignment == "clips" or junction.clipped:
                 if DEBUG and s.step_count % 20 == 1:
-                    print("    ADD to enemy_chargers")
-                enemy_chargers.append((dist, pos))
+                    print("    ADD to enemy_junctions")
+                enemy_junctions.append((dist, pos))
             else:
-                any_chargers.append((dist, pos))
+                any_junctions.append((dist, pos))
 
         if DEBUG and s.step_count % 20 == 1:
-            print(f"  enemy_chargers={enemy_chargers} any={any_chargers}")
+            print(f"  enemy_junctions={enemy_junctions} any={any_junctions}")
 
-        # First try enemy chargers (sorted by distance)
-        if enemy_chargers:
-            enemy_chargers.sort()
+        # First try enemy junctions (sorted by distance)
+        if enemy_junctions:
+            enemy_junctions.sort()
             if DEBUG:
-                print(f"[A{s.agent_id}] FIND_TARGET: Returning enemy charger at {enemy_chargers[0][1]}")
+                print(f"[A{s.agent_id}] FIND_TARGET: Returning enemy junction at {enemy_junctions[0][1]}")
             target_idx = 0
             if self._smart_role_coordinator is not None:
                 scrambler_ids = sorted(
@@ -305,13 +307,13 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 )
                 if scrambler_ids:
                     target_idx = scrambler_ids.index(s.agent_id) if s.agent_id in scrambler_ids else 0
-            return enemy_chargers[target_idx % len(enemy_chargers)][1]
+            return enemy_junctions[target_idx % len(enemy_junctions)][1]
 
-        # Then try any non-cogs charger (unknown alignment)
-        if any_chargers:
-            any_chargers.sort()
+        # Then try any non-cogs junction (unknown alignment)
+        if any_junctions:
+            any_junctions.sort()
             if DEBUG:
-                print(f"[A{s.agent_id}] FIND_TARGET: Returning any charger at {any_chargers[0][1]}")
+                print(f"[A{s.agent_id}] FIND_TARGET: Returning any junction at {any_junctions[0][1]}")
             target_idx = 0
             if self._smart_role_coordinator is not None:
                 scrambler_ids = sorted(
@@ -321,12 +323,12 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 )
                 if scrambler_ids:
                     target_idx = scrambler_ids.index(s.agent_id) if s.agent_id in scrambler_ids else 0
-            return any_chargers[target_idx % len(any_chargers)][1]
+            return any_junctions[target_idx % len(any_junctions)][1]
 
         return None
 
-    def _explore_for_chargers(self, s: CogsguardAgentState) -> Action:
-        """Explore aggressively to find more chargers spread around the map."""
+    def _explore_for_junctions(self, s: CogsguardAgentState) -> Action:
+        """Explore aggressively to find more junctions spread around the map."""
         frontier_action = self._explore_frontier(s)
         if frontier_action is not None:
             return frontier_action

@@ -8,7 +8,7 @@ Strategy:
 - Extractors are in map corners, aligned buildings provide deposit points
 - Miners should quickly head to corners to find extractors
 - Once extractors are known, alternate between mining and depositing
-- Deposit to nearest aligned building (hub or cogs-aligned chargers)
+- Deposit to nearest aligned building (hub or cogs-aligned junctions)
 - If gear is lost, collect resources without gear and check for gear on each dropoff
 - Retry failed mine actions up to MAX_RETRIES times
 - HP-aware: Never venture further than can safely return to healing territory
@@ -61,7 +61,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
     def _get_nearest_aligned_depot(self, s: CogsguardAgentState) -> tuple[int, int] | None:
         """Find the nearest aligned building that accepts deposits.
 
-        Returns position of nearest cogs-aligned building (hub or charger).
+        Returns position of nearest cogs-aligned building (hub or junction).
         These buildings have healing AOE and accept resource deposits.
         """
         candidates: list[tuple[int, tuple[int, int]]] = []
@@ -72,12 +72,12 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             dist = abs(hub_pos[0] - s.row) + abs(hub_pos[1] - s.col)
             candidates.append((dist, hub_pos))
 
-        # Check for cogs-aligned chargers
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        for charger in chargers:
-            if charger.alignment == "cogs":
-                dist = abs(charger.position[0] - s.row) + abs(charger.position[1] - s.col)
-                candidates.append((dist, charger.position))
+        # Check for cogs-aligned junctions
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        for junction in junctions:
+            if junction.alignment == "cogs":
+                dist = abs(junction.position[0] - s.row) + abs(junction.position[1] - s.col)
+                candidates.append((dist, junction.position))
 
         if not candidates:
             return None
@@ -185,20 +185,20 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         """Calculate current HP drain rate based on proximity to enemy buildings.
 
         Base drain is HP_DRAIN_BASE per step outside healing AOE.
-        Additional HP_DRAIN_ENEMY_AOE per step when near enemy chargers.
+        Additional HP_DRAIN_ENEMY_AOE per step when near enemy junctions.
         """
         drain_rate = HP_DRAIN_BASE
 
-        # Check if near any enemy chargers
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        for charger in chargers:
-            if charger.alignment == "cogs":
-                continue  # Friendly charger
-            dist = abs(charger.position[0] - s.row) + abs(charger.position[1] - s.col)
+        # Check if near any enemy junctions
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        for junction in junctions:
+            if junction.alignment == "cogs":
+                continue  # Friendly junction
+            dist = abs(junction.position[0] - s.row) + abs(junction.position[1] - s.col)
             if dist <= ENEMY_AOE_RANGE:
                 drain_rate += HP_DRAIN_ENEMY_AOE
                 if DEBUG:
-                    print(f"[A{s.agent_id}] MINER: Near enemy charger at {charger.position}, drain_rate={drain_rate}")
+                    print(f"[A{s.agent_id}] MINER: Near enemy junction at {junction.position}, drain_rate={drain_rate}")
                 break  # Only count once even if near multiple enemies
 
         return drain_rate
@@ -309,7 +309,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         (agents auto-regen energy every step, and regen full near aligned buildings)
         """
         # Use structures map for most up-to-date extractor info
-        # Prefer extractors that are safe (not near clips chargers)
+        # Prefer extractors that are safe (not near clips junctions)
         extractor = self._get_safe_extractor(s, preferred_resource=self._preferred_resource)
 
         if extractor is None:
@@ -438,20 +438,20 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
     ) -> "StructureInfo | None":
         """Get extractor prioritized by distance to aligned stations.
 
-        Prioritizes extractors nearest to aligned buildings (hub/cogs chargers)
+        Prioritizes extractors nearest to aligned buildings (hub/cogs junctions)
         for shorter, safer mining routes.
 
         Considers:
         1. Distance from extractor to nearest aligned station (primary sort)
-        2. Distance from clips chargers (enemy AOE damage)
+        2. Distance from clips junctions (enemy AOE damage)
         3. HP-based range limit - only select extractors we can reach and return from safely
         """
         # Avoid extractors within enemy AOE so "safe" picks never drain faster than expected.
         danger_range = ENEMY_AOE_RANGE
 
-        # Get all clips chargers
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        danger_zones = [c.position for c in chargers if c.alignment != "cogs"]
+        # Get all clips junctions
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        danger_zones = [c.position for c in junctions if c.alignment != "cogs"]
 
         # Calculate max safe operating distance based on HP
         # We need HP to get to extractor AND back to healing zone

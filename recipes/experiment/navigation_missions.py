@@ -38,7 +38,7 @@ def _cleanup_nav_env(env: MettaGridConfig) -> MettaGridConfig:
     oxygen_cfg = OxygenExtractorConfig()
     germanium_cfg = GermaniumExtractorConfig()
     silicon_cfg = SiliconExtractorConfig()
-    charger_cfg = ChargerConfig()
+    junction_cfg = ChargerConfig()
     chest_cfg = CvCChestConfig()
     wall_cfg = CvCWallConfig()
     hub_cfg = HubConfig()
@@ -48,7 +48,7 @@ def _cleanup_nav_env(env: MettaGridConfig) -> MettaGridConfig:
             "wall": wall_cfg.station_cfg(),
             "hub": hub_cfg.station_cfg(),
             "chest": chest_cfg.station_cfg(),
-            "charger": charger_cfg.station_cfg(),
+            "junction": junction_cfg.station_cfg(),
             "carbon_extractor": carbon_cfg.station_cfg(),
             "oxygen_extractor": oxygen_cfg.station_cfg(),
             "germanium_extractor": germanium_cfg.station_cfg(),

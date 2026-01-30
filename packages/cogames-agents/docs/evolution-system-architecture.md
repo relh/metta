@@ -64,30 +64,30 @@ RoleTier    ──*:*──> BehaviorDef  (via behavior_ids)
 
 ### Default behaviors (seeded by coordinator)
 
-| Name                | Source    | Description            |
-| ------------------- | --------- | ---------------------- |
-| explore             | COMMON    | General exploration    |
-| recharge            | COMMON    | Energy recharge        |
-| mine_resource       | MINER     | Gather from extractor  |
-| deposit_resource    | MINER     | Deposit at station     |
-| find_extractor      | MINER     | Locate extractor       |
-| discover_stations   | SCOUT     | Find stations          |
-| discover_extractors | SCOUT     | Find extractors        |
-| discover_chargers   | SCOUT     | Find chargers          |
-| get_hearts          | ALIGNER   | Acquire hearts         |
-| get_influence       | ALIGNER   | Acquire influence      |
-| align_charger       | ALIGNER   | Align a charger        |
-| scramble_charger    | SCRAMBLER | Scramble enemy charger |
-| find_enemy_charger  | SCRAMBLER | Locate enemy charger   |
+| Name                | Source    | Description             |
+| ------------------- | --------- | ----------------------- |
+| explore             | COMMON    | General exploration     |
+| recharge            | COMMON    | Energy recharge         |
+| mine_resource       | MINER     | Gather from extractor   |
+| deposit_resource    | MINER     | Deposit at station      |
+| find_extractor      | MINER     | Locate extractor        |
+| discover_stations   | SCOUT     | Find stations           |
+| discover_extractors | SCOUT     | Find extractors         |
+| discover_junctions  | SCOUT     | Find junctions          |
+| get_hearts          | ALIGNER   | Acquire hearts          |
+| get_influence       | ALIGNER   | Acquire influence       |
+| align_junction      | ALIGNER   | Align a junction        |
+| scramble_junction   | SCRAMBLER | Scramble enemy junction |
+| find_enemy_junction | SCRAMBLER | Locate enemy junction   |
 
 ### Default roles (seeded by coordinator)
 
-| Role          | Tier 1                    | Tier 2              | Tier 3            | Tier 4  |
-| ------------- | ------------------------- | ------------------- | ----------------- | ------- |
-| BaseMiner     | deposit_resource          | mine_resource       | find_extractor    | explore |
-| BaseScout     | discover_stations         | discover_extractors | discover_chargers | explore |
-| BaseAligner   | get_hearts, get_influence | align_charger       | explore           | -       |
-| BaseScrambler | get_hearts                | find_enemy_charger  | scramble_charger  | explore |
+| Role          | Tier 1                    | Tier 2              | Tier 3             | Tier 4  |
+| ------------- | ------------------------- | ------------------- | ------------------ | ------- |
+| BaseMiner     | deposit_resource          | mine_resource       | find_extractor     | explore |
+| BaseScout     | discover_stations         | discover_extractors | discover_junctions | explore |
+| BaseAligner   | get_hearts, get_influence | align_junction      | explore            | -       |
+| BaseScrambler | get_hearts                | find_enemy_junction | scramble_junction  | explore |
 
 ---
 

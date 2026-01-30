@@ -90,7 +90,7 @@ class Phase(Enum):
     GATHER = "gather"  # Collect resources (explore if needed)
     ASSEMBLE = "assemble"  # Make hearts at hub
     DELIVER = "deliver"  # Deposit hearts to chest
-    RECHARGE = "recharge"  # Recharge energy at charger
+    RECHARGE = "recharge"  # Recharge energy at junction
     CRAFT_UNCLIP = "craft_unclip"  # Craft unclip items at hub
     UNCLIP = "unclip"  # Unclip extractors
 
@@ -178,7 +178,7 @@ class SimpleAgentState:
         default_factory=lambda: {"carbon": [], "oxygen": [], "germanium": [], "silicon": []}
     )
     stations: dict[str, tuple[int, int] | None] = field(
-        default_factory=lambda: {"hub": None, "chest": None, "charger": None}
+        default_factory=lambda: {"hub": None, "chest": None, "junction": None}
     )
 
     # Inventory

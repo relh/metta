@@ -609,10 +609,17 @@ dependencies = [
 agents = [
     { name = "cogames-agents" },
 ]
+test = [
+    { name = "cogames-agents" },
+    { name = "pytest" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "cogames-agents", marker = "extra == 'agents'", editable = "packages/cogames-agents" },
+    { name = "cogames-agents", marker = "extra == 'test'", editable = "packages/cogames-agents" },
     { name = "einops", specifier = ">=0.8.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -624,16 +631,19 @@ requires-dist = [
     { name = "packaging", specifier = ">=24.0.0" },
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
     { name = "pydantic", specifier = ">=2.11.5" },
+    { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-httpserver", specifier = ">=1.1.0" },
+    { name = "pytest-xdist", marker = "extra == 'test'" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "questionary", specifier = ">=2.0.1" },
     { name = "questionary", specifier = ">=2.1.0" },
     { name = "rich", specifier = ">=13.7.0" },
+    { name = "ruff", marker = "extra == 'test'" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "typer", specifier = ">=0.19.2" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]
-provides-extras = ["agents"]
+provides-extras = ["agents", "test"]
 
 [[package]]
 name = "cogames-agents"

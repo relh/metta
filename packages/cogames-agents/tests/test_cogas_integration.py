@@ -778,7 +778,7 @@ class TestFullPipeline:
         emap = _make_entity_map(
             entities={
                 (100, 105): Entity(
-                    type="cogs_charger",
+                    type="cogs_junction",
                     properties={"alignment": "cogs"},
                     last_seen=50,
                 ),

@@ -7,7 +7,7 @@
 
 ### Junction States
 
-Junctions (chargers on the map) have three states:
+Junctions (junctions on the map) have three states:
 
 - **Neutral** (unaligned)
 - **Cogs-aligned** (your team controls)

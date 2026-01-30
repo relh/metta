@@ -312,7 +312,7 @@ class ScramblerBehavior:
         # First try to find CLIPS junction in current observation
         if state.last_obs is not None:
             result = services.map_tracker.get_direction_to_nearest(
-                state, state.last_obs, frozenset({"junction", "charger", "supply_depot"})
+                state, state.last_obs, frozenset({"junction", "supply_depot"})
             )
             if result:
                 direction, target_pos = result

@@ -166,10 +166,10 @@ class EvolutionaryRoleCoordinator:
             interruptible=True,
         )
         self.catalog.add_behavior(
-            name="discover_chargers",
+            name="discover_junctions",
             source=BehaviorSource.SCOUT,
             can_start=_always_true,
-            act=self._behavior_act("discover_chargers"),
+            act=self._behavior_act("discover_junctions"),
             should_terminate=_always_false,
             interruptible=True,
         )
@@ -192,28 +192,28 @@ class EvolutionaryRoleCoordinator:
             interruptible=True,
         )
         self.catalog.add_behavior(
-            name="align_charger",
+            name="align_junction",
             source=BehaviorSource.ALIGNER,
             can_start=_always_true,
-            act=self._behavior_act("align_charger"),
+            act=self._behavior_act("align_junction"),
             should_terminate=_always_false,
             interruptible=True,
         )
 
         # Scrambler behaviors
         self.catalog.add_behavior(
-            name="scramble_charger",
+            name="scramble_junction",
             source=BehaviorSource.SCRAMBLER,
             can_start=_always_true,
-            act=self._behavior_act("scramble_charger"),
+            act=self._behavior_act("scramble_junction"),
             should_terminate=_always_false,
             interruptible=True,
         )
         self.catalog.add_behavior(
-            name="find_enemy_charger",
+            name="find_enemy_junction",
             source=BehaviorSource.SCRAMBLER,
             can_start=_always_true,
-            act=self._behavior_act("find_enemy_charger"),
+            act=self._behavior_act("find_enemy_junction"),
             should_terminate=_always_false,
             interruptible=True,
         )
@@ -256,7 +256,7 @@ class EvolutionaryRoleCoordinator:
         )
         self.catalog.register_role(miner_role)
 
-        # Scout role: discover_stations -> discover_extractors -> discover_chargers -> explore
+        # Scout role: discover_stations -> discover_extractors -> discover_junctions -> explore
         scout_tiers = [
             RoleTier(
                 behavior_ids=[self.catalog.find_behavior_id("discover_stations")],
@@ -267,7 +267,7 @@ class EvolutionaryRoleCoordinator:
                 selection=TierSelection.FIXED,
             ),
             RoleTier(
-                behavior_ids=[self.catalog.find_behavior_id("discover_chargers")],
+                behavior_ids=[self.catalog.find_behavior_id("discover_junctions")],
                 selection=TierSelection.FIXED,
             ),
             RoleTier(
@@ -283,7 +283,7 @@ class EvolutionaryRoleCoordinator:
         )
         self.catalog.register_role(scout_role)
 
-        # Aligner role: get_hearts -> get_influence -> align_charger -> explore
+        # Aligner role: get_hearts -> get_influence -> align_junction -> explore
         aligner_tiers = [
             RoleTier(
                 behavior_ids=[
@@ -293,7 +293,7 @@ class EvolutionaryRoleCoordinator:
                 selection=TierSelection.FIXED,
             ),
             RoleTier(
-                behavior_ids=[self.catalog.find_behavior_id("align_charger")],
+                behavior_ids=[self.catalog.find_behavior_id("align_junction")],
                 selection=TierSelection.FIXED,
             ),
             RoleTier(
@@ -309,18 +309,18 @@ class EvolutionaryRoleCoordinator:
         )
         self.catalog.register_role(aligner_role)
 
-        # Scrambler role: get_hearts -> find_enemy_charger -> scramble_charger -> explore
+        # Scrambler role: get_hearts -> find_enemy_junction -> scramble_junction -> explore
         scrambler_tiers = [
             RoleTier(
                 behavior_ids=[self.catalog.find_behavior_id("get_hearts")],
                 selection=TierSelection.FIXED,
             ),
             RoleTier(
-                behavior_ids=[self.catalog.find_behavior_id("find_enemy_charger")],
+                behavior_ids=[self.catalog.find_behavior_id("find_enemy_junction")],
                 selection=TierSelection.FIXED,
             ),
             RoleTier(
-                behavior_ids=[self.catalog.find_behavior_id("scramble_charger")],
+                behavior_ids=[self.catalog.find_behavior_id("scramble_junction")],
                 selection=TierSelection.FIXED,
             ),
             RoleTier(

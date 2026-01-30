@@ -5,9 +5,9 @@ Aligners find supply depots and align them to the cogs commons to take control.
 With aligner gear, they get +20 influence capacity.
 
 Strategy:
-- Find ALL chargers on the map
-- Prioritize aligning neutral and enemy (clips) chargers
-- Systematically work through all chargers to take them over
+- Find ALL junctions on the map
+- Prioritize aligning neutral and enemy (clips) junctions
+- Systematically work through all junctions to take them over
 - Check energy before moving to targets
 - Retry failed align actions up to MAX_RETRIES times
 """
@@ -44,11 +44,12 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         - If gear acquisition fails repeatedly, get hearts first
         """
         if DEBUG and s.step_count % 50 == 0:
-            num_chargers = len(s.get_structures_by_type(StructureType.CHARGER))
-            num_worked = len(s.worked_chargers)
+            num_junctions = len(s.get_structures_by_type(StructureType.CHARGER))
+            num_worked = len(s.worked_junctions)
             print(
                 f"[A{s.agent_id}] ALIGNER: step={s.step_count} influence={s.influence} "
-                f"heart={s.heart} energy={s.energy} gear={s.aligner} chargers_known={num_chargers} worked={num_worked}"
+                f"heart={s.heart} energy={s.energy} gear={s.aligner} "
+                f"junctions_known={num_junctions} worked={num_worked}"
             )
 
         hub_pos = s.get_structure_position(StructureType.HUB)
@@ -86,7 +87,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     print(f"[A{s.agent_id}] ALIGNER: Previous align succeeded!")
                 if target is not None and self._smart_role_coordinator is not None:
                     hub_pos = s.stations.get("hub")
-                    self._smart_role_coordinator.register_charger_alignment(
+                    self._smart_role_coordinator.register_junction_alignment(
                         target,
                         "cogs",
                         hub_pos,
@@ -109,7 +110,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     s._pending_alignment_target = None
                 s.clear_pending_action()
 
-        # Find the best depot to align (prioritize closest non-cogs charger)
+        # Find the best depot to align (prioritize closest non-cogs junction)
         target_depot = None
         pending_target = s._pending_alignment_target
         if pending_target is not None:
@@ -125,8 +126,8 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         if target_depot is None:
             if DEBUG and s.step_count % 50 == 0:
-                print(f"[A{s.agent_id}] ALIGNER: No targets, exploring for chargers")
-            return self._explore_for_chargers(s)
+                print(f"[A{s.agent_id}] ALIGNER: No targets, exploring for junctions")
+            return self._explore_for_junctions(s)
 
         # Navigate to depot
         # Note: moves require energy. If move fails due to low energy,
@@ -134,20 +135,20 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         # (agents auto-regen energy every step, and regen full near aligned buildings)
         if not is_adjacent((s.row, s.col), target_depot):
             if DEBUG and s.step_count % 20 == 0:
-                print(f"[A{s.agent_id}] ALIGNER: Moving to charger at {target_depot}")
+                print(f"[A{s.agent_id}] ALIGNER: Moving to junction at {target_depot}")
             return self._move_towards(s, target_depot, reach_adjacent=True)
 
         # Align the depot by bumping it
-        # Mark this charger as worked for a while (align multiple times then move on)
-        last_worked = s.worked_chargers.get(target_depot, 0)
+        # Mark this junction as worked for a while (align multiple times then move on)
+        last_worked = s.worked_junctions.get(target_depot, 0)
         times_worked = s.step_count - last_worked if last_worked > 0 else 0
-        s.worked_chargers[target_depot] = s.step_count
+        s.worked_junctions[target_depot] = s.step_count
 
         # Start tracking this align attempt
         s.start_action_attempt("align", target_depot)
 
         if DEBUG and times_worked < 5:
-            print(f"[A{s.agent_id}] ALIGNER: ALIGNING charger at {target_depot} (energy={s.energy}, heart={s.heart})!")
+            print(f"[A{s.agent_id}] ALIGNER: ALIGNING junction at {target_depot} (energy={s.energy}, heart={s.heart})!")
         return self._use_object_at(s, target_depot)
 
     def _handle_no_gear(self, s: CogsguardAgentState) -> Action:
@@ -193,7 +194,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 if DEBUG:
                     print(f"[A{s.agent_id}] ALIGNER: Waited 40+ steps for hearts, exploring instead")
                 s._heart_wait_start = 0
-                return self._explore_for_chargers(s)
+                return self._explore_for_junctions(s)
 
             # Try chest first - it's the primary heart source
             chest_pos = s.get_structure_position(StructureType.CHEST)
@@ -229,15 +230,15 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         return self._noop()
 
     def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
-        """Find the closest un-aligned charger to align.
+        """Find the closest un-aligned junction to align.
 
-        Prioritizes by distance - aligns the closest charger that isn't already cogs-aligned.
-        Skips chargers that were recently worked on to ensure we visit multiple chargers.
+        Prioritizes by distance - aligns the closest junction that isn't already cogs-aligned.
+        Skips junctions that were recently worked on to ensure we visit multiple junctions.
         """
-        # Get all known chargers from structures map
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
+        # Get all known junctions from structures map
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
 
-        # How long to ignore a charger after working on it (steps)
+        # How long to ignore a junction after working on it (steps)
         cooldown = 50
 
         recent_candidates: list[tuple[int, tuple[int, int]]] = []
@@ -245,11 +246,11 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             hub_pos = s.stations.get("hub")
             recent_targets = self._smart_role_coordinator.recent_scramble_targets(hub_pos, s.step_count)
             for pos in recent_targets:
-                last_worked = s.worked_chargers.get(pos, 0)
+                last_worked = s.worked_junctions.get(pos, 0)
                 if last_worked > 0 and s.step_count - last_worked < cooldown:
                     continue
-                charger = s.get_structure_at(pos)
-                if charger is not None and charger.alignment in ("cogs", "clips"):
+                junction = s.get_structure_at(pos)
+                if junction is not None and junction.alignment in ("cogs", "clips"):
                     continue
                 dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
                 recent_candidates.append((dist, pos))
@@ -267,32 +268,32 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     target_idx = aligner_ids.index(s.agent_id) if s.agent_id in aligner_ids else 0
             return recent_candidates[target_idx % len(recent_candidates)][1]
 
-        # Collect all un-aligned chargers (not cogs) and sort by distance
-        unaligned_chargers: list[tuple[int, tuple[int, int]]] = []
+        # Collect all un-aligned junctions (not cogs) and sort by distance
+        unaligned_junctions: list[tuple[int, tuple[int, int]]] = []
 
-        for charger in chargers:
-            pos = charger.position
+        for junction in junctions:
+            pos = junction.position
             dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
 
-            # Skip recently worked chargers
-            last_worked = s.worked_chargers.get(pos, 0)
+            # Skip recently worked junctions
+            last_worked = s.worked_junctions.get(pos, 0)
             if last_worked > 0 and s.step_count - last_worked < cooldown:
                 continue
 
-            # Skip already cogs-aligned chargers
-            if charger.alignment is not None:
+            # Skip already cogs-aligned junctions
+            if junction.alignment is not None:
                 continue
 
-            # Add neutral chargers only
-            unaligned_chargers.append((dist, pos))
+            # Add neutral junctions only
+            unaligned_junctions.append((dist, pos))
 
         # Sort by distance and return closest
-        if unaligned_chargers:
-            unaligned_chargers.sort()
+        if unaligned_junctions:
+            unaligned_junctions.sort()
             if DEBUG and s.step_count % 20 == 0:
-                count = len(unaligned_chargers)
-                closest = unaligned_chargers[0][1]
-                print(f"[A{s.agent_id}] ALIGNER: Found {count} un-aligned chargers, closest at {closest}")
+                count = len(unaligned_junctions)
+                closest = unaligned_junctions[0][1]
+                print(f"[A{s.agent_id}] ALIGNER: Found {count} un-aligned junctions, closest at {closest}")
             target_idx = 0
             if self._smart_role_coordinator is not None:
                 aligner_ids = sorted(
@@ -302,12 +303,12 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 )
                 if aligner_ids:
                     target_idx = aligner_ids.index(s.agent_id) if s.agent_id in aligner_ids else 0
-            return unaligned_chargers[target_idx % len(unaligned_chargers)][1]
+            return unaligned_junctions[target_idx % len(unaligned_junctions)][1]
 
         return None
 
-    def _explore_for_chargers(self, s: CogsguardAgentState) -> Action:
-        """Explore aggressively to find more chargers spread around the map."""
+    def _explore_for_junctions(self, s: CogsguardAgentState) -> Action:
+        """Explore aggressively to find more junctions spread around the map."""
         frontier_action = self._explore_frontier(s)
         if frontier_action is not None:
             return frontier_action

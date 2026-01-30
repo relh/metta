@@ -190,10 +190,10 @@ class Coordinator:
         self._score_update_step = step
         self._cogs_junctions = len(
             entity_map.find(type_contains="junction", property_filter={"alignment": "cogs"})
-        ) + len(entity_map.find(type_contains="charger", property_filter={"alignment": "cogs"}))
+        ) + len(entity_map.find(type_contains="junction", property_filter={"alignment": "cogs"}))
         self._clips_junctions = len(
             entity_map.find(type_contains="junction", property_filter={"alignment": "clips"})
-        ) + len(entity_map.find(type_contains="charger", property_filter={"alignment": "clips"}))
+        ) + len(entity_map.find(type_contains="junction", property_filter={"alignment": "clips"}))
 
     @property
     def is_winning(self) -> bool:

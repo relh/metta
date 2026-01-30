@@ -262,7 +262,7 @@ class Phase(Enum):
     GATHER = "gather"          # Collect resources from extractors
     ASSEMBLE = "assemble"      # Craft hearts at hub
     DELIVER = "deliver"        # Deposit hearts to chest
-    RECHARGE = "recharge"      # Restore energy at charger
+    RECHARGE = "recharge"      # Restore energy at junction
     CRAFT_UNCLIP = "craft_unclip"  # Craft unclip items (UnclippingAgent)
     UNCLIP = "unclip"          # Restore clipped extractors (UnclippingAgent)
 ```
@@ -286,7 +286,7 @@ The `_execute_phase` method dispatches to phase-specific handlers:
 GATHER   -> _do_gather()    — find extractors, navigate, use them
 ASSEMBLE -> _do_assemble()  — find hub, navigate, use it
 DELIVER  -> _do_deliver()   — find chest, navigate, use it
-RECHARGE -> _do_recharge()  — find charger, navigate, use it
+RECHARGE -> _do_recharge()  — find junction, navigate, use it
 ```
 
 ### Adding custom phases

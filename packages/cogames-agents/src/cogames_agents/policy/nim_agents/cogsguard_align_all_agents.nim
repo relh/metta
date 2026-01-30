@@ -4,7 +4,7 @@ import
   common
 
 const
-  DepotTags = ["charger", "junction", "supply_depot"]
+  DepotTags = ["junction", "junction", "supply_depot"]
   HubTags = ["hub", "hub", "main_nexus"]
   StationTags = ["aligner_station", "scrambler_station", "miner_station", "scout_station"]
   ResourceNames = ["carbon", "oxygen", "germanium", "silicon"]

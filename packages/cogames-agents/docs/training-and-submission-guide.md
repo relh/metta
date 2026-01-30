@@ -322,7 +322,7 @@ Outputs:
 - Per-step role distribution trace
 - Collective resource inventory over time (with deltas)
 - Role transition counts
-- Structure counts per agent (chargers, extractors)
+- Structure counts per agent (junctions, extractors)
 
 ---
 

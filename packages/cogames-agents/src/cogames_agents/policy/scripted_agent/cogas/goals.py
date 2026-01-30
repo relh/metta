@@ -2,7 +2,7 @@
 Cogas goals -- phase-aware goal factories and cogas-specific goals.
 
 Reuses planky's goal implementations where possible, adding:
-- RechargeEnergyGoal: energy-aware detour to charger
+- RechargeEnergyGoal: energy-aware detour to junction
 - CoordinatedAlignGoal: junction priority queue with team coordination
 - CoordinatedScrambleGoal: disruption scoring with team coordination
 - PatrolJunctionsGoal: sentinel mode for SUSTAIN phase
@@ -193,10 +193,10 @@ class GetScramblerGearGoal(SharedDiscoveryGearGoal):
 
 
 class RechargeEnergyGoal(Goal):
-    """Detour to nearest charger when energy is low.
+    """Detour to nearest junction when energy is low.
 
     Energy-aware pathing: checks path cost against remaining energy
-    and forces a charger detour if the agent would stall mid-path.
+    and forces a junction detour if the agent would stall mid-path.
     """
 
     name = "RechargeEnergy"
@@ -208,31 +208,31 @@ class RechargeEnergyGoal(Goal):
         return ctx.state.energy >= self._threshold
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
-        # Find nearest charger (prefer cogs-aligned for AOE bonus)
-        charger = _find_nearest_charger(ctx)
-        if charger is None:
+        # Find nearest junction (prefer cogs-aligned for AOE bonus)
+        junction = _find_nearest_junction(ctx)
+        if junction is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
         if ctx.trace:
-            ctx.trace.nav_target = charger
+            ctx.trace.nav_target = junction
 
-        dist = _manhattan(ctx.state.position, charger)
+        dist = _manhattan(ctx.state.position, junction)
         if dist <= 1:
-            return _move_toward(ctx.state.position, charger)
-        return ctx.navigator.get_action(ctx.state.position, charger, ctx.map, reach_adjacent=True)
+            return _move_toward(ctx.state.position, junction)
+        return ctx.navigator.get_action(ctx.state.position, junction, ctx.map, reach_adjacent=True)
 
 
-def _find_nearest_charger(ctx: PlankyContext) -> Optional[tuple[int, int]]:
-    """Find nearest charger, preferring cogs-aligned ones."""
+def _find_nearest_junction(ctx: PlankyContext) -> Optional[tuple[int, int]]:
+    """Find nearest junction, preferring cogs-aligned ones."""
     pos = ctx.state.position
     candidates: list[tuple[int, tuple[int, int]]] = []
 
-    # Prefer cogs-aligned chargers (AOE energy bonus)
-    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+    # Prefer cogs-aligned junctions (AOE energy bonus)
+    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, cpos), cpos))
 
-    # Then any neutral charger
-    for cpos, e in ctx.map.find(type_contains="charger"):
+    # Then any neutral junction
+    for cpos, e in ctx.map.find(type_contains="junction"):
         alignment = e.properties.get("alignment")
         if alignment is None:
             candidates.append((_manhattan(pos, cpos) + 5, cpos))  # Slight penalty for neutral
@@ -335,7 +335,7 @@ class CoordinatedAlignGoal(Goal):
         prev_target = ctx.blackboard.get(f"_align_prev_target_{self._agent_id}")
         if prev_target is not None:
             prev_entities = ctx.map.find(type_contains="junction")
-            prev_entities.extend(ctx.map.find(type_contains="charger"))
+            prev_entities.extend(ctx.map.find(type_contains="junction"))
             for ep, e in prev_entities:
                 if ep == prev_target and e.properties.get("alignment") == "cogs":
                     # Previous target aligned — clear failure tracking and advance
@@ -415,7 +415,7 @@ class CoordinatedAlignGoal(Goal):
             score = self._score_junction(ctx, pos, jpos)
             candidates.append((score, jpos))
 
-        for cpos, e in ctx.map.find(type_contains="charger"):
+        for cpos, e in ctx.map.find(type_contains="junction"):
             if e.properties.get("alignment") is not None:
                 continue
             if self._recently_failed(ctx, cpos):
@@ -440,7 +440,7 @@ class CoordinatedAlignGoal(Goal):
         for jp, e in ctx.map.find(type_contains="junction"):
             if jp == p and e.properties.get("alignment") == "cogs":
                 return True
-        for cp, e in ctx.map.find(type_contains="charger"):
+        for cp, e in ctx.map.find(type_contains="junction"):
             if cp == p and e.properties.get("alignment") == "cogs":
                 return True
         return False
@@ -570,7 +570,7 @@ class CoordinatedScrambleGoal(Goal):
             failed_step = ctx.blackboard.get(f"scramble_failed_{p}", -9999)
             return ctx.step - failed_step < self.COOLDOWN_STEPS
 
-        # Enemy junctions and chargers
+        # Enemy junctions and junctions
         candidates: list[tuple[float, tuple[int, int]]] = []
 
         for jpos, _e in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
@@ -581,7 +581,7 @@ class CoordinatedScrambleGoal(Goal):
             score = self._score_target(ctx, pos, jpos)
             candidates.append((score, jpos))
 
-        for cpos, _e in ctx.map.find(type_contains="charger", property_filter={"alignment": "clips"}):
+        for cpos, _e in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
             if recently_failed(cpos):
                 continue
             if cpos in claimed and not self._coordinator.claim_scramble(self._agent_id, cpos):
@@ -618,13 +618,13 @@ class CoordinatedScrambleGoal(Goal):
         cluster_weight = -8.0 if is_late_losing else -4.0
         cluster_bonus = cluster_weight * clips_nearby
 
-        # Also count enemy chargers as high-value (deny energy)
-        clips_chargers_nearby = sum(
+        # Also count enemy junctions as high-value (deny energy)
+        clips_junctions_nearby = sum(
             1
-            for cp, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "clips"})
+            for cp, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"})
             if _manhattan(epos, cp) <= self.AOE_RANGE and cp != epos
         )
-        charger_bonus = -6.0 * clips_chargers_nearby
+        junction_bonus = -6.0 * clips_junctions_nearby
 
         # Bonus for targets near our neutral junctions (opens them for aligners)
         neutral_nearby = sum(
@@ -638,7 +638,7 @@ class CoordinatedScrambleGoal(Goal):
         if is_late_losing:
             dist *= 0.5
 
-        return dist + cluster_bonus + charger_bonus + opener_bonus
+        return dist + cluster_bonus + junction_bonus + opener_bonus
 
 
 # ---------------------------------------------------------------------------
@@ -683,7 +683,7 @@ class PatrolJunctionsGoal(Goal):
         for jpos, e in ctx.map.find(type_contains="junction"):
             if e.properties.get("alignment") is None:
                 neutral.append((_manhattan(pos, jpos), jpos))
-        for cpos, e in ctx.map.find(type_contains="charger"):
+        for cpos, e in ctx.map.find(type_contains="junction"):
             if e.properties.get("alignment") is None:
                 neutral.append((_manhattan(pos, cpos), cpos))
 
@@ -695,7 +695,7 @@ class PatrolJunctionsGoal(Goal):
         cogs: list[tuple[int, tuple[int, int]]] = []
         for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
             cogs.append((_manhattan(pos, jpos), jpos))
-        for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+        for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
             cogs.append((_manhattan(pos, cpos), cpos))
 
         if not cogs:

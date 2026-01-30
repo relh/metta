@@ -72,7 +72,7 @@ class AgentSnapshot:
 
 @dataclass
 class JunctionState:
-    """Tracks the state of a known junction (charger/supply depot)."""
+    """Tracks the state of a known junction (junction/supply depot)."""
 
     position: tuple[int, int]
     alignment: Optional[str] = None  # "cogs", "clips", or None (neutral)

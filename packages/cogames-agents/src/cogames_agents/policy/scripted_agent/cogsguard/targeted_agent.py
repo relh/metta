@@ -75,21 +75,21 @@ class TargetedPlannerState:
     num_agents: int
     desired_vibes: list[str] = field(default_factory=list)
     last_plan_step: int = 0
-    known_chargers: int = 0
-    aligned_chargers: int = 0
+    known_junctions: int = 0
+    aligned_junctions: int = 0
     chest_resources: int = 0
-    charger_map: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
+    junction_map: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
     extractor_map: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
-    assigned_chargers: dict[int, tuple[int, int]] = field(default_factory=dict)
+    assigned_junctions: dict[int, tuple[int, int]] = field(default_factory=dict)
     assigned_extractors: dict[int, tuple[int, int]] = field(default_factory=dict)
 
     def update_from_agent(self, s: CogsguardAgentState) -> None:
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        aligned = [c for c in chargers if c.alignment == "cogs"]
-        self.known_chargers = max(self.known_chargers, len(chargers))
-        self.aligned_chargers = max(self.aligned_chargers, len(aligned))
-        for charger in chargers:
-            self.charger_map[charger.position] = charger.alignment
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        aligned = [c for c in junctions if c.alignment == "cogs"]
+        self.known_junctions = max(self.known_junctions, len(junctions))
+        self.aligned_junctions = max(self.aligned_junctions, len(aligned))
+        for junction in junctions:
+            self.junction_map[junction.position] = junction.alignment
 
         for extractor in s.get_usable_extractors():
             self.extractor_map[extractor.position] = extractor.resource_type
@@ -111,13 +111,13 @@ class TargetedPlannerState:
 
         if DEBUG:
             print(
-                f"[TARGETED] plan@{step_count}: chargers={self.known_chargers} "
-                f"aligned={self.aligned_chargers} chest={self.chest_resources} "
+                f"[TARGETED] plan@{step_count}: junctions={self.known_junctions} "
+                f"aligned={self.aligned_junctions} chest={self.chest_resources} "
                 f"roles={counts}"
             )
 
     def _choose_counts(self, step_count: int) -> dict[str, int]:
-        if step_count < PHASE_EXPLORE_END or self.known_chargers == 0:
+        if step_count < PHASE_EXPLORE_END or self.known_junctions == 0:
             scouts = 3 if self.num_agents >= 8 else 2 if self.num_agents >= 5 else 1
             return {
                 "scrambler": 0,
@@ -137,7 +137,7 @@ class TargetedPlannerState:
                 "miner": max(1, self.num_agents - (scramblers + aligners + scouts)),
             }
 
-        if step_count < PHASE_CONTROL_END and self.aligned_chargers < max(1, self.known_chargers // 2):
+        if step_count < PHASE_CONTROL_END and self.aligned_junctions < max(1, self.known_junctions // 2):
             if self.num_agents >= 8:
                 scramblers = 2
                 aligners = 3
@@ -162,8 +162,8 @@ class TargetedPlannerState:
         }
 
     def _assign_targets(self) -> None:
-        chargers = [pos for pos, alignment in self.charger_map.items() if alignment != "cogs"]
-        chargers.sort()
+        junctions = [pos for pos, alignment in self.junction_map.items() if alignment != "cogs"]
+        junctions.sort()
         extractors_by_resource: dict[str, list[tuple[int, int]]] = {res: [] for res in RESOURCE_CYCLE}
         for pos, resource in self.extractor_map.items():
             if resource in extractors_by_resource:
@@ -172,17 +172,17 @@ class TargetedPlannerState:
             positions.sort()
         all_extractors = sorted(self.extractor_map.keys())
 
-        self.assigned_chargers.clear()
+        self.assigned_junctions.clear()
         self.assigned_extractors.clear()
         if not self.desired_vibes:
             return
 
-        charger_index = 0
+        junction_index = 0
         extractor_index = 0
         for agent_id, vibe in enumerate(self.desired_vibes):
-            if vibe in CONTROL_VIBES and chargers:
-                self.assigned_chargers[agent_id] = chargers[charger_index]
-                charger_index = (charger_index + 1) % len(chargers)
+            if vibe in CONTROL_VIBES and junctions:
+                self.assigned_junctions[agent_id] = junctions[junction_index]
+                junction_index = (junction_index + 1) % len(junctions)
             elif vibe == "miner" and self.extractor_map:
                 preferred = RESOURCE_CYCLE[agent_id % len(RESOURCE_CYCLE)]
                 preferred_list = extractors_by_resource.get(preferred, [])
@@ -217,7 +217,7 @@ class TargetedMultiRoleImpl(CogsguardMultiRoleImpl):
         return super()._execute_phase(s)
 
     def execute_role(self, s: CogsguardAgentState) -> Action:
-        target = self._shared_state.assigned_chargers.get(s.agent_id)
+        target = self._shared_state.assigned_junctions.get(s.agent_id)
         if target and s.current_vibe in CONTROL_VIBES and s.has_gear() and s.heart >= 1:
             struct = s.get_structure_at(target)
             if struct and struct.alignment != "cogs":
@@ -243,80 +243,80 @@ class TargetedMultiRoleImpl(CogsguardMultiRoleImpl):
 
 class TargetedScramblerAgentPolicyImpl(ScramblerAgentPolicyImpl):
     def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        cooldown = 20 if len(chargers) <= 4 else 50
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        cooldown = 20 if len(junctions) <= 4 else 50
 
-        enemy_chargers: list[tuple[int, tuple[int, int]]] = []
-        neutral_chargers: list[tuple[int, tuple[int, int]]] = []
-        any_chargers: list[tuple[int, tuple[int, int]]] = []
+        enemy_junctions: list[tuple[int, tuple[int, int]]] = []
+        neutral_junctions: list[tuple[int, tuple[int, int]]] = []
+        any_junctions: list[tuple[int, tuple[int, int]]] = []
 
-        for charger in chargers:
-            pos = charger.position
+        for junction in junctions:
+            pos = junction.position
             dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
 
-            last_worked = s.worked_chargers.get(pos, 0)
+            last_worked = s.worked_junctions.get(pos, 0)
             if last_worked > 0 and s.step_count - last_worked < cooldown:
                 continue
 
-            if charger.alignment == "cogs":
+            if junction.alignment == "cogs":
                 continue
 
-            if charger.alignment == "clips" or charger.clipped:
-                enemy_chargers.append((dist, pos))
-            elif charger.alignment is None or charger.alignment == "neutral":
-                neutral_chargers.append((dist, pos))
+            if junction.alignment == "clips" or junction.clipped:
+                enemy_junctions.append((dist, pos))
+            elif junction.alignment is None or junction.alignment == "neutral":
+                neutral_junctions.append((dist, pos))
             else:
-                any_chargers.append((dist, pos))
+                any_junctions.append((dist, pos))
 
-        if enemy_chargers:
-            enemy_chargers.sort()
-            return enemy_chargers[0][1]
-        if neutral_chargers:
-            neutral_chargers.sort()
-            return neutral_chargers[0][1]
-        if any_chargers:
-            any_chargers.sort()
-            return any_chargers[0][1]
+        if enemy_junctions:
+            enemy_junctions.sort()
+            return enemy_junctions[0][1]
+        if neutral_junctions:
+            neutral_junctions.sort()
+            return neutral_junctions[0][1]
+        if any_junctions:
+            any_junctions.sort()
+            return any_junctions[0][1]
 
         return super()._find_best_target(s)
 
 
 class TargetedAlignerAgentPolicyImpl(AlignerAgentPolicyImpl):
     def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        cooldown = 20 if len(chargers) <= 4 else 50
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        cooldown = 20 if len(junctions) <= 4 else 50
 
-        neutral_chargers: list[tuple[int, tuple[int, int]]] = []
-        clips_chargers: list[tuple[int, tuple[int, int]]] = []
-        other_chargers: list[tuple[int, tuple[int, int]]] = []
+        neutral_junctions: list[tuple[int, tuple[int, int]]] = []
+        clips_junctions: list[tuple[int, tuple[int, int]]] = []
+        other_junctions: list[tuple[int, tuple[int, int]]] = []
 
-        for charger in chargers:
-            pos = charger.position
+        for junction in junctions:
+            pos = junction.position
             dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
 
-            last_worked = s.worked_chargers.get(pos, 0)
+            last_worked = s.worked_junctions.get(pos, 0)
             if last_worked > 0 and s.step_count - last_worked < cooldown:
                 continue
 
-            if charger.alignment == "cogs":
+            if junction.alignment == "cogs":
                 continue
 
-            if charger.alignment is None or charger.alignment == "neutral":
-                neutral_chargers.append((dist, pos))
-            elif charger.alignment == "clips" or charger.clipped:
-                clips_chargers.append((dist, pos))
+            if junction.alignment is None or junction.alignment == "neutral":
+                neutral_junctions.append((dist, pos))
+            elif junction.alignment == "clips" or junction.clipped:
+                clips_junctions.append((dist, pos))
             else:
-                other_chargers.append((dist, pos))
+                other_junctions.append((dist, pos))
 
-        if neutral_chargers:
-            neutral_chargers.sort()
-            return neutral_chargers[0][1]
-        if clips_chargers:
-            clips_chargers.sort()
-            return clips_chargers[0][1]
-        if other_chargers:
-            other_chargers.sort()
-            return other_chargers[0][1]
+        if neutral_junctions:
+            neutral_junctions.sort()
+            return neutral_junctions[0][1]
+        if clips_junctions:
+            clips_junctions.sort()
+            return clips_junctions[0][1]
+        if other_junctions:
+            other_junctions.sort()
+            return other_junctions[0][1]
 
         return super()._find_best_target(s)
 

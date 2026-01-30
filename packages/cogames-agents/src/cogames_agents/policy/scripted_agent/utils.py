@@ -339,7 +339,7 @@ def use_object_at(
 ) -> Action:
     """Use an object by moving into its cell. Sets a flag so position tracking knows not to update.
 
-    This is the generic "move into to use" action for extractors, hubs, chests, chargers, etc.
+    This is the generic "move into to use" action for extractors, hubs, chests, junctions, etc.
     """
     action = move_into_cell(state, target_pos)
 

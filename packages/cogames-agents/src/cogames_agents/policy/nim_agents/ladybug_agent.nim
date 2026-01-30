@@ -60,7 +60,7 @@ const
   cellObstacle = 2
   parentSentinel = (-9999, -9999)
   ResourceTypes = ["carbon", "oxygen", "germanium", "silicon"]
-  StationKeys = ["hub", "chest", "charger"]
+  StationKeys = ["hub", "chest", "junction"]
   DirectionNames = ["north", "south", "east", "west"]
   CardinalNeighbors = [(-1, 0), (1, 0), (0, -1), (0, 1)]
   DefaultHeartRecipe = [
@@ -147,8 +147,8 @@ proc stationFromName(lowerName: string): string =
     "hub"
   elif lowerName.contains("chest"):
     "chest"
-  elif lowerName.contains("charger"):
-    "charger"
+  elif lowerName.contains("junction"):
+    "junction"
   else:
     ""
 
@@ -777,7 +777,7 @@ proc desiredVibe(agent: LadybugAgent): string =
   of deliverPhase:
     return "default"
   of rechargePhase:
-    return "charger"
+    return "junction"
 
 proc vibeAction(agent: LadybugAgent, vibe: string): int =
   case vibe
@@ -791,7 +791,7 @@ proc vibeAction(agent: LadybugAgent, vibe: string): int =
   of "silicon_b": agent.cfg.actions.vibeSiliconB
   of "heart_a": agent.cfg.actions.vibeHeartA
   of "heart_b": agent.cfg.actions.vibeHeartB
-  of "charger": agent.cfg.actions.vibeCharger
+  of "junction": agent.cfg.actions.vibeCharger
   of "gear": agent.cfg.actions.vibeGear
   of "hub": agent.cfg.actions.vibeHub
   of "chest": agent.cfg.actions.vibeChest
@@ -864,12 +864,12 @@ proc doDeliver(agent: LadybugAgent): int =
 proc doRecharge(agent: LadybugAgent): int =
   agent.state.targetResource = ""
   let exploreAction = agent.exploreUntil(
-    proc (): bool = agent.state.stations["charger"].isSome(),
-    "need charger"
+    proc (): bool = agent.state.stations["junction"].isSome(),
+    "need junction"
   )
   if exploreAction.isSome():
     return exploreAction.get()
-  let loc = agent.state.stations["charger"].get()
+  let loc = agent.state.stations["junction"].get()
   let nav = agent.navigateToAdjacent(loc.y, loc.x)
   if nav.isSome():
     return nav.get()

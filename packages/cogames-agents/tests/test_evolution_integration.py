@@ -78,9 +78,9 @@ class TestSeedingBehaviors:
         assert "find_extractor" in names
         assert "discover_stations" in names
         assert "get_hearts" in names
-        assert "align_charger" in names
-        assert "scramble_charger" in names
-        assert "find_enemy_charger" in names
+        assert "align_junction" in names
+        assert "scramble_junction" in names
+        assert "find_enemy_junction" in names
 
     def test_default_role_count(self, coordinator: EvolutionaryRoleCoordinator) -> None:
         assert len(coordinator.catalog.roles) == 4

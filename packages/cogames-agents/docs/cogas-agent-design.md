@@ -46,7 +46,7 @@ Each agent has:
 | Role      | Count | Rationale                                                            |
 | --------- | ----- | -------------------------------------------------------------------- |
 | Miner     | 3     | Resource foundation; hearts require steady element supply            |
-| Scout     | 1     | Procedural map demands early discovery of extractors + chargers      |
+| Scout     | 1     | Procedural map demands early discovery of extractors + junctions     |
 | Aligner   | 3     | Primary scoring role; more aligners = more junctions held            |
 | Scrambler | 2     | Deny enemy junctions; converts clips-aligned to neutral for aligners |
 | Flex      | 1     | Starts scout, transitions to aligner after map discovered            |
@@ -62,33 +62,33 @@ maximizes early discovery then converts to the highest-value late-game role.
 
 The evolutionary coordinator adjusts counts based on game-state signals:
 
-| Signal                                       | Adjustment                      |
-| -------------------------------------------- | ------------------------------- |
-| All chargers already discovered (step > 200) | Convert scout → aligner         |
-| Heart stockpile > 10                         | Reduce miners by 1, add aligner |
-| No clips-aligned junctions remain            | Convert scramblers → aligners   |
-| Resource deficit (any element < 5)           | Convert 1 aligner → miner       |
-| Energy starvation (avg energy < 20)          | Prioritize charger alignment    |
+| Signal                                        | Adjustment                      |
+| --------------------------------------------- | ------------------------------- |
+| All junctions already discovered (step > 200) | Convert scout → aligner         |
+| Heart stockpile > 10                          | Reduce miners by 1, add aligner |
+| No clips-aligned junctions remain             | Convert scramblers → aligners   |
+| Resource deficit (any element < 5)            | Convert 1 aligner → miner       |
+| Energy starvation (avg energy < 20)           | Prioritize junction alignment   |
 
 ## 3. Key Innovations Over Existing Agents
 
 ### 3.1 Energy-Aware Pathing
 
 **Problem**: Move costs 3 energy. Agents exhaust energy after ~33 moves, then stall. Hub AOE (+100 energy) requires
-standing near an aligned charger.
+standing near an aligned junction.
 
 **Solution**: The navigator maintains an **energy budget**. Before committing to a path, it checks
 `path_cost = len(path) * 3` against current energy. If the path exceeds budget, the agent detours to the nearest aligned
-charger for recharge first. Charger positions are shared across all agents via the coordinator.
+junction for recharge first. Charger positions are shared across all agents via the coordinator.
 
 ```
 if path_energy_cost(target) > agent.energy - ENERGY_RESERVE:
-    detour_to_nearest_charger()
+    detour_to_nearest_junction()
 else:
     navigate(target)
 ```
 
-`ENERGY_RESERVE = 15` ensures agents always have enough energy to reach a charger from their current position.
+`ENERGY_RESERVE = 15` ensures agents always have enough energy to reach a junction from their current position.
 
 ### 3.2 Aligner Priority Queue
 
@@ -227,7 +227,7 @@ accumulation. The catalog tracks:
 **Scout-specific**:
 
 1. `AcquireGear` (scout station)
-2. `ExploreFrontier` - BFS-based frontier exploration, prioritize charger/extractor discovery
+2. `ExploreFrontier` - BFS-based frontier exploration, prioritize junction/extractor discovery
 3. `BroadcastMap` - Update coordinator with all discovered positions
 
 **Exit condition**: All agents have gear OR step > 30.
@@ -241,7 +241,7 @@ accumulation. The catalog tracks:
 **Miner goals**:
 
 1. `Survive(hp=15)` - Retreat if low HP
-2. `RechargeEnergy(threshold=20)` - Detour to charger if energy low
+2. `RechargeEnergy(threshold=20)` - Detour to junction if energy low
 3. `SelectResource` - Pick resource type based on team deficit (coordinator tracks)
 4. `NavigateToExtractor` - Path to selected extractor
 5. `MineResource` - Bump extractor to mine
@@ -331,7 +331,7 @@ accumulation. The catalog tracks:
 
 1. **Energy starvation not resolved at engine level**: If hub AOE remains broken, energy-aware pathing is a workaround,
    not a fix. Score ceiling is lower.
-2. **Procedural map variance**: Bad map seeds can place chargers far from hub, making early alignment slow. Mitigation:
+2. **Procedural map variance**: Bad map seeds can place junctions far from hub, making early alignment slow. Mitigation:
    scout fast-path + flex agent.
 3. **Strong enemy scramblers**: If the opponent runs aggressive scramble strategies, our sentinel + re-align loop may
    not keep pace. Mitigation: increase scrambler count via adaptive distribution.

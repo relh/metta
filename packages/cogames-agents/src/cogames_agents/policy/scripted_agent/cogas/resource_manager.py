@@ -59,7 +59,7 @@ class DepotInfo:
     """Tracked deposit location."""
 
     position: tuple[int, int]
-    depot_type: str  # "hub", "junction", "charger"
+    depot_type: str  # "hub", "junction", "junction"
     alignment: Optional[str] = None
     last_seen_step: int = 0
 
@@ -129,7 +129,7 @@ class ResourceManager:
                     )
 
     def _update_depots(self, ctx: PlankyContext) -> None:
-        """Scan visible depots (hubs, cogs junctions/chargers)."""
+        """Scan visible depots (hubs, cogs junctions/junctions)."""
         for pos, _ in ctx.map.find(type="hub"):
             self._depots[pos] = DepotInfo(
                 position=pos,
@@ -144,10 +144,10 @@ class ResourceManager:
                 alignment=e.properties.get("alignment"),
                 last_seen_step=ctx.step,
             )
-        for pos, e in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+        for pos, e in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
             self._depots[pos] = DepotInfo(
                 position=pos,
-                depot_type="charger",
+                depot_type="junction",
                 alignment=e.properties.get("alignment"),
                 last_seen_step=ctx.step,
             )

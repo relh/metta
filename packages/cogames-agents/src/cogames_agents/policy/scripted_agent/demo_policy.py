@@ -64,7 +64,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
                 or "extractor" in obj.name
                 or is_station(obj.name, "hub")
                 or is_station(obj.name, "chest")
-                or is_station(obj.name, "charger")
+                or is_station(obj.name, "junction")
                 or (obj.name == "agent" and obj.agent_group != s.agent_id)
             )
         }
@@ -108,7 +108,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
                 or "extractor" in obj.name
                 or is_station(obj.name, "hub")
                 or is_station(obj.name, "chest")
-                or is_station(obj.name, "charger")
+                or is_station(obj.name, "junction")
                 or (obj.name == "agent" and obj.agent_group != s.agent_id)
             )
         }

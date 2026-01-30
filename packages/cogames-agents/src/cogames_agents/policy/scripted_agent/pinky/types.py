@@ -46,7 +46,7 @@ class StructureType(Enum):
     """Types of structures in the game."""
 
     HUB = "hub"  # Main hub / resource deposit point (cogs nexus)
-    JUNCTION = "junction"  # Territory control point (charger/supply depot)
+    JUNCTION = "junction"  # Territory control point (junction/supply depot)
     MINER_STATION = "miner_station"
     SCOUT_STATION = "scout_station"
     ALIGNER_STATION = "aligner_station"

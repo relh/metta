@@ -21,7 +21,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 def policy_env_info() -> PolicyEnvInterface:
     return PolicyEnvInterface(
         obs_features=[],
-        tags=["collective:cogs", "collective:clips", "hub", "charger"],
+        tags=["collective:cogs", "collective:clips", "hub", "junction"],
         action_names=["noop", "move_north", "move_south", "move_east", "move_west"],
         num_agents=1,
         observation_shape=(1, 1),
@@ -108,7 +108,7 @@ def test_aligner_requires_influence_before_aligning(policy_env_info: PolicyEnvIn
     assert state._pending_action_type is None
 
 
-def test_scrambler_prioritizes_clips_chargers(policy_env_info: PolicyEnvInterface) -> None:
+def test_scrambler_prioritizes_clips_junctions(policy_env_info: PolicyEnvInterface) -> None:
     policy = ScramblerAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.SCRAMBLER)
     state = _make_state(Role.SCRAMBLER, map_size=10, row=0, col=0)
 
@@ -152,7 +152,7 @@ def test_miner_prefers_nearest_aligned_depot(policy_env_info: PolicyEnvInterface
     state.structures[(0, 2)] = StructureInfo(
         position=(0, 2),
         structure_type=StructureType.CHARGER,
-        name="charger",
+        name="junction",
         alignment="cogs",
     )
 

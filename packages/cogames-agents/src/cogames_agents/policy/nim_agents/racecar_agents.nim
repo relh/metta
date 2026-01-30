@@ -23,7 +23,7 @@ type
     map: Table[Location, seq[FeatureValue]]
     seen: HashSet[Location]
     unreachable: HashSet[Location]
-    depleted: HashSet[Location]    # extractors/chargers with remainingUses == 0
+    depleted: HashSet[Location]    # extractors/junctions with remainingUses == 0
     cfg: Config
     random: Rand
     location: Location
@@ -432,7 +432,7 @@ proc step*(
     # Vibe-check support: assign and enforce a required vibe from the hub pattern.
     proc actionForVibe(cfg: Config, v: int): Option[int] =
       if v == cfg.vibes.default: return some(cfg.actions.vibeDefault)
-      if v == cfg.vibes.charger: return some(cfg.actions.vibeCharger)
+      if v == cfg.vibes.junction: return some(cfg.actions.vibeCharger)
       if v == cfg.vibes.carbonA: return some(cfg.actions.vibeCarbonA)
       if v == cfg.vibes.carbonB: return some(cfg.actions.vibeCarbonB)
       if v == cfg.vibes.oxygenA: return some(cfg.actions.vibeOxygenA)
@@ -492,24 +492,24 @@ proc step*(
 
     # Are we running low on energy?
     if invEnergy < MaxEnergy div 4:
-      let chargerNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.charger)
-      if chargerNearby.isSome():
-        measurePush("charger nearby")
-        let action = agent.cfg.aStar(agent.location, chargerNearby.get(), agent.map)
+      let junctionNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.junction)
+      if junctionNearby.isSome():
+        measurePush("junction nearby")
+        let action = agent.cfg.aStar(agent.location, junctionNearby.get(), agent.map)
         measurePop()
         if action.isSome():
           doAction(action.get().int32)
-          log "going to charger"
+          log "going to junction"
           return
 
     # Charge opportunistically, with a slightly higher margin for hard energy maps.
     let opportunisticMargin = if stepsRemaining < 200: MaxEnergy - 30 else: MaxEnergy - 20
     if invEnergy < opportunisticMargin:
-      let chargerNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.charger)
-      if chargerNearby.isSome():
-        if manhattan(agent.location, chargerNearby.get()) < 2:
+      let junctionNearby = agent.cfg.getNearbyExtractor(agent.location, agent.map, agent.cfg.tags.junction)
+      if junctionNearby.isSome():
+        if manhattan(agent.location, junctionNearby.get()) < 2:
           measurePush("charge nearby")
-          let action = agent.cfg.aStar(agent.location, chargerNearby.get(), agent.map)
+          let action = agent.cfg.aStar(agent.location, junctionNearby.get(), agent.map)
           measurePop()
           if action.isSome():
             doAction(action.get().int32)

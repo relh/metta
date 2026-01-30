@@ -22,14 +22,14 @@ class CogsguardPhase(Enum):
 
     GET_GEAR = "get_gear"  # Find and equip role-specific gear
     EXECUTE_ROLE = "execute_role"  # Execute role-specific behavior
-    RECHARGE = "recharge"  # Recharge energy at charger
+    RECHARGE = "recharge"  # Recharge energy at junction
 
 
 class StructureType(Enum):
     """Types of structures in the game."""
 
     HUB = "hub"  # Main hub / resource deposit point
-    CHARGER = "charger"  # Supply depot
+    CHARGER = "junction"  # Supply depot
     MINER_STATION = "miner_station"
     SCOUT_STATION = "scout_station"
     ALIGNER_STATION = "aligner_station"
@@ -189,9 +189,9 @@ class CogsguardAgentState:
     # Current observation reference
     current_obs: Optional[AgentObservation] = None
 
-    # Track chargers we've worked on (position -> last interaction step)
-    # Used by aligners/scramblers to avoid getting stuck on the same charger
-    worked_chargers: dict[tuple[int, int], int] = field(default_factory=dict)
+    # Track junctions we've worked on (position -> last interaction step)
+    # Used by aligners/scramblers to avoid getting stuck on the same junction
+    worked_junctions: dict[tuple[int, int], int] = field(default_factory=dict)
 
     # Scrambler-specific tracking for heart acquisition timeout
     _heart_wait_start: int = 0

@@ -137,7 +137,7 @@ def _find_deposit(ctx: "PlankyContext") -> tuple[int, int] | None:
         candidates.append((_manhattan(pos, apos), apos))
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, jpos), jpos))
-    for cpos, _ in ctx.map.find(type_contains="charger", property_filter={"alignment": "cogs"}):
+    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, cpos), cpos))
     if not candidates:
         return None

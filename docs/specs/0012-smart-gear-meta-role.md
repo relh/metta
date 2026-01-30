@@ -11,9 +11,9 @@ interruptible options to make each role more structured and explainable, while p
 ## Problem
 
 - The current gear vibe randomly picks a role, which is brittle in early-game and fails to adapt to resource, heart, or
-  charger alignment shortages.
+  junction alignment shortages.
 - Static role counts in policy URIs cannot respond to changes in game state (missing stations, low hearts, or many enemy
-  chargers).
+  junctions).
 - Role logic is difficult to debug and reason about because it intermixes target selection, movement, and fallback
   behaviors without a consistent priority framework.
 
@@ -21,7 +21,7 @@ interruptible options to make each role more structured and explainable, while p
 
 Introduce a smart gear role that:
 
-- Aggregates shared signals (resource availability, discovered structures, charger alignment).
+- Aggregates shared signals (resource availability, discovered structures, junction alignment).
 - Computes a role "need" score and assigns a role to gear agents with hysteresis and cooldowns.
 - Runs role behaviors via ordered, interruptible option lists similar to tribal-village's gatherer/builder/fighter
   system.
@@ -59,8 +59,8 @@ Compute per-role scores each tick:
 
 - **Scout**: high if key stations or extractors are missing; decays as coverage increases.
 - **Miner**: high if hearts/influence are low or resource throughput is insufficient.
-- **Scrambler**: high if clips-aligned chargers dominate and hearts are available.
-- **Aligner**: high if neutral chargers exist and hearts+influence are available.
+- **Scrambler**: high if clips-aligned junctions dominate and hearts are available.
+- **Aligner**: high if neutral junctions exist and hearts+influence are available.
 
 Role selection uses:
 
@@ -73,9 +73,9 @@ Role selection uses:
 Each role is expressed as a list of interruptible options (tribal-village style):
 
 - **Miner**: heal/recharge -> deposit -> mine -> explore.
-- **Scout**: discover stations -> discover extractors -> discover chargers -> explore.
-- **Aligner**: get gear -> get hearts/influence -> align nearest non-cogs charger -> explore.
-- **Scrambler**: get gear -> get hearts -> scramble nearest clips charger -> explore.
+- **Scout**: discover stations -> discover extractors -> discover junctions -> explore.
+- **Aligner**: get gear -> get hearts/influence -> align nearest non-cogs junction -> explore.
+- **Scrambler**: get gear -> get hearts -> scramble nearest clips junction -> explore.
 
 Options are evaluated in priority order; higher-priority options can preempt active ones when interruptible.
 
@@ -94,7 +94,7 @@ Extend `packages/cogames-agents/scripts/run_cogsguard_rollout.py` to assert:
 
 - Each role is selected at least once when gear agents are enabled.
 - Miners attempt mining and deposit near aligned depots.
-- Aligners and scramblers target the correct charger alignment.
+- Aligners and scramblers target the correct junction alignment.
 - Scouts increase map coverage/structures discovered beyond a threshold.
 
 ## Phased Delivery

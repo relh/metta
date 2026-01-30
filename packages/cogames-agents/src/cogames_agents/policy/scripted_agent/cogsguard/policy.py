@@ -121,7 +121,7 @@ class SmartRoleAgentSnapshot:
     structures_seen: int
     heart_count: int
     influence_count: int
-    charger_alignment_counts: dict[str, int]
+    junction_alignment_counts: dict[str, int]
 
 
 @dataclass
@@ -130,21 +130,21 @@ class SmartRoleCoordinator:
 
     num_agents: int
     agent_snapshots: dict[int, SmartRoleAgentSnapshot] = field(default_factory=dict)
-    charger_alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
+    junction_alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
     station_offsets: dict[str, tuple[int, int]] = field(default_factory=dict)
     recent_scrambles: dict[tuple[int, int], int] = field(default_factory=dict)
 
     def update_agent(self, s: CogsguardAgentState) -> None:
         hub_pos = s.stations.get("hub")
         if hub_pos is not None:
-            self._record_known_chargers(s, hub_pos)
+            self._record_known_junctions(s, hub_pos)
             self._record_known_stations(s, hub_pos)
             self._apply_alignment_overrides(s, hub_pos)
             self._apply_station_overrides(s, hub_pos)
-        charger_counts = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
+        junction_counts = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
         for struct in s.get_structures_by_type(StructureType.CHARGER):
             bucket = self._normalize_alignment(struct.alignment)
-            charger_counts[bucket] += 1
+            junction_counts[bucket] += 1
 
         known_structures = tuple(sorted({struct.structure_type.value for struct in s.structures.values()}))
         self.agent_snapshots[s.agent_id] = SmartRoleAgentSnapshot(
@@ -155,10 +155,10 @@ class SmartRoleCoordinator:
             structures_seen=len(s.structures),
             heart_count=s.heart,
             influence_count=s.influence,
-            charger_alignment_counts=charger_counts,
+            junction_alignment_counts=junction_counts,
         )
 
-    def register_charger_alignment(
+    def register_junction_alignment(
         self,
         pos: tuple[int, int],
         alignment: Optional[str],
@@ -168,7 +168,7 @@ class SmartRoleCoordinator:
         if hub_pos is None:
             return
         offset = (pos[0] - hub_pos[0], pos[1] - hub_pos[1])
-        self.charger_alignment_overrides[offset] = alignment
+        self.junction_alignment_overrides[offset] = alignment
         if step is None:
             return
         if alignment is None:
@@ -196,15 +196,15 @@ class SmartRoleCoordinator:
             self.recent_scrambles.pop(offset, None)
         return targets
 
-    def _record_known_chargers(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
-        for charger in s.get_structures_by_type(StructureType.CHARGER):
-            offset = (charger.position[0] - hub_pos[0], charger.position[1] - hub_pos[1])
-            if offset not in self.charger_alignment_overrides and charger.alignment is not None:
-                self.charger_alignment_overrides[offset] = charger.alignment
+    def _record_known_junctions(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
+        for junction in s.get_structures_by_type(StructureType.CHARGER):
+            offset = (junction.position[0] - hub_pos[0], junction.position[1] - hub_pos[1])
+            if offset not in self.junction_alignment_overrides and junction.alignment is not None:
+                self.junction_alignment_overrides[offset] = junction.alignment
 
     def _record_known_stations(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
         for name, pos in s.stations.items():
-            if pos is None or name in ("hub", "charger"):
+            if pos is None or name in ("hub", "junction"):
                 continue
             if name not in self.station_offsets:
                 self.station_offsets[name] = (pos[0] - hub_pos[0], pos[1] - hub_pos[1])
@@ -229,9 +229,9 @@ class SmartRoleCoordinator:
             s.occupancy[pos[0]][pos[1]] = CellType.OBSTACLE.value
 
     def _apply_alignment_overrides(self, s: CogsguardAgentState, hub_pos: tuple[int, int]) -> None:
-        if not self.charger_alignment_overrides:
+        if not self.junction_alignment_overrides:
             return
-        for offset, alignment in self.charger_alignment_overrides.items():
+        for offset, alignment in self.junction_alignment_overrides.items():
             pos = (hub_pos[0] + offset[0], hub_pos[1] + offset[1])
             if not (0 <= pos[0] < s.map_height and 0 <= pos[1] < s.map_width):
                 continue
@@ -254,8 +254,8 @@ class SmartRoleCoordinator:
         if s.supply_depots:
             for idx, (pos, _alignment) in enumerate(s.supply_depots):
                 offset = (pos[0] - hub_pos[0], pos[1] - hub_pos[1])
-                if offset in self.charger_alignment_overrides:
-                    s.supply_depots[idx] = (pos, self.charger_alignment_overrides[offset])
+                if offset in self.junction_alignment_overrides:
+                    s.supply_depots[idx] = (pos, self.junction_alignment_overrides[offset])
 
     @staticmethod
     def _station_structure_type(name: str) -> StructureType:
@@ -291,9 +291,9 @@ class SmartRoleCoordinator:
         if role_counts.get("miner", 0) == 0:
             return "miner"
 
-        charger_counts = self._aggregate_charger_counts()
-        known_chargers = sum(charger_counts.values()) - charger_counts["unknown"]
-        if known_chargers == 0:
+        junction_counts = self._aggregate_junction_counts()
+        known_junctions = sum(junction_counts.values()) - junction_counts["unknown"]
+        if known_junctions == 0:
             return "scout"
 
         if role_counts.get("scrambler", 0) == 0:
@@ -301,24 +301,24 @@ class SmartRoleCoordinator:
         if role_counts.get("aligner", 0) == 0:
             return "aligner"
 
-        if charger_counts["clips"] > 0 and role_counts.get("scrambler", 0) <= role_counts.get("aligner", 0):
+        if junction_counts["clips"] > 0 and role_counts.get("scrambler", 0) <= role_counts.get("aligner", 0):
             return "scrambler"
-        if charger_counts["neutral"] > 0:
+        if junction_counts["neutral"] > 0:
             return "aligner"
 
         if self._aggregate_structures_seen() < 10:
             return "scout"
         return "miner"
 
-    def _aggregate_charger_counts(self) -> dict[str, int]:
+    def _aggregate_junction_counts(self) -> dict[str, int]:
         totals = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
         for snapshot in self.agent_snapshots.values():
             for key in totals:
-                totals[key] = max(totals[key], snapshot.charger_alignment_counts.get(key, 0))
+                totals[key] = max(totals[key], snapshot.junction_alignment_counts.get(key, 0))
         return totals
 
-    def aligned_charger_count(self) -> int:
-        return self._aggregate_charger_counts().get("cogs", 0)
+    def aligned_junction_count(self) -> int:
+        return self._aggregate_junction_counts().get("cogs", 0)
 
     def _aggregate_structures(self) -> set[str]:
         structures: set[str] = set()
@@ -658,9 +658,9 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
                     self._update_structure(s, pos, obj_name, struct_type, obj_state)
                     break
 
-            # Discover supply depots (charger in cogsguard)
-            is_charger = has_type_tag(obj_tags, ("supply_depot", "charger", "junction"))
-            if is_charger:
+            # Discover supply depots (junction in cogsguard)
+            is_junction = has_type_tag(obj_tags, ("supply_depot", "junction", "junction"))
+            if is_junction:
                 s.occupancy[r][c] = CellType.OBSTACLE.value
                 self._update_structure(s, pos, obj_name, StructureType.CHARGER, obj_state)
 
@@ -1680,31 +1680,31 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         ):
             return Role.SCOUT
 
-        chargers = s.get_structures_by_type(StructureType.CHARGER)
-        has_enemy_chargers = any(charger.alignment == "clips" for charger in chargers)
-        has_neutral_chargers = any(charger.alignment in (None, "neutral") for charger in chargers)
+        junctions = s.get_structures_by_type(StructureType.CHARGER)
+        has_enemy_junctions = any(junction.alignment == "clips" for junction in junctions)
+        has_neutral_junctions = any(junction.alignment in (None, "neutral") for junction in junctions)
         role_counts = self._role_counts()
 
         if s.role == Role.SCRAMBLER:
-            if has_neutral_chargers and self._role_is_ready(s, Role.ALIGNER):
+            if has_neutral_junctions and self._role_is_ready(s, Role.ALIGNER):
                 return Role.ALIGNER
-            if has_enemy_chargers:
+            if has_enemy_junctions:
                 return Role.SCRAMBLER
         if s.role == Role.ALIGNER:
             if (
                 s._pending_alignment_target is None
-                and not has_neutral_chargers
-                and has_enemy_chargers
+                and not has_neutral_junctions
+                and has_enemy_junctions
                 and self._role_is_ready(s, Role.SCRAMBLER)
             ):
                 return Role.SCRAMBLER
-            if has_enemy_chargers or has_neutral_chargers:
+            if has_enemy_junctions or has_neutral_junctions:
                 return Role.ALIGNER
 
         target_counts = self._target_role_counts(
             num_agents=self._policy_env_info.num_agents,
-            has_enemy_chargers=has_enemy_chargers,
-            has_neutral_chargers=has_neutral_chargers,
+            has_enemy_junctions=has_enemy_junctions,
+            has_neutral_junctions=has_neutral_junctions,
             hub_known=hub_known,
             step_count=s.step_count,
         )
@@ -1712,9 +1712,9 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         if deficit_role is not None:
             return deficit_role
 
-        if has_enemy_chargers and self._role_is_ready(s, Role.SCRAMBLER):
+        if has_enemy_junctions and self._role_is_ready(s, Role.SCRAMBLER):
             return Role.SCRAMBLER
-        if has_neutral_chargers and self._role_is_ready(s, Role.ALIGNER):
+        if has_neutral_junctions and self._role_is_ready(s, Role.ALIGNER):
             return Role.ALIGNER
 
         if not s.get_usable_extractors():
@@ -1723,7 +1723,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         if s.total_cargo < s.cargo_capacity - 2:
             return Role.MINER
 
-        return self._pick_balanced_role(s, has_enemy_chargers, has_neutral_chargers)
+        return self._pick_balanced_role(s, has_enemy_junctions, has_neutral_junctions)
 
     def _should_switch_role(self, s: CogsguardAgentState, desired_role: Role) -> bool:
         if desired_role == s.role:
@@ -1734,7 +1734,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
             return True
         if desired_role == Role.ALIGNER and s.role == Role.SCRAMBLER:
             has_neutral = any(
-                charger.alignment in (None, "neutral") for charger in s.get_structures_by_type(StructureType.CHARGER)
+                junction.alignment in (None, "neutral") for junction in s.get_structures_by_type(StructureType.CHARGER)
             )
             if has_neutral:
                 return True
@@ -1752,8 +1752,8 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
     def _target_role_counts(
         self,
         num_agents: int,
-        has_enemy_chargers: bool,
-        has_neutral_chargers: bool,
+        has_enemy_junctions: bool,
+        has_neutral_junctions: bool,
         hub_known: bool,
         step_count: int,
     ) -> dict[Role, int]:
@@ -1764,8 +1764,8 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
             targets[Role.SCOUT] = 1
         targets[Role.MINER] = max(4, num_agents // 2)
         if hub_known:
-            targets[Role.SCRAMBLER] = 2 if has_enemy_chargers else 1
-            targets[Role.ALIGNER] = 2 if has_neutral_chargers else 1
+            targets[Role.SCRAMBLER] = 2 if has_enemy_junctions else 1
+            targets[Role.ALIGNER] = 2 if has_neutral_junctions else 1
         return targets
 
     def _pick_deficit_role(
@@ -1807,13 +1807,13 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
     def _pick_balanced_role(
         self,
         s: CogsguardAgentState,
-        has_enemy_chargers: bool,
-        has_neutral_chargers: bool,
+        has_enemy_junctions: bool,
+        has_neutral_junctions: bool,
     ) -> Role:
         candidates = [Role.MINER, Role.SCOUT]
-        if has_enemy_chargers and self._role_is_ready(s, Role.SCRAMBLER):
+        if has_enemy_junctions and self._role_is_ready(s, Role.SCRAMBLER):
             candidates.append(Role.SCRAMBLER)
-        if has_neutral_chargers and self._role_is_ready(s, Role.ALIGNER):
+        if has_neutral_junctions and self._role_is_ready(s, Role.ALIGNER):
             candidates.append(Role.ALIGNER)
 
         role_counts = self._role_counts()
@@ -1877,7 +1877,7 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
     def _select_role(self, s: CogsguardAgentState) -> Role:
         aligned_count = 0
         if self._smart_role_coordinator is not None:
-            aligned_count = self._smart_role_coordinator.aligned_charger_count()
+            aligned_count = self._smart_role_coordinator.aligned_junction_count()
         if aligned_count < self.TARGET_ALIGNED_JUNCTIONS:
             if s._pending_action_type is not None:
                 return s.role
@@ -1892,7 +1892,7 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
     def _should_recharge(self, s: CogsguardAgentState) -> bool:
         aligned_count = 0
         if self._smart_role_coordinator is not None:
-            aligned_count = self._smart_role_coordinator.aligned_charger_count()
+            aligned_count = self._smart_role_coordinator.aligned_junction_count()
         if aligned_count < self.TARGET_ALIGNED_JUNCTIONS and s.role in (Role.SCRAMBLER, Role.ALIGNER):
             if s.total_cargo > 0:
                 return False
@@ -1904,22 +1904,22 @@ class CogsguardWomboImpl(CogsguardGeneralistImpl):
     def _target_role_counts(
         self,
         num_agents: int,
-        has_enemy_chargers: bool,
-        has_neutral_chargers: bool,
+        has_enemy_junctions: bool,
+        has_neutral_junctions: bool,
         hub_known: bool,
         step_count: int,
     ) -> dict[Role, int]:
         targets = super()._target_role_counts(
             num_agents=num_agents,
-            has_enemy_chargers=has_enemy_chargers,
-            has_neutral_chargers=has_neutral_chargers,
+            has_enemy_junctions=has_enemy_junctions,
+            has_neutral_junctions=has_neutral_junctions,
             hub_known=hub_known,
             step_count=step_count,
         )
 
         aligned_count = 0
         if self._smart_role_coordinator is not None:
-            aligned_count = self._smart_role_coordinator.aligned_charger_count()
+            aligned_count = self._smart_role_coordinator.aligned_junction_count()
 
         if aligned_count < self.TARGET_ALIGNED_JUNCTIONS:
             targets[Role.SCOUT] = max(targets.get(Role.SCOUT, 0), self.JUNCTION_PUSH_SCOUTS)

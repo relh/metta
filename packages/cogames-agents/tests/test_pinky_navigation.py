@@ -828,7 +828,7 @@ class TestObjectNamePriority:
     """Test that object names prefer type: tags over collective: tags.
 
     Regression test for PR comment: When a cell has both collective:* and type:* tags,
-    _get_object_name should return the type name (e.g., "charger") not the collective
+    _get_object_name should return the type name (e.g., "junction") not the collective
     name (e.g., "collective:cogs"), so that stations/junctions/extractors are properly
     recorded and roles can find gear, depots, and targets.
     """
@@ -843,27 +843,27 @@ class TestObjectNamePriority:
             3: "type:carbon_extractor",
             4: "type:miner_station",
             5: "collective:cogs",  # Collective tag
-            6: "type:charger",  # Type tag
+            6: "type:junction",  # Type tag
         }
         tracker = MapTracker(env_info)
         state = AgentState(agent_id=0)
         state.row = 100
         state.col = 100
 
-        # Cell with both collective:cogs (tag 5) and type:charger (tag 6)
+        # Cell with both collective:cogs (tag 5) and type:junction (tag 6)
         # The type: tag should win
         tokens = [
             make_token("tag", 6, 5, 5),  # collective:cogs at (101, 100)
-            make_token("tag", 6, 5, 6),  # type:charger at same position
+            make_token("tag", 6, 5, 6),  # type:junction at same position
         ]
         obs = make_obs(tokens)
         tracker.update(state, obs)
 
-        # Check that the structure was found as "charger", not "collective:cogs"
+        # Check that the structure was found as "junction", not "collective:cogs"
         assert (101, 100) in state.map.structures, "Should record structure at (101, 100)"
         struct = state.map.structures[(101, 100)]
-        assert "charger" in struct.name.lower(), (
-            f"Expected charger in name, got '{struct.name}'. type: tags should be preferred over collective: tags."
+        assert "junction" in struct.name.lower(), (
+            f"Expected junction in name, got '{struct.name}'. type: tags should be preferred over collective: tags."
         )
 
     def test_collective_tag_only_when_no_type_tag(self):
