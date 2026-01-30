@@ -120,6 +120,7 @@ cluster_test_jobs.json
 # MettaScope
 packages/mettagrid/nim/mettascope/dist/
 packages/mettagrid/nim/mettascope/bindings/generated/
+packages/mettagrid/nim/vibescope/bindings/generated/
 mettascope.out
 !packages/mettagrid/nim/mettascope/data/resources/
 !packages/mettagrid/nim/vibescope/data/resources/
