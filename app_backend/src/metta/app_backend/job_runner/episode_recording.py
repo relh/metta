@@ -2,7 +2,8 @@ import logging
 import uuid
 
 import duckdb
-from metta_alo.rollout import PureSingleEpisodeResult, SingleEpisodeJob
+from metta_alo.job_specs import SingleEpisodeJob
+from metta_alo.rollout import PureSingleEpisodeResult
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.episode_stats_db import (

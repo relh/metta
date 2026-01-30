@@ -14,7 +14,8 @@ from kubernetes import (
 )
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
-from metta_alo.rollout import PureSingleEpisodeResult, SingleEpisodeJob
+from metta_alo.job_specs import SingleEpisodeJob
+from metta_alo.rollout import PureSingleEpisodeResult
 from opentelemetry import trace as otel_trace
 
 from metta.app_backend.clients.stats_client import StatsClient

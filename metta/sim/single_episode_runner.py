@@ -13,7 +13,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests
-from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult, SingleEpisodeJob
+from metta_alo.job_specs import SingleEpisodeJob
+from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult
 
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.common.util.perf_profiler import PerfProfiler

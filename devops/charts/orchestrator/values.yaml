@@ -59,7 +59,7 @@ tournament:
   resources:
     requests:
       cpu: 10m
-      memory: 384Mi
+      memory: 1Gi
     limits:
       cpu: 200m
-      memory: 768Mi
+      memory: 2Gi

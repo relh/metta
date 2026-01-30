@@ -2,7 +2,7 @@ import json
 from uuid import uuid4
 
 import pytest
-from metta_alo.rollout import SingleEpisodeJob
+from metta_alo.job_specs import SingleEpisodeJob
 
 from metta.app_backend.models.tournament import PoolPlayer
 from metta.app_backend.tournament.referees.base import MatchRequest

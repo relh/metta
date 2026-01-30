@@ -2,7 +2,7 @@
 import argparse
 import uuid
 
-from metta_alo.rollout import SingleEpisodeJob
+from metta_alo.job_specs import SingleEpisodeJob
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestCreate, JobType

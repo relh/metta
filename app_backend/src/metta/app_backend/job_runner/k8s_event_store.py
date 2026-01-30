@@ -25,7 +25,10 @@ def _get_engine():
             logger.warning("STATS_DB_URI not set, k8s event storage disabled")
             _disabled = True
             return None
-        _engine = create_engine(settings.STATS_DB_URI, pool_pre_ping=True)
+        uri = settings.STATS_DB_URI
+        if uri.startswith("postgres://"):
+            uri = uri.replace("postgres://", "postgresql://", 1)
+        _engine = create_engine(uri, pool_pre_ping=True)
     return _engine
 
 

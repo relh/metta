@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
-from metta_alo.rollout import SingleEpisodeJob
+from metta_alo.job_specs import SingleEpisodeJob
 from metta_alo.scoring import compute_average_scores_per_agent
 from opentelemetry import trace as otel_trace
 from opentelemetry.trace import SpanKind
@@ -48,6 +48,18 @@ from metta.common.otel.tracing import trace
 
 logger = logging.getLogger(__name__)
 tracer = otel_trace.get_tracer(__name__)
+
+
+def _rss_mb() -> str:
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return f"{int(line.split()[1]) // 1024}Mi"
+    except OSError:
+        pass
+    return "?"
+
 
 SOFTMAX_S3_REPLAYS_PREFIX = "s3://softmax-public/replays/tournament"
 
@@ -95,7 +107,7 @@ class CommissionerBase(ABC):
 
     async def run(self) -> None:
         await self._ensure_season_exists()
-        logger.info(f"Starting commissioner for season '{self.season_name}'")
+        logger.info(f"Starting commissioner for season '{self.season_name}' (rss={_rss_mb()})")
         while True:
             update_heartbeat()
             had_activity = False
@@ -126,23 +138,34 @@ class CommissionerBase(ABC):
         if span.is_recording():
             span.set_attribute("tournament.season", self.season_name)
 
+        logger.info(f"[{self.season_name}] cycle start (rss={_rss_mb()})")
+
         pools = await self._ensure_pools_exist(list(self.referees.keys()))
+        logger.info(f"[{self.season_name}] pools loaded: {list(pools.keys())} (rss={_rss_mb()})")
 
         status_changed = await self._sync_match_statuses()
+        logger.info(f"[{self.season_name}] match statuses synced, changed={status_changed} (rss={_rss_mb()})")
 
         outstanding = await self._count_outstanding_matches()
         slots_available = max(0, MAX_OUTSTANDING_MATCHES - outstanding)
+        logger.info(f"[{self.season_name}] outstanding={outstanding} slots={slots_available} (rss={_rss_mb()})")
 
         total_scheduled = 0
         for pool_name, pool in pools.items():
             if slots_available <= 0:
+                logger.info(f"[{self.season_name}] no slots left, skipping remaining pools")
                 break
             referee = self.referees[pool_name]
             players = await self._get_pool_players(pool.id)
             active_ids = {p.id for p in players}
             match_counts = await self._get_match_counts(pool.id, active_ids)
+            logger.info(
+                f"[{self.season_name}] pool={pool_name} players={len(players)}"
+                f" match_combos={len(match_counts)} (rss={_rss_mb()})"
+            )
 
             requests = referee.get_matches_to_schedule(players, match_counts)
+            logger.info(f"[{self.season_name}] pool={pool_name} matches_to_schedule={len(requests)}")
             for req in requests[:slots_available]:
                 success = await self._create_and_dispatch_match(pool.id, req)
                 if success:
@@ -152,13 +175,17 @@ class CommissionerBase(ABC):
         if total_scheduled > 0:
             logger.info(f"Scheduled {total_scheduled} new matches")
 
+        logger.info(f"[{self.season_name}] scheduling done, getting membership changes (rss={_rss_mb()})")
         changes = await self.get_membership_changes(pools)
+        logger.info(f"[{self.season_name}] membership changes={len(changes)} (rss={_rss_mb()})")
         await self._apply_membership_changes(changes)
 
+        logger.info(f"[{self.season_name}] cycle complete (rss={_rss_mb()})")
         return status_changed or total_scheduled > 0 or len(changes) > 0
 
     async def _ensure_pools_exist(self, pool_names: list[str]) -> dict[str, Pool]:
         session = get_db()
+        logger.info(f"[{self.season_name}] _ensure_pools_exist: loading pools (rss={_rss_mb()})")
 
         season = (await session.execute(select(Season).filter_by(name=self.season_name))).scalar_one_or_none()
         if not season:
@@ -193,6 +220,7 @@ class CommissionerBase(ABC):
         """Sync match statuses from job statuses. Returns True if any changed."""
         session = get_db()
 
+        logger.info(f"[{self.season_name}] _sync_match_statuses: querying (rss={_rss_mb()})")
         pending = list(
             (
                 await session.execute(
@@ -207,6 +235,7 @@ class CommissionerBase(ABC):
             .scalars()
             .all()
         )
+        logger.info(f"[{self.season_name}] _sync_match_statuses: loaded {len(pending)} pending (rss={_rss_mb()})")
 
         updated = 0
         for match in pending:
@@ -235,7 +264,7 @@ class CommissionerBase(ABC):
         """Sync match scores from episode metrics. Returns True if any updated."""
         session = get_db()
 
-        # Find completed matches with missing scores, load players and episode_id in one query
+        logger.info(f"[{self.season_name}] _sync_match_scores: querying unscored (rss={_rss_mb()})")
         matches_with_episodes = (
             await session.execute(
                 select(Match, JobRequest.episode_id)
@@ -251,6 +280,9 @@ class CommissionerBase(ABC):
                 .distinct()
             )
         ).all()
+        logger.info(
+            f"[{self.season_name}] _sync_match_scores: loaded {len(matches_with_episodes)} unscored (rss={_rss_mb()})"
+        )
 
         # Filter to only matches with unscored players
         matches_needing_scores: list[tuple[Match, str]] = []
