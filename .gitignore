@@ -128,6 +128,7 @@ mettascope.out
 packages/mettagrid/nim/mettascope/src/tmp
 packages/mettagrid/python/src/mettagrid/nim/mettascope/
 packages/mettagrid/nim/mettascope/nim.cfg
+packages/mettagrid/nim/vibescope/nim.cfg
 packages/cogames-agents/src/cogames_agents/policy/nim_agents/nim.cfg
 packages/tribal_village/nim.cfg
 
