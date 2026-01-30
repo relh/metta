@@ -227,24 +227,8 @@ For each failing test:
 
 ## Step 9: Remove Worktree
 
-After all tests pass and submission is complete, clean up the worktree if in one:
-
-```bash
-BRANCH=$(git branch --show-current)
-ESCAPED_BRANCH=$(printf '%s\n' "$BRANCH" | sed 's/[.\\^$*+?()[{|]/\\&/g')
-WORKTREE_PATH=$(git worktree list --porcelain | grep -B2 "branch refs/heads/$ESCAPED_BRANCH" | grep "^worktree " | sed 's/^worktree //')
-if [ -z "$WORKTREE_PATH" ]; then
-  echo "Warning: Could not find worktree path for branch $BRANCH"
-  exit 0
-fi
-MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | cut -d' ' -f2)
-
-# Only remove if we're in a secondary worktree (not the main repo)
-if [ "$(pwd)" = "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "$MAIN_WORKTREE" ]; then
-  cd "$MAIN_WORKTREE"
-  git worktree remove "$WORKTREE_PATH"
-fi
-```
+After all tests pass and submission is complete, invoke `/wt.cleanup` to remove the worktree and return to the main
+repo.
 
 ## Quick Reference
 
@@ -331,6 +315,7 @@ gt track
 - **/pr.cool** - Called in Step 2 to clean up compat code
 - **/t.run-tests** - Progressive test runner (Step 7)
 - **/systematic-debugging** - For complex test failures
+- **/wt.cleanup** - Worktree removal (Step 9)
 
 **Called by:**
 

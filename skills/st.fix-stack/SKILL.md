@@ -230,14 +230,11 @@ By dispatching each branch as a sub-agent:
 
 ## Step 5: Worktree Cleanup
 
-After the entire stack is fixed, remove all worktrees created during the process:
+After the entire stack is fixed, invoke `/wt.cleanup` (using its **Bulk Cleanup** section) to remove all worktrees
+created during the process and return to the main repo.
 
-```bash
-git worktree list | grep .worktrees | awk '{print $1}' | xargs -I{} git worktree remove {}
-```
-
-This runs after all branches are submitted. Each sub-agent's `/pr.fix-branch` will skip its own cleanup when called from
-this skill, so cleanup happens here at the end.
+Each sub-agent's `/pr.fix-branch` will skip its own cleanup when called from this skill, so cleanup happens here at the
+end.
 
 ## Integration
 
@@ -245,6 +242,7 @@ this skill, so cleanup happens here at the end.
 
 - **using-git-worktrees** - For worktree setup (via sub-agent's /pr.fix-branch)
 - **pr.fix-branch** - Called for each branch via sub-agent (which in turn handles fix-comments, fix-ci, submit)
+- **wt.cleanup** - Bulk worktree removal (Step 5)
 
 **Pairs with:**
 

@@ -143,19 +143,14 @@ https://app.graphite.dev/github/pr/Metta-AI/metta/<PR_NUMBER>
 
 ## Step 7: Worktree Cleanup
 
-After the PR merges, remove the worktree:
-
-```bash
-MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
-cd "$MAIN_WORKTREE"
-wt remove "$BRANCH_NAME" 2>/dev/null || git worktree remove ".worktrees/$BRANCH_NAME" 2>/dev/null
-```
+After the PR merges, invoke `/wt.cleanup` to remove the worktree and return to the main repo.
 
 ## Integration
 
 **Uses:**
 
 - **pr.fix-branch** - Fixes PR comments and CI failures during monitoring
+- **wt.cleanup** - Worktree removal (Step 7)
 
 **Called by:**
 

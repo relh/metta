@@ -123,13 +123,8 @@ Report:
 
 ## Step 7: Worktree Cleanup
 
-After the stack is submitted (or single PR merged), remove the WIP worktree:
-
-```bash
-WIP_WORKTREE="$WORKTREE"  # path from Step 1
-cd "$(git rev-parse --show-toplevel 2>/dev/null || echo "$HOME")"
-git worktree remove "$WIP_WORKTREE"
-```
+After the stack is submitted (or single PR merged), invoke `/wt.cleanup` to remove the worktree and return to the main
+repo.
 
 ## Quick Reference
 
@@ -143,5 +138,5 @@ git worktree remove "$WIP_WORKTREE"
 
 ## Integration
 
-**Uses:** `st.graphite-stack`, `pr.submit`, `cb.lint-fix`, `t.run-tests`, `db.run-and-triage`  
+**Uses:** `st.graphite-stack`, `pr.submit`, `cb.lint-fix`, `t.run-tests`, `db.run-and-triage`, `wt.cleanup`  
 **Pairs with:** `st.make-stack` (when commits aren’t clean), `st.split` (to split an already-submitted branch)

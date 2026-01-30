@@ -67,6 +67,7 @@ Shared skills live in `skills/`:
 - `db.test-triage`
 - `do.worktrunk`
 - `n.debug-jobs`
+- `wt.cleanup`
 
 See each `skills/<name>/SKILL.md` for the full workflow.
 

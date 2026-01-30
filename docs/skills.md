@@ -14,6 +14,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 | `cb.`   | Codebase analysis/refactor/cleanup                   | cb.review-main, cb.cleanup-refactor |
 | `sk.`   | Skill management (create/update/submit/sync skills)  | sk.make-skill, sk.submit-skill      |
 | `t.`    | Testing                                              | t.run-tests                         |
+| `wt.`   | Git worktree utilities                               | wt.cleanup                          |
 | `r.`    | Repo scaffolding / package creation                  | r.make-package                      |
 | `cf.`   | Control-flow / meta-execution                        | cf.really                           |
 | `n.`    | Nishad-specific variants (only when truly personal)  | n.debug-jobs                        |

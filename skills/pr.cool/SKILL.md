@@ -519,17 +519,7 @@ widget = Widget(name="foo", dimensions=Size(10, 10))
 
 ## Step 7: Worktree Cleanup
 
-After submission is complete, remove the worktree if one was created in Step 0:
-
-```bash
-BRANCH=$(git branch --show-current)
-MAIN_WORKTREE=$(git worktree list --porcelain | head -1 | sed 's/^worktree //')
-if [ "$(pwd)" != "$MAIN_WORKTREE" ]; then
-  WORKTREE_PATH=$(pwd)
-  cd "$MAIN_WORKTREE"
-  git worktree remove "$WORKTREE_PATH"
-fi
-```
+After submission is complete, invoke `/wt.cleanup` to remove the worktree and return to the main repo.
 
 **Skip cleanup if** called from another skill (e.g., `/pr.submit`) that manages its own worktree lifecycle.
 
@@ -538,6 +528,7 @@ fi
 **Uses:**
 
 - **using-git-worktrees** - For worktree setup (Step 0, when called standalone)
+- **wt.cleanup** - Worktree removal (Step 7)
 
 **Called by:**
 
