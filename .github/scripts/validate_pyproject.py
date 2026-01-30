@@ -104,13 +104,15 @@ def check_exact_versions(data: dict, file_path: Path) -> list[str]:
 
 
 def check_license_format(data: dict, file_path: Path) -> list[str]:
-    """Check that license field uses PEP 621 table format.
+    """Check that license field uses string format per PEP 639.
 
-    PEP 621 requires:
-      license = { text = "MIT" }  OR  license = { file = "LICENSE" }
+    PEP 639 requires:
+      license = "MIT"
 
     NOT:
-      license = "MIT"  (old string format, not in spec)
+      license = { text = "MIT" }  (deprecated table format)
+
+    See: https://packaging.python.org/en/latest/specifications/pyproject-toml/#license
     """
     errors = []
     project = data.get("project", {})
@@ -121,31 +123,18 @@ def check_license_format(data: dict, file_path: Path) -> list[str]:
     if license_field is None:
         return errors
 
-    # Check if it's a string (invalid)
+    # String format is valid
     if isinstance(license_field, str):
-        errors.append(
-            f'  ✗ license-format: license = "{license_field}" is not PEP 621 compliant\n'
-            f'    → Use: license = {{ text = "{license_field}" }}\n'
-            "    → See: https://peps.python.org/pep-0621/#license"
-        )
         return errors
 
-    # Check if it's a table
+    # Table format is deprecated per PEP 639
     if isinstance(license_field, dict):
-        # Must have exactly one of 'text' or 'file'
-        has_text = "text" in license_field
-        has_file = "file" in license_field
-
-        if has_text and has_file:
-            errors.append(
-                "  ✗ license-format: license table cannot have both 'text' and 'file' keys\n"
-                '    → Use either { text = "..." } OR { file = "..." }'
-            )
-        elif not has_text and not has_file:
-            errors.append(
-                "  ✗ license-format: license table must have either 'text' or 'file' key\n"
-                '    → Use: license = { text = "MIT" } or license = { file = "LICENSE" }'
-            )
+        license_value = license_field.get("text") or license_field.get("file") or "MIT"
+        errors.append(
+            f"  ✗ license-format: license table format is deprecated (PEP 639)\n"
+            f'    → Use: license = "{license_value}"\n'
+            f"    → See: https://packaging.python.org/en/latest/specifications/pyproject-toml/#license"
+        )
 
     return errors
 
@@ -247,7 +236,7 @@ VALIDATION_RULES = [
         name="license-format",
         category="pep621",
         check=check_license_format,
-        help_text="License must use PEP 621 table format",
+        help_text="License must use string format (not table)",
     ),
     ValidationRule(
         name="no-dual-specification",
