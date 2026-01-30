@@ -81,11 +81,11 @@ jobs:
           PYPI_URL: "https://pypi.org"
         run: |
           # Timing rationale:
-          # - mettagrid's build job takes ~5 minutes
+          # - mettagrid's build job takes ~17 minutes (ARM builds are slow)
           # - PyPI propagation might add a few minutes
           # - Add some buffer just in case
-          # Total: 10 minutes should be sufficient
-          MAX_WAIT=600  # 10 minutes total
+          # Total: 25 minutes should be sufficient
+          MAX_WAIT=1500  # 25 minutes total
           CHECK_INTERVAL=60  # Check every minute
           ELAPSED=0
 
@@ -272,7 +272,7 @@ jobs:
             exit 0
           fi
 
-          MAX_WAIT=600  # 10 minutes
+          MAX_WAIT=1500  # 25 minutes
           CHECK_INTERVAL=30
           ELAPSED=0
 
