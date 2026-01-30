@@ -82,7 +82,7 @@ name = "metta"
 version = "0.1"
 description = "Metta AI framework"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 
 [project.optional-dependencies]
 tribal-village = ["tribal-village"]

@@ -8,7 +8,7 @@ version = "0.1.5"
 description = "cortex is a modular library for building recurrent backbones and agent memory systems."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "Subhojeet Pramanik", email = "email@subho.in" }]
 dependencies = [
   "torch",
