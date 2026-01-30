@@ -333,36 +333,38 @@ def _publish(
         assert next_version is not None
         assert next_tag is not None
 
-        # For cogames, we must publish mettagrid first and pin the cogames dependency to that exact version.
+        # For cogames, optionally publish mettagrid first and pin the cogames dependency to that exact version.
         if package == Package.COGAMES:
-            if not typer.confirm("To publish cogames, we must publish mettagrid first. Okay to proceed?", default=True):
-                error("Publishing aborted.")
-                raise typer.Exit(1)
+            if typer.confirm(
+                "Also publish mettagrid and update the public mettagrid version cogames depends on?",
+                default=True,
+            ):
+                print()
+                print()
+                header("Publishing mettagrid first...")
+                mettagrid_version = _publish(
+                    package=Package.METTAGRID,
+                    version_override=None,
+                    remote=remote,
+                    push_git_history_to_child_repo=push_git_history_to_child_repo,
+                    create_and_push_tag_to_monorepo=create_and_push_tag_to_monorepo,
+                    dry_run=dry_run,
+                    skip_git_checks=skip_git_checks,
+                )
+                assert mettagrid_version is not None
+                header(f"Published mettagrid with version {mettagrid_version}.")
+                print()
+                print()
+                header(f"Resuming with publishing {package}...")
 
-            print()
-            print()
-            header("Publishing mettagrid first...")
-            mettagrid_version = _publish(
-                package=Package.METTAGRID,
-                version_override=None,
-                remote=remote,
-                push_git_history_to_child_repo=push_git_history_to_child_repo,
-                create_and_push_tag_to_monorepo=create_and_push_tag_to_monorepo,
-                dry_run=dry_run,
-                skip_git_checks=skip_git_checks,
-            )
-            assert mettagrid_version is not None
-            header(f"Published mettagrid with version {mettagrid_version}.")
-            print()
-            print()
-            header(f"Resuming with publishing {package}...")
-
-            _pin_dependency_version(
-                package="cogames",
-                dependency="mettagrid",
-                version=mettagrid_version,
-                dry_run=dry_run,
-            )
+                _pin_dependency_version(
+                    package="cogames",
+                    dependency="mettagrid",
+                    version=mettagrid_version,
+                    dry_run=dry_run,
+                )
+            else:
+                info("Skipping mettagrid publish; continuing with cogames only.")
 
         _create_and_push_tag_to_monorepo(package=package, version=next_version, remote=remote, dry_run=dry_run)
 
