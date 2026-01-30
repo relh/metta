@@ -34,7 +34,7 @@ processes:
   # Provides local S3 storage for evaluation results and policies.
   # Used by server and watcher for storing/retrieving job artifacts.
   localstack:
-    command: docker run --rm --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack:latest
+    command: bash -c "docker rm -f localstack 2>/dev/null; docker run --rm --name localstack -p 4566:4566 -e SERVICES=s3 localstack/localstack:latest"
     readiness_probe:
       http_get:
         host: localhost
