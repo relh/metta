@@ -10,10 +10,11 @@ description:
 ## Overview
 
 Implement a fix end-to-end in a single new **worktree + WIP branch**, using clean, incremental commits. Once the fix is
-verified, split those commits into a Graphite stack so each PR stays reviewable.
+verified, decide whether it should ship as a **single PR** (preferred when the change is coherent) or be split into a
+Graphite stack (only when necessary to keep review manageable).
 
 **Announce at start:** "I’m using the issue-to-stack skill: I’ll fix everything on one WIP branch in a new worktree,
-then split it into a Graphite stack with st.graphite-stack."
+then submit as a single PR or split into a Graphite stack if needed."
 
 ## Step 1: Create a WIP Worktree + Branch
 
@@ -39,11 +40,11 @@ If the reproduction is slow or flaky, minimize it (one command, one test, or one
 
 ## Step 3: Implement the Fix as Stack-Friendly Commits (Still on WIP)
 
-Stay on the same WIP branch, but make **one commit per logical PR**:
+Stay on the same WIP branch. Prefer **one commit** when the change is clean and reviewable as a single PR; otherwise
+make **one commit per logical PR**:
 
-- Commit 1: the minimal compatibility shim / core fix
-- Commit 2: follow-up feature/tooling (if needed)
-- Commit 3: tests/docs/lint cleanup
+- Commit 1: the minimal compatibility shim / core fix (include any tests that validate this fix)
+- Commit 2: follow-up feature/tooling (if needed; include its tests/docs with it)
 
 Loop per commit:
 
@@ -56,6 +57,10 @@ git add -A
 git commit -m "fix: <small, reviewable change>"
 ```
 
+**Testing guidance:** Add tests when they materially increase confidence or prevent regressions; don’t add tests “just
+because”. If you do add tests, keep them in the **same PR/commit** as the change they validate (avoid standalone “tests
+only” PRs unless the tests are genuinely independent).
+
 ## Step 4: Verify the Whole WIP Branch
 
 Before splitting:
@@ -65,9 +70,20 @@ metta lint
 metta pytest
 ```
 
-## Step 5: Split WIP into a Graphite Stack
+## Step 5: Submit (Single PR) or Split (Stack)
 
-Use `st.graphite-stack` to decide boundaries and PR titles/descriptions.
+### Option A: Single PR (preferred when possible)
+
+If the diff is coherent and reviewable as one PR, submit the WIP branch directly:
+
+```bash
+/pr.submit
+```
+
+### Option B: Graphite stack (only when necessary)
+
+If the change is too large or has clearly separable pieces, use `st.graphite-stack` to decide boundaries and PR
+titles/descriptions.
 
 ```bash
 git log --oneline origin/main..HEAD
