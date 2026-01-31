@@ -233,6 +233,15 @@ class DepositCargoGoal(Goal):
 
         dist = _manhattan(ctx.state.position, depot_pos)
         if dist <= 1:
+            hubs = ctx.map.find(type="hub")
+            depot_entity = ctx.map.entities.get(depot_pos)
+            print(
+                f"[deposit-debug] agent={ctx.agent_id} t={ctx.step} pos={ctx.state.position}"
+                f" depot={depot_pos} depot_type={depot_entity.type if depot_entity else 'NONE'}"
+                f" depot_align={depot_entity.properties.get('alignment') if depot_entity else 'N/A'}"
+                f" cargo={current_cargo} prev={prev_cargo}"
+                f" hubs={[(p, e.properties.get('alignment')) for p, e in hubs]}"
+            )
             # Adjacent to depot - track attempts
             attempts_key = f"deposit_attempts_{depot_pos}"
             attempts = ctx.blackboard.get(attempts_key, 0) + 1

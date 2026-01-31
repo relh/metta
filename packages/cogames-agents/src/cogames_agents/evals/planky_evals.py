@@ -82,12 +82,8 @@ class _PlankyDiagnosticBase(Mission):
     # Per-mission inventory seed (applied to agent starting inventory)
     inventory_seed: Dict[str, int] = Field(default_factory=dict)
 
-    # Generous collective resources
-    collective_initial_carbon: int = Field(default=100)
-    collective_initial_oxygen: int = Field(default=100)
-    collective_initial_germanium: int = Field(default=100)
-    collective_initial_silicon: int = Field(default=100)
-    collective_initial_heart: int = Field(default=50)
+    # Generous collective resources (10x default)
+    wealth: int = Field(default=10)
 
     # Generous agent config
     cog: CogConfig = Field(

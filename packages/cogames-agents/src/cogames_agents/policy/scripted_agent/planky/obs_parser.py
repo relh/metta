@@ -112,37 +112,15 @@ class ObsParser:
         state.scrambler_gear = inv.get("scrambler", 0) > 0
         state.vibe = self._get_vibe_name(vibe_id)
 
-        # Read collective inventory from observation
-        # Collective tokens use feature names like "stat:collective:collective.<resource>.amount"
-        # with optional ":p<N>" suffixes for multi-token encoding.
-        _prefix = "stat:collective:collective."
-        _suffix = ".amount"
-        for tok in obs.tokens:
-            feature_name = tok.feature.name
-            if feature_name.startswith(_prefix):
-                rest = feature_name[len(_prefix) :]
-                # Handle multi-token encoding: "carbon.amount:p1" etc.
-                power = 0
-                if ":p" in rest:
-                    rest, power_str = rest.rsplit(":p", 1)
-                    power = int(power_str)
-                if rest.endswith(_suffix):
-                    resource = rest[: -len(_suffix)]
-                else:
-                    resource = rest
-                increment = tok.value * (256**power)
-                if resource == "carbon":
-                    state.collective_carbon += increment
-                elif resource == "oxygen":
-                    state.collective_oxygen += increment
-                elif resource == "germanium":
-                    state.collective_germanium += increment
-                elif resource == "silicon":
-                    state.collective_silicon += increment
-                elif resource == "heart":
-                    state.collective_heart += increment
-                elif resource == "influence":
-                    state.collective_influence += increment
+        # Read collective inventory from the inv dict.
+        # Collective tokens appear as "inv:collective:<resource>" features on the center cell,
+        # parsed above into keys like "collective:carbon", "collective:oxygen", etc.
+        state.collective_carbon = inv.get("collective:carbon", 0)
+        state.collective_oxygen = inv.get("collective:oxygen", 0)
+        state.collective_germanium = inv.get("collective:germanium", 0)
+        state.collective_silicon = inv.get("collective:silicon", 0)
+        state.collective_heart = inv.get("collective:heart", 0)
+        state.collective_influence = inv.get("collective:influence", 0)
 
         # Parse visible entities
         visible_entities: dict[tuple[int, int], Entity] = {}

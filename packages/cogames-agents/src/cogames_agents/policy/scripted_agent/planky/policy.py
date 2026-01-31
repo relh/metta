@@ -253,6 +253,17 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             # Evaluate goals normally
             action = evaluate_goals(agent_state.goals, ctx)
 
+        # DEBUG: dump all entity types for agent 0
+        if self._agent_id == 0 and agent_state.step == 25:
+            all_types = {}
+            for p, e in agent_state.entity_map.entities.items():
+                t = e.type
+                if t not in all_types:
+                    all_types[t] = []
+                all_types[t].append((p, e.properties.get("alignment")))
+            for t, entries in sorted(all_types.items()):
+                print(f"[planky-debug] type={t}: {entries[:5]}")
+
         # Emit trace
         if trace:
             line = trace.format_line(
@@ -369,6 +380,7 @@ class PlankyPolicy(MultiAgentPolicy):
         super().__init__(policy_env_info, device=device)
         self._feature_by_id = {f.id: f for f in policy_env_info.obs_features}
         self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
+        print(f"[planky] Action names: {list(policy_env_info.action_names)}")
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
         # Tracing
@@ -386,22 +398,28 @@ class PlankyPolicy(MultiAgentPolicy):
                 scrambler = 0
         else:
             if miner == -1:
-                miner = 2
+                miner = 3
             if aligner == -1:
-                aligner = 3
+                aligner = 5
             if scrambler == -1:
                 scrambler = 0
 
-        # Build role distribution
-        self._role_distribution: list[str] = []
-        self._role_distribution.extend(["miner"] * miner)
-        self._role_distribution.extend(["scout"] * scout)
-        self._role_distribution.extend(["aligner"] * aligner)
-        self._role_distribution.extend(["scrambler"] * scrambler)
-        self._role_distribution.extend(["stem"] * stem)
+        # Build per-team role distribution
+        team_roles: list[str] = []
+        team_roles.extend(["miner"] * miner)
+        team_roles.extend(["scout"] * scout)
+        team_roles.extend(["aligner"] * aligner)
+        team_roles.extend(["scrambler"] * scrambler)
+        team_roles.extend(["stem"] * stem)
+
+        # Tile the role distribution to cover all agents (supports multi-team setups).
+        num_agents = policy_env_info.num_agents
+        team_size = len(team_roles) if team_roles else 1
+        num_teams = max(1, (num_agents + team_size - 1) // team_size)
+        self._role_distribution: list[str] = (team_roles * num_teams)[:num_agents]
 
         if self._trace_enabled:
-            print(f"[planky] Role distribution: {self._role_distribution}")
+            print(f"[planky] Role distribution ({num_teams} teams): {self._role_distribution}")
 
         self._agent_policies: dict[int, StatefulAgentPolicy[PlankyAgentState]] = {}
 
@@ -429,8 +447,7 @@ class PlankyPolicy(MultiAgentPolicy):
     def step_batch(self, raw_observations: np.ndarray, raw_actions: np.ndarray) -> None:
         raw_actions[...] = self._noop_action_value
         num_agents = min(raw_observations.shape[0], self._policy_env_info.num_agents)
-        active_agents = min(num_agents, len(self._role_distribution))
-        for agent_id in range(active_agents):
+        for agent_id in range(num_agents):
             obs = self._raw_obs_to_agent_obs(agent_id, raw_observations[agent_id])
             action = self.agent_policy(agent_id).step(obs)
             action_index = self._action_name_to_index.get(action.name, 0)
