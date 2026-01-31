@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -19,6 +20,7 @@ from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
 from metta.app_backend.job_runner.job_artifacts import job_debug_key, job_logs_key
+from metta.app_backend.models.episodes import Episode
 from metta.app_backend.models.job_request import (
     JobPolicyVersion,
     JobRequest,
@@ -135,6 +137,29 @@ async def _resolve_metta_policy_uri(uri: str) -> PolicyVersion:
         version_str = f":v{version}" if version is not None else ""
         raise ValueError(f"No policy found with name '{name}{version_str}'")
     return versions[0]
+
+
+class AgentStatsDetail(BaseModel):
+    agent_id: int
+    reward: float
+    metrics: dict[str, float]
+
+
+class PolicyStatsDetail(BaseModel):
+    position: int
+    policy_version_id: UUID | None
+    policy_name: str | None
+    policy_version: int | None
+    num_agents: int
+    avg_metrics: dict[str, float]
+    avg_reward: float
+    agents: list[AgentStatsDetail]
+
+
+class EpisodeStatsResponse(BaseModel):
+    game_stats: dict[str, float]
+    policy_stats: list[PolicyStatsDetail]
+    steps: int | None
 
 
 def create_job_router() -> APIRouter:
@@ -319,6 +344,97 @@ def create_job_router() -> APIRouter:
                 raise HTTPException(status_code=404, detail=f"No logs found for job {job_id}") from None
             logger.error(f"Failed to read logs for job {job_id}: {e}")
             raise HTTPException(status_code=500, detail="Failed to read logs") from e
+
+    @router.get("/{job_id}/episode-stats")
+    @timed_http_handler
+    async def get_job_episode_stats(job_id: UUID, _user: CheckUser) -> EpisodeStatsResponse:
+        async with db_session() as session:
+            query = (
+                select(JobRequest)
+                .options(
+                    selectinload(JobRequest.policy_versions)  # type: ignore[arg-type]
+                    .joinedload(JobPolicyVersion.policy_version)  # type: ignore[arg-type]
+                    .joinedload(PolicyVersion.policy)  # type: ignore[arg-type]
+                )
+                .where(JobRequest.id == job_id)
+            )
+            result = await session.execute(query)
+            job = result.scalar_one_or_none()
+            if not job:
+                raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+            if job.status != JobStatus.completed:
+                raise HTTPException(status_code=400, detail="Job is not completed")
+
+            episode_id = job.episode_id_uuid
+            if not episode_id:
+                raise HTTPException(status_code=400, detail="Job has no episode result")
+
+            episode = await session.get(Episode, episode_id)
+            if not episode:
+                raise HTTPException(status_code=404, detail="Episode not found")
+
+            attributes = episode.attributes or {}
+            stats = attributes.get("stats", {})
+            agent_stats_list: list[dict[str, float]] = stats.get("agent", [])
+            rewards_list: list[float] = attributes.get("rewards", [])
+            game_stats: dict[str, float] = stats.get("game", {})
+            steps: int | None = attributes.get("steps") or stats.get("steps")
+
+            assignments: list[int] = job.job.get("assignments", [])
+            policy_map: dict[int, JobPolicyVersion] = {jpv.position: jpv for jpv in job.policy_versions}
+
+            policy_agents: dict[int, list[tuple[int, dict[str, float], float]]] = defaultdict(list)
+            for agent_id, agent_metrics in enumerate(agent_stats_list):
+                policy_idx = assignments[agent_id] if agent_id < len(assignments) else -1
+                reward = rewards_list[agent_id] if agent_id < len(rewards_list) else 0.0
+                policy_agents[policy_idx].append((agent_id, agent_metrics, reward))
+
+            policy_stats: list[PolicyStatsDetail] = []
+            for position in sorted(policy_agents.keys()):
+                agents = policy_agents[position]
+                jpv = policy_map.get(position)
+
+                all_metric_names = set()
+                for _, metrics, _ in agents:
+                    all_metric_names.update(metrics.keys())
+
+                avg_metrics: dict[str, float] = {}
+                for name in sorted(all_metric_names):
+                    values = [m[name] for _, m, _ in agents if name in m]
+                    if values:
+                        avg_metrics[name] = sum(values) / len(values)
+
+                reward_values = [r for _, _, r in agents]
+                avg_reward = sum(reward_values) / len(reward_values) if reward_values else 0.0
+
+                agent_details = [
+                    AgentStatsDetail(
+                        agent_id=aid,
+                        reward=reward,
+                        metrics=metrics,
+                    )
+                    for aid, metrics, reward in agents
+                ]
+
+                pv = jpv.policy_version if jpv else None
+                policy_stats.append(
+                    PolicyStatsDetail(
+                        position=position,
+                        policy_version_id=jpv.policy_version_id if jpv else None,
+                        policy_name=pv.policy.name if pv and pv.policy else None,
+                        policy_version=pv.version if pv else None,
+                        num_agents=len(agents),
+                        avg_metrics=avg_metrics,
+                        avg_reward=avg_reward,
+                        agents=agent_details,
+                    )
+                )
+
+            return EpisodeStatsResponse(
+                game_stats=game_stats,
+                policy_stats=policy_stats,
+                steps=steps,
+            )
 
     @router.get("/{job_id}")
     @timed_http_handler

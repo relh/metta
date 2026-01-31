@@ -361,6 +361,29 @@ export type SmartPlugStatus = {
   apower?: number | null
 }
 
+export type AgentStatsDetail = {
+  agent_id: number
+  reward: number
+  metrics: Record<string, number>
+}
+
+export type PolicyStatsDetail = {
+  position: number
+  policy_version_id: string | null
+  policy_name: string | null
+  policy_version: number | null
+  num_agents: number
+  avg_metrics: Record<string, number>
+  avg_reward: number
+  agents: AgentStatsDetail[]
+}
+
+export type EpisodeStatsResponse = {
+  game_stats: Record<string, number>
+  policy_stats: PolicyStatsDetail[]
+  steps: number | null
+}
+
 export class Repo {
   constructor(
     public baseUrl: string = 'http://localhost:8000',
@@ -662,6 +685,10 @@ export class Repo {
       await this.handleErrorResponse(response)
     }
     return response.text()
+  }
+
+  async getJobEpisodeStats(jobId: string): Promise<EpisodeStatsResponse> {
+    return this.apiCall<EpisodeStatsResponse>(`/jobs/${jobId}/episode-stats`)
   }
 
   // Tournament methods
