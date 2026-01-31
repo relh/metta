@@ -38,6 +38,7 @@ test-results/
 
 # Build artifacts
 *.so
+*.dylib
 build/
 build_debug/
 build-release/
