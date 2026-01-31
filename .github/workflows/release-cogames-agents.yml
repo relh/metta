@@ -51,88 +51,26 @@ jobs:
           name: cogames-agents-dist
           path: dist/*
 
-  wait-for-dependencies:
-    name: Wait for dependencies on PyPI
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-          fetch-tags: true
+  wait-for-mettagrid:
+    uses: ./.github/workflows/_wait-for-pypi.yml
+    with:
+      pyproject-path: packages/cogames-agents/pyproject.toml
+      dependency: mettagrid
 
-      - name: Extract pinned dependency versions
-        id: versions
-        run: |
-          PYPROJECT="packages/cogames-agents/pyproject.toml"
-
-          # Extract mettagrid==X.Y.Z (exact pin only)
-          if grep -qE '"mettagrid==' "$PYPROJECT"; then
-            VERSION=$(grep -oP 'mettagrid==\K[\d.]+' "$PYPROJECT" | head -1)
-            echo "mettagrid_version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Found mettagrid pin: $VERSION"
-          else
-            echo "mettagrid_version=" >> $GITHUB_OUTPUT
-            echo "No exact mettagrid pin found - skipping wait"
-          fi
-
-          # Extract cogames==X.Y.Z (exact pin only)
-          if grep -qE '"cogames==' "$PYPROJECT"; then
-            VERSION=$(grep -oP '"cogames==\K[\d.]+' "$PYPROJECT" | head -1)
-            echo "cogames_version=$VERSION" >> $GITHUB_OUTPUT
-            echo "Found cogames pin: $VERSION"
-          else
-            echo "cogames_version=" >> $GITHUB_OUTPUT
-            echo "No exact cogames pin found - skipping wait"
-          fi
-
-      - name: Wait for mettagrid on PyPI
-        if: steps.versions.outputs.mettagrid_version != ''
-        env:
-          VERSION: ${{ steps.versions.outputs.mettagrid_version }}
-        run: |
-          MAX_WAIT=1500  # 25 minutes (mettagrid ARM builds are slow)
-          CHECK_INTERVAL=60
-          ELAPSED=0
-          echo "Waiting for mettagrid==$VERSION on PyPI..."
-          while [ $ELAPSED -le $MAX_WAIT ]; do
-            if curl -sf "https://pypi.org/pypi/mettagrid/$VERSION/json" > /dev/null 2>&1; then
-              echo "mettagrid $VERSION is available!"
-              exit 0
-            fi
-            echo "Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
-            sleep $CHECK_INTERVAL
-            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
-          done
-          echo "ERROR: mettagrid $VERSION not found after $MAX_WAIT seconds"
-          exit 1
-
-      - name: Wait for cogames on PyPI
-        if: steps.versions.outputs.cogames_version != ''
-        env:
-          VERSION: ${{ steps.versions.outputs.cogames_version }}
-        run: |
-          MAX_WAIT=600  # 10 minutes (cogames is pure Python, faster than mettagrid)
-          CHECK_INTERVAL=30
-          ELAPSED=0
-          echo "Waiting for cogames==$VERSION on PyPI..."
-          while [ $ELAPSED -le $MAX_WAIT ]; do
-            if curl -sf "https://pypi.org/pypi/cogames/$VERSION/json" > /dev/null 2>&1; then
-              echo "cogames $VERSION is available!"
-              exit 0
-            fi
-            echo "Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
-            sleep $CHECK_INTERVAL
-            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
-          done
-          echo "ERROR: cogames $VERSION not found after $MAX_WAIT seconds"
-          exit 1
+  wait-for-cogames:
+    uses: ./.github/workflows/_wait-for-pypi.yml
+    with:
+      pyproject-path: packages/cogames-agents/pyproject.toml
+      dependency: cogames
+      max-wait: 600
+      check-interval: 30
 
   publish:
     name: Publish to PyPI
     needs:
       - build
-      - wait-for-dependencies
+      - wait-for-mettagrid
+      - wait-for-cogames
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'yes' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment:

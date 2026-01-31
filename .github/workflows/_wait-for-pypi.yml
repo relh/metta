@@ -1,0 +1,66 @@
+name: Wait for PyPI package
+
+on:
+  workflow_call:
+    inputs:
+      pyproject-path:
+        required: true
+        type: string
+      dependency:
+        required: true
+        type: string
+      max-wait:
+        required: false
+        type: number
+        default: 1500
+      check-interval:
+        required: false
+        type: number
+        default: 60
+
+jobs:
+  wait:
+    name: Wait for ${{ inputs.dependency }} on PyPI
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            ${{ inputs.pyproject-path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Extract dependency version
+        id: version
+        run: |
+          DEPENDENCY="${{ inputs.dependency }}"
+          PYPROJECT="${{ inputs.pyproject-path }}"
+          if grep -qE "${DEPENDENCY}[><=~!]" "$PYPROJECT"; then
+            VERSION=$(grep -E "${DEPENDENCY}" "$PYPROJECT" | grep -oP '\d+\.\d+\.\d+(\.\d+)?' | head -1)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Found $DEPENDENCY version requirement: $VERSION"
+          else
+            echo "No $DEPENDENCY version constraint found - skipping wait"
+            echo "version=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Poll PyPI
+        if: steps.version.outputs.version != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DEPENDENCY: ${{ inputs.dependency }}
+          MAX_WAIT: ${{ inputs.max-wait }}
+          CHECK_INTERVAL: ${{ inputs.check-interval }}
+        run: |
+          ELAPSED=0
+          echo "Waiting for ${DEPENDENCY}==${VERSION} on PyPI..."
+          while [ $ELAPSED -le $MAX_WAIT ]; do
+            if curl -sf "https://pypi.org/pypi/${DEPENDENCY}/${VERSION}/json" > /dev/null 2>&1; then
+              echo "${DEPENDENCY} ${VERSION} is available on PyPI!"
+              exit 0
+            fi
+            echo "Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
+            sleep $CHECK_INTERVAL
+            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+          done
+          echo "ERROR: ${DEPENDENCY} ${VERSION} not found on PyPI after ${MAX_WAIT} seconds"
+          exit 1
