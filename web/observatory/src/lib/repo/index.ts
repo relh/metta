@@ -249,6 +249,8 @@ export type PoolInfo = {
 export type SeasonDetail = {
   name: string
   summary: string
+  entry_pool: string | null
+  leaderboard_pool: string | null
   is_default: boolean
   pools: PoolInfo[]
 }

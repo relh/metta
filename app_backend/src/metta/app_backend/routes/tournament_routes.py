@@ -106,21 +106,23 @@ class PoolInfo(BaseModel):
 class SeasonResponse(BaseModel):
     name: str
     summary: str
-    validation_mission: str
+    entry_pool: str | None = None
+    leaderboard_pool: str | None = None
     is_default: bool
     pools: list[PoolInfo]
 
     @classmethod
     def from_commissioner(cls, season_name: str, pool_config_ids: dict[str, str] | None = None) -> "SeasonResponse":
         if season_name not in SEASONS:
-            return cls(name=season_name, summary="", validation_mission="", is_default=False, pools=[])
+            return cls(name=season_name, summary="", is_default=False, pools=[])
         commissioner = SEASONS[season_name]()
         desc = commissioner.description
         config_ids = pool_config_ids or {}
         return cls(
             name=season_name,
             summary=desc.summary,
-            validation_mission=desc.validation_mission,
+            entry_pool=commissioner.entry_pool,
+            leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
             pools=[
                 PoolInfo(name=p.name, description=p.description, config_id=config_ids.get(p.name)) for p in desc.pools

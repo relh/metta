@@ -13,6 +13,7 @@ export type PolicyVersionSummary = z.infer<typeof PolicyVersionSummarySchema>;
 const PoolInfoSchema = z.object({
   name: z.string(),
   description: z.string(),
+  config_id: z.string().nullable(),
 });
 
 export type PoolInfo = z.infer<typeof PoolInfoSchema>;
@@ -20,7 +21,8 @@ export type PoolInfo = z.infer<typeof PoolInfoSchema>;
 const SeasonResponseSchema = z.object({
   name: z.string(),
   summary: z.string(),
-  validation_mission: z.string(),
+  entry_pool: z.string().nullable(),
+  leaderboard_pool: z.string().nullable(),
   is_default: z.boolean(),
   pools: z.array(PoolInfoSchema),
 });

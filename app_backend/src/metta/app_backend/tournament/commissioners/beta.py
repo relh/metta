@@ -17,12 +17,12 @@ logger = logging.getLogger(__name__)
 class BetaCommissioner(CommissionerBase):
     season_name = "beta"
     leaderboard_pool = "competition"
+    entry_pool = "qualifying"
     referees = {
         "qualifying": SelfPlayReferee(),
         "competition": PairingReferee(),
     }
     summary = "Policies start in qualifying; promoted to competition if score meets threshold"
-    validation_mission = "training_facility.harvest"
     promotion_min_score = PROMOTION_MIN_SCORE
 
     def get_new_submission_membership_changes(self, policy_version_id: UUID) -> list[MembershipChangeRequest]:

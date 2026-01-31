@@ -1,12 +1,13 @@
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from metta_alo.job_specs import SingleEpisodeJob
@@ -82,7 +83,6 @@ class PoolDescription(BaseModel):
 
 class SeasonDescription(BaseModel):
     summary: str
-    validation_mission: str
     pools: list[PoolDescription]
 
 
@@ -90,14 +90,26 @@ class CommissionerBase(ABC):
     season_name: str
     referees: dict[str, RefereeBase]
     leaderboard_pool: str
+    entry_pool: str
     summary: str = ""
-    validation_mission: str = ""
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if inspect.isabstract(cls):
+            return
+        referees = getattr(cls, "referees", None)
+        if referees is None:
+            return
+        pool_names = set(referees.keys())
+        for attr in ("leaderboard_pool", "entry_pool"):
+            value = getattr(cls, attr, None)
+            if value is not None and value not in pool_names:
+                raise ValueError(f"{cls.__name__}.{attr}={value!r} is not in referees {pool_names}")
 
     @property
     def description(self) -> SeasonDescription:
         return SeasonDescription(
             summary=self.summary,
-            validation_mission=self.validation_mission,
             pools=[PoolDescription(name=name, description=ref.description) for name, ref in self.referees.items()],
         )
 

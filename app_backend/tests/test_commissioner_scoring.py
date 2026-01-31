@@ -18,8 +18,8 @@ from mettagrid.config.mettagrid_config import MettaGridConfig
 
 class _TestCommissioner(CommissionerBase):
     season_name = "test-season"
-    referees: dict[str, object] = {}
     leaderboard_pool = "test-pool"
+    referees: dict[str, object] = {"test-pool": object()}
 
     def get_new_submission_membership_changes(self, policy_version_id: UUID) -> list[MembershipChangeRequest]:
         return []
