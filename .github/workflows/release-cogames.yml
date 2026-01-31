@@ -99,7 +99,7 @@ jobs:
         env:
           SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          pip install ".[test]"
+          pip install . && pip install pytest pytest-xdist
       - name: Run tests
         run: |
           pytest tests/ -v
