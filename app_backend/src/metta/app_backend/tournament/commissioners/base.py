@@ -16,6 +16,7 @@ from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
 from pydantic import BaseModel
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
@@ -224,13 +225,19 @@ class CommissionerBase(ABC):
                 continue
             config_data = referee.make_env(seed=0).model_dump(mode="json")
             config_hash = hashlib.sha256(json.dumps(config_data, sort_keys=True).encode()).hexdigest()
-            env_config = (
-                await session.execute(select(MettagridEnvConfig).filter_by(config_hash=config_hash))
-            ).scalar_one_or_none()
-            if not env_config:
-                env_config = MettagridEnvConfig(config_hash=config_hash, config=config_data)
-                session.add(env_config)
-                await session.flush()
+            stmt = (
+                pg_insert(MettagridEnvConfig)
+                .values(config_hash=config_hash, config=config_data)
+                .on_conflict_do_nothing(index_elements=["config_hash"])
+                .returning(MettagridEnvConfig)
+            )
+            result = (await session.execute(stmt)).scalar_one_or_none()
+            if result:
+                env_config = result
+            else:
+                env_config = (
+                    await session.execute(select(MettagridEnvConfig).filter_by(config_hash=config_hash))
+                ).scalar_one()
             if pool.env_config_id != env_config.id:
                 pool.env_config_id = env_config.id
 
