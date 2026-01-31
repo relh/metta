@@ -19,7 +19,8 @@ from pathlib import Path
 
 # Bootstrap dependency versions
 REQUIRED_NIM_VERSION = "2.2.6"
-REQUIRED_NIMBY_VERSION = "0.1.13"
+NIMBY_VERSION_FILE = Path(__file__).parent.parent.parent.parent.parent / ".nimby-version"
+REQUIRED_NIMBY_VERSION = NIMBY_VERSION_FILE.read_text().strip()
 MIN_BAZEL_VERSION = "7.0.0"
 DEFAULT_BAZEL_VERSION = "latest"
 BAZELISKVERSION_FILE = Path(__file__).parent.parent.parent.parent.parent / ".bazeliskversion"

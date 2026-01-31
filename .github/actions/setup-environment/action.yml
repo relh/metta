@@ -56,7 +56,8 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
-        gh release download --repo treeform/nimby --pattern 'nimby-Linux-X64' --output nimby --clobber
+        NIMBY_VERSION=$(cat .nimby-version)
+        gh release download --repo treeform/nimby "$NIMBY_VERSION" --pattern 'nimby-Linux-X64' --output nimby --clobber
         chmod +x nimby
         ./nimby use 2.2.6
         echo "$HOME/.nimby/nim/bin" >> "$GITHUB_PATH"

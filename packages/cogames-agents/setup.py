@@ -20,8 +20,17 @@ from setuptools.dist import Distribution
 NIM_AGENTS_DIR = Path(__file__).parent / "src" / "cogames_agents" / "policy" / "nim_agents"
 NIMBY_LOCK = NIM_AGENTS_DIR / "nimby.lock"
 BINDINGS_DIR = NIM_AGENTS_DIR / "bindings" / "generated"
-REQUIRED_NIM_VERSION = os.environ.get("COGAMES_NIM_VERSION", "2.2.6")
-NIMBY_VERSION = os.environ.get("COGAMES_NIMBY_VERSION", "0.1.13")
+REQUIRED_NIM_VERSION = "2.2.6"
+
+
+def _read_nimby_version() -> str:
+    version_file = Path(__file__).resolve().parent.parent.parent / ".nimby-version"
+    if version_file.exists():
+        return version_file.read_text().strip()
+    return "0.1.13"
+
+
+NIMBY_VERSION = _read_nimby_version()
 
 
 def _get_nimby_url() -> str | None:
