@@ -1,0 +1,216 @@
+name: Build and publish cogames-agents
+
+on:
+  push:
+    tags:
+      - cogames-agents-v*
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Enable publishing step"
+        required: false
+        default: "yes"
+        type: choice
+        options:
+          - "yes"
+          - "no"
+      target:
+        description: "Where to publish: testpypi (safe testing) or pypi (live release)"
+        required: false
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+permissions:
+  contents: read
+  id-token: write
+  deployments: write
+
+jobs:
+  build:
+    name: Build distributions
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build twine setuptools_scm==8.1.0
+      - name: Build distributions
+        run: python -m build --outdir dist packages/cogames-agents
+      - name: Check distributions
+        run: python -m twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cogames-agents-dist
+          path: dist/*
+
+  wait-for-dependencies:
+    name: Wait for dependencies on PyPI
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Extract pinned dependency versions
+        id: versions
+        run: |
+          PYPROJECT="packages/cogames-agents/pyproject.toml"
+
+          # Extract mettagrid==X.Y.Z (exact pin only)
+          if grep -qE '"mettagrid==' "$PYPROJECT"; then
+            VERSION=$(grep -oP 'mettagrid==\K[\d.]+' "$PYPROJECT" | head -1)
+            echo "mettagrid_version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Found mettagrid pin: $VERSION"
+          else
+            echo "mettagrid_version=" >> $GITHUB_OUTPUT
+            echo "No exact mettagrid pin found - skipping wait"
+          fi
+
+          # Extract cogames==X.Y.Z (exact pin only)
+          if grep -qE '"cogames==' "$PYPROJECT"; then
+            VERSION=$(grep -oP '"cogames==\K[\d.]+' "$PYPROJECT" | head -1)
+            echo "cogames_version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Found cogames pin: $VERSION"
+          else
+            echo "cogames_version=" >> $GITHUB_OUTPUT
+            echo "No exact cogames pin found - skipping wait"
+          fi
+
+      - name: Wait for mettagrid on PyPI
+        if: steps.versions.outputs.mettagrid_version != ''
+        env:
+          VERSION: ${{ steps.versions.outputs.mettagrid_version }}
+        run: |
+          MAX_WAIT=1500  # 25 minutes (mettagrid ARM builds are slow)
+          CHECK_INTERVAL=60
+          ELAPSED=0
+          echo "Waiting for mettagrid==$VERSION on PyPI..."
+          while [ $ELAPSED -le $MAX_WAIT ]; do
+            if curl -sf "https://pypi.org/pypi/mettagrid/$VERSION/json" > /dev/null 2>&1; then
+              echo "mettagrid $VERSION is available!"
+              exit 0
+            fi
+            echo "Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
+            sleep $CHECK_INTERVAL
+            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+          done
+          echo "ERROR: mettagrid $VERSION not found after $MAX_WAIT seconds"
+          exit 1
+
+      - name: Wait for cogames on PyPI
+        if: steps.versions.outputs.cogames_version != ''
+        env:
+          VERSION: ${{ steps.versions.outputs.cogames_version }}
+        run: |
+          MAX_WAIT=600  # 10 minutes (cogames is pure Python, faster than mettagrid)
+          CHECK_INTERVAL=30
+          ELAPSED=0
+          echo "Waiting for cogames==$VERSION on PyPI..."
+          while [ $ELAPSED -le $MAX_WAIT ]; do
+            if curl -sf "https://pypi.org/pypi/cogames/$VERSION/json" > /dev/null 2>&1; then
+              echo "cogames $VERSION is available!"
+              exit 0
+            fi
+            echo "Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
+            sleep $CHECK_INTERVAL
+            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+          done
+          echo "ERROR: cogames $VERSION not found after $MAX_WAIT seconds"
+          exit 1
+
+  publish:
+    name: Publish to PyPI
+    needs:
+      - build
+      - wait-for-dependencies
+    if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'yes' }}
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    environment:
+      name: ${{ format('cogames-agents-{0}', github.event_name == 'workflow_dispatch' && github.event.inputs.target || 'pypi') }}
+    env:
+      PUBLISH_TARGET: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target || 'pypi' }}
+      DEPLOY_ENV: ${{ format('cogames-agents-{0}', github.event_name == 'workflow_dispatch' && github.event.inputs.target || 'pypi') }}
+      DEPLOY_URL: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'testpypi' && 'https://test.pypi.org/project/cogames-agents/' || 'https://pypi.org/project/cogames-agents/' }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cogames-agents-dist
+          path: dist
+      - name: List distributions
+        run: ls -l dist
+      - name: Create deployment record
+        id: create_deployment
+        uses: actions/github-script@v7
+        if: ${{ env.PUBLISH_TARGET == 'pypi' }}
+        env:
+          DEPLOY_DESCRIPTION: ${{ format('Publishing cogames-agents to {0}', env.PUBLISH_TARGET) }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const response = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: process.env.DEPLOY_ENV,
+              auto_merge: false,
+              required_contexts: [],
+              description: process.env.DEPLOY_DESCRIPTION,
+              production_environment: process.env.PUBLISH_TARGET === 'pypi',
+            });
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: response.data.id,
+              state: 'in_progress',
+              log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: process.env.DEPLOY_URL,
+              description: 'Publishing in progress',
+            });
+
+            core.setOutput('deployment_id', response.data.id);
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ env.PUBLISH_TARGET == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
+          skip-existing: ${{ env.PUBLISH_TARGET == 'testpypi' }}
+          verbose: true
+      - name: Mark deployment successful
+        if: ${{ env.PUBLISH_TARGET == 'pypi' && success() && steps.create_deployment.outputs.deployment_id != '' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ steps.create_deployment.outputs.deployment_id }}'),
+              state: 'success',
+              log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: process.env.DEPLOY_URL,
+              description: 'Publish succeeded',
+            });
+      - name: Mark deployment failed
+        if: ${{ env.PUBLISH_TARGET == 'pypi' && failure() && steps.create_deployment.outputs.deployment_id != '' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ steps.create_deployment.outputs.deployment_id }}'),
+              state: 'failure',
+              log_url: `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: process.env.DEPLOY_URL,
+              description: 'Publish failed',
+            });

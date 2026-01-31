@@ -647,7 +647,6 @@ provides-extras = ["agents", "test"]
 
 [[package]]
 name = "cogames-agents"
-version = "0.0.1"
 source = { editable = "packages/cogames-agents" }
 dependencies = [
     { name = "cogames" },

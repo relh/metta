@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+requires = ["setuptools==80.9.0", "wheel==0.45.1", "setuptools_scm==8.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cogames-agents"
-version = "0.0.1"
 description = "Optional agent policies for CoGames"
+dynamic = ["version"]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
@@ -17,7 +17,7 @@ classifiers = [
   "Operating System :: MacOS",
 ]
 urls = { Homepage = "https://github.com/Metta-AI/metta/tree/main/packages/cogames-agents", Repository = "https://github.com/Metta-AI/metta" }
-dependencies = ["cogames>=0.0.1", "mettagrid==0.2.0.58", "numpy>=2.0.0"]
+dependencies = ["cogames>=0.0.1", "mettagrid==0.2.0.66", "numpy>=2.0.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,6 +38,22 @@ include-package-data = true
   "policy/nim_agents/bindings/generated/*.dylib",
   "policy/nim_agents/bindings/generated/*.dll",
   "policy/nim_agents/bindings/generated/*.py",
+]
+
+[tool.setuptools_scm]
+tag_regex = "^cogames-agents-v(?P<version>\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?)$"
+version_scheme = "no-guess-dev"
+local_scheme = "no-local-version"
+root = "../.."
+fallback_version = "0.0.0"
+git_describe_command = [
+  "git",
+  "describe",
+  "--dirty",
+  "--tags",
+  "--long",
+  "--match",
+  "cogames-agents-v*",
 ]
 
 [tool.uv]
