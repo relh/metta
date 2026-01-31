@@ -83,6 +83,12 @@ files written using older schemas or services that haven't been redeployed.
 
 See `common/src/metta/common/tool/README.md` for details.
 
+## Documentation
+
+`docs/plans/` is a local scratch space for AI-generated implementation plans. These files are gitignored and should
+never be committed. If work involves architectural decisions worth preserving, add or update a spec in `docs/specs/`
+following the template there (`NNNN-short-title.md` format). See `docs/specs/README.md` for when a spec is appropriate.
+
 ## Git / Graphite
 
 This repo uses Graphite stacks. Before committing:
