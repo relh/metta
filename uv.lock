@@ -610,7 +610,6 @@ agents = [
     { name = "cogames-agents" },
 ]
 test = [
-    { name = "cogames-agents" },
     { name = "pytest" },
     { name = "pytest-xdist" },
     { name = "ruff" },
@@ -619,7 +618,6 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "cogames-agents", marker = "extra == 'agents'", editable = "packages/cogames-agents" },
-    { name = "cogames-agents", marker = "extra == 'test'", editable = "packages/cogames-agents" },
     { name = "einops", specifier = ">=0.8.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.1" },
