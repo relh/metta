@@ -233,15 +233,17 @@ class DepositCargoGoal(Goal):
 
         dist = _manhattan(ctx.state.position, depot_pos)
         if dist <= 1:
-            hubs = ctx.map.find(type="hub")
-            depot_entity = ctx.map.entities.get(depot_pos)
-            print(
-                f"[deposit-debug] agent={ctx.agent_id} t={ctx.step} pos={ctx.state.position}"
-                f" depot={depot_pos} depot_type={depot_entity.type if depot_entity else 'NONE'}"
-                f" depot_align={depot_entity.properties.get('alignment') if depot_entity else 'N/A'}"
-                f" cargo={current_cargo} prev={prev_cargo}"
-                f" hubs={[(p, e.properties.get('alignment')) for p, e in hubs]}"
-            )
+            if ctx.trace:
+                hub_dbg_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
+                hubs = ctx.map.find(type_contains="hub", property_filter=hub_dbg_filter)
+                depot_entity = ctx.map.entities.get(depot_pos)
+                print(
+                    f"[deposit-debug] agent={ctx.agent_id} t={ctx.step} pos={ctx.state.position}"
+                    f" depot={depot_pos} depot_type={depot_entity.type if depot_entity else 'NONE'}"
+                    f" depot_align={depot_entity.properties.get('alignment') if depot_entity else 'N/A'}"
+                    f" cargo={current_cargo} prev={prev_cargo}"
+                    f" hubs={[(p, e.properties.get('alignment')) for p, e in hubs]}"
+                )
             # Adjacent to depot - track attempts
             attempts_key = f"deposit_attempts_{depot_pos}"
             attempts = ctx.blackboard.get(attempts_key, 0) + 1
@@ -380,19 +382,17 @@ def _find_cogs_depot(ctx: PlankyContext) -> tuple[int, int] | None:
         failed_step = ctx.blackboard.get(f"deposit_failed_{p}", -9999)
         return ctx.step - failed_step < 100
 
-    # Prioritize hubs
-    for apos, _ in ctx.map.find(type="hub"):
+    # Prioritize own team's hub
+    hub_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
+    for apos, _ in ctx.map.find(type_contains="hub", property_filter=hub_filter):
         if not recently_failed(apos):
             return apos
 
-    # Fallback: nearest cogs junction/junction near hub
+    # Fallback: nearest cogs junction near hub
     candidates: list[tuple[int, tuple[int, int]]] = []
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         if not recently_failed(jpos) and _manhattan(jpos, SPAWN_POS) <= 15:
             candidates.append((_manhattan(pos, jpos), jpos))
-    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
-        if not recently_failed(cpos) and _manhattan(cpos, SPAWN_POS) <= 15:
-            candidates.append((_manhattan(pos, cpos), cpos))
 
     if not candidates:
         # Last resort: navigate to hub area

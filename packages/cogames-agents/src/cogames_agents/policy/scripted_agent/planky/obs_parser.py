@@ -171,6 +171,8 @@ class ObsParser:
 
             # Alignment from collective ID
             collective_id = props.pop("collective", None)
+            if collective_id is not None:
+                props["collective_id"] = collective_id
             alignment = self._derive_alignment(obj_name, props.get("clipped", 0), collective_id)
             if alignment:
                 props["alignment"] = alignment

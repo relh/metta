@@ -65,3 +65,4 @@ class PlankyContext:
     action_names: list[str]
     agent_id: int
     step: int
+    my_collective_id: Optional[int] = None

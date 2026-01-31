@@ -97,6 +97,7 @@ class PlankyAgentState:
         self.navigator = Navigator()
         self.blackboard: dict[str, Any] = {}
         self.step = 0
+        self.my_collective_id: int | None = None
 
 
 class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
@@ -144,6 +145,15 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             visible_entities=visible_entities,
             step=agent_state.step,
         )
+
+        # Detect own collective_id from nearest hub (once)
+        if agent_state.my_collective_id is None:
+            hub = agent_state.entity_map.find_nearest(state.position, type_contains="hub")
+            if hub is not None:
+                _, hub_entity = hub
+                cid = hub_entity.properties.get("collective_id")
+                if cid is not None:
+                    agent_state.my_collective_id = cid
 
         # Detect useful actions by comparing state changes
         # Useful = mined resources, deposited to collective, aligned/scrambled junction
@@ -236,6 +246,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             action_names=self._action_names,
             agent_id=self._agent_id,
             step=agent_state.step,
+            my_collective_id=agent_state.my_collective_id,
         )
 
         # If we're stuck (many failed moves), force exploration to discover terrain

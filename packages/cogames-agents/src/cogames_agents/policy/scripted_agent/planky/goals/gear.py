@@ -92,8 +92,9 @@ class GetGearGoal(Goal):
                 ctx.trace.activate(self.name, "giving up after max attempts")
             return None  # Skip to next goal
 
-        # Find station by type
-        result = ctx.map.find_nearest(ctx.state.position, type=self._station_type)
+        # Find station by type (filter to own team if known)
+        pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
+        result = ctx.map.find_nearest(ctx.state.position, type_contains=self._station_type, property_filter=pf)
         if result is None:
             # Station not discovered yet — navigate toward hub (spawn) where stations are
             from cogames_agents.policy.scripted_agent.planky.policy import SPAWN_POS

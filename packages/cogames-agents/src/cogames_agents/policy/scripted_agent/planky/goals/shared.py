@@ -50,11 +50,12 @@ class GetHeartsGoal(Goal):
         return False
 
     def execute(self, ctx: PlankyContext) -> Action:
-        # Find chest
-        result = ctx.map.find_nearest(ctx.state.position, type="chest")
+        # Find own team's chest
+        pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
+        result = ctx.map.find_nearest(ctx.state.position, type_contains="chest", property_filter=pf)
         if result is None:
             # Try hub as fallback
-            result = ctx.map.find_nearest(ctx.state.position, type="hub")
+            result = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
@@ -132,13 +133,12 @@ class FallbackMineGoal(Goal):
 def _find_deposit(ctx: "PlankyContext") -> tuple[int, int] | None:
     """Find nearest cogs-aligned depot for depositing resources."""
     pos = ctx.state.position
+    hub_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
     candidates: list[tuple[int, tuple[int, int]]] = []
-    for apos, _ in ctx.map.find(type="hub"):
+    for apos, _ in ctx.map.find(type_contains="hub", property_filter=hub_filter):
         candidates.append((_manhattan(pos, apos), apos))
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, jpos), jpos))
-    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
-        candidates.append((_manhattan(pos, cpos), cpos))
     if not candidates:
         return None
     candidates.sort()
