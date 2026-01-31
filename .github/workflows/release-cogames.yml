@@ -87,7 +87,17 @@ jobs:
       #  See https://github.com/Metta-AI/metta/actions/runs/20327783664/job/58396495857
       - name: Free up disk space
         uses: jlumbroso/free-disk-space@main
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref_name }}" == cogames-v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#cogames-v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
       - name: Install cogames with test dependencies
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.version.outputs.version }}
         run: |
           pip install ".[test]"
       - name: Run tests
