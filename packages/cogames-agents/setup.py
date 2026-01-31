@@ -21,15 +21,15 @@ NIM_AGENTS_DIR = Path(__file__).parent / "src" / "cogames_agents" / "policy" / "
 NIMBY_LOCK = NIM_AGENTS_DIR / "nimby.lock"
 BINDINGS_DIR = NIM_AGENTS_DIR / "bindings" / "generated"
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_PKG_ROOT = Path(__file__).resolve().parent
 
 
 def _read_dotfile_version(path: Path) -> str:
     return path.read_text().strip()
 
 
-NIM_VERSION = _read_dotfile_version(_REPO_ROOT / ".nim-version")
-NIMBY_VERSION = _read_dotfile_version(_REPO_ROOT / ".nimby-version")
+NIM_VERSION = _read_dotfile_version(_PKG_ROOT / ".nim-version")
+NIMBY_VERSION = _read_dotfile_version(_PKG_ROOT / ".nimby-version")
 
 
 def _get_nimby_url() -> str | None:
