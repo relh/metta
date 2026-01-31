@@ -72,6 +72,8 @@ jobs:
           # For tag pushes: use the tag name (e.g., cogames-v1.2.3)
           # For manual dispatch: use main branch (since arbitrary branches aren't in child repo)
           ref: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'main' }}
+          fetch-depth: 0
+          fetch-tags: true
       - name: Verify checked out ref
         run: |
           echo "github.ref: ${{ github.ref }}"
