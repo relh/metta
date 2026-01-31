@@ -376,15 +376,8 @@ tournament's evaluation environment.
 
 ### Package Requirements
 
-The tournament server evaluates policies using the published version of `cogames`. Your policy must be compatible with
-the installed `cogames` and `mettagrid` versions. If your policy depends on `cogames-agents`, it must be included in the
-submission zip or published to PyPI.
-
-Currently `cogames-agents` is **not** published to PyPI. To submit policies that depend on it:
-
-- Include all necessary source files via `-f` flags
-- Or use `--setup-script` to install the package in the evaluation environment
-- Or self-contain the policy logic within the uploaded files
+The tournament server evaluates policies using the published versions of `cogames`, `cogames-agents`, and `mettagrid`
+from PyPI. Your policy must be compatible with the installed versions of these packages.
 
 ---
 

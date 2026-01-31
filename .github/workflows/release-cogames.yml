@@ -99,7 +99,8 @@ jobs:
         env:
           SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          pip install . && pip install pytest pytest-xdist
+          pip install ".[test]"
+          pip install cogames-agents --no-deps
       - name: Run tests
         run: |
           pytest tests/ -v
