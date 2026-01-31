@@ -9,7 +9,6 @@ Handles installation of critical bootstrap dependencies needed before core.py ca
 import argparse
 import os
 import platform
-import re
 import shutil
 import subprocess
 import sys
@@ -17,13 +16,16 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# Bootstrap dependency versions
-REQUIRED_NIM_VERSION = "2.2.6"
-NIMBY_VERSION_FILE = Path(__file__).parent.parent.parent.parent.parent / ".nimby-version"
-REQUIRED_NIMBY_VERSION = NIMBY_VERSION_FILE.read_text().strip()
-MIN_BAZEL_VERSION = "7.0.0"
-DEFAULT_BAZEL_VERSION = "latest"
-BAZELISKVERSION_FILE = Path(__file__).parent.parent.parent.parent.parent / ".bazeliskversion"
+_REPO_ROOT = Path(__file__).parent.parent.parent.parent.parent
+
+
+def _read_dotfile_version(path: Path) -> str:
+    return path.read_text().strip()
+
+
+BAZELISK_VERSION = _read_dotfile_version(_REPO_ROOT / ".bazeliskversion")
+NIM_VERSION = _read_dotfile_version(_REPO_ROOT / ".nim-version")
+NIMBY_VERSION = _read_dotfile_version(_REPO_ROOT / ".nimby-version")
 
 
 TARGET_INSTALL_DIRS = [
@@ -73,29 +75,6 @@ def get_install_dir() -> Path | None:
     return None
 
 
-def ensure_bazel_version_file(version: str) -> None:
-    """Ensure a workspace-level .bazelversion exists to pin Bazelisk."""
-    try:
-        workspace = Path.cwd()
-        version_file = workspace / ".bazelversion"
-        if version_file.exists():
-            return
-        # Check if directory is writable (skip in Docker builds or read-only contexts)
-        if not os.access(workspace, os.W_OK):
-            return  # Not writable, skip silently
-        version_file.write_text(f"{version}\n")
-        info(f"Created {version_file} to request Bazel '{version}'.")
-    except Exception:  # pragma: no cover - silently fail in Docker builds or other non-writable contexts
-        pass
-
-
-def bazel_env() -> dict[str, str]:
-    """Environment dict ensuring Bazelisk uses the desired default version."""
-    env = os.environ.copy()
-    env.setdefault("USE_BAZEL_VERSION", DEFAULT_BAZEL_VERSION)
-    return env
-
-
 def _parse_version(v: str) -> tuple[int, ...]:
     parts = []
     for part in v.split("."):
@@ -130,24 +109,7 @@ def check_bootstrap_deps() -> bool:
     if not shutil.which("g++"):
         return False
 
-    # Check bazel (with version)
     if not shutil.which("bazel"):
-        return False
-    try:
-        result = subprocess.run(
-            ["bazel", "--version"],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=bazel_env(),
-        )
-        version_line = result.stdout.strip()
-        version_raw = version_line.split()[1] if len(version_line.split()) > 1 else ""
-        version_match = re.match(r"^(\d+(?:\.\d+)*)", version_raw)
-        version = version_match.group(1) if version_match else ""
-        if version and not version_ge(version, MIN_BAZEL_VERSION):
-            return False
-    except (subprocess.CalledProcessError, IndexError, ValueError):
         return False
 
     # Check nimby (with version)
@@ -157,7 +119,7 @@ def check_bootstrap_deps() -> bool:
         result = subprocess.run(["nimby", "--version"], check=True, capture_output=True, text=True)
         version_output = result.stdout.strip()
         version = version_output.split()[-1].replace("v", "")
-        if version and not version_ge(version, REQUIRED_NIMBY_VERSION):
+        if version and not version_ge(version, NIMBY_VERSION):
             return False
     except (subprocess.CalledProcessError, IndexError, ValueError):
         return False
@@ -169,7 +131,7 @@ def check_bootstrap_deps() -> bool:
         result = subprocess.run(["nim", "--version"], check=True, capture_output=True, text=True)
         version_line = result.stdout.split("\n")[0]
         version = version_line.split()[3] if len(version_line.split()) > 3 else ""
-        if version and not version_ge(version, REQUIRED_NIM_VERSION):
+        if version and not version_ge(version, NIM_VERSION):
             return False
     except (subprocess.CalledProcessError, IndexError, ValueError):
         return False
@@ -247,8 +209,7 @@ def get_bazelisk_url() -> str:
     system = platform.system().lower()
     machine = platform.machine().lower()
 
-    version = BAZELISKVERSION_FILE.read_text().strip()
-    base = f"https://github.com/bazelbuild/bazelisk/releases/download/v{version}/"
+    base = f"https://github.com/bazelbuild/bazelisk/releases/download/v{BAZELISK_VERSION}/"
 
     if system == "linux":
         if machine in ("aarch64", "arm64"):
@@ -268,25 +229,8 @@ def get_bazelisk_url() -> str:
 
 def install_bazel(run_command=None, non_interactive: bool = False) -> None:
     """Install bazel via bazelisk."""
-    ensure_bazel_version_file(DEFAULT_BAZEL_VERSION)
-
     if shutil.which("bazel"):
-        try:
-            result = subprocess.run(
-                ["bazel", "--version"],
-                check=True,
-                capture_output=True,
-                text=True,
-                env=bazel_env(),
-            )
-            version_line = result.stdout.strip()
-            version_raw = version_line.split()[1] if len(version_line.split()) > 1 else ""
-            version_match = re.match(r"^(\d+(?:\.\d+)*)", version_raw)
-            version = version_match.group(1) if version_match else ""
-            if version and version_ge(version, MIN_BAZEL_VERSION):
-                return  # Already installed with correct version
-        except (subprocess.CalledProcessError, IndexError, ValueError):
-            pass
+        return
 
     info("Installing bazel via bazelisk...")
 
@@ -315,26 +259,6 @@ def install_bazel(run_command=None, non_interactive: bool = False) -> None:
     if not shutil.which("bazel"):
         error("Failed to install bazelisk. Please install it manually from https://github.com/bazelbuild/bazelisk")
         raise RuntimeError("Bazel installation failed")
-
-    # Check version
-    try:
-        result = subprocess.run(
-            ["bazel", "--version"],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=bazel_env(),
-        )
-        version_line = result.stdout.strip()
-        version_raw = version_line.split()[1] if len(version_line.split()) > 1 else ""
-        version_match = re.match(r"^(\d+(?:\.\d+)*)", version_raw)
-        version = version_match.group(1) if version_match else ""
-        if version and not version_ge(version, MIN_BAZEL_VERSION):
-            error(f"Bazel version {version} is too old. Minimum required: {MIN_BAZEL_VERSION}. Please upgrade bazel.")
-            raise RuntimeError(f"Bazel version {version} is too old")
-    except (subprocess.CalledProcessError, IndexError, ValueError) as e:
-        error(f"Failed to determine bazel version: {e}")
-        raise
 
 
 def _get_nim_version() -> str | None:
@@ -365,9 +289,9 @@ def install_nim_via_nimby(run_command=None, non_interactive: bool = False) -> No
     # Check versions using current PATH (before we modify it)
     # This ensures we check what the user actually has, not what we've added to PATH
     current_nim_version = _get_nim_version()
-    nim_up_to_date = version_ge(current_nim_version, REQUIRED_NIM_VERSION)
+    nim_up_to_date = version_ge(current_nim_version, NIM_VERSION)
     current_nimby_version = _get_nimby_version()
-    nimby_up_to_date = version_ge(current_nimby_version, REQUIRED_NIMBY_VERSION)
+    nimby_up_to_date = version_ge(current_nimby_version, NIMBY_VERSION)
 
     # If both are up to date, exit early
     if nimby_up_to_date and nim_up_to_date:
@@ -388,13 +312,13 @@ def install_nim_via_nimby(run_command=None, non_interactive: bool = False) -> No
     if not nim_up_to_date:
         info(f"Nim is {'out of date' if current_nim_version else 'not found'}. Installing...")
         result = subprocess.run(
-            [str(target_nimby_path), "use", REQUIRED_NIM_VERSION],
+            [str(target_nimby_path), "use", NIM_VERSION],
             check=False,
             capture_output=True,
             text=True,
         )
         if result.returncode != 0:
-            error(f"Failed to install Nim version {REQUIRED_NIM_VERSION}: {result.stderr}")
+            error(f"Failed to install Nim version {NIM_VERSION}: {result.stderr}")
             raise RuntimeError("Nim installation failed")
         # This is where nimby use installs
         target_nim_path = Path.home() / ".nimby" / "nim" / "bin" / "nim"
@@ -429,7 +353,7 @@ def _install_nimby(target_nimby_path: Path) -> None:
         error(f"Unsupported architecture: {machine}")
         raise RuntimeError(f"Unsupported architecture: {machine}")
 
-    url = f"https://github.com/treeform/nimby/releases/download/{REQUIRED_NIMBY_VERSION}/nimby-{os_name}-{arch}"
+    url = f"https://github.com/treeform/nimby/releases/download/{NIMBY_VERSION}/nimby-{os_name}-{arch}"
     info(f"Downloading Nimby from {url} to {target_nimby_path}")
     target_nimby_path.parent.mkdir(parents=True, exist_ok=True)
     if target_nimby_path.exists() or target_nimby_path.is_symlink():
@@ -439,7 +363,7 @@ def _install_nimby(target_nimby_path: Path) -> None:
     except urllib.error.HTTPError as e:
         if e.code == 404:
             error(
-                f"Nimby {REQUIRED_NIMBY_VERSION} does not have a binary for {os_name} {arch}. "
+                f"Nimby {NIMBY_VERSION} does not have a binary for {os_name} {arch}. "
                 f"Available binaries: Linux-X64, macOS-ARM64, macOS-X64. "
                 f"For Docker builds on ARM64 Mac, use: docker build --platform=linux/amd64 ..."
             )

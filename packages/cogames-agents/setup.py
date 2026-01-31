@@ -20,17 +20,16 @@ from setuptools.dist import Distribution
 NIM_AGENTS_DIR = Path(__file__).parent / "src" / "cogames_agents" / "policy" / "nim_agents"
 NIMBY_LOCK = NIM_AGENTS_DIR / "nimby.lock"
 BINDINGS_DIR = NIM_AGENTS_DIR / "bindings" / "generated"
-REQUIRED_NIM_VERSION = "2.2.6"
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def _read_nimby_version() -> str:
-    version_file = Path(__file__).resolve().parent.parent.parent / ".nimby-version"
-    if version_file.exists():
-        return version_file.read_text().strip()
-    return "0.1.13"
+def _read_dotfile_version(path: Path) -> str:
+    return path.read_text().strip()
 
 
-NIMBY_VERSION = _read_nimby_version()
+NIM_VERSION = _read_dotfile_version(_REPO_ROOT / ".nim-version")
+NIMBY_VERSION = _read_dotfile_version(_REPO_ROOT / ".nimby-version")
 
 
 def _get_nimby_url() -> str | None:
@@ -63,7 +62,7 @@ def _build_nim() -> None:
             nimby = Path(tmp) / "nimby"
             urllib.request.urlretrieve(nimby_url, nimby)
             nimby.chmod(nimby.stat().st_mode | stat.S_IEXEC)
-            subprocess.check_call([str(nimby), "use", REQUIRED_NIM_VERSION])
+            subprocess.check_call([str(nimby), "use", NIM_VERSION])
 
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(nimby, dst)
