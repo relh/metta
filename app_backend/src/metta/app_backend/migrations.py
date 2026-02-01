@@ -282,4 +282,17 @@ MIGRATIONS = [
             """ALTER TABLE pools ADD COLUMN env_config_id UUID REFERENCES mettagrid_env_configs(id)""",
         ],
     ),
+    SqlMigration(
+        version=11,
+        description="Add season versioning columns",
+        sql_statements=[
+            """ALTER TABLE seasons ADD COLUMN version INTEGER NOT NULL DEFAULT 1""",
+            """ALTER TABLE seasons ADD COLUMN canonical BOOLEAN NOT NULL DEFAULT FALSE""",
+            """ALTER TABLE seasons ADD COLUMN disabled_at TIMESTAMP""",
+            """ALTER TABLE seasons DROP CONSTRAINT seasons_name_key""",
+            """ALTER TABLE seasons ADD CONSTRAINT seasons_name_version_key UNIQUE (name, version)""",
+            """CREATE UNIQUE INDEX idx_seasons_canonical ON seasons (name) WHERE canonical = TRUE""",
+            """UPDATE seasons SET canonical = TRUE""",
+        ],
+    ),
 ]

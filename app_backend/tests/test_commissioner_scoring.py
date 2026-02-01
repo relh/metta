@@ -47,7 +47,7 @@ async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_r
     episode_id = uuid4()
 
     async with db_session() as session:
-        season = Season(name=commissioner.season_name)
+        season = Season(name=commissioner.season_name, canonical=True)
         session.add(season)
         await session.flush()
 

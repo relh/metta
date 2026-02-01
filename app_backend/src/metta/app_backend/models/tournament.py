@@ -41,7 +41,10 @@ class Season(SQLModel, table=True):
     __tablename__ = "seasons"  # type: ignore[assignment]
 
     id: UUID = Field(default_factory=uuid4, primary_key=True)
-    name: str = Field(index=True, unique=True)
+    name: str = Field(index=True)
+    version: int = Field(default=1)
+    canonical: bool = Field(default=False)
+    disabled_at: datetime | None = Field(default=None)
     description: str | None = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("now()")}

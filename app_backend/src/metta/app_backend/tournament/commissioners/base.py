@@ -43,6 +43,7 @@ from metta.app_backend.models.tournament import (
     Season,
 )
 from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
+from metta.app_backend.tournament.season_resolver import resolve_season
 from metta.app_backend.tournament.settings import (
     MAX_OUTSTANDING_MATCHES,
     POLL_INTERVAL_FAST_SECONDS,
@@ -139,9 +140,9 @@ class CommissionerBase(ABC):
     @with_db
     async def _ensure_season_exists(self) -> None:
         session = get_db()
-        season = (await session.execute(select(Season).filter_by(name=self.season_name))).scalar_one_or_none()
+        season = await resolve_season(session, self.season_name)
         if not season:
-            season = Season(name=self.season_name)
+            season = Season(name=self.season_name, canonical=True)
             session.add(season)
             await session.commit()
             logger.info(f"Created season '{self.season_name}'")
@@ -203,7 +204,7 @@ class CommissionerBase(ABC):
         session = get_db()
         logger.info(f"[{self.season_name}] _ensure_pools_exist: loading pools (rss={_rss_mb()})")
 
-        season = (await session.execute(select(Season).filter_by(name=self.season_name))).scalar_one_or_none()
+        season = await resolve_season(session, self.season_name)
         if not season:
             raise ValueError(f"Season '{self.season_name}' not found - is the tournament running?")
 
@@ -222,7 +223,7 @@ class CommissionerBase(ABC):
                 await session.execute(
                     select(Pool)
                     .join(Pool.season)
-                    .where(Season.name == self.season_name)
+                    .where(Season.name == self.season_name, col(Season.canonical).is_(True))
                     .options(selectinload(Pool.players))
                 )
             )
@@ -268,7 +269,7 @@ class CommissionerBase(ABC):
                     select(Match)
                     .join(Match.pool)
                     .join(Pool.season)
-                    .where(Season.name == self.season_name)
+                    .where(Season.name == self.season_name, col(Season.canonical).is_(True))
                     .where(col(Match.status).in_([MatchStatus.scheduled, MatchStatus.running]))
                     .options(selectinload(Match.job))
                 )
@@ -313,7 +314,7 @@ class CommissionerBase(ABC):
                 .join(Pool.season)
                 .join(Match.job)
                 .join(Match.players)
-                .where(Season.name == self.season_name)
+                .where(Season.name == self.season_name, col(Season.canonical).is_(True))
                 .where(Match.status == MatchStatus.completed)
                 .where(JobRequest.episode_id.is_not(None))
                 .where(col(MatchPlayer.score).is_(None))
@@ -407,7 +408,7 @@ class CommissionerBase(ABC):
             .select_from(Match)
             .join(Match.pool)
             .join(Pool.season)
-            .where(Season.name == self.season_name)
+            .where(Season.name == self.season_name, col(Season.canonical).is_(True))
             .where(col(Match.status).in_([MatchStatus.pending, MatchStatus.scheduled, MatchStatus.running]))
         )
         return result.scalar_one()
@@ -460,7 +461,7 @@ class CommissionerBase(ABC):
             await session.execute(
                 select(Pool)
                 .join(Pool.season)
-                .where(Season.name == self.season_name)
+                .where(Season.name == self.season_name, col(Season.canonical).is_(True))
                 .where(Pool.name == self.leaderboard_pool)
             )
         ).scalar_one_or_none()
@@ -475,7 +476,10 @@ class CommissionerBase(ABC):
         session = get_db()
         pool = (
             await session.execute(
-                select(Pool).join(Pool.season).where(Season.name == self.season_name).where(Pool.name == pool_name)
+                select(Pool)
+                .join(Pool.season)
+                .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+                .where(Pool.name == pool_name)
             )
         ).scalar_one_or_none()
         if not pool:
@@ -504,7 +508,10 @@ class CommissionerBase(ABC):
 
         pool_names = {c.pool_name for c in changes}
         pools_result = await session.execute(
-            select(Pool).join(Pool.season).where(Season.name == self.season_name).where(col(Pool.name).in_(pool_names))
+            select(Pool)
+            .join(Pool.season)
+            .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+            .where(col(Pool.name).in_(pool_names))
         )
         pools = {p.name: p for p in pools_result.scalars().all() if p.name}
 
