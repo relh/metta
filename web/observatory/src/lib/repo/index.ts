@@ -1,5 +1,15 @@
 import { notFound, redirect } from 'next/navigation'
 
+const decodePathSegment = (value: string) => {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+const encodePathSegment = (value: string) => encodeURIComponent(decodePathSegment(value))
+
 export type TokenInfo = {
   id: string
   name: string
@@ -248,11 +258,20 @@ export type PoolInfo = {
 
 export type SeasonDetail = {
   name: string
+  version: number
+  canonical: boolean
   summary: string
   entry_pool: string | null
   leaderboard_pool: string | null
   is_default: boolean
   pools: PoolInfo[]
+}
+
+export type SeasonVersionInfo = {
+  version: number
+  canonical: boolean
+  disabled_at: string | null
+  created_at: string
 }
 
 export type PolicyVersionSummary = {
@@ -310,6 +329,7 @@ export type SeasonMatchSummary = {
 
 export type MembershipHistoryEntry = {
   season_name: string
+  season_version: number | null
   pool_name: string
   action: string
   notes: string | null
@@ -697,15 +717,19 @@ export class Repo {
   }
 
   async getSeason(seasonName: string): Promise<SeasonDetail> {
-    return this.apiCall<SeasonDetail>(`/tournament/seasons/${encodeURIComponent(seasonName)}`)
+    return this.apiCall<SeasonDetail>(`/tournament/seasons/${encodePathSegment(seasonName)}`)
+  }
+
+  async getSeasonVersions(seasonName: string): Promise<SeasonVersionInfo[]> {
+    return this.apiCall<SeasonVersionInfo[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/versions`)
   }
 
   async getSeasonLeaderboard(seasonName: string): Promise<LeaderboardEntry[]> {
-    return this.apiCall<LeaderboardEntry[]>(`/tournament/seasons/${encodeURIComponent(seasonName)}/leaderboard`)
+    return this.apiCall<LeaderboardEntry[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard`)
   }
 
   async getSeasonPolicies(seasonName: string): Promise<PolicySummary[]> {
-    return this.apiCall<PolicySummary[]>(`/tournament/seasons/${encodeURIComponent(seasonName)}/policies`)
+    return this.apiCall<PolicySummary[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/policies`)
   }
 
   async getSeasonMatches(
@@ -732,13 +756,13 @@ export class Repo {
     }
     const query = searchParams.toString()
     return this.apiCall<SeasonMatchSummary[]>(
-      `/tournament/seasons/${encodeURIComponent(seasonName)}/matches${query ? `?${query}` : ''}`
+      `/tournament/seasons/${encodePathSegment(seasonName)}/matches${query ? `?${query}` : ''}`
     )
   }
 
   async submitToSeason(seasonName: string, policyVersionId: string): Promise<SubmissionResponse> {
     return this.apiCallWithBody<SubmissionResponse>(
-      `/tournament/seasons/${encodeURIComponent(seasonName)}/submissions`,
+      `/tournament/seasons/${encodePathSegment(seasonName)}/submissions`,
       { policy_version_id: policyVersionId }
     )
   }

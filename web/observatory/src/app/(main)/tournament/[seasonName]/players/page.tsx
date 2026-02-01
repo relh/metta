@@ -13,9 +13,9 @@ import { SubmitForm } from './SubmitForm'
 export default async function PlayersPage(params: PageProps<'/tournament/[seasonName]/players'>) {
   const { seasonName } = await params.params
   const repo = await getRepo()
-  const policies = await repo.getSeasonPolicies(seasonName)
+  const [season, policies] = await Promise.all([repo.getSeason(seasonName), repo.getSeasonPolicies(seasonName)])
   const existingPolicyVersionIds = new Set(policies.map((p) => p.policy.id))
-  const poolNames = policies[0]?.pools.map((p) => p.pool_name) || []
+  const poolNames = season.pools.map((pool) => pool.name)
 
   return (
     <div className="space-y-4">

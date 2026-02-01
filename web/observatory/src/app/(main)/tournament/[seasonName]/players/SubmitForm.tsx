@@ -40,6 +40,10 @@ export const SubmitForm: FC<{
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null)
 
+  const seasonVersionMatch = seasonName.match(/^(.*?)(?::v|:)(\d+)$/)
+  const seasonVersion = seasonVersionMatch ? Number(seasonVersionMatch[2]) : null
+  const isVersionedSeason = seasonVersion !== null && Number.isFinite(seasonVersion)
+
   const router = useRouter()
 
   const loadPolicies = async (inputValue: string): Promise<PolicyOption[]> => {
@@ -87,6 +91,10 @@ export const SubmitForm: FC<{
   }, [submitSuccess, submitError])
 
   const handleSubmit = async () => {
+    if (isVersionedSeason) {
+      setSubmitError('Submissions are only allowed on the current season.')
+      return
+    }
     if (!selectedVersion) return
     setSubmitting(true)
     setSubmitError(null)
@@ -141,12 +149,15 @@ export const SubmitForm: FC<{
         <Button
           onClick={handleSubmit}
           theme="primary"
-          disabled={!selectedVersion || submitting || !!isAlreadySubmitted}
+          disabled={!selectedVersion || submitting || !!isAlreadySubmitted || isVersionedSeason}
         >
           {submitting ? '...' : 'Submit'}
         </Button>
       </div>
 
+      {isVersionedSeason && (
+        <div className="text-xs text-amber-600 mt-1">Submissions are only allowed on the current season.</div>
+      )}
       {isAlreadySubmitted && <div className="text-xs text-amber-600 mt-1">Already in season</div>}
       {submitError && <div className="text-xs text-red-600 mt-1">{submitError}</div>}
       {submitSuccess && <div className="text-xs text-green-600 mt-1">{submitSuccess}</div>}
