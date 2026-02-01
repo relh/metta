@@ -137,11 +137,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
                 <TD className="text-gray-500 text-sm">{formatRelativeTime(entry.created_at)}</TD>
                 <TD>
                   <div className="flex items-center gap-2">
-                    <StyledLink
-                      href={`/tournament/${entry.season_version ? `${entry.season_name}:v${entry.season_version}` : entry.season_name}`}
-                    >
-                      {entry.season_name}
-                    </StyledLink>
+                    <StyledLink href={`/tournament/${entry.season_name}`}>{entry.season_name}</StyledLink>
                     <VersionBadge version={entry.season_version} />
                   </div>
                 </TD>

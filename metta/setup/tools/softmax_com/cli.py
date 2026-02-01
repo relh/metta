@@ -121,7 +121,7 @@ def postgres(ctx: typer.Context):
 )
 @handle_errors
 def frontend(
-    backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "prod",
+    backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
 ):
     env = _base_env()
     env["NEXTAUH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
@@ -143,6 +143,9 @@ def frontend(
         env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
 
     info(f"Observatory API URL: {env.get('OBSERVATORY_API_URL')}")
+    info("Generating Prisma client")
+    subprocess.run(["pnpm", "db:generate"], env=env, check=True, cwd=repo_root / "web/softmax.com")
+
     info("Starting Softmax.com frontend")
 
     subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/softmax.com")
