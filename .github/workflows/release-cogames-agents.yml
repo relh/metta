@@ -129,7 +129,7 @@ jobs:
     with:
       pyproject-path: packages/cogames-agents/pyproject.toml
       dependency: cogames
-      max-wait: 600
+      max-wait: 2400
       check-interval: 30
 
   test:

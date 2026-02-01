@@ -54,7 +54,7 @@ Recursively calls `_publish(Package.METTAGRID)`:
 - Pushes filtered git history to the `Metta-AI/mettagrid` child repo
 
 The tag push triggers `.github/workflows/release-mettagrid.yml`, which builds multi-platform wheels (Linux x86, Linux
-ARM, macOS) and publishes to PyPI via OIDC trusted publisher. This takes ~17 minutes due to ARM builds.
+ARM, macOS) and publishes to PyPI via OIDC trusted publisher.
 
 ### 4. Publish cogames
 
@@ -90,11 +90,11 @@ and cogames versions to appear on PyPI, then publishes.
 Each package has a release workflow at `.github/workflows/release-{package}.yml` triggered by tag pushes matching
 `{package}-v*`.
 
-| Package        | Build          | Wait gates                  | Tests                      | Publish       |
-| -------------- | -------------- | --------------------------- | -------------------------- | ------------- |
-| mettagrid      | Multi-platform | None                        | None                       | PyPI via OIDC |
-| cogames        | Pure Python    | mettagrid on PyPI (25 min)  | pytest + CLI smoke tests   | PyPI via OIDC |
-| cogames-agents | Multi-platform | mettagrid + cogames (25/10) | None (build + twine check) | PyPI via OIDC |
+| Package        | Build          | Wait gates                        | Tests                      | Publish       |
+| -------------- | -------------- | --------------------------------- | -------------------------- | ------------- |
+| mettagrid      | Multi-platform | None                              | None                       | PyPI via OIDC |
+| cogames        | Pure Python    | mettagrid on PyPI (40 min)        | pytest + CLI smoke tests   | PyPI via OIDC |
+| cogames-agents | Multi-platform | mettagrid + cogames (40 min each) | None (build + twine check) | PyPI via OIDC |
 
 All workflows use PyPI trusted publishers (OIDC) -- no API tokens needed. Each requires two GitHub environments:
 `{package}-pypi` and `{package}-testpypi`.
@@ -108,8 +108,7 @@ After a full `metta publish cogames-agents`:
 - 3 new git tags pushed to origin
 - 3 CI workflows triggered (running in parallel, with wait gates ensuring correct ordering)
 - 2-3 PRs to merge dependency pins back to main
-- Packages appear on PyPI in order: mettagrid first (~17 min), cogames next (~5 min after), cogames-agents last (~5 min
-  after)
+- Packages appear on PyPI in order: mettagrid first, then cogames, then cogames-agents (each waits for its dependencies)
 
 ## Partial Flows
 

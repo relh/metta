@@ -12,7 +12,7 @@ on:
       max-wait:
         required: false
         type: number
-        default: 1500
+        default: 2400
       check-interval:
         required: false
         type: number

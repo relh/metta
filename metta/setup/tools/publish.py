@@ -218,7 +218,7 @@ def _post_to_discord(
     message += f"Release: [View on GitHub]({tag_url})\n"
 
     if release_workflow_url := _RELEASE_WORKFLOW_URL_FOR_PACKAGE.get(package):
-        message += f"\n📦 Triggered [release workflow]({release_workflow_url}) to publish to PyPi (takes ~5-10 min)."
+        message += f"\n📦 Triggered [release workflow]({release_workflow_url}) to publish to PyPI."
 
     if dry_run:
         info("Would post following message to Discord:")
