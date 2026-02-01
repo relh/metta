@@ -1,8 +1,9 @@
-name: "Build and Deploy to WASM Mettascope"
+name: "Build and Deploy Mettascope & Vibescope"
 on:
   push:
     paths: &site_paths
       - "packages/mettagrid/nim/mettascope/**"
+      - "packages/mettagrid/nim/vibescope/**"
       - ".github/workflows/**"
   pull_request:
     paths: *site_paths
@@ -38,11 +39,16 @@ jobs:
           nimby list
           cat nim.cfg
 
+      - name: Install Vibescope Dependencies
+        run: |
+          cd ..
+          nimby sync -g metta/packages/mettagrid/nim/vibescope/nimby.lock
+
       - name: Cache nimby dependencies
         uses: actions/cache@v4
         with:
           path: ~/.nimby
-          key: nimby-deps-${{ hashFiles('metta/packages/mettagrid/nim/mettascope/nimby.lock') }}-${{ runner.os }}
+          key: nimby-deps-${{ hashFiles('metta/packages/mettagrid/nim/mettascope/nimby.lock', 'metta/packages/mettagrid/nim/vibescope/nimby.lock') }}-${{ runner.os }}
 
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
@@ -52,11 +58,15 @@ jobs:
 
       - name: Build mettascope
         run: |
-          cd packages/mettagrid/nim/mettascope
-          cd ../../../..
           mkdir -p packages/mettagrid/nim/mettascope/dist
           nim c -d:emscripten packages/mettagrid/nim/mettascope/src/mettascope.nim
           ls -la packages/mettagrid/nim/mettascope/dist
+
+      - name: Build vibescope
+        run: |
+          mkdir -p packages/mettagrid/nim/vibescope/dist
+          nim c -d:emscripten packages/mettagrid/nim/vibescope/src/vibescope.nim
+          ls -la packages/mettagrid/nim/vibescope/dist
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -65,6 +75,8 @@ jobs:
         run: |
           mkdir -p deploy/mettascope
           cp -r packages/mettagrid/nim/mettascope/dist/* deploy/mettascope/
+          mkdir -p deploy/vibescope
+          cp -r packages/mettagrid/nim/vibescope/dist/* deploy/vibescope/
 
       - name: Upload artifact
         # Only upload artifact for main branch
