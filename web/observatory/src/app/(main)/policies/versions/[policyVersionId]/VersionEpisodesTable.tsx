@@ -3,7 +3,7 @@ import { FC, useState } from 'react'
 
 import { A } from '@/components/A'
 import { Button } from '@/components/Button'
-import { normalizeReplayUrl, ReplayViewer } from '@/components/ReplayViewer'
+import { normalizeReplayUrl, normalizeVibescopeUrl, ReplayViewer } from '@/components/ReplayViewer'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableHeader, TD, TH, TR } from '@/components/Table'
 import { EpisodeWithTags } from '@/lib/repo'
@@ -30,18 +30,18 @@ export const VersionEpisodesTable: FC<{ policyVersionId: string; episodes: Episo
   policyVersionId,
   episodes,
 }) => {
-  const [episodeReplayPreview, setEpisodeReplayPreview] = useState<{ url: string; label: string } | null>(null)
+  const [episodeReplayPreview, setEpisodeReplayPreview] = useState<{
+    replayUrl: string
+    label: string
+  } | null>(null)
 
   const toggleEpisodeReplayPreview = (episode: EpisodeWithTags) => {
-    const normalized = normalizeReplayUrl(episode.replay_url)
-    if (!normalized) {
-      return
-    }
+    if (!episode.replay_url) return
     setEpisodeReplayPreview((prev) => {
-      if (prev?.url === normalized) {
+      if (prev?.replayUrl === episode.replay_url) {
         return null
       }
-      return { url: normalized, label: `Episode ${episode.id.slice(0, 8)}` }
+      return { replayUrl: episode.replay_url!, label: `Episode ${episode.id.slice(0, 8)}` }
     })
   }
 
@@ -65,17 +65,23 @@ export const VersionEpisodesTable: FC<{ policyVersionId: string; episodes: Episo
                 </TD>
                 <TD>
                   {(() => {
-                    const replayUrl = normalizeReplayUrl(episode.replay_url)
-                    if (!replayUrl) {
+                    const msUrl = normalizeReplayUrl(episode.replay_url)
+                    const vsUrl = normalizeVibescopeUrl(episode.replay_url)
+                    if (!msUrl) {
                       return '—'
                     }
                     return (
                       <div className="flex items-center gap-2">
-                        <A href={replayUrl} target="_blank" rel="noopener noreferrer">
-                          Replay
+                        <A href={msUrl} target="_blank" rel="noopener noreferrer">
+                          MS
                         </A>
+                        {vsUrl ? (
+                          <A href={vsUrl} target="_blank" rel="noopener noreferrer">
+                            VS
+                          </A>
+                        ) : null}
                         <Button size="sm" onClick={() => toggleEpisodeReplayPreview(episode)}>
-                          Show below
+                          Show
                         </Button>
                       </div>
                     )
@@ -92,7 +98,10 @@ export const VersionEpisodesTable: FC<{ policyVersionId: string; episodes: Episo
       </div>
       {episodeReplayPreview ? (
         <div className="mt-4">
-          <ReplayViewer replayUrl={episodeReplayPreview.url} label={`Replay preview (${episodeReplayPreview.label})`} />
+          <ReplayViewer
+            replayUrl={episodeReplayPreview.replayUrl}
+            label={`Replay preview (${episodeReplayPreview.label})`}
+          />
         </div>
       ) : null}
     </>
