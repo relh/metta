@@ -123,6 +123,8 @@ packages/mettagrid/nim/mettascope/dist/
 packages/mettagrid/nim/mettascope/bindings/generated/
 packages/mettagrid/nim/vibescope/bindings/generated/
 mettascope.out
+vibescope.out
+packages/mettagrid/nim/vibescope/src/vibescope/replays
 !packages/mettagrid/nim/mettascope/data/resources/
 !packages/mettagrid/nim/vibescope/data/resources/
 !packages/mettagrid/nim/vibescope/data/replays/
