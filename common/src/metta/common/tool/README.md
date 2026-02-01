@@ -157,6 +157,12 @@ The output shows all available tool makers (e.g., `train`, `evaluate`, `train_sh
 ./tools/run.py evaluate arena --dry-run
 ```
 
+## Game Version Worktrees
+
+Use `--game-version <commit-or-alias>` to run tools against a historical game version. The runner will create a detached
+git worktree under `.metta/game_versions` and re-run the command from there. Clean up cached worktrees with
+`git worktree list` and `git worktree prune`, or remove a specific entry with `git worktree remove <path>`.
+
 ## Argument Classification
 
 ```bash

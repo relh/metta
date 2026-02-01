@@ -80,6 +80,7 @@ tests/pufferlib_compatibility_matrix.json
 
 # Logs and profiling
 *.log
+.metta/
 stats.profile
 cpplint_output*
 

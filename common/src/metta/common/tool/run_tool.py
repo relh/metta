@@ -15,6 +15,7 @@ import inspect
 import json
 import logging
 import os
+import shutil
 import signal
 import sys
 import tempfile
@@ -25,6 +26,7 @@ from pydantic import BaseModel, TypeAdapter
 from rich.console import Console
 
 from metta.common.tool import Tool
+from metta.common.tool.game_version import run_in_game_version, strip_game_version_args
 from metta.common.tool.recipe_registry import recipe_registry
 from metta.common.tool.schema import get_pydantic_field_info
 from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker
@@ -37,6 +39,15 @@ _KNOWN_TOOLS = {"train", "evaluate", "evaluate_remote", "play", "replay", "sweep
 
 # Lazy torch initialization flag - only initialize when actually running a tool
 _torch_initialized = False
+
+
+def _run_in_game_version(version: str) -> int:
+    argv = strip_game_version_args(sys.argv[1:])
+    if shutil.which("uv"):
+        cmd = ["uv", "run", "./tools/run.py"]
+    else:
+        cmd = [sys.executable, "./tools/run.py"]
+    return run_in_game_version(version, argv, cmd)
 
 
 def _ensure_torch_initialized() -> None:
@@ -399,6 +410,15 @@ constructor/function vs configuration overrides based on introspection.
     parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed argument classification")
     parser.add_argument("--dry-run", action="store_true", help="Validate the args and exit")
     parser.add_argument(
+        "--game-version",
+        "--game_version",
+        dest="game_version",
+        help=(
+            "Run the tool using a different game version (git commit or alias). "
+            "Aliases can be configured via METTA_GAME_VERSION_<ALIAS> env vars."
+        ),
+    )
+    parser.add_argument(
         "--list",
         action="store_true",
         help="List tools defined by the resolved recipe module and exit",
@@ -410,6 +430,15 @@ constructor/function vs configuration overrides based on introspection.
     # Parse known args; keep unknowns to validate separation between runner flags and tool args
     known_args, unknown_args = parser.parse_known_args()
     console = Console()
+
+    if known_args.game_version:
+        try:
+            exit_code = _run_in_game_version(known_args.game_version)
+        except Exception as exc:
+            output_error(f"{red('Error:')} {exc}")
+            return 1
+        if exit_code >= 0:
+            return exit_code
 
     # If help is requested without a tool path, show general help
     if known_args.help and not known_args.tool_path:
