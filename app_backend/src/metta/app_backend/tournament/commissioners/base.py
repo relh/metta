@@ -114,6 +114,9 @@ class CommissionerBase(ABC):
             pools=[PoolDescription(name=name, description=ref.description) for name, ref in self.referees.items()],
         )
 
+    def get_referees(self, season_version: int) -> dict[str, RefereeBase]:
+        return self.referees
+
     @abstractmethod
     def get_new_submission_membership_changes(self, policy_version_id: UUID) -> list[MembershipChangeRequest]:
         pass
@@ -170,7 +173,13 @@ class CommissionerBase(ABC):
 
         logger.info(f"[{self.season_name}] cycle start (rss={_rss_mb()})")
 
-        pools = await self._ensure_pools_exist(list(self.referees.keys()))
+        session = get_db()
+        season = await resolve_season(session, self.season_name)
+        if not season:
+            raise ValueError(f"Season '{self.season_name}' not found - is the tournament running?")
+        referees = self.get_referees(season.version)
+
+        pools = await self._ensure_pools_exist(referees)
         logger.info(f"[{self.season_name}] pools loaded: {list(pools.keys())} (rss={_rss_mb()})")
 
         status_changed = await self._sync_match_statuses()
@@ -182,10 +191,12 @@ class CommissionerBase(ABC):
 
         total_scheduled = 0
         for pool_name, pool in pools.items():
+            if pool_name not in referees:
+                continue
             if slots_available <= 0:
                 logger.info(f"[{self.season_name}] no slots left, skipping remaining pools")
                 break
-            referee = self.referees[pool_name]
+            referee = referees[pool_name]
             players = await self._get_pool_players(pool.id)
             active_ids = {p.id for p in players}
             match_counts = await self._get_match_counts(pool.id, active_ids)
@@ -252,7 +263,7 @@ class CommissionerBase(ABC):
         )
         return list(matches)
 
-    async def _ensure_pools_exist(self, pool_names: list[str]) -> dict[str, Pool]:
+    async def _ensure_pools_exist(self, referees: dict[str, RefereeBase]) -> dict[str, Pool]:
         session = get_db()
         logger.info(f"[{self.season_name}] _ensure_pools_exist: loading pools (rss={_rss_mb()})")
 
@@ -263,7 +274,7 @@ class CommissionerBase(ABC):
         existing = list((await session.execute(select(Pool).filter_by(season_id=season.id))).scalars().all())
         existing_names = {p.name for p in existing if p.name}
 
-        for name in pool_names:
+        for name in referees:
             if name not in existing_names:
                 session.add(Pool(season_id=season.id, name=name))
                 logger.info(f"Created pool '{name}' for season '{self.season_name}'")
@@ -272,7 +283,7 @@ class CommissionerBase(ABC):
 
         pools_by_name = await self._get_pools()
 
-        for pool_name, referee in self.referees.items():
+        for pool_name, referee in referees.items():
             pool = pools_by_name.get(pool_name)
             if not pool:
                 continue
