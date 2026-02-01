@@ -414,7 +414,7 @@ def create_job_router() -> APIRouter:
                     AgentStatsDetail(
                         agent_id=aid,
                         reward=reward,
-                        metrics=metrics,
+                        metrics={k: v for k, v in metrics.items() if v is not None},
                     )
                     for aid, metrics, reward in agents
                 ]
