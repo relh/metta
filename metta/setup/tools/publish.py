@@ -170,7 +170,7 @@ def _pin_dependency_versions(*, package: str, pins: dict[str, str], dry_run: boo
         check=True,
     )
     subprocess.run(
-        ["gt", "submit", "--no-interactive", "--publish", "--auto-merge"],
+        ["gt", "submit", "--no-interactive", "--publish", "--merge-when-ready"],
         check=True,
     )
     success("PR created via Graphite with auto-merge enabled.")
