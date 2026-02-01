@@ -35,7 +35,7 @@ jobs:
           DEPENDENCY="${{ inputs.dependency }}"
           PYPROJECT="${{ inputs.pyproject-path }}"
           if grep -qE "${DEPENDENCY}[><=~!]" "$PYPROJECT"; then
-            VERSION=$(grep -E "${DEPENDENCY}" "$PYPROJECT" | grep -oP '\d+\.\d+\.\d+(\.\d+)?' | head -1)
+            VERSION=$(grep -oP "${DEPENDENCY}[><=~!]+\K\d+\.\d+\.\d+(\.\d+)?" "$PYPROJECT" | head -1)
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             echo "Found $DEPENDENCY version requirement: $VERSION"
           else
