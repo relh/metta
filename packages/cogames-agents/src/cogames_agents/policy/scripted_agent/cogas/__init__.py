@@ -1,5 +1,5 @@
-"""Cogas policy - phased goal-tree competitive agent with junction control."""
+"""Cogas policy - goal-tree scripted agent."""
 
-from .cogas_policy import CogasPolicy
+from .policy import CogasPolicy
 
 __all__ = ["CogasPolicy"]
