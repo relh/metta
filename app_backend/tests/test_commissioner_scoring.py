@@ -164,7 +164,7 @@ async def test_leaderboard_weighting_uses_episode_policy_num_agents(isolated_sta
     episode_id_2 = uuid4()
 
     async with db_session() as session:
-        season = Season(name="leaderboard-season")
+        season = Season(name="leaderboard-season", canonical=True)
         session.add(season)
         await session.flush()
 

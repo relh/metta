@@ -149,7 +149,8 @@ Observatory local development.
   metta observatory server           # API server (uses LocalStack for S3)
   metta observatory frontend         # Observatory frontend
   metta observatory watcher          # Watches k8s jobs, reads results from S3
-  metta observatory tournament       # Tournament commissioner (creates matches, updates scores)
+  metta observatory tournament run    # Tournament commissioner (creates matches, updates scores)
+  metta observatory tournament roll-season <name>  # Roll a season to a new version
 
 [bold]Upload policy:[/bold]
   uv run cogames submit -p baseline --server {LOCAL_BACKEND_URL} --skip-validation -n <your-policy-name>
@@ -307,6 +308,7 @@ def up(
     if not tui:
         cmd.append("-t=false")
     if services:
+        cmd.append("up")
         cmd.extend(services)
     info("Starting observatory services...")
     subprocess.run(cmd, cwd=repo_root, env=env, check=True)
@@ -394,9 +396,13 @@ def frontend(
     subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/observatory")
 
 
-@app.command(name="tournament", help="Run the tournament commissioner")
+tournament_app = typer.Typer(help="Tournament management", rich_markup_mode="rich", no_args_is_help=True)
+
+
+@tournament_app.command(name="run")
 @handle_errors
-def tournament():
+def tournament_run():
+    """Run the tournament commissioner."""
     env = _local_dev_env()
     subprocess.run(
         ["uv", "run", "python", str(repo_root / "app_backend/src/metta/app_backend/tournament/cli.py")],
@@ -405,6 +411,27 @@ def tournament():
     )
 
 
+@tournament_app.command(name="roll-season")
+@handle_errors
+def tournament_roll_season(
+    season_name: Annotated[str, typer.Argument(help="Season name to roll (e.g. beta-cogsguard)")],
+):
+    """Roll a season to a new version, migrating active members."""
+    env = _local_dev_env()
+    subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            f"from metta.app_backend.tournament.cli import roll_season; roll_season({season_name!r})",
+        ],
+        env=env,
+        check=True,
+    )
+
+
+app.add_typer(tournament_app, name="tournament")
 app.add_typer(local_k8s_app, name="local-k8s")
 
 

@@ -26,7 +26,7 @@ import gitta
 # pyright: reportArgumentType=false, reportCallIssue=false
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.database import get_db, with_db
+from metta.app_backend.database import db_session, get_db, with_db
 from metta.app_backend.health_server import update_heartbeat
 from metta.app_backend.models.episodes import Episode, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobStatus, JobType
@@ -127,6 +127,19 @@ class CommissionerBase(ABC):
         logger.info(f"Starting commissioner for season '{self.season_name}' (rss={_rss_mb()})")
         while True:
             update_heartbeat()
+
+            async with db_session() as session:
+                season = (
+                    await session.execute(select(Season).filter_by(name=self.season_name, canonical=True))
+                ).scalar_one_or_none()
+                if not season:
+                    logger.info(f"Canonical season '{self.season_name}' no longer exists, reloading")
+                    await self._ensure_season_exists()
+                elif season.disabled_at is not None:
+                    logger.info(f"Season '{self.season_name}' is disabled, skipping cycle")
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                    continue
+
             had_activity = False
             start = time.monotonic()
             try:
@@ -200,6 +213,45 @@ class CommissionerBase(ABC):
         logger.info(f"[{self.season_name}] cycle complete (rss={_rss_mb()})")
         return status_changed or total_scheduled > 0 or len(changes) > 0
 
+    async def _get_pools(self) -> dict[str, Pool]:
+        session = get_db()
+        pools = (
+            (
+                await session.execute(
+                    select(Pool)
+                    .join(Pool.season)
+                    .where(Season.name == self.season_name)
+                    .where(col(Season.canonical).is_(True))
+                    .options(selectinload(Pool.players))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return {p.name: p for p in pools if p.name}
+
+    async def _get_season_matches(self) -> list[Match]:
+        session = get_db()
+        season = (
+            await session.execute(select(Season).filter_by(name=self.season_name, canonical=True))
+        ).scalar_one_or_none()
+        if not season:
+            return []
+        matches = (
+            (
+                await session.execute(
+                    select(Match)
+                    .join(Match.pool)
+                    .where(Pool.season_id == season.id)
+                    .options(selectinload(Match.players))
+                    .order_by(col(Match.created_at).desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return list(matches)
+
     async def _ensure_pools_exist(self, pool_names: list[str]) -> dict[str, Pool]:
         session = get_db()
         logger.info(f"[{self.season_name}] _ensure_pools_exist: loading pools (rss={_rss_mb()})")
@@ -218,19 +270,7 @@ class CommissionerBase(ABC):
 
         await session.commit()
 
-        all_pools = (
-            (
-                await session.execute(
-                    select(Pool)
-                    .join(Pool.season)
-                    .where(Season.name == self.season_name, col(Season.canonical).is_(True))
-                    .options(selectinload(Pool.players))
-                )
-            )
-            .scalars()
-            .all()
-        )
-        pools_by_name = {p.name: p for p in all_pools if p.name}
+        pools_by_name = await self._get_pools()
 
         for pool_name, referee in self.referees.items():
             pool = pools_by_name.get(pool_name)
@@ -269,7 +309,7 @@ class CommissionerBase(ABC):
                     select(Match)
                     .join(Match.pool)
                     .join(Pool.season)
-                    .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+                    .where(Season.name == self.season_name)
                     .where(col(Match.status).in_([MatchStatus.scheduled, MatchStatus.running]))
                     .options(selectinload(Match.job))
                 )
@@ -314,7 +354,7 @@ class CommissionerBase(ABC):
                 .join(Pool.season)
                 .join(Match.job)
                 .join(Match.players)
-                .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+                .where(Season.name == self.season_name)
                 .where(Match.status == MatchStatus.completed)
                 .where(JobRequest.episode_id.is_not(None))
                 .where(col(MatchPlayer.score).is_(None))
@@ -408,7 +448,8 @@ class CommissionerBase(ABC):
             .select_from(Match)
             .join(Match.pool)
             .join(Pool.season)
-            .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+            .where(Season.name == self.season_name)
+            .where(col(Season.canonical).is_(True))
             .where(col(Match.status).in_([MatchStatus.pending, MatchStatus.scheduled, MatchStatus.running]))
         )
         return result.scalar_one()
@@ -455,16 +496,19 @@ class CommissionerBase(ABC):
         return [c.pool_name for c in changes if c.action == "add"]
 
     @with_db
-    async def get_leaderboard(self) -> list[tuple[UUID, float, int]]:
+    async def get_leaderboard(self, season_id: UUID | None = None) -> list[tuple[UUID, float, int]]:
         session = get_db()
-        pool = (
-            await session.execute(
+        if season_id is not None:
+            query = select(Pool).where(Pool.season_id == season_id, Pool.name == self.leaderboard_pool)
+        else:
+            query = (
                 select(Pool)
                 .join(Pool.season)
-                .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+                .where(Season.name == self.season_name)
+                .where(col(Season.canonical).is_(True))
                 .where(Pool.name == self.leaderboard_pool)
             )
-        ).scalar_one_or_none()
+        pool = (await session.execute(query)).scalar_one_or_none()
         if not pool:
             return []
 
@@ -478,7 +522,8 @@ class CommissionerBase(ABC):
             await session.execute(
                 select(Pool)
                 .join(Pool.season)
-                .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+                .where(Season.name == self.season_name)
+                .where(col(Season.canonical).is_(True))
                 .where(Pool.name == pool_name)
             )
         ).scalar_one_or_none()
@@ -510,7 +555,8 @@ class CommissionerBase(ABC):
         pools_result = await session.execute(
             select(Pool)
             .join(Pool.season)
-            .where(Season.name == self.season_name, col(Season.canonical).is_(True))
+            .where(Season.name == self.season_name)
+            .where(col(Season.canonical).is_(True))
             .where(col(Pool.name).in_(pool_names))
         )
         pools = {p.name: p for p in pools_result.scalars().all() if p.name}

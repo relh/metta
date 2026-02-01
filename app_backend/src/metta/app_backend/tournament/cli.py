@@ -16,6 +16,18 @@ def run_commissioner():
     asyncio.run(run_all())
 
 
+def roll_season(season_name: str) -> None:
+    from metta.app_backend.database import db_session
+    from metta.app_backend.tournament.scripts.roll_season import roll_season_version
+
+    async def run() -> None:
+        async with db_session() as session:
+            new_season = await roll_season_version(session, season_name)
+            print(f"Rolled {season_name} to v{new_season.version}")
+
+    asyncio.run(run())
+
+
 if __name__ == "__main__":
     init_logging()
     suppress_noisy_logs()

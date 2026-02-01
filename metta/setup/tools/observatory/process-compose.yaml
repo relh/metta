@@ -148,7 +148,7 @@ processes:
   # ===========================================================================
   # Runs tournament commissioners (one per season) that create matches and update scores.
   tournament:
-    command: metta observatory tournament
+    command: metta observatory tournament run
     depends_on:
       server:
         condition: process_healthy
