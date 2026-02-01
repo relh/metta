@@ -73,13 +73,10 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_34
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_34
           CIBW_BEFORE_ALL_LINUX: |
-            # Get architecture.
             ARCH="$(uname -m)"
-
-            # Install pip.
             python3 -m pip install "pip<25"
 
-            # Install Bazelisk (arch-aware)
+            # Install Bazelisk
             if [ "$ARCH" = "aarch64" ]; then
               BAZEL_ARCH="arm64"
             elif [ "$ARCH" = "x86_64" ]; then
@@ -92,8 +89,13 @@ jobs:
             chmod +x /usr/local/bin/bazelisk
             ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
 
-            # Install Nim + nimby
+            # Build Nim from source (pre-built binaries require glibc > 2.34)
             NIM_VERSION=$(cat {project}/.nim-version)
+            yum install -y git
+            git clone --depth 1 --branch "v${NIM_VERSION}" https://github.com/nim-lang/Nim.git /opt/nim
+            cd /opt/nim && sh build_all.sh && cd -
+
+            # Install nimby binary (for nimby sync)
             NIMBY_VERSION=$(cat {project}/.nimby-version)
             if [ "$ARCH" = "aarch64" ]; then
               NIMBY_PLATFORM="Linux-ARM64"
@@ -102,15 +104,10 @@ jobs:
             else
               echo "Unexpected architecture: $ARCH" && exit 1
             fi
-            TMP_DIR="$(mktemp -d)"
-            curl -fsSL -o "$TMP_DIR/nimby" \
+            curl -fsSL -o /opt/nim/bin/nimby \
               "https://github.com/treeform/nimby/releases/download/${NIMBY_VERSION}/nimby-${NIMBY_PLATFORM}"
-            chmod +x "$TMP_DIR/nimby"
-            "$TMP_DIR/nimby" use "$NIM_VERSION"
-            mkdir -p "$HOME/.nimby/nim/bin"
-            mv -f "$TMP_DIR/nimby" "$HOME/.nimby/nim/bin/nimby"
-            rm -rf "$TMP_DIR"
-          CIBW_ENVIRONMENT_LINUX: PATH="$HOME/.nimby/nim/bin:$PATH"
+            chmod +x /opt/nim/bin/nimby
+          CIBW_ENVIRONMENT_LINUX: PATH="/opt/nim/bin:$PATH"
           CIBW_BEFORE_ALL_MACOS: |
             python3 -m pip install "pip<25"
             NIM_VERSION=$(cat {project}/.nim-version)
