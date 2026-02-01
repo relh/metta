@@ -403,7 +403,7 @@ def create_job_router() -> APIRouter:
 
                 avg_metrics: dict[str, float] = {}
                 for name in sorted(all_metric_names):
-                    values = [m[name] for _, m, _ in agents if name in m]
+                    values = [m[name] for _, m, _ in agents if name in m and m[name] is not None]
                     if values:
                         avg_metrics[name] = sum(values) / len(values)
 
