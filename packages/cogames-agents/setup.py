@@ -49,15 +49,22 @@ def _get_nimby_url() -> str | None:
         return None
 
 
+def _nim_already_installed() -> bool:
+    nim = shutil.which("nim")
+    if nim is None:
+        return False
+    result = subprocess.run([nim, "--version"], capture_output=True, text=True)
+    return f"Nim Compiler Version {NIM_VERSION}" in result.stdout
+
+
 def _build_nim() -> None:
     system = platform.system()
     arch = platform.machine()
 
-    nimby_url = _get_nimby_url()
-    nim_bin_dir = Path.home() / ".nimby" / "nim" / "bin"
-
-    if nimby_url is not None:
-        # Download and install nimby
+    if _nim_already_installed():
+        pass
+    elif (nimby_url := _get_nimby_url()) is not None:
+        nim_bin_dir = Path.home() / ".nimby" / "nim" / "bin"
         dst = nim_bin_dir / "nimby"
         with tempfile.TemporaryDirectory() as tmp:
             nimby = Path(tmp) / "nimby"
@@ -69,16 +76,12 @@ def _build_nim() -> None:
             shutil.copy2(nimby, dst)
 
         os.environ["PATH"] = f"{dst.parent}{os.pathsep}" + os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{nim_bin_dir}{os.pathsep}" + os.environ.get("PATH", "")
     else:
-        # For unsupported platforms, assume nim/nimby are pre-installed
-        if shutil.which("nim") is None:
-            raise RuntimeError(
-                f"Nim is not installed and nimby download is not available for {system} {arch}. "
-                "Please install Nim manually (https://nim-lang.org/install.html) or build nimby from source."
-            )
-
-    # Ensure nim/nimble binaries installed by nimby are discoverable by subprocesses.
-    os.environ["PATH"] = f"{nim_bin_dir}{os.pathsep}" + os.environ.get("PATH", "")
+        raise RuntimeError(
+            f"Nim {NIM_VERSION} is not installed and nimby download is not available for {system} {arch}. "
+            "Please install Nim manually (https://nim-lang.org/install.html) or build nimby from source."
+        )
 
     # Sync Nim dependencies using nimby
     if shutil.which("nimby") is not None:

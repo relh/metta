@@ -81,8 +81,9 @@ Returns to the starting branch (`main`), then:
 - Creates and pushes git tag `cogames-agents-v0.0.0.2` on the current HEAD (which has both pins)
 - Posts to Discord, pushes to `Metta-AI/cogames-agents` child repo
 
-The tag push triggers `.github/workflows/release-cogames-agents.yml`, which builds the wheel, waits for both pinned
-mettagrid and cogames versions to appear on PyPI, then publishes.
+The tag push triggers `.github/workflows/release-cogames-agents.yml`, which builds multi-platform wheels (Linux x86,
+Linux ARM, macOS) -- cogames-agents compiles Nim code into platform-specific binaries -- waits for both pinned mettagrid
+and cogames versions to appear on PyPI, then publishes.
 
 ## CI Workflows
 
@@ -93,7 +94,7 @@ Each package has a release workflow at `.github/workflows/release-{package}.yml`
 | -------------- | -------------- | --------------------------- | -------------------------- | ------------- |
 | mettagrid      | Multi-platform | None                        | None                       | PyPI via OIDC |
 | cogames        | Pure Python    | mettagrid on PyPI (25 min)  | pytest + CLI smoke tests   | PyPI via OIDC |
-| cogames-agents | Pure Python    | mettagrid + cogames (25/10) | None (build + twine check) | PyPI via OIDC |
+| cogames-agents | Multi-platform | mettagrid + cogames (25/10) | None (build + twine check) | PyPI via OIDC |
 
 All workflows use PyPI trusted publishers (OIDC) -- no API tokens needed. Each requires two GitHub environments:
 `{package}-pypi` and `{package}-testpypi`.

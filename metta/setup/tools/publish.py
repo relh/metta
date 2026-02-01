@@ -124,31 +124,29 @@ def _get_next_version(*, package: str, version_override: Optional[str]) -> str:
         return next_version
 
 
-def _pin_dependency_version(*, package: str, dependency: str, version: str, dry_run: bool) -> None:
+def _pin_dependency_versions(*, package: str, pins: dict[str, str], dry_run: bool) -> None:
     pyproject_path = Path(get_repo_root()) / "packages" / package / "pyproject.toml"
     assert pyproject_path.exists()
 
-    # Pattern to match dependency in the dependencies array.
-    # Matches: "dependency", or "dependency>=X.Y.Z", or "dependency==X.Y.Z"
-    pattern = rf'("{dependency}(?:[><=~!]+[\d.]+)?",)'
-    replacement = f'"{dependency}=={version}",'
+    content = pyproject_path.read_text()
+    for dependency, version in pins.items():
+        pattern = rf'("{dependency}(?:[><=~!]+[\d.]+)?",)'
+        replacement = f'"{dependency}=={version}",'
+        assert re.search(pattern, content), f"Dependency {dependency} not found in {pyproject_path}"
+        new_content = re.sub(pattern, replacement, content)
+        assert new_content != content, f"No change after pinning {dependency} to {version}"
+        content = new_content
 
-    old_content = pyproject_path.read_text()
-    new_content = re.sub(pattern, replacement, old_content)
-
-    assert re.search(pattern, old_content)
-    assert new_content != old_content
-
-    current_branch = gitta.get_current_branch()
-    new_branch_name = f"chore/update-{package}-{dependency}-to-{version}"
-    new_pr_title = f"chore: update {package} {dependency} to {version}"
-    new_pr_body = "This PR was automatically created by `metta/setup/tools/publish.py`."
-    new_commit_msg = new_pr_title
+    pin_summary = ", ".join(f"{dep} to {ver}" for dep, ver in pins.items())
+    first_dep = next(iter(pins))
+    first_ver = pins[first_dep]
+    new_branch_name = f"chore/update-{package}-{first_dep}-to-{first_ver}"
+    new_commit_msg = f"chore: update {package} {pin_summary}"
 
     if dry_run:
-        info(f"Would pin {dependency} to =={version} in {package}/pyproject.toml")
+        info(f"Would pin {pin_summary} in {package}/pyproject.toml")
         info(f"Would commit changes in new branch {new_branch_name}")
-        info(f"Would put up PR to update {package}'s {dependency} dependency.")
+        info("Would put up PR with auto-merge via Graphite.")
         return
 
     if not _is_staging_area_clean():
@@ -162,43 +160,20 @@ def _pin_dependency_version(*, package: str, dependency: str, version: str, dry_
         error("Publishing aborted.")
         raise typer.Exit(1)
 
-    info(f"Pinning dependency {dependency} to version {version} in {package}/pyproject.toml")
-    pyproject_path.write_text(new_content)
-
-    info(f"Creating new branch {new_branch_name}")
-    gitta.run_git("checkout", "-b", new_branch_name)
-
-    info(f"Staging changes to {package}/pyproject.toml")
+    info(f"Pinning {pin_summary} in {package}/pyproject.toml")
+    pyproject_path.write_text(content)
     gitta.run_git("add", str(pyproject_path))
 
-    info(f"Committing changes to {package}/pyproject.toml")
-    # Skip pre-commit hooks: they can take minutes to build packages, exceeding the 30s timeout.
-    # This commit only pins a dependency version, so full validation isn't needed.
-    gitta.run_git("commit", "--no-verify", "-m", new_commit_msg)
-
-    if typer.confirm(
-        f"Automatically put up PR from {new_branch_name} to {current_branch}?",
-        default=True,
-    ):
-        info("Pushing branch to remote...")
-        gitta.run_git("push", "-u", "origin", new_branch_name)
-
-        info(f"Putting up PR from {new_branch_name} to {current_branch}...")
-        pr_url = gitta.run_gh(
-            "pr",
-            "create",
-            "--title",
-            new_pr_title,
-            "--body",
-            new_pr_body,
-            "--head",
-            new_branch_name,
-            "--base",
-            current_branch,
-        )
-        success(f"PR created: {pr_url}")
-    else:
-        warning(f"Skipping putting up PR from {new_branch_name} to {current_branch}; do it yourself later.")
+    info(f"Creating Graphite branch {new_branch_name} with auto-merge...")
+    subprocess.run(
+        ["gt", "create", new_branch_name, "-m", new_commit_msg, "--no-interactive"],
+        check=True,
+    )
+    subprocess.run(
+        ["gt", "submit", "--no-interactive", "--publish", "--auto-merge"],
+        check=True,
+    )
+    success("PR created via Graphite with auto-merge enabled.")
 
 
 def _create_and_push_tag_to_monorepo(*, package: str, version: str, remote: str, dry_run: bool) -> None:
@@ -425,20 +400,13 @@ def _publish(
             else:
                 info("Skipping mettagrid publish; continuing with cogames only.")
 
+        pins: dict[str, str] = {}
         if mettagrid_version_to_pin is not None:
-            _pin_dependency_version(
-                package=package.value,
-                dependency="mettagrid",
-                version=mettagrid_version_to_pin,
-                dry_run=dry_run,
-            )
+            pins["mettagrid"] = mettagrid_version_to_pin
         if cogames_version_to_pin is not None:
-            _pin_dependency_version(
-                package=package.value,
-                dependency="cogames",
-                version=cogames_version_to_pin,
-                dry_run=dry_run,
-            )
+            pins["cogames"] = cogames_version_to_pin
+        if pins:
+            _pin_dependency_versions(package=package.value, pins=pins, dry_run=dry_run)
 
         _create_and_push_tag_to_monorepo(package=package, version=next_version, remote=remote, dry_run=dry_run)
 
