@@ -21,18 +21,49 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
   >([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<string>("__all__");
+  const [selectedVersion, setSelectedVersion] = useState<string>("__all__");
 
   const seasonOptions = useMemo(() => {
     const unique = [...new Set(membershipHistory.map((m) => m.season_name))];
     return unique.sort();
   }, [membershipHistory]);
 
+  const seasonVersions = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const entry of membershipHistory) {
+      if (entry.season_version === null) continue;
+      const existing = map.get(entry.season_name) ?? [];
+      if (!existing.includes(entry.season_version)) {
+        existing.push(entry.season_version);
+      }
+      map.set(entry.season_name, existing);
+    }
+    for (const [season, versions] of map.entries()) {
+      versions.sort((a, b) => b - a);
+      map.set(season, versions);
+    }
+    return map;
+  }, [membershipHistory]);
+
+  const versionOptions = useMemo(() => {
+    if (selectedSeason === "__all__") {
+      return [];
+    }
+    return seasonVersions.get(selectedSeason) ?? [];
+  }, [seasonVersions, selectedSeason]);
+
   const filteredHistory = useMemo(
     () =>
-      selectedSeason === "__all__"
-        ? membershipHistory
-        : membershipHistory.filter((m) => m.season_name === selectedSeason),
-    [membershipHistory, selectedSeason],
+      membershipHistory.filter((m) => {
+        if (selectedSeason !== "__all__" && m.season_name !== selectedSeason) {
+          return false;
+        }
+        if (selectedVersion !== "__all__") {
+          return m.season_version === Number(selectedVersion);
+        }
+        return true;
+      }),
+    [membershipHistory, selectedSeason, selectedVersion],
   );
 
   const addPolicyFilter = useCallback(
@@ -60,6 +91,7 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
       setLoadingHistory(true);
       setMembershipHistory([]);
       setSelectedSeason("__all__");
+      setSelectedVersion("__all__");
 
       try {
         const res = await fetch(
@@ -173,9 +205,10 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
                                   {seasonOptions.length > 1 && (
                                     <select
                                       value={selectedSeason}
-                                      onChange={(e) =>
-                                        setSelectedSeason(e.target.value)
-                                      }
+                                      onChange={(e) => {
+                                        setSelectedSeason(e.target.value);
+                                        setSelectedVersion("__all__");
+                                      }}
                                       className="rounded border border-[#d8d2bf] bg-white px-2 py-0.5 text-xs text-[#4a5f8c]"
                                     >
                                       <option value="__all__">
@@ -188,6 +221,28 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
                                       ))}
                                     </select>
                                   )}
+                                  {selectedSeason !== "__all__" &&
+                                    versionOptions.length > 0 && (
+                                      <select
+                                        value={selectedVersion}
+                                        onChange={(e) =>
+                                          setSelectedVersion(e.target.value)
+                                        }
+                                        className="rounded border border-[#d8d2bf] bg-white px-2 py-0.5 text-xs text-[#4a5f8c]"
+                                      >
+                                        <option value="__all__">
+                                          All versions
+                                        </option>
+                                        {versionOptions.map((version) => (
+                                          <option
+                                            key={version}
+                                            value={String(version)}
+                                          >
+                                            v{version}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    )}
                                 </div>
                                 <div className="space-y-1">
                                   {filteredHistory.map((entry, i) => (
@@ -210,6 +265,11 @@ export function YourPolicies({ policies }: { policies: PolicySummary[] }) {
                                         }`}
                                       >
                                         {entry.action}
+                                      </span>
+                                      <span className="text-xs text-[#8a9bb8]">
+                                        {entry.season_version
+                                          ? `${entry.season_name} v${entry.season_version}`
+                                          : entry.season_name}
                                       </span>
                                       <span className="text-[#0e2758]">
                                         {entry.pool_name}

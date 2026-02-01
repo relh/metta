@@ -20,6 +20,8 @@ export type PoolInfo = z.infer<typeof PoolInfoSchema>;
 
 const SeasonResponseSchema = z.object({
   name: z.string(),
+  version: z.number(),
+  canonical: z.boolean(),
   summary: z.string(),
   entry_pool: z.string().nullable(),
   leaderboard_pool: z.string().nullable(),
@@ -83,6 +85,7 @@ export type MatchesResponse = MatchSummary[];
 
 const MembershipHistoryEntrySchema = z.object({
   season_name: z.string(),
+  season_version: z.number().nullable(),
   pool_name: z.string(),
   action: z.string(),
   notes: z.string().nullable(),
@@ -94,6 +97,26 @@ export type MembershipHistoryEntry = z.infer<
 >;
 
 export type MembershipHistoryResponse = MembershipHistoryEntry[];
+
+const SeasonVersionInfoSchema = z.object({
+  version: z.number(),
+  canonical: z.boolean(),
+  disabled_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export type SeasonVersionInfo = z.infer<typeof SeasonVersionInfoSchema>;
+
+const decodePathSegment = (value: string) => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+const encodePathSegment = (value: string) =>
+  encodeURIComponent(decodePathSegment(value));
 
 async function fetchApi(url: string, userId?: string): Promise<unknown> {
   let headers: Record<string, string> = {};
@@ -145,7 +168,7 @@ export async function getLeaderboard(
   seasonName: string,
 ): Promise<LeaderboardResponse> {
   const data = await fetchApi(
-    `/tournament/seasons/${encodeURIComponent(seasonName)}/leaderboard`,
+    `/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard`,
   );
   return z.array(LeaderboardEntrySchema).parse(data);
 }
@@ -161,7 +184,7 @@ export async function getPolicies(
   const params = new URLSearchParams();
   if (args.mine) params.set("mine", "true");
   const query = params.toString();
-  const url = `/tournament/seasons/${encodeURIComponent(args.seasonName)}/policies${query ? `?${query}` : ""}`;
+  const url = `/tournament/seasons/${encodePathSegment(args.seasonName)}/policies${query ? `?${query}` : ""}`;
   const data = await fetchApi(url, args.userId);
   return z.array(PolicySummarySchema).parse(data);
 }
@@ -189,9 +212,18 @@ export async function getMatches(
     }
   }
   const query = params.toString();
-  const url = `/tournament/seasons/${encodeURIComponent(seasonName)}/matches${query ? `?${query}` : ""}`;
+  const url = `/tournament/seasons/${encodePathSegment(seasonName)}/matches${query ? `?${query}` : ""}`;
   const data = await fetchApi(url);
   return z.array(MatchSummarySchema).parse(data);
+}
+
+export async function getSeasonVersions(
+  seasonName: string,
+): Promise<SeasonVersionInfo[]> {
+  const data = await fetchApi(
+    `/tournament/seasons/${encodePathSegment(seasonName)}/versions`,
+  );
+  return z.array(SeasonVersionInfoSchema).parse(data);
 }
 
 export async function getMyMemberships(

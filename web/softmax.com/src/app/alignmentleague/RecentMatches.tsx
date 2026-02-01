@@ -32,11 +32,23 @@ export function RecentMatches() {
   const tableRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const seasonParam = searchParams.get("season") ?? "";
+  const versionParam = searchParams.get("version") ?? "";
+
+  const encodeSeasonRef = (value: string) => {
+    try {
+      return encodeURIComponent(decodeURIComponent(value));
+    } catch {
+      return encodeURIComponent(value);
+    }
+  };
+
   const [seasonName, setSeasonName] = useState("");
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [pools, setPools] = useState<{ name: string; description: string }[]>(
     [],
   );
+  const [seasonList, setSeasonList] = useState<SeasonResponse[]>([]);
   const [policyInfoCache, setPolicyInfoCache] = useState<
     Map<string, PolicyOption>
   >(new Map());
@@ -61,11 +73,7 @@ export function RecentMatches() {
         const res = await fetch("/api/tournament/seasons");
         if (res.ok) {
           const seasons: SeasonResponse[] = await res.json();
-          const defaultSeason = seasons.find((s) => s.is_default) ?? seasons[0];
-          if (defaultSeason) {
-            setSeasonName(defaultSeason.name);
-            setPools(defaultSeason.pools);
-          }
+          setSeasonList(seasons);
         }
       } catch (err) {
         console.error(err);
@@ -73,6 +81,20 @@ export function RecentMatches() {
     }
     fetchSeasonData();
   }, []);
+
+  useEffect(() => {
+    if (seasonList.length === 0) return;
+    const defaultSeason = seasonList.find((s) => s.is_default) ?? seasonList[0];
+    const desiredSeason = seasonParam || defaultSeason?.name || "";
+    const season =
+      seasonList.find((s) => s.name === desiredSeason) ?? defaultSeason;
+    if (season) {
+      if (season.name !== seasonName) {
+        setSeasonName(season.name);
+      }
+      setPools(season.pools);
+    }
+  }, [seasonList, seasonParam, seasonName]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -105,8 +127,11 @@ export function RecentMatches() {
         if (selectedPolicyIds.length > 0) {
           params.set("policies", selectedPolicyIds.join(","));
         }
+        const seasonRef = versionParam
+          ? `${seasonName}:v${versionParam}`
+          : seasonName;
         const res = await fetch(
-          `/api/tournament/seasons/${encodeURIComponent(seasonName)}/matches?${params.toString()}`,
+          `/api/tournament/seasons/${encodeSeasonRef(seasonRef)}/matches?${params.toString()}`,
         );
         if (!res.ok) throw new Error("Failed to fetch matches");
         const data: MatchSummary[] = await res.json();
@@ -159,17 +184,25 @@ export function RecentMatches() {
       }
     }
     fetchMatches();
-  }, [page, selectedPool, selectedPolicyIds.join(","), seasonName]);
+  }, [
+    page,
+    selectedPool,
+    selectedPolicyIds.join(","),
+    seasonName,
+    versionParam,
+  ]);
 
   const updateFilters = useCallback(
     (pool: string | null, policyIds: string[]) => {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams(searchParams.toString());
       if (pool) params.set("pool", pool);
+      else params.delete("pool");
       if (policyIds.length > 0) params.set("policies", policyIds.join(","));
+      else params.delete("policies");
       setPage(0);
       router.push(`?${params.toString()}`, { scroll: false });
     },
-    [router],
+    [router, searchParams],
   );
 
   const setPoolFilter = useCallback(

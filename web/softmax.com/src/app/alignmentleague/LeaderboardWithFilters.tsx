@@ -9,6 +9,7 @@ import type {
   LeaderboardEntry,
   LeaderboardResponse,
   SeasonResponse,
+  SeasonVersionInfo,
 } from "@/lib/observatoryClient";
 
 import { PolicyTag } from "./PolicyTag";
@@ -19,9 +20,39 @@ export function LeaderboardWithFilters() {
 
   const [seasons, setSeasons] = useState<SeasonResponse[]>([]);
   const [selectedSeason, setSelectedSeason] = useState("");
+  const [seasonVersions, setSeasonVersions] = useState<SeasonVersionInfo[]>([]);
+  const [selectedVersion, setSelectedVersion] =
+    useState<SeasonVersionInfo | null>(null);
+  const [loadingVersions, setLoadingVersions] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const seasonParam = searchParams.get("season") ?? "";
+  const versionParam = searchParams.get("version") ?? "";
+
+  const encodeSeasonRef = (value: string) => {
+    try {
+      return encodeURIComponent(decodeURIComponent(value));
+    } catch {
+      return encodeURIComponent(value);
+    }
+  };
+
+  const updateSearchParams = useCallback(
+    (updates: Record<string, string | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value) {
+          params.delete(key);
+        } else {
+          params.set(key, value);
+        }
+      }
+      router.push(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   useEffect(() => {
     async function fetchSeasons() {
@@ -42,13 +73,70 @@ export function LeaderboardWithFilters() {
   }, []);
 
   useEffect(() => {
+    if (seasons.length === 0) return;
+    const defaultSeason = seasons.find((s) => s.is_default) ?? seasons[0];
+    const validParam = seasonParam
+      ? seasons.find((s) => s.name === seasonParam)
+      : undefined;
+    const desiredSeason = validParam?.name || defaultSeason?.name || "";
+    if (desiredSeason && desiredSeason !== selectedSeason) {
+      setSelectedSeason(desiredSeason);
+    }
+    if ((!seasonParam || !validParam) && desiredSeason) {
+      updateSearchParams({ season: desiredSeason });
+    }
+  }, [seasons, seasonParam, selectedSeason, updateSearchParams]);
+
+  useEffect(() => {
+    async function fetchVersions() {
+      if (!selectedSeason) {
+        setSeasonVersions([]);
+        setSelectedVersion(null);
+        return;
+      }
+      setSeasonVersions([]);
+      setSelectedVersion(null);
+      setLoadingVersions(true);
+      try {
+        const res = await fetch(
+          `/api/tournament/seasons/${encodeSeasonRef(selectedSeason)}/versions`,
+        );
+        if (!res.ok) throw new Error("Failed to fetch season versions");
+        const data: SeasonVersionInfo[] = await res.json();
+        setSeasonVersions(data);
+        if (data.length > 0) {
+          const requested = versionParam
+            ? data.find((v) => v.version === Number(versionParam))
+            : undefined;
+          const canonical = data.find((v) => v.canonical) ?? data[0];
+          if (versionParam && !requested) {
+            updateSearchParams({ version: null });
+          }
+          setSelectedVersion(requested ?? canonical);
+        }
+      } catch (err) {
+        console.error(err);
+        setSeasonVersions([]);
+        setSelectedVersion(null);
+      } finally {
+        setLoadingVersions(false);
+      }
+    }
+    fetchVersions();
+  }, [selectedSeason, updateSearchParams, versionParam]);
+
+  const seasonRef = versionParam
+    ? `${selectedSeason}:v${versionParam}`
+    : selectedSeason;
+
+  useEffect(() => {
     async function fetchLeaderboard() {
       if (!selectedSeason) return;
       setLoading(true);
       setError(null);
       try {
         const res = await fetch(
-          `/api/tournament/seasons/${encodeURIComponent(selectedSeason)}/leaderboard`,
+          `/api/tournament/seasons/${encodeSeasonRef(seasonRef)}/leaderboard`,
         );
         if (!res.ok) throw new Error("Failed to fetch leaderboard");
         const data: LeaderboardResponse = await res.json();
@@ -60,7 +148,7 @@ export function LeaderboardWithFilters() {
       }
     }
     fetchLeaderboard();
-  }, [selectedSeason, seasons]);
+  }, [seasonRef, selectedSeason, seasons]);
 
   const addPolicyFilter = useCallback(
     (policyId: string) => {
@@ -92,13 +180,43 @@ export function LeaderboardWithFilters() {
           <select
             className="rounded-lg border border-[#d8d2bf] bg-[#fffef8] px-3 py-1.5 text-sm font-medium text-[#0e2758] focus:ring-2 focus:ring-[#4a5f8c] focus:outline-none"
             value={selectedSeason}
-            onChange={(e) => setSelectedSeason(e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setSelectedSeason(next);
+              setSelectedVersion(null);
+              updateSearchParams({ season: next, version: null });
+            }}
           >
             {seasons.map((season) => (
               <option key={season.name} value={season.name}>
                 Season: {season.name}
               </option>
             ))}
+          </select>
+        )}
+        {selectedSeason && (
+          <select
+            className="rounded-lg border border-[#d8d2bf] bg-[#fffef8] px-3 py-1.5 text-sm font-medium text-[#0e2758] focus:ring-2 focus:ring-[#4a5f8c] focus:outline-none"
+            value={selectedVersion?.version ?? ""}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              const version = seasonVersions.find((v) => v.version === next);
+              setSelectedVersion(version ?? null);
+              updateSearchParams({
+                version: version ? String(version.version) : null,
+              });
+            }}
+            disabled={!selectedSeason || loadingVersions}
+          >
+            <option value="">Version</option>
+            {seasonVersions
+              .slice()
+              .sort((a, b) => b.version - a.version)
+              .map((version) => (
+                <option key={version.version} value={version.version}>
+                  {`v${version.version}${version.canonical ? " (current)" : ""}`}
+                </option>
+              ))}
           </select>
         )}
       </div>
