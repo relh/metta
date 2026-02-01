@@ -16,31 +16,32 @@ async def test_season_version_flow(isolated_stats_repo: MettaRepo) -> None:  # n
         session.add(season_v1)
         await session.flush()
 
-        pool = Pool(season_id=season_v1.id, name="competition")
-        session.add(pool)
+        qualifying = Pool(season_id=season_v1.id, name="qualifying")
+        competition = Pool(season_id=season_v1.id, name="competition")
+        session.add(qualifying)
+        session.add(competition)
         await session.flush()
 
-        active_policy = Policy(name="active-policy", user_id="test-user")
-        session.add(active_policy)
-        await session.flush()
-        active_pv = PolicyVersion(policy_id=active_policy.id, version=1)
-        session.add(active_pv)
-        await session.flush()
-        session.add(PoolPlayer(pool_id=pool.id, policy_version_id=active_pv.id, retired=False))
-
+        policy_a = Policy(name="policy-a", user_id="test-user")
+        policy_b = Policy(name="policy-b", user_id="test-user")
         retired_policy = Policy(name="retired-policy", user_id="test-user")
-        session.add(retired_policy)
+        session.add_all([policy_a, policy_b, retired_policy])
         await session.flush()
+        pv_a = PolicyVersion(policy_id=policy_a.id, version=1)
+        pv_b = PolicyVersion(policy_id=policy_b.id, version=1)
         retired_pv = PolicyVersion(policy_id=retired_policy.id, version=1)
-        session.add(retired_pv)
+        session.add_all([pv_a, pv_b, retired_pv])
         await session.flush()
-        session.add(PoolPlayer(pool_id=pool.id, policy_version_id=retired_pv.id, retired=True))
+
+        session.add(PoolPlayer(pool_id=qualifying.id, policy_version_id=pv_a.id, retired=False))
+        session.add(PoolPlayer(pool_id=competition.id, policy_version_id=pv_b.id, retired=False))
+        session.add(PoolPlayer(pool_id=competition.id, policy_version_id=retired_pv.id, retired=True))
 
         season_v1_id = season_v1.id
-        active_pv_id = active_pv.id
+        active_pv_ids = {pv_a.id, pv_b.id}
 
     async with db_session() as session:
-        season_v2 = await roll_season_version(session, "integration-test")
+        season_v2 = await roll_season_version(session, "integration-test", entry_pool="qualifying")
         assert season_v2.version == 2
         assert season_v2.canonical is True
         season_v2_id = season_v2.id
@@ -56,13 +57,19 @@ async def test_season_version_flow(isolated_stats_repo: MettaRepo) -> None:  # n
 
     async with db_session() as session:
         new_pools = (await session.execute(select(Pool).where(Pool.season_id == season_v2_id))).scalars().all()
-        assert len(new_pools) == 1
-        new_players = (
-            (await session.execute(select(PoolPlayer).where(PoolPlayer.pool_id == new_pools[0].id))).scalars().all()
+        assert len(new_pools) == 2
+
+        entry = next(p for p in new_pools if p.name == "qualifying")
+        comp = next(p for p in new_pools if p.name == "competition")
+
+        entry_players = (
+            (await session.execute(select(PoolPlayer).where(PoolPlayer.pool_id == entry.id))).scalars().all()
         )
-        assert len(new_players) == 1
-        assert new_players[0].policy_version_id == active_pv_id
+        assert {p.policy_version_id for p in entry_players} == active_pv_ids
+
+        comp_players = (await session.execute(select(PoolPlayer).where(PoolPlayer.pool_id == comp.id))).scalars().all()
+        assert len(comp_players) == 0
 
     async with db_session() as session:
         with pytest.raises(ValueError, match="No canonical season found"):
-            await roll_season_version(session, "nonexistent-season")
+            await roll_season_version(session, "nonexistent-season", entry_pool="qualifying")
