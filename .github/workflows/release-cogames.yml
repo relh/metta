@@ -202,6 +202,8 @@ jobs:
     steps:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+      - name: Create venv
+        run: uv venv .venv --python 3.12
 
       - name: Extract cogames version from tag
         id: version
@@ -254,6 +256,8 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          source .venv/bin/activate
+
           # Set up index URL for testpypi if needed
           if [ "${{ env.PUBLISH_TARGET }}" == "testpypi" ]; then
             INDEX_ARGS="--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/"
@@ -264,10 +268,10 @@ jobs:
           # Install cogames from PyPI
           if [ -n "$VERSION" ]; then
             echo "Installing cogames==$VERSION from PyPI..."
-            uv pip install $INDEX_ARGS "cogames==$VERSION" --system
+            uv pip install $INDEX_ARGS "cogames==$VERSION"
           else
             echo "Installing latest cogames from PyPI..."
-            uv pip install $INDEX_ARGS cogames --system
+            uv pip install $INDEX_ARGS cogames
           fi
 
           # Smoke test 1: Check version command works

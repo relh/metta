@@ -364,7 +364,7 @@ def _install_nimby(target_nimby_path: Path) -> None:
         if e.code == 404:
             error(
                 f"Nimby {NIMBY_VERSION} does not have a binary for {os_name} {arch}. "
-                f"Available binaries: Linux-X64, macOS-ARM64, macOS-X64. "
+                f"Available binaries: Linux-X64, Linux-ARM64, macOS-ARM64, macOS-X64. "
                 f"For Docker builds on ARM64 Mac, use: docker build --platform=linux/amd64 ..."
             )
         raise RuntimeError(f"Nimby binary not available for {os_name} {arch}") from e

@@ -39,12 +39,13 @@ def _get_nimby_url() -> str | None:
 
     if system == "Linux" and arch == "x86_64":
         return f"https://github.com/treeform/nimby/releases/download/{NIMBY_VERSION}/nimby-Linux-X64"
+    elif system == "Linux" and arch == "aarch64":
+        return f"https://github.com/treeform/nimby/releases/download/{NIMBY_VERSION}/nimby-Linux-ARM64"
     elif system == "Darwin" and arch == "arm64":
         return f"https://github.com/treeform/nimby/releases/download/{NIMBY_VERSION}/nimby-macOS-ARM64"
     elif system == "Darwin" and arch == "x86_64":
         return f"https://github.com/treeform/nimby/releases/download/{NIMBY_VERSION}/nimby-macOS-X64"
     else:
-        # For unsupported platforms (e.g., Linux ARM64), nimby must be pre-installed
         return None
 
 
@@ -79,13 +80,9 @@ def _build_nim() -> None:
     # Ensure nim/nimble binaries installed by nimby are discoverable by subprocesses.
     os.environ["PATH"] = f"{nim_bin_dir}{os.pathsep}" + os.environ.get("PATH", "")
 
-    # Sync Nim dependencies
-    if NIMBY_LOCK.exists():
-        if shutil.which("nimby") is not None:
-            subprocess.check_call(["nimby", "sync", "-g", str(NIMBY_LOCK)], cwd=NIM_AGENTS_DIR)
-        else:
-            # nimby not available (unsupported platform with manual Nim install) - use nimble directly
-            subprocess.check_call(["nimble", "install", "-y"], cwd=NIM_AGENTS_DIR)
+    # Sync Nim dependencies using nimby
+    if shutil.which("nimby") is not None:
+        subprocess.check_call(["nimby", "sync", "-g", str(NIMBY_LOCK)], cwd=NIM_AGENTS_DIR)
 
     # Create output directory for compiled binaries
     BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
