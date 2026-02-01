@@ -95,33 +95,22 @@ jobs:
             # Install Nim + nimby
             NIM_VERSION=$(cat {project}/.nim-version)
             NIMBY_VERSION=$(cat {project}/.nimby-version)
-
-            # TODO: Switch back to nimby once it ships binaries targeting GLIBC 2.34
-            # (needs 2.35+ on x86, 2.38+ on ARM as of nimby 0.1.16).
-            # To switch back, comment out the build-from-source block and uncomment below:
-            #
-            # if [ "$ARCH" = "aarch64" ]; then
-            #   NIMBY_PLATFORM="Linux-ARM64"
-            # elif [ "$ARCH" = "x86_64" ]; then
-            #   NIMBY_PLATFORM="Linux-X64"
-            # else
-            #   echo "Unexpected architecture: $ARCH" && exit 1
-            # fi
-            # TMP_DIR="$(mktemp -d)"
-            # curl -fsSL -o "$TMP_DIR/nimby" \
-            #   "https://github.com/treeform/nimby/releases/download/${NIMBY_VERSION}/nimby-${NIMBY_PLATFORM}"
-            # chmod +x "$TMP_DIR/nimby"
-            # "$TMP_DIR/nimby" use "$NIM_VERSION"
-            # mkdir -p "$HOME/.nimby/nim/bin"
-            # mv -f "$TMP_DIR/nimby" "$HOME/.nimby/nim/bin/nimby"
-            # rm -rf "$TMP_DIR"
-
-            # Build from source (workaround for nimby GLIBC incompatibility with manylinux_2_34)
-            yum install -y git
-            git clone --depth 1 --branch "v${NIM_VERSION}" https://github.com/nim-lang/Nim.git /opt/nim
-            cd /opt/nim && sh build_all.sh && cd -
-            /opt/nim/bin/nimble install -y "nimby@${NIMBY_VERSION}"
-          CIBW_ENVIRONMENT_LINUX: PATH="/opt/nim/bin:$HOME/.nimble/bin:$PATH"
+            if [ "$ARCH" = "aarch64" ]; then
+              NIMBY_PLATFORM="Linux-ARM64"
+            elif [ "$ARCH" = "x86_64" ]; then
+              NIMBY_PLATFORM="Linux-X64"
+            else
+              echo "Unexpected architecture: $ARCH" && exit 1
+            fi
+            TMP_DIR="$(mktemp -d)"
+            curl -fsSL -o "$TMP_DIR/nimby" \
+              "https://github.com/treeform/nimby/releases/download/${NIMBY_VERSION}/nimby-${NIMBY_PLATFORM}"
+            chmod +x "$TMP_DIR/nimby"
+            "$TMP_DIR/nimby" use "$NIM_VERSION"
+            mkdir -p "$HOME/.nimby/nim/bin"
+            mv -f "$TMP_DIR/nimby" "$HOME/.nimby/nim/bin/nimby"
+            rm -rf "$TMP_DIR"
+          CIBW_ENVIRONMENT_LINUX: PATH="$HOME/.nimby/nim/bin:$PATH"
           CIBW_BEFORE_ALL_MACOS: |
             python3 -m pip install "pip<25"
             NIM_VERSION=$(cat {project}/.nim-version)
