@@ -41,6 +41,7 @@ Shared skills live in `skills/`:
 - `pr.address-review`
 - `pr.check-ci`
 - `pr.context`
+- `pr.context-cool`
 - `pr.cool`
 - `pr.fix-branch`
 - `pr.fix-ci`
