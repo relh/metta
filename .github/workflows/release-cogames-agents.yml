@@ -132,6 +132,46 @@ jobs:
       max-wait: 600
       check-interval: 30
 
+  test:
+    name: Smoke test cogames-agents
+    needs:
+      - wait-for-mettagrid
+      - wait-for-cogames
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: Metta-AI/cogames-agents
+          ref: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'main' }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Verify checked out ref
+        run: |
+          echo "github.ref: ${{ github.ref }}"
+          echo "github.ref_name: ${{ github.ref_name }}"
+          echo "Checked out: $(git describe --tags --always)"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@main
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref_name }}" == cogames-agents-v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#cogames-agents-v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+      - name: Install cogames-agents with test dependencies
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          pip install ".[test]"
+      - name: Run tests
+        run: |
+          pytest tests/ -v
+
   publish:
     name: Publish to PyPI
     needs:
@@ -139,6 +179,7 @@ jobs:
       - build-wheels
       - wait-for-mettagrid
       - wait-for-cogames
+      - test
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'yes' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     environment:

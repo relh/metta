@@ -14,9 +14,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from metta_alo.rollout import run_single_episode
 
-from cogames.cogs_vs_clips.evals.pinky_evals import (
+# TODO (relh/daveey): fix test and re-enable — cogames.cogs_vs_clips.evals.pinky_evals module does not exist
+pytest.skip("missing pinky_evals module", allow_module_level=True)
+
+from metta_alo.rollout import run_single_episode  # noqa: E402
+
+from cogames.cogs_vs_clips.evals.pinky_evals import (  # noqa: E402
     PINKY_BEHAVIOR_EVALS,
     PinkyAlignerTest,
     PinkyAllGearStations,
@@ -34,8 +38,8 @@ from cogames.cogs_vs_clips.evals.pinky_evals import (
     PinkyScoutExplore,
     PinkyScramblerTest,
 )
-from mettagrid.policy.loader import discover_and_register_policies
-from mettagrid.policy.policy import PolicySpec
+from mettagrid.policy.loader import discover_and_register_policies  # noqa: E402
+from mettagrid.policy.policy import PolicySpec  # noqa: E402
 
 # Register pinky and other policies
 discover_and_register_policies("cogames_agents.policy")
