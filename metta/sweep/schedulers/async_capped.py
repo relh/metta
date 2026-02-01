@@ -62,6 +62,7 @@ class AsyncCappedSchedulerConfig(Config):
     max_concurrent_evals: int = 1
     liar_strategy: str = "best"  # one of: "best", "mean", "worst"
     min_suggestion_distance: float = 0.0  # optional distance floor for external use
+    sweep_config_hash: str | None = None
 
 
 class AsyncCappedOptimizingScheduler:
@@ -84,6 +85,7 @@ class AsyncCappedOptimizingScheduler:
     def schedule(self, runs: list[RunInfo], available_training_slots: int) -> list[JobDefinition]:
         jobs: list[JobDefinition] = []
 
+        runs = self._filter_runs(runs)
         # Update state
         self.state.refresh(runs, force_eval=self.config.force_eval)
 
@@ -192,6 +194,8 @@ class AsyncCappedOptimizingScheduler:
                 train_overrides=merged_overrides,
             )
             job.metadata["sweep/suggestion"] = suggestion
+            if self.config.sweep_config_hash:
+                job.metadata["sweep/config_hash"] = self.config.sweep_config_hash
             jobs.append(job)
 
             # Update state tracking
@@ -201,6 +205,7 @@ class AsyncCappedOptimizingScheduler:
         return jobs
 
     def is_experiment_complete(self, runs: list[RunInfo]) -> bool:
+        runs = self._filter_runs(runs)
         finished = [r for r in runs if r.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.STALE)]
         if len(finished) >= self.config.max_trials:
             completed = [r for r in runs if r.status == JobStatus.COMPLETED]
@@ -219,7 +224,7 @@ class AsyncCappedOptimizingScheduler:
         for run in runs:
             if run.status != JobStatus.COMPLETED:
                 continue
-            summary = run.summary if isinstance(run.summary, dict) else {}
+            summary = run.summary or {}
             if not summary:
                 continue
             score = summary.get("sweep/score")
@@ -237,6 +242,20 @@ class AsyncCappedOptimizingScheduler:
                 except Exception:
                     continue
         return obs
+
+    def _filter_runs(self, runs: list[RunInfo]) -> list[RunInfo]:
+        if not self.config.sweep_config_hash:
+            return runs
+        filtered = [
+            run for run in runs if (run.summary or {}).get("sweep/config_hash") == self.config.sweep_config_hash
+        ]
+        skipped = len(runs) - len(filtered)
+        if skipped:
+            logger.debug(
+                "[AsyncCappedOptimizingScheduler] Skipping %d run(s) with mismatched sweep config hash",
+                skipped,
+            )
+        return filtered
 
     def _build_constant_liar_fantasies(
         self, runs: list[RunInfo], observations: list[dict[str, Any]]

@@ -45,6 +45,7 @@ class GridSearchSchedulerConfig(Config):
     max_concurrent_evals: Optional[int] = None
     # Flat dict of categorical parameters (dot-path keys)
     parameters: Dict[str, Any] = Field(default_factory=dict)
+    sweep_config_hash: str | None = None
 
 
 class GridSearchScheduler:
@@ -63,6 +64,7 @@ class GridSearchScheduler:
     def schedule(self, runs: list[RunInfo], available_training_slots: int) -> list[JobDefinition]:
         jobs: list[JobDefinition] = []
 
+        runs = self._filter_runs(runs)
         self.state.refresh(runs)
 
         # 1) Schedule evals for any runs with training done (throttled)
@@ -130,6 +132,8 @@ class GridSearchScheduler:
                 train_overrides=merged_overrides,
             )
             job.metadata["sweep/suggestion"] = suggestion
+            if self.config.sweep_config_hash:
+                job.metadata["sweep/config_hash"] = self.config.sweep_config_hash
             jobs.append(job)
             self.state.mark_training_scheduled(run_id, suggestion)
             launched += 1
@@ -138,6 +142,7 @@ class GridSearchScheduler:
         return jobs
 
     def is_experiment_complete(self, runs: list[RunInfo]) -> bool:
+        runs = self._filter_runs(runs)
         finished = [r for r in runs if r.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.STALE)]
         target = len(self._grid) if self.config.max_trials is None else min(self.config.max_trials, len(self._grid))
         is_done = len(finished) >= target
@@ -154,6 +159,17 @@ class GridSearchScheduler:
     # ---------- Helpers ----------
     def _extract_suggestion(self, run: RunInfo) -> dict[str, Any] | None:
         return SchedulerState._extract_suggestion(run)
+
+    def _filter_runs(self, runs: list[RunInfo]) -> list[RunInfo]:
+        if not self.config.sweep_config_hash:
+            return runs
+        filtered = [
+            run for run in runs if (run.summary or {}).get("sweep/config_hash") == self.config.sweep_config_hash
+        ]
+        skipped = len(runs) - len(filtered)
+        if skipped:
+            logger.debug("[GridSearchScheduler] Skipping %d run(s) with mismatched sweep config hash", skipped)
+        return filtered
 
     def _suggestion_key(self, suggestion: dict[str, Any]) -> Tuple[Any, ...]:
         # Build a key tuple ordered by dimension names

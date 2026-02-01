@@ -59,7 +59,7 @@ class ProteinOptimizer:
                 is_failure=bool(obs.get("is_failure", False)),
             )
 
-        logger.info(f"Loaded {len(observations)} observations into Protein optimizer")
+        logger.info("Loaded %d observations into Protein optimizer", len(observations))
 
         if n_suggestions == 0:
             logger.debug("Zero suggestions requested, returning empty list")

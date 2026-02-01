@@ -1,5 +1,7 @@
 """SweepTool for Bayesian hyperparameter optimization using adaptive experiments."""
 
+import hashlib
+import json
 import logging
 import os
 import uuid
@@ -245,6 +247,8 @@ class SweepTool(Tool):
         # Populate optimizer parameters and fixed overrides from search_space (flat dot paths)
         parameters, base_overrides = self._split_search_space(self.search_space)
         protein_config = self._build_protein_config(parameters)
+        sweep_config_hash = self._compute_sweep_config_hash(parameters, base_overrides)
+        logger.info("[SweepTool] Sweep config hash: %s", sweep_config_hash)
 
         # Check for resumption using cogweb
         resume = False
@@ -306,6 +310,7 @@ class SweepTool(Tool):
                 max_concurrent_evals=self.max_concurrent_evals,
                 liar_strategy=self.liar_strategy,
                 base_overrides=base_overrides,
+                sweep_config_hash=sweep_config_hash,
             )
             scheduler = AsyncCappedOptimizingScheduler(scheduler_config)
         else:
@@ -345,6 +350,7 @@ class SweepTool(Tool):
                 max_concurrent_evals=self.max_concurrent_evals,
                 parameters=grid_params,
                 base_overrides=base_overrides,
+                sweep_config_hash=sweep_config_hash,
             )
             scheduler = GridSearchScheduler(scheduler_config)
 
@@ -466,3 +472,35 @@ class SweepTool(Tool):
             parameters=dict(parameters),
             settings=self.protein_settings,
         )
+
+    def _compute_sweep_config_hash(self, parameters: dict[str, ParameterSpec], base_overrides: dict[str, Any]) -> str:
+        """Compute a stable hash for the sweep configuration.
+
+        Used to avoid mixing observations from different sweep configs when resuming.
+        """
+
+        def _normalize_value(value: Any) -> Any:
+            if isinstance(value, (ParameterConfig, CategoricalParameterConfig)):
+                return value.model_dump()
+            if isinstance(value, dict):
+                return {k: _normalize_value(value[k]) for k in sorted(value)}
+            if isinstance(value, list):
+                return [_normalize_value(item) for item in value]
+            return value
+
+        payload = {
+            "recipe_module": self.recipe_module,
+            "train_entrypoint": self.train_entrypoint,
+            "eval_entrypoint": self.eval_entrypoint,
+            "metric": self.protein_metric,
+            "goal": self.protein_goal,
+            "cost_key": self.cost_key,
+            "protein_settings": self.protein_settings.model_dump(),
+            "eval_overrides": _normalize_value(self.eval_overrides),
+            "parameters": _normalize_value(parameters),
+            "base_overrides": _normalize_value(base_overrides),
+        }
+        if self.scheduler_type == SweepSchedulerType.GRID_SEARCH and self.grid_parameters:
+            payload["grid_parameters"] = _normalize_value(self.grid_parameters)
+        data = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(data.encode()).hexdigest()[:12]

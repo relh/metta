@@ -90,3 +90,33 @@ def test_sweep_tool_grid_search_builds_scheduler(monkeypatch, tmp_path) -> None:
         s = job.metadata.get("sweep/suggestion", {})
         assert s["model.color"] in {"red", "blue"}
         assert s["trainer.device"] in {"cpu", "cuda"}
+
+
+def test_grid_search_hash_changes_with_grid_parameters() -> None:
+    params_a = {"trainer": {"device": ["cpu", "cuda"]}}
+    params_b = {"trainer": {"device": ["cpu"]}}
+
+    tool_a = grid_search(
+        name="grid.hash.a",
+        recipe="test.recipe",
+        train_entrypoint="train",
+        eval_entrypoint="evaluate",
+        metric_key="test/metric",
+        search_space=params_a,
+    )
+    tool_b = grid_search(
+        name="grid.hash.b",
+        recipe="test.recipe",
+        train_entrypoint="train",
+        eval_entrypoint="evaluate",
+        metric_key="test/metric",
+        search_space=params_b,
+    )
+
+    params_a_split, overrides_a = tool_a._split_search_space(tool_a.search_space)
+    params_b_split, overrides_b = tool_b._split_search_space(tool_b.search_space)
+
+    hash_a = tool_a._compute_sweep_config_hash(params_a_split, overrides_a)
+    hash_b = tool_b._compute_sweep_config_hash(params_b_split, overrides_b)
+
+    assert hash_a != hash_b

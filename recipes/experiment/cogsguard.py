@@ -12,7 +12,7 @@ import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_reward_variants import apply_reward_variants
 from cogames.cogs_vs_clips.mission import Mission
-from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
+from cogames.cogs_vs_clips.sites import COGSGUARD_MACHINA_1, make_cogsguard_arena_site
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -24,7 +24,10 @@ from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
+from metta.sweep.core import SweepParameters as SP
+from metta.sweep.core import make_sweep
 from mettagrid.config.mettagrid_config import MettaGridConfig
+from recipes.experiment.cogs_v_clips import get_cvc_sweep_search_space
 
 _CogsGuardLayout = Literal["machina_1", "arena"]
 
@@ -43,8 +46,8 @@ def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
 
 def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> Mission:
     if layout == "machina_1":
-        site = make_cogsguard_machina1_site(num_agents)
-        description = "Basic CogsGuard mission (Machina1 layout)"
+        site = COGSGUARD_MACHINA_1
+        description = "Basic CogsGuard mission (Machina1 leaderboard layout)"
     elif layout == "arena":
         site = make_cogsguard_arena_site(num_agents)
         description = "Basic CogsGuard mission (arena layout)"
@@ -61,7 +64,7 @@ def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_st
 
 
 def make_env(
-    num_agents: int = 10,
+    num_agents: int = 8,
     max_steps: int = 10000,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = "machina_1",
@@ -187,3 +190,61 @@ def replay(
 ) -> tools.ReplayTool:
     """Generate replay from a policy."""
     return tools.ReplayTool(sim=simulations(variants=variants, layout=layout)[0], policy_uri=policy_uri)
+
+
+def train_sweep(
+    variants: Optional[Sequence[str]] = ("milestones", "credit"),
+    layout: _CogsGuardLayout = "machina_1",
+    policy_architecture: Optional[PolicyArchitecture] = None,
+    teacher: Optional[TeacherConfig] = None,
+    use_default_teacher: bool = False,
+) -> tools.TrainTool:
+    tool = train(
+        policy_architecture=policy_architecture,
+        teacher=teacher,
+        variants=variants,
+        layout=layout,
+        use_default_teacher=use_default_teacher,
+    )
+    tool.trainer.total_timesteps = 1_000_000_000
+    return tool
+
+
+def evaluate_stub(*args: object, **kwargs: object) -> tools.StubTool:
+    return tools.StubTool()
+
+
+def sweep(
+    sweep_name: str,
+    variants: Optional[Sequence[str]] = ("milestones", "credit"),
+    sweep_reward_variants: bool = True,
+    max_trials: int = 80,
+    num_parallel_trials: int = 4,
+) -> tools.SweepTool:
+    search_space = get_cvc_sweep_search_space()
+    if sweep_reward_variants:
+        search_space.update(
+            SP.categorical(
+                "variants",
+                choices=[
+                    "[]",
+                    '["milestones"]',
+                    '["credit"]',
+                    '["milestones","credit"]',
+                ],
+            )
+        )
+    elif variants is not None:
+        search_space["variants"] = list(variants)
+
+    return make_sweep(
+        name=sweep_name,
+        recipe="recipes.experiment.cogsguard",
+        train_entrypoint="train_sweep",
+        eval_entrypoint="evaluate_stub",
+        metric_key="env_collective/cogs/aligned.junction.held",
+        search_space=search_space,
+        cost_key="metric/total_time",
+        max_trials=max_trials,
+        num_parallel_trials=num_parallel_trials,
+    )
