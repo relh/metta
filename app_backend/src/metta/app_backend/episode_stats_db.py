@@ -4,6 +4,7 @@ This module provides a standardized way to create, populate, and read
 DuckDB files containing episode statistics with agent-level metrics.
 """
 
+import json
 import os
 import tempfile
 from contextlib import contextmanager
@@ -127,15 +128,29 @@ def insert_agent_metric(
     )
 
 
+def _parse_json_attr(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return {}
+
+
 def read_episodes(conn: duckdb.DuckDBPyConnection) -> list[tuple]:
     """Read all episodes from the DuckDB database.
 
     Returns:
         List of tuples: (id, primary_pv_id, replay_url, thumbnail_url, attributes, eval_task_id)
     """
-    return conn.execute(
+    rows = conn.execute(
         "SELECT id, primary_pv_id, replay_url, thumbnail_url, attributes, eval_task_id FROM episodes"
     ).fetchall()
+    return [(r[0], r[1], r[2], r[3], _parse_json_attr(r[4]), r[5]) for r in rows]
 
 
 def read_episode_tags(conn: duckdb.DuckDBPyConnection, episode_id: str) -> list[tuple[str, str]]:

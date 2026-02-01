@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -373,7 +374,9 @@ def create_job_router() -> APIRouter:
             if not episode:
                 raise HTTPException(status_code=404, detail="Episode not found")
 
-            attributes = episode.attributes or {}
+            raw_attrs = episode.attributes or {}
+            parsed = json.loads(raw_attrs) if isinstance(raw_attrs, str) else raw_attrs
+            attributes = parsed if isinstance(parsed, dict) else {}
             stats = attributes.get("stats", {})
             agent_stats_list: list[dict[str, float]] = stats.get("agent", [])
             rewards_list: list[float] = attributes.get("rewards", [])
