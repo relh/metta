@@ -652,12 +652,23 @@ dependencies = [
     { name = "numpy" },
 ]
 
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cogames", editable = "packages/cogames" },
     { name = "mettagrid", editable = "packages/mettagrid" },
     { name = "numpy", specifier = ">=2.0.0" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pytest-xdist", marker = "extra == 'test'" },
+    { name = "ruff", marker = "extra == 'test'" },
 ]
+provides-extras = ["test"]
 
 [[package]]
 name = "colorama"
