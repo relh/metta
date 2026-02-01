@@ -395,6 +395,7 @@ def cmd_lint(
         TextColumn("{task.description}", justify="left"),
     )
 
+    is_full_run = not files and not staged
     formatter_order = [name for name in formatters if name in files_by_formatter]
     with Progress(*columns, transient=True) as progress:
         with ThreadPoolExecutor(max_workers=len(formatter_order) or 1) as executor:
@@ -404,11 +405,14 @@ def cmd_lint(
                 fs = files_by_formatter.get(formatter_name)
                 if not fs:
                     continue
+                # Whole-repo formatters (accepts_file_args=False) run with files=None
+                # so they execute without file args; on partial runs they get skipped
+                run_files = None if (is_full_run and not formatter.accepts_file_args) else fs
                 action_word = "Formatting" if fix else "Checking"
                 file_count = len(fs)
                 in_progress_desc = _format_progress_message(formatter.name, action_word, file_count, "blue")
                 task_id = progress.add_task(in_progress_desc, total=None, start=True)
-                future = executor.submit(formatter.run, fix=fix, files=fs)
+                future = executor.submit(formatter.run, fix=fix, files=run_files)
                 futures[future] = (formatter, task_id, file_count)
 
             for future in as_completed(futures):
