@@ -145,6 +145,7 @@ packages/tribal_village/nim.cfg
 
 # Nim Agents
 packages/cogames-agents/src/cogames_agents/policy/nim_agents/bindings/generated
+bindings/generated/
 
 # Uncategorized
 .terraform*

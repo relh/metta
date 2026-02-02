@@ -86,13 +86,21 @@ class EpisodeResult:
         return int(self.agent_stats.get(f"{gear}.gained", 0))
 
     def resource_deposited(self, resource: str) -> int:
-        return int(self.cogs_stats.get(f"collective.{resource}.deposited", 0))
+        # Try new format first, then legacy format
+        value = self.cogs_stats.get(f"{resource}.deposited", 0)
+        if value == 0:
+            value = self.cogs_stats.get(f"collective.{resource}.deposited", 0)
+        return int(value)
 
     def total_deposited(self) -> int:
         return sum(self.resource_deposited(r) for r in ["carbon", "oxygen", "germanium", "silicon"])
 
     def junctions_aligned(self) -> int:
-        return int(self.cogs_stats.get("junction.gained", 0))
+        # Try new format first, then legacy format
+        value = self.cogs_stats.get("aligned.junction.gained", 0)
+        if value == 0:
+            value = self.cogs_stats.get("junction.gained", 0)
+        return int(value)
 
     def hearts_gained(self) -> int:
         return int(self.agent_stats.get("heart.gained", 0))

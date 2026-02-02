@@ -12,7 +12,24 @@ from .entity_map import Entity
 
 if TYPE_CHECKING:
     from mettagrid.policy.policy_env_interface import PolicyEnvInterface
-    from mettagrid.simulator.interface import AgentObservation
+    from mettagrid.simulator.interface import AgentObservation, ObservationToken
+
+# GLOBAL_LOCATION marker (0xFE) indicates global observations (not tied to grid position)
+_GLOBAL_LOCATION_BYTE = 0xFE
+
+
+def _is_global_token(tok: ObservationToken) -> bool:
+    """Check if token is a global observation (not tied to grid position).
+
+    Backwards-compatible: uses is_global property if available (daveey-inv-fix),
+    otherwise checks raw location byte directly (main).
+    """
+    # Use getattr to avoid type error - is_global exists on daveey-inv-fix but not main
+    is_global = getattr(tok, "is_global", None)
+    if is_global is not None:
+        return is_global
+    # Fallback: check raw location byte for GLOBAL_LOCATION marker
+    return tok.raw_token[0] == _GLOBAL_LOCATION_BYTE
 
 
 class ObsParser:
@@ -52,10 +69,12 @@ class ObsParser:
         """
         state = StateSnapshot()
 
-        # Read center cell for inventory/vibe and local position
+        # Read center cell for inventory/vibe, and global/center tokens for local position
         inv: dict[str, int] = {}
         vibe_id = 0
         # Local position tokens: lp:east/west for col offset, lp:north/south for row offset
+        # On daveey-inv-fix: these are GLOBAL tokens (at GLOBAL_LOCATION = 0xFE)
+        # On main: these appear at the center cell position
         lp_col_offset = 0  # east is positive, west is negative
         lp_row_offset = 0  # south is positive, north is negative
         has_position = False
@@ -63,9 +82,51 @@ class ObsParser:
         center_r, center_c = self._obs_hr, self._obs_wr
 
         for tok in obs.tokens:
+            feature_name = tok.feature.name
+
+            # Global tokens include local position and collective inventory (daveey-inv-fix)
+            if _is_global_token(tok):
+                if feature_name == "lp:east":
+                    lp_col_offset = tok.value
+                    has_position = True
+                elif feature_name == "lp:west":
+                    lp_col_offset = -tok.value
+                    has_position = True
+                elif feature_name == "lp:south":
+                    lp_row_offset = tok.value
+                    has_position = True
+                elif feature_name == "lp:north":
+                    lp_row_offset = -tok.value
+                    has_position = True
+                elif feature_name.startswith("inv:"):
+                    # Collective inventory tokens are global observations
+                    resource_name = feature_name[4:]
+                    if ":p" in resource_name:
+                        base_name, power_str = resource_name.rsplit(":p", 1)
+                        power = int(power_str)
+                        current = inv.get(base_name, 0)
+                        inv[base_name] = current + tok.value * (256**power)
+                    else:
+                        current = inv.get(resource_name, 0)
+                        inv[resource_name] = current + tok.value
+                continue
+
+            # Center cell tokens for inventory/vibe and local position (main compatibility)
             if tok.row() == center_r and tok.col() == center_c:
-                feature_name = tok.feature.name
-                if feature_name.startswith("inv:"):
+                # Local position tokens at center cell (main branch)
+                if feature_name == "lp:east":
+                    lp_col_offset = tok.value
+                    has_position = True
+                elif feature_name == "lp:west":
+                    lp_col_offset = -tok.value
+                    has_position = True
+                elif feature_name == "lp:south":
+                    lp_row_offset = tok.value
+                    has_position = True
+                elif feature_name == "lp:north":
+                    lp_row_offset = -tok.value
+                    has_position = True
+                elif feature_name.startswith("inv:"):
                     resource_name = feature_name[4:]
                     # Handle multi-token encoding
                     if ":p" in resource_name:
@@ -78,19 +139,6 @@ class ObsParser:
                         inv[resource_name] = current + tok.value
                 elif feature_name == "vibe":
                     vibe_id = tok.value
-                # Local position tokens from local_position observation feature
-                elif feature_name == "lp:east":
-                    lp_col_offset = tok.value
-                    has_position = True
-                elif feature_name == "lp:west":
-                    lp_col_offset = -tok.value
-                    has_position = True
-                elif feature_name == "lp:south":
-                    lp_row_offset = tok.value
-                    has_position = True
-                elif feature_name == "lp:north":
-                    lp_row_offset = -tok.value
-                    has_position = True
 
         # Build state - lp: tokens give offset from spawn
         if has_position:
@@ -113,7 +161,7 @@ class ObsParser:
         state.vibe = self._get_vibe_name(vibe_id)
 
         # Read collective inventory from the inv dict.
-        # Collective tokens appear as "inv:collective:<resource>" features on the center cell,
+        # Collective tokens appear as "inv:collective:<resource>" global observation tokens,
         # parsed above into keys like "collective:carbon", "collective:oxygen", etc.
         state.collective_carbon = inv.get("collective:carbon", 0)
         state.collective_oxygen = inv.get("collective:oxygen", 0)
@@ -127,7 +175,14 @@ class ObsParser:
         position_features: dict[tuple[int, int], dict] = {}
 
         for tok in obs.tokens:
+            # Skip global tokens (already processed above for local position)
+            if _is_global_token(tok):
+                continue
+
             obs_r, obs_c = tok.row(), tok.col()
+            # Skip tokens without valid spatial location (shouldn't happen after is_global check)
+            if obs_r is None or obs_c is None:
+                continue
             # Skip center cell
             if obs_r == center_r and obs_c == center_c:
                 continue

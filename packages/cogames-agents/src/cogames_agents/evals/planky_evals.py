@@ -16,6 +16,7 @@ from pydantic import Field
 from cogames.cogs_vs_clips.cog import CogConfig
 from cogames.cogs_vs_clips.mission import CoGameSite as Site
 from cogames.cogs_vs_clips.mission import CvCMission as Mission
+from cogames.cogs_vs_clips.team import CogTeam
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
@@ -109,6 +110,14 @@ class _PlankyDiagnosticBase(Mission):
         custom_map = _get_planky_map(self.map_name)
         original_map_builder = self.site.map_builder
         self.site.map_builder = custom_map
+
+        # Apply wealth to teams (base class wealth attribute wasn't being used)
+        original_teams = self.teams
+        self.teams = {
+            name: CogTeam(name=team.name, num_agents=team.num_agents, wealth=self.wealth)
+            for name, team in self.teams.items()
+        }
+
         try:
             cfg = super().make_env()
             cfg.game.map_builder = custom_map
@@ -125,6 +134,7 @@ class _PlankyDiagnosticBase(Mission):
             return cfg
         finally:
             self.site.map_builder = original_map_builder
+            self.teams = original_teams
 
 
 # ==============================================================================

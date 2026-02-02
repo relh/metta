@@ -18,6 +18,7 @@ class GetMinerGearGoal(GetGearGoal):
     """Get miner gear (costs C1 O1 G3 S1 from collective).
 
     Miners always get gear regardless of reserves — they produce resources.
+    Gear provides 10x cargo capacity (40 vs 4), so always worth getting if affordable.
     """
 
     def __init__(self) -> None:
@@ -29,12 +30,10 @@ class GetMinerGearGoal(GetGearGoal):
         )
 
     def _collective_can_afford(self, ctx: "PlankyContext") -> bool:
-        """Miners always get gear — they're the resource producers.
+        """Miners always get gear if affordable — 10x cargo capacity is worth it.
 
-        But skip if collective is already well-stocked (no need to mine).
+        Even if collective is well-stocked, get gear to mine more efficiently.
         """
-        if _collective_resources_sufficient(ctx):
-            return False
         if not self._gear_cost:
             return True
         s = ctx.state
@@ -110,13 +109,21 @@ class ExploreHubGoal(Goal):
 class PickResourceGoal(Goal):
     """Select a target resource based on collective needs.
 
-    Prioritizes the resource that the collective has the least of,
-    ensuring balanced gathering for heart production.
-    Re-evaluates every 50 steps to adapt to changing needs.
+    Priority order:
+    1. Resources below COLLECTIVE_SUFFICIENT_THRESHOLD (100) — mine the lowest
+    2. If all above threshold, pick the one we have least of (for balance)
+
+    Bottleneck switching: If current target is >20% above mean and any element
+    is <10% below mean, switch to the bottleneck element to keep resources balanced.
+    Re-evaluates every 50 steps, or immediately if a resource is critically low.
     """
 
     name = "PickResource"
     REEVALUATE_INTERVAL = 50
+    CRITICAL_THRESHOLD = 20  # Force re-evaluation if any resource below this
+    ABOVE_MEAN_THRESHOLD = 0.20  # Switch if target is 20% above mean
+    BELOW_MEAN_THRESHOLD = 0.10  # Switch if bottleneck is 10% below mean
+    MIN_MEAN_FOR_BOTTLENECK = 30  # Don't do bottleneck switching if mean < this
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
         # Don't bother picking a resource if collective is well-stocked
@@ -125,6 +132,56 @@ class PickResourceGoal(Goal):
 
         if "target_resource" not in ctx.blackboard:
             return False
+
+        current_target = ctx.blackboard.get("target_resource")
+
+        # Get collective resource levels
+        collective = {
+            "carbon": ctx.state.collective_carbon,
+            "oxygen": ctx.state.collective_oxygen,
+            "germanium": ctx.state.collective_germanium,
+            "silicon": ctx.state.collective_silicon,
+        }
+
+        # Force re-evaluation if any resource is critically low and we're not targeting it
+        critically_low = [res for res, amt in collective.items() if amt < self.CRITICAL_THRESHOLD]
+        if critically_low and current_target not in critically_low:
+            # Find the lowest critically low resource
+            lowest = min(critically_low, key=lambda r: collective[r])
+            if ctx.trace:
+                ctx.trace.skip(
+                    self.name,
+                    f"critical: {lowest}={collective[lowest]}, switching from {current_target}",
+                )
+            ctx.blackboard.pop("target_resource", None)
+            return False
+
+        # Bottleneck switching: if target is >20% above mean and any element is <10% below mean
+        # Only do this if mean >= MIN_MEAN_FOR_BOTTLENECK (avoid early game thrashing)
+        mean_count = sum(collective.values()) / len(collective)
+        if mean_count >= self.MIN_MEAN_FOR_BOTTLENECK:
+            target_amount = collective.get(current_target, 0)
+            above_mean_limit = mean_count * (1 + self.ABOVE_MEAN_THRESHOLD)
+            below_mean_limit = mean_count * (1 - self.BELOW_MEAN_THRESHOLD)
+
+            if target_amount > above_mean_limit:
+                # Find bottleneck elements (below 10% of mean)
+                bottlenecks = [res for res, amt in collective.items() if amt < below_mean_limit]
+                if bottlenecks:
+                    # Switch to the lowest bottleneck
+                    lowest_bottleneck = min(bottlenecks, key=lambda r: collective[r])
+                    if ctx.trace:
+                        ctx.trace.skip(
+                            self.name,
+                            f"bottleneck: {current_target}={target_amount} "
+                            f">{above_mean_limit:.0f} (mean={mean_count:.0f}), "
+                            f"switching to {lowest_bottleneck}={collective[lowest_bottleneck]} "
+                            f"<{below_mean_limit:.0f}",
+                        )
+                    # Set the bottleneck as explicit target so execute() uses it even without extractor
+                    ctx.blackboard["_bottleneck_target"] = lowest_bottleneck
+                    ctx.blackboard.pop("target_resource", None)
+                    return False
 
         # Re-evaluate periodically to ensure we're mining what's needed
         last_pick = ctx.blackboard.get("_target_resource_step", 0)
@@ -144,6 +201,18 @@ class PickResourceGoal(Goal):
             "silicon": ctx.state.collective_silicon,
         }
 
+        # Check if we have a bottleneck target from is_satisfied (use it even if no extractor known)
+        bottleneck_target = ctx.blackboard.pop("_bottleneck_target", None)
+        if bottleneck_target:
+            ctx.blackboard["target_resource"] = bottleneck_target
+            ctx.blackboard["_target_resource_step"] = ctx.step
+            if ctx.trace:
+                ctx.trace.activate(
+                    self.name, f"bottleneck={bottleneck_target} (will explore if no extractor) coll={collective}"
+                )
+            # Return None to let MineResource run in the same tick
+            return None
+
         # Find resources with available extractors
         available_resources: list[tuple[int, str]] = []
         for resource in RESOURCE_TYPES:
@@ -156,8 +225,8 @@ class PickResourceGoal(Goal):
                 and not _extractor_recently_failed(ctx, pos)
             ]
             if usable:
-                # Score by collective amount (lower = higher priority)
-                available_resources.append((collective.get(resource, 0), resource))
+                amount = collective.get(resource, 0)
+                available_resources.append((amount, resource))
 
         if not available_resources:
             # No extractors known — pick carbon as default, MineResource will explore
@@ -165,18 +234,28 @@ class PickResourceGoal(Goal):
             ctx.blackboard["_target_resource_step"] = ctx.step
             if ctx.trace:
                 ctx.trace.activate(self.name, "no extractors known, defaulting to carbon")
-            return Action(name="noop")
+            # Return None to let MineResource explore in the same tick
+            return None
 
-        # Pick the resource the collective has least of (that we can mine)
-        available_resources.sort()
-        best_resource = available_resources[0][1]
-
-        if ctx.trace:
-            ctx.trace.activate(self.name, f"need={best_resource} coll={collective}")
+        # Priority: resources below threshold first (sorted by amount), then others
+        below_threshold = [(amt, res) for amt, res in available_resources if amt < COLLECTIVE_SUFFICIENT_THRESHOLD]
+        if below_threshold:
+            # Mine the resource we have least of that's below 100
+            below_threshold.sort()
+            best_resource = below_threshold[0][1]
+            if ctx.trace:
+                ctx.trace.activate(self.name, f"need={best_resource} (below 100) coll={collective}")
+        else:
+            # All above threshold — pick the one with least (for balance)
+            available_resources.sort()
+            best_resource = available_resources[0][1]
+            if ctx.trace:
+                ctx.trace.activate(self.name, f"need={best_resource} (all above 100) coll={collective}")
 
         ctx.blackboard["target_resource"] = best_resource
         ctx.blackboard["_target_resource_step"] = ctx.step
-        return Action(name="noop")
+        # Return None to let MineResource run in the same tick
+        return None
 
 
 def _extractor_recently_failed(ctx: PlankyContext, pos: tuple[int, int]) -> bool:
