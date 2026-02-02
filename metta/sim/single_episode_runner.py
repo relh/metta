@@ -166,9 +166,14 @@ def run_episode(
             copy_data(local_results_uri, upload_results_uri, content_type="application/json")
             logger.info(f"Uploaded results to {upload_results_uri[:50]}...")
 
-        if upload_replay_uri and local_replay_uri:
-            copy_data(local_replay_uri, upload_replay_uri, content_type="application/x-compress")
-            logger.info(f"Uploaded replay to {upload_replay_uri[:50]}...")
+        if upload_replay_uri:
+            if local_replay_uri:
+                copy_data(local_replay_uri, upload_replay_uri, content_type="application/x-compress")
+                logger.info(f"Uploaded replay to {upload_replay_uri[:50]}...")
+            else:
+                logger.warning(f"No replay to upload to {upload_replay_uri[:50]}...")
+        else:
+            logger.info("No replay URI provided, skipping upload")
 
         return results
 
