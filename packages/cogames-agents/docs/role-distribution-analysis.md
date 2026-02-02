@@ -11,7 +11,7 @@ game-state-driven role switching.
 
 **Key Finding:** The highest-performing agents (CoGsGuard Control, Wombo) share a common pattern: they start with an
 explore-heavy distribution and dynamically shift toward aligner/scrambler-heavy distributions as junctions are
-discovered. Pure static distributions (planky defaults, pinky defaults) leave performance on the table.
+discovered. Pure static distributions (planky defaults) leave performance on the table.
 
 ---
 
@@ -59,50 +59,7 @@ hub recipes.
 
 ---
 
-### 2.2 Pinky (`metta://policy/pinky`)
-
-**Architecture:** Vibe-based role system with per-agent Brain. URI-configurable static distribution.
-
-**Default distribution:** All zeroes -- no agents active unless URI params specify counts.
-
-**Gear-vibe distribution (when `?gear=10`):** The "gear" vibe triggers a hardcoded role selection cycle:
-
-| Agent ID | Role      | Pattern |
-| -------- | --------- | ------- |
-| 0        | aligner   |         |
-| 1        | aligner   |         |
-| 2        | scrambler |         |
-| 3        | miner     |         |
-| 4        | aligner   |         |
-| 5        | scrambler |         |
-| 6        | aligner   |         |
-| 7        | scrambler |         |
-| 8        | aligner   |         |
-| 9        | miner     |         |
-
-**Effective gear-vibe distribution (10 agents):**
-
-| Role      | Count | Percentage |
-| --------- | ----- | ---------- |
-| Miner     | 2     | 20%        |
-| Scout     | 0     | 0%         |
-| Aligner   | 5     | 50%        |
-| Scrambler | 3     | 30%        |
-
-**Key observations:**
-
-- The gear-vibe cycle is **heavily biased toward aligners** (50%).
-- **Zero scouts** -- same blind-discovery problem as planky defaults.
-- Only 2 miners -- may struggle with resource economy on larger maps.
-- Supports dynamic `change_role` parameter: miners become aligners/scramblers when all communal resources exceed 25, and
-  aligners/scramblers revert to miners when any resource drops below 3.
-- Agents beyond the specified count stay `default` (noop) -- pinky does NOT fill remaining slots automatically.
-
-**Source:** `pinky/policy.py:133-148` (gear cycle), `pinky/policy.py:457-477` (constructor).
-
----
-
-### 2.3 Role_py / CoGsGuard (`metta://policy/role_py`)
+### 2.2 Role_py / CoGsGuard (`metta://policy/role_py`)
 
 **Architecture:** Multi-role vibe system with SmartRoleCoordinator. Dynamic role switching.
 
@@ -141,7 +98,7 @@ assigns roles based on team state:
 
 ---
 
-### 2.4 CoGsGuard V2 (`metta://policy/cogsguard_v2`)
+### 2.3 CoGsGuard V2 (`metta://policy/cogsguard_v2`)
 
 **Architecture:** CoGsGuard base with tuned static default allocation formula.
 
@@ -175,7 +132,7 @@ assigns roles based on team state:
 
 ---
 
-### 2.5 CoGsGuard Control (`metta://policy/cogsguard_control`)
+### 2.4 CoGsGuard Control (`metta://policy/cogsguard_control`)
 
 **Architecture:** Phased commander coordinator with active role reassignment.
 
@@ -202,7 +159,7 @@ assigns roles based on team state:
 
 ---
 
-### 2.6 Wombo (`metta://policy/wombo`)
+### 2.5 Wombo (`metta://policy/wombo`)
 
 **Architecture:** CoGsGuard generalist variant prioritizing multi-junction alignment.
 
@@ -244,7 +201,7 @@ algorithm considering:
 
 ---
 
-### 2.7 Teacher (`metta://policy/teacher`)
+### 2.6 Teacher (`metta://policy/teacher`)
 
 **Architecture:** Wrapper that delegates to Nim CoGsGuard agents with forced initial vibes.
 
@@ -286,12 +243,6 @@ metta://policy/role_py?role_order=aligner,miner,aligner,miner    # Exact sequenc
 metta://policy/role_py?evolution=1                                 # Evolutionary roles
 ```
 
-### Pinky additional params:
-
-```
-metta://policy/pinky?miner=4&aligner=3&scrambler=3&debug=1&change_role=100
-```
-
 ### Planky additional params:
 
 ```
@@ -316,7 +267,6 @@ For a standard 10-agent team:
 | Agent                 | Miner        | Scout   | Aligner | Scrambler | Dynamic? | Notes                                           |
 | --------------------- | ------------ | ------- | ------- | --------- | -------- | ----------------------------------------------- |
 | **planky** (default)  | 4 (40%)      | 0 (0%)  | 2 (20%) | 4 (40%)   | No       | No scouts; denial-heavy                         |
-| **pinky** (gear=10)   | 2 (20%)      | 0 (0%)  | 5 (50%) | 3 (30%)   | Partial  | Aligner-heavy; resource-triggered switching     |
 | **role_py** (default) | 4 (40%)      | 0-2\*   | 0-2\*   | 1 (10%)   | Yes      | 5 dynamic `gear` agents fill gaps               |
 | **cogsguard_v2**      | 5 (50%)      | 1 (10%) | 2 (20%) | 2 (20%)   | Limited  | Balanced static formula                         |
 | **cogsguard_control** | 5-7          | 1-2     | 0-2     | 1-2       | Yes      | Phase-aware; commander reassigns every 40 steps |
@@ -405,8 +355,8 @@ Aggressive junction control with double scouts and generalist role switching.
 
 ## 6. Conclusions
 
-1. **No agent currently uses a theoretically optimal distribution out of the box.** Planky and pinky lack scouts
-   entirely in their defaults. Role_py's defaults are miner-heavy with most agents dynamically assigned.
+1. **No agent currently uses a theoretically optimal distribution out of the box.** Planky lacks scouts entirely in its
+   defaults. Role_py's defaults are miner-heavy with most agents dynamically assigned.
 
 2. **Dynamic role switching outperforms static allocation.** CoGsGuard Control and Wombo (the highest-rated agents in
    machina1 analysis) both use adaptive distributions.

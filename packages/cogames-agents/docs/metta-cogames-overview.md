@@ -130,7 +130,7 @@ class=baseline,proportion=0.5
 
 # URI format (role-based)
 metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
-metta://policy/pinky?miner=4&aligner=2&scrambler=4&scout=0
+metta://policy/role_py?miner=4&aligner=2&scrambler=4&scout=0
 ```
 
 ## 4. CogsGuard Game Mechanics
@@ -237,7 +237,7 @@ Recipe execution:
 - `thinky`, `race_car`, `ladybug` -- Nim-compiled (faster)
 - `role`, `role_py`, `wombo` -- Role-rotation strategies
 - `miner`, `scout`, `aligner`, `scrambler` -- Role specialists
-- `teacher`, `pinky` -- Role assignment meta-policies
+- `teacher` -- Role assignment meta-policy
 
 **Templates** (from cogames):
 

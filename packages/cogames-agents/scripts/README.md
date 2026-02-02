@@ -16,7 +16,7 @@ Runs every registered scripted agent through `cogames scrimmage` and saves per-a
 ./scripts/benchmark_agents.sh -e 20 -s 2000 -m cogsguard_arena.basic -o ./my_results
 
 # Subset of agents
-./scripts/benchmark_agents.sh -a role,pinky,baseline,wombo -e 50
+./scripts/benchmark_agents.sh -a role,baseline,wombo -e 50
 ```
 
 **Options:**
@@ -67,7 +67,7 @@ Fast single-agent eval for development iteration (3 episodes, 500 steps by defau
 ./scripts/quick_eval.sh role
 
 # JSON output
-./scripts/quick_eval.sh pinky --json
+./scripts/quick_eval.sh planky --json
 
 # Open in MettaScope GUI
 ./scripts/quick_eval.sh baseline --gui
@@ -84,7 +84,6 @@ Registered scripted agents (from `cogames-agents` package):
 | -------------------- | ------------------------------- |
 | `role`               | Multi-role Nim CogsGuard policy |
 | `role_py`            | Python multi-role CogsGuard     |
-| `pinky`              | Alternative role ordering       |
 | `planky`             | Plank-focused strategy          |
 | `wombo`              | Alternative multi-role          |
 | `baseline`           | Standard baseline               |

@@ -135,31 +135,6 @@ cogames play -m cogsguard_machina_1.basic \
   -p "metta://policy/planky?stem=10"
 ```
 
-## Comparing Planky vs Pinky
-
-Run both agents on the same mission and compare:
-
-```bash
-# Planky scrimmage
-cogames scrimmage -m cogsguard_machina_1.basic \
-  -p "metta://policy/planky?miner=4&aligner=2&scrambler=4" \
-  --episodes 10
-
-# Pinky scrimmage
-cogames scrimmage -m cogsguard_machina_1.basic \
-  -p "metta://policy/pinky?miner=4&aligner=2&scrambler=4" \
-  --episodes 10
-```
-
-Or head-to-head with `cogames run`:
-
-```bash
-cogames run -m cogsguard_machina_1.basic \
-  -p "metta://policy/planky?miner=4&aligner=2&scrambler=4" \
-  -p "metta://policy/pinky?miner=4&aligner=2&scrambler=4" \
-  --episodes 10
-```
-
 ## Alternative Policy Specification
 
 All of these are equivalent:

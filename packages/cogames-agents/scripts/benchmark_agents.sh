@@ -27,7 +27,6 @@ AGENTS=""
 ALL_AGENTS=(
   role
   role_py
-  pinky
   planky
   wombo
   baseline

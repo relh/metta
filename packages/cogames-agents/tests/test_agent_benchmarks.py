@@ -1,6 +1,6 @@
 """Parameterized benchmark tests for scripted agent variants.
 
-Each agent variant (role_py, pinky, planky, wombo, teacher, baseline, etc.)
+Each agent variant (role_py, planky, wombo, teacher, baseline, etc.)
 is tested for:
 - Importability and class instantiation
 - Short-name registration in the scripted registry
@@ -18,7 +18,6 @@ from cogames_agents.policy.scripted_registry import (
 # All agent variants the issue requires coverage for, plus extras
 CORE_AGENT_NAMES = [
     "role_py",
-    "pinky",
     "planky",
     "wombo",
     "teacher",

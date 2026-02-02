@@ -7,9 +7,9 @@ Blueprint for a leaderboard-winning agent targeting `cogs.aligned.junction.held 
 Cogas uses a **phased goal-tree** architecture, combining Planky's declarative goal decomposition with CogsGuard's
 phase-based state machine and evolution-driven role selection.
 
-**Why not pure behavior-tree (Pinky)?** Pinky's vibe-driven approach lacks explicit precondition reasoning. Agents
-thrash between behaviors when preconditions aren't met (e.g., attempting to align without hearts). Goal-trees naturally
-decompose "align junction" into "have gear AND have hearts AND be adjacent" without custom priority logic.
+**Why not pure behavior-tree?** A vibe-driven approach lacks explicit precondition reasoning. Agents thrash between
+behaviors when preconditions aren't met (e.g., attempting to align without hearts). Goal-trees naturally decompose
+"align junction" into "have gear AND have hearts AND be adjacent" without custom priority logic.
 
 **Why not pure goal-tree (Planky)?** Planky has no phase awareness. It re-evaluates the full goal list every tick, which
 is wasteful when the agent is mid-navigation. Adding phases (BOOTSTRAP, CONTROL, SUSTAIN) gives temporal structure that
@@ -28,7 +28,7 @@ are imperative spaghetti. Goal-tree decomposition inside each phase keeps role l
 ├─────────────────────────────────────┤
 │  GoalEvaluator (per-phase goals)    │  Precondition decomposition
 ├─────────────────────────────────────┤
-│  Navigator + EntityMap + SafetyMgr  │  Shared services (from Planky/Pinky)
+│  Navigator + EntityMap + SafetyMgr  │  Shared services (from Planky)
 └─────────────────────────────────────┘
 ```
 
@@ -347,7 +347,7 @@ accumulation. The catalog tracks:
 3. Implement `PhaseController` with BOOTSTRAP/CONTROL/SUSTAIN transitions
 4. Port Planky's goal-tree evaluator with phase-aware goal lists
 5. Implement role-specific goals (miner, aligner, scrambler, scout)
-6. Reuse Planky's `Navigator`, `EntityMap` and Pinky's `SafetyManager`
+6. Reuse Planky's `Navigator` and `EntityMap`
 
 ### Stage 2: Innovations
 

@@ -87,17 +87,6 @@ loop.
 | Weaknesses   | Inherits all baseline weaknesses. Unclipping is only relevant when enemy scramblers have clipped extractors -- in pure resource gathering it adds overhead. |
 | Machina1 fit | **Poor to moderate**. Useful only in adversarial scenarios. The baseline movement inefficiency dominates performance.                                       |
 
-### Pinky Agent
-
-**Architecture**: Vibe-based role system with per-agent Brain. Roles: miner, scout, aligner, scrambler. URI-configurable
-role distribution.
-
-| Aspect       | Assessment                                                                                                                                                                                        |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Strengths    | Multi-role coordination. Scout discovers map efficiently. Aligner/scrambler handle junction control. Dynamic role switching based on communal resource levels. Gear acquisition from stations.    |
-| Weaknesses   | Role switching logic may thrash on machina1 where resource availability shifts as biome zones are discovered. Navigator service quality depends on map complexity -- maze biomes can confuse BFS. |
-| Machina1 fit | **Moderate**. Role specialization helps, but the brain/service abstraction adds overhead. Works best when tuned via URI params for specific role ratios.                                          |
-
 ### Planky Agent
 
 **Architecture**: Goal-tree hierarchical policy. Each role has a priority-ordered goal list. Goals evaluate
@@ -344,7 +333,6 @@ This would produce generation-over-generation shifts in the role population.
 | tiny_baseline         | Non-viable           | Testing only                      |
 | baseline              | Poor                 | Ablation baseline                 |
 | ladybug_py            | Poor-Moderate        | Adversarial unclipping            |
-| pinky                 | Moderate             | Tunable role experiments          |
 | planky                | Moderate-Good        | Goal-priority research            |
 | role_py (CoGsGuard)   | Good                 | General competitive play          |
 | cogsguard_v2          | Good-Strong          | Balanced default teams            |

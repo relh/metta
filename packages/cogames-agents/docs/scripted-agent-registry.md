@@ -36,7 +36,3 @@ python -c "from cogames_agents.policy.scripted_registry import list_scripted_age
 - `cogsguard_v2` - V2 variant
 - `miner`, `scout`, `aligner`, `scrambler` - Role-specific policies
 - `teacher` - Teacher wrapper over Nim multi-role
-
-## Pinky (Python, CogsGuard)
-
-- `pinky` - Role-count based policy (`?miner=...&scout=...&aligner=...&scrambler=...`)

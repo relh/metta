@@ -97,7 +97,7 @@ def train(
     if teacher is None and use_default_teacher:
         teacher = TeacherConfig(
             mode="supervisor",
-            policy_uri="metta://policy/pinky?miner=4&aligner=2&scrambler=4",
+            policy_uri="metta://policy/role?miner=4&aligner=2&scrambler=4",
             steps=5_500_000_000,
             teacher_led_proportion=0.0,
             anneal_start_step=2_500_000_000,

@@ -22,7 +22,6 @@ Common scripted policy names include:
 - CogsGuard variants: `alignall`, `cogsguard_control`, `cogsguard_targeted`, `cogsguard_v2`
 - CogsGuard roles: `miner`, `scout`, `aligner`, `scrambler`
 - Teacher: `teacher`
-- Pinky: `pinky`
 
 For the full registry snapshot, see `docs/scripted-agent-registry.md`.
 
@@ -40,18 +39,6 @@ Examples:
 ```
 metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
 metta://policy/role_py?role_order=aligner,miner,aligner,miner,scout
-```
-
-Pinky role counts are applied in a different order than CogsGuard:
-
-- Pinky order: miner -> scout -> aligner -> scrambler, and any remaining agents stay default/noop.
-- CogsGuard order: scrambler -> aligner -> miner -> scout, then fills remaining agents with gear.
-
-Examples:
-
-```
-metta://policy/pinky?miner=4&aligner=2&scrambler=4
-metta://policy/pinky?miner=2&scout=2&aligner=1&scrambler=1&debug=1
 ```
 
 ## Recipe usage

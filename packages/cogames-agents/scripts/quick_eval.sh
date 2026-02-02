@@ -6,7 +6,7 @@
 #
 # Examples:
 #   ./scripts/quick_eval.sh role
-#   ./scripts/quick_eval.sh pinky -e 5 -s 500
+#   ./scripts/quick_eval.sh planky -e 5 -s 500
 #   ./scripts/quick_eval.sh baseline --json
 #   ./scripts/quick_eval.sh role -m cogsguard_arena.basic --seed 99
 
@@ -16,7 +16,7 @@ if [[ $# -lt 1 ]] || [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
   echo "Usage: $0 AGENT [OPTIONS]"
   echo ""
   echo "Arguments:"
-  echo "  AGENT              Scripted agent name (e.g. role, pinky, baseline)"
+  echo "  AGENT              Scripted agent name (e.g. role, planky, baseline)"
   echo ""
   echo "Options:"
   echo "  -e EPISODES        Number of episodes (default: 3)"
