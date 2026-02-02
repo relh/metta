@@ -1,6 +1,6 @@
 import
   genny, fidget2/measure,
-  random_agents, thinky_agents, racecar_agents, ladybug_agent, cogsguard_agents,
+  random_agents, thinky_agents, racecar_agents, cogsguard_agents,
   cogsguard_align_all_agents
 
 
@@ -44,12 +44,6 @@ exportRefObject RaceCarPolicy:
     newRaceCarPolicy(string)
   procs:
     stepBatch(RaceCarPolicy, pointer, int, int, int, int, pointer, int, pointer)
-
-exportRefObject LadybugPolicy:
-  constructor:
-    newLadybugPolicy(string)
-  procs:
-    stepBatch(LadybugPolicy, pointer, int, int, int, int, pointer, int, pointer)
 
 exportRefObject CogsguardPolicy:
   constructor:

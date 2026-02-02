@@ -13,8 +13,6 @@ def test_resolve_scripted_agent_uri_known() -> None:
         "cogsguard_control",
         "cogsguard_targeted",
         "cogsguard_v2",
-        "ladybug",
-        "ladybug_py",
         "miner",
         "nim_random",
         "race_car",

@@ -28,8 +28,6 @@ EXTENDED_AGENT_NAMES = [
     "role",
     "thinky",
     "race_car",
-    "ladybug",
-    "ladybug_py",
     "nim_random",
     "alignall",
     "tiny_baseline",

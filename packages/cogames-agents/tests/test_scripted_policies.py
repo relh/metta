@@ -46,12 +46,8 @@ POLICIES_UNDER_TEST: tuple[PolicyUnderTest, ...] = (
     PolicyUnderTest("thinky", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("nim_random", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("race_car", requires_nim=True, supports_supervisor=True),
-    PolicyUnderTest("ladybug", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("role", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("teacher", requires_nim=True, supports_supervisor=True),
-    PolicyUnderTest("baseline"),
-    PolicyUnderTest("ladybug_py"),
-    PolicyUnderTest("role_py"),
     PolicyUnderTest("starter"),
     PolicyUnderTest(
         "cogames_agents.policy.nim_agents.agents.ThinkyAgentsMultiPolicy",
@@ -78,9 +74,7 @@ POLICIES_UNDER_TEST: tuple[PolicyUnderTest, ...] = (
         requires_nim=True,
         supports_supervisor=True,
     ),
-    PolicyUnderTest("cogames_agents.policy.scripted_agent.baseline_agent.BaselinePolicy"),
     PolicyUnderTest("cogames.policy.starter_agent.StarterPolicy"),
-    PolicyUnderTest("cogames_agents.policy.scripted_agent.unclipping_agent.UnclippingPolicy"),
 )
 
 SUPERVISOR_POLICIES: tuple[PolicyUnderTest, ...] = tuple(p for p in POLICIES_UNDER_TEST if p.supports_supervisor)
