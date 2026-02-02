@@ -1,5 +1,6 @@
 import logging
 import uuid
+from pathlib import Path
 
 from metta_alo.job_specs import SingleEpisodeJob
 
@@ -24,6 +25,23 @@ def _resolve_job_id(client: StatsClient, uuid_id: uuid.UUID) -> uuid.UUID:
     raise ValueError(f"No job found for job_id or episode_id: {uuid_id}")
 
 
+def _run_job(job: SingleEpisodeJob, output_dir: str) -> int:
+    job.replay_uri = f"file://{output_dir}/replay.json.z"
+    job.debug_uri = f"file://{output_dir}/debug.zip"
+    job.results_uri = f"file://{output_dir}/results.json"
+    logger.info(f"Running job: {len(job.policy_uris)} policies, seed={job.seed}")
+    logger.info(f"Output directory: {output_dir}")
+
+    result = run_episode(
+        job,
+        upload_replay_uri=job.replay_uri,
+        upload_debug_uri=job.debug_uri,
+        upload_results_uri=job.results_uri,
+    )
+    logger.info(f"Episode finished: {result.steps} steps, rewards={result.rewards}")
+    return 0
+
+
 class SingleEpisodeTool(Tool):
     stats_server_uri: str | None = auto_stats_server_uri()
     output_dir: str = "."
@@ -37,28 +55,36 @@ class SingleEpisodeTool(Tool):
         job_id = _resolve_job_id(client, self.id)
         job_request = client.get_job(job_id)
         job = SingleEpisodeJob.model_validate(job_request.job)
-        job.replay_uri = f"file://{self.output_dir}/replay.json.z"
-        job.debug_uri = f"file://{self.output_dir}/debug.zip"
-        job.results_uri = f"file://{self.output_dir}/results.json"
-        logger.info(f"Fetched job {job_id}: {len(job.policy_uris)} policies, seed={job.seed}")
-        logger.info(f"Output directory: {self.output_dir}")
-
-        result = run_episode(
-            job,
-            upload_replay_uri=job.replay_uri,
-            upload_debug_uri=job.debug_uri,
-            upload_results_uri=job.results_uri,
-        )
-        logger.info(f"Episode finished: {result.steps} steps, rewards={result.rewards}")
-        return 0
+        logger.info(f"Fetched job {job_id}")
+        return _run_job(job, self.output_dir)
 
 
-def repro(id: str, output_dir: str = ".") -> SingleEpisodeTool:
+class SingleEpisodeFileTool(Tool):
+    output_dir: str = "."
+    file: str
+
+    def invoke(self, args: dict[str, str]) -> int:
+        path = Path(self.file).expanduser()
+        if not path.exists():
+            raise FileNotFoundError(f"Job spec file not found: {path}")
+        job = SingleEpisodeJob.model_validate_json(path.read_text())
+        logger.info(f"Loaded job from {path}")
+        return _run_job(job, self.output_dir)
+
+
+def repro(source: str, output_dir: str = ".") -> Tool:
     """
-    ./tools/run.py recipes.experiment.episode_runner.repro id=<job-or-episode-uuid>
+    ./tools/run.py recipes.experiment.episode_runner.repro source=<uuid-or-path-to-job.json>
+
+    You can find a job id at https://observatory.softmax-research.net/episode-jobs, or an episode ID on an episode page
+
+    If you click on the leftmost button on the episode page, you will download its specification: a
+    `job-<job_id>.json` file. You can provide a path to that (or a modified version of it), to this tool, too.
     """
+    if Path(source).expanduser().exists():
+        return SingleEpisodeFileTool(file=source, output_dir=output_dir)
     try:
-        uuid_id = uuid.UUID(id)
+        uuid_id = uuid.UUID(source)
     except ValueError as e:
-        raise ValueError(f"Invalid UUID: {id}") from e
+        raise ValueError(f"'{source}' is not a valid UUID or existing file path") from e
     return SingleEpisodeTool(id=uuid_id, output_dir=output_dir)
