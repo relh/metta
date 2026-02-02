@@ -261,7 +261,7 @@ class PickResourceGoal(Goal):
 def _extractor_recently_failed(ctx: PlankyContext, pos: tuple[int, int]) -> bool:
     """Check if we recently failed to mine from this extractor."""
     failed_step = ctx.blackboard.get(f"mine_failed_{pos}", -9999)
-    return ctx.step - failed_step < 100  # 100 step cooldown - extractors may refill
+    return ctx.step - failed_step < 30  # Short cooldown — come back after depositing
 
 
 class DepositCargoGoal(Goal):
@@ -312,17 +312,6 @@ class DepositCargoGoal(Goal):
 
         dist = _manhattan(ctx.state.position, depot_pos)
         if dist <= 1:
-            if ctx.trace:
-                hub_dbg_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-                hubs = ctx.map.find(type_contains="hub", property_filter=hub_dbg_filter)
-                depot_entity = ctx.map.entities.get(depot_pos)
-                print(
-                    f"[deposit-debug] agent={ctx.agent_id} t={ctx.step} pos={ctx.state.position}"
-                    f" depot={depot_pos} depot_type={depot_entity.type if depot_entity else 'NONE'}"
-                    f" depot_align={depot_entity.properties.get('alignment') if depot_entity else 'N/A'}"
-                    f" cargo={current_cargo} prev={prev_cargo}"
-                    f" hubs={[(p, e.properties.get('alignment')) for p, e in hubs]}"
-                )
             # Adjacent to depot - track attempts
             attempts_key = f"deposit_attempts_{depot_pos}"
             attempts = ctx.blackboard.get(attempts_key, 0) + 1
@@ -356,13 +345,18 @@ class MineResourceGoal(Goal):
     """
 
     name = "MineResource"
-    MAX_ATTEMPTS_PER_EXTRACTOR = 3  # Reduced from 5 - fail faster
+    # How many consecutive bumps without cargo increase before giving up on this extractor.
+    # Keep high — miners should keep tapping as long as inventory is increasing.
+    MAX_ATTEMPTS_PER_EXTRACTOR = 5
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # Stop mining when the collective is well-stocked
+        # When collective is well-stocked, switch to aligner instead of idling
         if _collective_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
-            if ctx.trace:
-                ctx.trace.skip(self.name, "collective resources sufficient, idling")
+            if not ctx.blackboard.get("_miner_converted"):
+                ctx.blackboard["_miner_converted"] = True
+                ctx.blackboard["change_role"] = "aligner"
+                if ctx.trace:
+                    ctx.trace.skip(self.name, "resources sufficient, converting to aligner")
             return True
         return False
 
@@ -414,7 +408,7 @@ class MineResourceGoal(Goal):
                 ctx.blackboard[attempts_key] = attempts
 
                 if attempts > self.MAX_ATTEMPTS_PER_EXTRACTOR:
-                    # Mark as failed permanently for this episode
+                    # Mark as temporarily failed — will retry after cooldown
                     ctx.blackboard[f"mine_failed_{target_pos}"] = ctx.step
                     ctx.blackboard[attempts_key] = 0
                     # Also clear target resource to force re-evaluation

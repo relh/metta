@@ -303,8 +303,8 @@ def _make_goal_list(role: str) -> list[Goal]:
         return [
             SurviveGoal(hp_threshold=15),
             EmergencyMineGoal(),
-            ExploreHubGoal(),
             GetMinerGearGoal(),
+            ExploreHubGoal(),
             PickResourceGoal(),
             DepositCargoGoal(),
             MineResourceGoal(),
@@ -754,7 +754,9 @@ class PlankyPolicy(MultiAgentPolicy):
         self._stats_enabled = bool(stats)
 
         # Resolve defaults: if stem > 0 and miner/aligner/scrambler not explicitly set, zero them
-        if stem > 0:
+        # If ANY explicit role is provided (not -1), treat unset roles as 0 to avoid surprises
+        any_explicit = miner >= 0 or aligner >= 0 or scrambler >= 0 or scout > 0
+        if stem > 0 or any_explicit:
             if miner == -1:
                 miner = 0
             if aligner == -1:
@@ -762,12 +764,10 @@ class PlankyPolicy(MultiAgentPolicy):
             if scrambler == -1:
                 scrambler = 0
         else:
-            if miner == -1:
-                miner = 4
-            if aligner == -1:
-                aligner = 4
-            if scrambler == -1:
-                scrambler = 0
+            # Pure defaults (no explicit roles, no stem)
+            miner = 4
+            aligner = 4
+            scrambler = 0
 
         # Build per-team role distribution
         team_roles: list[str] = []

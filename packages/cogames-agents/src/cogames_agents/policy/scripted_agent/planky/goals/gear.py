@@ -44,7 +44,7 @@ class GetGearGoal(Goal):
         self._bb_last_dist_key = f"{goal_name}_last_dist"
 
     # Minimum collective resource reserve — don't consume below this level
-    RESOURCE_RESERVE = 3
+    RESOURCE_RESERVE = 1
 
     def _collective_can_afford(self, ctx: PlankyContext) -> bool:
         """Check if the collective can afford gear while maintaining reserves."""
@@ -96,16 +96,17 @@ class GetGearGoal(Goal):
         pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
         result = ctx.map.find_nearest(ctx.state.position, type_contains=self._station_type, property_filter=pf)
         if result is None:
-            # Station not discovered yet — navigate toward hub (spawn) where stations are
+            # Station not discovered yet — navigate toward station area (south of hub center)
+            # Stations are placed at hub_center + (5, 0) in the default layout
             from cogames_agents.policy.scripted_agent.planky.policy import SPAWN_POS  # noqa: PLC0415
 
-            hub_dist = _manhattan(ctx.state.position, SPAWN_POS)
+            station_area = (SPAWN_POS[0] + 5, SPAWN_POS[1])
+            area_dist = _manhattan(ctx.state.position, station_area)
             if ctx.trace:
-                ctx.trace.activate(self.name, f"exploring for {self._station_type} (hub dist={hub_dist})")
-            if hub_dist > 3:
-                # Navigate toward hub
-                return ctx.navigator.get_action(ctx.state.position, SPAWN_POS, ctx.map, reach_adjacent=True)
-            # At hub — explore nearby to find the station
+                ctx.trace.activate(self.name, f"exploring for {self._station_type} (station area dist={area_dist})")
+            if area_dist > 2:
+                return ctx.navigator.get_action(ctx.state.position, station_area, ctx.map, reach_adjacent=True)
+            # In station area — explore nearby to find the specific station
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
         station_pos, _ = result
@@ -133,9 +134,14 @@ class GetGearGoal(Goal):
                 ctx.navigator._cached_target = None
                 return ctx.navigator.explore(ctx.state.position, ctx.map)
 
+            action = _move_toward(ctx.state.position, station_pos)
             if ctx.trace:
-                ctx.trace.activate(self.name, f"bump {bump_count}/{self.MAX_BUMPS_AT_STATION}")
-            return _move_toward(ctx.state.position, station_pos)
+                ctx.trace.activate(
+                    self.name,
+                    f"bump {bump_count}/{self.MAX_BUMPS_AT_STATION} "
+                    f"pos={ctx.state.position} station={station_pos} → {action.name}",
+                )
+            return action
 
         # Not adjacent yet - navigate toward station
         ctx.blackboard[self._bb_bump_count_key] = 0

@@ -121,14 +121,14 @@ class AlignJunctionGoal(Goal):
         return ctx.navigator.get_action(ctx.state.position, target, ctx.map, reach_adjacent=True)
 
     def _find_best_target(self, ctx: PlankyContext) -> tuple[int, int] | None:
-        """Find nearest neutral junction, including contested ones."""
+        """Find neutral junction, spreading aligners across different targets by agent_id."""
         pos = ctx.state.position
 
         def recently_failed(p: tuple[int, int]) -> bool:
             failed_step = ctx.blackboard.get(f"align_failed_{p}", -9999)
             return ctx.step - failed_step < self.COOLDOWN_STEPS
 
-        # Find neutral junctions (no AOE filter — aligners go where needed)
+        # Find neutral junctions
         candidates: list[tuple[int, tuple[int, int]]] = []
 
         for jpos, e in ctx.map.find(type_contains="junction"):
@@ -139,17 +139,19 @@ class AlignJunctionGoal(Goal):
                 continue
             candidates.append((_manhattan(pos, jpos), jpos))
 
-        for cpos, e in ctx.map.find(type_contains="junction"):
-            alignment = e.properties.get("alignment")
-            if alignment is not None:
-                continue
-            if recently_failed(cpos):
-                continue
-            candidates.append((_manhattan(pos, cpos), cpos))
-
         if not candidates:
             return None
+
+        # Sort by distance, then use agent_id offset to spread aligners
+        # across different junctions when multiple are available
         candidates.sort()
+        if len(candidates) > 1:
+            idx = ctx.agent_id % len(candidates)
+            # Pick from top 3 nearest (or fewer), offset by agent_id
+            top_n = min(3, len(candidates))
+            idx = ctx.agent_id % top_n
+            return candidates[idx][1]
+
         return candidates[0][1]
 
 

@@ -27,7 +27,7 @@ class GetHeartsGoal(Goal):
         self._min_hearts = min_hearts
 
     # Minimum collective resource reserve — don't consume below this level
-    RESOURCE_RESERVE = 3
+    RESOURCE_RESERVE = 1
 
     def _collective_can_afford_heart(self, ctx: PlankyContext) -> bool:
         s = ctx.state
@@ -78,8 +78,8 @@ class EmergencyMineGoal(Goal):
     """
 
     name = "EmergencyMine"
-    CRITICAL_LOW = 10  # Trigger emergency when any resource below this
-    RECOVERY_THRESHOLD = 20  # Exit emergency when all resources above this
+    CRITICAL_LOW = 3  # Trigger emergency when any resource below this
+    RECOVERY_THRESHOLD = 8  # Exit emergency when all resources above this
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
         # Agents with hearts should use them, not mine
