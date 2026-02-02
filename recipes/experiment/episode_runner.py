@@ -1,3 +1,4 @@
+import json
 import logging
 import uuid
 from pathlib import Path
@@ -31,6 +32,11 @@ def _run_job(job: SingleEpisodeJob, output_dir: str) -> int:
     job.results_uri = f"file://{output_dir}/results.json"
     logger.info(f"Running job: {len(job.policy_uris)} policies, seed={job.seed}")
     logger.info(f"Output directory: {output_dir}")
+
+    config_path = Path(output_dir) / "job_config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(job.model_dump(), indent=2, default=str))
+    logger.info(f"Wrote job config to {config_path}")
 
     result = run_episode(
         job,
