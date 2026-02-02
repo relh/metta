@@ -66,8 +66,37 @@ class ObsParser:
         center_r, center_c = self._obs_hr, self._obs_wr
 
         for tok in obs.tokens:
-            if tok.row() == center_r and tok.col() == center_c:
-                feature_name = tok.feature.name
+            feature_name = tok.feature.name
+            loc = tok.location
+            if loc is None:
+                # Global observations don't have a spatial location.
+                if feature_name == "vibe":
+                    vibe_id = tok.value
+                elif feature_name == "lp:east":
+                    lp_col_offset = tok.value
+                    has_position = True
+                elif feature_name == "lp:west":
+                    lp_col_offset = -tok.value
+                    has_position = True
+                elif feature_name == "lp:south":
+                    lp_row_offset = tok.value
+                    has_position = True
+                elif feature_name == "lp:north":
+                    lp_row_offset = -tok.value
+                    has_position = True
+                elif feature_name.startswith("inv:") and not feature_name.startswith("inv:collective:"):
+                    resource_name = feature_name[4:]
+                    if ":p" in resource_name:
+                        base_name, power_str = resource_name.rsplit(":p", 1)
+                        power = int(power_str)
+                        current = inv.get(base_name, 0)
+                        inv[base_name] = current + tok.value * (256**power)
+                    else:
+                        current = inv.get(resource_name, 0)
+                        inv[resource_name] = current + tok.value
+                continue
+
+            if loc.row == center_r and loc.col == center_c:
                 if feature_name.startswith("inv:"):
                     resource_name = feature_name[4:]
                     # Handle multi-token encoding
@@ -81,7 +110,7 @@ class ObsParser:
                         inv[resource_name] = current + tok.value
                 elif feature_name == "vibe":
                     vibe_id = tok.value
-                # Local position tokens from local_position observation feature
+                # Local position tokens from local_position observation feature (older encodings)
                 elif feature_name == "lp:east":
                     lp_col_offset = tok.value
                     has_position = True
@@ -174,7 +203,11 @@ class ObsParser:
         position_features: dict[tuple[int, int], dict] = {}
 
         for tok in obs.tokens:
-            obs_r, obs_c = tok.row(), tok.col()
+            loc = tok.location
+            if loc is None:
+                continue
+
+            obs_r, obs_c = loc.row, loc.col
             # Skip center cell
             if obs_r == center_r and obs_c == center_c:
                 continue
