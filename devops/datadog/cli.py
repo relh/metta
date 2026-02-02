@@ -79,8 +79,8 @@ def monitors_sync(
     Creates new monitors or updates existing ones to match the definitions in code.
     Monitors are matched by name.
     """
-    from devops.datadog.monitors import get_all_monitor_configs
-    from devops.datadog.monitors_client import DatadogMonitorsClient
+    from devops.datadog.monitors import get_all_monitor_configs  # noqa: PLC0415
+    from devops.datadog.monitors_client import DatadogMonitorsClient  # noqa: PLC0415
 
     configs = get_all_monitor_configs()
 
@@ -112,7 +112,7 @@ def monitors_list(
     ),
 ) -> None:
     """List monitors from Datadog."""
-    from devops.datadog.monitors_client import DatadogMonitorsClient
+    from devops.datadog.monitors_client import DatadogMonitorsClient  # noqa: PLC0415
 
     client = DatadogMonitorsClient()
     monitors = client.list_monitors(name_filter=name_filter)

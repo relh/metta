@@ -18,7 +18,7 @@ def _ensure_mettagrid_mock() -> None:
     """Ensure mettagrid.simulator is importable even when the real package
     has circular-import issues.  Only patches if the real import fails."""
     try:
-        from mettagrid.simulator import Action  # noqa: F401
+        from mettagrid.simulator import Action  # noqa: F401, PLC0415
 
         return  # real import works, nothing to do
     except (ImportError, AttributeError):
@@ -98,7 +98,7 @@ def _ensure_mettagrid_mock() -> None:
 def _ensure_cogames_stubs() -> None:
     """Ensure cogames submodules are importable."""
     try:
-        from cogames.cogs_vs_clips.stations import GEAR_COSTS  # noqa: F401
+        from cogames.cogs_vs_clips.stations import GEAR_COSTS  # noqa: F401, PLC0415
     except (ImportError, AttributeError):
         cvc_mod = sys.modules.get("cogames.cogs_vs_clips.stations")
         if cvc_mod is None:

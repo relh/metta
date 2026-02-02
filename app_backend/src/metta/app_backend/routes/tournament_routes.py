@@ -231,7 +231,7 @@ def create_tournament_router() -> APIRouter:
     @router.get("/configs/{config_id}")
     @timed_http_handler
     async def get_config(config_id: UUID, session: AsyncSession = Depends(get_session)) -> JSONResponse:
-        from metta.app_backend.models.tournament import MettagridEnvConfig
+        from metta.app_backend.models.tournament import MettagridEnvConfig  # noqa: PLC0415
 
         env_config = (await session.execute(select(MettagridEnvConfig).filter_by(id=config_id))).scalar_one_or_none()
         if not env_config:

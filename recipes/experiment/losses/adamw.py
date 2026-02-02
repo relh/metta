@@ -51,7 +51,7 @@ def train_shaped(rewards: bool = True) -> tools.TrainTool:
     This provides easier training with reward shaping and converters enabled.
     """
     # Import and configure the shaped environment from base recipe
-    from recipes.experiment.arena import train_shaped as base_train_shaped
+    from recipes.experiment.arena import train_shaped as base_train_shaped  # noqa: PLC0415
 
     # Get the base shaped training tool
     base_tool = base_train_shaped(rewards=rewards)

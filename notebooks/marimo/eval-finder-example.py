@@ -6,7 +6,7 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
-    import marimo as mo
+    import marimo as mo  # noqa: PLC0415
 
     return (mo,)
 
@@ -53,11 +53,11 @@ def _(mo):
 @app.cell
 def _():
     # Import the eval finder widget
-    from metta.app_backend.clients.scorecard_client import ScorecardClient
-    from notebooks.utils.eval_finder_widget.eval_finder_widget import (
+    from metta.app_backend.clients.scorecard_client import ScorecardClient  # noqa: PLC0415
+    from notebooks.utils.eval_finder_widget.eval_finder_widget import (  # noqa: PLC0415
         EvalFinderWidget,
     )
-    from notebooks.utils.eval_finder_widget.eval_finder_widget.util import (
+    from notebooks.utils.eval_finder_widget.eval_finder_widget.util import (  # noqa: PLC0415
         create_demo_eval_finder_widget,
         fetch_eval_data_for_policies,
     )
@@ -174,7 +174,7 @@ async def _(client):
             return training_run_policies, run_free_policies
 
         except Exception as e:
-            import traceback
+            import traceback  # noqa: PLC0415
 
             print(f"⚠️ Could not fetch policies: {e}")
             print(f"Exception type: {type(e).__name__}")
@@ -356,7 +356,7 @@ async def _(
     run_free_policies,
     training_run_policies,
 ):
-    from notebooks.utils.scorecard_widget.scorecard_widget.ScorecardWidget import (
+    from notebooks.utils.scorecard_widget.scorecard_widget.ScorecardWidget import (  # noqa: PLC0415
         ScorecardWidget,
     )
 

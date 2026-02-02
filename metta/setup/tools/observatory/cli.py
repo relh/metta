@@ -202,7 +202,7 @@ def _get_db_uri() -> str:
     When running directly on macOS (not in a container), 127.0.0.1 works
     because postgres runs on the same machine.
     """
-    from metta.setup.tools.observatory.local_k8s import _is_running_in_container
+    from metta.setup.tools.observatory.local_k8s import _is_running_in_container  # noqa: PLC0415
 
     if _is_running_in_container():
         # Postgres runs on the host's Docker, so use host.docker.internal
@@ -261,7 +261,7 @@ def _process_compose_env() -> dict[str, str]:
     These allow process-compose services to work identically whether running
     directly on Mac or inside a devcontainer.
     """
-    from metta.setup.tools.observatory.local_k8s import (
+    from metta.setup.tools.observatory.local_k8s import (  # noqa: PLC0415
         _get_orbstack_kubeconfig_for_container,
         _is_running_in_container,
     )

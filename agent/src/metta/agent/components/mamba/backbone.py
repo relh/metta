@@ -28,8 +28,8 @@ def _load_wrapper_types() -> Tuple[type, type]:
     if _WRAPPER_TYPES is not None:
         return _WRAPPER_TYPES
     try:
-        from .wrapper import MambaConfig as wrapper_config
-        from .wrapper import MambaWrapperModel as wrapper_model
+        from .wrapper import MambaConfig as wrapper_config  # noqa: PLC0415
+        from .wrapper import MambaWrapperModel as wrapper_model  # noqa: PLC0415
     except ModuleNotFoundError as exc:
         if exc.name == "mamba_ssm":
             raise RuntimeError(

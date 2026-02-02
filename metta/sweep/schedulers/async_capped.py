@@ -70,7 +70,7 @@ class AsyncCappedOptimizingScheduler:
 
     def __init__(self, config: AsyncCappedSchedulerConfig, state: SchedulerState | None = None):
         # Keep local import for slow loading ProteinOptimizer (~500ms)
-        from metta.sweep.optimizer.protein import ProteinOptimizer
+        from metta.sweep.optimizer.protein import ProteinOptimizer  # noqa: PLC0415
 
         self.config = config
         self.optimizer = ProteinOptimizer(config.protein_config)

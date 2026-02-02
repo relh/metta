@@ -26,7 +26,7 @@ def test_causal_conv1d_triton_vs_pytorch_forward():
     if not device.type == "cuda":
         pytest.skip("Triton kernel requires CUDA")
 
-    from cortex.kernels.triton.conv1d import causal_conv1d_triton
+    from cortex.kernels.triton.conv1d import causal_conv1d_triton  # noqa: PLC0415
 
     dtype = torch.float32
     B = 2  # batch size
@@ -100,7 +100,7 @@ def test_causal_conv1d_triton_vs_pytorch_gradients():
     if not device.type == "cuda":
         pytest.skip("Triton kernel requires CUDA")
 
-    from cortex.kernels.triton.conv1d import causal_conv1d_triton
+    from cortex.kernels.triton.conv1d import causal_conv1d_triton  # noqa: PLC0415
 
     dtype = torch.float32
     B = 2  # batch size
@@ -213,7 +213,7 @@ def test_causal_conv1d_triton_error_conditions():
     if not device.type == "cuda":
         pytest.skip("Triton kernel requires CUDA")
 
-    from cortex.kernels.triton.conv1d import causal_conv1d_triton
+    from cortex.kernels.triton.conv1d import causal_conv1d_triton  # noqa: PLC0415
 
     B, T, F, KS = 2, 32, 16, 4
 

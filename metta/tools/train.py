@@ -61,7 +61,7 @@ logger = getRankAwareLogger(__name__)
 
 
 def _default_policy_architecture() -> PolicyArchitecture:
-    from metta.agent.policies.vit import ViTDefaultConfig
+    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
 
     return ViTDefaultConfig()
 
@@ -395,7 +395,7 @@ class TrainTool(Tool):
         # Opportunistically enable flash attention when available
         if os.environ.get("FLASH_ATTENTION") is None:
             try:
-                import flash_attn  # noqa: F401 # type: ignore[import-not-found]
+                import flash_attn  # noqa: F401, PLC0415
             except ImportError:
                 pass
             else:

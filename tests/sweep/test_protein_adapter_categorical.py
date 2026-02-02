@@ -40,7 +40,7 @@ def test_protein_adapter_encodes_observations_and_decodes_suggestions(monkeypatc
     )
 
     # Monkeypatch the Protein class used in the adapter
-    import metta.sweep.optimizer.protein as adapter_module
+    import metta.sweep.optimizer.protein as adapter_module  # noqa: PLC0415
 
     monkeypatch.setattr(adapter_module, "Protein", DummyProtein)
 
@@ -83,7 +83,7 @@ def test_empty_categorical_choices_raises(monkeypatch):
     )
 
     # Dummy Protein to avoid heavy imports
-    import metta.sweep.optimizer.protein as adapter_module
+    import metta.sweep.optimizer.protein as adapter_module  # noqa: PLC0415
 
     monkeypatch.setattr(adapter_module, "Protein", DummyProtein)
 

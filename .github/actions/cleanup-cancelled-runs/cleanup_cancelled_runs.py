@@ -245,7 +245,7 @@ def main():
         print(f"Skipping cancelled runs older than {max_age_days} day(s)")
 
     # Initialize GitHub client
-    from github import Auth  # pyright: ignore[reportMissingImports]
+    from github import Auth  # pyright: ignore[reportMissingImports]  # noqa: PLC0415
 
     g = Github(auth=Auth.Token(github_token))
     repo = g.get_repo(github_repository)

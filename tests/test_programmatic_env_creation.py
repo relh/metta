@@ -206,7 +206,7 @@ class TestTypeIdentityBreakingChange:
 
     def test_cpp_config_builds_without_type_ids(self):
         # Building C++ config should succeed with name-only objects
-        from mettagrid.config.mettagrid_c_config import convert_to_cpp_game_config
+        from mettagrid.config.mettagrid_c_config import convert_to_cpp_game_config  # noqa: PLC0415
 
         objects = {
             "apple": WallConfig(name="apple"),

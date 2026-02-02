@@ -93,12 +93,12 @@ class DebugHarness:
             seed: Random seed
             policy_uri: Policy URI with role counts (e.g., "metta://policy/role?miner=4&scrambler=1")
         """
-        import importlib
+        import importlib  # noqa: PLC0415
 
-        from mettagrid.policy.loader import initialize_or_load_policy
-        from mettagrid.policy.policy_env_interface import PolicyEnvInterface
-        from mettagrid.simulator.rollout import Rollout
-        from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
+        from mettagrid.policy.loader import initialize_or_load_policy  # noqa: PLC0415
+        from mettagrid.policy.policy_env_interface import PolicyEnvInterface  # noqa: PLC0415
+        from mettagrid.simulator.rollout import Rollout  # noqa: PLC0415
+        from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri  # noqa: PLC0415
 
         # Import recipe and get make_env
         recipe = importlib.import_module(recipe_module)

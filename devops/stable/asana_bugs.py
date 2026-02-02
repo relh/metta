@@ -50,7 +50,7 @@ def _get_asana_credentials() -> tuple[Optional[str], Optional[str]]:
     """
     # Try AWS Secrets Manager first
     try:
-        from softmax.aws.secrets_manager import get_secretsmanager_secret
+        from softmax.aws.secrets_manager import get_secretsmanager_secret  # noqa: PLC0415
 
         secret_str = get_secretsmanager_secret("asana/atlas_app", require_exists=False)
         if secret_str:

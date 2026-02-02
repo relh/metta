@@ -112,7 +112,7 @@ def fetch_eval_data_for_policies(
         try:
             asyncio.get_running_loop()
             # We're in a running event loop (Jupyter/Marimo), use nest_asyncio
-            import nest_asyncio
+            import nest_asyncio  # noqa: PLC0415
 
             nest_asyncio.apply()
         except RuntimeError:
@@ -250,7 +250,7 @@ def create_demo_eval_finder_widget():
     Returns:
         EvalFinderWidget instance with demo data loaded
     """
-    from .EvalFinderWidget import EvalFinderWidget
+    from .EvalFinderWidget import EvalFinderWidget  # noqa: PLC0415
 
     # Create widget
     widget = EvalFinderWidget()

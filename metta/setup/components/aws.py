@@ -23,7 +23,7 @@ class AWSSetup(SetupModule):
 
     def check_installed(self) -> bool:
         try:
-            import boto3  # noqa: F401
+            import boto3  # noqa: F401, PLC0415
 
             return True
         except ImportError:
@@ -60,7 +60,7 @@ class AWSSetup(SetupModule):
     def check_connected_as(self) -> str | None:
         try:
             # Keep local import: optional dependency
-            import boto3
+            import boto3  # noqa: PLC0415
 
             sts = boto3.client("sts")
             response = sts.get_caller_identity()

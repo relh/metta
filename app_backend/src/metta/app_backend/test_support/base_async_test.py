@@ -25,8 +25,8 @@ class BaseAsyncTest:
     @pytest_asyncio.fixture(scope="function")
     async def stats_repo(self, db_uri: str) -> AsyncGenerator[MettaRepo, None]:
         """Create a MettaRepo instance with async cleanup for the test database."""
-        from metta.app_backend import config as app_config
-        from metta.app_backend import database
+        from metta.app_backend import config as app_config  # noqa: PLC0415
+        from metta.app_backend import database  # noqa: PLC0415
 
         database._engine = None
         database._session_factory = None
@@ -46,7 +46,7 @@ class BaseAsyncTest:
     def test_app(self, stats_repo: MettaRepo) -> FastAPI:
         """Create a test FastAPI app. stats_repo configures the global DB settings."""
         _ = stats_repo
-        from metta.app_backend.server import create_app
+        from metta.app_backend.server import create_app  # noqa: PLC0415
 
         return create_app()
 

@@ -155,7 +155,7 @@ class ScrambleJunctionGoal(Goal):
         if not enemy_positions:
             return None
 
-        from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS
+        from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS  # noqa: PLC0415
 
         def primary_dir(p: tuple[int, int]) -> str:
             dr = p[0] - SPAWN_POS[0]

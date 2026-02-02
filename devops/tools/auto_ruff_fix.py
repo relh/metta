@@ -406,14 +406,14 @@ Example of the format I need:
 
         except Exception as e:
             print(f"Error applying diff to {file_path}: {e}")
-            import traceback
+            import traceback  # noqa: PLC0415
 
             traceback.print_exc()
             return False
 
     def _text_similar(self, text1, text2, threshold=0.8):
         """Check if two text blocks are similar enough."""
-        import difflib
+        import difflib  # noqa: PLC0415
 
         return difflib.SequenceMatcher(None, text1, text2).ratio() >= threshold
 

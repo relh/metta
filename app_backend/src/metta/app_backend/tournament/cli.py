@@ -25,8 +25,8 @@ def run_commissioner():
 
 
 def roll_season(season_name: str) -> None:
-    from metta.app_backend.database import db_session
-    from metta.app_backend.tournament.scripts.roll_season import roll_season_version
+    from metta.app_backend.database import db_session  # noqa: PLC0415
+    from metta.app_backend.tournament.scripts.roll_season import roll_season_version  # noqa: PLC0415
 
     commissioner_cls = SEASONS.get(season_name)
     if not commissioner_cls:

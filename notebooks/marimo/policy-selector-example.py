@@ -9,7 +9,7 @@ with app.setup:
 
 @app.cell
 def _():
-    from notebooks.utils.policy_selector_widget.policy_selector_widget import (
+    from notebooks.utils.policy_selector_widget.policy_selector_widget import (  # noqa: PLC0415
         create_policy_selector_widget,
     )
 
@@ -42,7 +42,7 @@ def _():
 
 @app.cell
 def _():
-    from metta.app_backend.clients.scorecard_client import ScorecardClient
+    from metta.app_backend.clients.scorecard_client import ScorecardClient  # noqa: PLC0415
 
     client = ScorecardClient()  # production data
     # client = ScorecardClient("http://localhost:8000")  # development mode
@@ -74,7 +74,7 @@ def _(live_widget):
 @app.cell
 async def _(client, live_widget):
     # Access the widget's value to trigger reactivity in Marimo
-    from notebooks.utils.scorecard_widget.scorecard_widget.ScorecardWidget import (
+    from notebooks.utils.scorecard_widget.scorecard_widget.ScorecardWidget import (  # noqa: PLC0415
         ScorecardWidget,
     )
 

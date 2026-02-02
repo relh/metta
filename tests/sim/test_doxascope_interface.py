@@ -180,8 +180,8 @@ class Test05CortexActivationExtractionInterface:
 
     def test_can_find_cortex_in_policy_components(self):
         """Verify we can find CortexTD in a policy's components using Doxascope's pattern."""
-        import torch.nn as nn
-        from cortex import LSTMCellConfig, PassThroughBlockConfig
+        import torch.nn as nn  # noqa: PLC0415
+        from cortex import LSTMCellConfig, PassThroughBlockConfig  # noqa: PLC0415
 
         # Create a real CortexTD component
         stack_config = CortexStackConfig(
@@ -236,9 +236,9 @@ class Test05CortexActivationExtractionInterface:
 
     def test_cortex_state_structure_for_extraction(self):
         """Verify that _rollout_current_state has the structure Doxascope expects for extraction."""
-        import torch
-        from cortex import LSTMCellConfig, PassThroughBlockConfig
-        from tensordict import TensorDict
+        import torch  # noqa: PLC0415
+        from cortex import LSTMCellConfig, PassThroughBlockConfig  # noqa: PLC0415
+        from tensordict import TensorDict  # noqa: PLC0415
 
         # Create a CortexTD component
         stack_config = CortexStackConfig(
@@ -280,7 +280,7 @@ class Test05CortexActivationExtractionInterface:
         assert isinstance(cortex._rollout_current_state, TensorDict), "rollout state should be TensorDict"
 
         # Test: Verify we can extract tensors from it (pattern from doxascope_data.py:487-494)
-        import optree
+        import optree  # noqa: PLC0415
 
         leaves, _ = optree.tree_flatten(cortex._rollout_current_state, namespace="torch")
 

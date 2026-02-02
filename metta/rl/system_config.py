@@ -14,7 +14,7 @@ def guess_device() -> str:
     if platform.system() == "Darwin":
         return "cpu"
 
-    import torch  # Lazy import: torch is heavy and not needed at module load time
+    import torch  # Lazy import: torch is heavy and not needed at module load time  # noqa: PLC0415
 
     if not torch.cuda.is_available():
         return "cpu"

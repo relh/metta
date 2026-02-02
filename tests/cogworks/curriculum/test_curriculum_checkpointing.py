@@ -354,7 +354,7 @@ class TestCheckpointManagerIntegration:
             curriculum_state = curriculum.get_state()
 
             # Save trainer state with curriculum
-            import torch
+            import torch  # noqa: PLC0415
 
             optimizer = torch.optim.Adam([torch.tensor(1.0, requires_grad=True)])
 
@@ -383,7 +383,7 @@ class TestCheckpointManagerIntegration:
             checkpoint_manager = CheckpointManager(run="test_backward_compat", system_cfg=system_config)
 
             # Save trainer state without curriculum
-            import torch
+            import torch  # noqa: PLC0415
 
             optimizer = torch.optim.Adam([torch.tensor(1.0, requires_grad=True)])
 
@@ -445,7 +445,7 @@ class TestTaskRecreation:
 
     def test_lazy_env_cfg_recreation_performance(self):
         """Test that lazy env_cfg recreation improves loading performance."""
-        import time
+        import time  # noqa: PLC0415
 
         # Create curriculum with many tasks
         mg_config = MettaGridConfig(game=GameConfig(num_agents=4))

@@ -134,7 +134,7 @@ def submit_full_curriculum_experiment_all_variants():
 
 def submit_full_curriculum_with_navigation():
     """Submit full curriculum + navigation missions (no variants)."""
-    from recipes.experiment.cvc.mission_variant_curriculum import FULL_CURRICULUM_MISSIONS
+    from recipes.experiment.cvc.mission_variant_curriculum import FULL_CURRICULUM_MISSIONS  # noqa: PLC0415
 
     date = time.strftime(".%m%d")
     nav_mission_names = [m.name for m in NAVIGATION_MISSIONS]
@@ -150,7 +150,7 @@ def submit_full_curriculum_with_navigation():
 
 def submit_full_curriculum_with_navigation_with_variants():
     """Submit full curriculum + navigation missions with all variants."""
-    from recipes.experiment.cvc.mission_variant_curriculum import FULL_CURRICULUM_MISSIONS
+    from recipes.experiment.cvc.mission_variant_curriculum import FULL_CURRICULUM_MISSIONS  # noqa: PLC0415
 
     date = time.strftime(".%m%d")
     nav_mission_names = [m.name for m in NAVIGATION_MISSIONS]

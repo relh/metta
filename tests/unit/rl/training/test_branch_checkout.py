@@ -156,7 +156,7 @@ def test_git_ref_validation():
     assert validate_git_ref("abc123def456789012345678901234567890abcd") == "abc123def456789012345678901234567890abcd"
 
     # Test invalid refs
-    import pytest
+    import pytest  # noqa: PLC0415
 
     with pytest.raises(ValueError):
         validate_git_ref("../etc/passwd")

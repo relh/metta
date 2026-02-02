@@ -37,7 +37,7 @@ REPO_ROOT = _find_repo_root()
 def _load_pr_similarity_module():
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
-    import metta.tools.pr_similarity as pr_similarity  # type: ignore[import-not-found]
+    import metta.tools.pr_similarity as pr_similarity  # type: ignore[import-not-found]  # noqa: PLC0415
 
     return pr_similarity
 
@@ -84,7 +84,7 @@ def summarize_description(description: str, limit: int = 240) -> str:
 
 def build_context() -> ServerContext:
     cache_path = determine_cache_path()
-    from metta.tools.pr_similarity import resolve_cache_paths
+    from metta.tools.pr_similarity import resolve_cache_paths  # noqa: PLC0415
 
     meta_path, vectors_path = resolve_cache_paths(cache_path)
     try:

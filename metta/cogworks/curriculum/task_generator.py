@@ -69,8 +69,8 @@ class TaskGeneratorConfig(Config, Generic[TTaskGenerator]):
         # Local imports for slow loading (>1 sec each) modules
         # Importing these two configs would ideally not require importing these
         # full modules. Anyone reading this is encouraged to fix.
-        from metta.cogworks.curriculum.curriculum import CurriculumConfig
-        from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
+        from metta.cogworks.curriculum.curriculum import CurriculumConfig  # noqa: PLC0415
+        from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig  # noqa: PLC0415
 
         if algorithm_config is None:
             algorithm_config = LearningProgressConfig()

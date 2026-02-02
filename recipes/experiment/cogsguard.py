@@ -103,7 +103,7 @@ def train(
             anneal_start_step=2_500_000_000,
             ppo_begin_step=0,
         )
-    from metta.agent.policies.vit import ViTDefaultConfig
+    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
 
     resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
     trainer_cfg = TrainerConfig()

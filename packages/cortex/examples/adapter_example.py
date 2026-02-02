@@ -108,7 +108,7 @@ def test_freezing_and_training():
     # Freeze all non-adapter blocks
     frozen_count = 0
     for i, block in enumerate(stack.blocks):
-        from cortex.blocks.adapter import AdapterBlock
+        from cortex.blocks.adapter import AdapterBlock  # noqa: PLC0415
 
         if not isinstance(block, AdapterBlock):
             for param in block.parameters():

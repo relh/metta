@@ -49,7 +49,7 @@ def resolve_to_model_class(import_path: str) -> type[BaseModel] | None:
 
     if obj is None:
         try:
-            from metta.common.tool.tool_path import resolve_and_load_tool_maker
+            from metta.common.tool.tool_path import resolve_and_load_tool_maker  # noqa: PLC0415
 
             obj = resolve_and_load_tool_maker(import_path)
         except ImportError:
@@ -103,7 +103,7 @@ def discover_recipe_tools() -> dict[str, str]:
 
     # Find the recipes package
     try:
-        import recipes
+        import recipes  # noqa: PLC0415
 
         recipes_path = Path(recipes.__file__).parent
     except ImportError:

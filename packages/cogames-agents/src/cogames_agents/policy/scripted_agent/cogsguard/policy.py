@@ -1422,7 +1422,7 @@ class CogsguardPolicy(MultiAgentPolicy):
                 use_evolutionary_roles=self._use_evolutionary_roles,
             )
             if self._evolutionary_role_coordinator is not None and not self._evolutionary_hooks_configured:
-                from .behavior_hooks import build_cogsguard_behavior_hooks
+                from .behavior_hooks import build_cogsguard_behavior_hooks  # noqa: PLC0415
 
                 self._evolutionary_role_coordinator.behavior_hooks.update(build_cogsguard_behavior_hooks(impl))
                 self._evolutionary_hooks_configured = True
@@ -1590,10 +1590,10 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
     def _get_role_impl(self, role: Role) -> CogsguardAgentPolicyImpl:
         """Get or create role-specific implementation."""
         if role not in self._role_impls:
-            from .aligner import AlignerAgentPolicyImpl
-            from .miner import MinerAgentPolicyImpl
-            from .scout import ScoutAgentPolicyImpl
-            from .scrambler import ScramblerAgentPolicyImpl
+            from .aligner import AlignerAgentPolicyImpl  # noqa: PLC0415
+            from .miner import MinerAgentPolicyImpl  # noqa: PLC0415
+            from .scout import ScoutAgentPolicyImpl  # noqa: PLC0415
+            from .scrambler import ScramblerAgentPolicyImpl  # noqa: PLC0415
 
             impl_class = {
                 Role.MINER: MinerAgentPolicyImpl,
@@ -1844,10 +1844,10 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
 
     def _get_role_impl(self, role: Role) -> CogsguardAgentPolicyImpl:
         if role not in self._role_impls:
-            from .aligner import AlignerAgentPolicyImpl
-            from .miner import MinerAgentPolicyImpl
-            from .scout import ScoutAgentPolicyImpl
-            from .scrambler import ScramblerAgentPolicyImpl
+            from .aligner import AlignerAgentPolicyImpl  # noqa: PLC0415
+            from .miner import MinerAgentPolicyImpl  # noqa: PLC0415
+            from .scout import ScoutAgentPolicyImpl  # noqa: PLC0415
+            from .scrambler import ScramblerAgentPolicyImpl  # noqa: PLC0415
 
             impl_class = {
                 Role.MINER: MinerAgentPolicyImpl,

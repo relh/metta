@@ -49,7 +49,7 @@ def pytest_configure(config: pytest.Config) -> None:
     active_profile = config.getoption("--metta-profile") or os.environ.get("METTA_TEST_PROFILE")
     BaseMettaSetupTest.active_profile_name = active_profile
     try:
-        from metta.setup.profiles import UserType
+        from metta.setup.profiles import UserType  # noqa: PLC0415
 
         BaseMettaSetupTest.active_user_type = (
             UserType(active_profile) if active_profile in {u.value for u in UserType} else None
@@ -149,7 +149,7 @@ def temp_test_env() -> Generator[Path, None, None]:
         os.environ.pop("METTA_TEST_ENV", None)
 
     # Remove temporary directory
-    import shutil
+    import shutil  # noqa: PLC0415
 
     shutil.rmtree(temp_dir, ignore_errors=True)
 

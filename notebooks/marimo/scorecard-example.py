@@ -6,7 +6,7 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
-    import marimo as mo
+    import marimo as mo  # noqa: PLC0415
 
     return (mo,)
 
@@ -19,11 +19,11 @@ def _(mo):
 
 @app.cell
 def _():
-    import altair as alt
-    import pandas as pd
+    import altair as alt  # noqa: PLC0415
+    import pandas as pd  # noqa: PLC0415
 
-    from metta.app_backend.clients.scorecard_client import ScorecardClient
-    from metta.common.util.collections import group_by
+    from metta.app_backend.clients.scorecard_client import ScorecardClient  # noqa: PLC0415
+    from metta.common.util.collections import group_by  # noqa: PLC0415
 
     client = ScorecardClient()
     return alt, client, group_by, pd

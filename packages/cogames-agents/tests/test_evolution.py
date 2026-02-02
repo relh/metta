@@ -26,7 +26,7 @@ from cogames_agents.policy.evolution.cogsguard.evolution import (
 
 
 def _noop_action(_):
-    from mettagrid.simulator import Action
+    from mettagrid.simulator import Action  # noqa: PLC0415
 
     return Action(name="noop")
 

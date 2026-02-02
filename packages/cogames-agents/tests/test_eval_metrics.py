@@ -280,9 +280,9 @@ class TestParityMetricsInterface:
     """Test that parity_metrics module functions exist and work."""
 
     def test_update_action_counts(self) -> None:
-        from collections import Counter
+        from collections import Counter  # noqa: PLC0415
 
-        from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (
+        from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (  # noqa: PLC0415
             update_action_counts,
         )
 
@@ -295,7 +295,7 @@ class TestParityMetricsInterface:
         assert counts["attack"] == 1
 
     def test_update_move_stats(self) -> None:
-        from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (
+        from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (  # noqa: PLC0415
             update_move_stats,
         )
 
@@ -309,9 +309,9 @@ class TestParityMetricsInterface:
         assert stats["fail"] == 1
 
     def test_diff_action_counts(self) -> None:
-        from collections import Counter
+        from collections import Counter  # noqa: PLC0415
 
-        from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (
+        from cogames_agents.policy.scripted_agent.cogsguard.parity_metrics import (  # noqa: PLC0415
             diff_action_counts,
         )
 

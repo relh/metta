@@ -186,7 +186,7 @@ def set_task_secrets(task: sky.Task) -> None:
     # Also, copying the entire `.netrc` is too much (it could contain other credentials).
 
     # Lazy import to avoid loading wandb at CLI startup
-    import wandb
+    import wandb  # noqa: PLC0415
 
     wandb_password = netrc.netrc(os.path.expanduser("~/.netrc")).hosts["api.wandb.ai"][2]
     if not wandb_password:
@@ -194,7 +194,7 @@ def set_task_secrets(task: sky.Task) -> None:
 
     # Lazy import - app_backend is optional and not available in CI
     try:
-        from metta.app_backend.clients.base_client import get_machine_token
+        from metta.app_backend.clients.base_client import get_machine_token  # noqa: PLC0415
 
         observatory_token = get_machine_token(PROD_STATS_SERVER_URI)
     except ImportError:
@@ -226,7 +226,7 @@ def launch_task(task: sky.Task) -> str:
     dashboard_url = get_server_url() + "/dashboard/jobs"
     print(f"- Or, visit: {yellow(dashboard_url)}")
 
-    from devops.skypilot.utils.job_helpers import get_job_id_from_request_id
+    from devops.skypilot.utils.job_helpers import get_job_id_from_request_id  # noqa: PLC0415
 
     job_id = get_job_id_from_request_id(request_id, wait_seconds=5.0)
     if job_id:

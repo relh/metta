@@ -26,7 +26,7 @@ docker_client = docker_client_fixture()
 
 def pytest_configure(config):
     """Configure test settings before any tests run (works with xdist workers)."""
-    from metta.app_backend import config as app_config
+    from metta.app_backend import config as app_config  # noqa: PLC0415
 
     app_config.settings.RUN_MIGRATIONS = True
     app_config.settings.OBSERVATORY_AUTH_SECRET = "test_secret"
@@ -67,8 +67,8 @@ def db_uri(postgres_container: PostgresContainer) -> str:
 @pytest.fixture(scope="class")
 def stats_repo(db_uri: str) -> MettaRepo:
     """Create a MettaRepo instance with the test database."""
-    from metta.app_backend import config as app_config
-    from metta.app_backend import database
+    from metta.app_backend import config as app_config  # noqa: PLC0415
+    from metta.app_backend import database  # noqa: PLC0415
 
     # Reset the engine singleton and point it at the test database
     database._engine = None
@@ -109,7 +109,7 @@ def fake_aws_credentials(monkeypatch):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
     monkeypatch.setenv("EVAL_S3_BUCKET", "test-bucket")
-    from metta.app_backend.job_runner.config import get_dispatch_config
+    from metta.app_backend.job_runner.config import get_dispatch_config  # noqa: PLC0415
 
     get_dispatch_config.cache_clear()
 
@@ -117,7 +117,7 @@ def fake_aws_credentials(monkeypatch):
 @pytest.fixture(autouse=True)
 def mock_k8s_client(monkeypatch):
     """Prevent any accidental k8s API calls in tests."""
-    from metta.app_backend.job_runner import dispatcher
+    from metta.app_backend.job_runner import dispatcher  # noqa: PLC0415
 
     mock_client = MagicMock()
     monkeypatch.setattr(dispatcher, "get_k8s_client", lambda: mock_client)
@@ -143,8 +143,8 @@ def isolated_db_context(db_uri: str) -> str:
 @pytest.fixture(scope="function")
 def isolated_stats_repo(isolated_db_context: str) -> MettaRepo:
     """Create a MettaRepo instance with an isolated schema."""
-    from metta.app_backend import config as app_config
-    from metta.app_backend import database
+    from metta.app_backend import config as app_config  # noqa: PLC0415
+    from metta.app_backend import database  # noqa: PLC0415
 
     database._engine = None
     database._session_factory = None

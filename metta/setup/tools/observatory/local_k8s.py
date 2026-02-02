@@ -132,7 +132,7 @@ def _get_orbstack_kubeconfig_for_container() -> str | None:
         - Kubeconfig doesn't exist
         - Kubeconfig doesn't have an OrbStack cluster
     """
-    import yaml
+    import yaml  # noqa: PLC0415
 
     if not _is_running_in_container():
         return None
@@ -359,7 +359,7 @@ def _ensure_k3d_cluster() -> None:
         text=True,
     )
     if result.returncode == 0:
-        import json
+        import json  # noqa: PLC0415
 
         clusters = json.loads(result.stdout) if result.stdout.strip() else []
         if any(c.get("name") == K3D_CLUSTER_NAME for c in clusters):

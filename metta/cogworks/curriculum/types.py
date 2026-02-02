@@ -145,7 +145,7 @@ class CurriculumAlgorithm(StatsLogger, ABC):
         self, num_tasks: int, hypers: Optional[CurriculumAlgorithmConfig] = None, initialize_weights: bool = True
     ):
         # Import here to avoid circular import at module level
-        from metta.cogworks.curriculum.curriculum import DiscreteRandomConfig
+        from metta.cogworks.curriculum.curriculum import DiscreteRandomConfig  # noqa: PLC0415
 
         if num_tasks <= 0:
             raise ValueError(f"Number of tasks must be positive. num_tasks {num_tasks}")

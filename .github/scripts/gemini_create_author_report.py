@@ -570,7 +570,7 @@ def main():
     # Import parse_config
     script_dir = Path(__file__).parent.parent.parent / "scripts"
     sys.path.insert(0, str(script_dir))
-    from utils.config import parse_config
+    from utils.config import parse_config  # noqa: PLC0415
 
     # Define required and optional environment variables
     required_vars = [

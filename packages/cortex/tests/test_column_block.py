@@ -71,7 +71,7 @@ def test_router_uniform_init():
     d_hidden = 16
     k = 4
     stack = _stack_with_column(d_hidden=d_hidden, k=k)
-    from cortex import ColumnBlock as _ColumnBlock
+    from cortex import ColumnBlock as _ColumnBlock  # noqa: PLC0415
 
     col = next(b for b in stack.blocks if isinstance(b, _ColumnBlock))
     B2, T2 = 2, 3

@@ -547,7 +547,7 @@ def train_one(
                 and total == 0  # first minibatch only to avoid overhead
                 and (EPOCH_IDX % max(AXONS_PARITY_PROBE, 1) == 0)
             ):
-                import copy
+                import copy  # noqa: PLC0415
 
                 model_a = copy.deepcopy(model).to(device)
                 model_b = copy.deepcopy(model).to(device)

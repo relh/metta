@@ -128,9 +128,9 @@ class MetricSample(BaseModel):
 
     def to_series(self):  # type: ignore[override]
         """Convert to datadog_api_client MetricSeries (import lazily)."""
-        from datadog_api_client.v2.model.metric_intake_type import MetricIntakeType
-        from datadog_api_client.v2.model.metric_point import MetricPoint
-        from datadog_api_client.v2.model.metric_series import MetricSeries
+        from datadog_api_client.v2.model.metric_intake_type import MetricIntakeType  # noqa: PLC0415
+        from datadog_api_client.v2.model.metric_point import MetricPoint  # noqa: PLC0415
+        from datadog_api_client.v2.model.metric_series import MetricSeries  # noqa: PLC0415
 
         # Map our MetricKind to Datadog's MetricIntakeType
         # Note: DISTRIBUTION may not be available in all datadog-api-client versions

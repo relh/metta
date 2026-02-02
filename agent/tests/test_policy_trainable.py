@@ -16,7 +16,7 @@ class SimplePolicy(Policy):
     def __init__(self, policy_env_info: PolicyEnvInterface | None = None):
         if policy_env_info is None:
             # Create a minimal PolicyEnvInterface for testing
-            from mettagrid.config.mettagrid_config import MettaGridConfig
+            from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
             mg_cfg = MettaGridConfig()
             policy_env_info = PolicyEnvInterface.from_mg_cfg(mg_cfg)
@@ -43,7 +43,7 @@ def test_policy_inherits_from_multi_agent_policy():
 
 def test_policy_implements_network_method():
     """Verify Policy implements network() method that returns self."""
-    from mettagrid.config.mettagrid_config import MettaGridConfig
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
     policy = SimplePolicy(policy_env_info)
@@ -55,7 +55,7 @@ def test_policy_implements_network_method():
 
 def test_policy_implements_agent_policy_method():
     """Verify Policy implements agent_policy() method."""
-    from mettagrid.config.mettagrid_config import MettaGridConfig
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
     policy = SimplePolicy(policy_env_info)
@@ -66,7 +66,7 @@ def test_policy_implements_agent_policy_method():
 
 def test_agent_policy_adapter_step():
     """Verify the AgentPolicy adapter can step."""
-    from mettagrid.config.mettagrid_config import MettaGridConfig
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
     policy = SimplePolicy(policy_env_info)
@@ -85,7 +85,7 @@ def test_agent_policy_adapter_step():
 
 def test_agent_policy_adapter_reset():
     """Verify the AgentPolicy adapter can reset."""
-    from mettagrid.config.mettagrid_config import MettaGridConfig
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
     policy = SimplePolicy(policy_env_info)
@@ -97,10 +97,10 @@ def test_agent_policy_adapter_reset():
 
 def test_policy_load_save_delegates_to_network():
     """Verify load/save use torch state dict methods."""
-    import tempfile
-    from pathlib import Path
+    import tempfile  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
 
-    from mettagrid.config.mettagrid_config import MettaGridConfig
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
     policy = SimplePolicy(policy_env_info)

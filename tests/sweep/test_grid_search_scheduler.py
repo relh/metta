@@ -249,7 +249,7 @@ def test_grid_scheduler_eval_throttling():
         ),
     ]
     jobs = scheduler.schedule(runs_train_done, available_training_slots=5)
-    from metta.adaptive.models import JobTypes
+    from metta.adaptive.models import JobTypes  # noqa: PLC0415
 
     # Exactly one eval should be scheduled due to throttle
     eval_jobs = [j for j in jobs if j.type == JobTypes.LAUNCH_EVAL]

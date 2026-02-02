@@ -242,7 +242,7 @@ class Navigator:
         direction_bias: Optional[str] = None,
     ) -> Optional[tuple[int, int]]:
         """BFS to find nearest unexplored cell adjacent to explored free cell."""
-        from collections import deque
+        from collections import deque  # noqa: PLC0415
 
         if direction_bias == "north":
             deltas = [(-1, 0), (0, -1), (0, 1), (1, 0)]

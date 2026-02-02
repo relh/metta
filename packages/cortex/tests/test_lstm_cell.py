@@ -168,7 +168,7 @@ def test_lstm_state_reset():
 @pytest.mark.skipif(not torch.cuda.is_available() or not TRITON_AVAILABLE, reason="Triton backend unavailable")
 def test_lstm_reset_forward_backward_match_backends():
     """Ensure Triton reset behaviour matches PyTorch forward/backward on CUDA."""
-    from cortex.kernels.triton.lstm import lstm_sequence_triton
+    from cortex.kernels.triton.lstm import lstm_sequence_triton  # noqa: PLC0415
 
     torch.manual_seed(1234)
 

@@ -316,7 +316,7 @@ def live_monitor_runs(
 
     # Always use adaptive store
     try:
-        from metta.adaptive.stores.wandb import WandbStore
+        from metta.adaptive.stores.wandb import WandbStore  # noqa: PLC0415
 
         store = WandbStore(entity=entity, project=project)
     except ImportError:
@@ -600,7 +600,7 @@ def cli(
             raise typer.Exit(0) from None
         return
 
-    import wandb
+    import wandb  # noqa: PLC0415
 
     if not wandb.api.api_key:
         typer.echo("Error: WandB API key not found. Please run 'metta install wandb' first.")

@@ -13,7 +13,7 @@ def init_tracing():
     if datadog_config.DD_TRACE_ENABLED:
         if datadog_config.DD_LOGS_INJECTION:
             # Inject trace identifiers into stdlib logging records for log/trace correlation
-            from ddtrace import patch
+            from ddtrace import patch  # noqa: PLC0415
 
             patch(logging=True)
         logger.info(
@@ -28,7 +28,7 @@ def init_tracing():
 
 def trace(name: str):
     def decorator(func):
-        import asyncio
+        import asyncio  # noqa: PLC0415
 
         if asyncio.iscoroutinefunction(func):
 

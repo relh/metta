@@ -26,7 +26,7 @@ class DummyPolicy(Policy):
 
     def __init__(self, policy_env_info: PolicyEnvInterface | None = None) -> None:
         if policy_env_info is None:
-            from mettagrid.config.mettagrid_config import MettaGridConfig
+            from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
             policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
         super().__init__(policy_env_info)

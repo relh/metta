@@ -388,11 +388,11 @@ def test_mlstm_reset_mask_functionality() -> None:
     if not (TRITON_AVAILABLE and device.type == "cuda"):
         pytest.skip("Triton reset-mask checks require CUDA with Triton kernels")
 
-    from cortex.kernels.pytorch.mlstm import (
+    from cortex.kernels.pytorch.mlstm import (  # noqa: PLC0415
         mlstm_chunkwise_simple,
         mlstm_recurrent_step_stabilized_simple,
     )
-    from cortex.kernels.triton.mlstm import mlstm_chunkwise_triton
+    from cortex.kernels.triton.mlstm import mlstm_chunkwise_triton  # noqa: PLC0415
 
     B = 4  # batch size
     T = 98  # sequence length (spans multiple chunks)
@@ -769,8 +769,8 @@ def test_mlstm_reset_mask_functionality() -> None:
     )
 
     # Test 8: mLSTMCell end-to-end with reset mask (sequence vs. step)
-    from cortex.cells.mlstm import mLSTMCell  # local import to avoid circularities
-    from cortex.config import mLSTMCellConfig
+    from cortex.cells.mlstm import mLSTMCell  # local import to avoid circularities  # noqa: PLC0415
+    from cortex.config import mLSTMCellConfig  # noqa: PLC0415
 
     # Use kernel_size=1 to avoid conv-state dependence across timesteps,
     # ensuring step/sequence parity under resets.

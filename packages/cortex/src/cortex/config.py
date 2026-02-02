@@ -131,7 +131,7 @@ class BlockConfig(BaseModel):
             tag = value.get("cell_type")
             if not isinstance(tag, str) or not tag:
                 return value
-            from cortex.cells.registry import get_cell_config_class
+            from cortex.cells.registry import get_cell_config_class  # noqa: PLC0415
 
             cfg_cls = get_cell_config_class(tag)
             return cfg_cls.model_validate(value)
@@ -195,7 +195,7 @@ class AdapterBlockConfig(BlockConfig):
             tag = value.get("block_type")
             if not isinstance(tag, str) or not tag:
                 return value
-            from cortex.blocks.registry import get_block_config_class
+            from cortex.blocks.registry import get_block_config_class  # noqa: PLC0415
 
             cfg_cls = get_block_config_class(tag)
             return cfg_cls.model_validate(value)
@@ -223,7 +223,7 @@ class CortexStackConfig(BaseModel):
             if isinstance(item, Mapping):
                 tag = item.get("block_type")
                 if isinstance(tag, str) and tag:
-                    from cortex.blocks.registry import get_block_config_class
+                    from cortex.blocks.registry import get_block_config_class  # noqa: PLC0415
 
                     cfg_cls = get_block_config_class(tag)
                     out.append(cfg_cls.model_validate(item))
@@ -286,7 +286,7 @@ class ColumnBlockConfig(BlockConfig):
             if isinstance(item, Mapping):
                 tag = item.get("block_type")
                 if isinstance(tag, str) and tag:
-                    from cortex.blocks.registry import get_block_config_class
+                    from cortex.blocks.registry import get_block_config_class  # noqa: PLC0415
 
                     cfg_cls = get_block_config_class(tag)
                     out.append(cfg_cls.model_validate(item))

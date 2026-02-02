@@ -6,7 +6,7 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
-    import marimo as mo
+    import marimo as mo  # noqa: PLC0415
 
     return (mo,)
 
@@ -28,7 +28,7 @@ def _():
     # Optional: confirm you're set up to connect to the services used in this notebook
     # If the command does not run, run `./install.sh` from your terminal
     # Note: Marimo doesn't support IPython magic commands, use subprocess instead if needed
-    import subprocess
+    import subprocess  # noqa: PLC0415
 
     subprocess.run(
         ["metta", "status", "--components=core,system,aws,wandb", "--non-interactive"]
@@ -38,12 +38,12 @@ def _():
 
 @app.cell
 def _():
-    import altair as alt
-    import pandas as pd
+    import altair as alt  # noqa: PLC0415
+    import pandas as pd  # noqa: PLC0415
 
-    from notebooks.utils.metrics import fetch_metrics
-    from notebooks.utils.monitoring_marimo import monitor_training_statuses
-    from notebooks.utils.replays import show_replay
+    from notebooks.utils.metrics import fetch_metrics  # noqa: PLC0415
+    from notebooks.utils.monitoring_marimo import monitor_training_statuses  # noqa: PLC0415
+    from notebooks.utils.replays import show_replay  # noqa: PLC0415
 
     print("Setup complete!")
     return alt, fetch_metrics, monitor_training_statuses, pd, show_replay

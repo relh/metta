@@ -17,15 +17,15 @@ def _resolve_simulations(
     variants: str | Sequence[str] | None = None,
 ) -> list[SimulationConfig]:
     if suite == "cogsguard":
-        from recipes.experiment import cogsguard
+        from recipes.experiment import cogsguard  # noqa: PLC0415
 
         return cogsguard.simulations(variants=variants)
     if suite == "cvc_arena":
-        from recipes.experiment import cvc_arena
+        from recipes.experiment import cvc_arena  # noqa: PLC0415
 
         return cvc_arena.simulations()
     if suite == "arena":
-        from recipes.experiment import arena
+        from recipes.experiment import arena  # noqa: PLC0415
 
         return arena.simulations()
     raise ValueError("Unknown suite. Choose from: arena, cvc_arena, cogsguard")

@@ -32,7 +32,7 @@ class TestProteinOptimizer:
     def test_unsupported_method_validation(self):
         """Test that ProteinConfig only accepts 'bayes' as method."""
         # Try to create a config with an unsupported method
-        from pydantic import ValidationError
+        from pydantic import ValidationError  # noqa: PLC0415
 
         with pytest.raises(ValidationError):
             ProteinConfig(

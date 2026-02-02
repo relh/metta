@@ -36,7 +36,7 @@ class PolicyUnderTest:
 @cache
 def _nim_bindings_available() -> bool:
     try:
-        import cogames_agents.policy.nim_agents.agents as _  # noqa: F401
+        import cogames_agents.policy.nim_agents.agents as _  # noqa: F401, PLC0415
     except ModuleNotFoundError:
         return False
     return True

@@ -54,9 +54,9 @@ class RefereeBase(ABC):
 
     async def get_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, int]]:
         """Returns list of (policy_version_id, score, match_count) sorted by score descending."""
-        from sqlalchemy.orm import selectinload
+        from sqlalchemy.orm import selectinload  # noqa: PLC0415
 
-        from metta.app_backend.database import get_db
+        from metta.app_backend.database import get_db  # noqa: PLC0415
 
         session = get_db()
         matches = list(

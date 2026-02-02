@@ -87,7 +87,7 @@ class ExploreHubGoal(Goal):
         return False
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
-        from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS
+        from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS  # noqa: PLC0415
 
         corner_idx = ctx.blackboard.get("_hub_corner_idx", ctx.agent_id % 4)
         offsets = self.HUB_OFFSETS
@@ -363,7 +363,7 @@ class MineResourceGoal(Goal):
 
 def _find_cogs_depot(ctx: PlankyContext) -> tuple[int, int] | None:
     """Find nearest cogs-aligned depot, prioritizing assembler (at hub)."""
-    from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS
+    from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS  # noqa: PLC0415
 
     pos = ctx.state.position
 

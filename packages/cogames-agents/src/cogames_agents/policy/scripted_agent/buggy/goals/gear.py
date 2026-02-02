@@ -99,7 +99,7 @@ class GetGearGoal(Goal):
         result = ctx.map.find_nearest(ctx.state.position, type=self._station_type)
         if result is None:
             # Station not discovered yet — navigate toward hub (spawn) where stations are
-            from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS
+            from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS  # noqa: PLC0415
 
             hub_dist = _manhattan(ctx.state.position, SPAWN_POS)
             if ctx.trace:

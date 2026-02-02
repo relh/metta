@@ -65,7 +65,7 @@ def test_discounted_sum_cuda_parity(shape_case) -> None:
     device = torch.device("cuda")
     dtype = torch.float32
 
-    from cortex.kernels.cuda.agalite.discounted_sum_cuda import discounted_sum_cuda
+    from cortex.kernels.cuda.agalite.discounted_sum_cuda import discounted_sum_cuda  # noqa: PLC0415
 
     # Run on a non-default stream with a delay to detect stream-unsafe kernel launches.
     x = torch.empty((T, B, R, D), device=device, dtype=dtype)

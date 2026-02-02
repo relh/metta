@@ -108,7 +108,7 @@ def test_custom_cell():
     d_hidden = 64
 
     # Create a recipe mixing LSTM and GRU cells
-    from cortex import LSTMCellConfig
+    from cortex import LSTMCellConfig  # noqa: PLC0415
 
     recipe = CortexStackConfig(
         d_hidden=d_hidden,

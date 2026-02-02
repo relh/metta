@@ -323,8 +323,8 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         next_r, next_c = s.row + dr, s.col + dc
 
         # Check if we can move in that direction
-        from cogames_agents.policy.scripted_agent.pathfinding import is_traversable
-        from cogames_agents.policy.scripted_agent.types import CellType
+        from cogames_agents.policy.scripted_agent.pathfinding import is_traversable  # noqa: PLC0415
+        from cogames_agents.policy.scripted_agent.types import CellType  # noqa: PLC0415
 
         if is_traversable(s, next_r, next_c, CellType):  # type: ignore[arg-type]
             return self._move(direction)

@@ -151,7 +151,7 @@ class AlignJunctionGoal(Goal):
                 return False
             return ctx.step - claim_step <= self.CLAIM_TTL_STEPS
 
-        from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS
+        from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS  # noqa: PLC0415
 
         def primary_dir(p: tuple[int, int]) -> str:
             dr = p[0] - SPAWN_POS[0]

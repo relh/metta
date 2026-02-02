@@ -7,7 +7,7 @@ def test_legacy_cogames_nim_agents_import_path_exists() -> None:
     # Old policy bundles reference this path (pre `cogames-agents` split).
     assert importlib.util.find_spec("cogames.policy.nim_agents") is not None
     assert importlib.util.find_spec("cogames.policy.nim_agents.agents") is not None
-    import cogames.policy.nim_agents  # noqa: F401
-    import cogames.policy.nim_agents.agents as legacy_agents
+    import cogames.policy.nim_agents  # noqa: F401, PLC0415
+    import cogames.policy.nim_agents.agents as legacy_agents  # noqa: PLC0415
 
     assert hasattr(legacy_agents, "ThinkyAgentsMultiPolicy")

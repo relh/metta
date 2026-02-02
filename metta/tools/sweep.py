@@ -316,7 +316,10 @@ class SweepTool(Tool):
         else:
             # GRID_SEARCH scheduler: derive categorical parameters and enumerate
             # Keep local import for slow loading metta.sweep.schedulers.grid_search
-            from metta.sweep.schedulers.grid_search import GridSearchScheduler, GridSearchSchedulerConfig
+            from metta.sweep.schedulers.grid_search import (  # noqa: PLC0415
+                GridSearchScheduler,
+                GridSearchSchedulerConfig,
+            )
 
             # Helper to extract categoricals from search_space if present
             def _extract_categorical_params(params: dict) -> dict:

@@ -386,7 +386,7 @@ def populate_single_episode_duckdb(
     assignments: list[int],
     results: PureSingleEpisodeResult,
 ) -> EpisodeId:
-    from metta.app_backend.job_runner.episode_recording import (
+    from metta.app_backend.job_runner.episode_recording import (  # noqa: PLC0415
         populate_single_episode_duckdb as _populate,
     )
 
@@ -411,7 +411,7 @@ def write_single_episode_to_observatory(
     results: PureSingleEpisodeResult,
     stats_client: StatsClient,
 ) -> EpisodeId:
-    from metta.app_backend.job_runner.episode_recording import (
+    from metta.app_backend.job_runner.episode_recording import (  # noqa: PLC0415
         write_single_episode_to_observatory as _write,
     )
 

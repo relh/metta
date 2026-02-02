@@ -30,9 +30,9 @@ def mlstm_chunkwise_triton(
 ) -> tuple[pt.Tensor, tuple[pt.Tensor, pt.Tensor, pt.Tensor]]:
     """Triton-accelerated chunkwise mLSTM implementation."""
     try:
-        from cortex.kernels.triton.mlstm.torch import mlstm_chunkwise__xl_chunk
+        from cortex.kernels.triton.mlstm.torch import mlstm_chunkwise__xl_chunk  # noqa: PLC0415
     except ImportError:
-        from cortex.kernels.pytorch.mlstm import mlstm_chunkwise_simple
+        from cortex.kernels.pytorch.mlstm import mlstm_chunkwise_simple  # noqa: PLC0415
 
         return mlstm_chunkwise_simple(
             queries=queries,

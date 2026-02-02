@@ -25,7 +25,7 @@ def td_lambda_reverse_scan_pytorch(delta: Tensor, mask_next: Tensor, gamma_lambd
 
 
 def td_lambda_reverse_scan_cuda(delta: Tensor, mask_next: Tensor, gamma_lambda: float) -> Tensor:
-    from cortex.kernels.cuda.agalite.discounted_sum_cuda import discounted_sum_cuda
+    from cortex.kernels.cuda.agalite.discounted_sum_cuda import discounted_sum_cuda  # noqa: PLC0415
 
     discounts = gamma_lambda * mask_next
     batch_size = delta.shape[0]
@@ -37,7 +37,7 @@ def td_lambda_reverse_scan_cuda(delta: Tensor, mask_next: Tensor, gamma_lambda: 
 
 
 def td_lambda_reverse_scan(delta: Tensor, mask_next: Tensor, gamma_lambda: float) -> Tensor:
-    from cortex.utils import select_backend
+    from cortex.utils import select_backend  # noqa: PLC0415
 
     fn = select_backend(
         triton_fn=None,

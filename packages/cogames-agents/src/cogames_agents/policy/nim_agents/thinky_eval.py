@@ -92,7 +92,7 @@ EVALS: List[Tuple[str, str, int]] = [
 
 def _load_all_missions() -> Dict[str, Mission]:
     # Minimal loader: merge all known mission sets
-    from importlib import import_module
+    from importlib import import_module  # noqa: PLC0415
 
     missions: List[Mission] = []
     for mod_name in (
@@ -140,7 +140,7 @@ def _ensure_vibe_supports_gear(env_cfg) -> None:
             change_vibe = env_cfg.game.actions.change_vibe
             has_gear = any(v.name == "gear" for v in change_vibe.vibes)
             if not has_gear:
-                from mettagrid.config.vibes import VIBE_BY_NAME
+                from mettagrid.config.vibes import VIBE_BY_NAME  # noqa: PLC0415
 
                 change_vibe.vibes = list(change_vibe.vibes) + [VIBE_BY_NAME["gear"]]
     except Exception:

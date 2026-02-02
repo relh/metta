@@ -121,8 +121,8 @@ def discover_jobs(suite: Suite | None = None) -> list[JobSpec]:
     """
     _registry.clear()
 
-    import recipes.experiment as experiment_package
-    import recipes.prod as prod_package
+    import recipes.experiment as experiment_package  # noqa: PLC0415
+    import recipes.prod as prod_package  # noqa: PLC0415
 
     for package, prefix in [
         (prod_package, "recipes.prod."),

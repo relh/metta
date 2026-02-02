@@ -169,7 +169,7 @@ def evaluate(run: str = "local.regret_test.1") -> EvaluateTool:
 
 def compare_curricula(enable_detailed_slice_logging: bool = False) -> dict[str, TrainTool]:
     """Create training configs to compare three curricula."""
-    from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
+    from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig  # noqa: PLC0415
 
     arena_tasks = _make_arena_tasks(make_arena_env())
 

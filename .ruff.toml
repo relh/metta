@@ -48,8 +48,9 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 # F: pyflakes
 # B: flake8-bugbear
 # I: isort
+# PLC0415: import-outside-top-level (discourages local imports)
 # See full rule list: https://docs.astral.sh/ruff/rules/
-select = ["E", "F", "B", "I", "TID"]
+select = ["E", "F", "B", "I", "TID", "PLC0415"]
 
 # Rules to explicitly ignore
 # E203: Whitespace before ':' (conflicts with Black)

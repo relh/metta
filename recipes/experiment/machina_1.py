@@ -10,7 +10,7 @@ from metta.rl.training.teacher import TeacherConfig
 
 
 def _apply_full_vibes(env_cfg) -> None:
-    from mettagrid.config import vibes
+    from mettagrid.config import vibes  # noqa: PLC0415
 
     env_cfg.game.vibe_names = [v.name for v in vibes.VIBES]
     change_vibe = getattr(env_cfg.game.actions, "change_vibe", None)
@@ -30,9 +30,9 @@ def train(
     use_default_teacher: bool = False,
 ) -> tools.TrainTool:
     """Train on machina_1.open_world with leaderboard-aligned defaults and single-map eval."""
-    from metta.agent.policies.vit import ViTDefaultConfig
-    from metta.sim.simulation_config import SimulationConfig
-    from recipes.experiment.cogs_v_clips import (
+    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
+    from metta.sim.simulation_config import SimulationConfig  # noqa: PLC0415
+    from recipes.experiment.cogs_v_clips import (  # noqa: PLC0415
         _normalize_variant_names,
         make_training_env,
         train_single_mission,
@@ -95,8 +95,8 @@ def _make_play_sim(
     num_cogs: int = 4,
     variants: Optional[Sequence[str]] = None,
 ):
-    from metta.sim.simulation_config import SimulationConfig
-    from recipes.experiment.cogs_v_clips import _normalize_variant_names, make_training_env
+    from metta.sim.simulation_config import SimulationConfig  # noqa: PLC0415
+    from recipes.experiment.cogs_v_clips import _normalize_variant_names, make_training_env  # noqa: PLC0415
 
     variant_names = _normalize_variant_names(variants=variants)
     env_cfg = make_training_env(
@@ -141,7 +141,7 @@ def train_sweep(
     use_default_teacher: bool = False,
 ) -> tools.TrainTool:
     """Sweep-friendly train with heart_chorus baked in."""
-    from recipes.experiment.cogs_v_clips import _normalize_variant_names
+    from recipes.experiment.cogs_v_clips import _normalize_variant_names  # noqa: PLC0415
 
     base_variants = _normalize_variant_names(initial=["heart_chorus"], variants=variants)
 
@@ -173,8 +173,8 @@ def sweep(
     num_parallel_trials: int = 4,
 ) -> tools.SweepTool:
     """Hyperparameter sweep targeting train_sweep (heart_chorus baked in)."""
-    from metta.sweep.core import make_sweep
-    from recipes.experiment.cogs_v_clips import get_cvc_sweep_search_space
+    from metta.sweep.core import make_sweep  # noqa: PLC0415
+    from recipes.experiment.cogs_v_clips import get_cvc_sweep_search_space  # noqa: PLC0415
 
     search_space = get_cvc_sweep_search_space()
 

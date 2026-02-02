@@ -98,7 +98,7 @@ class FallbackMineGoal(Goal):
     name = "FallbackMine"
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        from .miner import _collective_resources_sufficient
+        from .miner import _collective_resources_sufficient  # noqa: PLC0415
 
         # Stop fallback mining when collective is well-stocked
         if _collective_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
@@ -106,7 +106,7 @@ class FallbackMineGoal(Goal):
         return False
 
     def execute(self, ctx: PlankyContext) -> Action:
-        from .miner import RESOURCE_TYPES, _extractor_recently_failed
+        from .miner import RESOURCE_TYPES, _extractor_recently_failed  # noqa: PLC0415
 
         # If carrying resources, deposit first
         if ctx.state.cargo_total > 0:

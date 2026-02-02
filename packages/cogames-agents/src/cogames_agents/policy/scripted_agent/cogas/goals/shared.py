@@ -87,7 +87,7 @@ class FallbackMineGoal(Goal):
         return False
 
     def execute(self, ctx: CogasContext) -> Action:
-        from .miner import RESOURCE_TYPES, _extractor_recently_failed
+        from .miner import RESOURCE_TYPES, _extractor_recently_failed  # noqa: PLC0415
 
         # If carrying resources, deposit first
         if ctx.state.cargo_total > 0:

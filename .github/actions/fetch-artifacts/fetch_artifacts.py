@@ -122,7 +122,7 @@ class GitHubAPI:
     def download_artifact(self, download_url: str, output_path: Path) -> bool:
         """Download an artifact ZIP file."""
         try:
-            import requests
+            import requests  # noqa: PLC0415
 
             # Use the stored token for download
             headers = {"Authorization": f"Bearer {self.token}"}
@@ -326,7 +326,7 @@ def main():
     # Import parse_config
     script_dir = Path(__file__).parent.parent.parent / "scripts"
     sys.path.insert(0, str(script_dir))
-    from utils.config import parse_config
+    from utils.config import parse_config  # noqa: PLC0415
 
     try:
         required_vars = [

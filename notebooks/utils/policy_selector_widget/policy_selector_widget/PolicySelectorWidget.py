@@ -171,8 +171,8 @@ class PolicySelectorWidget(anywidget.AnyWidget):
                 else:
                     print("🔄 No sync method, falling back to async in thread...")
                     # Fall back to async in thread
-                    import asyncio
-                    import threading
+                    import asyncio  # noqa: PLC0415
+                    import threading  # noqa: PLC0415
 
                     def run_async_search():
                         try:
@@ -185,7 +185,7 @@ class PolicySelectorWidget(anywidget.AnyWidget):
                             return result
                         except Exception as e:
                             print(f"🚨 Error in async search thread: {e}")
-                            import traceback
+                            import traceback  # noqa: PLC0415
 
                             print(traceback.format_exc())
                             # Force update to stop spinner
@@ -203,7 +203,7 @@ class PolicySelectorWidget(anywidget.AnyWidget):
 
             except Exception as e:
                 print(f"🚨 Error in search handler: {e}")
-                import traceback
+                import traceback  # noqa: PLC0415
 
                 print(traceback.format_exc())
                 # Force update to stop spinner
@@ -276,7 +276,7 @@ class PolicySelectorWidget(anywidget.AnyWidget):
 
             except Exception as e:
                 print(f"🚨 Error in search trigger handler: {e}")
-                import traceback
+                import traceback  # noqa: PLC0415
 
                 print(traceback.format_exc())
 
@@ -313,7 +313,7 @@ class PolicySelectorWidget(anywidget.AnyWidget):
                 self.policy_data = list(policies)
 
             except Exception:
-                import traceback
+                import traceback  # noqa: PLC0415
 
                 print(traceback.format_exc())
             finally:
@@ -585,7 +585,7 @@ class PolicySelectorWidget(anywidget.AnyWidget):
 
         except Exception as e:
             print(f"🚨 API search failed: {e}")
-            import traceback
+            import traceback  # noqa: PLC0415
 
             print(traceback.format_exc())
 

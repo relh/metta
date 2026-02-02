@@ -178,7 +178,7 @@ def make_sweep(
         search_space = flat_params
 
     # Keep local imports: SweepSchedulerType, SweepTool are slow loading
-    from metta.tools.sweep import SweepSchedulerType, SweepTool
+    from metta.tools.sweep import SweepSchedulerType, SweepTool  # noqa: PLC0415
 
     protein_goal = goal
     protein_settings = ProteinSettings()
@@ -259,7 +259,7 @@ def grid_search(
         search_space = flat_params
 
     # Keep local imports: SweepSchedulerType, SweepTool are slow loading
-    from metta.tools.sweep import SweepSchedulerType, SweepTool
+    from metta.tools.sweep import SweepSchedulerType, SweepTool  # noqa: PLC0415
 
     scheduler_type = SweepSchedulerType.GRID_SEARCH
 

@@ -50,7 +50,7 @@ def mock_github_api():
 @pytest.fixture
 def clear_pr_cache():
     """Clear the PR cache before and after each test."""
-    from gitta.github import _clear_matched_pr_cache
+    from gitta.github import _clear_matched_pr_cache  # noqa: PLC0415
 
     _clear_matched_pr_cache()
     yield

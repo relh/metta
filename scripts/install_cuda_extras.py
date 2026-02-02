@@ -54,7 +54,7 @@ def ensure_cuda_home() -> None:
         return
 
     try:
-        from torch.utils.cpp_extension import CUDA_HOME as torch_cuda_home
+        from torch.utils.cpp_extension import CUDA_HOME as torch_cuda_home  # noqa: PLC0415
     except Exception:  # pragma: no cover - torch missing or stale
         return
 
@@ -95,7 +95,7 @@ def main() -> int:
         return 0
 
     try:
-        import torch
+        import torch  # noqa: PLC0415
     except ImportError:
         print("[cuda-extras] PyTorch not installed yet; skipping CUDA extras.")
         return 0

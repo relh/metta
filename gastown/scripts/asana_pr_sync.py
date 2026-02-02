@@ -145,7 +145,7 @@ def main() -> None:
     if not token:
         raise RuntimeError("ASANA_TOKEN is required to post comments")
 
-    import asana as asana_sdk
+    import asana as asana_sdk  # noqa: PLC0415
 
     client = asana_client(token)
     stories_api = asana_sdk.StoriesApi(client)

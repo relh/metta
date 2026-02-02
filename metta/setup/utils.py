@@ -93,7 +93,7 @@ def prompt_choice(
         return _simple_prompt_choice(prompt, choices, default, current, non_interactive)
 
     try:
-        from simple_term_menu import TerminalMenu
+        from simple_term_menu import TerminalMenu  # noqa: PLC0415
 
         # Format menu entries with shortcut numbers in brackets
         # This allows both arrow key navigation and direct number input

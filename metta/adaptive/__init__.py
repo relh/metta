@@ -40,7 +40,7 @@ __all__ = [
 def __getattr__(name: str):
     """Dynamically import heavy submodules only when needed."""
     if name == "WandbStore":
-        from metta.adaptive.stores.wandb import WandbStore
+        from metta.adaptive.stores.wandb import WandbStore  # noqa: PLC0415
 
         return WandbStore
     raise AttributeError(name)

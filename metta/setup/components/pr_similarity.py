@@ -84,7 +84,7 @@ class PrSimilaritySetup(SetupModule):
             return
 
         # Keep local import: slow loading (~1000ms)
-        from metta.tools.pr_similarity import API_KEY_ENV
+        from metta.tools.pr_similarity import API_KEY_ENV  # noqa: PLC0415
 
         saved_settings = get_saved_settings()
         if saved_settings.user_type not in {UserType.SOFTMAX, UserType.SOFTMAX_DOCKER}:

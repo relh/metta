@@ -82,7 +82,7 @@ class WandbSetup(SetupModule):
     def check_connected_as(self) -> str | None:
         try:
             # Local import because wandb is heavy, top-level import slows down other metta cli commands
-            import wandb
+            import wandb  # noqa: PLC0415
 
             api = wandb.Api()
             saved_settings = get_saved_settings()
@@ -107,7 +107,7 @@ class WandbSetup(SetupModule):
             )
         if self.is_enabled():
             try:
-                import wandb
+                import wandb  # noqa: PLC0415
 
                 # TODO: let users specify their intended entity and project as part of configuration
                 return dict(

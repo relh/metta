@@ -83,7 +83,7 @@ def test_parse_cli_args_handles_special_cases():
 
 def test_parse_cli_args_rejects_invalid_format():
     """Verify that arguments without '=' are rejected."""
-    import pytest
+    import pytest  # noqa: PLC0415
 
     with pytest.raises(ValueError, match="Invalid argument format"):
         parse_cli_args(["no_equals_sign"])

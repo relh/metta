@@ -190,7 +190,7 @@ class PolicyVersionsResponse(BaseModel):
 
 
 def create_stats_router() -> APIRouter:
-    from metta.app_backend.job_runner.config import get_dispatch_config
+    from metta.app_backend.job_runner.config import get_dispatch_config  # noqa: PLC0415
 
     policy_s3_bucket = get_dispatch_config().POLICY_S3_BUCKET or "observatory-private"
     router = APIRouter(prefix="/stats", tags=["stats"])
@@ -314,7 +314,7 @@ def create_stats_router() -> APIRouter:
     @router.post("/policies/submit/presigned-url")
     @timed_http_handler
     async def get_submit_policy_presigned_url(user: CheckUser) -> PresignedUploadUrlResponse:
-        from botocore.config import Config
+        from botocore.config import Config  # noqa: PLC0415
 
         upload_id = uuid.uuid4()
         s3_key = f"cogames/submissions/{user.id}/{upload_id}.zip"
@@ -348,7 +348,7 @@ def create_stats_router() -> APIRouter:
         result = await _create_policy_version_from_s3_key(name=request.name, user_id=user.id, s3_key=s3_key)
 
         if request.season:
-            from metta.app_backend.tournament.registry import SEASONS
+            from metta.app_backend.tournament.registry import SEASONS  # noqa: PLC0415
 
             if request.season not in SEASONS:
                 raise HTTPException(400, f"Season '{request.season}' not found")
@@ -365,7 +365,7 @@ def create_stats_router() -> APIRouter:
     @router.post("/episodes/bulk_upload/presigned-url")
     @timed_http_handler
     async def get_bulk_upload_presigned_url(user: CheckUser) -> PresignedUploadUrlResponse:
-        from botocore.config import Config
+        from botocore.config import Config  # noqa: PLC0415
 
         upload_id = uuid.uuid4()
         s3_key = f"episodes/{upload_id}.duckdb"
@@ -390,7 +390,7 @@ def create_stats_router() -> APIRouter:
         request: CompleteBulkUploadRequest,
         user: CheckUser,
     ) -> BulkEpisodeUploadResponse:
-        from metta.app_backend.episode_stats_db import (
+        from metta.app_backend.episode_stats_db import (  # noqa: PLC0415
             read_agent_metrics,
             read_agent_policies,
             read_episode_tags,

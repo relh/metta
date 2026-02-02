@@ -36,7 +36,7 @@ class MambaBackboneConfig(ComponentConfig):
     require_stride_multiple_of_eight: bool = True
 
     def make_component(self, env: Optional[Any] = None):  # type: ignore[override]
-        from .backbone import MambaBackboneComponent
+        from .backbone import MambaBackboneComponent  # noqa: PLC0415
 
         return MambaBackboneComponent(config=self, env=env)
 

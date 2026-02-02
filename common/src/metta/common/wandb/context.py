@@ -95,8 +95,8 @@ class WandbContext:
 
         logger.info(f"Initializing W&B run with timeout={self.timeout}s")
 
-        import wandb
-        from wandb.errors import CommError
+        import wandb  # noqa: PLC0415
+        from wandb.errors import CommError  # noqa: PLC0415
 
         try:
             tags = list(self.wandb_config.tags)
@@ -171,7 +171,7 @@ class WandbContext:
     @staticmethod
     def cleanup_run(run: WandbRun | None):
         if run:
-            import wandb
+            import wandb  # noqa: PLC0415
 
             try:
                 wandb.finish()
@@ -203,7 +203,7 @@ class WandbRunAppendContext:
             logger.warning("WandbRunAppendContext requires a run_id to resume a run.")
             return None
 
-        import wandb
+        import wandb  # noqa: PLC0415
 
         os.environ.setdefault("WANDB_DISABLE_CODE", "true")
         os.environ.setdefault("WANDB_DISABLE_GIT", "true")

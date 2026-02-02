@@ -34,7 +34,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 def _supports_mem_eff_path() -> bool:
     try:
-        from causal_conv1d import causal_conv1d_fn  # type: ignore[attr-defined]
+        from causal_conv1d import causal_conv1d_fn  # type: ignore[attr-defined]  # noqa: PLC0415
     except ModuleNotFoundError:
         return False
 
@@ -99,8 +99,8 @@ def train(
     _ensure_cuda_extras_installed()
 
     try:
-        from metta.agent.components.drama.config import DramaWorldModelConfig
-        from metta.agent.policies.drama_policy import DramaPolicyConfig
+        from metta.agent.components.drama.config import DramaWorldModelConfig  # noqa: PLC0415
+        from metta.agent.policies.drama_policy import DramaPolicyConfig  # noqa: PLC0415
     except ModuleNotFoundError as exc:
         if exc.name == "mamba_ssm":
             raise RuntimeError(

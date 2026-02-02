@@ -96,7 +96,7 @@ class PolicyArchitecture(Config):
     @classmethod
     def from_spec(cls, spec: str) -> "PolicyArchitecture":
         """Deserialize an architecture from a string specification."""
-        import ast
+        import ast  # noqa: PLC0415
 
         spec = spec.strip()
         if not spec:
@@ -193,13 +193,13 @@ class Policy(MultiAgentPolicy, nn.Module):
 
     def load_policy_data(self, policy_data_path: str) -> None:
         """Load network weights from file using PyTorch state dict."""
-        import torch
+        import torch  # noqa: PLC0415
 
         self.load_state_dict(torch.load(policy_data_path, map_location=self.device))
 
     def save_policy_data(self, policy_data_path: str) -> None:
         """Save network weights to file using torch.save."""
-        import torch
+        import torch  # noqa: PLC0415
 
         torch.save(self.state_dict(), policy_data_path)
 
@@ -446,7 +446,7 @@ def _component_to_manifest(component: Any) -> dict[str, Any]:
 
 def _load_component(data: Any, context: str, default_class: type | None = None) -> Any:
     """Load a component config from serialized data."""
-    from collections.abc import Mapping
+    from collections.abc import Mapping  # noqa: PLC0415
 
     if not isinstance(data, Mapping):
         if hasattr(data, "model_dump"):
@@ -470,7 +470,7 @@ def _load_component(data: Any, context: str, default_class: type | None = None) 
 
 def _sorted_structure(value: Any) -> Any:
     """Recursively sort dicts by key for deterministic serialization."""
-    from collections.abc import Mapping
+    from collections.abc import Mapping  # noqa: PLC0415
 
     if isinstance(value, Mapping):
         return {key: _sorted_structure(value[key]) for key in sorted(value)}
@@ -481,7 +481,7 @@ def _sorted_structure(value: Any) -> Any:
 
 def _expr_to_dotted(expr) -> str:
     """Convert an AST expression to a dotted class path string."""
-    import ast
+    import ast  # noqa: PLC0415
 
     if isinstance(expr, ast.Name):
         return expr.id

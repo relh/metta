@@ -377,7 +377,7 @@ Return a JSON response with this exact structure:
             return base_name
 
         # Branch exists, append timestamp
-        import datetime
+        import datetime  # noqa: PLC0415
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         new_name = f"{base_name}-{timestamp}"

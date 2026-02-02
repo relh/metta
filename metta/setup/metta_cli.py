@@ -691,7 +691,7 @@ def cmd_gridworks(ctx: typer.Context):
 )
 def cmd_run_monitor(ctx: typer.Context) -> None:
     """Launch the live run monitor CLI without importing it at module load time."""
-    from metta.adaptive import live_run_monitor
+    from metta.adaptive import live_run_monitor  # noqa: PLC0415
 
     live_run_monitor.app(
         prog_name="metta run-monitor",

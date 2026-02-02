@@ -50,7 +50,7 @@ class DramaWorldModelConfig(ComponentConfig):
     pff_cfg: Optional[Dict[str, Any]] = None
 
     def make_component(self, env: Optional[Any] = None):  # type: ignore[override]
-        from .world_model_component import DramaWorldModelComponent
+        from .world_model_component import DramaWorldModelComponent  # noqa: PLC0415
 
         resolved = self
         if env is not None:

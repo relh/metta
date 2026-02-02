@@ -41,7 +41,7 @@ class TestGetGithubToken:
 
     def test_returns_none_when_gh_cli_fails(self):
         with patch("subprocess.run") as mock_run:
-            import subprocess
+            import subprocess  # noqa: PLC0415
 
             mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
             assert get_github_token() is None

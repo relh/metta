@@ -69,7 +69,7 @@ def make_random_maps_curriculum(
     base_env = mission.make_env()
 
     # Use full vibe set to maintain a single action space across train/eval.
-    from mettagrid.config import vibes as vibes_module
+    from mettagrid.config import vibes as vibes_module  # noqa: PLC0415
 
     base_env.game.vibe_names = [v.name for v in vibes_module.VIBES]
     if base_env.game.actions.change_vibe:
@@ -324,7 +324,7 @@ def play_sparse(
     env = mission.make_env()
 
     # Use full vibes to keep action space consistent with eval.
-    from mettagrid.config import vibes as vibes_module
+    from mettagrid.config import vibes as vibes_module  # noqa: PLC0415
 
     env.game.vibe_names = [v.name for v in vibes_module.VIBES]
     if env.game.actions.change_vibe:

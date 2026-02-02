@@ -41,7 +41,7 @@ def _supports_mem_eff_path() -> bool:
     """Return True if the fused causal-conv1d kernels are available."""
 
     try:
-        from causal_conv1d import causal_conv1d_fn  # type: ignore[attr-defined]
+        from causal_conv1d import causal_conv1d_fn  # type: ignore[attr-defined]  # noqa: PLC0415
     except ModuleNotFoundError:
         return False
 
@@ -101,8 +101,8 @@ def train(
     _ensure_cuda_extras_installed()
 
     try:
-        import metta.agent.components.mamba.config as mamba_config
-        from metta.agent.policies.mamba_sliding import MambaSlidingConfig
+        import metta.agent.components.mamba.config as mamba_config  # noqa: PLC0415
+        from metta.agent.policies.mamba_sliding import MambaSlidingConfig  # noqa: PLC0415
     except ModuleNotFoundError as exc:
         if exc.name == "mamba_ssm":
             raise RuntimeError(

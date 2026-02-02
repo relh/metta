@@ -40,7 +40,7 @@ class TestBulkEpisodeUpload:
 
         # Mock S3 download to copy the test file
         async def mock_download(bucket: str, key: str, filename: str):
-            import shutil
+            import shutil  # noqa: PLC0415
 
             shutil.copy(str(db_path), filename)
 
@@ -64,7 +64,7 @@ class TestBulkEpisodeUpload:
 
     async def _create_policy_version(self, stats_repo: MettaRepo) -> uuid.UUID:
         """Helper to create a policy and policy version in the database."""
-        from psycopg.types.json import Jsonb
+        from psycopg.types.json import Jsonb  # noqa: PLC0415
 
         async with stats_repo.connect() as con:
             # Create policy with a unique name

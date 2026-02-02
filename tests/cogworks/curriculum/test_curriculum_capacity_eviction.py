@@ -206,7 +206,7 @@ class TestCurriculumCapacityAndEviction:
 
     def test_learning_progress_eviction_criteria(self):
         """Test that tasks with low learning progress are preferentially evicted."""
-        import random
+        import random  # noqa: PLC0415
 
         # Set fixed seed for reproducible test behavior
         random.seed(42)

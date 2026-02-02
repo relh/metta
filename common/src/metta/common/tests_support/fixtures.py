@@ -10,8 +10,8 @@ def docker_client_fixture():
     def docker_client():
         try:
             # Keep local optional import
-            import docker
-            from docker.errors import DockerException
+            import docker  # noqa: PLC0415
+            from docker.errors import DockerException  # noqa: PLC0415
         except ImportError:
             pytest.skip("Docker is not installed")
 

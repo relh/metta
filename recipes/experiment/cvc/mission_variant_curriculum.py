@@ -302,14 +302,14 @@ def make_curriculum(
                             "protocol with vibes",
                         ]
                     ):
-                        import logging
+                        import logging  # noqa: PLC0415
 
                         logging.debug(
                             f"Skipping incompatible mission-variant combination {mission_name}+{variant_name}: {e}"
                         )
                         continue
                     # For map building errors or other unexpected errors
-                    import logging
+                    import logging  # noqa: PLC0415
 
                     logging.warning(f"Failed to create mission-variant combination {mission_name}+{variant_name}: {e}")
                     continue
@@ -358,12 +358,12 @@ def make_curriculum(
                         "protocol with vibes",
                     ]
                 ):
-                    import logging
+                    import logging  # noqa: PLC0415
 
                     logging.debug(f"Skipping incompatible mission {mission_name}: {e}")
                     continue
                 # For map building errors or other unexpected errors
-                import logging
+                import logging  # noqa: PLC0415
 
                 logging.warning(f"Failed to create mission {mission_name}: {e}")
                 continue
@@ -508,11 +508,11 @@ def _get_policy_action_space(policy_uri: str) -> Optional[int]:
         return None
 
     try:
-        from pathlib import Path
+        from pathlib import Path  # noqa: PLC0415
 
-        from safetensors.torch import load_file as load_safetensors_file
+        from safetensors.torch import load_file as load_safetensors_file  # noqa: PLC0415
 
-        from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
+        from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri  # noqa: PLC0415
 
         spec = policy_spec_from_uri(policy_uri)
         if not spec.data_path:

@@ -56,7 +56,7 @@ class GatedResidualBlock(BaseBlock):
         *,
         resets: ResetMask | None = None,
     ) -> tuple[Tensor, MaybeState]:
-        from tensordict import TensorDict
+        from tensordict import TensorDict  # noqa: PLC0415
 
         # Extract cell state from block state
         cell_key = self.cell.__class__.__name__
@@ -115,7 +115,7 @@ def test_custom_block():
 
     # Build the stack using the standard CortexStack - no custom class needed!
     # The registry system automatically handles our custom block type
-    from cortex.stacks import CortexStack
+    from cortex.stacks import CortexStack  # noqa: PLC0415
 
     stack = CortexStack(recipe)
 

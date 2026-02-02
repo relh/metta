@@ -399,7 +399,7 @@ class MineResourceGoal(Goal):
 
 def _find_cogs_depot(ctx: CogasContext) -> tuple[int, int] | None:
     """Find nearest cogs-aligned depot, prioritizing hub."""
-    from cogames_agents.policy.scripted_agent.cogas.policy import SPAWN_POS
+    from cogames_agents.policy.scripted_agent.cogas.policy import SPAWN_POS  # noqa: PLC0415
 
     pos = ctx.state.position
 

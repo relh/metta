@@ -61,7 +61,7 @@ def _ensure_torch_initialized() -> None:
         return
     _torch_initialized = True
 
-    from metta.rl.torch_init import configure_torch_globally_for_performance
+    from metta.rl.torch_init import configure_torch_globally_for_performance  # noqa: PLC0415
 
     configure_torch_globally_for_performance()
 
@@ -702,7 +702,7 @@ constructor/function vs configuration overrides based on introspection.
     # Lazily initialize torch - only when actually running a tool (not for --dry-run)
     _ensure_torch_initialized()
 
-    from metta.rl.torch_init import configure_torch_for_determinism, seed_everything_distributed_aware
+    from metta.rl.torch_init import configure_torch_for_determinism, seed_everything_distributed_aware  # noqa: PLC0415
 
     seed_everything_distributed_aware(tool_cfg.system.seed)
     if tool_cfg.system.torch_deterministic:
