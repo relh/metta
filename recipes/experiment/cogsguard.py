@@ -97,8 +97,8 @@ def train(
     layout: _CogsGuardLayout = "machina_1",
     use_default_teacher: bool = False,
 ) -> tools.TrainTool:
-    if teacher is None and use_default_teacher:
-        teacher = TeacherConfig(
+    if use_default_teacher:
+        default_teacher = TeacherConfig(
             mode="supervisor",
             policy_uri="metta://policy/role?miner=4&aligner=2&scrambler=4",
             steps=5_500_000_000,
@@ -106,6 +106,10 @@ def train(
             anneal_start_step=2_500_000_000,
             ppo_begin_step=0,
         )
+        if teacher is None:
+            teacher = default_teacher
+        else:
+            teacher = default_teacher.model_copy(update=teacher.model_dump(exclude_unset=True), deep=True)
     from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
 
     resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
