@@ -149,6 +149,11 @@ def run_episode(
             with profiler_ctx:
                 stdout, stderr = proc.communicate()
 
+            if stdout:
+                logger.info("Episode runner stdout:\n%s", stdout.rstrip())
+            if stderr:
+                logger.info("Episode runner stderr:\n%s", stderr.rstrip())
+
             if proc.returncode != 0:
                 if proc.returncode < 0:
                     signal_num = -proc.returncode
