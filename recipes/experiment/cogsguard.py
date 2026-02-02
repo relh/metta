@@ -11,6 +11,7 @@ from typing import Literal, Optional, Sequence
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.mission import CvCMission
+from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
 from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -56,7 +57,9 @@ def make_env(
     layout: _CogsGuardLayout = "machina_1",
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
-    return _make_cogsguard_mission(layout=layout, num_agents=num_agents, max_steps=max_steps).make_env()
+    env = _make_cogsguard_mission(layout=layout, num_agents=num_agents, max_steps=max_steps).make_env()
+    apply_reward_variants(env, variants=variants)
+    return env
 
 
 def make_curriculum(
