@@ -206,9 +206,9 @@ class CommissionerBase(ABC):
                 f" match_combos={len(match_counts)} (rss={_rss_mb()})"
             )
 
-            requests = referee.get_matches_to_schedule(players, match_counts)
+            requests = referee.get_matches_to_schedule(players, match_counts, limit=slots_available)
             logger.info(f"[{self.season_name}] pool={pool_name} matches_to_schedule={len(requests)}")
-            for req in requests[:slots_available]:
+            for req in requests:
                 success = await self._create_and_dispatch_match(pool.id, req)
                 if success:
                     total_scheduled += 1

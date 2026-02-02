@@ -48,6 +48,7 @@ class RefereeBase(ABC):
         self,
         players: list[PoolPlayer],
         match_counts: MatchCounts,
+        limit: int = 0,
     ) -> list[MatchRequest]:
         pass
 

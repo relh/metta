@@ -19,6 +19,7 @@ class PairingRefereeBase(RefereeBase):
         self,
         players: list[PoolPlayer],
         match_counts: MatchCounts,
+        limit: int = 0,
     ) -> list[MatchRequest]:
         pending: list[tuple[int, UUID, UUID, list[int], int]] = []
         player_ids = [p.id for p in players]
@@ -41,6 +42,8 @@ class PairingRefereeBase(RefereeBase):
                         completed += 1
 
         pending.sort(key=lambda x: x[0])
+        if limit > 0:
+            pending = pending[:limit]
         seed = 42
         episode_tags_base = {"match_type": "pairing"}
         if self.game_tag:

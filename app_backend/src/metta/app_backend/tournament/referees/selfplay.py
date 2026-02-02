@@ -16,6 +16,7 @@ class SelfPlayRefereeBase(RefereeBase):
         self,
         players: list[PoolPlayer],
         match_counts: MatchCounts,
+        limit: int = 0,
     ) -> list[MatchRequest]:
         assignments = tuple([0] * self.num_agents)
         requests: list[MatchRequest] = []
@@ -45,6 +46,8 @@ class SelfPlayRefereeBase(RefereeBase):
                         skip_replay=self.skip_replay,
                     )
                 )
+                if limit > 0 and len(requests) >= limit:
+                    return requests
 
         return requests
 
