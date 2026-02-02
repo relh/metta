@@ -13,6 +13,11 @@ from metta.adaptive.models import JobDefinition, JobTypes, RunInfo
 class TestAdaptiveController:
     """Test the core adaptive experiment controller."""
 
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch):
+        """Prevent real sleeps in the controller loop."""
+        monkeypatch.setattr("metta.adaptive.adaptive_controller.time.sleep", lambda _s: None)
+
     @pytest.fixture
     def mock_scheduler(self):
         """Mock scheduler that returns controllable job lists."""

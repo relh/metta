@@ -2,9 +2,14 @@
 
 These tests verify that launch.py can parse arguments and validate configurations
 without actually launching jobs.
+
+``_validate_run_tool`` spawns a ``uv run tools/run.py --dry-run`` subprocess which
+takes ~7 s per call.  Since run_tool validation is already covered by its own
+tests (``tests/tools/test_run_tool_exit_codes.py``), we mock it here so that
+launch-specific logic is exercised without the subprocess overhead.
 """
 
-from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
@@ -13,11 +18,8 @@ from devops.skypilot.launch import app
 
 runner = CliRunner(mix_stderr=False)
 
-
-def get_launch_script_path() -> Path:
-    """Get path to launch.py script."""
-    # Assumes we're in repo root when running tests
-    return Path("devops/skypilot/launch.py")
+# Patch target for the subprocess-spawning validator inside launch.py.
+_VALIDATE_PATCH = patch("devops.skypilot.launch._validate_run_tool", return_value=True)
 
 
 def test_launch_dry_run_success():
@@ -31,16 +33,16 @@ def test_launch_dry_run_success():
     5. Script gets far enough to display job summary
     """
 
-    # Run with --dry-run and --skip-git-check (which also skips GitHub API calls)
-    result = runner.invoke(
-        app,
-        [
-            "cogsguard.train",
-            "run=test_dry_run",
-            "--dry-run",
-            "--skip-git-check",
-        ],
-    )
+    with _VALIDATE_PATCH:
+        result = runner.invoke(
+            app,
+            [
+                "cogsguard.train",
+                "run=test_dry_run",
+                "--dry-run",
+                "--skip-git-check",
+            ],
+        )
 
     # Should exit cleanly with code 0
     assert result.exit_code == 0, f"Expected exit code 0, got {result.exit_code}\nstderr: {result.stderr}"
@@ -61,17 +63,17 @@ def test_launch_dry_run_success():
 
 def test_launch_two_token_syntax():
     """Test that launch.py supports two-token syntax like 'train cogsguard'."""
-    # Test two-token syntax
-    result = runner.invoke(
-        app,
-        [
-            "train",
-            "cogsguard",
-            "run=test_two_token",
-            "--dry-run",
-            "--skip-git-check",
-        ],
-    )
+    with _VALIDATE_PATCH:
+        result = runner.invoke(
+            app,
+            [
+                "train",
+                "cogsguard",
+                "run=test_two_token",
+                "--dry-run",
+                "--skip-git-check",
+            ],
+        )
 
     # Should exit cleanly
     assert result.exit_code == 0, f"Expected exit code 0, got {result.exit_code}\nstderr: {result.stderr}"
@@ -89,16 +91,16 @@ def test_launch_invalid_run_name():
     - Contain only letters, numbers, dashes, underscores, or dots
     - End with a letter or number
     """
-    # Run name starting with number should fail
-    result = runner.invoke(
-        app,
-        [
-            "cogsguard.train",
-            "run=123invalid",
-            "--dry-run",
-            "--skip-git-check",
-        ],
-    )
+    with _VALIDATE_PATCH:
+        result = runner.invoke(
+            app,
+            [
+                "cogsguard.train",
+                "run=123invalid",
+                "--dry-run",
+                "--skip-git-check",
+            ],
+        )
 
     # Should fail validation
     assert result.exit_code != 0, "Expected non-zero exit code for invalid run name"
@@ -112,7 +114,6 @@ def test_launch_invalid_run_name():
 
 def test_launch_invalid_module_path():
     """Test that launch.py validates module paths."""
-    # Use a module path that doesn't exist
     result = runner.invoke(
         app,
         [
@@ -129,16 +130,16 @@ def test_launch_invalid_module_path():
 
 def test_launch_dump_config():
     """Test that launch.py can dump configuration without launching."""
-    # Test YAML dump
-    result = runner.invoke(
-        app,
-        [
-            "cogsguard.train",
-            "run=test_dump",
-            "--dump-config=yaml",
-            "--skip-git-check",
-        ],
-    )
+    with _VALIDATE_PATCH:
+        result = runner.invoke(
+            app,
+            [
+                "cogsguard.train",
+                "run=test_dump",
+                "--dump-config=yaml",
+                "--skip-git-check",
+            ],
+        )
 
     # Should not fail (exit code 0 or None since it's just dumping config)
     # Note: --dump-config doesn't explicitly call sys.exit(), so check for clean execution

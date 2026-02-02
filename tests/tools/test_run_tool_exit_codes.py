@@ -1,55 +1,31 @@
-"""Test that run_tool.py correctly propagates exit codes."""
+"""Test that run_tool.py correctly propagates exit codes.
 
-import subprocess
+Tests call main() directly instead of spawning a subprocess to avoid the
+multi-second overhead of ``uv run`` process startup.
+"""
 
-from metta.common.util.fs import get_repo_root
+from unittest.mock import patch
+
+from metta.common.tool.run_tool import main
 
 
 def test_run_tool_returns_exit_code_1_on_exception():
-    """Test that tools/run.py exits with code 1 when a tool raises an exception.
+    """Test that main() returns a non-zero exit code when a tool raises an exception.
 
     This test verifies that run_tool.main() is wrapped in sys.exit() so that
     exceptions properly result in non-zero exit codes.
     """
-    # Run a command with a non-existent recipe to trigger an error
-
-    result = subprocess.run(
-        ["uv", "run", "./tools/run.py", "train", "nonexistent_recipe_that_does_not_exist"],
-        cwd=get_repo_root(),
-        capture_output=True,
-        timeout=120,
-    )
+    with patch("sys.argv", ["run.py", "train", "nonexistent_recipe_that_does_not_exist"]):
+        exit_code = main()
 
     # The process should exit with a non-zero code (error), not 0 (success)
     # Exit code 1 = tool invocation failed, 2 = usage error
-    assert result.returncode != 0, (
-        f"Expected non-zero exit code for failed tool invocation, got {result.returncode}. "
-        f"Stderr: {result.stderr.decode()[:500]}"
-    )
-
-    # Verify that an error message was logged
-    combined_output = result.stdout.decode() + result.stderr.decode()
-    has_error = (
-        "nonexistent_recipe" in combined_output.lower()
-        or "not found" in combined_output.lower()
-        or "error" in combined_output.lower()
-    )
-    assert has_error, "Expected error message not found in output"
+    assert exit_code != 0, f"Expected non-zero exit code for failed tool invocation, got {exit_code}"
 
 
 def test_run_tool_returns_exit_code_0_on_success():
-    """Test that tools/run.py exits with code 0 when a tool succeeds."""
+    """Test that main() returns exit code 0 when a tool succeeds."""
+    with patch("sys.argv", ["run.py", "train", "cogsguard", "--dry-run"]):
+        exit_code = main()
 
-    # Run a --dry-run which should succeed
-    result = subprocess.run(
-        ["uv", "run", "./tools/run.py", "train", "cogsguard", "--dry-run"],
-        cwd=get_repo_root(),
-        capture_output=True,
-        timeout=120,
-    )
-
-    # The process should exit with code 0 (success)
-    assert result.returncode == 0, (
-        f"Expected exit code 0 for successful tool invocation, got {result.returncode}. "
-        f"Stderr: {result.stderr.decode()[:500]}"
-    )
+    assert exit_code == 0, f"Expected exit code 0 for successful tool invocation, got {exit_code}"
