@@ -14,7 +14,7 @@ export const JobsTable: FC<{ jobs: JobRequest[] }> = ({ jobs }) => {
         <TH>Tags</TH>
         <TH style={{ width: 280 }}>Timeline</TH>
         <TH>Result</TH>
-        <TH style={{ width: 50 }}>Logs</TH>
+        <TH style={{ width: 100 }}>Actions</TH>
       </TableHeader>
       <TableBody>
         {jobs.map((job) => (

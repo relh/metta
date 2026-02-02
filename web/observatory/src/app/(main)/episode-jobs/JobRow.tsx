@@ -1,5 +1,5 @@
 'use client'
-import { FC, useRef, useState } from 'react'
+import { FC, useCallback, useRef, useState } from 'react'
 
 import { StyledLink } from '@/components/StyledLink'
 import { TD, TR } from '@/components/Table'
@@ -50,6 +50,26 @@ const Tags: FC<{ tags: Record<string, string> }> = ({ tags }) => {
         </div>
       )}
     </div>
+  )
+}
+
+const CopyReproButton: FC<{ jobId: string }> = ({ jobId }) => {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = useCallback(() => {
+    const cmd = `./tools/run.py recipes.experiment.episode_runner.repro id=${jobId}`
+    navigator.clipboard.writeText(cmd)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }, [jobId])
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="text-gray-500 hover:text-gray-800 text-xs bg-transparent border-none cursor-pointer p-0 whitespace-nowrap"
+      title="Copy local repro command"
+    >
+      {copied ? 'Copied!' : 'Repro'}
+    </button>
   )
 }
 
@@ -124,16 +144,19 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
         )}
       </TD>
       <TD>
-        {(job.status === 'completed' || job.status === 'failed') && (
-          <a
-            href={`/api/jobs/${job.id}/logs`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:underline text-xs"
-          >
-            Logs
-          </a>
-        )}
+        <div className="flex gap-2 items-center">
+          {(job.status === 'completed' || job.status === 'failed') && (
+            <a
+              href={`/api/jobs/${job.id}/logs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline text-xs"
+            >
+              Logs
+            </a>
+          )}
+          <CopyReproButton jobId={job.id} />
+        </div>
       </TD>
     </TR>
   )
