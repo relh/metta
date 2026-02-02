@@ -36,7 +36,12 @@
       "Bash(gh run view:*)",
       "Bash(gh run list:*)"
     ],
-    "deny": []
+    "deny": [
+      "Read(doc/docs/overview.md)",
+      "Read(app_backend/src/metta/app_backend/metrics/data_flow.md)",
+      "Read(app_backend/src/metta/app_backend/metrics/metrics_design.md)",
+      "Read(app_backend/src/metta/app_backend/metrics/schema_reference.md)"
+    ]
   },
   "hooks": {
     "SessionStart": [
