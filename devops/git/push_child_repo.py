@@ -10,6 +10,7 @@ Usage:
     uv run devops/git/push_child_repo.py <repo>
     uv run devops/git/push_child_repo.py <repo> --dry-run
     uv run devops/git/push_child_repo.py <repo> --yes  # Skip confirmations
+    uv run devops/git/push_child_repo.py <repo> --target-branch test  # Push to test branch
 
 Assumes any repo to publish is in packages/<repo>.
 """
@@ -18,15 +19,60 @@ import argparse
 import sys
 from pathlib import Path
 
+import tomlkit
+
 import gitta as git
 from metta.common.util.constants import METTA_GITHUB_ORGANIZATION
 
+# Packages synced to public repos; workspace deps are replaced with git sources
+PUBLIC_PACKAGES = {"mettagrid", "cogames", "cogames-agents"}
 
-def get_remote_url(package_name: str) -> str:
+
+def get_remote_url(package_name: str, *, use_https: bool = False) -> str:
+    if use_https:
+        return f"https://github.com/{METTA_GITHUB_ORGANIZATION}/{package_name}.git"
     return f"git@github.com:{METTA_GITHUB_ORGANIZATION}/{package_name}.git"
 
 
-def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool = False):
+def transform_pyproject_for_external(filtered_path: Path) -> bool:
+    """Replace workspace deps with git sources. Raises ValueError for unknown deps."""
+    pyproject_path = filtered_path / "pyproject.toml"
+    if not pyproject_path.exists():
+        return False
+
+    content = pyproject_path.read_text()
+    doc = tomlkit.parse(content)
+
+    sources = doc.get("tool", {}).get("uv", {}).get("sources", {})
+    if not sources:
+        return False
+
+    workspace_deps = [name for name, config in sources.items() if isinstance(config, dict) and config.get("workspace")]
+    if not workspace_deps:
+        return False
+
+    unknown_deps = set(workspace_deps) - PUBLIC_PACKAGES
+    if unknown_deps:
+        raise ValueError(
+            f"Unknown workspace dependencies: {unknown_deps}. Add them to PUBLIC_PACKAGES if they should be synced."
+        )
+
+    for dep_name in workspace_deps:
+        sources[dep_name] = tomlkit.inline_table()
+        sources[dep_name]["git"] = get_remote_url(dep_name, use_https=True)
+
+    pyproject_path.write_text(tomlkit.dumps(doc))
+    git.run_git_in_dir(filtered_path, "add", "pyproject.toml")
+    git.run_git_in_dir(
+        filtered_path,
+        "commit",
+        "--amend",
+        "--no-edit",
+    )
+    return True
+
+
+def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool = False, target_branch: str = "main"):
     """Filter and push repository subset to configured remote."""
 
     # Assume all packages are in packages/<repo_name>
@@ -48,12 +94,16 @@ def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool 
         print(f"Filter failed: {e}")
         sys.exit(1)
 
-    # Step 2: Show what we got
+    # Step 2: Transform pyproject.toml for external use
+    if transform_pyproject_for_external(filtered_path):
+        print("Transformed pyproject.toml: replaced workspace sources with external sources")
+
+    # Step 3: Show what we got
     files = git.get_file_list(filtered_path)
     commits = git.get_commit_count(filtered_path)
     print(f"Result: {len(files)} files, {commits} commits")
 
-    # Step 3: Safety checks before push
+    # Step 4: Safety checks before push
     try:
         current_origin = git.run_git("remote", "get-url", "origin").strip()
         if current_origin and remote_url.rstrip("/").rstrip(".git") == current_origin.rstrip("/").rstrip(".git"):
@@ -64,7 +114,7 @@ def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool 
     except Exception:
         pass  # No origin is fine
 
-    # Step 4: Find package-specific tags
+    # Step 5: Find package-specific tags
     tag_pattern = f"{package_name}-*"
     try:
         matching_tags = git.run_git_in_dir(filtered_path, "tag", "--list", tag_pattern).strip().splitlines()
@@ -80,8 +130,8 @@ def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool 
     else:
         print(f"\nNo tags matching pattern '{tag_pattern}' found")
 
-    # Step 5: Push (with confirmations)
-    print(f"\n{'DRY RUN: ' if dry_run else ''}Push to {remote_url}")
+    # Step 6: Push (with confirmations)
+    print(f"\n{'DRY RUN: ' if dry_run else ''}Push to {remote_url} (branch: {target_branch})")
 
     if not dry_run and not skip_confirmation:
         print("\nThis will FORCE PUSH and replace the target repository!")
@@ -94,16 +144,16 @@ def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool 
             print("Aborted")
             sys.exit(1)
 
-    # Step 6: Do the push
+    # Step 7: Do the push
     try:
         git.add_remote("production", remote_url, filtered_path)
 
         # Push main branch
-        push_cmd = ["push", "--force", "production", "HEAD:main"]
+        push_cmd = ["push", "--force", "production", f"HEAD:{target_branch}"]
         if dry_run:
             push_cmd.insert(2, "--dry-run")
 
-        print("\nPushing main branch...")
+        print(f"\nPushing to {target_branch} branch...")
         output = git.run_git_in_dir(filtered_path, *push_cmd)
         if output:
             print(output)
@@ -132,11 +182,12 @@ def main():
     parser.add_argument("package", help="Package name (will sync packages/<package>)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts")
+    parser.add_argument("--target-branch", default="main", help="Target branch in child repo (default: main)")
 
     args = parser.parse_args()
 
     try:
-        sync_repo(args.package, args.dry_run, args.yes)
+        sync_repo(args.package, args.dry_run, args.yes, args.target_branch)
     except KeyboardInterrupt:
         print("\nAborted")
         sys.exit(1)
