@@ -92,7 +92,6 @@ class _PlankyDiagnosticBase(Mission):
         default_factory=lambda: CogConfig(
             energy_limit=255,
             initial_energy=255,
-            energy_regen=255,
             initial_hp=100,
             hp_regen=0,
             influence_regen=0,
@@ -275,7 +274,6 @@ class PlankySurviveRetreat(_PlankyDiagnosticBase):
         default_factory=lambda: CogConfig(
             energy_limit=255,
             initial_energy=255,
-            energy_regen=255,
             initial_hp=20,
             hp_regen=0,
             influence_regen=0,
