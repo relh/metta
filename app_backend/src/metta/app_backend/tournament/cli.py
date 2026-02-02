@@ -1,9 +1,17 @@
 import asyncio
 
-from metta.app_backend.health_server import start_health_server
+from metta.app_backend.health_server import start_health_server, update_heartbeat
 from metta.app_backend.tournament.registry import SEASONS
 from metta.common.otel.tracing import init_otel_tracing
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
+
+HEARTBEAT_INTERVAL_SECONDS = 10
+
+
+async def _heartbeat_loop() -> None:
+    while True:
+        update_heartbeat()
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
 
 
 def run_commissioner():
@@ -11,7 +19,7 @@ def run_commissioner():
 
     async def run_all() -> None:
         commissioners = [cls() for cls in SEASONS.values()]
-        await asyncio.gather(*[c.run() for c in commissioners])
+        await asyncio.gather(_heartbeat_loop(), *[c.run() for c in commissioners])
 
     asyncio.run(run_all())
 
