@@ -160,7 +160,7 @@ def _init_console_logging() -> None:
         rich_handler = AlwaysShowTimeRichHandler(
             rich_tracebacks=True,
             show_path=True,
-            enable_link_path=True,
+            enable_link_path=False,
         )
 
         # Create a formatter that includes rank if needed
