@@ -107,12 +107,16 @@ class CommissionerBase(ABC):
             if value is not None and value not in pool_names:
                 raise ValueError(f"{cls.__name__}.{attr}={value!r} is not in referees {pool_names}")
 
-    @property
-    def description(self) -> SeasonDescription:
+    def description_for_version(self, season_version: int = 1) -> SeasonDescription:
+        referees = self.get_referees(season_version)
         return SeasonDescription(
             summary=self.summary,
-            pools=[PoolDescription(name=name, description=ref.description) for name, ref in self.referees.items()],
+            pools=[PoolDescription(name=name, description=ref.description) for name, ref in referees.items()],
         )
+
+    @property
+    def description(self) -> SeasonDescription:
+        return self.description_for_version()
 
     def get_referees(self, season_version: int) -> dict[str, RefereeBase]:
         return self.referees

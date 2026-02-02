@@ -140,7 +140,7 @@ class SeasonResponse(BaseModel):
                 is_default=False,
             )
         commissioner = SEASONS[season_name]()
-        desc = commissioner.description
+        desc = commissioner.description_for_version(version)
         config_ids = pool_config_ids or {}
         return cls(
             name=season_name,
