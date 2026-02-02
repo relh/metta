@@ -12,9 +12,15 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_job_id(client: StatsClient, uuid_id: uuid.UUID) -> uuid.UUID:
+    try:
+        job_request = client.get_job(job_id=uuid_id)
+        return job_request.id
+    except Exception:
+        pass
     result = client.sql_query(f"SELECT id FROM job_requests WHERE result->>'episode_id' = '{uuid_id}' LIMIT 1")
     if result.rows:
         return uuid.UUID(result.rows[0][0])
+
     raise ValueError(f"No job found for job_id or episode_id: {uuid_id}")
 
 
