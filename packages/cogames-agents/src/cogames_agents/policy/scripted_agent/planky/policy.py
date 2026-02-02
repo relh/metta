@@ -138,10 +138,22 @@ def _atexit_dump_all_stats() -> None:
     if not policies:
         return
 
+    # Check if any policy has stats or trace enabled (for stats output)
+    show_stats = any(getattr(p, "_stats_enabled", False) or getattr(p, "_trace_enabled", False) for p in policies)
+    # Check if any policy has trace or bio enabled (for agent timelines)
+    show_timelines = any(getattr(p, "_trace_enabled", False) or getattr(p, "_bio_enabled", False) for p in policies)
+
+    # Mark all policies as dumped to prevent individual dumps
+    for policy in policies:
+        policy._stats_dumped = True
+
+    # Skip stats output if not enabled
+    if not show_stats:
+        return
+
     # Collect stats from all policies into one unified view
     all_agent_stats: list[tuple[int, str, int | None, AgentTickStats]] = []
     for policy in policies:
-        policy._stats_dumped = True  # Mark as dumped to prevent individual dumps
         for agent_id, agent_policy in policy._agent_policies.items():
             if agent_policy._state is None:
                 continue
@@ -174,7 +186,7 @@ def _atexit_dump_all_stats() -> None:
         f"{'Moving':>8} {'Still':>8} {'Aligned':>8} {'Scrambled':>9}"
     )
     print("-" * 90)
-    for agent_id, role, collective_id, stats in sorted(all_agent_stats):
+    for agent_id, role, collective_id, stats in sorted(all_agent_stats, key=lambda x: (x[0], x[1], x[2] or 0)):
         total_ticks = sum(stats.ticks_by_role.values())
         total_gear = sum(stats.ticks_with_gear_by_role.values())
         total_moving = sum(stats.ticks_moving_by_role.values())
@@ -255,21 +267,22 @@ def _atexit_dump_all_stats() -> None:
         print(f"Mining actions with gear:    {total_mining_with_gear:>6} ({pct_with:>5.1f}%)")
         print(f"Mining actions without gear: {total_mining_without_gear:>6} ({100 - pct_with:>5.1f}%)")
 
-    # Agent timelines
-    print("\n--- Agent Timelines ---")
-    for agent_id, role, collective_id, stats in sorted(all_agent_stats):
-        team = "cogs" if collective_id == 1 else "clips" if collective_id == 0 else "?"
-        initial = stats.initial_role or "?"
-        changes = stats.role_changes
-        print(f"\nAgent {agent_id} ({team}, initial role: {initial}, role changes: {changes}, final role: {role}):")
-        if not stats.timeline:
-            print("  (no events)")
-        for event in stats.timeline:
-            # Summary events (high step numbers) show as "end"
-            if event.step >= 999000:
-                print(f"    end: {event.description}")
-            else:
-                print(f"  {event.step:>5}: {event.description}")
+    # Agent timelines (only if trace or bio enabled)
+    if show_timelines:
+        print("\n--- Agent Timelines ---")
+        for agent_id, role, collective_id, stats in sorted(all_agent_stats, key=lambda x: (x[0], x[1], x[2] or 0)):
+            team = "cogs" if collective_id == 1 else "clips" if collective_id == 0 else "?"
+            initial = stats.initial_role or "?"
+            changes = stats.role_changes
+            print(f"\nAgent {agent_id} ({team}, initial role: {initial}, role changes: {changes}, final role: {role}):")
+            if not stats.timeline:
+                print("  (no events)")
+            for event in stats.timeline:
+                # Summary events (high step numbers) show as "end"
+                if event.step >= 999000:
+                    print(f"    end: {event.description}")
+                else:
+                    print(f"  {event.step:>5}: {event.description}")
 
     print("=" * 100 + "\n")
 
@@ -719,23 +732,26 @@ class PlankyPolicy(MultiAgentPolicy):
         aligner: int = -1,
         scrambler: int = -1,
         stem: int = 0,
-        # Tracing
+        # Tracing, bio, and stats
         trace: int = 0,
         trace_level: int = 1,
         trace_agent: int = -1,
+        bio: int = 0,
+        stats: int = 0,
         # Accept any extra kwargs
         **kwargs: object,
     ) -> None:
         super().__init__(policy_env_info, device=device)
         self._feature_by_id = {f.id: f for f in policy_env_info.obs_features}
         self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
-        print(f"[planky] Action names: {list(policy_env_info.action_names)}")
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
-        # Tracing
+        # Tracing, bio (detailed agent timelines), and stats output
         self._trace_enabled = bool(trace)
         self._trace_level = trace_level
         self._trace_agent = trace_agent
+        self._bio_enabled = bool(bio)
+        self._stats_enabled = bool(stats)
 
         # Resolve defaults: if stem > 0 and miner/aligner/scrambler not explicitly set, zero them
         if stem > 0:
@@ -849,6 +865,10 @@ class PlankyPolicy(MultiAgentPolicy):
     def _dump_episode_stats(self) -> None:
         """Print episode stats table at end of episode."""
         self._stats_dumped = True
+
+        # Skip if stats/trace not enabled
+        if not (self._stats_enabled or self._trace_enabled):
+            return
 
         # Skip if no policies
         if not self._agent_policies:
@@ -970,21 +990,25 @@ class PlankyPolicy(MultiAgentPolicy):
             print(f"Mining actions with gear:    {total_mining_with_gear:>6} ({pct_with:>5.1f}%)")
             print(f"Mining actions without gear: {total_mining_without_gear:>6} ({100 - pct_with:>5.1f}%)")
 
-        # Agent timelines
-        print("\n--- Agent Timelines ---")
-        for agent_id, role, collective_id, stats in sorted(agent_stats):
-            team = "cogs" if collective_id == 1 else "clips" if collective_id == 0 else "?"
-            initial = stats.initial_role or "?"
-            changes = stats.role_changes
-            print(f"\nAgent {agent_id} ({team}, initial role: {initial}, role changes: {changes}, final role: {role}):")
-            if not stats.timeline:
-                print("  (no events)")
-            for event in stats.timeline:
-                # Summary events (high step numbers) show as "end"
-                if event.step >= 999000:
-                    print(f"    end: {event.description}")
-                else:
-                    print(f"  {event.step:>5}: {event.description}")
+        # Agent timelines (only if trace or bio enabled)
+        if self._trace_enabled or self._bio_enabled:
+            print("\n--- Agent Timelines ---")
+            for agent_id, role, collective_id, stats in sorted(agent_stats):
+                team = "cogs" if collective_id == 1 else "clips" if collective_id == 0 else "?"
+                initial = stats.initial_role or "?"
+                changes = stats.role_changes
+                print(
+                    f"\nAgent {agent_id} ({team}, initial role: {initial}, "
+                    f"role changes: {changes}, final role: {role}):"
+                )
+                if not stats.timeline:
+                    print("  (no events)")
+                for event in stats.timeline:
+                    # Summary events (high step numbers) show as "end"
+                    if event.step >= 999000:
+                        print(f"    end: {event.description}")
+                    else:
+                        print(f"  {event.step:>5}: {event.description}")
 
         print("=" * 100 + "\n")
 
