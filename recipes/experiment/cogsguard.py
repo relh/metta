@@ -10,9 +10,8 @@ from typing import Literal, Optional, Sequence
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
-from cogames.cogs_vs_clips.cogsguard_reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.mission import Mission
-from cogames.cogs_vs_clips.sites import COGSGUARD_MACHINA_1, make_cogsguard_arena_site
+from cogames.cogs_vs_clips.mission import CvCMission
+from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -27,26 +26,13 @@ from metta.sim.simulation_config import SimulationConfig
 from metta.sweep.core import SweepParameters as SP
 from metta.sweep.core import make_sweep
 from mettagrid.config.mettagrid_config import MettaGridConfig
-from recipes.experiment.cogs_v_clips import get_cvc_sweep_search_space
 
 _CogsGuardLayout = Literal["machina_1", "arena"]
 
 
-def _normalize_variants(variants: str | Sequence[str] | None) -> list[str]:
-    """Normalize reward variants to a list of variant names.
-
-    Note: an empty list means "no variants" (use mission defaults).
-    """
-    if variants is None:
-        return []
-    if isinstance(variants, str):
-        return [variants]
-    return list(variants)
-
-
-def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> Mission:
+def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> CvCMission:
     if layout == "machina_1":
-        site = COGSGUARD_MACHINA_1
+        site = make_cogsguard_machina1_site(num_agents)
         description = "Basic CogsGuard mission (Machina1 leaderboard layout)"
     elif layout == "arena":
         site = make_cogsguard_arena_site(num_agents)
@@ -54,7 +40,7 @@ def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_st
     else:
         raise ValueError(f"Unknown CogsGuard layout: {layout!r}")
 
-    return Mission(
+    return CvCMission(
         name="basic",
         description=description,
         site=site,
@@ -70,10 +56,7 @@ def make_env(
     layout: _CogsGuardLayout = "machina_1",
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
-    variants = _normalize_variants(variants)
-    env = _make_cogsguard_mission(layout=layout, num_agents=num_agents, max_steps=max_steps).make_env()
-    apply_reward_variants(env, variants=variants)
-    return env
+    return _make_cogsguard_mission(layout=layout, num_agents=num_agents, max_steps=max_steps).make_env()
 
 
 def make_curriculum(
@@ -82,8 +65,6 @@ def make_curriculum(
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = "machina_1",
 ) -> CurriculumConfig:
-    # Reward variants are stackable, so we keep a single env/curriculum and pass
-    # the full variant list through.
     env = env or make_env(variants=variants, layout=layout)
     tasks = cc.single_task(env)
 
@@ -221,7 +202,8 @@ def sweep(
     max_trials: int = 80,
     num_parallel_trials: int = 4,
 ) -> tools.SweepTool:
-    search_space = get_cvc_sweep_search_space()
+    # Basic sweep search space (simplified from cogs_v_clips)
+    search_space: dict[str, object] = {}
     if sweep_reward_variants:
         search_space.update(
             SP.categorical(

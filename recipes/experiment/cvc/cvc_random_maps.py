@@ -14,7 +14,8 @@ from typing import Optional, Sequence
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.evals.integrated_evals import EVAL_MISSIONS
-from cogames.cogs_vs_clips.mission import Mission, NumCogsVariant
+from cogames.cogs_vs_clips.mission import CvCMission as Mission
+from cogames.cogs_vs_clips.mission import NumCogsVariant
 from cogames.cogs_vs_clips.sites import HELLO_WORLD
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -110,8 +111,6 @@ def make_random_maps_curriculum(
     tasks.add_bucket("game.map_builder.instance.objects.silicon_extractor", [Span(10, 50)])
     # Standard curriculum buckets
     tasks.add_bucket("game.max_steps", [750, 1000, 1250, 1500, 2000, 3000, 4000])
-
-    tasks.add_bucket("game.agent.rewards.stats.chest.heart.deposited_by_agent", [3])
 
     if heart_buckets:
         tasks.add_bucket("game.agent.rewards.inventory.heart", [0.1, 0.333, 0.5, 1.0])

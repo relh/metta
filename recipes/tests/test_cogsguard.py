@@ -9,7 +9,7 @@ import random
 
 import pytest
 
-from cogames.cogs_vs_clips.stations import ELEMENTS, GEAR
+from cogames.cogs_vs_clips.config import CvCConfig
 from metta.rl.training.teacher import TeacherConfig
 
 # Import after cogsguard to avoid circular import issues
@@ -45,11 +45,11 @@ class TestCogsguardEnvironment:
         assert "hp" in env_config.game.resource_names
 
         # Check gear resources
-        for gear_type in GEAR:
+        for gear_type in CvCConfig.GEAR:
             assert gear_type in env_config.game.resource_names
 
         # Check element resources
-        for element in ELEMENTS:
+        for element in CvCConfig.ELEMENTS:
             assert element in env_config.game.resource_names
 
     def test_environment_simulation_runs(self) -> None:
@@ -109,11 +109,11 @@ class TestCogsguardEnvironment:
         assert "chest" in objects
 
         # Check extractors for all elements
-        for element in ELEMENTS:
+        for element in CvCConfig.ELEMENTS:
             assert f"{element}_extractor" in objects
 
         # Check gear stations
-        for gear_type in GEAR:
+        for gear_type in CvCConfig.GEAR:
             assert f"{gear_type}_station" in objects
 
     def test_collectives_configured(self) -> None:

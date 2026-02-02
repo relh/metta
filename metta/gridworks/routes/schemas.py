@@ -10,7 +10,9 @@ from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
 
 import mettagrid.mapgen.scenes
-from cogames.cogs_vs_clips.mission import Mission, MissionVariant, Site
+from cogames.cogs_vs_clips.mission import CoGameMissionVariant as MissionVariant
+from cogames.cogs_vs_clips.mission import CoGameSite as Site
+from cogames.cogs_vs_clips.mission import CvCMission as Mission
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.eval import EvaluateTool

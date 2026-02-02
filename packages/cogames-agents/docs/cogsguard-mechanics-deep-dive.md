@@ -206,8 +206,8 @@ Four resources mined from extractors in map corners:
 
 **Source:** `stations.py:122-206`
 
-**Miner bonus:** With miner gear, extractors yield 10x resources (large_amount vs small_amount in
-`SimpleExtractorConfig`, `stations.py:275-300`).
+**Miner bonus:** With miner gear, extractors yield 10x resources (large_amount vs small_amount in `CvCExtractorConfig`,
+`stations.py:275-300`).
 
 ### Hearts
 

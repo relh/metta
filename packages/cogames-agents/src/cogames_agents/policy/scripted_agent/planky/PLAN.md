@@ -78,13 +78,13 @@ cogames play --mission cogsguard_machina_1.basic \
 
 ### Testing Combat Roles Without Economy
 
-The `CogsGuardMission` has a `wealth` field that multiplies initial collective resources. To test aligners/scramblers
-without resource constraints, temporarily edit `mission.py`:
+The `CvCMission` has a `wealth` field that multiplies initial collective resources. To test aligners/scramblers without
+resource constraints, temporarily edit `mission.py`:
 
 ```python
 # In packages/cogames/src/cogames/cogs_vs_clips/missions.py
 # Change wealth=100 for 1000 of each resource + 500 hearts
-CogsGuardMachina1Mission = CogsGuardMission(
+CogsGuardMachina1Mission = CvCMission(
     name="basic",
     ...
     wealth=100,  # Add this line temporarily

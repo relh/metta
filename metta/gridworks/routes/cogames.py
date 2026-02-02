@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
 
 from cogames.cli.mission import parse_variants
-from cogames.cogs_vs_clips.mission import AnyMission, MissionVariant
+from cogames.cogs_vs_clips.mission import CoGameMissionVariant as MissionVariant
+from cogames.cogs_vs_clips.mission import CvCMission as AnyMission
 from cogames.cogs_vs_clips.missions import MISSIONS
 from cogames.cogs_vs_clips.variants import VARIANTS
 from metta.gridworks.common import ConfigWithExtraInfo, extend_config

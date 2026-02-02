@@ -193,14 +193,6 @@ def _enforce_training_vibes(env: MettaGridConfig) -> None:
         # This ensures action space is 19 (1 noop + 4 move + 14 vibes)
         if env.game.actions.attack:
             env.game.actions.attack.enabled = False
-    # Prune transfers
-    allowed_vibes = set(env.game.vibe_names)
-    chest = env.game.objects.get("chest")
-    if chest:
-        vibe_transfers = getattr(chest, "vibe_transfers", None)
-        if isinstance(vibe_transfers, dict):
-            new_transfers = {v: t for v, t in vibe_transfers.items() if v in allowed_vibes}
-            chest.vibe_transfers = new_transfers
 
 
 def make_curriculum(

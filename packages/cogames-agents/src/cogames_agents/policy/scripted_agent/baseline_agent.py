@@ -100,12 +100,12 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
 
         # Map resource names to their corresponding vibe names for debugging glyphs.
         # This keeps resource naming (carbon, oxygen, germanium, silicon) separate from
-        # visual glyph naming (carbon_a, oxygen_a, etc.).
+        # visual glyph naming.
         self._resource_to_vibe: dict[str, str] = {
-            "carbon": "carbon_a",
-            "oxygen": "oxygen_a",
-            "germanium": "germanium_a",
-            "silicon": "silicon_a",
+            "carbon": "default",
+            "oxygen": "default",
+            "germanium": "default",
+            "silicon": "default",
         }
 
     def initial_agent_state(self) -> SimpleAgentState:
@@ -433,14 +433,14 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         """Map phase to a vibe for visual debugging in replays."""
         # During GATHER, vibe the target resource we're currently collecting
         if phase == Phase.GATHER and state.target_resource is not None:
-            # Map resource name (e.g., "silicon") to a valid vibe name (e.g., "silicon_a").
+            # Map resource name (e.g., "silicon") to a valid vibe name.
             return self._resource_to_vibe.get(state.target_resource, "default")
 
         phase_to_vibe = {
-            Phase.GATHER: "carbon_a",  # Default fallback if no target resource
-            Phase.ASSEMBLE: "heart_a",  # Red for assembly
+            Phase.GATHER: "default",  # Default fallback if no target resource
+            Phase.ASSEMBLE: "heart",  # Heart for assembly
             Phase.DELIVER: "default",  # Must be "default" to deposit hearts into chest
-            Phase.RECHARGE: "junction",  # Blue/electric for recharging
+            Phase.RECHARGE: "default",  # Default for recharging
             Phase.CRAFT_UNCLIP: "gear",  # Gear icon for crafting unclip items
             Phase.UNCLIP: "gear",  # Gear icon for unclipping
         }
@@ -1019,10 +1019,10 @@ class BaselinePolicy(MultiAgentPolicy):
 
 
 RESOURCE_VIBE_ALIASES: dict[str, str] = {
-    "carbon": "carbon_a",
-    "oxygen": "oxygen_a",
-    "germanium": "germanium_a",
-    "silicon": "silicon_a",
+    "carbon": "default",
+    "oxygen": "default",
+    "germanium": "default",
+    "silicon": "default",
     # Crafting resources (appear when crafting unclipping items)
     "decoder": "gear",
     "modulator": "gear",

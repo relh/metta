@@ -8,7 +8,8 @@ from typing import Dict, List, Tuple
 import cogames_agents.policy.nim_agents.agents as na
 from cogames.cli.utils import suppress_noisy_logs
 from cogames.cogs_vs_clips.evals.diagnostic_evals import DIAGNOSTIC_EVALS
-from cogames.cogs_vs_clips.mission import Mission, NumCogsVariant
+from cogames.cogs_vs_clips.mission import CvCMission as Mission
+from cogames.cogs_vs_clips.mission import NumCogsVariant
 from mettagrid.policy.loader import initialize_or_load_policy
 from mettagrid.policy.policy import PolicySpec
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface

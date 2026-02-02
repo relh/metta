@@ -46,7 +46,7 @@ rollout.
 
 ### Background: Cogsguard changes (from `origin/daveey-cogsguard-v2`)
 
-- New `CogsGuardMission` and `CogConfig` in `packages/cogames/src/cogames/cogs_vs_clips`.
+- New `CvCMission` and `CogConfig` in `packages/cogames/src/cogames/cogs_vs_clips`.
 - New Cogsguard station configs (junction, hub, gear stations, extractor, chest).
 - New arena site and `make_cogsguard_mission` helper.
 - Recipe update: `recipes/experiment/cogsguard.py` now uses `make_cogsguard_mission` and `suite="cogsguard"`.

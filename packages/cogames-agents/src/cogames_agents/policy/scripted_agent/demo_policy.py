@@ -160,9 +160,9 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
 
         # ---------------- PRE-PHASE: find hub to learn recipe ----------------
         if s.heart_recipe is None:
-            if s.current_glyph != "heart_a":
-                s.current_glyph = "heart_a"
-                return change_vibe_action("heart_a", action_names=self._action_names), s
+            if s.current_glyph != "heart":
+                s.current_glyph = "heart"
+                return change_vibe_action("heart", action_names=self._action_names), s
 
             hub = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "hub"))
             if hub:
@@ -194,9 +194,9 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         ):
             hub = self._closest(s, parsed, lambda o: is_station(o.name.lower(), "hub"))
             if hub:
-                if s.current_glyph != "heart_a":
-                    s.current_glyph = "heart_a"
-                    return change_vibe_action("heart_a", action_names=self._action_names), s
+                if s.current_glyph != "heart":
+                    s.current_glyph = "heart"
+                    return change_vibe_action("heart", action_names=self._action_names), s
                 if self._adjacent(s, hub):
                     return use_object_at(s, hub), s
                 return self._step_towards(s, hub, parsed), s
