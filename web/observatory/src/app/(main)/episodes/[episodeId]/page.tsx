@@ -8,8 +8,7 @@ import { TagList } from '@/components/TagList'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
 
-import { AgentStats, GameStats } from './AgentStats'
-import { PoliciesAndScores } from './PoliciesAndScores'
+import { GameStats, PoliciesAndAgents } from './PoliciesAndAgents'
 
 export default async function EpisodeDetailPage(props: PageProps<'/episodes/[episodeId]'>) {
   const repo = await getRepo()
@@ -37,10 +36,8 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
         </div>
       </div>
 
-      <PoliciesAndScores episode={episode} />
-
       <GameStats attributes={episode.attributes} />
-      <AgentStats attributes={episode.attributes} jobId={episode.tags?.job_id} />
+      <PoliciesAndAgents jobId={episode.tags?.job_id} />
 
       <Card title="Replay">
         <ReplayViewer replayUrl={episode.replay_url} label="Episode replay" />
