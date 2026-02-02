@@ -2,7 +2,9 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from typing import Literal, TypedDict, cast
 from uuid import UUID
 
@@ -39,6 +41,9 @@ logger = logging.getLogger(__name__)
 WATCH_TIMEOUT_SECONDS = 30
 RECONCILE_INTERVAL_SECONDS = 60
 _terminal_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="pod-terminal")
+_job_locks: dict[UUID, threading.Lock] = {}
+_job_lock_refs: dict[UUID, int] = {}
+_job_locks_lock = threading.Lock()
 
 _s3_client: BaseClient | None = None
 _s3_client_lock = threading.Lock()
@@ -338,6 +343,11 @@ def _copy_replay_to_public(job_id: UUID, replay_uri: str | None) -> bool:
 
 
 def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str):
+    job_request = stats_client.get_job(job_id)
+    if job_request.status in (JobStatus.completed, JobStatus.failed):
+        logger.info(f"Job {job_id} already {job_request.status.value}, skipping (pod {pod_name})")
+        return
+
     cfg = get_dispatch_config()
     results, read_error = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, job_results_key(job_id))
     if not results:
@@ -354,7 +364,6 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
         return
 
     try:
-        job_request = stats_client.get_job(job_id)
         job = SingleEpisodeJob.model_validate(job_request.job)
         _copy_replay_to_public(job_id, job.replay_uri)
         record_job_episode(job_id, job, results, stats_client)  # pyright: ignore[reportArgumentType]
@@ -375,17 +384,37 @@ def _handle_pod_terminal(
     pod_name: str,
 ):
     try:
-        phase = pod.status.phase if pod.status else None
-        if phase == "Succeeded":
-            _handle_pod_succeeded(stats_client, job_id, pod_name)
-        elif phase == "Failed":
-            error = _get_pod_error(batch_v1, pod)
-            error_type = _classify_error(error)
-            _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
-            logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
+        with _job_lock(job_id):
+            phase = pod.status.phase if pod.status else None
+            if phase == "Succeeded":
+                _handle_pod_succeeded(stats_client, job_id, pod_name)
+            elif phase == "Failed":
+                error = _get_pod_error(batch_v1, pod)
+                error_type = _classify_error(error)
+                _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
+                logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
         _cleanup_terminated_pod(core_v1, batch_v1, pod, job_id)
     except Exception:
         logger.error(f"Unhandled error processing terminal pod {pod_name} for job {job_id}", exc_info=True)
+
+
+@contextmanager
+def _job_lock(job_id: UUID) -> Iterator[None]:
+    with _job_locks_lock:
+        if job_id not in _job_locks:
+            _job_locks[job_id] = threading.Lock()
+            _job_lock_refs[job_id] = 0
+        _job_lock_refs[job_id] += 1
+        lock = _job_locks[job_id]
+    with lock:
+        try:
+            yield
+        finally:
+            with _job_locks_lock:
+                _job_lock_refs[job_id] -= 1
+                if _job_lock_refs[job_id] == 0:
+                    _job_locks.pop(job_id, None)
+                    _job_lock_refs.pop(job_id, None)
 
 
 @trace("tournament.job.status_update")
@@ -406,13 +435,15 @@ def _handle_pod_state(
         if phase:
             span.set_attribute("pod.phase", phase)
 
-    if phase == "Succeeded":
-        _terminal_executor.submit(_handle_pod_terminal, stats_client, core_v1, batch_v1, pod, job_id, pod_name)
-    elif phase == "Failed":
+    if phase in ("Succeeded", "Failed"):
         _terminal_executor.submit(_handle_pod_terminal, stats_client, core_v1, batch_v1, pod, job_id, pod_name)
     elif phase == "Running" and _is_container_running(pod):
-        _update_job_status(stats_client, job_id, JobStatus.running, worker=pod_name)
-        logger.debug(f"Job {job_id} running (pod {pod_name})")
+        with _job_lock(job_id):
+            job_request = stats_client.get_job(job_id)
+            if job_request.status in (JobStatus.completed, JobStatus.failed):
+                return
+            _update_job_status(stats_client, job_id, JobStatus.running, worker=pod_name)
+            logger.debug(f"Job {job_id} running (pod {pod_name})")
 
 
 def _handle_pod_deleted(stats_client: StatsClient, pod: client.V1Pod):
