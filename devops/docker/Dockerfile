@@ -11,7 +11,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     libgomp1 \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI v2 for training-time Secrets Manager access.
+RUN set -eux; \
+  arch="$(uname -m)"; \
+  case "$arch" in \
+    x86_64) aws_arch="x86_64" ;; \
+    aarch64|arm64) aws_arch="aarch64" ;; \
+    *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+  esac; \
+  tmpdir="$(mktemp -d)"; \
+  curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "${tmpdir}/awscliv2.zip"; \
+  unzip -q "${tmpdir}/awscliv2.zip" -d "${tmpdir}"; \
+  "${tmpdir}/aws/install" --update; \
+  rm -rf "${tmpdir}"
 
 WORKDIR /workspace/metta
 

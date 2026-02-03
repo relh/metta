@@ -65,6 +65,14 @@ check_sso_token() {
   return 1
 }
 
+# Function to check if SSO config is present
+has_sso_config() {
+  [ -f ~/.aws/config ] || return 1
+  grep -q "\[sso-session softmax-sso\]" ~/.aws/config 2> /dev/null \
+    && grep -q "sso_start_url" ~/.aws/config 2> /dev/null \
+    && grep -q "sso_region" ~/.aws/config 2> /dev/null
+}
+
 # Function to initialize AWS SSO configuration
 initialize_aws_config() {
   echo "Initializing AWS configuration..."
@@ -182,6 +190,10 @@ if [ "$IS_TEST_ENV" = "false" ]; then
   else
     # Check if we already have a valid token
     if check_sso_token; then
+      if ! has_sso_config; then
+        echo "Valid SSO token found but config is missing; initializing AWS config..."
+        initialize_aws_config
+      fi
       echo "Valid SSO token already exists for softmax-sso"
       echo "Skip initialization as token is valid."
       echo "Use --reset if you need to completely reset your AWS configuration."

@@ -4,12 +4,17 @@ set -eu
 REPO_DIR="/workspace/metta"
 DEPLOY_KEY_SECRET="github/metta-deploy-key"
 
-# Install AWS CLI if not present (needed for fetching deploy key)
-if ! command -v aws &> /dev/null; then
-  echo "[SETUP] Installing AWS CLI..."
-  pip install --quiet awscli
-  export PATH="$HOME/.local/bin:$PATH"
-fi
+# Ensure AWS CLI v2 is present (installed in the training image).
+ensure_aws_cli_v2() {
+  if command -v aws &> /dev/null && aws --version 2> /dev/null | grep -q "aws-cli/2"; then
+    return 0
+  fi
+
+  echo "[SETUP] AWS CLI v2 not found. Rebuild the training image to include AWS CLI v2." >&2
+  exit 1
+}
+
+ensure_aws_cli_v2
 
 # Setup SSH deploy key for GitHub access
 setup_deploy_key() {
