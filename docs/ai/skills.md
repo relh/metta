@@ -35,6 +35,8 @@ Shared skills live in `skills/`:
 - `do.mettabox-ops`
 - `do.worktrunk`
 - `n.add-publishable-package`
+- `n.add-season`
+- `n.setup-worktree-ide-themes`
 - `n.debug-jobs`
 - `n.monitor-infra`
 - `n.observatory-up`
