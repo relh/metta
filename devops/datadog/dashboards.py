@@ -35,10 +35,10 @@ def _timeseries_widget(title: str, *, group_by: str, x: int = 0, y: int = 0, wid
 
 def skills_leaderboard_dashboard() -> dict:
     return {
-        "title": "Skills Leaderboard",
+        "title": "Claude Code Skills Leaderboard",
         "description": "Claude Code skill usage across the team",
         "layout_type": "ordered",
-        "tags": ["team:dev", "managed-by:code"],
+        "tags": ["team:dev"],
         "widgets": [
             {
                 "definition": {
@@ -48,12 +48,12 @@ def skills_leaderboard_dashboard() -> dict:
                     "time": {"live_span": TIMEFRAME},
                     "precision": 0,
                 },
-                "layout": {"x": 0, "y": 0, "width": 3, "height": 3},
+                "layout": {"x": 0, "y": 0, "width": 2, "height": 3},
             },
             _toplist_widget(
-                "Top Users",
-                group_by="user",
-                x=3,
+                "Usage by Category",
+                group_by="skill_prefix",
+                x=2,
                 y=0,
                 width=4,
                 height=3,
@@ -61,9 +61,17 @@ def skills_leaderboard_dashboard() -> dict:
             _toplist_widget(
                 "Top Skills",
                 group_by="skill",
-                x=7,
+                x=6,
                 y=0,
-                width=5,
+                width=4,
+                height=3,
+            ),
+            _toplist_widget(
+                "Top Users",
+                group_by="user",
+                x=10,
+                y=0,
+                width=2,
                 height=3,
             ),
             _timeseries_widget(
@@ -79,14 +87,6 @@ def skills_leaderboard_dashboard() -> dict:
                 group_by="skill",
                 x=0,
                 y=7,
-                width=12,
-                height=4,
-            ),
-            _toplist_widget(
-                "Usage by Category",
-                group_by="skill_prefix",
-                x=0,
-                y=11,
                 width=12,
                 height=4,
             ),
