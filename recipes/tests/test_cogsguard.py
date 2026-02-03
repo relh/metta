@@ -23,8 +23,8 @@ class TestCogsguardEnvironment:
     @pytest.mark.parametrize(
         ("layout", "expected_label"),
         [
-            ("machina_1", "cogsguard_machina_1.basic"),
-            ("arena", "cogsguard_arena.basic"),
+            ("machina_1", "cogsguard_machina_1.basic.no_clips"),
+            ("arena", "cogsguard_arena.basic.no_clips"),
         ],
     )
     def test_make_env_layout_switches_map(self, layout: str, expected_label: str) -> None:
@@ -123,7 +123,7 @@ class TestCogsguardEnvironment:
         # collectives is a dict[str, CollectiveConfig]
         collective_names = list(env_config.game.collectives.keys())
         assert "cogs" in collective_names
-        assert "clips" in collective_names
+        assert "clips" not in collective_names
 
         # Check cogs collective has initial resources
         cogs = env_config.game.collectives["cogs"]

@@ -5,6 +5,7 @@ from metta.common.util.log_config import suppress_noisy_logs
 
 suppress_noisy_logs()
 
+import inspect
 import json
 import logging
 import subprocess
@@ -13,6 +14,7 @@ from typing import Annotated, Literal, Optional
 import sky
 import typer
 import yaml
+from pydantic import BaseModel
 from typer import rich_utils
 
 import gitta as git
@@ -23,7 +25,8 @@ from devops.skypilot.utils.task_helpers import (
     set_task_secrets,
     validate_task_name,
 )
-from metta.common.tool.tool_path import parse_two_token_syntax, validate_module_path
+from metta.common.tool import Tool
+from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker, validate_module_path
 from metta.common.util.cli import get_user_confirmation
 from metta.common.util.fs import cd_repo_root
 from metta.common.util.log_config import init_logging
@@ -59,6 +62,36 @@ def _validate_run_tool(module_path: str, args: list) -> bool:
     except FileNotFoundError:
         print(red("[VALIDATION] ❌ Could not find run.py or uv command"))
         return False
+
+
+def _tool_has_field(tool_cls: type[Tool], field_name: str) -> bool:
+    for base in tool_cls.__mro__:
+        if base is Tool:
+            break
+        if issubclass(base, BaseModel) and hasattr(base, "model_fields"):
+            if field_name in base.model_fields:
+                return True
+    return False
+
+
+def _should_pass_run(module_path: str) -> bool:
+    tool_maker = resolve_and_load_tool_maker(module_path)
+    if tool_maker is None:
+        return False
+
+    if inspect.isclass(tool_maker) and issubclass(tool_maker, Tool):
+        return _tool_has_field(tool_maker, "run")
+
+    try:
+        sig = inspect.signature(tool_maker)
+    except (TypeError, ValueError):
+        sig = None
+
+    if sig and "run" in sig.parameters:
+        return True
+
+    tool_name = module_path.rsplit(".", 1)[-1]
+    return tool_name == "train"
 
 
 def check_git_state(commit_hash: str) -> str | None:
@@ -177,7 +210,6 @@ def main(
 
     for arg in tool_args:
         if arg.startswith("run="):
-            # Extract the run ID
             new_run_id = arg[4:]
             if run_id is not None and new_run_id != run_id:
                 raise ValueError(f"Conflicting run IDs specified: '{run_id}' and '{new_run_id}'")
@@ -185,12 +217,15 @@ def main(
         else:
             filtered_args.append(arg)
 
+    should_pass_run = _should_pass_run(module_path)
+
     if run_id is None:
         run_id = auto_run_name()
         logger.info(f"Using auto-generated run ID: {run_id}")
         logger.info("To specify a run ID pass run=foo")
 
-    filtered_args.append(f"run={run_id}")
+    if should_pass_run:
+        filtered_args.append(f"run={run_id}")
 
     cd_repo_root()
 

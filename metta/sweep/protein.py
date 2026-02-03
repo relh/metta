@@ -39,6 +39,8 @@ class Linear(Space):
         super().__init__(min, max, scale, mean, is_integer)
 
     def normalize(self, value):
+        if self.max == self.min:
+            return 0.0
         zero_one = (value - self.min) / (self.max - self.min)
         return 2 * zero_one - 1
 
@@ -57,7 +59,10 @@ class Pow2(Space):
         super().__init__(min, max, scale, mean, is_integer)
 
     def normalize(self, value):
-        zero_one = (math.log(value, 2) - math.log(self.min, 2)) / (math.log(self.max, 2) - math.log(self.min, 2))
+        denom = math.log(self.max, 2) - math.log(self.min, 2)
+        if denom == 0:
+            return 0.0
+        zero_one = (math.log(value, 2) - math.log(self.min, 2)) / denom
         return 2 * zero_one - 1
 
     def unnormalize(self, value):
@@ -78,9 +83,10 @@ class Log(Space):
         super().__init__(min, max, scale, mean, is_integer)
 
     def normalize(self, value):
-        zero_one = (math.log(value, self.base) - math.log(self.min, self.base)) / (
-            math.log(self.max, self.base) - math.log(self.min, self.base)
-        )
+        denom = math.log(self.max, self.base) - math.log(self.min, self.base)
+        if denom == 0:
+            return 0.0
+        zero_one = (math.log(value, self.base) - math.log(self.min, self.base)) / denom
         return 2 * zero_one - 1
 
     def unnormalize(self, value):
@@ -103,9 +109,10 @@ class Logit(Space):
         super().__init__(min, max, scale, mean, is_integer)
 
     def normalize(self, value):
-        zero_one = (math.log(1 - value, self.base) - math.log(1 - self.min, self.base)) / (
-            math.log(1 - self.max, self.base) - math.log(1 - self.min, self.base)
-        )
+        denom = math.log(1 - self.max, self.base) - math.log(1 - self.min, self.base)
+        if denom == 0:
+            return 0.0
+        zero_one = (math.log(1 - value, self.base) - math.log(1 - self.min, self.base)) / denom
         return 2 * zero_one - 1
 
     def unnormalize(self, value):

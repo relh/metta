@@ -13,6 +13,7 @@ import metta.tools as tools
 from cogames.cogs_vs_clips.mission import CvCMission
 from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
 from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
+from cogames.cogs_vs_clips.variants import NoClipsVariant
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -41,13 +42,14 @@ def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_st
     else:
         raise ValueError(f"Unknown CogsGuard layout: {layout!r}")
 
-    return CvCMission(
+    mission = CvCMission(
         name="basic",
         description=description,
         site=site,
         num_cogs=num_agents,
         max_steps=max_steps,
     )
+    return mission.with_variants([NoClipsVariant()])
 
 
 def make_env(
@@ -96,6 +98,7 @@ def train(
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = "machina_1",
     use_default_teacher: bool = False,
+    sweep_mode: bool = False,
 ) -> tools.TrainTool:
     if use_default_teacher:
         default_teacher = TeacherConfig(
@@ -114,6 +117,21 @@ def train(
 
     resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
     trainer_cfg = TrainerConfig()
+    if sweep_mode:
+        # Tuned from docs/experiments/cogsguard_sweep_2026-01-29.md.
+        trainer_cfg.sampling.method = "prioritized"
+        trainer_cfg.sampling.prio_alpha = 0.3098
+        trainer_cfg.sampling.prio_beta0 = 0.7994
+        trainer_cfg.advantage.gae_lambda = 0.9161
+        trainer_cfg.advantage.gamma = 0.9995
+        trainer_cfg.losses.ppo_actor.clip_coef = 0.3644
+        trainer_cfg.losses.ppo_actor.ent_coef = 0.0717
+        trainer_cfg.losses.ppo_critic.vf_coef = 1.3652
+        trainer_cfg.optimizer.learning_rate = 0.00924
+        trainer_cfg.optimizer.momentum = 0.9724
+        trainer_cfg.optimizer.weight_decay = 0.10
+        trainer_cfg.optimizer.eps = 2.5e-06
+        trainer_cfg.optimizer.warmup_steps = 1752
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
     scheduler = None
@@ -140,7 +158,18 @@ def train(
     tt.stats_reporter.default_zero_metrics = tt.stats_reporter.default_zero_metrics + (
         "env_collective/cogs/aligned.junction.held",
     )
-    tt.policy_architecture = policy_architecture or ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
+    default_architecture = ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
+    if sweep_mode:
+        default_architecture = ViTDefaultConfig(
+            obs_shim_ignore_inventory_power_tokens=False,
+            actor_hidden=384,
+            critic_hidden=768,
+            latent_dim=96,
+            core_resnet_layers=1,
+            core_num_heads=4,
+            core_num_latents=16,
+        )
+    tt.policy_architecture = policy_architecture or default_architecture
     return tt
 
 
@@ -193,6 +222,7 @@ def train_sweep(
         variants=variants,
         layout=layout,
         use_default_teacher=use_default_teacher,
+        sweep_mode=True,
     )
     tool.trainer.total_timesteps = 1_000_000_000
     return tool
