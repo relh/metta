@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 from pathlib import Path
 
 import typer
@@ -189,96 +187,6 @@ def dashboards_list(
     typer.echo(f"Found {len(dashboards)} dashboards:\n")
     for d in dashboards:
         typer.echo(f"  [{d['id']}] {d['title']}")
-
-
-CACHE_DIR = Path.home() / ".metta"
-CACHE_FILE = CACHE_DIR / "dd_api_key"
-
-
-def _check_jq() -> bool:
-    if shutil.which("jq"):
-        return True
-    typer.echo("jq is not installed. Install it:")
-    typer.echo("  macOS:  brew install jq")
-    typer.echo("  Linux:  sudo apt-get install jq")
-    return False
-
-
-def _get_cached_api_key() -> str | None:
-    if CACHE_FILE.exists():
-        return CACHE_FILE.read_text().strip() or None
-    return None
-
-
-def _cache_api_key(key: str) -> None:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    CACHE_FILE.write_text(key)
-    CACHE_FILE.chmod(0o600)
-
-
-def _fetch_api_key_from_aws() -> str | None:
-    if not shutil.which("aws"):
-        return None
-    try:
-        result = subprocess.run(
-            [
-                "aws",
-                "secretsmanager",
-                "get-secret-value",
-                "--secret-id",
-                "datadog/api-key",
-                "--query",
-                "SecretString",
-                "--output",
-                "text",
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip() or None
-    except subprocess.CalledProcessError:
-        return None
-
-
-@app.command()
-def setup(
-    force: bool = typer.Option(False, "--force", help="Overwrite existing cached API key."),
-) -> None:
-    """Set up skills usage tracking (jq + Datadog API key)."""
-    ok = True
-
-    typer.echo("Checking prerequisites...\n")
-
-    if _check_jq():
-        typer.echo("  jq: OK")
-    else:
-        ok = False
-
-    existing_key = _get_cached_api_key()
-    if existing_key and not force:
-        typer.echo(f"  DD API key: cached at {CACHE_FILE}")
-    else:
-        typer.echo("  DD API key: fetching...")
-        api_key = _fetch_api_key_from_aws()
-        if api_key:
-            _cache_api_key(api_key)
-            typer.echo(f"  DD API key: cached from AWS at {CACHE_FILE}")
-        else:
-            typer.echo("  Could not fetch from AWS. Enter your Datadog API key:")
-            api_key = typer.prompt("  API key", hide_input=True)
-            if not api_key:
-                typer.echo("  No key provided.")
-                ok = False
-            else:
-                _cache_api_key(api_key)
-                typer.echo(f"  DD API key: cached at {CACHE_FILE}")
-
-    if ok:
-        typer.echo("\nSkills tracking is ready.")
-    else:
-        typer.echo("\nSetup incomplete -- fix the issues above and re-run.")
-        raise typer.Exit(1)
 
 
 def main() -> None:
