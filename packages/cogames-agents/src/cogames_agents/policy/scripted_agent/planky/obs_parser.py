@@ -46,7 +46,7 @@ class ObsParser:
             if action_name.startswith("change_vibe_"):
                 self._vibe_names.append(action_name[len("change_vibe_") :])
 
-        # Collective name mapping
+        # Collective name mapping (alphabetical: clips=0, cogs=1)
         self._collective_names = ["clips", "cogs"]  # Alphabetical
         self._cogs_collective_id = 1  # "cogs" is index 1 alphabetically
         self._clips_collective_id = 0  # "clips" is index 0
@@ -278,7 +278,7 @@ class ObsParser:
                 return "cogs"
             elif collective_id == self._clips_collective_id:
                 return "clips"
-        if "cogs" in obj_name:
+        if "c:" in obj_name:
             return "cogs"
         if "clips" in obj_name or clipped > 0:
             return "clips"

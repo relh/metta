@@ -10,7 +10,7 @@ from typing import Optional
 class Entity:
     """An object on the map."""
 
-    type: str  # e.g. "carbon_extractor", "miner_station", "wall", "agent"
+    type: str  # e.g. "carbon_extractor", "miner", "wall", "agent"
     properties: dict  # alignment, remaining_uses, inventory_amount, cooldown, etc.
     last_seen: int = 0
 

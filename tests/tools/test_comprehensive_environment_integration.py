@@ -167,7 +167,7 @@ class TestComprehensiveEnvironmentIntegration:
         assert nav_env.game.num_agents == 2
 
         # Test that they have expected components
-        assert "aligner_station" in cogsguard_env.game.objects
+        assert any(k.endswith("aligner") for k in cogsguard_env.game.objects)
         assert "wall" in nav_env.game.objects
         assert cogsguard_env.game.actions.move is not None
         assert nav_env.game.actions.move is not None

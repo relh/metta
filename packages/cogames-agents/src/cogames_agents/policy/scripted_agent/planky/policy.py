@@ -232,7 +232,7 @@ def _atexit_dump_all_stats() -> None:
     print("-" * 90)
     zero_stats = {"ticks": 0, "gear": 0, "moving": 0, "still": 0}
     team_totals: dict[str, dict[str, int]] = {
-        "cogs": dict(zero_stats),
+        "c": dict(zero_stats),
         "clips": dict(zero_stats),
     }
     for _, _, collective_id, stats in all_agent_stats:
@@ -244,7 +244,7 @@ def _atexit_dump_all_stats() -> None:
         team_totals[team]["moving"] += sum(stats.ticks_moving_by_role.values())
         team_totals[team]["still"] += sum(stats.ticks_still_by_role.values())
 
-    for team in ["cogs", "clips"]:
+    for team in ["c", "clips"]:
         t = team_totals[team]
         ticks = t["ticks"]
         if ticks == 0:
@@ -975,7 +975,7 @@ class PlankyPolicy(MultiAgentPolicy):
         print("-" * 90)
         zero_stats = {"ticks": 0, "gear": 0, "moving": 0, "still": 0}
         team_totals: dict[str, dict[str, int]] = {
-            "cogs": dict(zero_stats),
+            "c": dict(zero_stats),
             "clips": dict(zero_stats),
         }
         for _, _, collective_id, stats in agent_stats:
@@ -987,7 +987,7 @@ class PlankyPolicy(MultiAgentPolicy):
             team_totals[team]["moving"] += sum(stats.ticks_moving_by_role.values())
             team_totals[team]["still"] += sum(stats.ticks_still_by_role.values())
 
-        for team in ["cogs", "clips"]:
+        for team in ["c", "clips"]:
             t = team_totals[team]
             ticks = t["ticks"]
             if ticks == 0:

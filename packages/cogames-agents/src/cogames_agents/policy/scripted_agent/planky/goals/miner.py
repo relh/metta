@@ -24,7 +24,7 @@ class GetMinerGearGoal(GetGearGoal):
     def __init__(self) -> None:
         super().__init__(
             gear_attr="miner_gear",
-            station_type="miner_station",
+            station_type="miner",
             goal_name="GetMinerGear",
             gear_cost={"carbon": 1, "oxygen": 1, "germanium": 3, "silicon": 1},
         )

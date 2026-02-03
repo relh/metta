@@ -141,7 +141,7 @@ class SmartRoleCoordinator:
             self._record_known_stations(s, hub_pos)
             self._apply_alignment_overrides(s, hub_pos)
             self._apply_station_overrides(s, hub_pos)
-        junction_counts = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
+        junction_counts = {"c": 0, "clips": 0, "neutral": 0, "unknown": 0}
         for struct in s.get_structures_by_type(StructureType.CHARGER):
             bucket = self._normalize_alignment(struct.alignment)
             junction_counts[bucket] += 1
@@ -260,10 +260,10 @@ class SmartRoleCoordinator:
     @staticmethod
     def _station_structure_type(name: str) -> StructureType:
         return {
-            "miner_station": StructureType.MINER_STATION,
-            "scout_station": StructureType.SCOUT_STATION,
-            "aligner_station": StructureType.ALIGNER_STATION,
-            "scrambler_station": StructureType.SCRAMBLER_STATION,
+            "miner": StructureType.MINER_STATION,
+            "scout": StructureType.SCOUT_STATION,
+            "aligner": StructureType.ALIGNER_STATION,
+            "scrambler": StructureType.SCRAMBLER_STATION,
             "chest": StructureType.CHEST,
         }.get(name, StructureType.UNKNOWN)
 
@@ -271,7 +271,7 @@ class SmartRoleCoordinator:
     def _normalize_alignment(alignment: Optional[str]) -> str:
         if alignment is None or alignment == "neutral":
             return "neutral"
-        if alignment in ("cogs", "clips"):
+        if alignment in ("c", "clips"):
             return alignment
         return "unknown"
 
@@ -311,14 +311,14 @@ class SmartRoleCoordinator:
         return "miner"
 
     def _aggregate_junction_counts(self) -> dict[str, int]:
-        totals = {"cogs": 0, "clips": 0, "neutral": 0, "unknown": 0}
+        totals = {"c": 0, "clips": 0, "neutral": 0, "unknown": 0}
         for snapshot in self.agent_snapshots.values():
             for key in totals:
                 totals[key] = max(totals[key], snapshot.junction_alignment_counts.get(key, 0))
         return totals
 
     def aligned_junction_count(self) -> int:
-        return self._aggregate_junction_counts().get("cogs", 0)
+        return self._aggregate_junction_counts().get("c", 0)
 
     def _aggregate_structures(self) -> set[str]:
         structures: set[str] = set()
@@ -696,10 +696,10 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
     def _get_station_type(self, station_name: str) -> StructureType:
         """Convert station name to StructureType."""
         mapping = {
-            "miner_station": StructureType.MINER_STATION,
-            "scout_station": StructureType.SCOUT_STATION,
-            "aligner_station": StructureType.ALIGNER_STATION,
-            "scrambler_station": StructureType.SCRAMBLER_STATION,
+            "miner": StructureType.MINER_STATION,
+            "scout": StructureType.SCOUT_STATION,
+            "aligner": StructureType.ALIGNER_STATION,
+            "scrambler": StructureType.SCRAMBLER_STATION,
         }
         return mapping.get(station_name, StructureType.UNKNOWN)
 
@@ -814,6 +814,11 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         obj_lower = obj_name.lower()
         tag_lowers = [tag.lower() for tag in tags or []]
         # Check if name contains alignment info
+        # Check for team prefix format "X:" (e.g., "c:hub", "cg:miner")
+        if ":" in obj_lower:
+            prefix = obj_lower.split(":")[0]
+            if prefix in ("c", "cg", "cb"):
+                return "cogs"
         if "cogs" in obj_lower or "cogs_" in obj_lower or any("cogs" in tag for tag in tag_lowers):
             return "cogs"
         if "clips" in obj_lower or "clips_" in obj_lower or any("clips" in tag for tag in tag_lowers):
@@ -979,7 +984,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Bootstrap with scout gear for mobility when station is unknown.
         if station_pos is None:
             scout_station = s.get_structure_position(StructureType.SCOUT_STATION)
-            if scout_station is not None and s.scout == 0 and station_name != "scout_station":
+            if scout_station is not None and s.scout == 0 and station_name != "scout":
                 if not is_adjacent((s.row, s.col), scout_station):
                     return self._move_towards(s, scout_station, reach_adjacent=True)
                 return self._use_object_at(s, scout_station)

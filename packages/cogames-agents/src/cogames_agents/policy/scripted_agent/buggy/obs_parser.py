@@ -282,10 +282,10 @@ class ObsParser:
         # Cogs structures always belong to the cogs collective.
         if obj_name in {
             "hub",
-            "miner_station",
-            "aligner_station",
-            "scrambler_station",
-            "scout_station",
+            "miner",
+            "aligner",
+            "scrambler",
+            "scout",
             "chest",
         }:
             self._cogs_collective_id = collective_id
@@ -316,7 +316,7 @@ class ObsParser:
         return "default"
 
     def _derive_alignment(self, obj_name: str, clipped: int, collective_id: int | None) -> str | None:
-        if "cogs" in obj_name:
+        if "c:" in obj_name:
             return "cogs"
         if "clips" in obj_name or clipped > 0:
             return "clips"

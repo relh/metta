@@ -49,7 +49,7 @@ def _is_in_safe_zone(ctx: PlankyContext) -> bool:
     """Check if agent is within AOE of any cogs structure."""
     pos = ctx.state.position
     # Check hub
-    hubs = ctx.map.find(type="hub")
+    hubs = ctx.map.find(type_contains="hub")
     for apos, _ in hubs:
         if _manhattan(pos, apos) <= JUNCTION_AOE_RANGE:
             return True
@@ -57,11 +57,6 @@ def _is_in_safe_zone(ctx: PlankyContext) -> bool:
     junctions = ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"})
     for jpos, _ in junctions:
         if _manhattan(pos, jpos) <= JUNCTION_AOE_RANGE:
-            return True
-    # Check cogs junctions
-    junctions = ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"})
-    for cpos, _ in junctions:
-        if _manhattan(pos, cpos) <= JUNCTION_AOE_RANGE:
             return True
     return False
 
@@ -72,9 +67,6 @@ def _is_in_enemy_aoe(ctx: PlankyContext) -> bool:
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
         if _manhattan(pos, jpos) <= JUNCTION_AOE_RANGE:
             return True
-    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "clips"}):
-        if _manhattan(pos, cpos) <= JUNCTION_AOE_RANGE:
-            return True
     return False
 
 
@@ -83,12 +75,10 @@ def _nearest_safe_zone(ctx: PlankyContext) -> tuple[int, int] | None:
     pos = ctx.state.position
     candidates: list[tuple[int, tuple[int, int]]] = []
 
-    for apos, _ in ctx.map.find(type="hub"):
+    for apos, _ in ctx.map.find(type_contains="hub"):
         candidates.append((_manhattan(pos, apos), apos))
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, jpos), jpos))
-    for cpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
-        candidates.append((_manhattan(pos, cpos), cpos))
 
     if not candidates:
         return None

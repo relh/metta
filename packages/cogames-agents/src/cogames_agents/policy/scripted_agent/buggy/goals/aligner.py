@@ -23,7 +23,7 @@ class GetAlignerGearGoal(GetGearGoal):
     def __init__(self) -> None:
         super().__init__(
             gear_attr="aligner_gear",
-            station_type="aligner_station",
+            station_type="aligner",
             goal_name="GetAlignerGear",
             gear_cost={"carbon": 3, "oxygen": 1, "germanium": 1, "silicon": 1},
         )

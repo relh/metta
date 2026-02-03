@@ -36,7 +36,7 @@ class GetGearGoal(Goal):
     ) -> None:
         self.name = goal_name
         self._gear_attr = gear_attr  # e.g. "miner_gear"
-        self._station_type = station_type  # e.g. "miner_station"
+        self._station_type = station_type  # e.g. "miner"
         self._gear_cost = gear_cost or {}
         self._bb_attempts_key = f"{goal_name}_total_attempts"
         self._bb_giveup_step_key = f"{goal_name}_giveup_step"

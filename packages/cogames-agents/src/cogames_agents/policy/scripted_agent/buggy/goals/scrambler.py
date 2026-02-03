@@ -23,7 +23,7 @@ class GetScramblerGearGoal(GetGearGoal):
     def __init__(self) -> None:
         super().__init__(
             gear_attr="scrambler_gear",
-            station_type="scrambler_station",
+            station_type="scrambler",
             goal_name="GetScramblerGear",
             gear_cost={"carbon": 1, "oxygen": 3, "germanium": 1, "silicon": 1},
         )

@@ -113,7 +113,7 @@ class _PlankyDiagnosticBase(Mission):
         # Apply wealth to teams (base class wealth attribute wasn't being used)
         original_teams = self.teams
         self.teams = {
-            name: CogTeam(name=team.name, num_agents=team.num_agents, wealth=self.wealth)
+            name: CogTeam(name=team.name, short_name=team.short_name, num_agents=team.num_agents, wealth=self.wealth)
             for name, team in self.teams.items()
         }
 

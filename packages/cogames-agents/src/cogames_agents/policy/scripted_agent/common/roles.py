@@ -11,10 +11,10 @@ class Role(Enum):
 
 
 ROLE_TO_STATION: dict[Role, str] = {
-    Role.MINER: "miner_station",
-    Role.SCOUT: "scout_station",
-    Role.ALIGNER: "aligner_station",
-    Role.SCRAMBLER: "scrambler_station",
+    Role.MINER: "miner",
+    Role.SCOUT: "scout",
+    Role.ALIGNER: "aligner",
+    Role.SCRAMBLER: "scrambler",
 }
 
 ROLE_TO_GEAR: dict[Role, str] = {

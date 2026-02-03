@@ -89,7 +89,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     hub_pos = s.stations.get("hub")
                     self._smart_role_coordinator.register_junction_alignment(
                         target,
-                        "cogs",
+                        "c",
                         hub_pos,
                         s.step_count,
                     )
@@ -250,7 +250,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 if last_worked > 0 and s.step_count - last_worked < cooldown:
                     continue
                 junction = s.get_structure_at(pos)
-                if junction is not None and junction.alignment in ("cogs", "clips"):
+                if junction is not None and junction.alignment in ("c", "clips"):
                     continue
                 dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
                 recent_candidates.append((dist, pos))

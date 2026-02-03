@@ -30,10 +30,10 @@ class StructureType(Enum):
 
     HUB = "hub"  # Main hub / resource deposit point
     CHARGER = "junction"  # Supply depot
-    MINER_STATION = "miner_station"
-    SCOUT_STATION = "scout_station"
-    ALIGNER_STATION = "aligner_station"
-    SCRAMBLER_STATION = "scrambler_station"
+    MINER_STATION = "miner"
+    SCOUT_STATION = "scout"
+    ALIGNER_STATION = "aligner"
+    SCRAMBLER_STATION = "scrambler"
     EXTRACTOR = "extractor"  # Resource extractor/chest
     CHEST = "chest"  # Heart acquisition point
     WALL = "wall"

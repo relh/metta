@@ -19,7 +19,7 @@ class GetScoutGearGoal(GetGearGoal):
     def __init__(self) -> None:
         super().__init__(
             gear_attr="scout_gear",
-            station_type="scout_station",
+            station_type="scout",
             goal_name="GetScoutGear",
             gear_cost={"carbon": 1, "oxygen": 1, "germanium": 1, "silicon": 3},
         )
