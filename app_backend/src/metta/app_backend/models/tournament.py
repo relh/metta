@@ -112,7 +112,7 @@ class Match(SQLModel, table=True):
 
     pool: Pool = Relationship(back_populates="matches")
     players: list["MatchPlayer"] = Relationship(back_populates="match", sa_relationship_kwargs={"lazy": "selectin"})
-    job: Optional["JobRequest"] = Relationship()
+    job: Optional["JobRequest"] = Relationship(back_populates="matches")
 
 
 class MatchPlayer(SQLModel, table=True):

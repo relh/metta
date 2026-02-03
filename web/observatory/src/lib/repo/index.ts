@@ -336,6 +336,23 @@ export type MembershipHistoryEntry = {
   created_at: string
 }
 
+export type EpisodePolicyStat = {
+  policy_version_id: string
+  num_agents: number
+  avg_reward: number | null
+}
+
+export type JobEpisodeInfo = {
+  replay_url: string | null
+  attributes: Record<string, any> | null
+  policy_stats: EpisodePolicyStat[]
+}
+
+export type JobMatchInfo = {
+  pool_name: string | null
+  season_name: string | null
+}
+
 export type JobRequest = {
   id: string
   job_type: string
@@ -351,6 +368,8 @@ export type JobRequest = {
   running_at: string | null
   completed_at: string | null
   policy_versions: JobPolicyVersionSummary[]
+  episode: JobEpisodeInfo | null
+  match: JobMatchInfo | null
 }
 
 export type PolicyRow = {

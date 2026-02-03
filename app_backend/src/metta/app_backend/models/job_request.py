@@ -69,6 +69,8 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
     completed_at: datetime | None = None
 
     policy_versions: list["JobPolicyVersion"] = Relationship(back_populates="job")
+    episode_jobs: list["EpisodeJob"] = Relationship()
+    matches: list["Match"] = Relationship(back_populates="job")
 
     @hybrid_property
     def episode_id(self) -> str | None:  # type: ignore[no-redef]
@@ -98,4 +100,6 @@ class JobPolicyVersion(SQLModel, table=True):
 
 
 # Import after classes are defined to avoid circular imports
+from metta.app_backend.models.episodes import EpisodeJob as EpisodeJob  # noqa: E402, F401
 from metta.app_backend.models.policies import PolicyVersion as PolicyVersion  # noqa: E402, F401
+from metta.app_backend.models.tournament import Match as Match  # noqa: E402, F401

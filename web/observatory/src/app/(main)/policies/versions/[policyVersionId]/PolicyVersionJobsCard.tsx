@@ -1,6 +1,5 @@
 import { FC } from 'react'
 
-import { StyledLink } from '@/components/StyledLink'
 import { Card } from '@/components/Card'
 import { getRepo } from '@/lib/repo/server'
 
@@ -17,11 +16,6 @@ export const PolicyVersionJobsCard: FC<{ policyVersionId: string }> = async ({ p
 
   return (
     <Card title="Jobs">
-      <div className="flex justify-end mb-3">
-        <StyledLink href={`/episode-jobs?policyVersionId=${policyVersionId}`} className="text-sm">
-          View all jobs
-        </StyledLink>
-      </div>
       {jobs.length === 0 ? (
         <div className="text-gray-500 text-sm">No episode jobs found for this policy version.</div>
       ) : (

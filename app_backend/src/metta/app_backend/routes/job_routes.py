@@ -1,3 +1,6 @@
+# pyright: reportArgumentType=false, reportCallIssue=false, reportAttributeAccessIssue=false, reportOptionalMemberAccess=false, reportUnusedVariable=false, reportUnusedFunction=false
+# SQLModel type stubs cause false positives; route handlers appear "unused" inside factory function
+
 import asyncio
 import json
 import logging
@@ -21,7 +24,7 @@ from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
 from metta.app_backend.job_runner.job_artifacts import job_debug_key, job_logs_key
-from metta.app_backend.models.episodes import Episode
+from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import (
     JobPolicyVersion,
     JobRequest,
@@ -31,6 +34,7 @@ from metta.app_backend.models.job_request import (
     JobType,
 )
 from metta.app_backend.models.policies import PolicyVersion
+from metta.app_backend.models.tournament import Match, Pool
 from metta.app_backend.otel.metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
@@ -45,6 +49,23 @@ MAX_OUTSTANDING_JOBS = 200
 class JobPolicyVersionSummary(BaseModel):
     position: int
     policy: PolicyVersionSummary
+
+
+class EpisodePolicyStat(BaseModel):
+    policy_version_id: UUID
+    num_agents: int
+    avg_reward: float | None
+
+
+class JobEpisodeInfo(BaseModel):
+    replay_url: str | None = None
+    attributes: dict[str, Any] | None = None
+    policy_stats: list[EpisodePolicyStat] = []
+
+
+class JobMatchInfo(BaseModel):
+    pool_name: str | None = None
+    season_name: str | None = None
 
 
 class JobRequestResponse(BaseModel):
@@ -62,9 +83,17 @@ class JobRequestResponse(BaseModel):
     error: str | None
     error_type: str | None
     policy_versions: list[JobPolicyVersionSummary] = []
+    episode: JobEpisodeInfo | None = None
+    match: JobMatchInfo | None = None
 
     @classmethod
-    def from_job(cls, job: JobRequest) -> "JobRequestResponse":
+    def from_job(
+        cls,
+        job: JobRequest,
+        *,
+        episode: "JobEpisodeInfo | None" = None,
+        match: "JobMatchInfo | None" = None,
+    ) -> "JobRequestResponse":
         pvs = [
             JobPolicyVersionSummary(
                 position=jpv.position,
@@ -72,7 +101,12 @@ class JobRequestResponse(BaseModel):
             )
             for jpv in job.policy_versions
         ]
-        return cls(**job.model_dump(exclude={"policy_versions"}), policy_versions=sorted(pvs, key=lambda e: e.position))
+        return cls(
+            **job.model_dump(exclude={"policy_versions"}),
+            policy_versions=sorted(pvs, key=lambda e: e.position),
+            episode=episode,
+            match=match,
+        )
 
 
 def _fixup_episode_job(job: JobRequest) -> None:
@@ -294,31 +328,92 @@ def create_job_router() -> APIRouter:
             except ValueError:
                 return []
         async with db_session() as session:
-            query = (
-                select(JobRequest)
-                .options(
-                    selectinload(JobRequest.policy_versions)  # type: ignore[arg-type]
-                    .joinedload(JobPolicyVersion.policy_version)  # type: ignore[arg-type]
-                    .joinedload(PolicyVersion.policy)  # type: ignore[arg-type]
-                )
-                .order_by(col(JobRequest.created_at).desc())
-                .offset(offset)
-                .limit(limit)
-            )
+            id_query = select(JobRequest.id).order_by(col(JobRequest.created_at).desc()).offset(offset).limit(limit)
             if job_id_uuid:
-                query = query.where(JobRequest.id == job_id_uuid)
+                id_query = id_query.where(JobRequest.id == job_id_uuid)
             if statuses:
-                query = query.where(col(JobRequest.status).in_(statuses))
+                id_query = id_query.where(col(JobRequest.status).in_(statuses))
             if job_type:
-                query = query.where(col(JobRequest.job_type) == job_type)
+                id_query = id_query.where(col(JobRequest.job_type) == job_type)
             if policy_version_id_uuid:
                 policy_job_ids = select(JobPolicyVersion.job_id).where(
                     JobPolicyVersion.policy_version_id == policy_version_id_uuid
                 )
-                query = query.where(col(JobRequest.id).in_(policy_job_ids))
-            result = await session.execute(query)
-            jobs = list(result.scalars().all())
-            return [JobRequestResponse.from_job(job) for job in jobs]
+                id_query = id_query.where(col(JobRequest.id).in_(policy_job_ids))
+            id_result = await session.execute(id_query)
+            job_ids = [row[0] for row in id_result.all()]
+            if not job_ids:
+                return []
+
+            query = (
+                select(JobRequest)
+                .where(col(JobRequest.id).in_(job_ids))
+                .options(
+                    selectinload(JobRequest.policy_versions)  # type: ignore[arg-type]
+                    .joinedload(JobPolicyVersion.policy_version)  # type: ignore[arg-type]
+                    .joinedload(PolicyVersion.policy),  # type: ignore[arg-type]
+                    selectinload(JobRequest.episode_jobs).joinedload(EpisodeJob.episode),  # type: ignore[arg-type]  # type: ignore[arg-type]
+                    selectinload(JobRequest.matches)  # type: ignore[arg-type]
+                    .joinedload(Match.pool)  # type: ignore[arg-type]
+                    .joinedload(Pool.season),  # type: ignore[arg-type]
+                )
+                .order_by(col(JobRequest.created_at).desc())
+            )
+            jobs = (await session.execute(query)).scalars().unique().all()
+
+            completed_job_ids = [jr.id for jr in jobs if jr.status == JobStatus.completed]
+            job_policy_stats: dict[UUID, list[EpisodePolicyStat]] = defaultdict(list)
+            if completed_job_ids:
+                stats_query = (
+                    select(
+                        EpisodeJob.job_id,
+                        EpisodePolicy.policy_version_id,
+                        EpisodePolicy.num_agents,
+                        EpisodePolicyMetric.value,
+                    )
+                    .join(Episode, Episode.id == EpisodeJob.episode_id)
+                    .join(EpisodePolicy, EpisodePolicy.episode_id == Episode.id)
+                    .join(PolicyVersion, PolicyVersion.id == EpisodePolicy.policy_version_id)
+                    .outerjoin(
+                        EpisodePolicyMetric,
+                        (EpisodePolicyMetric.episode_internal_id == Episode.internal_id)
+                        & (EpisodePolicyMetric.pv_internal_id == PolicyVersion.internal_id)
+                        & (EpisodePolicyMetric.metric_name == "reward"),
+                    )
+                    .where(col(EpisodeJob.job_id).in_(completed_job_ids))
+                )
+                stats_result = await session.execute(stats_query)
+                for s_job_id, pv_id, num_agents, reward_value in stats_result.all():
+                    avg_reward = reward_value / num_agents if reward_value is not None and num_agents > 0 else None
+                    job_policy_stats[s_job_id].append(
+                        EpisodePolicyStat(policy_version_id=pv_id, num_agents=num_agents, avg_reward=avg_reward)
+                    )
+
+        # Session is closed — any missing selectinload will raise DetachedInstanceError
+        responses: list[JobRequestResponse] = []
+        for jr in jobs:
+            # episode_jobs is many-to-one, but we only show the first episode per job for now
+            ep = jr.episode_jobs[0].episode if jr.episode_jobs else None
+            episode_info = (
+                JobEpisodeInfo(
+                    replay_url=ep.replay_url if ep else None,
+                    attributes=ep.attributes if ep else None,
+                    policy_stats=job_policy_stats.get(jr.id, []),
+                )
+                if ep is not None or jr.id in job_policy_stats
+                else None
+            )
+            m = jr.matches[0] if jr.matches else None
+            match_info = (
+                JobMatchInfo(
+                    pool_name=m.pool.name if m and m.pool else None,
+                    season_name=m.pool.season.name if m and m.pool and m.pool.season else None,
+                )
+                if m is not None
+                else None
+            )
+            responses.append(JobRequestResponse.from_job(jr, episode=episode_info, match=match_info))
+        return responses
 
     @router.get("/{job_id}/logs")
     @timed_http_handler

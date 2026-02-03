@@ -8,6 +8,7 @@ import { TagList } from '@/components/TagList'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
 
+import { JobsTable } from '../../episode-jobs/JobsTable'
 import { GameStats, PoliciesAndAgents } from './PoliciesAndAgents'
 
 export default async function EpisodeDetailPage(props: PageProps<'/episodes/[episodeId]'>) {
@@ -18,6 +19,8 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
   if (!episode) {
     notFound()
   }
+
+  const jobs = episode.job_id ? await repo.getJobs({ job_id: episode.job_id, limit: 1 }) : []
 
   return (
     <StandardPageLayout>
@@ -43,6 +46,12 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
 
       <GameStats attributes={episode.attributes} />
       <PoliciesAndAgents jobId={episode.tags?.job_id} />
+
+      {jobs.length > 0 && (
+        <Card title="Job">
+          <JobsTable jobs={jobs} />
+        </Card>
+      )}
 
       <Card title="Replay">
         <ReplayViewer replayUrl={episode.replay_url} label="Episode replay" />

@@ -21,6 +21,7 @@ export function formatDate(value: string | null): string {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    second: '2-digit',
   })
 }
 
@@ -53,6 +54,21 @@ export function formatDurationBetween(from: string | null, to: string | null): s
   const toDate = parseDatetime(to)
   if (!fromDate || !toDate) return null
   const diffMs = toDate.getTime() - fromDate.getTime()
+  if (diffMs < 0) return null
+  const seconds = Math.floor(diffMs / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (minutes < 60) return `${minutes}m ${remainingSeconds}s`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `${hours}h ${remainingMinutes}m`
+}
+
+export function formatDurationSince(from: string | null): string | null {
+  const fromDate = parseDatetime(from)
+  if (!fromDate) return null
+  const diffMs = Date.now() - fromDate.getTime()
   if (diffMs < 0) return null
   const seconds = Math.floor(diffMs / 1000)
   if (seconds < 60) return `${seconds}s`

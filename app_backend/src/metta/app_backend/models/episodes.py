@@ -66,3 +66,5 @@ class EpisodeJob(SQLModel, table=True):
 
     episode_id: UUID = Field(foreign_key="episodes.id", primary_key=True)
     job_id: UUID = Field(foreign_key="job_requests.id", primary_key=True)
+
+    episode: Episode = Relationship()
