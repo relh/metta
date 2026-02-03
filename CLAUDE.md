@@ -68,6 +68,11 @@ metta pytest tests/path/to/test.py -v    # Run specific test
 metta pytest --changed                    # Run only tests affected by your changes
 ```
 
+## Observatory
+
+Observatory is the tournament and job orchestration platform. When working on Observatory features, read
+`metta/setup/tools/observatory/CLAUDE.md` for setup, commands, debugging guides, and architecture details.
+
 ## Proto Files
 
 Files in `proto/` define schemas for cross-system boundaries (network APIs, files on disk). Do not modify proto schemas
