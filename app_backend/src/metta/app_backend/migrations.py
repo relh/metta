@@ -307,4 +307,13 @@ MIGRATIONS = [
             """CREATE INDEX idx_episode_jobs_job_id ON episode_jobs (job_id)""",
         ],
     ),
+    SqlMigration(
+        version=13,
+        description="Add composite indexes for leaderboard and tournament queries",
+        sql_statements=[
+            """CREATE INDEX idx_matches_pool_status ON matches (pool_id, status)""",
+            """CREATE INDEX idx_matches_pool_created ON matches (pool_id, created_at DESC)""",
+            """CREATE INDEX idx_pools_season_name ON pools (season_id, name)""",
+        ],
+    ),
 ]
