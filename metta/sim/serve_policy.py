@@ -218,6 +218,7 @@ def main(
     env_interface_file: Annotated[Path, typer.Option(help="Path to PolicyEnvInterface JSON file")],
     host: Annotated[str, typer.Option(help="Host to bind to")] = "127.0.0.1",
     port: Annotated[int, typer.Option(help="Port to bind to (0 for OS-assigned)")] = 8000,
+    port_file: Annotated[Path | None, typer.Option(help="Write bound port number to this file")] = None,
     verbose: Annotated[bool, typer.Option(help="Enable verbose logging")] = False,
 ):
     """Serve a policy over HTTP using the Policy protocol (JSON)."""
@@ -240,6 +241,8 @@ def main(
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind((host, port))
     actual_port = sock.getsockname()[1]
+    if port_file is not None:
+        port_file.write_text(str(actual_port))
     logger.info("Serving policy %s on %s:%d", policy, host, actual_port)
 
     config = uvicorn.Config(app, fd=sock.fileno())
