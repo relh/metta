@@ -124,40 +124,19 @@ Task(
   prompt="""
   You are fixing Graphite branch '<branch-name>' in repository at '<repo_path>'.
 
-  Run the /pr.fix-branch skill on this branch:
+  Invoke the /pr.fix-branch skill using the Skill tool:
+    Skill(skill="pr.fix-branch")
 
-  1. Set up worktree:
-     - Check for existing worktree: git worktree list --porcelain | grep -B2 "branch refs/heads/<branch>"
-     - If exists, cd into it. If not: git worktree add .worktrees/<branch> <branch>
-     - cd into the worktree directory
+  This skill will handle the full flow:
+  - Worktree setup
+  - Sync and restack
+  - Fix PR review comments via /pr.fix-comments (fetch threads, fix code,
+    respond to each comment, resolve threads)
+  - Fix CI failures via /pr.fix-ci
+  - Submit via /pr.submit (lint, commit, submit, test)
 
-  2. Sync and restack:
-     - gt sync --no-interactive
-     - gt restack
-
-  3. Fix PR review comments:
-     - Get PR number: gh pr list --head <branch> --json number -q '.[0].number'
-     - Fetch comments and address unresolved ones
-     - Run tests after fixes: metta pytest --changed
-
-  4. Fix CI failures:
-     - Check CI using commit SHA (NEVER use gh pr checks):
-       HEAD_SHA=$(git rev-parse HEAD)
-       OWNER=$(gh repo view --json owner -q '.owner.login')
-       REPO=$(gh repo view --json name -q '.name')
-       gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
-         --jq '.check_runs[] | "\(.name): \(.conclusion // .status)"'
-     - If failures, get logs and fix them
-     - Verify locally: metta pytest --changed
-
-  5. Submit (lint first, then submit, then test in parallel with CI):
-     - Run /pr.cool to clean up compat code
-     - Check for disabled tests - fix or remove them
-     - Run lint: metta lint (fix any errors)
-     - Stage and commit: git add -A && gt modify --no-interactive
-     - Submit: gt submit --no-interactive (CI starts remotely)
-     - Run tests locally: metta pytest --changed -v
-     - If local tests fail: fix, re-lint, re-commit, re-submit, re-test
+  Before invoking the skill, make sure you are on the correct branch:
+    git checkout <branch-name>
 
   Repository: <repo_path>
   Branch: <branch-name>
