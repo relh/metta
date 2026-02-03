@@ -295,4 +295,16 @@ MIGRATIONS = [
             """UPDATE seasons SET canonical = TRUE""",
         ],
     ),
+    SqlMigration(
+        version=12,
+        description="Add episode_jobs junction table",
+        sql_statements=[
+            """CREATE TABLE episode_jobs (
+                episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+                job_id UUID NOT NULL REFERENCES job_requests(id) ON DELETE CASCADE,
+                PRIMARY KEY (episode_id, job_id)
+            )""",
+            """CREATE INDEX idx_episode_jobs_job_id ON episode_jobs (job_id)""",
+        ],
+    ),
 ]

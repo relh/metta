@@ -60,3 +60,10 @@ class EpisodeTag(SQLModel, table=True):
     value: str
 
     episode: Episode = Relationship(back_populates="tags")
+
+
+class EpisodeJob(SQLModel, table=True):
+    __tablename__ = "episode_jobs"  # type: ignore[assignment]
+
+    episode_id: UUID = Field(foreign_key="episodes.id", primary_key=True)
+    job_id: UUID = Field(foreign_key="job_requests.id", primary_key=True)

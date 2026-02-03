@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import aliased
 
 from metta.app_backend.database import get_db, with_db
-from metta.app_backend.models.episodes import Episode, EpisodePolicy, EpisodePolicyMetric, EpisodeTag
+from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodePolicyMetric, EpisodeTag
 from metta.app_backend.models.policies import PolicyVersion
 
 
@@ -28,6 +28,7 @@ class EpisodeWithTags(BaseModel):
     created_at: Any
     tags: dict[str, str] = Field(default_factory=dict)
     avg_rewards: dict[UUID, float] = Field(default_factory=dict)
+    job_id: UUID | None = None
 
     @field_validator("attributes", mode="before")
     @classmethod
@@ -108,6 +109,13 @@ async def record_episode(
 
 
 @with_db
+async def link_episode_job(episode_id: UUID, job_id: UUID) -> None:
+    session = get_db()
+    session.add(EpisodeJob(episode_id=episode_id, job_id=job_id))
+    await session.flush()
+
+
+@with_db
 async def get_episodes(
     *,
     primary_policy_version_ids: list[UUID] | None = None,
@@ -154,6 +162,15 @@ async def get_episodes(
         .cte("episode_avg_rewards")
     )
 
+    job_cte = (
+        select(
+            EpisodeJob.episode_id,
+            func.min(cast(EpisodeJob.job_id, String)).label("job_id"),
+        )
+        .group_by(EpisodeJob.episode_id)
+        .cte("episode_job_agg")
+    )
+
     attributes_expr = func.coalesce(Episode.attributes, cast(literal("{}"), JSONB)).label("attributes")
     tags_expr = func.coalesce(tags_cte.c.tags, cast(literal("{}"), JSONB)).label("tags")
     avg_rewards_expr = func.coalesce(avg_rewards_cte.c.avg_rewards, cast(literal("{}"), JSONB)).label("avg_rewards")
@@ -169,10 +186,12 @@ async def get_episodes(
             Episode.created_at,
             tags_expr,
             avg_rewards_expr,
+            job_cte.c.job_id.label("job_id"),
         )
         .select_from(Episode)
         .outerjoin(tags_cte, tags_cte.c.episode_id == Episode.id)
         .outerjoin(avg_rewards_cte, avg_rewards_cte.c.episode_id == Episode.id)
+        .outerjoin(job_cte, job_cte.c.episode_id == Episode.id)
     )
 
     where_conditions = []
@@ -215,6 +234,11 @@ async def get_episodes(
         data = dict(row)
         data["tags"] = data["tags"] or {}
         data["avg_rewards"] = {UUID(str(k)): v for k, v in avg_rewards.items()}
+        raw_job_id = data.get("job_id")
+        try:
+            data["job_id"] = UUID(raw_job_id) if raw_job_id else None
+        except (ValueError, AttributeError):
+            data["job_id"] = None
         episodes.append(EpisodeWithTags.model_validate(data))
 
     return episodes

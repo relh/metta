@@ -187,6 +187,7 @@ export type EpisodeWithTags = {
   created_at: string
   tags: Record<string, string>
   avg_rewards: Record<string, number>
+  job_id: string | null
 }
 
 export type PolicyVersionWithName = {

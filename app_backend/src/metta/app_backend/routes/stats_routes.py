@@ -469,6 +469,15 @@ def create_stats_router() -> APIRouter:
                 policy_metrics=policy_metrics_list,
             )
 
+            job_id_tag = dict(tags).get("job_id")
+            if job_id_tag:
+                try:
+                    job_uuid = uuid.UUID(job_id_tag)
+                except (ValueError, AttributeError):
+                    logger.warning("Invalid job_id tag %r for episode %s", job_id_tag, episode_id)
+                else:
+                    await episode_queries.link_episode_job(episode_id, job_uuid)
+
             episodes_created += 1
 
         conn.close()

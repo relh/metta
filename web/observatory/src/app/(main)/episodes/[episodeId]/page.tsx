@@ -28,6 +28,11 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
           <div className="flex flex-wrap gap-3 text-sm text-gray-600">
             <span title={formatDate(episode.created_at)}>Created: {formatRelativeTime(episode.created_at)}</span>
             {episode.eval_task_id && <span>Eval Task: {episode.eval_task_id}</span>}
+            {episode.job_id && (
+              <a href={`/episode-jobs?jobId=${episode.job_id}`} className="text-blue-600 hover:underline">
+                Job: {episode.job_id.slice(0, 8)}
+              </a>
+            )}
             <span className="flex items-center gap-1 text-gray-500">
               Episode ID:
               <span className="font-mono text-xs text-gray-700">{episodeId}</span>
