@@ -23,6 +23,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 import gitta as git
+from devops.datadog.cli import app as datadog_app
 from metta.common.util.fs import get_repo_root
 from metta.common.util.log_config import init_logging
 from metta.setup.components.base import SetupModuleStatus
@@ -700,6 +701,7 @@ def cmd_run_monitor(ctx: typer.Context) -> None:
     )
 
 
+app.add_typer(datadog_app, name="datadog")
 app.add_typer(observatory_app, name="observatory")
 app.add_typer(softmax_com_app, name="softmax-com")
 app.add_typer(book_app, name="book")
