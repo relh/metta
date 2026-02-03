@@ -109,7 +109,6 @@ class TestBulkEpisodeUpload:
         insert_episode(
             conn,
             episode_id=episode_id,
-            primary_pv_id=str(pv_id),
             replay_url="https://example.com/replay.json",
             thumbnail_url=None,
             attributes={"suite": "test", "name": "test_env"},
@@ -158,7 +157,6 @@ class TestBulkEpisodeUpload:
 
         # Update the DuckDB to use the actual policy version ID
         conn = duckdb.connect(str(sample_duckdb))
-        conn.execute(f"UPDATE episodes SET primary_pv_id = '{pv_response.id}'")
         conn.execute(f"UPDATE episode_agent_policies SET policy_version_id = '{pv_response.id}'")
         conn.close()
 
@@ -170,7 +168,7 @@ class TestBulkEpisodeUpload:
 
         # Verify data in database
         async with stats_repo.connect() as con:
-            result = await con.execute("SELECT COUNT(*) FROM episodes WHERE primary_pv_id = %s", (pv_response.id,))
+            result = await con.execute("SELECT COUNT(*) FROM episodes")
             row = await result.fetchone()
             assert row is not None
             assert row[0] >= 1
@@ -199,7 +197,6 @@ class TestBulkEpisodeUpload:
             insert_episode(
                 conn,
                 episode_id=episode_id,
-                primary_pv_id=pv_id_str,
                 replay_url=f"https://example.com/replay_{ep_idx}.json",
                 thumbnail_url=None,
                 attributes={"episode": ep_idx},
@@ -249,7 +246,6 @@ class TestBulkEpisodeUpload:
         insert_episode(
             conn,
             episode_id=episode_id,
-            primary_pv_id=pv1_id_str,
             replay_url=None,
             thumbnail_url=None,
             attributes={},
@@ -325,7 +321,6 @@ class TestBulkEpisodeUpload:
         insert_episode(
             conn,
             episode_id=episode_id,
-            primary_pv_id=pv_id_str,
             replay_url=None,
             thumbnail_url=None,
             attributes={},

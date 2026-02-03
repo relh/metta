@@ -17,14 +17,13 @@ into PostgreSQL. The S3 copy persists indefinitely.
 
 One row per file (always exactly one episode per DuckDB file).
 
-| Column          | Type    | Constraints | Description                                                                         |
-| --------------- | ------- | ----------- | ----------------------------------------------------------------------------------- |
-| `id`            | VARCHAR | PRIMARY KEY | Episode UUID (generated in `episode_recording.py`)                                  |
-| `primary_pv_id` | VARCHAR |             | UUID of the "primary" policy version (first policy in the job's `policy_uris` list) |
-| `replay_url`    | VARCHAR |             | HTTP URL to the episode replay file on S3, or NULL if replay not recorded           |
-| `thumbnail_url` | VARCHAR |             | Always NULL today — reserved for future episode thumbnail images                    |
-| `attributes`    | JSON    |             | Always `{}` today — episode attributes are not populated in DuckDB                  |
-| `eval_task_id`  | VARCHAR |             | Always NULL today — reserved for linking to legacy eval task system                 |
+| Column          | Type    | Constraints | Description                                                               |
+| --------------- | ------- | ----------- | ------------------------------------------------------------------------- |
+| `id`            | VARCHAR | PRIMARY KEY | Episode UUID (generated in `episode_recording.py`)                        |
+| `replay_url`    | VARCHAR |             | HTTP URL to the episode replay file on S3, or NULL if replay not recorded |
+| `thumbnail_url` | VARCHAR |             | Always NULL today — reserved for future episode thumbnail images          |
+| `attributes`    | JSON    |             | Always `{}` today — episode attributes are not populated in DuckDB        |
+| `eval_task_id`  | VARCHAR |             | Always NULL today — reserved for linking to legacy eval task system       |
 
 ### `episode_tags`
 
@@ -128,17 +127,16 @@ Key-value tags on policy versions. Used for filtering in queries.
 
 A single episode (game) that was played and recorded.
 
-| Column          | Type      | Constraints                       | Description                                                                                                           |
-| --------------- | --------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `id`            | UUID      | PK, DEFAULT `uuid_generate_v4()`  | Unique episode identifier                                                                                             |
-| `internal_id`   | SERIAL    | UNIQUE                            | Auto-incrementing integer ID (used in metric FKs for performance)                                                     |
-| `data_uri`      | TEXT      |                                   | S3 URI to the DuckDB file containing full episode data (e.g., `s3://observatory-private/episodes/{upload_id}.duckdb`) |
-| `primary_pv_id` | UUID      | FK → `policy_versions.id` CASCADE | The "main" policy version for this episode (typically the one being evaluated)                                        |
-| `replay_url`    | TEXT      |                                   | HTTP URL to the episode replay file                                                                                   |
-| `thumbnail_url` | TEXT      |                                   | Episode thumbnail image URL (unused today)                                                                            |
-| `attributes`    | JSONB     |                                   | Episode metadata (see Valid Values below)                                                                             |
-| `eval_task_id`  | UUID      |                                   | Link to legacy eval task system (unused in current flow)                                                              |
-| `created_at`    | TIMESTAMP | NOT NULL, DEFAULT `now()`         | When the episode record was created in PostgreSQL                                                                     |
+| Column          | Type      | Constraints                      | Description                                                                                                           |
+| --------------- | --------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `id`            | UUID      | PK, DEFAULT `uuid_generate_v4()` | Unique episode identifier                                                                                             |
+| `internal_id`   | SERIAL    | UNIQUE                           | Auto-incrementing integer ID (used in metric FKs for performance)                                                     |
+| `data_uri`      | TEXT      |                                  | S3 URI to the DuckDB file containing full episode data (e.g., `s3://observatory-private/episodes/{upload_id}.duckdb`) |
+| `replay_url`    | TEXT      |                                  | HTTP URL to the episode replay file                                                                                   |
+| `thumbnail_url` | TEXT      |                                  | Episode thumbnail image URL (unused today)                                                                            |
+| `attributes`    | JSONB     |                                  | Episode metadata (see Valid Values below)                                                                             |
+| `eval_task_id`  | UUID      |                                  | Link to legacy eval task system (unused in current flow)                                                              |
+| `created_at`    | TIMESTAMP | NOT NULL, DEFAULT `now()`        | When the episode record was created in PostgreSQL                                                                     |
 
 #### `episode_tags`
 
@@ -600,7 +598,6 @@ How data transforms during `complete_bulk_upload()` in `stats_routes.py`:
 | DuckDB Table.Column       | PostgreSQL Table.Column   | Transformation                                     |
 | ------------------------- | ------------------------- | -------------------------------------------------- |
 | `episodes.id`             | `episodes.id`             | VARCHAR → UUID cast                                |
-| `episodes.primary_pv_id`  | `episodes.primary_pv_id`  | VARCHAR → UUID cast                                |
 | `episodes.replay_url`     | `episodes.replay_url`     | Direct copy                                        |
 | `episodes.thumbnail_url`  | `episodes.thumbnail_url`  | Direct copy                                        |
 | `episodes.attributes`     | `episodes.attributes`     | Direct copy (JSON → JSONB)                         |

@@ -105,7 +105,6 @@ async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_r
         episode = Episode(
             id=episode_id,
             data_uri="s3://test/episode.json",
-            primary_pv_id=pv_a.id,
             replay_url=None,
             thumbnail_url=None,
             attributes={},
@@ -224,7 +223,6 @@ async def test_leaderboard_weighting_uses_episode_policy_num_agents(isolated_sta
         episode = Episode(
             id=episode_id_1,
             data_uri="s3://test/episode.json",
-            primary_pv_id=pv_a.id,
             replay_url=None,
             thumbnail_url=None,
             attributes={},
@@ -283,7 +281,6 @@ async def test_leaderboard_weighting_uses_episode_policy_num_agents(isolated_sta
         episode_2 = Episode(
             id=episode_id_2,
             data_uri="s3://test/episode-2.json",
-            primary_pv_id=pv_a.id,
             replay_url=None,
             thumbnail_url=None,
             attributes={},

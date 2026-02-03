@@ -348,7 +348,6 @@ def write_eval_results_to_observatory(
                     insert_episode(
                         conn,
                         episode_id=episode_id,
-                        primary_pv_id=primary_policy_version_id,
                         replay_url=e.replay_path,
                         thumbnail_url=None,
                         eval_task_id=None,

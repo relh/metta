@@ -16,7 +16,6 @@ import duckdb
 EPISODE_STATS_SCHEMA = [
     """CREATE TABLE episodes (
       id VARCHAR PRIMARY KEY,
-      primary_pv_id VARCHAR,
       replay_url VARCHAR,
       thumbnail_url VARCHAR,
       attributes JSON,
@@ -84,7 +83,6 @@ def episode_stats_db(path: str | Path | None = None) -> Generator[tuple[duckdb.D
 def insert_episode(
     conn: duckdb.DuckDBPyConnection,
     episode_id: str,
-    primary_pv_id: str | None = None,
     replay_url: str | None = None,
     thumbnail_url: str | None = None,
     attributes: dict[str, Any] | None = None,
@@ -93,10 +91,10 @@ def insert_episode(
     """Insert an episode record into the DuckDB database."""
     conn.execute(
         """
-        INSERT INTO episodes (id, primary_pv_id, replay_url, thumbnail_url, attributes, eval_task_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO episodes (id, replay_url, thumbnail_url, attributes, eval_task_id)
+        VALUES (?, ?, ?, ?, ?)
         """,
-        [episode_id, primary_pv_id, replay_url, thumbnail_url, attributes or {}, eval_task_id],
+        [episode_id, replay_url, thumbnail_url, attributes or {}, eval_task_id],
     )
 
 
@@ -145,12 +143,10 @@ def read_episodes(conn: duckdb.DuckDBPyConnection) -> list[tuple]:
     """Read all episodes from the DuckDB database.
 
     Returns:
-        List of tuples: (id, primary_pv_id, replay_url, thumbnail_url, attributes, eval_task_id)
+        List of tuples: (id, replay_url, thumbnail_url, attributes, eval_task_id)
     """
-    rows = conn.execute(
-        "SELECT id, primary_pv_id, replay_url, thumbnail_url, attributes, eval_task_id FROM episodes"
-    ).fetchall()
-    return [(r[0], r[1], r[2], r[3], _parse_json_attr(r[4]), r[5]) for r in rows]
+    rows = conn.execute("SELECT id, replay_url, thumbnail_url, attributes, eval_task_id FROM episodes").fetchall()
+    return [(r[0], r[1], r[2], _parse_json_attr(r[3]), r[4]) for r in rows]
 
 
 def read_episode_tags(conn: duckdb.DuckDBPyConnection, episode_id: str) -> list[tuple[str, str]]:

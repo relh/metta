@@ -48,7 +48,6 @@ class EpisodeWithTags(BaseModel):
 async def record_episode(
     id: UUID,
     data_uri: str,
-    primary_pv_id: UUID | None,
     replay_url: str | None,
     attributes: dict[str, Any],
     eval_task_id: UUID | None,
@@ -62,7 +61,6 @@ async def record_episode(
     episode = Episode(
         id=id,
         data_uri=data_uri,
-        primary_pv_id=primary_pv_id,
         replay_url=replay_url,
         thumbnail_url=thumbnail_url,
         attributes=attributes,

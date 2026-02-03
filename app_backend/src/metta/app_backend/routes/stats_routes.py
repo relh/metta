@@ -415,11 +415,10 @@ def create_stats_router() -> APIRouter:
         episodes_created = 0
         for episode_row in episodes:
             episode_id = uuid.UUID(episode_row[0]) if isinstance(episode_row[0], str) else episode_row[0]
-            primary_pv_id = uuid.UUID(episode_row[1]) if isinstance(episode_row[1], str) and episode_row[1] else None
-            replay_url = episode_row[2]
-            thumbnail_url = episode_row[3]
-            attributes = episode_row[4] or {}
-            eval_task_id = uuid.UUID(episode_row[5]) if isinstance(episode_row[5], str) and episode_row[5] else None
+            replay_url = episode_row[1]
+            thumbnail_url = episode_row[2]
+            attributes = episode_row[3] or {}
+            eval_task_id = uuid.UUID(episode_row[4]) if isinstance(episode_row[4], str) and episode_row[4] else None
 
             tags = read_episode_tags(conn, str(episode_id))
 
@@ -459,7 +458,6 @@ def create_stats_router() -> APIRouter:
             await episode_queries.record_episode(
                 id=episode_id,
                 data_uri=s3_uri,
-                primary_pv_id=primary_pv_id,
                 replay_url=replay_url,
                 attributes=attributes,
                 eval_task_id=eval_task_id,

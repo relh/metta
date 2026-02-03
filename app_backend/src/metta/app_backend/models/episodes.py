@@ -20,7 +20,6 @@ class Episode(SQLModel, table=True):
         },
     )
     data_uri: str | None = None
-    primary_pv_id: UUID | None = Field(default=None, foreign_key="policy_versions.id")
     replay_url: str | None = None
     thumbnail_url: str | None = None
     attributes: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))

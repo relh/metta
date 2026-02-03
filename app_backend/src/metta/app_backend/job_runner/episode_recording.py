@@ -48,7 +48,6 @@ def populate_single_episode_duckdb(
     insert_episode(
         conn,
         episode_id=str(episode_id),
-        primary_pv_id=str(policy_version_ids[0]) if policy_version_ids[0] else None,
         replay_url=http_url(replay_uri) if replay_uri else None,
         thumbnail_url=None,
         attributes=results.model_dump(),

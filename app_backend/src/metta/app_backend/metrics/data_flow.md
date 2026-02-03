@@ -147,7 +147,7 @@ All agent stats are written to a local DuckDB file. Nothing is filtered at this 
 **DuckDB schema:**
 
 ```sql
-episodes              (id, primary_pv_id, replay_url, thumbnail_url, attributes, eval_task_id)
+episodes              (id, replay_url, thumbnail_url, attributes, eval_task_id)
 episode_tags          (episode_id, key, value)
 episode_agent_policies(episode_id, policy_version_id, agent_id)
 episode_agent_metrics (episode_id, agent_id, metric, value)
@@ -296,7 +296,6 @@ The `get_episodes()` function builds a SQLAlchemy query with two CTEs:
 ```python
 class EpisodeWithTags(BaseModel):
     id: UUID
-    primary_pv_id: UUID | None
     replay_url: str | None
     thumbnail_url: str | None
     attributes: dict[str, Any]

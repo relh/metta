@@ -142,7 +142,6 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
     await episode_queries.record_episode(
         id=episode_id,
         data_uri=f"s3://episodes/{uuid.uuid4()}",
-        primary_pv_id=pv_id,
         replay_url="https://example.com/replays/episode-test",
         attributes={"note": "avg reward should be computed"},
         eval_task_id=None,
