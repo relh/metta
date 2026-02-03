@@ -20,7 +20,6 @@ from metta.app_backend.models.policies import PolicyVersion
 
 class EpisodeWithTags(BaseModel):
     id: UUID
-    primary_pv_id: UUID | None
     replay_url: str | None
     thumbnail_url: str | None
     attributes: dict[str, Any] = Field(default_factory=dict)
@@ -178,7 +177,6 @@ async def get_episodes(
     stmt = (
         select(
             Episode.id,
-            Episode.primary_pv_id,
             Episode.replay_url,
             Episode.thumbnail_url,
             attributes_expr,

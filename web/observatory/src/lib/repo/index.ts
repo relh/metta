@@ -179,7 +179,6 @@ export type PublicPolicyVersionRow = {
 
 export type EpisodeWithTags = {
   id: string
-  primary_pv_id: string | null
   replay_url: string | null
   thumbnail_url: string | null
   attributes: Record<string, any>

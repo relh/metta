@@ -17,13 +17,7 @@ function formatScore(value: number | null | undefined): string {
 }
 
 function getPolicyAvgReward(policyVersionId: string, episode: EpisodeWithTags): number | undefined {
-  if (policyVersionId && episode.avg_rewards[policyVersionId] !== undefined) {
-    return episode.avg_rewards[policyVersionId]
-  }
-  if (episode.primary_pv_id && episode.avg_rewards[episode.primary_pv_id] !== undefined) {
-    return episode.avg_rewards[episode.primary_pv_id]
-  }
-  return undefined
+  return episode.avg_rewards[policyVersionId]
 }
 
 export const VersionEpisodesTable: FC<{ policyVersionId: string; episodes: EpisodeWithTags[] }> = ({
