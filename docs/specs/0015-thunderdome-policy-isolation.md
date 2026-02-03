@@ -93,12 +93,11 @@ Using a single Python process for the game runner and all policies means class n
 
 ### Split into multiple Python processes within one VM
 
-We'll still be coupled to Python, and policy authors will need to make do with whatever version of the Python
-dependencies we provide.
+See [0021-policy-process-isolation](0021-policy-process-isolation.md) for the concrete design.
 
-But they won't need to worry about class name collisions.
-
-We'll need to build (finish building) a wire protocol for the game engine to communicate with the policies.
+Each policy runs in its own process, communicating with the game via HTTP using the Policy v1 protocol (`policy.proto`).
+The game subprocess never imports policy code, eliminating class name collisions, dependency conflicts, and shared-state
+bugs.
 
 ### Split into multiple Python processes, each in a separate VM.
 
