@@ -102,6 +102,7 @@ def record_job_episode(
     job: SingleEpisodeJob,
     results: PureSingleEpisodeResult,
     stats_client: StatsClient,
+    result_data: dict[str, str] | None = None,
 ) -> uuid.UUID:
     policy_version_ids = resolve_policy_version_ids(job.policy_uris, stats_client)
     episode_tags = {"job_id": str(job_id), **job.episode_tags}
@@ -115,6 +116,7 @@ def record_job_episode(
         stats_client=stats_client,
     )
 
-    stats_client.update_job(job_id, JobRequestUpdate(result={"episode_id": str(episode_id)}))
+    final_result = {**(result_data or {}), "episode_id": str(episode_id)}
+    stats_client.update_job(job_id, JobRequestUpdate(result=final_result))
     logger.info(f"Recorded episode {episode_id} for job {job_id}")
     return episode_id

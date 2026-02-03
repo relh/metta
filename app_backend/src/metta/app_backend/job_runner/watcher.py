@@ -5,7 +5,7 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
 
 import boto3
@@ -342,7 +342,15 @@ def _copy_replay_to_public(job_id: UUID, replay_uri: str | None) -> bool:
         return False
 
 
-def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str):
+def _get_runner_image(pod: client.V1Pod) -> str | None:
+    if not pod.status or not pod.status.container_statuses:
+        return None
+    return pod.status.container_statuses[0].image_id or None
+
+
+def _handle_pod_succeeded(
+    stats_client: StatsClient, job_id: UUID, pod_name: str, result_data: dict[str, Any] | None = None
+):
     job_request = stats_client.get_job(job_id)
     if job_request.status in (JobStatus.completed, JobStatus.failed):
         logger.info(f"Job {job_id} already {job_request.status.value}, skipping (pod {pod_name})")
@@ -366,7 +374,7 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
     try:
         job = SingleEpisodeJob.model_validate(job_request.job)
         _copy_replay_to_public(job_id, job.replay_uri)
-        record_job_episode(job_id, job, results, stats_client)  # pyright: ignore[reportArgumentType]
+        record_job_episode(job_id, job, results, stats_client, result_data=result_data)  # pyright: ignore[reportArgumentType]
         _update_job_status(stats_client, job_id, JobStatus.completed)
         logger.info(f"Job {job_id} completed (pod {pod_name})")
     except Exception as e:
@@ -384,14 +392,20 @@ def _handle_pod_terminal(
     pod_name: str,
 ):
     try:
+        runner_image = _get_runner_image(pod)
+        result_data: dict[str, Any] = {}
+        if runner_image:
+            result_data["runner_image"] = runner_image
         with _job_lock(job_id):
             phase = pod.status.phase if pod.status else None
             if phase == "Succeeded":
-                _handle_pod_succeeded(stats_client, job_id, pod_name)
+                _handle_pod_succeeded(stats_client, job_id, pod_name, result_data=result_data)
             elif phase == "Failed":
                 error = _get_pod_error(batch_v1, pod)
                 error_type = _classify_error(error)
                 _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
+                if result_data:
+                    stats_client.update_job(job_id, JobRequestUpdate(result=result_data))
                 logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
         _cleanup_terminated_pod(core_v1, batch_v1, pod, job_id)
     except Exception:

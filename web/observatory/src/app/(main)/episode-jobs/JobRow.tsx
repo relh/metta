@@ -5,6 +5,7 @@ import { StyledLink } from '@/components/StyledLink'
 import { TD, TR } from '@/components/Table'
 import { JobRequest } from '@/lib/repo'
 
+import { LabelRow, LabelValueTable } from './LabelValueTable'
 import { PolicyLink } from './PolicyLink'
 import { StatusBadge } from './StatusBadge'
 import { Timeline } from './Timeline'
@@ -53,22 +54,35 @@ const Tags: FC<{ tags: Record<string, string> }> = ({ tags }) => {
   )
 }
 
-const CopyReproButton: FC<{ jobId: string }> = ({ jobId }) => {
+function parseRunnerImageShort(runnerImage: string | undefined): string | null {
+  if (!runnerImage) return null
+  const digestMatch = runnerImage.match(/sha256:([a-f0-9]+)/)
+  if (digestMatch) return digestMatch[1].slice(0, 12)
+  const lastColon = runnerImage.lastIndexOf(':')
+  if (lastColon === -1) return runnerImage.split('/').pop() ?? runnerImage
+  return runnerImage.slice(lastColon + 1)
+}
+
+const CopyButton: FC<{ text: string; children: React.ReactNode; className?: string; title?: string }> = ({
+  text,
+  children,
+  className,
+  title,
+}) => {
   const [copied, setCopied] = useState(false)
   const handleCopy = useCallback(() => {
-    const cmd = `./tools/run.py recipes.experiment.episode_runner.repro id=${jobId}`
-    navigator.clipboard.writeText(cmd)
+    navigator.clipboard.writeText(text)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
-  }, [jobId])
+  }, [text])
 
   return (
     <button
       onClick={handleCopy}
-      className="text-gray-500 hover:text-gray-800 text-xs bg-transparent border-none cursor-pointer p-0 whitespace-nowrap"
-      title="Copy local repro command"
+      className={`bg-transparent border-none cursor-pointer p-0 ${className ?? ''}`}
+      title={title ?? text}
     >
-      {copied ? 'Copied!' : 'Repro'}
+      {copied ? <span className="text-green-600">Copied!</span> : children}
     </button>
   )
 }
@@ -79,31 +93,69 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const policyByPosition = new Map(policyVersionEntries.map((entry) => [entry.position, entry.policy]))
   const episodeTags = job.job?.episode_tags as Record<string, string> | undefined
   const episodeId = job.result?.episode_id as string | undefined
+  const runnerImageShort = parseRunnerImageShort(job.result?.runner_image as string | undefined)
+  const runnerImageFull = job.result?.runner_image as string | undefined
   const lifecycleError = job.error
 
   return (
     <TR>
       <TD>
-        <StatusBadge status={job.status} />
-        {job.job ? (
-          <button
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(job.job, null, 2)], { type: 'application/json' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `job-${job.id}.json`
-              a.click()
-              URL.revokeObjectURL(url)
-            }}
-            className="font-mono text-xs text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
-            title="Download job spec"
-          >
-            {job.id.slice(0, 8)}
-          </button>
-        ) : (
-          <div className="font-mono text-xs">{job.id.slice(0, 8)}</div>
-        )}
+        <LabelValueTable>
+          <LabelRow label="Status">
+            <StatusBadge status={job.status} />
+          </LabelRow>
+          {runnerImageShort && (
+            <LabelRow label="Runner Image">
+              <CopyButton text={runnerImageFull ?? ''} className="font-mono hover:text-gray-900">
+                <span>{runnerImageShort}</span>
+              </CopyButton>
+            </LabelRow>
+          )}
+          <LabelRow label="Job ID">
+            <CopyButton text={job.id} className="font-mono hover:text-gray-900">
+              <span>{job.id.slice(0, 8)}</span>
+            </CopyButton>
+          </LabelRow>
+          {job.job && (
+            <LabelRow label="Spec">
+              <button
+                onClick={() => {
+                  const blob = new Blob([JSON.stringify(job.job, null, 2)], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `job-${job.id}.json`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+              >
+                Download
+              </button>
+            </LabelRow>
+          )}
+          {(job.status === 'completed' || job.status === 'failed') && (
+            <LabelRow label="Logs">
+              <a
+                href={`/api/jobs/${job.id}/logs`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                View
+              </a>
+            </LabelRow>
+          )}
+          <LabelRow label="Repro">
+            <CopyButton
+              text={`./tools/run.py recipes.experiment.episode_runner.repro id=${job.id}`}
+              className="text-blue-600 hover:underline"
+              title="Copy local repro command"
+            >
+              <span>Copy</span>
+            </CopyButton>
+          </LabelRow>
+        </LabelValueTable>
       </TD>
       <TD>
         {policyUris && policyUris.length > 0 ? (
@@ -142,21 +194,6 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
         ) : (
           '-'
         )}
-      </TD>
-      <TD>
-        <div className="flex gap-2 items-center">
-          {(job.status === 'completed' || job.status === 'failed') && (
-            <a
-              href={`/api/jobs/${job.id}/logs`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:underline text-xs"
-            >
-              Logs
-            </a>
-          )}
-          <CopyReproButton jobId={job.id} />
-        </div>
       </TD>
     </TR>
   )
