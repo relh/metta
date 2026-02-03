@@ -1,7 +1,7 @@
 import requests
 
-from metta.sim.policy_server_manager import launch_policy_server
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
+from mettagrid.runner.policy_server_manager import launch_policy_server
 
 
 def _minimal_env_interface() -> PolicyEnvInterface:

@@ -2545,7 +2545,7 @@ dev = [
     { name = "cpplint", specifier = ">=2.0.2" },
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "gcovr", specifier = ">=8.3" },
-    { name = "grpcio-tools", specifier = ">=1.76.0" },
+    { name = "grpcio-tools", specifier = ">=1.71.0" },
     { name = "import-linter", specifier = ">=2.1" },
     { name = "metta-pr-similarity-mcp", editable = "mcp_servers/pr_similarity" },
     { name = "mypy", specifier = ">=1.18.2" },
@@ -2580,7 +2580,7 @@ mcp-servers = [{ name = "metta-pr-similarity-mcp", editable = "mcp_servers/pr_si
 testing = [
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "gcovr", specifier = ">=8.3" },
-    { name = "grpcio-tools", specifier = ">=1.76.0" },
+    { name = "grpcio-tools", specifier = ">=1.71.0" },
     { name = "pyright", specifier = ">=1.1.401" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
@@ -2774,24 +2774,31 @@ source = { editable = "packages/mettagrid" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
+    { name = "fastapi" },
     { name = "gymnasium" },
     { name = "importnb" },
     { name = "pettingzoo" },
+    { name = "protobuf" },
     { name = "pufferlib-core" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "scipy-stubs" },
+    { name = "typer" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "freezegun" },
+    { name = "grpcio-tools" },
     { name = "pytest" },
     { name = "pytest-benchmark" },
     { name = "pytest-xdist" },
 ]
 testing = [
     { name = "freezegun" },
+    { name = "grpcio-tools" },
     { name = "pytest" },
     { name = "pytest-benchmark" },
     { name = "pytest-xdist" },
@@ -2801,24 +2808,31 @@ testing = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "botocore", specifier = ">=1.38.29" },
+    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "gymnasium", specifier = ">=1.1.1" },
     { name = "importnb", specifier = ">=2023.11.1" },
     { name = "pettingzoo", specifier = ">=1.25" },
+    { name = "protobuf", specifier = ">=6.31.1" },
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
     { name = "pydantic", specifier = ">=2.12.2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "requests", specifier = ">=2.32.0" },
     { name = "scipy-stubs", specifier = ">=1.17.0.0" },
+    { name = "typer", specifier = ">=0.15.0" },
+    { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "freezegun", specifier = ">=1.5.0" },
+    { name = "grpcio-tools", specifier = ">=1.71.0" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
 ]
 testing = [
     { name = "freezegun", specifier = ">=1.5.0" },
+    { name = "grpcio-tools", specifier = ">=1.71.0" },
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },

@@ -61,7 +61,7 @@ def launch_policy_server(
     cmd = [
         sys.executable,
         "-m",
-        "metta.sim.serve_policy",
+        "mettagrid.runner.serve_policy",
         "--policy",
         policy_uri,
         "--env-interface-file",

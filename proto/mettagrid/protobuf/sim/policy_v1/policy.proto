@@ -18,7 +18,7 @@
 
 edition = "2023";
 
-package metta.protobuf.sim.policy_v1;
+package mettagrid.protobuf.sim.policy_v1;
 
 // AgentObservations contains the game engine's observations for a single
 // agent for a given tick of the game.

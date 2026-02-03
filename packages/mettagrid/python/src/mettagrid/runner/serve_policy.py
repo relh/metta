@@ -11,12 +11,11 @@ import typer
 import uvicorn
 from google.protobuf import json_format
 
-from metta.common.util.log_config import init_logging, suppress_noisy_logs
-from metta.protobuf.sim.policy_v1 import policy_pb2
 from mettagrid.config.id_map import ObservationFeatureSpec
 from mettagrid.policy.loader import initialize_or_load_policy
 from mettagrid.policy.policy import AgentPolicy, MultiAgentPolicy
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
+from mettagrid.protobuf.sim.policy_v1 import policy_pb2
 from mettagrid.simulator import AgentObservation, ObservationToken
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
@@ -179,7 +178,7 @@ def create_app(service: PolicyService, *, verbose: bool = False) -> fastapi.Fast
     # TODO: factor out the repeated handler pattern (parse proto request, call service,
     # serialize proto response) into a generic wrapper or decorator.
 
-    @app.post("/metta.protobuf.sim.policy_v1.Policy/PreparePolicy")
+    @app.post("/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy")
     async def prepare_policy(request: fastapi.Request):
         body = await request.body()
         try:
@@ -194,7 +193,7 @@ def create_app(service: PolicyService, *, verbose: bool = False) -> fastapi.Fast
             media_type="application/json",
         )
 
-    @app.post("/metta.protobuf.sim.policy_v1.Policy/BatchStep")
+    @app.post("/mettagrid.protobuf.sim.policy_v1.Policy/BatchStep")
     async def batch_step(request: fastapi.Request):
         body = await request.body()
         try:
@@ -251,6 +250,4 @@ def main(
 
 
 if __name__ == "__main__":
-    init_logging()
-    suppress_noisy_logs()
     cli()

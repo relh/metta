@@ -35,7 +35,8 @@
     "notebooks/.ipynb_checkpoints",
     "**/bindings/generated",
     "packages/cogames/README.py",
-    "packages/cogames/tutorials"
+    "packages/cogames/tutorials",
+    "**/*_pb2.pyi"
   ],
   "extraPaths": [
     "./agent/src",

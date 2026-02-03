@@ -1,9 +1,9 @@
 from fastapi.testclient import TestClient
 
-from metta.protobuf.sim.policy_v1 import policy_pb2
-from metta.sim.serve_policy import PolicyService, create_app
 from mettagrid.policy.policy import AgentPolicy, MultiAgentPolicy
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
+from mettagrid.protobuf.sim.policy_v1 import policy_pb2
+from mettagrid.runner.serve_policy import PolicyService, create_app
 from mettagrid.simulator import Action, AgentObservation
 
 
@@ -40,7 +40,7 @@ def test_prepare_policy():
     client = TestClient(app)
 
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/PreparePolicy",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy",
         json={
             "episode_id": "ep-123",
             "game_rules": {
@@ -69,7 +69,7 @@ def test_prepare_policy_wrong_method():
     app = create_app(PolicyService(lambda _: ConstantActionPolicy(42), null_env_adapter))
     client = TestClient(app)
 
-    response = client.get("/metta.protobuf.sim.policy_v1.Policy/PreparePolicy")
+    response = client.get("/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy")
 
     assert response.status_code == 405
 
@@ -79,7 +79,7 @@ def test_prepare_policy_invalid_json_shape():
     client = TestClient(app)
 
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/PreparePolicy",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy",
         json={"episode_id": True},  # should be string, not bool
     )
 
@@ -92,7 +92,7 @@ def test_prepare_policy_unsupported_observation_format():
 
     # AGENT_OBSERVATIONS_FORMAT_UNKNOWN (0) is not supported
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/PreparePolicy",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy",
         json={"episode_id": "ep-123", "agent_ids": [0], "observations_format": "AGENT_OBSERVATIONS_FORMAT_UNKNOWN"},
     )
 
@@ -106,7 +106,7 @@ def test_batch_step():
 
     # Must call PreparePolicy first to register the episode
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/PreparePolicy",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy",
         json={
             "episode_id": "ep-123",
             "agent_ids": [0],
@@ -117,7 +117,7 @@ def test_batch_step():
     assert response.status_code == 200
 
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/BatchStep",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/BatchStep",
         json={
             "episode_id": "ep-123",
             "step_id": 1,
@@ -140,7 +140,7 @@ def test_batch_step_unknown_episode():
     client = TestClient(app)
 
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/BatchStep",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/BatchStep",
         json={
             "episode_id": "nonexistent",
             "step_id": 1,
@@ -157,14 +157,14 @@ def test_batch_step_unknown_agent():
 
     # Register episode with agent 0
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/PreparePolicy",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/PreparePolicy",
         json={"episode_id": "ep-123", "agent_ids": [0], "observations_format": "TRIPLET_V1"},
     )
     assert response.status_code == 200
 
     # Request step for agent 99, which wasn't registered
     response = client.post(
-        "/metta.protobuf.sim.policy_v1.Policy/BatchStep",
+        "/mettagrid.protobuf.sim.policy_v1.Policy/BatchStep",
         json={
             "episode_id": "ep-123",
             "step_id": 1,
