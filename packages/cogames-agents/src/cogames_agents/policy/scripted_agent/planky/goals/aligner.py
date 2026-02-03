@@ -121,7 +121,7 @@ class AlignJunctionGoal(Goal):
         return ctx.navigator.get_action(ctx.state.position, target, ctx.map, reach_adjacent=True)
 
     def _find_best_target(self, ctx: PlankyContext) -> tuple[int, int] | None:
-        """Find neutral junction, spreading aligners across different targets by agent_id."""
+        """Find nearest neutral junction."""
         pos = ctx.state.position
 
         def recently_failed(p: tuple[int, int]) -> bool:
@@ -141,17 +141,7 @@ class AlignJunctionGoal(Goal):
 
         if not candidates:
             return None
-
-        # Sort by distance, then use agent_id offset to spread aligners
-        # across different junctions when multiple are available
         candidates.sort()
-        if len(candidates) > 1:
-            idx = ctx.agent_id % len(candidates)
-            # Pick from top 3 nearest (or fewer), offset by agent_id
-            top_n = min(3, len(candidates))
-            idx = ctx.agent_id % top_n
-            return candidates[idx][1]
-
         return candidates[0][1]
 
 

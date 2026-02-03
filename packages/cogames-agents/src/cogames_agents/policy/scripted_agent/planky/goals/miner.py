@@ -350,13 +350,10 @@ class MineResourceGoal(Goal):
     MAX_ATTEMPTS_PER_EXTRACTOR = 5
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # When collective is well-stocked, switch to aligner instead of idling
+        # Stop mining when the collective is well-stocked
         if _collective_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
-            if not ctx.blackboard.get("_miner_converted"):
-                ctx.blackboard["_miner_converted"] = True
-                ctx.blackboard["change_role"] = "aligner"
-                if ctx.trace:
-                    ctx.trace.skip(self.name, "resources sufficient, converting to aligner")
+            if ctx.trace:
+                ctx.trace.skip(self.name, "collective resources sufficient, idling")
             return True
         return False
 
