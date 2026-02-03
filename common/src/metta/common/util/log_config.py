@@ -111,7 +111,7 @@ def _init_console_logging() -> None:
 
     # Check if we're running with wandb or in a context where logs might be captured
     # This includes wandb runs, batch jobs, or when NO_HYPERLINKS is set
-    use_simple_handler = any(
+    use_simple_handler = not (hasattr(sys.stdout, "isatty") and sys.stdout.isatty()) or any(
         os.environ.get(key) is not None
         for key in (
             "WANDB_MODE",  # wandb is configured
