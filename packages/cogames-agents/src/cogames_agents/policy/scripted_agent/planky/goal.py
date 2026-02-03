@@ -60,8 +60,10 @@ def evaluate_goals(goals: list[Goal], ctx: PlankyContext) -> Action:
                 ctx.trace.skip(leaf.name, "deferred")
             continue
 
+        chain = _build_chain(goal, leaf)
+        ctx.blackboard["_active_goal"] = chain
         if ctx.trace:
-            ctx.trace.active_goal_chain = _build_chain(goal, leaf)
+            ctx.trace.active_goal_chain = chain
             ctx.trace.action_name = action.name
 
         return action

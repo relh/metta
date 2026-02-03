@@ -546,8 +546,9 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
                 agent_state.entity_map,
                 direction_bias=["north", "east", "south", "west"][self._agent_id % 4],
             )
+            agent_state.blackboard["_active_goal"] = f"ForceExplore(stuck={fail_count})"
             if trace:
-                trace.active_goal_chain = f"ForceExplore(stuck={fail_count})"
+                trace.active_goal_chain = agent_state.blackboard["_active_goal"]
                 trace.action_name = action.name
         else:
             # Evaluate goals normally
@@ -573,6 +574,25 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
                     f"cargo={state.cargo_total}/{state.cargo_capacity} "
                     f"energy={state.energy}"
                 )
+
+        # Publish policy infos for renderer
+        active_goal = trace.active_goal_chain if trace else ""
+        nav_target = trace.nav_target if trace else None
+        # Capture active goal and nav target even without tracing
+        if not trace:
+            active_goal = agent_state.blackboard.get("_active_goal", "")
+            nav_target = agent_state.navigator._cached_target
+
+        info: dict[str, Any] = {
+            "role": agent_state.role,
+            "goal": active_goal,
+        }
+        if nav_target:
+            info["target"] = f"{nav_target[0]},{nav_target[1]}"
+        target_resource = agent_state.blackboard.get("target_resource")
+        if target_resource:
+            info["mining"] = target_resource
+        self._infos = info
 
         # Track action for failed-move detection
         agent_state.blackboard["_last_action"] = action.name
