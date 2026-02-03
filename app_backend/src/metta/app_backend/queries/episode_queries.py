@@ -197,7 +197,16 @@ async def get_episodes(
     where_conditions = []
 
     if primary_policy_version_ids:
-        where_conditions.append(Episode.primary_pv_id.in_(primary_policy_version_ids))
+        where_conditions.append(
+            exists(
+                select(1)
+                .select_from(EpisodePolicy)
+                .where(
+                    EpisodePolicy.episode_id == Episode.id,
+                    EpisodePolicy.policy_version_id.in_(primary_policy_version_ids),
+                )
+            )
+        )
 
     if episode_ids:
         where_conditions.append(Episode.id.in_(episode_ids))
