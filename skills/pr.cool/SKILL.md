@@ -9,13 +9,14 @@ description:
 
 ## Overview
 
-Analyze a branch and clean it up. **Works in a git worktree by default** for isolation.
+Analyze a branch and clean it up. Works in a **worktree, branch, or checkout** (worktree recommended for isolation).
 
 1. **Scope check** - Verify only features in the PR description are in the branch
 2. **Compat cleanup** - Remove backwards compatibility code, fix callsites
 3. **Assert over fallback** - Replace defensive fallbacks with assertions
 
-**Core principle:** Worktree → Verify scope → Delete compat code → Fix callsites → Assert don't fallback
+**Core principle:** Context (worktree/branch/checkout) → Verify scope → Delete compat code → Fix callsites → Assert
+don't fallback
 
 **Announce at start:** "I'm using the cool skill to verify scope and clean up this branch."
 
@@ -26,7 +27,7 @@ digraph cool {
   rankdir=TB;
   node [shape=box];
 
-  worktree [label="Step 0: Worktree Setup"];
+  context [label="Step 0: Context Setup (Worktree/Branch/Checkout)"];
   scope [label="Step 1: Verify Scope"];
   get_pr [label="Get PR description"];
   get_changes [label="Analyze actual changes"];
@@ -41,7 +42,7 @@ digraph cool {
   test [label="Step 5: Run Tests"];
   submit [label="Step 6: Submit"];
 
-  worktree -> scope -> get_pr -> get_changes -> compare -> ask;
+  context -> scope -> get_pr -> get_changes -> compare -> ask;
   ask -> remove [label="remove features"];
   ask -> update_desc [label="update description"];
   ask -> analyze [label="scope OK"];
@@ -51,9 +52,10 @@ digraph cool {
 }
 ```
 
-## Step 0: Worktree Setup (Default)
+## Step 0: Context Setup (Worktree/Branch/Checkout)
 
-By default, work in an isolated git worktree. **Skip if already in worktree** (e.g., called from /pr.submit).
+Choose a working context: **worktree, branch, or checkout**. Worktree is recommended for isolation. **Skip setup if
+you're already in the right context** (e.g., called from /pr.submit).
 
 ```bash
 BRANCH=$(git branch --show-current)
@@ -63,13 +65,13 @@ WORKTREE_PATH=$(git worktree list --porcelain | grep -B2 "branch refs/heads/$BRA
 if [ "$(pwd)" = "$WORKTREE_PATH" ]; then
   echo "Already in worktree for $BRANCH - skipping setup"
 else
-  # Ask user (with worktree as default)
-  # If yes: create/reuse worktree, cd into it
-  # If no: continue in current directory
+  # Ask user which context to use (worktree/branch/checkout; worktree recommended)
+  # If worktree: create/reuse worktree, cd into it
+  # If branch/checkout: continue in current directory
 fi
 ```
 
-**If using worktree:** Follow `using-git-worktrees` skill - find/create `.worktrees/$BRANCH`, verify ignored, run
+**If using a worktree:** Follow `using-git-worktrees` skill - find/create `.worktrees/$BRANCH`, verify ignored, run
 project setup.
 
 ## Step 1: Verify Scope
@@ -517,22 +519,23 @@ widget = Widget(name="foo", dimensions=Size(10, 10))
 - **Problem:** Hard to track which change broke what
 - **Fix:** Run tests incrementally, fix as you go
 
-## Step 7: Worktree Cleanup
+## Step 7: Worktree Cleanup (If Used)
 
-After submission is complete, invoke `/wt.cleanup` to remove the worktree and return to the main repo.
+If you used a worktree, invoke `/wt.cleanup` to remove the worktree and return to the main repo.
 
-**Skip cleanup if** called from another skill (e.g., `/pr.submit`) that manages its own worktree lifecycle.
+**Skip cleanup if** called from another skill (e.g., `/pr.submit`) that manages its own context lifecycle (often a
+worktree).
 
 ## Integration
 
 **Uses:**
 
-- **using-git-worktrees** - For worktree setup (Step 0, when called standalone)
-- **wt.cleanup** - Worktree removal (Step 7)
+- **using-git-worktrees** - For optional worktree setup (Step 0)
+- **wt.cleanup** - Worktree removal if used (Step 7)
 
 **Called by:**
 
-- **pr.submit** - As Step 4, after tests pass and before final submission (worktree already set up)
+- **pr.submit** - As Step 4, after tests pass and before final submission (context already set up, often a worktree)
 
 **Pairs with:**
 
