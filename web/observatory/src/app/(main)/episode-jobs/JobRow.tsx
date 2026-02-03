@@ -87,6 +87,24 @@ const CopyButton: FC<{ text: string; children: React.ReactNode; className?: stri
   )
 }
 
+function truncateValue(value: unknown, depth: number = 0): unknown {
+  if (depth > 4) return '...'
+  if (typeof value === 'string' && value.length > 80) return value.slice(0, 80) + '...'
+  if (Array.isArray(value)) {
+    const truncated = value.slice(0, 10).map((v) => truncateValue(v, depth + 1))
+    if (value.length > 10) truncated.push(`... +${value.length - 10} more`)
+    return truncated
+  }
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = truncateValue(v, depth + 1)
+    }
+    return result
+  }
+  return value
+}
+
 export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const policyUris = job.job?.policy_uris as string[] | undefined
   const policyVersionEntries = job.policy_versions
@@ -96,105 +114,125 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const runnerImageShort = parseRunnerImageShort(job.result?.runner_image as string | undefined)
   const runnerImageFull = job.result?.runner_image as string | undefined
   const lifecycleError = job.error
+  const [showSpec, setShowSpec] = useState(false)
 
   return (
-    <TR>
-      <TD>
-        <LabelValueTable>
-          <LabelRow label="Status">
-            <StatusBadge status={job.status} />
-          </LabelRow>
-          {runnerImageShort && (
-            <LabelRow label="Runner Image">
-              <CopyButton text={runnerImageFull ?? ''} className="font-mono hover:text-gray-900">
-                <span>{runnerImageShort}</span>
+    <>
+      <TR>
+        <TD>
+          <LabelValueTable>
+            <LabelRow label="Status">
+              <StatusBadge status={job.status} />
+            </LabelRow>
+            {runnerImageShort && (
+              <LabelRow label="Runner Image">
+                <CopyButton text={runnerImageFull ?? ''} className="font-mono hover:text-gray-900">
+                  <span>{runnerImageShort}</span>
+                </CopyButton>
+              </LabelRow>
+            )}
+            <LabelRow label="Job ID">
+              <CopyButton text={job.id} className="font-mono hover:text-gray-900">
+                <span>{job.id.slice(0, 8)}</span>
               </CopyButton>
             </LabelRow>
-          )}
-          <LabelRow label="Job ID">
-            <CopyButton text={job.id} className="font-mono hover:text-gray-900">
-              <span>{job.id.slice(0, 8)}</span>
-            </CopyButton>
-          </LabelRow>
-          {job.job && (
-            <LabelRow label="Spec">
-              <button
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(job.job, null, 2)], { type: 'application/json' })
-                  const url = URL.createObjectURL(blob)
-                  const a = document.createElement('a')
-                  a.href = url
-                  a.download = `job-${job.id}.json`
-                  a.click()
-                  URL.revokeObjectURL(url)
-                }}
-                className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
-              >
-                Download
-              </button>
-            </LabelRow>
-          )}
-          {(job.status === 'completed' || job.status === 'failed') && (
-            <LabelRow label="Logs">
-              <a
-                href={`/api/jobs/${job.id}/logs`}
-                target="_blank"
-                rel="noopener noreferrer"
+            {job.job && (
+              <LabelRow label="Spec">
+                <span className="flex gap-1.5 justify-end">
+                  <button
+                    onClick={() => setShowSpec(!showSpec)}
+                    className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+                  >
+                    {showSpec ? 'Collapse' : 'Expand'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([JSON.stringify(job.job, null, 2)], { type: 'application/json' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `job-${job.id}.json`
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                    className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+                  >
+                    Download
+                  </button>
+                </span>
+              </LabelRow>
+            )}
+            {(job.status === 'completed' || job.status === 'failed') && (
+              <LabelRow label="Logs">
+                <a
+                  href={`/api/jobs/${job.id}/logs`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:underline text-xs"
+                >
+                  View
+                </a>
+              </LabelRow>
+            )}
+            <LabelRow label="Repro">
+              <CopyButton
+                text={`./tools/run.py recipes.experiment.episode_runner.repro id=${job.id}`}
                 className="text-blue-600 hover:underline"
+                title="Copy local repro command"
               >
-                View
-              </a>
+                <span>Copy</span>
+              </CopyButton>
             </LabelRow>
+          </LabelValueTable>
+        </TD>
+        <TD>
+          {policyUris && policyUris.length > 0 ? (
+            policyUris.map((uri, i) => (
+              <div key={`${uri}-${i}`}>
+                <PolicyLink uri={uri} policy={policyByPosition.get(i)} />
+              </div>
+            ))
+          ) : policyVersionEntries.length > 0 ? (
+            policyVersionEntries.map((entry) => (
+              <div key={`${entry.policy.id}-${entry.position}`}>
+                <PolicyLink uri={`metta://policy/${entry.policy.id}`} policy={entry.policy} />
+              </div>
+            ))
+          ) : (
+            <span className="text-gray-400">-</span>
           )}
-          <LabelRow label="Repro">
-            <CopyButton
-              text={`./tools/run.py recipes.experiment.episode_runner.repro id=${job.id}`}
-              className="text-blue-600 hover:underline"
-              title="Copy local repro command"
-            >
-              <span>Copy</span>
-            </CopyButton>
-          </LabelRow>
-        </LabelValueTable>
-      </TD>
-      <TD>
-        {policyUris && policyUris.length > 0 ? (
-          policyUris.map((uri, i) => (
-            <div key={`${uri}-${i}`}>
-              <PolicyLink uri={uri} policy={policyByPosition.get(i)} />
-            </div>
-          ))
-        ) : policyVersionEntries.length > 0 ? (
-          policyVersionEntries.map((entry) => (
-            <div key={`${entry.policy.id}-${entry.position}`}>
-              <PolicyLink uri={`metta://policy/${entry.policy.id}`} policy={entry.policy} />
-            </div>
-          ))
-        ) : (
-          <span className="text-gray-400">-</span>
-        )}
-      </TD>
-      <TD>
-        {episodeTags && Object.keys(episodeTags).length > 0 ? (
-          <Tags tags={episodeTags} />
-        ) : (
-          <span className="text-gray-400">-</span>
-        )}
-      </TD>
-      <TD>
-        <Timeline job={job} />
-      </TD>
-      <TD>
-        {episodeId ? (
-          <StyledLink href={`/episodes/${episodeId}`}>View</StyledLink>
-        ) : lifecycleError ? (
-          <span className="text-red-600 text-xs truncate max-w-[150px] block" title={lifecycleError}>
-            {lifecycleError}
-          </span>
-        ) : (
-          '-'
-        )}
-      </TD>
-    </TR>
+        </TD>
+        <TD>
+          {episodeTags && Object.keys(episodeTags).length > 0 ? (
+            <Tags tags={episodeTags} />
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </TD>
+        <TD>
+          <Timeline job={job} />
+        </TD>
+        <TD>
+          {episodeId ? (
+            <StyledLink href={`/episodes/${episodeId}`}>View</StyledLink>
+          ) : lifecycleError ? (
+            <span className="text-red-600 text-xs truncate max-w-[150px] block" title={lifecycleError}>
+              {lifecycleError}
+            </span>
+          ) : (
+            '-'
+          )}
+        </TD>
+      </TR>
+      {showSpec && job.job && (
+        <TR>
+          <TD colSpan={5}>
+            <pre className="bg-gray-50 border border-gray-200 rounded p-2 text-[11px] overflow-auto max-h-[300px] m-0">
+              {JSON.stringify(truncateValue(job.job), null, 2)}
+            </pre>
+          </TD>
+        </TR>
+      )}
+    </>
   )
 }
