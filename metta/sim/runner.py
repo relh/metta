@@ -3,7 +3,6 @@ import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Callable, Sequence
 
-import numpy as np
 from metta_alo.scoring import allocate_counts, validate_proportions
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,7 +24,7 @@ def _run_single_simulation(
 
     proportions = list(sim_cfg.proportions) if sim_cfg.proportions is not None else [1.0] * len(policy_specs)
     counts = allocate_counts(sim_cfg.env.game.num_agents, proportions)
-    assignments = np.repeat(np.arange(len(counts), dtype=int), counts)
+    assignments = [i for i, c in enumerate(counts) for _ in range(c)]
     max_action_time_ms = sim_cfg.max_action_time_ms or 10000
     rollout_result, _replay_paths = run_multi_episode_rollout(
         policy_specs=policy_specs,
