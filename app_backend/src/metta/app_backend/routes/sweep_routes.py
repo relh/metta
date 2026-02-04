@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from metta.app_backend.auth import CheckUser
+from metta.app_backend.auth import CheckSoftmaxUser
 from metta.app_backend.queries import sweep_queries
 from metta.app_backend.route_logger import timed_http_handler
 
@@ -36,7 +36,7 @@ def create_sweep_router() -> APIRouter:
 
     @router.post("/{sweep_name}/create_sweep")
     @timed_http_handler
-    async def create_sweep(sweep_name: str, request: SweepCreateRequest, user: CheckUser) -> SweepCreateResponse:
+    async def create_sweep(sweep_name: str, request: SweepCreateRequest, user: CheckSoftmaxUser) -> SweepCreateResponse:
         existing_sweep = await sweep_queries.get_sweep_by_name(sweep_name)
 
         if existing_sweep:
@@ -54,7 +54,7 @@ def create_sweep_router() -> APIRouter:
 
     @router.get("/{sweep_name}")
     @timed_http_handler
-    async def get_sweep(sweep_name: str, user: CheckUser) -> SweepInfo:
+    async def get_sweep(sweep_name: str, user: CheckSoftmaxUser) -> SweepInfo:
         sweep = await sweep_queries.get_sweep_by_name(sweep_name)
 
         if not sweep:
@@ -64,7 +64,7 @@ def create_sweep_router() -> APIRouter:
 
     @router.post("/{sweep_name}/runs/next")
     @timed_http_handler
-    async def get_next_run_id(sweep_name: str, user: CheckUser) -> RunIdResponse:
+    async def get_next_run_id(sweep_name: str, user: CheckSoftmaxUser) -> RunIdResponse:
         sweep = await sweep_queries.get_sweep_by_name(sweep_name)
 
         if not sweep:

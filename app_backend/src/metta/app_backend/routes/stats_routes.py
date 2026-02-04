@@ -6,10 +6,10 @@ from typing import Annotated, Any, Optional
 
 import aioboto3
 import duckdb
-from fastapi import APIRouter, Body, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from metta.app_backend.auth import CheckMaybeUser, CheckUser
+from metta.app_backend.auth import CheckMaybeUser, CheckSoftmaxUser, CheckUser
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
@@ -215,7 +215,10 @@ def create_stats_router() -> APIRouter:
 
     @router.post("/policies")
     @timed_http_handler
-    async def upsert_policy(policy: PolicyCreate, user: CheckUser) -> UUIDResponse:
+    async def upsert_policy(policy: PolicyCreate, user: CheckSoftmaxUser) -> UUIDResponse:
+        """
+        Internal endpoint. Cogames uploads use submit/presigned-url and submit/complete.
+        """
         if policy.is_system_policy:
             user_id = "system"
         else:
@@ -232,9 +235,15 @@ def create_stats_router() -> APIRouter:
     @router.post("/policies/{policy_id_str}/versions")
     @timed_http_handler
     async def create_policy_version(
-        policy_id_str: str, policy_version: PolicyVersionCreate, user: CheckUser
+        policy_id_str: str, policy_version: PolicyVersionCreate, user: CheckSoftmaxUser
     ) -> UUIDResponse:
+        """
+        Internal endpoint. Cogames uploads use submit/presigned-url and submit/complete.
+        """
         policy_id = uuid.UUID(policy_id_str)
+        # We could check policy ownership here, but this route is softmax-only, and doing this for other users can
+        # sometimes be convenient for debugging.
+        # Related: https://app.asana.com/1/1209016784099267/task/1212896601632585/comment/1213074742971731?focus=true
         policy_version_id = await policy_queries.create_policy_version(
             policy_id=policy_id,
             s3_path=policy_version.s3_path,
@@ -246,7 +255,7 @@ def create_stats_router() -> APIRouter:
 
     @router.get("/policies/versions/{policy_version_id_str}")
     @timed_http_handler
-    async def get_policy_version(policy_version_id_str: str) -> PolicyVersionWithName:
+    async def get_policy_version(policy_version_id_str: str, _user: CheckSoftmaxUser) -> PolicyVersionWithName:
         policy_version_id = uuid.UUID(policy_version_id_str)
         pv = await policy_queries.get_policy_version_with_name(policy_version_id)
         if pv is None:
@@ -261,7 +270,8 @@ def create_stats_router() -> APIRouter:
 
     @router.get("/policies/{policy_id}")
     @timed_http_handler
-    async def get_policy_by_id(policy_id: str, user: CheckUser) -> PublicPolicyVersionRow:
+    async def get_policy_by_id(policy_id: str) -> PublicPolicyVersionRow:
+        """Get a policy version by ID. Public endpoint - no auth required."""
         try:
             policy_version_id = uuid.UUID(policy_id)
         except ValueError:
@@ -277,39 +287,14 @@ def create_stats_router() -> APIRouter:
     @router.put("/policies/versions/{policy_version_id_str}/tags")
     @timed_http_handler
     async def update_policy_version_tags_route(
-        policy_version_id_str: str, tags: Annotated[dict[str, str], Body(...)], user: CheckUser
+        policy_version_id_str: str, tags: Annotated[dict[str, str], Body(...)], user: CheckSoftmaxUser
     ) -> UUIDResponse:
         policy_version_id = uuid.UUID(policy_version_id_str)
+        # We could check policy version ownership here, but this route is softmax-only, and doing this for other users
+        # can sometimes be convenient for debugging.
+        # Related: https://app.asana.com/1/1209016784099267/task/1212896601632585/comment/1213074742971731?focus=true
         await policy_queries.upsert_policy_version_tags(policy_version_id, tags)
         return UUIDResponse(id=policy_version_id)
-
-    @router.post("/policies/submit")
-    @timed_http_handler
-    async def submit_policy(file: UploadFile, user: CheckUser, name: str = Form(...)) -> PolicyVersionResponse:
-        if not file.filename or not file.filename.endswith(".zip"):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be a .zip file",
-            )
-
-        submission_uuid = uuid.uuid4()
-        s3_key = f"cogames/submissions/{user.id}/{submission_uuid}.zip"
-
-        with tempfile.SpooledTemporaryFile(max_size=100 * 1024 * 1024) as temp_file:
-            while chunk := await file.read(8192):
-                temp_file.write(chunk)
-            temp_file.seek(0)
-
-            session = aioboto3.Session()
-            async with session.client("s3") as s3_client:  # type: ignore
-                await s3_client.upload_fileobj(
-                    temp_file,
-                    policy_s3_bucket,
-                    s3_key,
-                    ExtraArgs={"ContentType": "application/zip"},
-                )
-
-        return await _create_policy_version_from_s3_key(name=name, user_id=user.id, s3_key=s3_key)
 
     @router.post("/policies/submit/presigned-url")
     @timed_http_handler
@@ -364,7 +349,9 @@ def create_stats_router() -> APIRouter:
 
     @router.post("/episodes/bulk_upload/presigned-url")
     @timed_http_handler
-    async def get_bulk_upload_presigned_url(user: CheckUser) -> PresignedUploadUrlResponse:
+    async def get_bulk_upload_presigned_url(
+        user: CheckSoftmaxUser,  # only softmax users can bulk-upload
+    ) -> PresignedUploadUrlResponse:
         from botocore.config import Config  # noqa: PLC0415
 
         upload_id = uuid.uuid4()
@@ -388,7 +375,7 @@ def create_stats_router() -> APIRouter:
     @timed_http_handler
     async def complete_bulk_upload(
         request: CompleteBulkUploadRequest,
-        user: CheckUser,
+        user: CheckSoftmaxUser,  # only softmax users can bulk-upload
     ) -> BulkEpisodeUploadResponse:
         from metta.app_backend.episode_stats_db import (  # noqa: PLC0415
             read_agent_metrics,

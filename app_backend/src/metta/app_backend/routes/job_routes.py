@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
-from metta.app_backend.auth import CheckUser
+from metta.app_backend.auth import CheckSoftmaxUser, CheckUser
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
@@ -202,7 +202,7 @@ def create_job_router() -> APIRouter:
 
     @router.post("/batch")
     @timed_http_handler
-    async def create_jobs_batch(jobs: list[JobRequestCreate], user: CheckUser) -> list[UUID]:
+    async def create_jobs_batch(jobs: list[JobRequestCreate], user: CheckSoftmaxUser) -> list[UUID]:
         if not jobs:
             return []
 
@@ -307,7 +307,7 @@ def create_job_router() -> APIRouter:
     @router.get("")
     @timed_http_handler
     async def list_jobs(
-        _user: CheckUser,
+        _user: CheckSoftmaxUser,
         job_type: JobType | None = Query(default=None),
         statuses: list[JobStatus] | None = Query(default=None),
         job_id: str | None = Query(default=None),
@@ -417,7 +417,7 @@ def create_job_router() -> APIRouter:
 
     @router.get("/{job_id}/logs")
     @timed_http_handler
-    async def get_job_logs(job_id: UUID, _user: CheckUser) -> PlainTextResponse:
+    async def get_job_logs(job_id: UUID, _user: CheckSoftmaxUser) -> PlainTextResponse:
         async with db_session() as session:
             result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
             if not result.scalar_one_or_none():
@@ -536,7 +536,7 @@ def create_job_router() -> APIRouter:
 
     @router.get("/{job_id}")
     @timed_http_handler
-    async def get_job(job_id: UUID, _user: CheckUser) -> JobRequestResponse:
+    async def get_job(job_id: UUID, _user: CheckSoftmaxUser) -> JobRequestResponse:
         async with db_session() as session:
             query = (
                 select(JobRequest)
@@ -555,7 +555,7 @@ def create_job_router() -> APIRouter:
 
     @router.post("/{job_id}")
     @timed_http_handler
-    async def update_job(job_id: UUID, request: JobRequestUpdate, _user: CheckUser) -> JobRequest:
+    async def update_job(job_id: UUID, request: JobRequestUpdate, _user: CheckSoftmaxUser) -> JobRequest:
         async with db_session() as session:
             result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
             job = result.scalar_one_or_none()

@@ -101,7 +101,9 @@ def test_create_sweep_with_machine_token(test_client: TestClient):
     """Test creating sweep with machine token authentication."""
     test_sweep_id = uuid.uuid4()
 
-    mock_validate = AsyncMock(return_value=User(id="machine_user_id", email="machine_user@example.com"))
+    mock_validate = AsyncMock(
+        return_value=User(id="machine_user_id", email="machine_user@example.com", is_softmax_team_member=True)
+    )
 
     with (
         patch("metta.app_backend.queries.sweep_queries.get_sweep_by_name", new_callable=AsyncMock) as mock_get,
