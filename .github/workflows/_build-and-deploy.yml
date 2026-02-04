@@ -150,6 +150,7 @@ jobs:
             ${{ inputs.release }}-pr-${{ github.event.pull_request.number }} \
             ${{ inputs.chart }} \
             --set image.tag=${{ steps.build-image.outputs.tag }} \
+            --labels pr-preview=true,pr-number=${{ github.event.pull_request.number }} \
             ${{ inputs.preview_helm_values }}
 
       - name: Comment PR with preview URL

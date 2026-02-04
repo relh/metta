@@ -1,0 +1,91 @@
+name: "Cleanup Stale Preview Deployments"
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+env:
+  CI_APP_ID: ${{ secrets.CI_APP_ID }}
+  CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+jobs:
+  cleanup-previews:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: read
+
+    steps:
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Configure EKS
+        uses: ./.github/actions/eks-configure
+        with:
+          aws_role: ${{ vars.AWS_ROLE }}
+
+      - name: Cleanup stale preview deployments
+        env:
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
+          MAX_AGE_DAYS: 5
+        run: |
+          NOW=$(date +%s)
+          MAX_AGE_SECONDS=$((MAX_AGE_DAYS * 24 * 60 * 60))
+
+          # Find all releases with pr-preview=true label across all namespaces
+          helm list -A -l pr-preview=true -o json | jq -c '.[]' | while read -r release_json; do
+            NAMESPACE=$(echo "$release_json" | jq -r '.namespace')
+            RELEASE=$(echo "$release_json" | jq -r '.name')
+            PR_NUM=$(echo "$release_json" | jq -r '.labels["pr-number"]')
+            UPDATED=$(echo "$release_json" | jq -r '.updated')
+
+            # Check age
+            UPDATED_TS=$(date -d "$UPDATED" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "${UPDATED%.*}" +%s 2>/dev/null || echo "0")
+            AGE_SECONDS=$((NOW - UPDATED_TS))
+            AGE_DAYS=$((AGE_SECONDS / 86400))
+
+            if [[ $AGE_SECONDS -gt $MAX_AGE_SECONDS ]]; then
+              echo "Deleting old preview: $RELEASE in $NAMESPACE (${AGE_DAYS} days old, PR #$PR_NUM)"
+              helm delete -n "$NAMESPACE" "$RELEASE" --ignore-not-found
+              continue
+            fi
+
+            if [[ -z "$PR_NUM" || "$PR_NUM" == "null" ]]; then
+              echo "Warning: Release $RELEASE in $NAMESPACE has no pr-number label, skipping"
+              continue
+            fi
+
+            # Check if PR is still open (with retry for transient failures)
+            STATE=""
+            for attempt in 1 2 3; do
+              if STATE=$(gh pr view "$PR_NUM" --json state -q '.state' 2>&1); then
+                break
+              fi
+              if [[ $attempt -lt 3 ]]; then
+                echo "Warning: Failed to fetch PR #$PR_NUM state (attempt $attempt/3), retrying..."
+                sleep 2
+              fi
+            done
+
+            if [[ -z "$STATE" ]]; then
+              echo "Warning: Could not fetch PR #$PR_NUM state after 3 attempts, skipping $RELEASE"
+              continue
+            fi
+
+            if [[ "$STATE" != "OPEN" ]]; then
+              echo "Deleting stale preview: $RELEASE in $NAMESPACE (PR #$PR_NUM is $STATE)"
+              helm delete -n "$NAMESPACE" "$RELEASE" --ignore-not-found
+            else
+              echo "Keeping preview: $RELEASE in $NAMESPACE (PR #$PR_NUM is still open, ${AGE_DAYS} days old)"
+            fi
+          done
