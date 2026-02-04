@@ -25,7 +25,7 @@ RUN set -eux; \
   tmpdir="$(mktemp -d)"; \
   curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "${tmpdir}/awscliv2.zip"; \
   unzip -q "${tmpdir}/awscliv2.zip" -d "${tmpdir}"; \
-  "${tmpdir}/aws/install" --update; \
+  "${tmpdir}/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update; \
   rm -rf "${tmpdir}"
 
 WORKDIR /workspace/metta
