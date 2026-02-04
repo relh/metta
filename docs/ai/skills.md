@@ -74,6 +74,7 @@ Shared skills live in `skills/`:
 - `tr.cogames-variant-debug`
 - `tr.policy-save-load-audit`
 - `tr.recipe-curriculum-audit`
+- `tr.wandb-inspect`
 - `wt.cleanup`
 
 See each `skills/<name>/SKILL.md` for the full workflow.
