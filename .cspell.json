@@ -259,6 +259,7 @@
     "rollouts",
     "ruffignore",
     "runstore",
+    "sandboxed",
     "scanline",
     "Schulman",
     "scikit",

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -16,8 +17,10 @@ import requests
 
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.common.util.perf_profiler import PerfProfiler
+from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
 from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.policy_server_manager import PolicyServerHandle, launch_policy_server
 from mettagrid.runner.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult
 from mettagrid.util.file import copy_data, read, write_data
 from mettagrid.util.uri_resolvers.schemes import resolve_uri
@@ -67,6 +70,8 @@ def _localize_policy_uri(uri: str) -> str:
         return local_path.as_uri()
 
     resolved = resolve_uri(uri)
+    if resolved.scheme == "mock":
+        return resolved.canonical
     if resolved.scheme == "file":
         if resolved.local_path is None or not resolved.local_path.exists():
             raise FileNotFoundError(f"Policy path does not exist: {uri}")
@@ -82,6 +87,40 @@ def _localize_policy_uri(uri: str) -> str:
 
 def _localize_policy_uris(policy_uris: list[str]) -> list[str]:
     return [_localize_policy_uri(uri) for uri in policy_uris]
+
+
+def _spawn_policy_servers(
+    local_policy_uris: list[str],
+    env_interface: PolicyEnvInterface,
+) -> tuple[list[PolicyServerHandle], list[str]]:
+    unique_uris = list(dict.fromkeys(local_policy_uris))
+    uri_to_server: dict[str, PolicyServerHandle] = {}
+    servers: list[PolicyServerHandle] = []
+    futures: dict = {}
+    try:
+        with ThreadPoolExecutor(max_workers=len(unique_uris)) as pool:
+            futures = {pool.submit(launch_policy_server, uri, env_interface): uri for uri in unique_uris}
+            for future in as_completed(futures):
+                uri = futures[future]
+                handle = future.result()
+                servers.append(handle)
+                uri_to_server[uri] = handle
+    except Exception:
+        for f in futures:
+            f.cancel()
+        for s in servers:
+            s.shutdown()
+        for f in futures:
+            if f.done() and not f.cancelled() and f.exception() is None:
+                handle = f.result()
+                if handle not in servers:
+                    try:
+                        handle.shutdown()
+                    except Exception:
+                        pass
+        raise
+    http_uris = [uri_to_server[uri].base_url for uri in local_policy_uris]
+    return servers, http_uris
 
 
 def run_episode(
@@ -100,14 +139,18 @@ def run_episode(
 
     signal.signal(signal.SIGTERM, sigterm_handler)
 
+    work_dir = tempfile.mkdtemp()
+    servers: list[PolicyServerHandle] = []
     try:
         local_policy_uris = _localize_policy_uris(job.policy_uris)
+        env_interface = PolicyEnvInterface.from_mg_cfg(job.env)
+        servers, http_policy_uris = _spawn_policy_servers(local_policy_uris, env_interface)
 
-        local_results_uri = "file://results.json"
-        local_replay_uri = "file://replay.json.z" if upload_replay_uri else None
+        local_results_uri = f"file://{work_dir}/results.json"
+        local_replay_uri = f"file://{work_dir}/replay.json.z" if upload_replay_uri else None
 
         pure_job = PureSingleEpisodeJob(
-            policy_uris=local_policy_uris,
+            policy_uris=http_policy_uris,
             assignments=job.assignments,
             env=job.env,
             results_uri=local_results_uri,
@@ -121,7 +164,6 @@ def run_episode(
             pure_job_spec = {
                 "job": pure_job.model_dump(),
                 "device": "cpu",
-                "allow_network": False,
             }
             temp_file.write(json.dumps(pure_job_spec).encode("utf-8"))
             temp_file.flush()
@@ -155,34 +197,31 @@ def run_episode(
                 logger.info("Episode runner stderr:\n%s", stderr.rstrip())
 
             if proc.returncode != 0:
-                if proc.returncode < 0:
-                    signal_num = -proc.returncode
-                    raise RuntimeError(f"Killed by signal {signal_num}")
-                error_output = stderr or stdout or "No output"
-                if len(error_output) > 200000:
-                    error_output = error_output[:200000] + "\n... (truncated)"
-                raise RuntimeError(
-                    f"mettagrid.runner.pure_single_episode_runner failed (exit {proc.returncode}):\n{error_output}"
-                )
+                code = proc.returncode
+                detail = f"signal {-code}" if code < 0 else f"exit {code}"
+                raise RuntimeError(f"pure_single_episode_runner failed ({detail})")
 
         results = PureSingleEpisodeResult.model_validate_json(read(local_results_uri))
 
         if upload_results_uri:
             copy_data(local_results_uri, upload_results_uri, content_type="application/json")
-            logger.info(f"Uploaded results to {upload_results_uri[:50]}...")
+            logger.info(f"Uploaded results to {upload_results_uri}")
 
         if upload_replay_uri:
             if local_replay_uri:
                 copy_data(local_replay_uri, upload_replay_uri, content_type="application/x-compress")
-                logger.info(f"Uploaded replay to {upload_replay_uri[:50]}...")
+                logger.info(f"Uploaded replay to {upload_replay_uri}")
             else:
-                logger.warning(f"No replay to upload to {upload_replay_uri[:50]}...")
+                logger.warning(f"No replay to upload to {upload_replay_uri}")
         else:
             logger.info("No replay URI provided, skipping upload")
 
         return results
 
     finally:
+        for server in servers:
+            server.shutdown()
+        shutil.rmtree(work_dir, ignore_errors=True)
         if local_debug_dir is not None:
             _upload_debug_dir(local_debug_dir, upload_debug_uri)
             shutil.rmtree(local_debug_dir, ignore_errors=True)
