@@ -10,50 +10,6 @@ const decodePathSegment = (value: string) => {
 
 const encodePathSegment = (value: string) => encodeURIComponent(decodePathSegment(value))
 
-export type TokenInfo = {
-  id: string
-  name: string
-  created_at: string
-  expiration_time: string
-  last_used_at: string | null
-}
-
-export type TokenCreate = {
-  name: string
-}
-
-export type TokenResponse = {
-  token: string
-}
-
-export type TokenListResponse = {
-  tokens: TokenInfo[]
-}
-
-export type TrainingRun = {
-  id: string
-  name: string
-  created_at: string
-  user_id: string
-  finished_at: string | null
-  status: string
-  url: string | null
-  description: string | null
-  tags: string[]
-}
-
-export type TrainingRunListResponse = {
-  training_runs: TrainingRun[]
-}
-
-export type TrainingRunDescriptionUpdate = {
-  description: string
-}
-
-export type TrainingRunTagsUpdate = {
-  tags: string[]
-}
-
 export type EvalTaskCreateRequest = {
   command: string
   git_hash: string | null
@@ -122,49 +78,6 @@ export type TaskFilters = {
 }
 
 // Policy-based scorecard types
-export type PaginationRequest = {
-  page: number
-  page_size: number
-}
-
-export type TrainingRunInfo = {
-  id: string
-  name: string
-  user_id: string | null
-  created_at: string
-  tags: string[]
-}
-
-export type RunFreePolicyInfo = {
-  id: string
-  name: string
-  user_id: string | null
-  created_at: string
-}
-
-export type EvalNamesRequest = {
-  training_run_ids: string[]
-  run_free_policy_ids: string[]
-}
-
-export type MetricsRequest = {
-  training_run_ids: string[]
-  run_free_policy_ids: string[]
-  eval_names: string[]
-}
-
-export type TrainingRunScorecardRequest = {
-  eval_names: string[]
-  metric: string
-}
-
-export type TrainingRunPolicy = {
-  policy_name: string
-  policy_id: string
-  epoch_start: number | null
-  epoch_end: number | null
-}
-
 export type PublicPolicyVersionRow = {
   id: string
   policy_id: string
@@ -515,19 +428,6 @@ export class Repo {
     }
   }
 
-  // Token management methods
-  async createToken(tokenData: TokenCreate): Promise<TokenResponse> {
-    return this.apiCallWithBody<TokenResponse>('/tokens', tokenData)
-  }
-
-  async listTokens(): Promise<TokenListResponse> {
-    return this.apiCall<TokenListResponse>('/tokens')
-  }
-
-  async deleteToken(tokenId: string): Promise<void> {
-    return this.apiCallDelete(`/tokens/${tokenId}`)
-  }
-
   // User methods
   async whoami(): Promise<{ user_email: string }> {
     return this.apiCall<{ user_email: string }>('/whoami')
@@ -558,29 +458,6 @@ export class Repo {
     return this.apiCallWithBody<AIQueryResponse>('/sql/generate-query', {
       description,
     })
-  }
-
-  // Training run methods
-  async getTrainingRuns(): Promise<TrainingRunListResponse> {
-    return this.apiCall<TrainingRunListResponse>('/training-runs')
-  }
-
-  async getTrainingRun(runId: string): Promise<TrainingRun> {
-    return this.apiCall<TrainingRun>(`/training-runs/${encodeURIComponent(runId)}`)
-  }
-
-  async updateTrainingRunDescription(runId: string, description: string): Promise<TrainingRun> {
-    return this.apiCallWithBodyPut<TrainingRun>(`/training-runs/${encodeURIComponent(runId)}/description`, {
-      description,
-    })
-  }
-
-  async updateTrainingRunTags(runId: string, tags: string[]): Promise<TrainingRun> {
-    return this.apiCallWithBodyPut<TrainingRun>(`/training-runs/${encodeURIComponent(runId)}/tags`, { tags })
-  }
-
-  async getTrainingRunPolicies(runId: string): Promise<TrainingRunPolicy[]> {
-    return this.apiCall<TrainingRunPolicy[]>(`/training-runs/${encodeURIComponent(runId)}/policies`)
   }
 
   async createEvalTask(request: EvalTaskCreateRequest): Promise<EvalTask> {
@@ -621,13 +498,6 @@ export class Repo {
   }
 
   // Policy methods
-  async getPolicyIds(policyNames: string[]): Promise<Record<string, string>> {
-    const params = new URLSearchParams()
-    policyNames.forEach((name) => params.append('policy_names', name))
-    const response = await this.apiCall<{ policy_ids: Record<string, string> }>(`/stats/policies/ids?${params}`)
-    return response.policy_ids
-  }
-
   async getPolicyVersion(policyVersionId: string): Promise<PolicyVersionWithName> {
     return this.apiCall<PolicyVersionWithName>(`/stats/policies/versions/${policyVersionId}`)
   }
