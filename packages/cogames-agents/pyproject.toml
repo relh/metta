@@ -17,7 +17,7 @@ classifiers = [
   "Operating System :: MacOS",
 ]
 urls = { Homepage = "https://github.com/Metta-AI/metta/tree/main/packages/cogames-agents", Repository = "https://github.com/Metta-AI/metta" }
-dependencies = ["cogames==0.3.65", "mettagrid==0.2.0.75", "numpy>=2.0.0"]
+dependencies = ["cogames==0.3.66", "mettagrid==0.2.0.77", "numpy>=2.0.0"]
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-xdist", "ruff"]
