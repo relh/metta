@@ -243,7 +243,11 @@ def _reconcile_stale_jobs(stats_client: StatsClient):
             else:
                 logger.warning(f"Reconciliation: job {job.id} marked {job.status} but no pod found, marking failed")
                 _update_job_status(
-                    stats_client, job.id, JobStatus.failed, error="Pod not found (reconciliation)", error_type="unknown"
+                    stats_client,
+                    job.id,
+                    JobStatus.failed,
+                    error="Pod not found (reconciliation)",
+                    error_type="pod_not_found",
                 )
                 stale_count += 1
 
@@ -487,7 +491,13 @@ def _handle_pod_deleted(stats_client: StatsClient, pod: client.V1Pod):
         return
 
     job_id, pod_name = info
-    _update_job_status(stats_client, job_id, JobStatus.failed, error="Pod deleted unexpectedly", error_type="unknown")
+    _update_job_status(
+        stats_client,
+        job_id,
+        JobStatus.failed,
+        error="Pod deleted unexpectedly",
+        error_type="pod_deleted",
+    )
     logger.warning(f"Job {job_id} failed: pod {pod_name} deleted unexpectedly (phase={phase})")
 
 

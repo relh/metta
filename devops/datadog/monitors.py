@@ -229,6 +229,173 @@ def job_stuck_pending_monitor() -> dict:
     }
 
 
+def job_lifecycle_failure_rate_monitor() -> dict:
+    """Monitor for high job lifecycle failure rate (infrastructure/k8s issues).
+
+    Alerts when >10% of jobs are failing due to lifecycle errors (pod_not_found,
+    pod_deleted, result_missing, result_error) as opposed to episode runtime errors.
+    Includes minimum volume guard to avoid false positives on low traffic.
+    """
+    return {
+        "name": "[Tournament] High Job Lifecycle Failure Rate: {{value}}%",
+        "type": "query alert",
+        "query": (
+            "sum(last_15m):"
+            "(sum:job.state_transition{to_status:failed,"
+            "error_type:(pod_not_found OR pod_deleted OR result_missing OR result_error),"
+            "service:observatory-backend}.as_count() / "
+            "(sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count() + "
+            "sum:job.state_transition{to_status:completed,service:observatory-backend}.as_count())) * 100 > 10 && "
+            "sum(last_15m):sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count() > 10"
+        ),
+        "message": (
+            "{{value}}% of jobs failing due to infrastructure/lifecycle issues (>10 failures).\n\n"
+            "This indicates K8s/pod/S3 problems, not episode runtime errors.\n\n"
+            "Check: https://observatory.softmax-research.net/episode-jobs?status=failed\n"
+            "Pod health: `kubectl get pods -n metta`\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 15, "warning": 10},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
+def job_high_oom_rate_monitor() -> dict:
+    """Monitor for high OOM rate among failures.
+
+    Alerts when >5% of job failures are due to OOM, indicating pods may need
+    more memory or there's a memory leak. Includes minimum volume guard.
+    """
+    return {
+        "name": "[Tournament] High OOM Rate: {{value}}% of failures",
+        "type": "query alert",
+        "query": (
+            "sum(last_15m):"
+            "(sum:job.state_transition{to_status:failed,error_type:oom,service:observatory-backend}.as_count() / "
+            "sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count()) * 100 > 5 && "
+            "sum(last_15m):sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count() > 10"
+        ),
+        "message": (
+            "{{value}}% of job failures are OOM (threshold: 5%).\n\n"
+            "Possible causes:\n"
+            "- Pod memory limits too low\n"
+            "- Memory leak in policy or environment\n"
+            "- Large replay files not being cleaned up\n\n"
+            "Check: https://observatory.softmax-research.net/episode-jobs?status=failed&error_type=oom\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 10, "warning": 5},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
+def job_high_pending_queue_monitor() -> dict:
+    """Monitor for sustained high pending job count.
+
+    Alerts when pending job queue is sustained above 50, indicating dispatch
+    may be slower than job submission rate. Complements job_queue_buildup_monitor
+    which tracks total outstanding jobs.
+    """
+    return {
+        "name": "[Tournament] High Pending Queue: {{value}} pending",
+        "type": "query alert",
+        "query": ("avg(last_10m):avg:job.outstanding_count{status:pending,service:observatory-backend} > 50"),
+        "message": (
+            "{{value}} jobs pending (sustained >10min). Dispatch may be slower than submission rate.\n\n"
+            "Check:\n"
+            "- K8s node availability: `kubectl get nodes`\n"
+            "- Job dispatcher health\n"
+            "- https://observatory.softmax-research.net/episode-jobs?status=pending\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 100, "warning": 50},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
+            "include_tags": False,
+        },
+    }
+
+
+def job_slow_dispatch_monitor() -> dict:
+    """Monitor for slow job dispatch times.
+
+    Alerts when p95 dispatch time (pending -> running) exceeds 2 minutes,
+    indicating K8s scheduling issues. Note: only measures completed dispatches.
+    """
+    return {
+        "name": "[Tournament] Slow Job Dispatch: {{value}}s p95",
+        "type": "query alert",
+        "query": ("p95(last_30m):p95:job.stage_duration{stage:dispatched,service:observatory-backend} > 120"),
+        "message": (
+            "P95 dispatch time is {{value}}s (threshold: 120s).\n\n"
+            "Possible causes:\n"
+            "- K8s node scaling issues\n"
+            "- Resource constraints (CPU/memory/GPU unavailable)\n"
+            "- Node pressure or scheduling delays\n\n"
+            "Check: `kubectl get nodes` and `kubectl describe nodes`\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 180, "warning": 120},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
+def job_no_activity_monitor() -> dict:
+    """Monitor for no job activity when tournament should be running.
+
+    Alerts when no job state transitions have occurred in 10 minutes, indicating
+    the tournament commissioner may have stopped creating jobs. This is an imprecise
+    check that may alert during legitimate downtime, but catches stuck commissioners.
+    """
+    return {
+        "name": "[Tournament] No Job Activity: {{value}} jobs in 10min",
+        "type": "query alert",
+        "query": ("sum(last_10m):sum:job.state_transition{service:observatory-backend}.as_count() < 1"),
+        "message": (
+            "No job state transitions in the last 10 minutes.\n\n"
+            "Possible causes:\n"
+            "- Tournament commissioner stopped or crashed\n"
+            "- No active tournaments/qualifying pools scheduled\n"
+            "- Database connectivity issues\n\n"
+            "Check:\n"
+            "- Commissioner logs: `kubectl logs -n metta -l app=tournament-commissioner`\n"
+            "- Active tournaments: https://observatory.softmax-research.net/tournaments\n"
+            "- DB connectivity\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 1},
+        "options": {
+            "notify_no_data": True,
+            "no_data_timeframe": 10,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
 ALL_MONITORS = [
     k8s_deployment_replicas_monitor,
     k8s_crashloopbackoff_monitor,
@@ -236,6 +403,11 @@ ALL_MONITORS = [
     job_queue_buildup_monitor,
     job_failure_rate_monitor,
     job_stuck_pending_monitor,
+    job_lifecycle_failure_rate_monitor,
+    job_high_oom_rate_monitor,
+    job_high_pending_queue_monitor,
+    job_slow_dispatch_monitor,
+    job_no_activity_monitor,
 ]
 
 
