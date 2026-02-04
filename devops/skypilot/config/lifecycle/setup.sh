@@ -4,22 +4,13 @@ set -eu
 REPO_DIR="/workspace/metta"
 DEPLOY_KEY_SECRET="github/metta-deploy-key"
 
-# Ensure the execution environment can
-# pick up the image's aws installation
-export PATH="/usr/local/bin:$PATH"
-
 # Ensure AWS CLI v2 is present (installed in the training image).
+# Explicitly use version installed in Docker container path.
 ensure_aws_cli_v2() {
-  if command -v aws &> /dev/null && aws --version 2> /dev/null | grep -q "aws-cli/2"; then
+  if command -v /usr/local/bin/aws &> /dev/null && /usr/local/bin/aws --version 2> /dev/null | grep -q "aws-cli/2"; then
     return 0
   fi
 
-  echo "Got AWS version:"
-  if command -v aws > /dev/null; then
-    aws --version
-  else
-    echo "  aws command not found at all"
-  fi
   echo "[SETUP] AWS CLI v2 not found. Rebuild the training image to include AWS CLI v2." >&2
   exit 1
 }
@@ -32,7 +23,7 @@ setup_deploy_key() {
   mkdir -p ~/.ssh
   chmod 700 ~/.ssh
 
-  aws secretsmanager get-secret-value \
+  /usr/local/bin/aws secretsmanager get-secret-value \
     --secret-id "$DEPLOY_KEY_SECRET" \
     --query SecretString \
     --output text \
