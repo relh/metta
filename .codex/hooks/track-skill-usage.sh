@@ -1,16 +1,31 @@
 #!/bin/bash
-# UserPromptSubmit hook -- tracks skill usage via Datadog when user types /skill-name.
+# Codex notify hook -- tracks skill usage via Datadog when the user invokes a /skill.
+# Codex passes the notification JSON as the first CLI argument.
+#
+# Configure in .codex/config.toml:
+#   notify = ["bash", ".codex/hooks/track-skill-usage.sh"]
 
 set -euo pipefail
 
 # Guard: need jq
 command -v jq > /dev/null 2>&1 || exit 0
 
-# Read hook payload from stdin
-payload=$(cat)
+# Codex passes notification payload as first argument
+payload="${1:-}"
+[ -z "$payload" ] && exit 0
 
-# Extract prompt text
-prompt=$(echo "$payload" | jq -r '.prompt // empty' 2> /dev/null)
+# Only handle agent-turn-complete events
+event_type=$(echo "$payload" | jq -r '.type // empty' 2> /dev/null)
+[ "$event_type" = "agent-turn-complete" ] || exit 0
+
+# Extract a user message that looks like a skill invocation (starts with /).
+# input-messages may be an array of strings or message objects ({role, content}).
+prompt=$(echo "$payload" | jq -r '
+  [."input-messages"[]? |
+    (if type == "string" then . elif type == "object" then .content // empty else empty end) |
+    select(type == "string" and startswith("/"))
+  ] | first // empty
+' 2> /dev/null)
 
 # Only track slash commands (skill invocations)
 [[ "$prompt" =~ ^/ ]] || exit 0
@@ -45,7 +60,7 @@ timestamp=$(date +%s)
       --arg user "$user" \
       --arg skill_prefix "$skill_prefix" \
       --argjson timestamp "$timestamp" \
-      '{series: [{metric: "metta.skills.usage", type: 1, points: [{timestamp: $timestamp, value: 1}], tags: ["skill:\($skill)", "user:\($user)", "skill_prefix:\($skill_prefix)", "tool:claude"]}]}'
+      '{series: [{metric: "metta.skills.usage", type: 1, points: [{timestamp: $timestamp, value: 1}], tags: ["skill:\($skill)", "user:\($user)", "skill_prefix:\($skill_prefix)", "tool:codex"]}]}'
   )" > /dev/null 2>&1) &
 
 exit 0

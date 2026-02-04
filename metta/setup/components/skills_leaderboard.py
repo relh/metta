@@ -49,5 +49,5 @@ class SkillsLeaderboardSetup(SetupModule):
         CACHE_FILE.chmod(0o600)
         info(f"DD API key cached at {CACHE_FILE}")
 
-        info("When you start claude code sessions from the repo's root, your skill usage will now be tracked")
+        info("When you start Claude Code or Codex sessions from the repo's root, your skill usage will now be tracked")
         success("https://app.datadoghq.com/dashboard/ebw-5wr-q8h")
