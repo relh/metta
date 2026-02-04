@@ -6,7 +6,7 @@ from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestCreate, JobType
 from metta.app_backend.tournament.referees.envs import make_cogsguard_env
 from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI, SOFTMAX_S3_REPLAYS_PREFIX
-from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.types import SingleEpisodeJob
 from mettagrid.util.file import http_url
 
 SERVERS = {

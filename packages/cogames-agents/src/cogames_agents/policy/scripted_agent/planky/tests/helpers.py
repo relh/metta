@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from cogames.cli.mission import get_mission
-from mettagrid.runner.rollout import run_single_episode
+from mettagrid.runner.rollout import run_episode_local
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 
@@ -125,7 +125,7 @@ def run_planky_episode(
     old_stdout = sys.stdout
     sys.stdout = captured
     try:
-        results, _replay = run_single_episode(
+        results, _replay = run_episode_local(
             policy_specs=[policy_spec],
             assignments=[0] * num_agents,
             env=env_cfg,

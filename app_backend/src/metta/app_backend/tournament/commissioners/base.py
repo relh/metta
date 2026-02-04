@@ -49,7 +49,7 @@ from metta.app_backend.tournament.settings import (
     settings,
 )
 from metta.common.otel.tracing import trace
-from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.types import SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 tracer = otel_trace.get_tracer(__name__)

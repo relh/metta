@@ -13,8 +13,7 @@ from metta.app_backend.episode_stats_db import (
 )
 from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.models.job_request import JobRequestUpdate
-from mettagrid.runner.job_specs import SingleEpisodeJob
-from mettagrid.runner.rollout import PureSingleEpisodeResult
+from mettagrid.runner.types import PureSingleEpisodeResult, SingleEpisodeJob
 from mettagrid.util.file import http_url
 
 logger = logging.getLogger(__name__)

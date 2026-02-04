@@ -1,4 +1,4 @@
-"""Export PolicyEnvInterface to JSON for use with serve_policy.
+"""Export PolicyEnvInterface to JSON for use with the policy server.
 
 Usage:
     ./tools/run.py recipes.experiment.export_env_interface.export output_path=./env_interface.json

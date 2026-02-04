@@ -9,13 +9,30 @@ import zipfile
 from pathlib import Path
 
 import requests
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
-from mettagrid.runner.episode_runner import EpisodeResult, run_episode
-from mettagrid.runner.job_specs import RuntimeInfo, SingleEpisodeJob
+from mettagrid.runner.episode_runner import run_episode_isolated
+from mettagrid.runner.types import RuntimeInfo, SingleEpisodeJob
 from mettagrid.util.file import copy_data, write_data
 
 logger = logging.getLogger(__name__)
+
+
+class ExecutorSettings(BaseSettings):
+    """Environment variables consumed by the episode executor entrypoint.
+
+    TODO: RESULTS_URI, REPLAY_URI live here as env vars, but debug_uri comes from
+    SingleEpisodeJob. All three are output upload destinations and should be sourced
+    the same way -- either all on the job spec or all as env vars.
+    """
+
+    JOB_SPEC_URI: str | None = Field(default=None, description="Presigned URL to fetch the job spec from")
+    RESULTS_URI: str | None = Field(default=None, description="Presigned URL to upload episode results to")
+    REPLAY_URI: str | None = Field(default=None, description="Presigned URL to upload the replay to")
+    RUNTIME_INFO_URI: str | None = Field(default=None, description="Presigned URL to upload runtime info to")
+    GIT_COMMIT: str | None = Field(default=None, description="Git commit hash of the running build")
 
 
 def _upload_debug_dir(local_debug_dir: str | None, debug_uri: str | None) -> None:
@@ -38,30 +55,25 @@ def _upload_debug_dir(local_debug_dir: str | None, debug_uri: str | None) -> Non
 
 
 def _upload_results(
-    episode: EpisodeResult,
+    results_path: Path,
+    replay_path: Path | None,
     results_uri: str | None,
     replay_uri: str | None,
+    debug_dir: Path | None,
     debug_uri: str | None,
 ) -> None:
-    try:
-        if results_uri:
-            copy_data(episode.results_path.as_uri(), results_uri, content_type="application/json")
-            logger.info(f"Uploaded results to {results_uri}")
+    if results_uri and results_path.exists():
+        copy_data(results_path.as_uri(), results_uri, content_type="application/json")
+        logger.info(f"Uploaded results to {results_uri}")
 
-        if replay_uri and episode.replay_path:
-            copy_data(episode.replay_path.as_uri(), replay_uri, content_type="application/x-compress")
-            logger.info(f"Uploaded replay to {replay_uri}")
+    if replay_uri and replay_path is not None and replay_path.exists():
+        copy_data(replay_path.as_uri(), replay_uri, content_type="application/x-compress")
+        logger.info(f"Uploaded replay to {replay_uri}")
 
-        debug_dir_str = str(episode.debug_dir) if episode.debug_dir else None
-        _upload_debug_dir(debug_dir_str, debug_uri)
-    finally:
-        shutil.rmtree(episode.results_path.parent, ignore_errors=True)
-        if episode.debug_dir:
-            shutil.rmtree(episode.debug_dir, ignore_errors=True)
+    _upload_debug_dir(str(debug_dir) if debug_dir else None, debug_uri)
 
 
-def _collect_runtime_info() -> RuntimeInfo:
-    git_commit = os.environ.get("GIT_COMMIT") or None
+def _collect_runtime_info(settings: ExecutorSettings) -> RuntimeInfo:
     instance_type: str | None = None
     try:
         resp = requests.get("http://169.254.169.254/latest/meta-data/instance-type", timeout=2)
@@ -69,51 +81,63 @@ def _collect_runtime_info() -> RuntimeInfo:
             instance_type = resp.text.strip()
     except Exception:
         pass
-    return RuntimeInfo(git_commit=git_commit, instance_type=instance_type)
+    return RuntimeInfo(git_commit=settings.GIT_COMMIT, instance_type=instance_type)
 
 
 def main() -> None:
-    job_spec_uri = os.environ.get("JOB_SPEC_URI")
-    results_uri = os.environ.get("RESULTS_URI")
-    replay_uri = os.environ.get("REPLAY_URI")
+    settings = ExecutorSettings()
 
-    if not job_spec_uri:
+    if not settings.JOB_SPEC_URI:
         print("Set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
         sys.exit(1)
         return
 
-    logger.info(f"Running with presigned URLs: spec={job_spec_uri[:50]}...")
+    logger.info(f"Running with presigned URLs: spec={settings.JOB_SPEC_URI[:50]}...")
 
-    runtime_info_uri = os.environ.get("RUNTIME_INFO_URI")
-    if runtime_info_uri:
-        runtime_info = _collect_runtime_info()
+    if settings.RUNTIME_INFO_URI:
+        runtime_info = _collect_runtime_info(settings)
         try:
             payload = runtime_info.model_dump_json(exclude_none=True)
-            write_data(runtime_info_uri, payload.encode("utf-8"), content_type="application/json")
+            write_data(settings.RUNTIME_INFO_URI, payload.encode("utf-8"), content_type="application/json")
             logger.info(f"Uploaded runtime info: {payload}")
         except Exception as e:
             logger.warning(f"Failed to upload runtime info: {e}")
 
-    response = requests.get(job_spec_uri, timeout=30)
+    # TODO: we use a combination of httpx and requests; should this use httpx?
+    response = requests.get(settings.JOB_SPEC_URI, timeout=30)
     response.raise_for_status()
     job = SingleEpisodeJob.model_validate(response.json())
 
     debug_uri = job.debug_uri
-    capture_replay = replay_uri is not None
-    debug_dir = Path(tempfile.mkdtemp()) if debug_uri else None
+    capture_replay = settings.REPLAY_URI is not None
 
-    def sigterm_handler(_signum: int, _frame: object) -> None:
-        logger.warning("Received SIGTERM, uploading debug_dir before exit...")
-        _upload_debug_dir(str(debug_dir) if debug_dir else None, debug_uri)
-        sys.exit(128 + signal.SIGTERM)
+    with tempfile.TemporaryDirectory() as output_dir_str:
+        output_dir = Path(output_dir_str)
+        debug_dir = Path(tempfile.mkdtemp()) if debug_uri else None
 
-    if debug_dir:
-        signal.signal(signal.SIGTERM, sigterm_handler)
+        results_path = output_dir / "results.json"
+        replay_path = output_dir / "replay.json.z" if capture_replay else None
 
-    episode = run_episode(job, capture_replay=capture_replay, debug_dir=debug_dir)
+        def sigterm_handler(_signum: int, _frame: object) -> None:
+            logger.warning("Received SIGTERM, uploading debug_dir before exit...")
+            _upload_debug_dir(str(debug_dir) if debug_dir else None, debug_uri)
+            sys.exit(128 + signal.SIGTERM)
 
-    _upload_results(episode, results_uri, replay_uri, debug_uri)
-    logger.info("Job completed successfully")
+        if debug_dir:
+            signal.signal(signal.SIGTERM, sigterm_handler)
+
+        try:
+            run_episode_isolated(
+                job.episode_spec(),
+                results_path,
+                replay_path=replay_path,
+                debug_dir=debug_dir,
+            )
+            _upload_results(results_path, replay_path, settings.RESULTS_URI, settings.REPLAY_URI, debug_dir, debug_uri)
+            logger.info("Job completed successfully")
+        finally:
+            if debug_dir:
+                shutil.rmtree(debug_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

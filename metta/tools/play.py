@@ -15,7 +15,7 @@ from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_stats_server_uri, auto_wandb_config
 from mettagrid.map_builder.map_builder import HasSeed
 from mettagrid.renderer.renderer import RenderMode
-from mettagrid.runner.rollout import run_single_episode
+from mettagrid.runner.rollout import run_episode_local
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 logger = logging.getLogger(__name__)
@@ -124,12 +124,10 @@ class PlayTool(Tool):
         if seed is None:
             seed = self.system.seed
 
-        episode_results, _replay = run_single_episode(
+        episode_results, _replay = run_episode_local(
             policy_specs=policy_specs,
             assignments=[0] * env_cfg.game.num_agents,
             env=env_cfg,
-            results_uri=None,
-            replay_uri=None,
             seed=seed,
             max_action_time_ms=10000,
             autostart=self.autostart,

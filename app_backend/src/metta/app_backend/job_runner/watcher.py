@@ -38,8 +38,7 @@ from metta.app_backend.job_runner.tournament_cluster import get_tournament_clien
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
-from mettagrid.runner.job_specs import RuntimeInfo, SingleEpisodeJob
-from mettagrid.runner.rollout import PureSingleEpisodeResult
+from mettagrid.runner.types import PureSingleEpisodeResult, RuntimeInfo, SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 

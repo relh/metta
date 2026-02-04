@@ -8,7 +8,7 @@ from metta.app_backend.tournament.referees.base import MatchRequest
 from metta.app_backend.tournament.referees.cogsguard import CogsguardPairingReferee, CogsguardSelfPlayReferee
 from metta.app_backend.tournament.referees.pairing import PairingReferee
 from metta.app_backend.tournament.referees.selfplay import SelfPlayReferee
-from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.types import SingleEpisodeJob
 
 
 def _make_player(pool_id=None) -> PoolPlayer:

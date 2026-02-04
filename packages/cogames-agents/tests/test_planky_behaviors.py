@@ -51,7 +51,7 @@ from cogames_agents.evals.planky_evals import (
 
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
-from mettagrid.runner.rollout import run_single_episode
+from mettagrid.runner.rollout import run_episode_local
 
 # Register planky and other policies
 discover_and_register_policies("cogames_agents.policy")
@@ -88,13 +88,10 @@ def run_planky_episode(
         all_roles["miner"] = 1  # Default to one miner
     policy_spec = PolicySpec(class_path="planky", data_path=None, init_kwargs=all_roles)
 
-    # Run the episode directly using run_single_episode to get stats
-    results, _replay = run_single_episode(
+    results, _replay = run_episode_local(
         policy_specs=[policy_spec],
         assignments=[0] * env_cfg.game.num_agents,
         env=env_cfg,
-        results_uri=None,
-        replay_uri=None,
         seed=seed,
         device="cpu",
         render_mode="none",

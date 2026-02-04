@@ -1,6 +1,5 @@
 import json
 import logging
-import shutil
 import tempfile
 import uuid
 from pathlib import Path
@@ -8,9 +7,8 @@ from pathlib import Path
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.tool import Tool
 from metta.tools.utils.auto_config import auto_stats_server_uri
-from mettagrid.runner.episode_runner import run_episode
-from mettagrid.runner.job_specs import SingleEpisodeJob
-from mettagrid.util.file import copy_data
+from mettagrid.runner.episode_runner import run_episode_isolated
+from mettagrid.runner.types import SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 
@@ -28,27 +26,34 @@ def _resolve_job_id(client: StatsClient, uuid_id: uuid.UUID) -> uuid.UUID:
     raise ValueError(f"No job found for job_id or episode_id: {uuid_id}")
 
 
+RESULTS_FILENAME = "results.json"
+REPLAY_FILENAME = "replay.json.z"
+
+
 def _run_job(job: SingleEpisodeJob, output_dir: str) -> int:
-    replay_uri = f"file://{output_dir}/replay.json.z"
-    results_uri = f"file://{output_dir}/results.json"
     logger.info(f"Running job: {len(job.policy_uris)} policies, seed={job.seed}")
     logger.info(f"Output directory: {output_dir}")
 
-    config_path = Path(output_dir) / "job_config.json"
-    config_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    config_path = out_path / "job_config.json"
     config_path.write_text(json.dumps(job.model_dump(), indent=2, default=str))
     logger.info(f"Wrote job config to {config_path}")
 
-    episode = run_episode(job, capture_replay=True, debug_dir=Path(tempfile.mkdtemp()))
-    try:
-        copy_data(episode.results_path.as_uri(), results_uri, content_type="application/json")
-        if episode.replay_path:
-            copy_data(episode.replay_path.as_uri(), replay_uri, content_type="application/x-compress")
-        logger.info(f"Episode finished: {episode.result.steps} steps, rewards={episode.result.rewards}")
-    finally:
-        shutil.rmtree(episode.results_path.parent, ignore_errors=True)
-        if episode.debug_dir:
-            shutil.rmtree(episode.debug_dir, ignore_errors=True)
+    with tempfile.TemporaryDirectory() as work_dir:
+        work_path = Path(work_dir)
+        results_path = work_path / RESULTS_FILENAME
+        replay_path = work_path / REPLAY_FILENAME
+        result = run_episode_isolated(
+            job.episode_spec(),
+            results_path,
+            replay_path=replay_path,
+            debug_dir=Path(tempfile.mkdtemp()),
+        )
+        results_path.rename(out_path / RESULTS_FILENAME)
+        if replay_path.exists():
+            replay_path.rename(out_path / REPLAY_FILENAME)
+        logger.info(f"Episode finished: {result.steps} steps, rewards={result.rewards}")
     return 0
 
 
