@@ -32,18 +32,6 @@ jobs:
         with:
           install-mode: "testing"
 
-      - name: Install Mettascope Dependencies
-        run: |
-          cd ..
-          nimby sync -g metta/packages/mettagrid/nim/mettascope/nimby.lock
-          nimby list
-          cat nim.cfg
-
-      - name: Install Vibescope Dependencies
-        run: |
-          cd ..
-          nimby sync -g metta/packages/mettagrid/nim/vibescope/nimby.lock
-
       - name: Cache nimby dependencies
         uses: actions/cache@v4
         with:
@@ -56,11 +44,23 @@ jobs:
           version: 4.0.19
           actions-cache-folder: "emsdk-cache"
 
+      # Build Mettascope first with its dependencies
+      - name: Install Mettascope Dependencies
+        run: |
+          cd ..
+          nimby sync -g metta/packages/mettagrid/nim/mettascope/nimby.lock
+
       - name: Build mettascope
         run: |
           mkdir -p packages/mettagrid/nim/mettascope/dist
           nim c -d:emscripten packages/mettagrid/nim/mettascope/src/mettascope.nim
           ls -la packages/mettagrid/nim/mettascope/dist
+
+      # Then build Vibescope with its dependencies
+      - name: Install Vibescope Dependencies
+        run: |
+          cd ..
+          nimby sync -g metta/packages/mettagrid/nim/vibescope/nimby.lock
 
       - name: Build vibescope
         run: |
