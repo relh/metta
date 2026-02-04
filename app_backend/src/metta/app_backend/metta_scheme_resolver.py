@@ -4,9 +4,8 @@ import logging
 import os
 import uuid
 from pathlib import Path
+from typing import Optional
 from urllib.parse import urlparse
-
-from metta_alo.policy import parse_policy_identifier
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.routes.stats_routes import PolicyVersionWithName
@@ -15,6 +14,20 @@ from mettagrid.util.uri_resolvers.base import MettaParsedScheme, SchemeResolver
 from mettagrid.util.uri_resolvers.schemes import resolve_uri
 
 logger = logging.getLogger(__name__)
+
+
+def parse_policy_identifier(identifier: str) -> tuple[str, Optional[int]]:
+    if identifier.endswith(":latest"):
+        return identifier[:-7], None
+    if ":" not in identifier:
+        return identifier, None
+    name, version_str = identifier.rsplit(":", 1)
+    if not name:
+        raise ValueError(f"Invalid policy identifier: {identifier}")
+    version_str = version_str.lstrip("v")
+    if not version_str.isdigit():
+        raise ValueError(f"Invalid version format: {identifier}")
+    return name, int(version_str)
 
 
 def _guess_data_dir() -> Path:

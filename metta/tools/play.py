@@ -5,7 +5,6 @@ import uuid
 from typing import Optional
 
 import torch
-from metta_alo.rollout import run_single_episode
 from pydantic import PrivateAttr, model_validator
 from rich.console import Console
 
@@ -16,6 +15,7 @@ from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_stats_server_uri, auto_wandb_config
 from mettagrid.map_builder.map_builder import HasSeed
 from mettagrid.renderer.renderer import RenderMode
+from mettagrid.runner.rollout import run_single_episode
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 logger = logging.getLogger(__name__)

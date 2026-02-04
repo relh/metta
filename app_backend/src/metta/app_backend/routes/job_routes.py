@@ -13,7 +13,6 @@ from uuid import UUID
 import boto3
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import PlainTextResponse
-from metta_alo.policy import parse_policy_identifier
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
@@ -24,6 +23,7 @@ from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
 from metta.app_backend.job_runner.job_artifacts import job_debug_key, job_logs_key
+from metta.app_backend.metta_scheme_resolver import parse_policy_identifier
 from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import (
     JobPolicyVersion,

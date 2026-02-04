@@ -16,8 +16,6 @@ from kubernetes import (
 )
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
-from metta_alo.job_specs import SingleEpisodeJob
-from metta_alo.rollout import PureSingleEpisodeResult
 from opentelemetry import trace as otel_trace
 
 from metta.app_backend.clients.stats_client import StatsClient
@@ -35,6 +33,8 @@ from metta.app_backend.job_runner.tournament_cluster import get_tournament_clien
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
+from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.rollout import PureSingleEpisodeResult
 
 logger = logging.getLogger(__name__)
 

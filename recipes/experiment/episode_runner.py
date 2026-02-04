@@ -3,12 +3,11 @@ import logging
 import uuid
 from pathlib import Path
 
-from metta_alo.job_specs import SingleEpisodeJob
-
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.tool import Tool
 from metta.sim.single_episode_runner import run_episode
 from metta.tools.utils.auto_config import auto_stats_server_uri
+from mettagrid.runner.job_specs import SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 

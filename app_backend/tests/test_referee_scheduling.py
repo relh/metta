@@ -2,13 +2,13 @@ import json
 from uuid import uuid4
 
 import pytest
-from metta_alo.job_specs import SingleEpisodeJob
 
 from metta.app_backend.models.tournament import PoolPlayer
 from metta.app_backend.tournament.referees.base import MatchRequest
 from metta.app_backend.tournament.referees.cogsguard import CogsguardPairingReferee, CogsguardSelfPlayReferee
 from metta.app_backend.tournament.referees.pairing import PairingReferee
 from metta.app_backend.tournament.referees.selfplay import SelfPlayReferee
+from mettagrid.runner.job_specs import SingleEpisodeJob
 
 
 def _make_player(pool_id=None) -> PoolPlayer:

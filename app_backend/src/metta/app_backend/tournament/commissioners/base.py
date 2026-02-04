@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from metta_alo.job_specs import SingleEpisodeJob
 from metta_alo.scoring import compute_average_scores_per_agent
 from opentelemetry import trace as otel_trace
 from opentelemetry.trace import SpanKind
@@ -50,6 +49,7 @@ from metta.app_backend.tournament.settings import (
     settings,
 )
 from metta.common.otel.tracing import trace
+from mettagrid.runner.job_specs import SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 tracer = otel_trace.get_tracer(__name__)

@@ -13,12 +13,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import requests
-from metta_alo.job_specs import SingleEpisodeJob
-from metta_alo.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult
 
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.common.util.perf_profiler import PerfProfiler
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
+from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult
 from mettagrid.util.file import copy_data, read, write_data
 from mettagrid.util.uri_resolvers.schemes import resolve_uri
 
@@ -129,7 +129,7 @@ def run_episode(
             # Enable Python perf support when profiling (writes /tmp/perf-<pid>.map)
             env = {**os.environ, "PYTHONPERFSUPPORT": "1"} if local_debug_dir else None
             proc = subprocess.Popen(
-                [sys.executable, "-m", "metta_alo.pure_single_episode_runner", temp_file.name],
+                [sys.executable, "-m", "mettagrid.runner.pure_single_episode_runner", temp_file.name],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -162,7 +162,7 @@ def run_episode(
                 if len(error_output) > 200000:
                     error_output = error_output[:200000] + "\n... (truncated)"
                 raise RuntimeError(
-                    f"metta_alo.pure_single_episode_runner failed (exit {proc.returncode}):\n{error_output}"
+                    f"mettagrid.runner.pure_single_episode_runner failed (exit {proc.returncode}):\n{error_output}"
                 )
 
         results = PureSingleEpisodeResult.model_validate_json(read(local_results_uri))

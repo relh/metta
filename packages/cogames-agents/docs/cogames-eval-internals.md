@@ -98,7 +98,7 @@ The core pipeline is in `packages/cogames/src/cogames/evaluate.py`:
 2. **For each mission:** a. `allocate_counts()` distributes agents among policies by weight (largest-remainder method).
    b. `np.repeat(np.arange(len(counts)), counts)` creates the initial assignment array.
 
-3. **Episode loop** (`run_multi_episode_rollout()` in `metta_alo/rollout.py:271`):
+3. **Episode loop** (`run_multi_episode_rollout()` in `mettagrid/runner/rollout.py`):
    - For each episode:
      - Shuffle assignments via `rng.shuffle(assignments)` (randomizes which agent slots get which policy).
      - `run_single_episode_rollout()` creates the environment, loads policies, runs the simulation, collects

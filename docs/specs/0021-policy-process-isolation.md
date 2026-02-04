@@ -83,7 +83,7 @@ New `metta/sim/policy_server_manager.py`:
 
 ### Remote Policy Client
 
-New `packages/cogames/src/metta_alo/policy/remote.py`:
+New `packages/mettagrid/python/src/mettagrid/runner/remote.py`:
 
 `RemoteMultiAgentPolicy(base_url, env_interface)`:
 

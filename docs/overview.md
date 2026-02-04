@@ -194,7 +194,7 @@ metta.common         ← bottom layer, cannot import from anything above
 
 - `cogames` cannot import from `metta`, `cortex`, `gitta`, or `tribal_village`
 - `mettagrid` cannot import from any other internal package
-- `app_backend` can only import `metta.common` and `metta_alo`
+- `app_backend` can only import `metta.common`, `metta_alo`, and `mettagrid`
 - Enforced by running `uv run lint-imports`
 
 ---

@@ -50,7 +50,7 @@ kubectl --context tournament get job <job-name> -n jobs -o yaml
 ## Key Files
 
 - `devops/docker/Dockerfile.policy_evaluator` - Container that runs episodes
-- `packages/cogames/src/metta_alo/pure_single_episode_runner.py` - Episode execution
+- `packages/mettagrid/python/src/mettagrid/runner/pure_single_episode_runner.py` - Episode execution
 - `devops/tf/tournament/` - Tournament cluster terraform
 
 ## Cross-Account Context

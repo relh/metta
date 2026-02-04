@@ -2,8 +2,6 @@ import logging
 import uuid
 
 import duckdb
-from metta_alo.job_specs import SingleEpisodeJob
-from metta_alo.rollout import PureSingleEpisodeResult
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.episode_stats_db import (
@@ -15,6 +13,8 @@ from metta.app_backend.episode_stats_db import (
 )
 from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.models.job_request import JobRequestUpdate
+from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.rollout import PureSingleEpisodeResult
 from mettagrid.util.file import http_url
 
 logger = logging.getLogger(__name__)

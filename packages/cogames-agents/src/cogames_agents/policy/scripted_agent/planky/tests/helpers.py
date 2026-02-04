@@ -8,9 +8,8 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from metta_alo.rollout import run_single_episode
-
 from cogames.cli.mission import get_mission
+from mettagrid.runner.rollout import run_single_episode
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 

@@ -48,10 +48,10 @@ from cogames_agents.evals.planky_evals import (
     PlankyStuckCorridor,
     PlankySurviveRetreat,
 )
-from metta_alo.rollout import run_single_episode
 
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
+from mettagrid.runner.rollout import run_single_episode
 
 # Register planky and other policies
 discover_and_register_policies("cogames_agents.policy")

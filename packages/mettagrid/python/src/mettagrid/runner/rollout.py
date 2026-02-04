@@ -8,16 +8,16 @@ from typing import Callable, Optional, Protocol, Sequence
 
 import numpy as np
 
-from metta_alo.pure_single_episode_runner import (
+from mettagrid import MettaGridConfig
+from mettagrid.policy.loader import AgentPolicy, PolicyEnvInterface, initialize_or_load_policy
+from mettagrid.policy.policy import PolicySpec
+from mettagrid.renderer.renderer import RenderMode
+from mettagrid.runner.pure_single_episode_runner import (
     PureSingleEpisodeJob,
     PureSingleEpisodeResult,
     _validate_assignments,
     _validate_output_uri,
 )
-from mettagrid import MettaGridConfig
-from mettagrid.policy.loader import AgentPolicy, PolicyEnvInterface, initialize_or_load_policy
-from mettagrid.policy.policy import PolicySpec
-from mettagrid.renderer.renderer import RenderMode
 from mettagrid.simulator.multi_episode.rollout import EpisodeRolloutResult, MultiEpisodeRolloutResult
 from mettagrid.simulator.replay_log_writer import EpisodeReplay, InMemoryReplayWriter
 from mettagrid.simulator.rollout import Rollout
