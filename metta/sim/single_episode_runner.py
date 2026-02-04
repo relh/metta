@@ -64,29 +64,35 @@ def _download_presigned_policy(url: str) -> Path:
     return local_path
 
 
+def _localize_file_uri(resolved, uri: str) -> str:
+    if resolved.local_path is None or not resolved.local_path.exists():
+        raise FileNotFoundError(f"Policy path does not exist: {uri}")
+    return resolved.local_path.as_uri()
+
+
+def _localize_s3_uri(resolved, _uri: str) -> str:
+    return download_policy_spec_from_s3_as_zip(
+        resolved.canonical,
+        remove_downloaded_copy_on_exit=True,
+    ).as_uri()
+
+
+_SCHEME_LOCALIZERS = {
+    "mock": lambda resolved, _uri: resolved.canonical,
+    "file": _localize_file_uri,
+    "s3": _localize_s3_uri,
+}
+
+
 def _localize_policy_uri(uri: str) -> str:
     if _is_presigned_url(uri):
-        local_path = _download_presigned_policy(uri)
-        return local_path.as_uri()
+        return _download_presigned_policy(uri).as_uri()
 
     resolved = resolve_uri(uri)
-    if resolved.scheme == "mock":
-        return resolved.canonical
-    if resolved.scheme == "file":
-        if resolved.local_path is None or not resolved.local_path.exists():
-            raise FileNotFoundError(f"Policy path does not exist: {uri}")
-        return resolved.local_path.as_uri()
-    if resolved.scheme == "s3":
-        local_path = download_policy_spec_from_s3_as_zip(
-            resolved.canonical,
-            remove_downloaded_copy_on_exit=True,
-        )
-        return local_path.as_uri()
-    raise ValueError(f"Unsupported policy URI: {uri}")
-
-
-def _localize_policy_uris(policy_uris: list[str]) -> list[str]:
-    return [_localize_policy_uri(uri) for uri in policy_uris]
+    localizer = _SCHEME_LOCALIZERS.get(resolved.scheme)
+    if localizer is None:
+        raise ValueError(f"Unsupported policy URI: {uri}")
+    return localizer(resolved, uri)
 
 
 def _spawn_policy_servers(
@@ -108,16 +114,15 @@ def _spawn_policy_servers(
     except Exception:
         for f in futures:
             f.cancel()
-        for s in servers:
-            s.shutdown()
+        all_handles = set(servers)
         for f in futures:
             if f.done() and not f.cancelled() and f.exception() is None:
-                handle = f.result()
-                if handle not in servers:
-                    try:
-                        handle.shutdown()
-                    except Exception:
-                        pass
+                all_handles.add(f.result())
+        for h in all_handles:
+            try:
+                h.shutdown()
+            except Exception:
+                pass
         raise
     http_uris = [uri_to_server[uri].base_url for uri in local_policy_uris]
     return servers, http_uris
@@ -142,7 +147,7 @@ def run_episode(
     work_dir = tempfile.mkdtemp()
     servers: list[PolicyServerHandle] = []
     try:
-        local_policy_uris = _localize_policy_uris(job.policy_uris)
+        local_policy_uris = [_localize_policy_uri(uri) for uri in job.policy_uris]
         env_interface = PolicyEnvInterface.from_mg_cfg(job.env)
         servers, http_policy_uris = _spawn_policy_servers(local_policy_uris, env_interface)
 
@@ -160,18 +165,18 @@ def run_episode(
             max_action_time_ms=job.max_action_time_ms,
         )
 
-        with tempfile.NamedTemporaryFile(delete=True) as temp_file:
+        with tempfile.NamedTemporaryFile(delete=True) as job_spec_tmp_file:
             pure_job_spec = {
                 "job": pure_job.model_dump(),
                 "device": "cpu",
             }
-            temp_file.write(json.dumps(pure_job_spec).encode("utf-8"))
-            temp_file.flush()
+            job_spec_tmp_file.write(json.dumps(pure_job_spec).encode("utf-8"))
+            job_spec_tmp_file.flush()
 
             # Enable Python perf support when profiling (writes /tmp/perf-<pid>.map)
             env = {**os.environ, "PYTHONPERFSUPPORT": "1"} if local_debug_dir else None
             proc = subprocess.Popen(
-                [sys.executable, "-m", "mettagrid.runner.pure_single_episode_runner", temp_file.name],
+                [sys.executable, "-m", "mettagrid.runner.pure_single_episode_runner", job_spec_tmp_file.name],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -207,14 +212,9 @@ def run_episode(
             copy_data(local_results_uri, upload_results_uri, content_type="application/json")
             logger.info(f"Uploaded results to {upload_results_uri}")
 
-        if upload_replay_uri:
-            if local_replay_uri:
-                copy_data(local_replay_uri, upload_replay_uri, content_type="application/x-compress")
-                logger.info(f"Uploaded replay to {upload_replay_uri}")
-            else:
-                logger.warning(f"No replay to upload to {upload_replay_uri}")
-        else:
-            logger.info("No replay URI provided, skipping upload")
+        if upload_replay_uri and local_replay_uri:
+            copy_data(local_replay_uri, upload_replay_uri, content_type="application/x-compress")
+            logger.info(f"Uploaded replay to {upload_replay_uri}")
 
         return results
 
@@ -227,8 +227,15 @@ def run_episode(
             shutil.rmtree(local_debug_dir, ignore_errors=True)
 
 
-def run_with_presigned_urls(job_spec_uri: str, results_uri: str | None, replay_uri: str | None):
-    logger.info(f"Running with presigned URLs: spec={job_spec_uri[:50]}...")
+def main():
+    job_spec_uri = os.environ.get("JOB_SPEC_URI")
+    results_uri = os.environ.get("RESULTS_URI")
+    replay_uri = os.environ.get("REPLAY_URI")
+
+    if not job_spec_uri:
+        print("Set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
+        sys.exit(1)
+        return
 
     response = requests.get(job_spec_uri, timeout=30)
     response.raise_for_status()
@@ -242,19 +249,6 @@ def run_with_presigned_urls(job_spec_uri: str, results_uri: str | None, replay_u
         use_profiler=True,
     )
     logger.info("Job completed successfully")
-
-
-def main():
-    job_spec_uri = os.environ.get("JOB_SPEC_URI")
-    results_uri = os.environ.get("RESULTS_URI")
-    replay_uri = os.environ.get("REPLAY_URI")
-
-    if job_spec_uri:
-        run_with_presigned_urls(job_spec_uri, results_uri, replay_uri)
-        return
-
-    print("Set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
-    sys.exit(1)
 
 
 if __name__ == "__main__":
