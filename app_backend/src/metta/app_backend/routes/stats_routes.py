@@ -268,19 +268,14 @@ def create_stats_router() -> APIRouter:
         versions = await policy_queries.get_user_policy_versions(user.id)
         return MyPolicyVersionsResponse(entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions])
 
-    @router.get("/policies/{policy_id}")
+    @router.get("/policies/{policy_version_id}")
     @timed_http_handler
-    async def get_policy_by_id(policy_id: str) -> PublicPolicyVersionRow:
+    async def get_policy_by_id(policy_version_id: uuid.UUID) -> PublicPolicyVersionRow:
         """Get a policy version by ID. Public endpoint - no auth required."""
-        try:
-            policy_version_id = uuid.UUID(policy_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid UUID format: {policy_id}") from None
-
         pv = await policy_queries.get_policy_version_by_id(policy_version_id)
 
         if pv is None:
-            raise HTTPException(status_code=404, detail=f"Policy version {policy_id} not found")
+            raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
 
         return PublicPolicyVersionRow.from_model(pv)
 
