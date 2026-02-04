@@ -588,7 +588,10 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
             "goal": active_goal,
         }
         if nav_target:
-            info["target"] = f"{nav_target[0]},{nav_target[1]}"
+            # Write relative offset from current position (row, col)
+            rel_row = nav_target[0] - state.position[0]
+            rel_col = nav_target[1] - state.position[1]
+            info["target"] = f"{rel_row},{rel_col}"
         target_resource = agent_state.blackboard.get("target_resource")
         if target_resource:
             info["mining"] = target_resource
