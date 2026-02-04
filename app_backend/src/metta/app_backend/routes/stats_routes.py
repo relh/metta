@@ -270,9 +270,14 @@ def create_stats_router() -> APIRouter:
 
     @router.get("/policies/{policy_version_id}")
     @timed_http_handler
-    async def get_policy_by_id(policy_version_id: uuid.UUID) -> PublicPolicyVersionRow:
-        """Get a policy version by ID. Public endpoint - no auth required."""
-        pv = await policy_queries.get_policy_version_by_id(policy_version_id)
+    async def get_policy_by_id(policy_version_id: uuid.UUID, user: CheckMaybeUser) -> PublicPolicyVersionRow:
+        """Get a policy version by ID. Visibility filtered based on user."""
+        filter_visibility = not (user and user.is_softmax_team_member)
+        pv = await policy_queries.get_policy_version_by_id(
+            policy_version_id,
+            visible_to_user_id=user.id if user else None,
+            filter_visibility=filter_visibility,
+        )
 
         if pv is None:
             raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
@@ -467,16 +472,20 @@ def create_stats_router() -> APIRouter:
     @router.get("/policies")
     @timed_http_handler
     async def get_policies(
+        user: CheckMaybeUser,
         name_exact: Optional[str] = None,
         name_fuzzy: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> PoliciesResponse:
+        filter_visibility = not (user and user.is_softmax_team_member)
         policies, total_count = await policy_queries.get_policies(
             name_exact=name_exact,
             name_fuzzy=name_fuzzy,
             limit=limit,
             offset=offset,
+            visible_to_user_id=user.id if user else None,
+            filter_visibility=filter_visibility,
         )
         return PoliciesResponse(
             entries=[PolicyRow.from_model(p) for p in policies],
@@ -498,6 +507,7 @@ def create_stats_router() -> APIRouter:
         if mine and not user:
             raise HTTPException(status_code=401, detail="Authentication required for mine=true")
         pv_uuids = [uuid.UUID(pv_id) for pv_id in policy_version_ids] if policy_version_ids else None
+        filter_visibility = not (user and user.is_softmax_team_member)
         versions, total_count = await policy_queries.get_policy_versions(
             name_exact=name_exact,
             name_fuzzy=name_fuzzy,
@@ -506,6 +516,8 @@ def create_stats_router() -> APIRouter:
             user_id=user.id if mine and user else None,
             limit=limit,
             offset=offset,
+            visible_to_user_id=user.id if user else None,
+            filter_visibility=filter_visibility,
         )
         return PolicyVersionsResponse(
             entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],
@@ -516,13 +528,17 @@ def create_stats_router() -> APIRouter:
     @timed_http_handler
     async def get_versions_for_policy(
         policy_id: str,
+        user: CheckMaybeUser,
         limit: int = 500,
         offset: int = 0,
     ) -> PolicyVersionsResponse:
+        filter_visibility = not (user and user.is_softmax_team_member)
         versions, total_count = await policy_queries.get_versions_for_policy(
             policy_id=uuid.UUID(policy_id),
             limit=limit,
             offset=offset,
+            visible_to_user_id=user.id if user else None,
+            filter_visibility=filter_visibility,
         )
         return PolicyVersionsResponse(
             entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],

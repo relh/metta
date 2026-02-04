@@ -2,15 +2,44 @@
 # SQLModel's Relationship() returns the target type, not SQLAlchemy's InstrumentedAttribute,
 # causing false positives on join() and selectinload() calls.
 
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
 from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.policies import Policy, PolicyVersion, PolicyVersionTag
+from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
+
+
+def _visible_pv_ids_subquery(user_id: str | None) -> Any:
+    """Return a subquery of policy_version IDs visible to the given user (or anonymous if None).
+
+    A policy version is visible if:
+    - It belongs to a policy owned by the user (if user_id is provided), OR
+    - It is submitted to a non-hidden tournament season (via PoolPlayer -> Pool -> Season)
+    """
+    # Import here to avoid circular import (registry -> commissioners -> stats_client -> stats_routes -> policy_queries)
+    from metta.app_backend.tournament.registry import HIDDEN_SEASONS  # noqa: PLC0415
+
+    # Policy versions in non-hidden seasons
+    in_public_season = (
+        select(PoolPlayer.policy_version_id)
+        .join(PoolPlayer.pool)
+        .join(Pool.season)
+        .where(col(Season.name).not_in(HIDDEN_SEASONS))
+    )
+
+    if user_id is None:
+        # Anonymous user: only season-based visibility
+        return in_public_season
+
+    # Logged-in user: owner OR season-based visibility
+    owned_by_user = select(PolicyVersion.id).join(Policy).where(Policy.user_id == user_id)
+    return union(in_public_season, owned_by_user)
 
 
 class PolicyNameTakenError(Exception):
@@ -91,15 +120,24 @@ async def get_policy_version_with_name(policy_version_id: UUID) -> PolicyVersion
 
 
 @with_db
-async def get_policy_version_by_id(policy_version_id: UUID) -> PolicyVersion | None:
+async def get_policy_version_by_id(
+    policy_version_id: UUID,
+    visible_to_user_id: str | None = None,
+    filter_visibility: bool = False,
+) -> PolicyVersion | None:
     session = get_db()
-    return (
-        await session.execute(
-            select(PolicyVersion)
-            .filter_by(id=policy_version_id)
-            .options(selectinload(PolicyVersion.policy), selectinload(PolicyVersion.tags))
-        )
-    ).scalar_one_or_none()
+    query = (
+        select(PolicyVersion)
+        .filter_by(id=policy_version_id)
+        .options(selectinload(PolicyVersion.policy), selectinload(PolicyVersion.tags))
+    )
+
+    # Visibility filtering: only return if the policy version is visible to the user
+    if filter_visibility:
+        visible_pv_ids = _visible_pv_ids_subquery(visible_to_user_id)
+        query = query.where(col(PolicyVersion.id).in_(visible_pv_ids))
+
+    return (await session.execute(query)).scalar_one_or_none()
 
 
 @with_db
@@ -126,6 +164,8 @@ async def get_policies(
     name_fuzzy: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    visible_to_user_id: str | None = None,
+    filter_visibility: bool = False,
 ) -> tuple[list[Policy], int]:
     session = get_db()
 
@@ -139,6 +179,15 @@ async def get_policies(
     if name_fuzzy:
         query = query.where(col(Policy.name).ilike(f"%{name_fuzzy}%"))
         count_query = count_query.where(col(Policy.name).ilike(f"%{name_fuzzy}%"))
+
+    # Visibility filtering: only show policies that have at least one visible version
+    if filter_visibility:
+        visible_pv_ids = _visible_pv_ids_subquery(visible_to_user_id)
+        has_visible_version = select(PolicyVersion.policy_id).where(col(PolicyVersion.id).in_(visible_pv_ids))
+
+        # policies always have at least one version, so filtering for visible versions is ok
+        query = query.where(col(Policy.id).in_(has_visible_version))
+        count_query = count_query.where(col(Policy.id).in_(has_visible_version))
 
     total = (await session.execute(count_query)).scalar_one()
 
@@ -167,6 +216,8 @@ async def get_policy_versions(
     user_id: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    visible_to_user_id: str | None = None,
+    filter_visibility: bool = False,
 ) -> tuple[list[PolicyVersion], int]:
     session = get_db()
 
@@ -193,6 +244,12 @@ async def get_policy_versions(
         query = query.where(Policy.user_id == user_id)
         count_query = count_query.where(Policy.user_id == user_id)
 
+    # Visibility filtering: only show policy versions that are visible to the user
+    if filter_visibility:
+        visible_pv_ids = _visible_pv_ids_subquery(visible_to_user_id)
+        query = query.where(col(PolicyVersion.id).in_(visible_pv_ids))
+        count_query = count_query.where(col(PolicyVersion.id).in_(visible_pv_ids))
+
     total = (await session.execute(count_query)).scalar_one()
 
     versions = list(
@@ -216,19 +273,26 @@ async def get_versions_for_policy(
     policy_id: UUID,
     limit: int = 500,
     offset: int = 0,
+    visible_to_user_id: str | None = None,
+    filter_visibility: bool = False,
 ) -> tuple[list[PolicyVersion], int]:
     session = get_db()
 
-    total = (
-        await session.execute(select(func.count()).select_from(PolicyVersion).filter_by(policy_id=policy_id))
-    ).scalar_one()
+    query = select(PolicyVersion).filter_by(policy_id=policy_id)
+    count_query = select(func.count()).select_from(PolicyVersion).filter_by(policy_id=policy_id)
+
+    # Visibility filtering: only show policy versions that are visible to the user
+    if filter_visibility:
+        visible_pv_ids = _visible_pv_ids_subquery(visible_to_user_id)
+        query = query.where(col(PolicyVersion.id).in_(visible_pv_ids))
+        count_query = count_query.where(col(PolicyVersion.id).in_(visible_pv_ids))
+
+    total = (await session.execute(count_query)).scalar_one()
 
     versions = list(
         (
             await session.execute(
-                select(PolicyVersion)
-                .filter_by(policy_id=policy_id)
-                .order_by(col(PolicyVersion.version).desc())
+                query.order_by(col(PolicyVersion.version).desc())
                 .limit(limit)
                 .offset(offset)
                 .options(selectinload(PolicyVersion.policy), selectinload(PolicyVersion.tags))
