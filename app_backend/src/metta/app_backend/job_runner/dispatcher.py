@@ -201,7 +201,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
                                 "--no-sync",
                                 "python",
                                 "-m",
-                                "metta.sim.single_episode_runner",
+                                "metta.app_backend.job_runner.executor",
                             ],
                             env=env_vars,
                             volume_mounts=volume_mounts,

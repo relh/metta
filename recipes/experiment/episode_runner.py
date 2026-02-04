@@ -1,13 +1,16 @@
 import json
 import logging
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.tool import Tool
-from metta.sim.single_episode_runner import run_episode
 from metta.tools.utils.auto_config import auto_stats_server_uri
+from mettagrid.runner.episode_runner import run_episode
 from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.util.file import copy_data
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +29,8 @@ def _resolve_job_id(client: StatsClient, uuid_id: uuid.UUID) -> uuid.UUID:
 
 
 def _run_job(job: SingleEpisodeJob, output_dir: str) -> int:
-    job.replay_uri = f"file://{output_dir}/replay.json.z"
-    job.debug_uri = f"file://{output_dir}/debug.zip"
-    job.results_uri = f"file://{output_dir}/results.json"
+    replay_uri = f"file://{output_dir}/replay.json.z"
+    results_uri = f"file://{output_dir}/results.json"
     logger.info(f"Running job: {len(job.policy_uris)} policies, seed={job.seed}")
     logger.info(f"Output directory: {output_dir}")
 
@@ -37,13 +39,16 @@ def _run_job(job: SingleEpisodeJob, output_dir: str) -> int:
     config_path.write_text(json.dumps(job.model_dump(), indent=2, default=str))
     logger.info(f"Wrote job config to {config_path}")
 
-    result = run_episode(
-        job,
-        upload_replay_uri=job.replay_uri,
-        upload_debug_uri=job.debug_uri,
-        upload_results_uri=job.results_uri,
-    )
-    logger.info(f"Episode finished: {result.steps} steps, rewards={result.rewards}")
+    episode = run_episode(job, capture_replay=True, debug_dir=Path(tempfile.mkdtemp()))
+    try:
+        copy_data(episode.results_path.as_uri(), results_uri, content_type="application/json")
+        if episode.replay_path:
+            copy_data(episode.replay_path.as_uri(), replay_uri, content_type="application/x-compress")
+        logger.info(f"Episode finished: {episode.result.steps} steps, rewards={episode.result.rewards}")
+    finally:
+        shutil.rmtree(episode.results_path.parent, ignore_errors=True)
+        if episode.debug_dir:
+            shutil.rmtree(episode.debug_dir, ignore_errors=True)
     return 0
 
 

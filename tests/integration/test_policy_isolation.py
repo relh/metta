@@ -1,9 +1,10 @@
 import json
+import shutil
 
 import pytest
 
 from cogames.cli.mission import get_mission
-from metta.sim.single_episode_runner import run_episode
+from mettagrid.runner.episode_runner import EpisodeResult, run_episode
 from mettagrid.runner.job_specs import SingleEpisodeJob
 from mettagrid.runner.pure_single_episode_runner import PureSingleEpisodeResult
 
@@ -15,7 +16,7 @@ def env_config():
     return env_cfg
 
 
-def test_run_episode_with_noop_policy(env_config, tmp_path):
+def test_run_episode_with_noop_policy(env_config):
     num_agents = env_config.game.num_agents
     job = SingleEpisodeJob(
         policy_uris=["mock://noop"],
@@ -24,25 +25,22 @@ def test_run_episode_with_noop_policy(env_config, tmp_path):
         seed=42,
     )
 
-    results_path = tmp_path / "results.json"
-    replay_path = tmp_path / "replay.json.z"
+    episode = run_episode(job, capture_replay=True)
+    try:
+        assert isinstance(episode, EpisodeResult)
+        assert isinstance(episode.result, PureSingleEpisodeResult)
+        assert episode.result.steps > 0
+        assert len(episode.result.rewards) == num_agents
+        assert len(episode.result.action_timeouts) == num_agents
+        assert episode.results_path.exists()
+        assert episode.replay_path is not None
+        assert episode.replay_path.exists()
 
-    result = run_episode(
-        job,
-        upload_results_uri=f"file://{results_path}",
-        upload_replay_uri=f"file://{replay_path}",
-    )
-
-    assert isinstance(result, PureSingleEpisodeResult)
-    assert result.steps > 0
-    assert len(result.rewards) == num_agents
-    assert len(result.action_timeouts) == num_agents
-    assert results_path.exists()
-    assert replay_path.exists()
-
-    saved = PureSingleEpisodeResult.model_validate_json(results_path.read_text())
-    assert saved.steps == result.steps
-    assert saved.rewards == result.rewards
+        saved = PureSingleEpisodeResult.model_validate_json(episode.results_path.read_text())
+        assert saved.steps == episode.result.steps
+        assert saved.rewards == episode.result.rewards
+    finally:
+        shutil.rmtree(episode.results_path.parent, ignore_errors=True)
 
 
 def test_run_episode_with_two_different_policies(env_config):
@@ -57,14 +55,16 @@ def test_run_episode_with_two_different_policies(env_config):
         seed=42,
     )
 
-    result = run_episode(job)
+    episode = run_episode(job)
+    try:
+        assert isinstance(episode.result, PureSingleEpisodeResult)
+        assert episode.result.steps > 0
+        assert len(episode.result.rewards) == num_agents
+    finally:
+        shutil.rmtree(episode.results_path.parent, ignore_errors=True)
 
-    assert isinstance(result, PureSingleEpisodeResult)
-    assert result.steps > 0
-    assert len(result.rewards) == num_agents
 
-
-def test_run_episode_output_written_to_file(env_config, tmp_path):
+def test_run_episode_output_written_to_file(env_config):
     num_agents = env_config.game.num_agents
     job = SingleEpisodeJob(
         policy_uris=["mock://noop"],
@@ -73,11 +73,12 @@ def test_run_episode_output_written_to_file(env_config, tmp_path):
         seed=123,
     )
 
-    results_path = tmp_path / "results.json"
-    result = run_episode(job, upload_results_uri=f"file://{results_path}")
-
-    assert results_path.exists()
-    data = json.loads(results_path.read_text())
-    assert "rewards" in data
-    assert "steps" in data
-    assert data["steps"] == result.steps
+    episode = run_episode(job)
+    try:
+        assert episode.results_path.exists()
+        data = json.loads(episode.results_path.read_text())
+        assert "rewards" in data
+        assert "steps" in data
+        assert data["steps"] == episode.result.steps
+    finally:
+        shutil.rmtree(episode.results_path.parent, ignore_errors=True)
