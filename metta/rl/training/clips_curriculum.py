@@ -47,13 +47,16 @@ class PerformanceProgress(ABC):
         min_intensity: float = 0.0,
         max_intensity: float = 1.0,
         smoothing_window: int = 10,
+        monotonic: bool = False,
         registry_id: Optional[str] = None,
     ):
         self._min_intensity = min_intensity
         self._max_intensity = max_intensity
         self._smoothing_window = smoothing_window
+        self._monotonic = monotonic
         self._registry_id = registry_id
         self._junction_percentage_history: list[float] = []
+        self._max_intensity_seen: float = min_intensity
 
         if registry_id is not None:
             _PERFORMANCE_REGISTRY[registry_id] = self
@@ -92,11 +95,17 @@ class LinearPerformanceProgress(PerformanceProgress):
 
     0% junction control → min_intensity
     100% junction control → max_intensity
+
+    If monotonic=True, intensity only increases (never decreases).
     """
 
     @property
     def intensity(self) -> float:
-        return self._min_intensity + self.junction_percentage * (self._max_intensity - self._min_intensity)
+        raw_intensity = self._min_intensity + self.junction_percentage * (self._max_intensity - self._min_intensity)
+        if self._monotonic:
+            self._max_intensity_seen = max(self._max_intensity_seen, raw_intensity)
+            return self._max_intensity_seen
+        return raw_intensity
 
 
 class ThresholdPerformanceProgress(PerformanceProgress):
@@ -104,6 +113,8 @@ class ThresholdPerformanceProgress(PerformanceProgress):
 
     Requires agents to control >= mastery_threshold of junctions for
     epochs_to_advance consecutive epochs before intensity increases by intensity_step.
+
+    Note: This mode is inherently monotonic (intensity only increases).
     """
 
     def __init__(
@@ -111,12 +122,13 @@ class ThresholdPerformanceProgress(PerformanceProgress):
         min_intensity: float = 0.0,
         max_intensity: float = 1.0,
         smoothing_window: int = 10,
+        monotonic: bool = False,
         mastery_threshold: float = 1.0,
         epochs_to_advance: int = 10,
         intensity_step: float = 0.1,
         registry_id: Optional[str] = None,
     ):
-        super().__init__(min_intensity, max_intensity, smoothing_window, registry_id)
+        super().__init__(min_intensity, max_intensity, smoothing_window, monotonic, registry_id)
         self._mastery_threshold = mastery_threshold
         self._epochs_to_advance = epochs_to_advance
         self._intensity_step = intensity_step
@@ -223,6 +235,7 @@ class ClipsCurriculumConfig(CurriculumConfig):
     min_intensity: float = Field(default=0.0)
     max_intensity: float = Field(default=1.0)
     smoothing_window: int = Field(default=10)
+    monotonic: bool = Field(default=False, description="If True, intensity only increases (never decreases)")
     mastery_threshold: float = Field(default=1.0)
     epochs_to_advance: int = Field(default=10)
     intensity_step: float = Field(default=0.1)
@@ -253,6 +266,7 @@ class ClipsCurriculumConfig(CurriculumConfig):
                 min_intensity=self.min_intensity,
                 max_intensity=self.max_intensity,
                 smoothing_window=self.smoothing_window,
+                monotonic=self.monotonic,
                 registry_id=self._registry_id,
             )
         elif self.mode == "threshold":
@@ -260,6 +274,7 @@ class ClipsCurriculumConfig(CurriculumConfig):
                 min_intensity=self.min_intensity,
                 max_intensity=self.max_intensity,
                 smoothing_window=self.smoothing_window,
+                monotonic=self.monotonic,
                 mastery_threshold=self.mastery_threshold,
                 epochs_to_advance=self.epochs_to_advance,
                 intensity_step=self.intensity_step,
@@ -288,6 +303,7 @@ class ClipsCurriculumConfig(CurriculumConfig):
         registry_id = self._registry_id
         assert self._mission is not None
         total_junctions = self._mission.total_junctions
+        max_steps = self._mission.max_steps
 
         class PerformanceUpdater(TrainerComponent):
             def __init__(self):
@@ -306,14 +322,23 @@ class ClipsCurriculumConfig(CurriculumConfig):
                 if stats is None or JUNCTION_HELD_STAT not in stats:
                     return
 
-                # stats[JUNCTION_HELD_STAT] is already mean junctions held per step
+                # JUNCTION_HELD_STAT is cumulative junction-steps held during the episode.
+                # Normalize by (total_junctions * max_steps) to get a percentage [0, 1].
+                # Note: A perfect agent can't reach 100% due to ramp-up time, ~90% is realistic max.
                 mean_junctions_held = stats[JUNCTION_HELD_STAT]
-                junction_percentage = mean_junctions_held / total_junctions
+                max_possible_held = total_junctions * max_steps
+                junction_percentage = mean_junctions_held / max_possible_held
                 performance.update(junction_percentage)
 
-                # Log intensity to wandb for debugging
+                # Log intensity and performance to wandb for debugging
                 if stats_reporter.wandb_run is not None:
-                    stats_reporter.wandb_run.log({"curriculum/clips_intensity": performance.intensity}, commit=False)
+                    stats_reporter.wandb_run.log(
+                        {
+                            "curriculum/clips_intensity": performance.intensity,
+                            "curriculum/junction_percentage": junction_percentage,
+                        },
+                        commit=False,
+                    )
 
         return [PerformanceUpdater()]
 
