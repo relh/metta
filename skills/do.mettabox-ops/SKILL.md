@@ -21,7 +21,8 @@ description:
 ./devops/mettabox/cli.py run metta1 -- train arena run=my_run trainer.total_timesteps=100000
 ```
 
-Use `--attach` to jump into the tmux session or `--session` to override the session name.
+Use `--attach` to jump into the tmux session or `--session` to override the session name. If the tmux session already
+exists, `run` will attach to it by default.
 
 ### List active runs
 
@@ -83,6 +84,18 @@ Use `--tty` for interactive commands and `--no-cd` if the command should not run
 ./devops/mettabox/cli.py tmux metta1 my_run
 ```
 
+### NVML / NVIDIA driver failure (inside tmux)
+
+If you see `cannot initialize NVML` inside the tmux session, the container's NVIDIA driver is broken. Fix by restarting
+the container on the host, then re-launch the run:
+
+```bash
+ssh metta@metta1 docker ps
+ssh metta@metta1 docker kill metta
+ssh metta@metta1 docker start metta
+./devops/mettabox/cli.py run metta1 -- <tool args>
+```
+
 ### Check SkyPilot sandboxes
 
 ```bash
@@ -95,6 +108,8 @@ Use `--tty` for interactive commands and `--no-cd` if the command should not run
 - Always pass `--` before tool args to avoid argument parsing issues.
 - If the container name differs, pass `--container <name>`.
 - `instrument` and `progress` auto-detect logs in `train_dir/<run_id>.log` or `train_dir/<run_id>/logs/script.log`.
+- If tmux shows `cannot initialize NVML`, restart the container on the host (`docker kill metta` + `docker start metta`)
+  and retry the run.
 
 ## Reference
 

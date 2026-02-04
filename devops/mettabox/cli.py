@@ -12,6 +12,10 @@ DEFAULT_BOXES = ("metta0", "metta1", "metta2", "metta3", "metta4")
 DEFAULT_CONTAINER = "metta"
 WORKSPACE = "/workspace/metta"
 TRAIN_DIR = "/workspace/metta/train_dir"
+NVML_TROUBLESHOOT = (
+    "If tmux shows 'cannot initialize NVML', the NVIDIA driver is broken inside the container. "
+    "Kill/restart the container on the host (docker ps; docker kill metta; docker start metta) and retry the run."
+)
 
 app = typer.Typer(
     rich_markup_mode="rich",
@@ -103,21 +107,59 @@ def exec(
 @app.command()
 def run(
     host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
-    tool_args: Annotated[list[str], typer.Argument(help="Args passed to tools/run.py.")],
+    tool_args: Annotated[
+        list[str],
+        typer.Argument(
+            help="Args passed to tools/run.py (do not include 'python tools/run.py' or 'uv run ./tools/run.py')."
+        ),
+    ],
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
     tmux: Annotated[bool, typer.Option("--tmux/--no-tmux", help="Run inside a new tmux session")] = True,
     session: Annotated[Optional[str], typer.Option("--session", "-s", help="tmux session name override")] = None,
     attach: Annotated[bool, typer.Option("--attach", help="Attach to tmux after launch")] = False,
 ) -> None:
+    """Launch a tools/run.py job in tmux.
+
+    Troubleshooting: If tmux shows 'cannot initialize NVML', the NVIDIA driver is broken inside the container.
+    Kill/restart the container on the host (docker ps; docker kill metta; docker start metta) and retry the run.
+    """
+    prefixes = (
+        ("uv", "run", "./tools/run.py"),
+        ("uv", "run", "tools/run.py"),
+        ("python", "./tools/run.py"),
+        ("python", "tools/run.py"),
+        ("python3", "./tools/run.py"),
+        ("python3", "tools/run.py"),
+        ("./tools/run.py",),
+        ("tools/run.py",),
+    )
+    stripped_prefix: Optional[tuple[str, ...]] = None
+    for prefix in prefixes:
+        if tool_args[: len(prefix)] == list(prefix):
+            tool_args = tool_args[len(prefix) :]
+            stripped_prefix = prefix
+            break
+    if stripped_prefix:
+        typer.echo(f"Note: stripped leading {' '.join(stripped_prefix)!r}; mettabox CLI already wraps tools/run.py.")
     if not tool_args:
         raise typer.BadParameter("Tools args required after '--'.")
     run_cmd = shlex.join(["uv", "run", "./tools/run.py", *tool_args])
     session_name = session or _extract_run_id(tool_args) or "metta-run"
     tty = attach
     if tmux:
-        cmd = f"tmux new-session -d -s {shlex.quote(session_name)} {shlex.quote(run_cmd)}"
+        session_label = shlex.quote(session_name)
+        session_exists = f"tmux has-session -t {session_label} 2>/dev/null"
+        create_cmd = f"tmux new-session -d -s {session_label} {shlex.quote(run_cmd)}"
+        attach_cmd = f"tmux attach -t {session_label}"
         if attach:
-            cmd = f"{cmd} && tmux attach -t {shlex.quote(session_name)}"
+            cmd = f"{session_exists} && {attach_cmd} || ({create_cmd} && {attach_cmd})"
+        else:
+            cmd = (
+                f"{session_exists} && "
+                f"echo 'Session {session_name} already exists; attaching.' && {attach_cmd} "
+                f"|| {create_cmd}"
+            )
+        tty = True
     else:
         if attach:
             raise typer.BadParameter("--attach requires --tmux.")
@@ -171,13 +213,20 @@ def instrument(
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
     gpu_snapshot: Annotated[bool, typer.Option("--gpu/--no-gpu", help="Show GPU snapshot before logs")] = True,
 ) -> None:
+    """Stream logs and optionally show a GPU snapshot.
+
+    If the GPU snapshot fails with 'cannot initialize NVML', restart the container on the host
+    (docker ps; docker kill metta; docker start metta) and retry.
+    """
     resolve_cmd = _resolve_log_path_cmd(run_id)
     tail_flag = "-f" if follow else ""
     cmd_parts = []
     if gpu_snapshot:
         cmd_parts.append(
-            "nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu "
-            "--format=csv,noheader,nounits || true"
+            "if ! nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu "
+            "--format=csv,noheader,nounits; then "
+            f"echo {shlex.quote('NVML error: ' + NVML_TROUBLESHOOT)} >&2; "
+            "fi"
         )
     cmd_parts.append(resolve_cmd)
     cmd_parts.append(f'tail -n {lines} {tail_flag} "$LOG_PATH"')
