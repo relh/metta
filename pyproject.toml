@@ -36,7 +36,7 @@ dependencies = [
   "metta-agent",
   "metta-app-backend",
   "metta-common",
-  "numpy>=2",
+  "numpy==2.3.3",
   "ninja>=1.11.1",
   "nvidia-ml-py",
   "omegaconf>=2.3.0",

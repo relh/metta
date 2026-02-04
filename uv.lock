@@ -2496,7 +2496,7 @@ requires-dist = [
     { name = "metta-app-backend", editable = "app_backend" },
     { name = "metta-common", editable = "common" },
     { name = "ninja", specifier = ">=1.11.1" },
-    { name = "numpy", specifier = ">=2" },
+    { name = "numpy", specifier = "==2.3.3" },
     { name = "nvidia-ml-py" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "optree", specifier = ">=0.17.0" },
@@ -2765,7 +2765,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.34.0" },
     { name = "google-genai", specifier = ">=1.46.0" },
     { name = "mcp", specifier = ">=1.0.0" },
-    { name = "numpy", specifier = ">=1.24.0" },
+    { name = "numpy", specifier = "==2.3.3" },
 ]
 
 [[package]]
@@ -2778,6 +2778,7 @@ dependencies = [
     { name = "gymnasium" },
     { name = "httpx" },
     { name = "importnb" },
+    { name = "numpy" },
     { name = "pettingzoo" },
     { name = "protobuf" },
     { name = "pufferlib-core" },
@@ -2813,6 +2814,7 @@ requires-dist = [
     { name = "gymnasium", specifier = ">=1.1.1" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "importnb", specifier = ">=2023.11.1" },
+    { name = "numpy", specifier = "==2.3.3" },
     { name = "pettingzoo", specifier = ">=1.25" },
     { name = "protobuf", specifier = ">=6.31.1" },
     { name = "pufferlib-core", editable = "packages/pufferlib-core" },
