@@ -38,6 +38,17 @@ jobs:
           path: ~/.nimby
           key: nimby-deps-${{ hashFiles('metta/packages/mettagrid/nim/mettascope/nimby.lock', 'metta/packages/mettagrid/nim/vibescope/nimby.lock') }}-${{ runner.os }}
 
+      - name: Clean cached nimby repos
+        run: |
+          if [ -d ~/.nimby/pkgs ]; then
+            for repo in ~/.nimby/pkgs/*; do
+              if [ -d "$repo/.git" ]; then
+                git -C "$repo" reset --hard
+                git -C "$repo" clean -fdx
+              fi
+            done
+          fi
+
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
