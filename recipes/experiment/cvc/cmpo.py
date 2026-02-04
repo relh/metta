@@ -1,49 +1,44 @@
-"""CMPO CoGs vs Clips training entry points."""
+"""CMPO Cogsguard training entry points (legacy CVC wrapper)."""
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 import metta.tools as tools
+from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.rl.training.teacher import TeacherConfig
-from recipes.experiment import cogs_v_clips
+from recipes.experiment import cogsguard
 from recipes.experiment.losses.cmpo import cmpo_losses
+
+_CogsGuardLayout = Literal["machina_1", "arena"]
 
 
 def train(
     num_cogs: int = 4,
+    max_steps: int = 10000,
     curriculum: Optional[CurriculumConfig] = None,
-    mission: Optional[str] = None,
-    base_missions: Optional[list[str]] = None,
-    enable_detailed_slice_logging: bool = False,
-    variants: Optional[Sequence[str]] = None,
-    eval_variants: Optional[Sequence[str]] = None,
-    eval_difficulty: Optional[str] = "standard",
-    max_evals: Optional[int] = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    use_lp: bool = True,
-    dr_variants: int = 0,
-    dr_rewards: bool = True,
-    dr_misc: bool = False,
-    maps_cache_size: Optional[int] = 30,
+    variants: Optional[str | Sequence[str]] = None,
+    layout: _CogsGuardLayout = "machina_1",
+    use_default_teacher: bool = False,
+    sweep_mode: bool = False,
+    use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
-    tool = cogs_v_clips.train(
-        num_cogs=num_cogs,
-        curriculum=curriculum,
-        mission=mission,
-        base_missions=base_missions,
-        enable_detailed_slice_logging=enable_detailed_slice_logging,
-        variants=variants,
-        eval_variants=eval_variants,
-        eval_difficulty=eval_difficulty,
-        max_evals=max_evals,
+    resolved_curriculum = curriculum
+    if resolved_curriculum is None and not use_clips_curriculum:
+        env = cogsguard.make_env(num_agents=num_cogs, max_steps=max_steps, variants=variants, layout=layout)
+        resolved_curriculum = cogsguard.make_curriculum(env=env, variants=variants, layout=layout)
+    tool = cogsguard.train(
+        curriculum=resolved_curriculum,
+        policy_architecture=policy_architecture,
         teacher=teacher,
-        use_lp=use_lp,
-        dr_variants=dr_variants,
-        dr_rewards=dr_rewards,
-        dr_misc=dr_misc,
-        maps_cache_size=maps_cache_size,
+        variants=variants,
+        layout=layout,
+        use_default_teacher=use_default_teacher,
+        sweep_mode=sweep_mode,
+        use_clips_curriculum=use_clips_curriculum,
     )
     tool.trainer.losses = cmpo_losses()
     return tool

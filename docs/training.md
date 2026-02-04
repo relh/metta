@@ -60,7 +60,7 @@ If a recipe exposes `use_default_teacher=true`, that enables a recipe-chosen def
 
 ### Examples
 
-**CogsGuard default teacher:**
+**CogsGuard default teacher (Machina 1 layout by default):**
 
 ```bash
 ./devops/skypilot/launch.py recipes.experiment.cogsguard.train --gpus 8 --max-runtime-hours 120 -- \
@@ -68,13 +68,7 @@ If a recipe exposes `use_default_teacher=true`, that enables a recipe-chosen def
   use_default_teacher=true
 ```
 
-**Machina default teacher (`recipes/experiment/machina_1.py`):**
-
-```bash
-./devops/skypilot/launch.py recipes.experiment.machina_1.train --gpus 8 --max-runtime-hours 120 -- \
-  run=your_run_name \
-  use_default_teacher=true
-```
+To switch layouts, pass `layout=arena` (or `layout=machina_1` explicitly).
 
 ### Custom teacher overrides
 
@@ -129,25 +123,10 @@ Example:
   variants='["milestones","credit"]'
 ```
 
-### Machina 1
-
-**Train:**
+To train on the arena layout instead of Machina 1:
 
 ```bash
-./devops/run.sh recipes.experiment.machina_1.train run=your_run_name
-```
-
-**Reward variants**
-
-Machina 1 uses the shared CoGames mission variant system (see `cogames/cogs_vs_clips/variants.py`). Some variants
-include reward shaping. The most common reward-shaping variant is:
-
-- **heart_chorus**: heart-centric reward shaping (see `HeartChorusVariant` in `cogames/cogs_vs_clips/variants.py`).
-
-Example:
-
-```bash
-./devops/run.sh recipes.experiment.machina_1.train \
+./devops/run.sh recipes.experiment.cogsguard.train \
   run=your_run_name \
-  variants='["heart_chorus"]'
+  layout=arena
 ```

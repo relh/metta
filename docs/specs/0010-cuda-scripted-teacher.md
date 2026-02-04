@@ -17,8 +17,9 @@ Thinky is our in-repo scripted policy (Nim) and the default teacher:
 ### Thinky teacher (behavioral cloning)
 
 ```
-uv run ./tools/run.py recipes.experiment.machina_1.train \
+uv run ./tools/run.py recipes.experiment.cogsguard.train \
   run=relh.machina1_cloner.120.teacherbc.1 \
+  layout=machina_1 \
   teacher.policy_uri=metta://policy/thinky \
   teacher.mode=sliced_cloner \
 ```
@@ -26,8 +27,9 @@ uv run ./tools/run.py recipes.experiment.machina_1.train \
 ### PPO only (no teacher)
 
 ```
-uv run ./tools/run.py recipes.experiment.machina_1.train \
+uv run ./tools/run.py recipes.experiment.cogsguard.train \
   run=relh.machina1_ppo_only.120 \
+  layout=machina_1 \
 ```
 
 ## Problem
@@ -42,7 +44,7 @@ Why this is slow:
 - Scripted policies are CPU-heavy (branchy logic, pathfinding, map bookkeeping), so they don’t scale with the number of
   parallel envs.
 
-For the exact machina_1 command above (defaults for `machina_1.train`), the environment math is:
+For the exact Cogsguard command above (defaults for `cogsguard.train` with `layout=machina_1`), the environment math is:
 
 ```
 target_batch_size = forward_pass_minibatch_target_size / num_agents

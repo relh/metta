@@ -1,4 +1,4 @@
-"""Machina v1 open-world recipe using the full vibe set and sweep helpers."""
+"""Machina 1 layout wrappers over Cogsguard training."""
 
 from __future__ import annotations
 
@@ -6,12 +6,14 @@ from typing import Optional, Sequence
 
 import metta.tools as tools
 from metta.agent.policy import PolicyArchitecture
+from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.rl.training.teacher import TeacherConfig
+from metta.sim.simulation_config import SimulationConfig
+from mettagrid.config import vibes
+from recipes.experiment import cogsguard
 
 
 def _apply_full_vibes(env_cfg) -> None:
-    from mettagrid.config import vibes  # noqa: PLC0415
-
     env_cfg.game.vibe_names = [v.name for v in vibes.VIBES]
     change_vibe = getattr(env_cfg.game.actions, "change_vibe", None)
     if change_vibe is not None:
@@ -20,172 +22,140 @@ def _apply_full_vibes(env_cfg) -> None:
         env_cfg.game.agent.vibe = 0
 
 
+def _resolve_curriculum(
+    curriculum: Optional[CurriculumConfig],
+    *,
+    num_cogs: int,
+    max_steps: int,
+    variants: Optional[Sequence[str]],
+    use_clips_curriculum: bool,
+) -> Optional[CurriculumConfig]:
+    if curriculum is not None or use_clips_curriculum:
+        return curriculum
+    env_cfg = cogsguard.make_env(
+        num_agents=num_cogs,
+        max_steps=max_steps,
+        variants=variants,
+        layout="machina_1",
+    )
+    _apply_full_vibes(env_cfg)
+    return cogsguard.make_curriculum(env=env_cfg, variants=variants, layout="machina_1")
+
+
+def _make_simulation(
+    *,
+    num_cogs: int,
+    max_steps: int,
+    variants: Optional[Sequence[str]],
+) -> SimulationConfig:
+    env_cfg = cogsguard.make_env(
+        num_agents=num_cogs,
+        max_steps=max_steps,
+        variants=variants,
+        layout="machina_1",
+    )
+    _apply_full_vibes(env_cfg)
+    return SimulationConfig(suite="cogsguard", name="basic_machina_1", env=env_cfg)
+
+
 def train(
     num_cogs: int = 4,
+    max_steps: int = 10000,
+    curriculum: Optional[CurriculumConfig] = None,
     variants: Optional[Sequence[str]] = None,
     eval_variants: Optional[Sequence[str]] = None,
-    eval_difficulty: str | None = None,
-    policy_architecture: PolicyArchitecture | None = None,
-    teacher: TeacherConfig | None = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
+    teacher: Optional[TeacherConfig] = None,
     use_default_teacher: bool = False,
+    use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
-    """Train on machina_1.open_world with leaderboard-aligned defaults and single-map eval."""
-    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
-    from metta.sim.simulation_config import SimulationConfig  # noqa: PLC0415
-    from recipes.experiment.cogs_v_clips import (  # noqa: PLC0415
-        _normalize_variant_names,
-        make_training_env,
-        train_single_mission,
-    )
-
-    if eval_variants is None:
-        eval_variants = variants
-
-    if teacher is None and use_default_teacher:
-        teacher = TeacherConfig(
-            mode="supervisor",
-            policy_uri="metta://policy/dinky:v15",
-            steps=5_500_000_000,
-            teacher_led_proportion=0.0,
-            anneal_start_step=2_500_000_000,
-            ppo_begin_step=0,
-        )
-
-    tt = train_single_mission(
-        mission="machina_1.open_world",
+    resolved_curriculum = _resolve_curriculum(
+        curriculum,
         num_cogs=num_cogs,
+        max_steps=max_steps,
         variants=variants,
-        eval_variants=eval_variants,
-        eval_difficulty=eval_difficulty,
-        teacher=teacher,
-        maps_cache_size=None,
+        use_clips_curriculum=use_clips_curriculum,
     )
-    tt.policy_architecture = policy_architecture or ViTDefaultConfig()
+
+    tt = cogsguard.train(
+        curriculum=resolved_curriculum,
+        policy_architecture=policy_architecture,
+        teacher=teacher,
+        variants=variants,
+        layout="machina_1",
+        use_default_teacher=use_default_teacher,
+        use_clips_curriculum=use_clips_curriculum,
+    )
     tt.system.torch_deterministic = False
 
-    # Explicitly keep full vibe/action definitions so saved checkpoints remain compatible.
-    env_cfg = tt.training_env.curriculum.task_generator.env
-    env_cfg.game.max_steps = 10000
-    _apply_full_vibes(env_cfg)
-
-    eval_variant_names = _normalize_variant_names(
-        initial=[eval_difficulty] if eval_difficulty else None,
-        variants=eval_variants,
-    )
-    eval_env = make_training_env(
-        num_cogs=num_cogs,
-        mission="machina_1.open_world",
-        variants=eval_variant_names or None,
-    )
-    eval_env.game.max_steps = 10000
-    _apply_full_vibes(eval_env)
+    resolved_eval_variants = eval_variants if eval_variants is not None else variants
     tt.evaluator.simulations = [
-        SimulationConfig(
-            suite="cogs_vs_clips",
-            name=f"machina_1_open_world_{num_cogs}cogs",
-            env=eval_env,
+        _make_simulation(
+            num_cogs=num_cogs,
+            max_steps=max_steps,
+            variants=resolved_eval_variants,
         )
     ]
-    # Run evals periodically during long runs
     tt.evaluator.epoch_interval = 150
     return tt
 
 
-def _make_play_sim(
-    num_cogs: int = 4,
-    variants: Optional[Sequence[str]] = None,
-):
-    from metta.sim.simulation_config import SimulationConfig  # noqa: PLC0415
-    from recipes.experiment.cogs_v_clips import _normalize_variant_names, make_training_env  # noqa: PLC0415
-
-    variant_names = _normalize_variant_names(variants=variants)
-    env_cfg = make_training_env(
-        num_cogs=num_cogs,
-        mission="machina_1.open_world",
-        variants=variant_names or None,
-    )
-    env_cfg.game.max_steps = 10000
-    _apply_full_vibes(env_cfg)
-    return SimulationConfig(
-        suite="cogs_vs_clips",
-        name=f"machina_1_open_world_{num_cogs}cogs",
-        env=env_cfg,
-    )
-
-
 def play(
-    policy_uri: str | None = None,
+    policy_uri: Optional[str] = None,
     num_cogs: int = 4,
+    max_steps: int = 10000,
     variants: Optional[Sequence[str]] = None,
 ) -> tools.PlayTool:
-    """Interactive play on machina_1.open_world."""
-    return tools.PlayTool(sim=_make_play_sim(num_cogs=num_cogs, variants=variants), policy_uri=policy_uri)
+    return tools.PlayTool(
+        sim=_make_simulation(num_cogs=num_cogs, max_steps=max_steps, variants=variants),
+        policy_uri=policy_uri,
+    )
 
 
 def replay(
-    policy_uri: str | None = None,
+    policy_uri: Optional[str] = None,
     num_cogs: int = 4,
+    max_steps: int = 10000,
     variants: Optional[Sequence[str]] = None,
 ) -> tools.ReplayTool:
-    """Generate a replay for machina_1.open_world."""
-    return tools.ReplayTool(sim=_make_play_sim(num_cogs=num_cogs, variants=variants), policy_uri=policy_uri)
+    return tools.ReplayTool(
+        sim=_make_simulation(num_cogs=num_cogs, max_steps=max_steps, variants=variants),
+        policy_uri=policy_uri,
+    )
 
 
 def train_sweep(
-    num_cogs: int = 4,
-    variants: Optional[Sequence[str]] = None,
-    eval_variants: Optional[Sequence[str]] = None,
-    eval_difficulty: str | None = None,
-    policy_architecture: PolicyArchitecture | None = None,
-    teacher: TeacherConfig | None = None,
+    variants: Optional[Sequence[str]] = ("milestones", "credit"),
+    policy_architecture: Optional[PolicyArchitecture] = None,
+    teacher: Optional[TeacherConfig] = None,
     use_default_teacher: bool = False,
 ) -> tools.TrainTool:
-    """Sweep-friendly train with heart_chorus baked in."""
-    from recipes.experiment.cogs_v_clips import _normalize_variant_names  # noqa: PLC0415
-
-    base_variants = _normalize_variant_names(initial=["heart_chorus"], variants=variants)
-
-    tt = train(
-        num_cogs=num_cogs,
-        variants=base_variants,
-        eval_variants=eval_variants or base_variants,
-        eval_difficulty=eval_difficulty,
+    tool = cogsguard.train_sweep(
+        variants=variants,
+        layout="machina_1",
         policy_architecture=policy_architecture,
         teacher=teacher,
         use_default_teacher=use_default_teacher,
     )
-    # Sweep-friendly default (kept consistent with the shared CvC sweep search space).
-    tt.trainer.total_timesteps = 1_000_000_000
-    return tt
+    tool.trainer.total_timesteps = 1_000_000_000
+    return tool
 
 
-def evaluate_stub(*args, **kwargs) -> tools.StubTool:
-    """No-op evaluator for sweeps."""
-
+def evaluate_stub(*args: object, **kwargs: object) -> tools.StubTool:
     return tools.StubTool()
 
 
 def sweep(
     sweep_name: str,
-    num_cogs: int = 4,
-    eval_difficulty: str | None = "standard",
+    variants: Optional[Sequence[str]] = ("milestones", "credit"),
+    sweep_reward_variants: bool = True,
     max_trials: int = 80,
     num_parallel_trials: int = 4,
 ) -> tools.SweepTool:
-    """Hyperparameter sweep targeting train_sweep (heart_chorus baked in)."""
-    from metta.sweep.core import make_sweep  # noqa: PLC0415
-    from recipes.experiment.cogs_v_clips import get_cvc_sweep_search_space  # noqa: PLC0415
-
-    search_space = get_cvc_sweep_search_space()
-
-    return make_sweep(
-        name=sweep_name,
-        recipe="recipes.experiment.machina_1",
-        train_entrypoint="train_sweep",
-        eval_entrypoint="evaluate_stub",
-        metric_key="env_game/hub.heart.created",
-        search_space=search_space,
-        cost_key="metric/total_time",
+    return cogsguard.sweep(
+        sweep_name=sweep_name,
+        variants=variants,
+        sweep_reward_variants=sweep_reward_variants,
         max_trials=max_trials,
         num_parallel_trials=num_parallel_trials,
     )

@@ -1,6 +1,5 @@
-"""Coordination-focused CoGs vs Clips entry points."""
+"""Cogsguard coordination entry points (legacy CVC wrapper)."""
 
-from recipes.experiment.cogs_v_clips import play
-from recipes.experiment.cogs_v_clips import train_coordination as train
+from recipes.experiment.cogsguard import play, train
 
 __all__ = ["train", "play"]
