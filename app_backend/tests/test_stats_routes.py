@@ -3,13 +3,12 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from metta.app_backend.metta_repo import MettaRepo
 from metta.app_backend.queries import episode_queries, policy_queries
 
 
 @pytest.mark.asyncio
 async def test_get_policy_versions_with_version_filter(
-    isolated_stats_repo: MettaRepo,  # noqa: ARG001
+    isolated_stats_repo: str,  # noqa: ARG001
     isolated_test_client: TestClient,
 ) -> None:
     user = "version-filter@example.com"
@@ -46,7 +45,7 @@ async def test_get_policy_versions_with_version_filter(
 
 @pytest.mark.asyncio
 async def test_get_policies_with_filters(
-    isolated_stats_repo: MettaRepo,  # noqa: ARG001
+    isolated_stats_repo: str,  # noqa: ARG001
     isolated_test_client: TestClient,
 ) -> None:
     user = "policies-filter@example.com"
@@ -70,7 +69,7 @@ async def test_get_policies_with_filters(
 
 @pytest.mark.asyncio
 async def test_get_versions_for_policy(
-    isolated_stats_repo: MettaRepo,  # noqa: ARG001
+    isolated_stats_repo: str,  # noqa: ARG001
     isolated_test_client: TestClient,
 ) -> None:
     user = "versions-for-policy@example.com"
@@ -96,7 +95,7 @@ async def test_get_versions_for_policy(
 
 @pytest.mark.asyncio
 async def test_get_my_policy_versions(
-    isolated_stats_repo: MettaRepo,  # noqa: ARG001
+    isolated_stats_repo: str,  # noqa: ARG001
     isolated_test_client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:
@@ -123,7 +122,7 @@ async def test_get_my_policy_versions(
 
 @pytest.mark.asyncio
 async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
-    isolated_stats_repo: MettaRepo,  # noqa: ARG001
+    isolated_stats_repo: str,  # noqa: ARG001
     isolated_test_client: TestClient,
     auth_headers: dict[str, str],
 ) -> None:

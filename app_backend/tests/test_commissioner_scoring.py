@@ -6,7 +6,6 @@ import pytest
 from sqlmodel import col, select
 
 from metta.app_backend.database import db_session
-from metta.app_backend.metta_repo import MettaRepo
 from metta.app_backend.models.episodes import Episode, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.models.policies import Policy, PolicyVersion
@@ -42,7 +41,7 @@ class _TestReferee(RefereeBase):
 
 
 @pytest.mark.asyncio
-async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_repo: MettaRepo) -> None:
+async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_repo: str) -> None:
     commissioner = _TestCommissioner()
 
     episode_id = uuid4()
@@ -157,7 +156,7 @@ async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_r
 
 
 @pytest.mark.asyncio
-async def test_leaderboard_weighting_uses_episode_policy_num_agents(isolated_stats_repo: MettaRepo) -> None:
+async def test_leaderboard_weighting_uses_episode_policy_num_agents(isolated_stats_repo: str) -> None:
     referee = _TestReferee()
 
     episode_id_1 = uuid4()

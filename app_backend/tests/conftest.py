@@ -8,10 +8,12 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from psycopg import Connection
 from testcontainers.postgres import PostgresContainer
 
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.metta_repo import MettaRepo
+from metta.app_backend.migrations import MIGRATIONS
+from metta.app_backend.schema_manager import run_migrations
 from metta.app_backend.server import create_app
 from metta.app_backend.test_support.client_adapter import (
     create_test_stats_client,
@@ -65,22 +67,23 @@ def db_uri(postgres_container: PostgresContainer) -> str:
 
 
 @pytest.fixture(scope="class")
-def stats_repo(db_uri: str) -> MettaRepo:
-    """Create a MettaRepo instance with the test database."""
+def stats_repo(db_uri: str) -> str:
     from metta.app_backend import config as app_config  # noqa: PLC0415
     from metta.app_backend import database  # noqa: PLC0415
 
-    # Reset the engine singleton and point it at the test database
     database._engine = None
     database._session_factory = None
     app_config.settings.STATS_DB_URI = db_uri
 
-    return MettaRepo(db_uri)
+    with Connection.connect(db_uri) as con:
+        run_migrations(con, MIGRATIONS)
+
+    return db_uri
 
 
 @pytest.fixture(scope="class")
-def test_app(stats_repo: MettaRepo) -> FastAPI:
-    """Create a test FastAPI app with dependency injection."""
+def test_app(stats_repo: str) -> FastAPI:
+    _ = stats_repo
     return create_app()
 
 
@@ -141,8 +144,7 @@ def isolated_db_context(db_uri: str) -> str:
 
 
 @pytest.fixture(scope="function")
-def isolated_stats_repo(isolated_db_context: str) -> MettaRepo:
-    """Create a MettaRepo instance with an isolated schema."""
+def isolated_stats_repo(isolated_db_context: str) -> str:
     from metta.app_backend import config as app_config  # noqa: PLC0415
     from metta.app_backend import database  # noqa: PLC0415
 
@@ -150,12 +152,15 @@ def isolated_stats_repo(isolated_db_context: str) -> MettaRepo:
     database._session_factory = None
     app_config.settings.STATS_DB_URI = isolated_db_context
 
-    return MettaRepo(isolated_db_context)
+    with Connection.connect(isolated_db_context) as con:
+        run_migrations(con, MIGRATIONS)
+
+    return isolated_db_context
 
 
 @pytest.fixture(scope="function")
-def isolated_test_app(isolated_stats_repo: MettaRepo) -> FastAPI:
-    """Create a test FastAPI app with isolated database."""
+def isolated_test_app(isolated_stats_repo: str) -> FastAPI:
+    _ = isolated_stats_repo
     return create_app()
 
 

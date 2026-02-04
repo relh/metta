@@ -296,8 +296,7 @@ Config: `devops/helm.values/datadog-monitors.yaml`
 Production uses AWS RDS (`main-pg.*.us-east-1.rds.amazonaws.com`). The connection string is in the
 `observatory-backend-env` k8s secret as `STATS_DB_URI`.
 
-Server runs migrations on startup (`RUN_MIGRATIONS=true`). Migration failures are the most common cause of backend pod
-crashes after a deploy -- check logs for `DuplicateColumn`, `DuplicateTable`, or similar errors.
+Server runs migrations on startup (`RUN_MIGRATIONS=true`).
 
 ## PR Preview Environments
 

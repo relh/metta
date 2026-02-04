@@ -80,10 +80,6 @@ def setup_logging():
     scorecard_routes_logger = logging.getLogger("policy_scorecard_routes")
     scorecard_routes_logger.setLevel(logging.INFO)
 
-    # Configure metta repo logger
-    metta_repo_logger = logging.getLogger("metta_repo")
-    metta_repo_logger.setLevel(logging.INFO)
-
     # Configure psycopg pool logger
     psycopg_pool_logger = logging.getLogger("psycopg.pool")
     psycopg_pool_logger.setLevel(logging.WARNING)

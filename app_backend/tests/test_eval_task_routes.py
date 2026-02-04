@@ -2,9 +2,9 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from psycopg import AsyncConnection
 
 from metta.app_backend.clients.eval_task_client import EvalTaskClient
-from metta.app_backend.metta_repo import MettaRepo
 from metta.app_backend.routes.eval_task_routes import (
     TaskClaimRequest,
     TaskCreateRequest,
@@ -265,7 +265,7 @@ class TestEvalTaskRoutes:
 
     @pytest.mark.slow
     @pytest.mark.asyncio
-    async def test_error_reason_stored_in_db(self, eval_task_client: EvalTaskClient, stats_repo: MettaRepo):
+    async def test_error_reason_stored_in_db(self, eval_task_client: EvalTaskClient, stats_repo: str):
         """Test that error_reason is properly stored in the database attributes."""
         task_response = eval_task_client.create_task(
             TaskCreateRequest(
@@ -285,7 +285,7 @@ class TestEvalTaskRoutes:
         )
 
         # Verify in DB - status is now in task_attempts table
-        async with stats_repo.connect() as con:
+        async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             result = await con.execute(
                 """
                 SELECT a.status, a.status_details

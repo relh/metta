@@ -8,6 +8,7 @@ import duckdb
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from psycopg import AsyncConnection
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.episode_stats_db import (
@@ -17,7 +18,6 @@ from metta.app_backend.episode_stats_db import (
     insert_episode,
     insert_episode_tag,
 )
-from metta.app_backend.metta_repo import MettaRepo
 
 
 class TestBulkEpisodeUpload:
@@ -62,11 +62,11 @@ class TestBulkEpisodeUpload:
         assert complete_response.status_code == 200
         return complete_response.json()
 
-    async def _create_policy_version(self, stats_repo: MettaRepo) -> uuid.UUID:
+    async def _create_policy_version(self, stats_repo: str) -> uuid.UUID:
         """Helper to create a policy and policy version in the database."""
         from psycopg.types.json import Jsonb  # noqa: PLC0415
 
-        async with stats_repo.connect() as con:
+        async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             # Create policy with a unique name
             policy_name = f"test_policy_{uuid.uuid4().hex[:8]}"
             result = await con.execute(
@@ -95,7 +95,7 @@ class TestBulkEpisodeUpload:
             return row[0]
 
     @pytest_asyncio.fixture
-    async def sample_duckdb(self, stats_repo: MettaRepo) -> Path:
+    async def sample_duckdb(self, stats_repo: str) -> Path:
         """Create a sample DuckDB file with episode stats."""
         # Create policy version in the database
         pv_id = await self._create_policy_version(stats_repo)
@@ -136,7 +136,7 @@ class TestBulkEpisodeUpload:
         mock_httpx_put: MagicMock,
         stats_client: StatsClient,
         sample_duckdb: Path,
-        stats_repo: MettaRepo,
+        stats_repo: str,
     ):
         """Test bulk upload via StatsClient using presigned URL flow."""
         self._setup_s3_mocks(mock_aioboto3, sample_duckdb)
@@ -167,7 +167,7 @@ class TestBulkEpisodeUpload:
         assert "s3://" in response.duckdb_s3_uri
 
         # Verify data in database
-        async with stats_repo.connect() as con:
+        async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             result = await con.execute("SELECT COUNT(*) FROM episodes")
             row = await result.fetchone()
             assert row is not None
@@ -180,7 +180,7 @@ class TestBulkEpisodeUpload:
         mock_aioboto3: MagicMock,
         test_client: TestClient,
         auth_headers: dict[str, str],
-        stats_repo: MettaRepo,
+        stats_repo: str,
     ):
         """Test uploading multiple episodes at once using presigned URL flow."""
         # Create policy version in the database first
@@ -216,7 +216,7 @@ class TestBulkEpisodeUpload:
         assert data["episodes_created"] == 3
 
         # Verify all episodes were created
-        async with stats_repo.connect() as con:
+        async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             result = await con.execute("SELECT COUNT(*) FROM episodes")
             row = await result.fetchone()
             assert row is not None
@@ -229,7 +229,7 @@ class TestBulkEpisodeUpload:
         mock_aioboto3: MagicMock,
         test_client: TestClient,
         auth_headers: dict[str, str],
-        stats_repo: MettaRepo,
+        stats_repo: str,
     ):
         """Test that agent metrics are correctly aggregated to policy metrics using presigned URL flow."""
         # Create two policy versions in the database
@@ -265,7 +265,7 @@ class TestBulkEpisodeUpload:
         self._call_presigned_upload_flow(test_client, auth_headers)
 
         # Verify aggregation
-        async with stats_repo.connect() as con:
+        async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             # Should have 2 policy entries
             result = await con.execute(
                 """
@@ -306,7 +306,7 @@ class TestBulkEpisodeUpload:
         mock_aioboto3: MagicMock,
         test_client: TestClient,
         auth_headers: dict[str, str],
-        stats_repo: MettaRepo,
+        stats_repo: str,
     ):
         """Test that only 'reward' metrics are stored (whitelist) using presigned URL flow."""
         # Create policy version in the database first
@@ -339,7 +339,7 @@ class TestBulkEpisodeUpload:
         self._call_presigned_upload_flow(test_client, auth_headers)
 
         # Verify only reward metric is stored
-        async with stats_repo.connect() as con:
+        async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             result = await con.execute(
                 """
                 SELECT DISTINCT metric_name

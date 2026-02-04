@@ -2,7 +2,6 @@ import pytest
 from sqlmodel import select
 
 from metta.app_backend.database import db_session
-from metta.app_backend.metta_repo import MettaRepo
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
 from metta.app_backend.tournament.scripts.roll_season import roll_season_version
@@ -10,7 +9,7 @@ from metta.app_backend.tournament.season_resolver import resolve_season
 
 
 @pytest.mark.asyncio
-async def test_season_version_flow(isolated_stats_repo: MettaRepo) -> None:  # noqa: ARG001
+async def test_season_version_flow(isolated_stats_repo: str) -> None:  # noqa: ARG001
     async with db_session() as session:
         season_v1 = Season(name="integration-test", version=1, canonical=True)
         session.add(season_v1)
