@@ -5,6 +5,7 @@ import { normalizeReplayUrl, normalizeVibescopeUrl } from '@/components/ReplayVi
 import { StyledLink } from '@/components/StyledLink'
 import { TD, TR } from '@/components/Table'
 import { JobRequest } from '@/lib/repo'
+import { METTA_GITHUB_ORGANIZATION, METTA_GITHUB_REPO } from '@/constants'
 import { formatDurationBetween, formatDurationSince } from '@/utils/datetime'
 
 import { LabelRow, LabelValueTable } from './LabelValueTable'
@@ -221,6 +222,8 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const episodeId = job.result?.episode_id as string | undefined
   const runnerImageShort = parseRunnerImageShort(job.result?.runner_image as string | undefined)
   const runnerImageFull = job.result?.runner_image as string | undefined
+  const gitCommit = job.result?.git_commit as string | undefined
+  const instanceType = job.result?.instance_type as string | undefined
   const lifecycleError = job.error
   const [expanded, setExpanded] = useState(false)
   const [showSpec, setShowSpec] = useState(false)
@@ -371,7 +374,24 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                       <span>{job.id}</span>
                     </CopyButton>
                   </LabelRow>
-                  {runnerImageShort && (
+                  {gitCommit && (
+                    <LabelRow label="Runner Commit">
+                      <a
+                        href={`https://github.com/${METTA_GITHUB_ORGANIZATION}/${METTA_GITHUB_REPO}/commit/${gitCommit}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-blue-600 hover:underline"
+                      >
+                        {gitCommit.slice(0, 7)}
+                      </a>
+                    </LabelRow>
+                  )}
+                  {instanceType && (
+                    <LabelRow label="Instance">
+                      <span className="font-mono text-xs">{instanceType}</span>
+                    </LabelRow>
+                  )}
+                  {!gitCommit && runnerImageShort && (
                     <LabelRow label="Runner Image">
                       <CopyButton text={runnerImageFull ?? ''} className="font-mono text-xs hover:text-gray-900">
                         <span>{runnerImageShort}</span>

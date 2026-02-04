@@ -16,6 +16,7 @@ from metta.app_backend.job_runner.config import (
 from metta.app_backend.job_runner.job_artifacts import (
     job_replay_key,
     job_results_key,
+    job_runtime_info_key,
     job_spec_key,
 )
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_client
@@ -74,9 +75,11 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     )
     spec_uri = presign_operation("get", cfg.EVAL_S3_BUCKET, spec_key, exp, endpoint)
     results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_results_key(job.id), exp, endpoint)
+    runtime_info_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_runtime_info_key(job.id), exp, endpoint)
     env_vars: list[client.V1EnvVar] = [
         client.V1EnvVar(name="JOB_SPEC_URI", value=spec_uri),
         client.V1EnvVar(name="RESULTS_URI", value=results_uri),
+        client.V1EnvVar(name="RUNTIME_INFO_URI", value=runtime_info_uri),
     ]
     if job.job.get("replay_uri") is not None:
         replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_replay_key(job.id), exp, endpoint)

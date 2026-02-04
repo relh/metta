@@ -24,3 +24,7 @@ def job_debug_key(job_id: Union[UUID, str]) -> str:
 
 def job_logs_key(job_id: Union[UUID, str]) -> str:
     return f"{job_prefix(job_id)}/logs.txt"
+
+
+def job_runtime_info_key(job_id: Union[UUID, str]) -> str:
+    return f"{job_prefix(job_id)}/runtime_info.json"

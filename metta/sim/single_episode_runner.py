@@ -19,7 +19,7 @@ from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from metta.common.util.perf_profiler import PerfProfiler
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.policy.prepare_policy_spec import download_policy_spec_from_s3_as_zip
-from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.job_specs import RuntimeInfo, SingleEpisodeJob
 from mettagrid.runner.policy_server_manager import PolicyServerHandle, launch_policy_server
 from mettagrid.runner.rollout import PureSingleEpisodeJob, PureSingleEpisodeResult
 from mettagrid.util.file import copy_data, read, write_data
@@ -227,6 +227,18 @@ def run_episode(
             shutil.rmtree(local_debug_dir, ignore_errors=True)
 
 
+def _collect_runtime_info() -> RuntimeInfo:
+    git_commit = os.environ.get("GIT_COMMIT") or None
+    instance_type: str | None = None
+    try:
+        resp = requests.get("http://169.254.169.254/latest/meta-data/instance-type", timeout=2)
+        if resp.ok:
+            instance_type = resp.text.strip()
+    except Exception:
+        pass
+    return RuntimeInfo(git_commit=git_commit, instance_type=instance_type)
+
+
 def main():
     job_spec_uri = os.environ.get("JOB_SPEC_URI")
     results_uri = os.environ.get("RESULTS_URI")
@@ -236,6 +248,18 @@ def main():
         print("Set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
         sys.exit(1)
         return
+
+    logger.info(f"Running with presigned URLs: spec={job_spec_uri[:50]}...")
+
+    runtime_info_uri = os.environ.get("RUNTIME_INFO_URI")
+    if runtime_info_uri:
+        runtime_info = _collect_runtime_info()
+        try:
+            payload = runtime_info.model_dump_json(exclude_none=True)
+            write_data(runtime_info_uri, payload.encode("utf-8"), content_type="application/json")
+            logger.info(f"Uploaded runtime info: {payload}")
+        except Exception as e:
+            logger.warning(f"Failed to upload runtime info: {e}")
 
     response = requests.get(job_spec_uri, timeout=30)
     response.raise_for_status()

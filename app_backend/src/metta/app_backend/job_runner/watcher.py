@@ -27,13 +27,18 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.job_runner.episode_recording import record_job_episode
-from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_replay_key, job_results_key
+from metta.app_backend.job_runner.job_artifacts import (
+    job_logs_key,
+    job_replay_key,
+    job_results_key,
+    job_runtime_info_key,
+)
 from metta.app_backend.job_runner.k8s_event_store import store_k8s_event
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
-from mettagrid.runner.job_specs import SingleEpisodeJob
+from mettagrid.runner.job_specs import RuntimeInfo, SingleEpisodeJob
 from mettagrid.runner.rollout import PureSingleEpisodeResult
 
 logger = logging.getLogger(__name__)
@@ -348,6 +353,16 @@ def _get_runner_image(pod: client.V1Pod) -> str | None:
     return pod.status.container_statuses[0].image_id or None
 
 
+def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
+    cfg = get_dispatch_config()
+    s3 = _get_s3_client()
+    try:
+        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=job_runtime_info_key(job_id))
+        return RuntimeInfo.model_validate_json(response["Body"].read())
+    except Exception:
+        return RuntimeInfo()
+
+
 def _handle_pod_succeeded(
     stats_client: StatsClient, job_id: UUID, pod_name: str, result_data: dict[str, Any] | None = None
 ):
@@ -396,6 +411,8 @@ def _handle_pod_terminal(
         result_data: dict[str, Any] = {}
         if runner_image:
             result_data["runner_image"] = runner_image
+        runtime_info = _read_runtime_info(job_id)
+        result_data.update(runtime_info.model_dump(exclude_none=True))
         with _job_lock(job_id):
             phase = pod.status.phase if pod.status else None
             if phase == "Succeeded":
