@@ -91,6 +91,9 @@ class TrainTool(Tool):
     disable_macbook_optimize: bool = False
     sandbox: bool = False
 
+    extra_components: list[Any] = Field(default_factory=list, exclude=True)
+    """Additional trainer components to register (e.g., curriculum updaters)."""
+
     def output_references(self, job_name: str) -> dict:
         storage = auto_policy_storage_decision(job_name)
         if storage.remote_prefix:
@@ -383,6 +386,12 @@ class TrainTool(Tool):
             )
 
         for component in components:
+            trainer.register(component)
+
+        for component in self.extra_components:
+            trainer.register(component)
+
+        for component in self.training_env.curriculum.get_trainer_components():
             trainer.register(component)
 
         if self.scheduler is not None:

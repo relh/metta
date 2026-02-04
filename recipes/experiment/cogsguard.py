@@ -22,6 +22,7 @@ from metta.cogworks.curriculum.curriculum import (
 )
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
+from metta.rl.training.clips_curriculum import ClipsCurriculumConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
@@ -99,7 +100,10 @@ def train(
     layout: _CogsGuardLayout = "machina_1",
     use_default_teacher: bool = False,
     sweep_mode: bool = False,
+    use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
+    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
+
     if use_default_teacher:
         default_teacher = TeacherConfig(
             mode="supervisor",
@@ -112,10 +116,20 @@ def train(
         if teacher is None:
             teacher = default_teacher
         else:
-            teacher = default_teacher.model_copy(update=teacher.model_dump(exclude_unset=True), deep=True)
-    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
+            overrides = teacher if isinstance(teacher, dict) else teacher.model_dump(exclude_unset=True)
+            teacher = default_teacher.model_copy(update=overrides, deep=True)
 
-    resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
+    if use_clips_curriculum:
+        default_clips = ClipsCurriculumConfig(layout=layout)
+        if curriculum is None:
+            curriculum = default_clips
+        else:
+            overrides = curriculum if isinstance(curriculum, dict) else curriculum.model_dump(exclude_unset=True)
+            curriculum = default_clips.model_copy(update=overrides, deep=True)
+        resolved_curriculum = curriculum
+    else:
+        resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
+
     trainer_cfg = TrainerConfig()
     if sweep_mode:
         # Tuned from docs/experiments/cogsguard_sweep_2026-01-29.md.

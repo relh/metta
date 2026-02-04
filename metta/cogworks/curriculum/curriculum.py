@@ -107,6 +107,10 @@ class CurriculumConfig(Config):
         """Create a Curriculum from this configuration."""
         return Curriculum(self)
 
+    def get_trainer_components(self) -> list:
+        """Return trainer components needed by this curriculum. Override in subclasses."""
+        return []
+
 
 class Curriculum(StatsLogger):
     """Base curriculum class that uses TaskGenerator to generate EnvConfigs and returns Tasks.
