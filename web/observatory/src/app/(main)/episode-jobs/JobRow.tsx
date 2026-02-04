@@ -406,7 +406,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                   )}
                   <LabelRow label="Local reproduce command">
                     <CopyButton
-                      text={`./tools/run.py recipes.experiment.episode_runner.repro id=${job.id}`}
+                      text={`./tools/run.py recipes.experiment.episode_runner.repro source=${job.id}`}
                       className="text-blue-600 hover:underline"
                       title="Copy local repro command"
                     >
