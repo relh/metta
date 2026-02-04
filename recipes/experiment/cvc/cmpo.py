@@ -22,7 +22,6 @@ def train(
     teacher: Optional[TeacherConfig] = None,
     variants: Optional[str | Sequence[str]] = None,
     layout: _CogsGuardLayout = "machina_1",
-    use_default_teacher: bool = False,
     sweep_mode: bool = False,
     use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
@@ -36,7 +35,6 @@ def train(
         teacher=teacher,
         variants=variants,
         layout=layout,
-        use_default_teacher=use_default_teacher,
         sweep_mode=sweep_mode,
         use_clips_curriculum=use_clips_curriculum,
     )

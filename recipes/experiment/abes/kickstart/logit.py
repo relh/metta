@@ -109,7 +109,6 @@ def train(
     teacher = teacher or TeacherConfig(
         policy_uri="s3://softmax-public/policies/av.sliced.mb.11.22.110.ctrl/av.sliced.mb.11.22.110.ctrl:v9900",
         mode="logit_kickstarter",
-        steps=1_000_000_000,
         teacher_led_proportion=1.0,
     )
 
@@ -131,29 +130,6 @@ def train(
         scheduler_rules=scheduler_rules,
         scheduler_run_gates=scheduler_run_gates,
         teacher_cfg=teacher,
-        default_steps=teacher.steps if teacher.steps is not None else 1_000_000_000,
-    )
-    scheduler_rules.extend(
-        [
-            ScheduleRule(
-                target_path="losses.logit_kickstarter.action_loss_coef",
-                mode="progress",
-                style="linear",
-                start_value=0.6,
-                end_value=0.0,
-                start_agent_step=500_000_000,
-                end_agent_step=1_000_000_000,
-            ),
-            ScheduleRule(
-                target_path="losses.logit_kickstarter.value_loss_coef",
-                mode="progress",
-                style="linear",
-                start_value=1.0,
-                end_value=0.0,
-                start_agent_step=500_000_000,
-                end_agent_step=1_000_000_000,
-            ),
-        ]
     )
     tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
     return tt

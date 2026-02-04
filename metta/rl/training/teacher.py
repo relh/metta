@@ -20,23 +20,28 @@ TeacherMode = Literal[
     "eer_cloner",
 ]
 
-DEFAULT_TEACHER_STEPS = 1_000_000_000
+DEFAULT_TEACHER_POLICY_URI = "metta://policy/role?miner=4&aligner=2&scrambler=4"
+DEFAULT_TEACHER_MODE: TeacherMode = "supervisor"
+DEFAULT_TEACHER_STEPS = 5_500_000_000
+DEFAULT_TEACHER_ANNEAL_START_STEP = 2_500_000_000
+DEFAULT_TEACHER_TEACHER_LED_PROPORTION = 0.0
+DEFAULT_TEACHER_PPO_BEGIN_STEP = 0
 
 
 class TeacherConfig(Config):
     """Shared knobs for enabling teacher/supervisor driven training phases."""
 
-    policy_uri: str | None = None
-    mode: TeacherMode = "sliced_cloner"
-    steps: int | None = None
+    policy_uri: str | None = DEFAULT_TEACHER_POLICY_URI
+    mode: TeacherMode = DEFAULT_TEACHER_MODE
+    steps: int | None = DEFAULT_TEACHER_STEPS
     # Teacher (led) and student slices should leave some remainder for PPO.
-    # Match mainline BC defaults: start at 20% teacher-led, anneal to 0.
-    teacher_led_proportion: float = Field(default=0.2, ge=0.0, le=1.0)
+    # Defaults align with the standard supervisor preset.
+    teacher_led_proportion: float = Field(default=DEFAULT_TEACHER_TEACHER_LED_PROPORTION, ge=0.0, le=1.0)
     student_led_proportion: float = Field(default=0.0, ge=0.0, le=1.0)
-    # Optional step to begin annealing proportions; defaults to 0 when unset.
-    anneal_start_step: int | None = Field(default=None, ge=0)
+    # Step to begin annealing proportions.
+    anneal_start_step: int | None = Field(default=DEFAULT_TEACHER_ANNEAL_START_STEP, ge=0)
     # Optional step to enable PPO training; rollout gating still avoids double-store with teacher phases.
-    ppo_begin_step: int | None = Field(default=None, ge=0)
+    ppo_begin_step: int | None = Field(default=DEFAULT_TEACHER_PPO_BEGIN_STEP, ge=0)
     # Optional per-mode overrides applied to the selected teacher loss config.
     #
     # Example CLI usage:
@@ -116,8 +121,8 @@ def apply_teacher_phase(
             _gate_ppo_train_from_step(int(teacher_cfg.ppo_begin_step))
         _gate_critic_after_teacher()
 
-    def _anneal(loss_name: str, attr_path: str, start_value: float) -> None:
-        if total_steps and start_value > 0.0 and anneal_start_step < total_steps:
+    def _anneal_range(loss_name: str, attr_path: str, start_value: float, *, start_step: int, end_step: int) -> None:
+        if end_step and start_value > 0.0 and start_step < end_step:
             scheduler_rules.append(
                 ScheduleRule(
                     target_path=f"losses.{loss_name}.{attr_path}",
@@ -125,9 +130,19 @@ def apply_teacher_phase(
                     style="linear",
                     start_value=start_value,
                     end_value=0.0,
-                    start_agent_step=anneal_start_step,
-                    end_agent_step=total_steps,
+                    start_agent_step=start_step,
+                    end_agent_step=end_step,
                 )
+            )
+
+    def _anneal(loss_name: str, attr_path: str, start_value: float) -> None:
+        if total_steps:
+            _anneal_range(
+                loss_name,
+                attr_path,
+                start_value,
+                start_step=anneal_start_step,
+                end_step=total_steps,
             )
 
     if teacher_cfg.mode in {"sliced_cloner", "sliced_cloner_no_ppo", "supervisor", "eer_cloner"}:
@@ -297,6 +312,22 @@ def apply_teacher_phase(
         _gate_loss("logit_kickstarter")
         _gate_ppo_after_teacher()
         _anneal("logit_kickstarter", attr_path="teacher_led_proportion", start_value=teacher_cfg.teacher_led_proportion)
+        if total_steps:
+            half_steps = total_steps // 2
+            _anneal_range(
+                "logit_kickstarter",
+                attr_path="action_loss_coef",
+                start_value=logit.action_loss_coef,
+                start_step=half_steps,
+                end_step=total_steps,
+            )
+            _anneal_range(
+                "logit_kickstarter",
+                attr_path="value_loss_coef",
+                start_value=logit.value_loss_coef,
+                start_step=half_steps,
+                end_step=total_steps,
+            )
         if total_steps:
             scheduler_rules.append(
                 ScheduleRule(

@@ -54,9 +54,7 @@ Notes:
 
 ## Kickstarting with a teacher
 
-Kickstarting can be used with any recipe that accepts `teacher` / `use_default_teacher` (e.g. CogsGuard, Machina, etc.).
-
-If a recipe exposes `use_default_teacher=true`, that enables a recipe-chosen default teacher.
+Kickstarting can be used with any recipe that accepts `teacher` (e.g. CogsGuard, Machina, etc.).
 
 ### Examples
 
@@ -64,11 +62,18 @@ If a recipe exposes `use_default_teacher=true`, that enables a recipe-chosen def
 
 ```bash
 ./devops/skypilot/launch.py recipes.experiment.cogsguard.train --gpus 8 --max-runtime-hours 120 -- \
-  run=your_run_name \
-  use_default_teacher=true
+  run=your_run_name
 ```
 
 To switch layouts, pass `layout=arena` (or `layout=machina_1` explicitly).
+
+To disable the default teacher, override the policy URI:
+
+```bash
+./devops/skypilot/launch.py recipes.experiment.cogsguard.train --gpus 8 --max-runtime-hours 120 -- \
+  run=your_run_name \
+  teacher.policy_uri=null
+```
 
 ### Custom teacher overrides
 

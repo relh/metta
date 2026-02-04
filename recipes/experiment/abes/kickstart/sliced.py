@@ -113,7 +113,6 @@ def train(
     teacher = teacher or TeacherConfig(
         policy_uri="s3://softmax-public/policies/av.student.11.26.28/av.student.11.26.28:v4000",
         mode="sliced_kickstarter",
-        steps=1_000_000_000,
         teacher_led_proportion=0.2,
     )
 
@@ -132,7 +131,6 @@ def train(
         scheduler_rules=scheduler_rules,
         scheduler_run_gates=scheduler_run_gates,
         teacher_cfg=teacher,
-        default_steps=teacher.steps or 1_000_000_000,
     )
     tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
     return tt

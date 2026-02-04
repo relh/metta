@@ -145,7 +145,6 @@ def train(
         policy_architecture = CortexBaseConfig(stack_cfg=stack_cfg, dtype=dtype)
 
     losses_config = LossesConfig()
-    default_teacher_steps = 1_000_000_000
     teacher = teacher or TeacherConfig(
         policy_uri="s3://softmax-public/policies/subho.abes.vit_baseline/subho.abes.vit_baseline:v2340.mpt",
         mode="eer_kickstarter",
@@ -174,7 +173,6 @@ def train(
         scheduler_rules=scheduler_rules,
         scheduler_run_gates=scheduler_run_gates,
         teacher_cfg=teacher,
-        default_steps=default_teacher_steps,
     )
     tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
     return tt

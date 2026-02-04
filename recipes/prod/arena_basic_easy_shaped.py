@@ -105,7 +105,7 @@ def train(
     eval_simulations = simulations()
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum)
-    teacher = teacher or TeacherConfig()  # Disabled by default unless policy_uri is provided.
+    teacher = teacher or TeacherConfig()  # Uses the default teacher preset unless overridden.
 
     if policy_architecture is None:
         policy_architecture = ViTDefaultConfig()
@@ -119,7 +119,6 @@ def train(
         scheduler_rules=scheduler_rules,
         scheduler_run_gates=scheduler_run_gates,
         teacher_cfg=teacher,
-        default_steps=teacher.steps or 1_000_000_000,
     )
 
     tt = TrainTool(

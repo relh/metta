@@ -66,7 +66,6 @@ def train(
     eval_variants: Optional[Sequence[str]] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    use_default_teacher: bool = False,
     use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
     resolved_curriculum = _resolve_curriculum(
@@ -83,7 +82,6 @@ def train(
         teacher=teacher,
         variants=variants,
         layout="machina_1",
-        use_default_teacher=use_default_teacher,
         use_clips_curriculum=use_clips_curriculum,
     )
     tt.system.torch_deterministic = False
@@ -128,14 +126,12 @@ def train_sweep(
     variants: Optional[Sequence[str]] = ("milestones", "credit"),
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    use_default_teacher: bool = False,
 ) -> tools.TrainTool:
     tool = cogsguard.train_sweep(
         variants=variants,
         layout="machina_1",
         policy_architecture=policy_architecture,
         teacher=teacher,
-        use_default_teacher=use_default_teacher,
     )
     tool.trainer.total_timesteps = 1_000_000_000
     return tool

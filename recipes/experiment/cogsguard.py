@@ -379,24 +379,13 @@ def train(
     max_steps_buckets: Sequence[int] | None = None,
     seed_span: cc.Span | None = None,
     event_profiles: Sequence[EventProfile] | None = None,
-    use_default_teacher: bool = False,
     sweep_mode: bool = False,
     use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
-    if use_default_teacher:
-        default_teacher = TeacherConfig(
-            mode="supervisor",
-            policy_uri="metta://policy/role?miner=4&aligner=2&scrambler=4",
-            steps=5_500_000_000,
-            teacher_led_proportion=0.0,
-            anneal_start_step=2_500_000_000,
-            ppo_begin_step=0,
-        )
-        if teacher is None:
-            teacher = default_teacher
-        else:
-            overrides = teacher if isinstance(teacher, dict) else teacher.model_dump(exclude_unset=True)
-            teacher = default_teacher.model_copy(update=overrides, deep=True)
+    if teacher is None:
+        teacher = TeacherConfig()
+    elif isinstance(teacher, dict):
+        teacher = TeacherConfig.model_validate(teacher)
 
     if use_clips_curriculum:
         default_clips = ClipsCurriculumConfig(layout=layout)
@@ -516,14 +505,12 @@ def train_sweep(
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
-    use_default_teacher: bool = False,
 ) -> tools.TrainTool:
     tool = train(
         policy_architecture=policy_architecture,
         teacher=teacher,
         variants=variants,
         layout=layout,
-        use_default_teacher=use_default_teacher,
         sweep_mode=True,
     )
     tool.trainer.total_timesteps = 1_000_000_000
