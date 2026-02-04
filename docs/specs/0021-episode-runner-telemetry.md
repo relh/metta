@@ -26,13 +26,21 @@ stopped job creation.
 
 ## Monitors
 
-added 5 monitors to `devops/datadog/monitors.py`:
+Deployed 6 monitors to production Datadog (critical thresholds only, no warnings to avoid noise):
 
-1. **job lifecycle failure rate** - alerts when >10% of jobs fail due to infrastructure issues (pod_not_found,
-   pod_deleted, result errors)
-2. **oom rate** - alerts when >5% of failures are OOM
-3. **high pending queue** - alerts when >50 jobs pending for >10min
-4. **slow dispatch** - alerts when p95 dispatch time >2min
-5. **no job activity** - alerts when no job transitions for 10min
+**Kubernetes (3):**
 
-all include minimum volume guards to prevent false positives on low traffic.
+1. **deployment replicas down** - alerts when replicas unavailable for 10+ min
+2. **crashloopbackoff** - alerts when pods stuck in crashloop
+3. **too many nodes** - alerts when node count exceeds 200 (cost protection)
+
+**Tournament (3):** 4. **high job failure rate** - alerts when >20 failures in 15 min 5. **job queue buildup** - alerts
+when total outstanding jobs >180 (approaching backpressure limit of 200) 6. **high pending queue** - alerts when >100
+jobs pending for >10 min
+
+**Not deployed (to avoid false positives):**
+
+- job lifecycle/OOM rate monitors - Datadog API doesn't support compound queries with &&
+- slow dispatch monitor - percentile queries don't work on this metric type
+- low running jobs - too dependent on tournament schedule
+- no job activity - alerts during legitimate downtime
