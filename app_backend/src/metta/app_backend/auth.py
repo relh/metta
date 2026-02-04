@@ -6,7 +6,9 @@ There are several ways to authenticate requests:
 1) `X-User-Id` and `X-Auth-Secret` header pair, where `X-Auth-Secret` is the secret static key that is shared between
 the backend and softmax.com login service. This is used for requests from softmax.com.
 
-2) `X-Auth-Token` header
+2) `Authorization` header with Bearer token
+
+3) `X-Auth-Token` header (legacy header)
 """
 
 from typing import Annotated, Optional
@@ -46,9 +48,15 @@ def get_user_from_header(request: Request) -> Optional[User]:
 
 
 async def get_user_from_token(request: Request) -> Optional[User]:
-    token = request.headers.get("X-Auth-Token")
+    token = request.headers.get("X-Auth-Token")  # Legacy header
+    if not token:
+        authorization_header = request.headers.get("Authorization", "")
+        if authorization_header.lower().startswith("bearer "):
+            token = authorization_header.split(" ", 1)[1]
+
     if token:
         return await validate_token_via_login_service(token)
+
     return None
 
 
@@ -95,7 +103,7 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.LOGIN_SERVICE_URL}/api/validate",
-                headers={"X-Auth-Token": token},
+                headers={"Authorization": f"Bearer {token}"},
                 timeout=5.0,
             )
 

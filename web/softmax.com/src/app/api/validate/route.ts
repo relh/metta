@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     // First check for machine token in headers
     const authToken =
       request.headers.get("X-Auth-Token") ||
-      request.headers.get("Authorization")?.replace("Bearer ", "");
+      request.headers.get("Authorization")?.replace(/^bearer /i, "");
 
     if (!authToken) {
       return typedResponse({ valid: false, error: "No token provided" }, 401);
