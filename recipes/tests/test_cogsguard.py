@@ -10,6 +10,7 @@ import random
 import pytest
 
 from cogames.cogs_vs_clips.config import CvCConfig
+from metta.cogworks.curriculum.task_generator import BucketedTaskGenerator, SingleTaskGenerator, TaskGeneratorSet
 from metta.rl.training.teacher import TeacherConfig
 
 # Import after cogsguard to avoid circular import issues
@@ -23,8 +24,8 @@ class TestCogsguardEnvironment:
     @pytest.mark.parametrize(
         ("layout", "expected_label"),
         [
-            ("machina_1", "cogsguard_machina_1.basic.no_clips"),
-            ("arena", "cogsguard_arena.basic.no_clips"),
+            ("machina_1", "cogsguard_machina_1.basic"),
+            ("arena", "cogsguard_arena.basic"),
         ],
     )
     def test_make_env_layout_switches_map(self, layout: str, expected_label: str) -> None:
@@ -142,6 +143,45 @@ class TestCogsguardCurriculum:
         # Check that the curriculum has tasks configured
         assert curriculum.task_generator is not None
 
+    def test_make_curriculum_includes_fixed_maps(self) -> None:
+        curriculum = cogsguard.make_curriculum(
+            num_agents=4,
+            include_fixed_maps=True,
+            include_eval_missions=False,
+        )
+        task_generator = curriculum.task_generator
+        assert task_generator is not None
+        configs = (
+            task_generator.task_generators if isinstance(task_generator, TaskGeneratorSet.Config) else [task_generator]
+        )
+        labels = []
+        for config in configs:
+            if not isinstance(config, BucketedTaskGenerator.Config):
+                continue
+            child = config.child_generator_config
+            if isinstance(child, SingleTaskGenerator.Config):
+                labels.append(child.env.label)
+        assert any("cogsguard_fixed_" in label for label in labels)
+
+    def test_make_curriculum_max_steps_buckets(self) -> None:
+        buckets = [500, 1000, 2000]
+        curriculum = cogsguard.make_curriculum(
+            layout="arena",
+            include_eval_missions=False,
+            include_fixed_maps=False,
+            max_steps=2000,
+            max_steps_buckets=buckets,
+        )
+        task_generator = curriculum.task_generator
+        assert isinstance(task_generator, TaskGeneratorSet.Config)
+        steps = []
+        for config in task_generator.task_generators:
+            assert isinstance(config, BucketedTaskGenerator.Config)
+            child = config.child_generator_config
+            assert isinstance(child, SingleTaskGenerator.Config)
+            steps.append(child.env.game.max_steps)
+        assert sorted(set(steps)) == buckets
+
     def test_simulations_returns_valid_configs(self) -> None:
         """Test that simulations() returns valid simulation configs."""
         sims = cogsguard.simulations()
@@ -150,6 +190,13 @@ class TestCogsguardCurriculum:
         for sim in sims:
             assert sim.suite == "cogsguard"
             assert sim.env is not None
+
+
+def test_wave_only_variant_disables_followup_events() -> None:
+    env_config = cogsguard.make_env(num_agents=4, max_steps=100, variants="clips_wave_only")
+    events = env_config.game.events
+    assert events["cogs_to_neutral"].timesteps == []
+    assert events["neutral_to_clips"].timesteps == []
 
 
 @pytest.mark.parametrize("num_agents", [2, 4, 8])

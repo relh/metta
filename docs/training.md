@@ -106,6 +106,24 @@ See `metta/rl/training/teacher.py` for available teacher modes and knobs (e.g. `
 ./devops/run.sh recipes.experiment.cogsguard.train run=your_run_name
 ```
 
+**Defaults (leaderboard baseline)**
+
+- `layout=machina_1`
+- `num_agents=8`
+- `max_steps=10000`
+- `variants` omitted (no mission or reward variants)
+- `include_eval_missions=false`
+- `include_fixed_maps=false`
+- `max_steps_buckets=[max_steps]` (single bucket)
+- `event_profiles` uses baseline clips/weather only
+
+**Curriculum options (opt-in)**
+
+- Add eval missions: `include_eval_missions=true`
+- Add fixed maps: `include_fixed_maps=true`
+- Multiple step buckets: `max_steps_buckets='[1000,2000,5000,10000]'`
+- Event profile bundle (Python): `cogames.cogs_vs_clips.cogsguard_curriculum.COGSGUARD_EVENT_PROFILES`
+
 **Reward variants**
 
 The CogsGuard recipe (`recipes/experiment/cogsguard.py`) supports stackable reward “variants”:

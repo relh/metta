@@ -6,14 +6,24 @@ This recipe is automatically validated in CI and release processes.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal, Optional, Sequence
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
+from cogames.cogs_vs_clips.cogsguard_curriculum import (
+    COGSGUARD_FIXED_MAPS,
+    EventProfile,
+    filter_compatible_variants,
+    resolve_event_profiles,
+    split_variants,
+)
+from cogames.cogs_vs_clips.evals.cogsguard_evals import COGSGUARD_EVAL_COGS, COGSGUARD_EVAL_MISSIONS
 from cogames.cogs_vs_clips.mission import CvCMission
 from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
-from cogames.cogs_vs_clips.variants import NoClipsVariant
+from cogames.cogs_vs_clips.sites import MAPS_DIR, make_cogsguard_arena_site, make_cogsguard_machina1_site
+from cogames.core import CoGameMissionVariant, CoGameSite
+from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -29,11 +39,26 @@ from metta.sim.simulation_config import SimulationConfig
 from metta.sweep.core import SweepParameters as SP
 from metta.sweep.core import make_sweep
 from mettagrid.config.mettagrid_config import MettaGridConfig
+from mettagrid.map_builder.map_builder import MapBuilderConfig
+from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
 
 _CogsGuardLayout = Literal["machina_1", "arena"]
+DEFAULT_LAYOUT: _CogsGuardLayout = "machina_1"
+DEFAULT_NUM_AGENTS = 8
+DEFAULT_MAX_STEPS = 10000
+DEFAULT_INCLUDE_EVAL_MISSIONS = False
+DEFAULT_INCLUDE_FIXED_MAPS = False
 
 
-def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_steps: int) -> CvCMission:
+def _make_cogsguard_mission(
+    *,
+    layout: _CogsGuardLayout,
+    num_agents: int,
+    max_steps: int,
+    variants: Sequence[CoGameMissionVariant] | None = None,
+    clips_overrides: dict[str, object] | None = None,
+    weather_overrides: dict[str, object] | None = None,
+) -> CvCMission:
     if layout == "machina_1":
         site = make_cogsguard_machina1_site(num_agents)
         description = "Basic CogsGuard mission (Machina1 leaderboard layout)"
@@ -50,32 +75,281 @@ def _make_cogsguard_mission(*, layout: _CogsGuardLayout, num_agents: int, max_st
         num_cogs=num_agents,
         max_steps=max_steps,
     )
-    return mission.with_variants([NoClipsVariant()])
+    if clips_overrides:
+        mission.clips = mission.clips.model_copy(update=clips_overrides)
+    if weather_overrides:
+        mission.weather = mission.weather.model_copy(update=weather_overrides)
+    if variants:
+        compatible = filter_compatible_variants(mission, variants)
+        if compatible:
+            mission = mission.with_variants(compatible)
+    return mission
+
+
+def _make_env_from_variants(
+    *,
+    num_agents: int,
+    max_steps: int,
+    variants: Sequence[CoGameMissionVariant] | None,
+    reward_variants: Sequence[str] | None,
+    event_profile_name: str | None,
+    clips_overrides: dict[str, object] | None,
+    weather_overrides: dict[str, object] | None,
+    layout: _CogsGuardLayout,
+) -> MettaGridConfig:
+    env = _make_cogsguard_mission(
+        layout=layout,
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=variants,
+        clips_overrides=clips_overrides,
+        weather_overrides=weather_overrides,
+    ).make_env()
+    if reward_variants:
+        apply_reward_variants(env, variants=list(reward_variants))
+    if event_profile_name:
+        env.label = f"{env.label}.{event_profile_name}"
+    return env
+
+
+def _make_eval_envs(
+    *,
+    num_agents: int,
+    max_steps: int,
+    variants: Sequence[CoGameMissionVariant],
+    reward_variants: Sequence[str] | None,
+    event_profile_name: str | None,
+    clips_overrides: dict[str, object] | None,
+    weather_overrides: dict[str, object] | None,
+) -> list[MettaGridConfig]:
+    eval_envs: list[MettaGridConfig] = []
+    for mission in COGSGUARD_EVAL_MISSIONS:
+        map_key = f"evals/{mission.name}.map"
+        spawn_count = COGSGUARD_EVAL_COGS.get(map_key)
+        if spawn_count is not None and spawn_count < num_agents:
+            continue
+        site = mission.site.model_copy(update={"min_cogs": num_agents, "max_cogs": num_agents})
+        eval_mission = CvCMission(
+            name=mission.name,
+            description=mission.description,
+            site=site,
+            num_cogs=num_agents,
+            max_steps=max_steps,
+        )
+        if clips_overrides:
+            eval_mission.clips = eval_mission.clips.model_copy(update=clips_overrides)
+        if weather_overrides:
+            eval_mission.weather = eval_mission.weather.model_copy(update=weather_overrides)
+        if variants:
+            compatible = filter_compatible_variants(eval_mission, variants)
+            if compatible:
+                eval_mission = eval_mission.with_variants(compatible)
+        env = eval_mission.make_env()
+        if reward_variants:
+            apply_reward_variants(env, variants=list(reward_variants))
+        if event_profile_name:
+            env.label = f"{env.label}.{event_profile_name}"
+        eval_envs.append(env)
+    return eval_envs
+
+
+def _count_spawn_pads(map_path: Path) -> int:
+    text = map_path.read_text()
+    if "map_data:" not in text:
+        raise ValueError(f"Missing map_data block in {map_path}")
+    map_section = text.split("map_data:", 1)[1].split("char_to_map_name:", 1)[0]
+    count = map_section.count("@")
+    if count <= 0:
+        raise ValueError(f"No spawn pads found in {map_path}")
+    return count
+
+
+def _load_ascii_map(map_name: str) -> MapGenConfig:
+    map_path = MAPS_DIR / map_name
+    if not map_path.exists():
+        raise FileNotFoundError(f"Map not found: {map_path}")
+    return MapGen.Config(
+        instance=MapBuilderConfig.from_uri(str(map_path)),
+        instances=1,
+        fixed_spawn_order=False,
+        instance_border_width=0,
+    )
+
+
+def _make_fixed_map_envs(
+    *,
+    num_agents: int,
+    max_steps: int,
+    variants: Sequence[CoGameMissionVariant],
+    reward_variants: Sequence[str] | None,
+    event_profile_name: str | None,
+    clips_overrides: dict[str, object] | None,
+    weather_overrides: dict[str, object] | None,
+) -> list[MettaGridConfig]:
+    envs: list[MettaGridConfig] = []
+    for map_name in COGSGUARD_FIXED_MAPS:
+        map_path = MAPS_DIR / map_name
+        if not map_path.exists():
+            raise FileNotFoundError(f"Map not found: {map_path}")
+        spawn_count = _count_spawn_pads(map_path)
+        if spawn_count < num_agents:
+            continue
+
+        stem = Path(map_name).stem
+        site = CoGameSite(
+            name=f"cogsguard_fixed_{stem}",
+            description=f"CogsGuard fixed map: {stem}",
+            map_builder=_load_ascii_map(map_name),
+            min_cogs=num_agents,
+            max_cogs=num_agents,
+        )
+        mission = CvCMission(
+            name="fixed",
+            description=f"CogsGuard fixed map: {stem}",
+            site=site,
+            num_cogs=num_agents,
+            max_steps=max_steps,
+        )
+        if clips_overrides:
+            mission.clips = mission.clips.model_copy(update=clips_overrides)
+        if weather_overrides:
+            mission.weather = mission.weather.model_copy(update=weather_overrides)
+        if variants:
+            compatible = filter_compatible_variants(mission, variants)
+            if compatible:
+                mission = mission.with_variants(compatible)
+        env = mission.make_env()
+        if reward_variants:
+            apply_reward_variants(env, variants=list(reward_variants))
+        if event_profile_name:
+            env.label = f"{env.label}.{event_profile_name}"
+        envs.append(env)
+    return envs
+
+
+def _resolve_max_steps_buckets(max_steps: int, max_steps_buckets: Sequence[int] | None) -> list[int]:
+    if max_steps_buckets is None:
+        buckets = [max_steps]
+    else:
+        buckets = list(max_steps_buckets)
+    buckets = sorted(set(int(steps) for steps in buckets if 0 < steps <= max_steps))
+    if max_steps not in buckets:
+        buckets.append(max_steps)
+    buckets = sorted(set(buckets))
+    return buckets
+
+
+def _supports_seed_bucket(env: MettaGridConfig) -> bool:
+    return isinstance(env.game.map_builder, MapGen.Config)
 
 
 def make_env(
-    num_agents: int = 8,
-    max_steps: int = 10000,
+    num_agents: int = DEFAULT_NUM_AGENTS,
+    max_steps: int = DEFAULT_MAX_STEPS,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
 ) -> MettaGridConfig:
     """Create a CogsGuard environment."""
-    env = _make_cogsguard_mission(layout=layout, num_agents=num_agents, max_steps=max_steps).make_env()
-    apply_reward_variants(env, variants=variants)
-    return env
+    resolved_variants, resolved_rewards = split_variants(variants)
+    return _make_env_from_variants(
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=resolved_variants,
+        reward_variants=resolved_rewards,
+        event_profile_name=None,
+        clips_overrides=None,
+        weather_overrides=None,
+        layout=layout,
+    )
 
 
 def make_curriculum(
     env: Optional[MettaGridConfig] = None,
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    num_agents: int = DEFAULT_NUM_AGENTS,
+    max_steps: int = DEFAULT_MAX_STEPS,
+    include_eval_missions: bool = DEFAULT_INCLUDE_EVAL_MISSIONS,
+    include_fixed_maps: bool = DEFAULT_INCLUDE_FIXED_MAPS,
+    max_steps_buckets: Sequence[int] | None = None,
+    seed_span: cc.Span | None = None,
+    event_profiles: Sequence[EventProfile] | None = None,
 ) -> CurriculumConfig:
-    env = env or make_env(variants=variants, layout=layout)
-    tasks = cc.single_task(env)
-
     if algorithm_config is None:
         algorithm_config = DiscreteRandomConfig()
+
+    if env is not None:
+        if _supports_seed_bucket(env):
+            task_generators = [cc.bucketed(env)]
+        else:
+            task_generators = [cc.single_task(env)]
+    else:
+        resolved_variants, resolved_rewards = split_variants(variants)
+        resolved_event_profiles = resolve_event_profiles(event_profiles)
+        label_event_profiles = event_profiles is not None
+        resolved_max_steps = _resolve_max_steps_buckets(max_steps, max_steps_buckets)
+        task_generators = []
+        for bucket_steps in resolved_max_steps:
+            for event_profile in resolved_event_profiles:
+                event_name = event_profile.name if label_event_profiles else None
+                task_generators.append(
+                    cc.bucketed(
+                        _make_env_from_variants(
+                            num_agents=num_agents,
+                            max_steps=bucket_steps,
+                            variants=resolved_variants,
+                            reward_variants=resolved_rewards,
+                            event_profile_name=event_name,
+                            clips_overrides=event_profile.clips_overrides,
+                            weather_overrides=event_profile.weather_overrides,
+                            layout=layout,
+                        )
+                    )
+                )
+            if include_eval_missions:
+                for event_profile in resolved_event_profiles:
+                    event_name = event_profile.name if label_event_profiles else None
+                    task_generators.extend(
+                        cc.bucketed(env_cfg)
+                        for env_cfg in _make_eval_envs(
+                            num_agents=num_agents,
+                            max_steps=bucket_steps,
+                            variants=resolved_variants,
+                            reward_variants=resolved_rewards,
+                            event_profile_name=event_name,
+                            clips_overrides=event_profile.clips_overrides,
+                            weather_overrides=event_profile.weather_overrides,
+                        )
+                    )
+            if include_fixed_maps:
+                for event_profile in resolved_event_profiles:
+                    event_name = event_profile.name if label_event_profiles else None
+                    task_generators.extend(
+                        cc.bucketed(env_cfg)
+                        for env_cfg in _make_fixed_map_envs(
+                            num_agents=num_agents,
+                            max_steps=bucket_steps,
+                            variants=resolved_variants,
+                            reward_variants=resolved_rewards,
+                            event_profile_name=event_name,
+                            clips_overrides=event_profile.clips_overrides,
+                            weather_overrides=event_profile.weather_overrides,
+                        )
+                    )
+
+    if seed_span is None:
+        seed_span = cc.Span(0, 1_000_000)
+
+    for task_gen in task_generators:
+        child = task_gen.child_generator_config
+        if isinstance(child, cc.SingleTaskGenerator.Config) and _supports_seed_bucket(child.env):
+            task_gen.add_bucket("game.map_builder.seed", [seed_span])
+
+    if len(task_generators) == 1:
+        tasks = task_generators[0]
+    else:
+        tasks = cc.merge(task_generators)
 
     return tasks.to_curriculum(algorithm_config=algorithm_config)
 
@@ -83,7 +357,7 @@ def make_curriculum(
 def simulations(
     env: Optional[MettaGridConfig] = None,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
 ) -> list[SimulationConfig]:
     env = env or make_env(variants=variants, layout=layout)
 
@@ -97,13 +371,18 @@ def train(
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    num_agents: int = DEFAULT_NUM_AGENTS,
+    max_steps: int = DEFAULT_MAX_STEPS,
+    include_eval_missions: bool = DEFAULT_INCLUDE_EVAL_MISSIONS,
+    include_fixed_maps: bool = DEFAULT_INCLUDE_FIXED_MAPS,
+    max_steps_buckets: Sequence[int] | None = None,
+    seed_span: cc.Span | None = None,
+    event_profiles: Sequence[EventProfile] | None = None,
     use_default_teacher: bool = False,
     sweep_mode: bool = False,
     use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
-    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
-
     if use_default_teacher:
         default_teacher = TeacherConfig(
             mode="supervisor",
@@ -128,8 +407,17 @@ def train(
             curriculum = default_clips.model_copy(update=overrides, deep=True)
         resolved_curriculum = curriculum
     else:
-        resolved_curriculum = curriculum or make_curriculum(variants=variants, layout=layout)
-
+        resolved_curriculum = curriculum or make_curriculum(
+            variants=variants,
+            layout=layout,
+            num_agents=num_agents,
+            max_steps=max_steps,
+            include_eval_missions=include_eval_missions,
+            include_fixed_maps=include_fixed_maps,
+            max_steps_buckets=max_steps_buckets,
+            seed_span=seed_span,
+            event_profiles=event_profiles,
+        )
     trainer_cfg = TrainerConfig()
     if sweep_mode:
         # Tuned from docs/experiments/cogsguard_sweep_2026-01-29.md.
@@ -190,7 +478,7 @@ def train(
 def evaluate(
     policy_uris: str | Sequence[str] | None = None,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
 ) -> tools.EvaluateTool:
     resolved_policy_uris: str | list[str]
     if policy_uris is None:
@@ -208,7 +496,7 @@ def evaluate(
 def play(
     policy_uri: Optional[str] = None,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
 ) -> tools.PlayTool:
     """Interactive play with a policy."""
     return tools.PlayTool(sim=simulations(variants=variants, layout=layout)[0], policy_uri=policy_uri)
@@ -217,7 +505,7 @@ def play(
 def replay(
     policy_uri: Optional[str] = None,
     variants: str | Sequence[str] | None = None,
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
 ) -> tools.ReplayTool:
     """Generate replay from a policy."""
     return tools.ReplayTool(sim=simulations(variants=variants, layout=layout)[0], policy_uri=policy_uri)
@@ -225,7 +513,7 @@ def replay(
 
 def train_sweep(
     variants: Optional[Sequence[str]] = ("milestones", "credit"),
-    layout: _CogsGuardLayout = "machina_1",
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
     use_default_teacher: bool = False,
