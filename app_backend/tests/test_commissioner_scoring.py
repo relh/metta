@@ -41,7 +41,7 @@ class _TestReferee(RefereeBase):
 
 
 @pytest.mark.asyncio
-async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_repo: str) -> None:
+async def test_sync_match_scores_uses_episode_policy_num_agents(stats_repo: str) -> None:
     commissioner = _TestCommissioner()
 
     episode_id = uuid4()
@@ -156,7 +156,7 @@ async def test_sync_match_scores_uses_episode_policy_num_agents(isolated_stats_r
 
 
 @pytest.mark.asyncio
-async def test_leaderboard_weighting_uses_episode_policy_num_agents(isolated_stats_repo: str) -> None:
+async def test_leaderboard_weighting_uses_episode_policy_num_agents(stats_repo: str) -> None:
     referee = _TestReferee()
 
     episode_id_1 = uuid4()

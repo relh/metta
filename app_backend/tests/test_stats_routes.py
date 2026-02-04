@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from metta.app_backend.auth import User
@@ -14,8 +15,7 @@ from metta.app_backend.test_support.client_adapter import get_user_headers
 
 @pytest.mark.asyncio
 async def test_get_policy_versions_with_version_filter(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient, softmax_headers: dict[str, str]
 ) -> None:
     user = "version-filter@example.com"
     policy_id = await policy_queries.upsert_policy(name="version-filter-policy", user_id=user, attributes={})
@@ -26,12 +26,7 @@ async def test_get_policy_versions_with_version_filter(
         policy_id=policy_id, s3_path=None, git_hash=None, policy_spec={}, attributes={}
     )
 
-    # Use softmax headers to bypass visibility filtering (testing query functionality, not visibility)
-    softmax_headers = get_user_headers(
-        User(id="team@softmax.com", email="team@softmax.com", is_softmax_team_member=True)
-    )
-
-    response = isolated_test_client.get(
+    response = test_client.get(
         "/stats/policy-versions",
         params={"name_exact": "version-filter-policy", "version": 1},
         headers=softmax_headers,
@@ -43,7 +38,7 @@ async def test_get_policy_versions_with_version_filter(
     assert body["entries"][0]["id"] == str(pv1_id)
     assert body["entries"][0]["version"] == 1
 
-    response = isolated_test_client.get(
+    response = test_client.get(
         "/stats/policy-versions",
         params={"name_exact": "version-filter-policy", "version": 2},
         headers=softmax_headers,
@@ -57,29 +52,20 @@ async def test_get_policy_versions_with_version_filter(
 
 
 @pytest.mark.asyncio
-async def test_get_policies_with_filters(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_get_policies_with_filters(test_client: TestClient, softmax_headers: dict[str, str]) -> None:
     user = "policies-filter@example.com"
     await policy_queries.upsert_policy(name="alpha-policy", user_id=user, attributes={})
     await policy_queries.upsert_policy(name="beta-policy", user_id=user, attributes={})
     await policy_queries.upsert_policy(name="gamma-test", user_id=user, attributes={})
 
-    # Use softmax headers to bypass visibility filtering (testing query functionality, not visibility)
-    softmax_headers = get_user_headers(
-        User(id="team@softmax.com", email="team@softmax.com", is_softmax_team_member=True)
-    )
-
-    response = isolated_test_client.get(
-        "/stats/policies", params={"name_exact": "alpha-policy"}, headers=softmax_headers
-    )
+    # Use softmax user to bypass visibility filtering (testing query functionality, not visibility)
+    response = test_client.get("/stats/policies", params={"name_exact": "alpha-policy"}, headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 1
     assert body["entries"][0]["name"] == "alpha-policy"
 
-    response = isolated_test_client.get("/stats/policies", params={"name_fuzzy": "policy"}, headers=softmax_headers)
+    response = test_client.get("/stats/policies", params={"name_fuzzy": "policy"}, headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 2
@@ -88,10 +74,7 @@ async def test_get_policies_with_filters(
 
 
 @pytest.mark.asyncio
-async def test_get_versions_for_policy(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_get_versions_for_policy(test_client: TestClient, softmax_headers: dict[str, str]) -> None:
     user = "versions-for-policy@example.com"
     policy_id = await policy_queries.upsert_policy(name="multi-version-policy", user_id=user, attributes={})
     await policy_queries.create_policy_version(
@@ -104,12 +87,8 @@ async def test_get_versions_for_policy(
         policy_id=policy_id, s3_path=None, git_hash=None, policy_spec={}, attributes={}
     )
 
-    # Use softmax headers to bypass visibility filtering (testing query functionality, not visibility)
-    softmax_headers = get_user_headers(
-        User(id="team@softmax.com", email="team@softmax.com", is_softmax_team_member=True)
-    )
-
-    response = isolated_test_client.get(f"/stats/policies/{policy_id}/versions", headers=softmax_headers)
+    # Use softmax user to bypass visibility filtering (testing query functionality, not visibility)
+    response = test_client.get(f"/stats/policies/{policy_id}/versions", headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 3
@@ -119,11 +98,7 @@ async def test_get_versions_for_policy(
 
 
 @pytest.mark.asyncio
-async def test_get_my_policy_versions(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-    auth_headers: dict[str, str],
-) -> None:
+async def test_get_my_policy_versions(test_client: TestClient, softmax_headers: dict[str, str]) -> None:
     my_user = "debug_user_id"
     other_user = "other@example.com"
 
@@ -137,7 +112,7 @@ async def test_get_my_policy_versions(
         policy_id=other_policy_id, s3_path=None, git_hash=None, policy_spec={}, attributes={}
     )
 
-    response = isolated_test_client.get("/stats/policies/my-versions", headers=auth_headers)
+    response = test_client.get("/stats/policies/my-versions", headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert len(body["entries"]) == 1
@@ -147,11 +122,8 @@ async def test_get_my_policy_versions(
 
 @pytest.mark.asyncio
 async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-    auth_headers: dict[str, str],
+    test_client: TestClient, softmax_headers: dict[str, str]
 ) -> None:
-    _ = isolated_stats_repo  # needed to configure database globals
     user = "episodes@example.com"
     policy_id = await policy_queries.upsert_policy(name="episodes-policy", user_id=user, attributes={})
     pv_id = await policy_queries.create_policy_version(
@@ -175,10 +147,10 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
         policy_metrics=[(pv_id, "reward", 10.0)],
     )
 
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/episodes/query",
         json={"episode_ids": [str(episode_id)], "limit": 1},
-        headers=auth_headers,
+        headers=softmax_headers,
     )
 
     assert response.status_code == 200
@@ -198,16 +170,11 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
 # - Public routes (cogames CLI submit, read endpoints) use CheckUser or are public
 
 
-def _get_headers_for_user(user_id: str, is_softmax: bool = False) -> dict[str, str]:
-    """Create auth headers for a test user."""
-    user = User(id=user_id, email=f"{user_id}@example.com", is_softmax_team_member=is_softmax)
-    return get_user_headers(user)
-
-
 @pytest.mark.asyncio
 async def test_update_policy_version_tags_requires_softmax(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    regular_headers: dict[str, str],
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that only softmax team members can update policy tags (internal route)."""
     owner_user = "owner@example.com"
@@ -219,8 +186,7 @@ async def test_update_policy_version_tags_requires_softmax(
     )
 
     # Non-softmax user should get 403
-    regular_headers = _get_headers_for_user("regular@example.com", is_softmax=False)
-    response = isolated_test_client.put(
+    response = test_client.put(
         f"/stats/policies/versions/{pv_id}/tags",
         json={"env": "prod"},
         headers=regular_headers,
@@ -228,8 +194,7 @@ async def test_update_policy_version_tags_requires_softmax(
     assert response.status_code == 403
 
     # Softmax user can update tags on any policy (even not their own)
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.put(
+    response = test_client.put(
         f"/stats/policies/versions/{pv_id}/tags",
         json={"env": "prod"},
         headers=softmax_headers,
@@ -239,8 +204,9 @@ async def test_update_policy_version_tags_requires_softmax(
 
 @pytest.mark.asyncio
 async def test_create_policy_version_requires_softmax(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    regular_headers: dict[str, str],
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that only softmax team members can create versions via internal route."""
     owner_user = "owner@example.com"
@@ -249,8 +215,7 @@ async def test_create_policy_version_requires_softmax(
     policy_id = await policy_queries.upsert_policy(name="owner-policy-versions", user_id=owner_user, attributes={})
 
     # Non-softmax user should get 403
-    regular_headers = _get_headers_for_user("regular@example.com", is_softmax=False)
-    response = isolated_test_client.post(
+    response = test_client.post(
         f"/stats/policies/{policy_id}/versions",
         json={"policy_spec": {}, "attributes": {}},
         headers=regular_headers,
@@ -258,8 +223,7 @@ async def test_create_policy_version_requires_softmax(
     assert response.status_code == 403
 
     # Softmax user can create versions on any policy (even not their own)
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.post(
+    response = test_client.post(
         f"/stats/policies/{policy_id}/versions",
         json={"policy_spec": {}, "attributes": {}},
         headers=softmax_headers,
@@ -269,13 +233,13 @@ async def test_create_policy_version_requires_softmax(
 
 @pytest.mark.asyncio
 async def test_upsert_policy_requires_softmax(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    regular_headers: dict[str, str],
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that only softmax team members can use the internal policy creation route."""
     # Non-softmax user should get 403
-    regular_headers = _get_headers_for_user("regular@example.com", is_softmax=False)
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/policies",
         json={"name": "regular-user-policy", "is_system_policy": False},
         headers=regular_headers,
@@ -283,8 +247,7 @@ async def test_upsert_policy_requires_softmax(
     assert response.status_code == 403
 
     # Softmax team member can create policies
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/policies",
         json={"name": "softmax-policy", "is_system_policy": False},
         headers=softmax_headers,
@@ -292,7 +255,7 @@ async def test_upsert_policy_requires_softmax(
     assert response.status_code == 200
 
     # Softmax team member can create system policies
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/policies",
         json={"name": "system-policy", "is_system_policy": True},
         headers=softmax_headers,
@@ -302,8 +265,9 @@ async def test_upsert_policy_requires_softmax(
 
 @pytest.mark.asyncio
 async def test_get_policy_version_with_details_requires_softmax(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    regular_headers: dict[str, str],
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that getting policy version with internal details requires softmax."""
     user = "owner@example.com"
@@ -313,16 +277,14 @@ async def test_get_policy_version_with_details_requires_softmax(
     )
 
     # Non-softmax user should get 403
-    regular_headers = _get_headers_for_user("regular@example.com", is_softmax=False)
-    response = isolated_test_client.get(
+    response = test_client.get(
         f"/stats/policies/versions/{pv_id}",
         headers=regular_headers,
     )
     assert response.status_code == 403
 
     # Softmax user can access
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.get(
+    response = test_client.get(
         f"/stats/policies/versions/{pv_id}",
         headers=softmax_headers,
     )
@@ -334,10 +296,7 @@ async def test_get_policy_version_with_details_requires_softmax(
 
 
 @pytest.mark.asyncio
-async def test_get_policy_by_id_is_public(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_get_policy_by_id_is_public(test_client: TestClient) -> None:
     """Test that get_policy_by_id is accessible without auth for policies in public seasons."""
     user = "owner@example.com"
     policy_id = await policy_queries.upsert_policy(name="public-read-policy", user_id=user, attributes={})
@@ -358,7 +317,7 @@ async def test_get_policy_by_id_is_public(
         await session.flush()
 
     # Request without auth headers should succeed for policies in public seasons
-    response = isolated_test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policies/{pv_id}")
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == str(pv_id)
@@ -367,14 +326,12 @@ async def test_get_policy_by_id_is_public(
 
 @pytest.mark.asyncio
 async def test_cogames_submit_routes_allow_regular_users(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    regular_headers: dict[str, str],
 ) -> None:
     """Test that cogames submit routes are accessible to regular authenticated users."""
-    regular_headers = _get_headers_for_user("regular@example.com", is_softmax=False)
-
     # Regular users can get presigned URLs for policy submission
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/policies/submit/presigned-url",
         headers=regular_headers,
     )
@@ -386,21 +343,20 @@ async def test_cogames_submit_routes_allow_regular_users(
 
 @pytest.mark.asyncio
 async def test_bulk_upload_requires_softmax(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    regular_headers: dict[str, str],
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that bulk episode upload requires softmax team membership."""
     # Non-softmax user should get 403
-    regular_headers = _get_headers_for_user("regular@example.com", is_softmax=False)
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/episodes/bulk_upload/presigned-url",
         headers=regular_headers,
     )
     assert response.status_code == 403
 
     # Softmax user can access
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.post(
+    response = test_client.post(
         "/stats/episodes/bulk_upload/presigned-url",
         headers=softmax_headers,
     )
@@ -415,7 +371,7 @@ async def test_bulk_upload_requires_softmax(
 
 
 async def _create_policy_with_season(
-    session, policy_name: str, user_id: str, season_name: str | None
+    session: AsyncSession, policy_name: str, user_id: str, season_name: str | None
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Helper to create a policy with a version, optionally submitted to a season."""
     policy = Policy(name=policy_name, user_id=user_id)
@@ -447,10 +403,7 @@ async def _create_policy_with_season(
 
 
 @pytest.mark.asyncio
-async def test_visibility_policies_not_in_season_hidden_from_anonymous(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_visibility_policies_not_in_season_hidden_from_anonymous(test_client: TestClient) -> None:
     """Test that policies not submitted to any season are hidden from anonymous users."""
     async with db_session() as session:
         # Create a policy NOT submitted to any season
@@ -459,29 +412,26 @@ async def test_visibility_policies_not_in_season_hidden_from_anonymous(
         )
 
     # Anonymous request should not see this policy
-    response = isolated_test_client.get("/stats/policies")
+    response = test_client.get("/stats/policies")
     assert response.status_code == 200
     body = response.json()
     policy_ids = {e["id"] for e in body["entries"]}
     assert str(policy_id) not in policy_ids
 
     # Anonymous request should not see this policy version
-    response = isolated_test_client.get("/stats/policy-versions")
+    response = test_client.get("/stats/policy-versions")
     assert response.status_code == 200
     body = response.json()
     pv_ids = {e["id"] for e in body["entries"]}
     assert str(pv_id) not in pv_ids
 
     # Anonymous request should get 404 for this specific policy version
-    response = isolated_test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policies/{pv_id}")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_visibility_policies_in_hidden_season_hidden_from_anonymous(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_visibility_policies_in_hidden_season_hidden_from_anonymous(test_client: TestClient) -> None:
     """Test that policies in hidden seasons (test-season, beta) are hidden from anonymous users."""
     async with db_session() as session:
         # Create a policy submitted to a hidden season ("test-season" is in HIDDEN_SEASONS)
@@ -490,22 +440,19 @@ async def test_visibility_policies_in_hidden_season_hidden_from_anonymous(
         )
 
     # Anonymous request should not see this policy
-    response = isolated_test_client.get("/stats/policies")
+    response = test_client.get("/stats/policies")
     assert response.status_code == 200
     body = response.json()
     policy_ids = {e["id"] for e in body["entries"]}
     assert str(policy_id) not in policy_ids
 
     # Anonymous request should get 404 for this specific policy version
-    response = isolated_test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policies/{pv_id}")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_visibility_policies_in_public_season_visible_to_anonymous(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_visibility_policies_in_public_season_visible_to_anonymous(test_client: TestClient) -> None:
     """Test that policies in non-hidden seasons (e.g., beta-cvc) are visible to anonymous users."""
     async with db_session() as session:
         # Create a policy submitted to a non-hidden season ("beta-cvc" is not in HIDDEN_SEASONS)
@@ -514,30 +461,27 @@ async def test_visibility_policies_in_public_season_visible_to_anonymous(
         )
 
     # Anonymous request should see this policy
-    response = isolated_test_client.get("/stats/policies")
+    response = test_client.get("/stats/policies")
     assert response.status_code == 200
     body = response.json()
     policy_ids = {e["id"] for e in body["entries"]}
     assert str(policy_id) in policy_ids
 
     # Anonymous request should see this policy version
-    response = isolated_test_client.get("/stats/policy-versions")
+    response = test_client.get("/stats/policy-versions")
     assert response.status_code == 200
     body = response.json()
     pv_ids = {e["id"] for e in body["entries"]}
     assert str(pv_id) in pv_ids
 
     # Anonymous request should be able to get this specific policy version
-    response = isolated_test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policies/{pv_id}")
     assert response.status_code == 200
     assert response.json()["id"] == str(pv_id)
 
 
 @pytest.mark.asyncio
-async def test_visibility_owner_sees_own_policies_regardless_of_season(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
-) -> None:
+async def test_visibility_owner_sees_own_policies_regardless_of_season(test_client: TestClient) -> None:
     """Test that policy owners can see their own policies regardless of tournament status."""
     owner_id = "owner@example.com"
 
@@ -546,30 +490,30 @@ async def test_visibility_owner_sees_own_policies_regardless_of_season(
         policy_id, pv_id = await _create_policy_with_season(session, "owner-unsubmitted-policy", owner_id, None)
 
     # Owner should see their own policy
-    owner_headers = _get_headers_for_user(owner_id, is_softmax=False)
-    response = isolated_test_client.get("/stats/policies", headers=owner_headers)
+    owner_headers = get_user_headers(User(id=owner_id, email=owner_id, is_softmax_team_member=False))
+    response = test_client.get("/stats/policies", headers=owner_headers)
     assert response.status_code == 200
     body = response.json()
     policy_ids = {e["id"] for e in body["entries"]}
     assert str(policy_id) in policy_ids
 
     # Owner should see their own policy version
-    response = isolated_test_client.get("/stats/policy-versions", headers=owner_headers)
+    response = test_client.get("/stats/policy-versions", headers=owner_headers)
     assert response.status_code == 200
     body = response.json()
     pv_ids = {e["id"] for e in body["entries"]}
     assert str(pv_id) in pv_ids
 
     # Owner should be able to get this specific policy version
-    response = isolated_test_client.get(f"/stats/policies/{pv_id}", headers=owner_headers)
+    response = test_client.get(f"/stats/policies/{pv_id}", headers=owner_headers)
     assert response.status_code == 200
     assert response.json()["id"] == str(pv_id)
 
 
 @pytest.mark.asyncio
 async def test_visibility_softmax_sees_all_policies(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that softmax team members can see all policies regardless of ownership or season."""
     async with db_session() as session:
@@ -579,30 +523,29 @@ async def test_visibility_softmax_sees_all_policies(
         )
 
     # Softmax user should see the policy
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.get("/stats/policies", headers=softmax_headers)
+    response = test_client.get("/stats/policies", headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     policy_ids = {e["id"] for e in body["entries"]}
     assert str(policy_id) in policy_ids
 
     # Softmax user should see the policy version
-    response = isolated_test_client.get("/stats/policy-versions", headers=softmax_headers)
+    response = test_client.get("/stats/policy-versions", headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     pv_ids = {e["id"] for e in body["entries"]}
     assert str(pv_id) in pv_ids
 
     # Softmax user should be able to get this specific policy version
-    response = isolated_test_client.get(f"/stats/policies/{pv_id}", headers=softmax_headers)
+    response = test_client.get(f"/stats/policies/{pv_id}", headers=softmax_headers)
     assert response.status_code == 200
     assert response.json()["id"] == str(pv_id)
 
 
 @pytest.mark.asyncio
 async def test_visibility_versions_for_policy_filtered(
-    isolated_stats_repo: str,  # noqa: ARG001
-    isolated_test_client: TestClient,
+    test_client: TestClient,
+    softmax_headers: dict[str, str],
 ) -> None:
     """Test that get_versions_for_policy respects visibility filtering."""
 
@@ -638,7 +581,7 @@ async def test_visibility_versions_for_policy_filtered(
         pv2_id = pv2.id
 
     # Anonymous request should only see version 1
-    response = isolated_test_client.get(f"/stats/policies/{policy_id}/versions")
+    response = test_client.get(f"/stats/policies/{policy_id}/versions")
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 1
@@ -646,8 +589,7 @@ async def test_visibility_versions_for_policy_filtered(
     assert body["entries"][0]["id"] == str(pv1_id)
 
     # Softmax user should see both versions
-    softmax_headers = _get_headers_for_user("team@softmax.com", is_softmax=True)
-    response = isolated_test_client.get(f"/stats/policies/{policy_id}/versions", headers=softmax_headers)
+    response = test_client.get(f"/stats/policies/{policy_id}/versions", headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 2

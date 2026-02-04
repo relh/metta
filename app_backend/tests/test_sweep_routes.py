@@ -13,8 +13,8 @@ from metta.app_backend.server import create_app
 
 
 @pytest.fixture
-def test_client():
-    """Create a test client."""
+def mock_test_client():
+    """Create a test client with mocked database (no real DB connection)."""
     app = create_app()
     return TestClient(app)
 
@@ -35,7 +35,7 @@ def _make_sweep(sweep_id: uuid.UUID, name: str = "test_sweep", run_counter: int 
     )
 
 
-def test_create_sweep_creates_new(test_client: TestClient, auth_headers: dict[str, str]):
+def test_create_sweep_creates_new(mock_test_client: TestClient, softmax_headers: dict[str, str]):
     """Test creating a new sweep."""
     test_sweep_id = uuid.uuid4()
 
@@ -46,14 +46,14 @@ def test_create_sweep_creates_new(test_client: TestClient, auth_headers: dict[st
         mock_get.return_value = None
         mock_create.return_value = test_sweep_id
 
-        response = test_client.post(
+        response = mock_test_client.post(
             "/sweeps/test_sweep/create_sweep",
             json={
                 "project": "test_project",
                 "entity": "test_entity",
                 "wandb_sweep_id": "wandb_123",
             },
-            headers=auth_headers,
+            headers=softmax_headers,
         )
 
         assert response.status_code == 200
@@ -69,7 +69,7 @@ def test_create_sweep_creates_new(test_client: TestClient, auth_headers: dict[st
         )
 
 
-def test_create_sweep_returns_existing(test_client: TestClient, auth_headers: dict[str, str]):
+def test_create_sweep_returns_existing(mock_test_client: TestClient, softmax_headers: dict[str, str]):
     """Test returning existing sweep info (idempotent)."""
     existing_sweep_id = uuid.uuid4()
     existing_sweep = _make_sweep(existing_sweep_id)
@@ -80,14 +80,14 @@ def test_create_sweep_returns_existing(test_client: TestClient, auth_headers: di
     ):
         mock_get.return_value = existing_sweep
 
-        response = test_client.post(
+        response = mock_test_client.post(
             "/sweeps/test_sweep/create_sweep",
             json={
                 "project": "test_project",
                 "entity": "test_entity",
                 "wandb_sweep_id": "wandb_123",
             },
-            headers=auth_headers,
+            headers=softmax_headers,
         )
 
         assert response.status_code == 200
@@ -97,7 +97,7 @@ def test_create_sweep_returns_existing(test_client: TestClient, auth_headers: di
         mock_create.assert_not_called()
 
 
-def test_create_sweep_with_machine_token(test_client: TestClient):
+def test_create_sweep_with_machine_token(mock_test_client: TestClient):
     """Test creating sweep with machine token authentication."""
     test_sweep_id = uuid.uuid4()
 
@@ -113,7 +113,7 @@ def test_create_sweep_with_machine_token(test_client: TestClient):
         mock_get.return_value = None
         mock_create.return_value = test_sweep_id
 
-        response = test_client.post(
+        response = mock_test_client.post(
             "/sweeps/test_sweep/create_sweep",
             json={
                 "project": "test_project",
@@ -137,7 +137,7 @@ def test_create_sweep_with_machine_token(test_client: TestClient):
         )
 
 
-def test_get_sweep_exists(test_client: TestClient, auth_headers: dict[str, str]):
+def test_get_sweep_exists(mock_test_client: TestClient, softmax_headers: dict[str, str]):
     """Test getting an existing sweep."""
     sweep_id = uuid.uuid4()
     sweep = _make_sweep(sweep_id)
@@ -145,7 +145,7 @@ def test_get_sweep_exists(test_client: TestClient, auth_headers: dict[str, str])
     with patch("metta.app_backend.queries.sweep_queries.get_sweep_by_name", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = sweep
 
-        response = test_client.get("/sweeps/test_sweep", headers=auth_headers)
+        response = mock_test_client.get("/sweeps/test_sweep", headers=softmax_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -153,12 +153,12 @@ def test_get_sweep_exists(test_client: TestClient, auth_headers: dict[str, str])
         assert data["wandb_sweep_id"] == "wandb_123"
 
 
-def test_get_sweep_not_exists(test_client: TestClient, auth_headers: dict[str, str]):
+def test_get_sweep_not_exists(mock_test_client: TestClient, softmax_headers: dict[str, str]):
     """Test getting a non-existent sweep."""
     with patch("metta.app_backend.queries.sweep_queries.get_sweep_by_name", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = None
 
-        response = test_client.get("/sweeps/nonexistent", headers=auth_headers)
+        response = mock_test_client.get("/sweeps/nonexistent", headers=softmax_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -166,7 +166,7 @@ def test_get_sweep_not_exists(test_client: TestClient, auth_headers: dict[str, s
         assert data["wandb_sweep_id"] == ""
 
 
-def test_get_next_run_id(test_client: TestClient, auth_headers: dict[str, str]):
+def test_get_next_run_id(mock_test_client: TestClient, softmax_headers: dict[str, str]):
     """Test getting the next run ID (atomic counter)."""
     sweep_id = uuid.uuid4()
     sweep = _make_sweep(sweep_id, run_counter=41)
@@ -180,7 +180,7 @@ def test_get_next_run_id(test_client: TestClient, auth_headers: dict[str, str]):
         mock_get.return_value = sweep
         mock_next.return_value = 42
 
-        response = test_client.post("/sweeps/test_sweep/runs/next", headers=auth_headers)
+        response = mock_test_client.post("/sweeps/test_sweep/runs/next", headers=softmax_headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -190,12 +190,12 @@ def test_get_next_run_id(test_client: TestClient, auth_headers: dict[str, str]):
         mock_next.assert_called_once_with(sweep_id)
 
 
-def test_get_next_run_id_sweep_not_found(test_client: TestClient, auth_headers: dict[str, str]):
+def test_get_next_run_id_sweep_not_found(mock_test_client: TestClient, softmax_headers: dict[str, str]):
     """Test getting next run ID for non-existent sweep."""
     with patch("metta.app_backend.queries.sweep_queries.get_sweep_by_name", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = None
 
-        response = test_client.post("/sweeps/nonexistent/runs/next", headers=auth_headers)
+        response = mock_test_client.post("/sweeps/nonexistent/runs/next", headers=softmax_headers)
 
         assert response.status_code == 404
         assert "not found" in response.json()["detail"]

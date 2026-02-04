@@ -9,7 +9,7 @@ from metta.app_backend.tournament.season_resolver import resolve_season
 
 
 @pytest.mark.asyncio
-async def test_season_version_flow(isolated_stats_repo: str) -> None:  # noqa: ARG001
+async def test_season_version_flow(stats_repo: str) -> None:  # noqa: ARG001
     async with db_session() as session:
         season_v1 = Season(name="integration-test", version=1, canonical=True)
         session.add(season_v1)

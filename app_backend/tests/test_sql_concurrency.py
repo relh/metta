@@ -7,15 +7,13 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from metta.app_backend.test_support.base_async_test import BaseAsyncTest
-
 
 @pytest.mark.slow
-class TestSQLConcurrency(BaseAsyncTest):
+class TestSQLConcurrency:
     """Tests for SQL route concurrency to validate async behavior."""
 
     @pytest.mark.asyncio
-    async def test_sql_query_concurrency(self, test_app: FastAPI, auth_headers: dict) -> None:
+    async def test_sql_query_concurrency(self, test_app: FastAPI, softmax_headers: dict) -> None:
         """
         Test that slow SQL queries don't block fast queries.
 
@@ -32,12 +30,12 @@ class TestSQLConcurrency(BaseAsyncTest):
             start_time = time.time()
 
             # Create tasks for concurrent execution
-            slow_task = asyncio.create_task(client.post("/sql/query", json=slow_query, headers=auth_headers))
+            slow_task = asyncio.create_task(client.post("/sql/query", json=slow_query, headers=softmax_headers))
 
             # Wait a tiny bit to ensure slow query starts first
             await asyncio.sleep(0.1)
 
-            fast_task = asyncio.create_task(client.post("/sql/query", json=fast_query, headers=auth_headers))
+            fast_task = asyncio.create_task(client.post("/sql/query", json=fast_query, headers=softmax_headers))
 
             # Wait for the fast query to complete
             fast_response = await fast_task
@@ -72,7 +70,7 @@ class TestSQLConcurrency(BaseAsyncTest):
             print(f"✓ Concurrency validated: {slow_duration / fast_duration:.1f}x difference")
 
     @pytest.mark.asyncio
-    async def test_multiple_concurrent_queries(self, test_app: FastAPI, auth_headers: dict) -> None:
+    async def test_multiple_concurrent_queries(self, test_app: FastAPI, softmax_headers: dict) -> None:
         """
         Test multiple concurrent queries to further validate async behavior.
 
@@ -89,13 +87,13 @@ class TestSQLConcurrency(BaseAsyncTest):
             start_time = time.time()
 
             # Start slow query first
-            slow_task = asyncio.create_task(client.post("/sql/query", json=slow_query, headers=auth_headers))
+            slow_task = asyncio.create_task(client.post("/sql/query", json=slow_query, headers=softmax_headers))
 
             # Wait briefly then start all fast queries
             await asyncio.sleep(0.1)
 
             fast_tasks = [
-                asyncio.create_task(client.post("/sql/query", json=query, headers=auth_headers))
+                asyncio.create_task(client.post("/sql/query", json=query, headers=softmax_headers))
                 for query in fast_queries
             ]
 

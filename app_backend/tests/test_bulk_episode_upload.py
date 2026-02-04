@@ -171,7 +171,7 @@ class TestBulkEpisodeUpload:
             result = await con.execute("SELECT COUNT(*) FROM episodes")
             row = await result.fetchone()
             assert row is not None
-            assert row[0] >= 1
+            assert row[0] == 1
 
     @pytest.mark.asyncio
     @patch("metta.app_backend.routes.stats_routes.aioboto3")
@@ -179,7 +179,7 @@ class TestBulkEpisodeUpload:
         self,
         mock_aioboto3: MagicMock,
         test_client: TestClient,
-        auth_headers: dict[str, str],
+        softmax_headers: dict[str, str],
         stats_repo: str,
     ):
         """Test uploading multiple episodes at once using presigned URL flow."""
@@ -211,7 +211,7 @@ class TestBulkEpisodeUpload:
         conn.close()
 
         self._setup_s3_mocks(mock_aioboto3, db_path)
-        data = self._call_presigned_upload_flow(test_client, auth_headers)
+        data = self._call_presigned_upload_flow(test_client, softmax_headers)
 
         assert data["episodes_created"] == 3
 
@@ -220,7 +220,7 @@ class TestBulkEpisodeUpload:
             result = await con.execute("SELECT COUNT(*) FROM episodes")
             row = await result.fetchone()
             assert row is not None
-            assert row[0] >= 3
+            assert row[0] == 3
 
     @pytest.mark.asyncio
     @patch("metta.app_backend.routes.stats_routes.aioboto3")
@@ -228,7 +228,7 @@ class TestBulkEpisodeUpload:
         self,
         mock_aioboto3: MagicMock,
         test_client: TestClient,
-        auth_headers: dict[str, str],
+        softmax_headers: dict[str, str],
         stats_repo: str,
     ):
         """Test that agent metrics are correctly aggregated to policy metrics using presigned URL flow."""
@@ -262,11 +262,11 @@ class TestBulkEpisodeUpload:
         conn.close()
 
         self._setup_s3_mocks(mock_aioboto3, db_path)
-        self._call_presigned_upload_flow(test_client, auth_headers)
+        self._call_presigned_upload_flow(test_client, softmax_headers)
 
         # Verify aggregation
         async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
-            # Should have 2 policy entries
+            # Should have exactly 2 policy entries
             result = await con.execute(
                 """
                 SELECT policy_version_id, num_agents
@@ -275,12 +275,11 @@ class TestBulkEpisodeUpload:
                 """
             )
             policies = await result.fetchall()
-            assert len(policies) >= 2
+            assert len(policies) == 2
 
             # Check that we have 4 agents for one policy and 2 for another
             agent_counts = sorted([p[1] for p in policies], reverse=True)
-            assert 4 in agent_counts[:5]  # Should be in top 5
-            assert 2 in agent_counts[:10]  # Should be in top 10
+            assert agent_counts == [4, 2]
 
             # Check aggregated metrics
             result = await con.execute(
@@ -288,16 +287,17 @@ class TestBulkEpisodeUpload:
                 SELECT pv_internal_id, metric_name, value
                 FROM episode_policy_metrics
                 WHERE metric_name = 'reward'
+                ORDER BY value DESC
                 """
             )
             metrics = await result.fetchall()
-            assert len(metrics) >= 2
+            assert len(metrics) == 2
 
             # Policy 1 should have 40.0 (4 agents * 10.0)
             # Policy 2 should have 20.0 (2 agents * 10.0)
-            values = sorted([m[2] for m in metrics], reverse=True)
-            assert any(abs(v - 40.0) < 0.01 for v in values[:5])
-            assert any(abs(v - 20.0) < 0.01 for v in values[:10])
+            values = [m[2] for m in metrics]
+            assert values[0] == pytest.approx(40.0)
+            assert values[1] == pytest.approx(20.0)
 
     @pytest.mark.asyncio
     @patch("metta.app_backend.routes.stats_routes.aioboto3")
@@ -305,7 +305,7 @@ class TestBulkEpisodeUpload:
         self,
         mock_aioboto3: MagicMock,
         test_client: TestClient,
-        auth_headers: dict[str, str],
+        softmax_headers: dict[str, str],
         stats_repo: str,
     ):
         """Test that only 'reward' metrics are stored (whitelist) using presigned URL flow."""
@@ -336,7 +336,7 @@ class TestBulkEpisodeUpload:
         conn.close()
 
         self._setup_s3_mocks(mock_aioboto3, db_path)
-        self._call_presigned_upload_flow(test_client, auth_headers)
+        self._call_presigned_upload_flow(test_client, softmax_headers)
 
         # Verify only reward metric is stored
         async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:

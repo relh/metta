@@ -1,5 +1,3 @@
-import uuid
-
 import pytest
 from fastapi.testclient import TestClient
 from psycopg import AsyncConnection
@@ -60,7 +58,7 @@ class TestEvalTaskRoutes:
 
         response = eval_task_client.get_available_tasks(limit=10)
 
-        assert len(response.tasks) >= 3
+        assert len(response.tasks) == 3
         returned_ids = [task.id for task in response.tasks]
         for task_id in task_ids:
             assert task_id in returned_ids
@@ -121,7 +119,7 @@ class TestEvalTaskRoutes:
         # Test getting all claimed tasks
         all_claimed_response = eval_task_client.get_claimed_tasks()
         all_claimed_ids = [task.id for task in all_claimed_response.tasks]
-        assert len(all_claimed_response.tasks) >= 6
+        assert len(all_claimed_response.tasks) == 6
 
         for task_ids in task_ids_by_worker.values():
             for task_id in task_ids:
@@ -182,7 +180,7 @@ class TestEvalTaskRoutes:
         self,
         eval_task_client: EvalTaskClient,
         test_client: TestClient,
-        auth_headers: dict[str, str],
+        softmax_headers: dict[str, str],
     ):
         """Test that invalid status updates are rejected."""
         task_response = eval_task_client.create_task(
@@ -201,7 +199,7 @@ class TestEvalTaskRoutes:
         update_response = test_client.post(
             f"/tasks/{task_id}/finish",
             json={"task_id": task_id, "status": "invalid_status"},
-            headers=auth_headers,
+            headers=softmax_headers,
         )
         assert update_response.status_code == 422
 
@@ -303,54 +301,44 @@ class TestEvalTaskRoutes:
     @pytest.mark.slow
     def test_get_all_tasks_with_filters(self, eval_task_client: EvalTaskClient):
         """Test get_all_tasks with status and git_hash filters."""
-        # Create tasks with different attributes
-        created_tasks = []
-
-        # Use unique test prefix to avoid conflicts with other tests
-        test_prefix = f"filter_test_{uuid.uuid4().hex[:8]}"
-
         # Task 1: unprocessed, git_hash_1, suite_navigation
         task1 = eval_task_client.create_task(
             TaskCreateRequest(
                 command="metta evaluate navigation",
-                git_hash=f"{test_prefix}_git_hash_1",
+                git_hash="filter_git_hash_1",
                 attributes={"sim_suite": "navigation"},
             )
         )
-        created_tasks.append(("task1", task1))
 
         # Task 2: unprocessed, git_hash_2, suite_memory
         task2 = eval_task_client.create_task(
             TaskCreateRequest(
                 command="metta evaluate memory",
-                git_hash=f"{test_prefix}_git_hash_2",
+                git_hash="filter_git_hash_2",
                 attributes={"sim_suite": "memory"},
             )
         )
-        created_tasks.append(("task2", task2))
 
         # Task 3: claimed (still unprocessed), git_hash_1, suite_navigation
         task3 = eval_task_client.create_task(
             TaskCreateRequest(
                 command="metta evaluate navigation",
-                git_hash=f"{test_prefix}_git_hash_1",
+                git_hash="filter_git_hash_1",
                 attributes={"sim_suite": "navigation"},
             )
         )
         eval_task_client.claim_tasks(TaskClaimRequest(tasks=[task3.id], assignee="worker_filter_test"))
-        created_tasks.append(("task3", task3))
 
         # Task 4: done status, git_hash_1, suite_navigation
         task4 = eval_task_client.create_task(
             TaskCreateRequest(
                 command="metta evaluate navigation",
-                git_hash=f"{test_prefix}_git_hash_1",
+                git_hash="filter_git_hash_1",
                 attributes={"sim_suite": "navigation"},
             )
         )
         eval_task_client.claim_tasks(TaskClaimRequest(tasks=[task4.id], assignee="worker_filter_test"))
         eval_task_client.finish_task(task4.id, TaskFinishRequest(task_id=task4.id, status="done"))
-        created_tasks.append(("task4", task4))
 
         # Test 1: Filter by status (only unprocessed)
         filters = TaskFilterParams(statuses=["unprocessed"], limit=100)
@@ -363,7 +351,7 @@ class TestEvalTaskRoutes:
         assert task4.id not in task_ids  # done status
 
         # Test 2: Filter by git_hash
-        filters = TaskFilterParams(git_hash=f"{test_prefix}_git_hash_1", limit=100)
+        filters = TaskFilterParams(git_hash="filter_git_hash_1", limit=100)
         response = eval_task_client.get_all_tasks(filters=filters)
         task_ids = [t.id for t in response.tasks]
         assert task1.id in task_ids
@@ -372,7 +360,7 @@ class TestEvalTaskRoutes:
         assert task4.id in task_ids
 
         # Test 3: Combined filters
-        filters = TaskFilterParams(statuses=["unprocessed"], git_hash=f"{test_prefix}_git_hash_1", limit=100)
+        filters = TaskFilterParams(statuses=["unprocessed"], git_hash="filter_git_hash_1", limit=100)
         response = eval_task_client.get_all_tasks(filters=filters)
         task_ids = [t.id for t in response.tasks]
         assert task1.id in task_ids
