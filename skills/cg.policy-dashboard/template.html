@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Policy Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --border-color: #30363d;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-yellow: #eab308;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar / Query Builder */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 1rem;
+            overflow-y: auto;
+            flex-shrink: 0;
+            transition: width 0.2s, padding 0.2s;
+        }
+
+        .sidebar.collapsed {
+            width: 48px;
+            padding: 0.5rem;
+            overflow: hidden;
+        }
+
+        .sidebar.collapsed .sidebar-content {
+            display: none;
+        }
+
+        .sidebar.collapsed .sidebar-toggle {
+            transform: rotate(180deg);
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .sidebar-toggle {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 0.25rem;
+            transition: transform 0.2s;
+        }
+
+        .sidebar-toggle:hover {
+            color: var(--text-primary);
+        }
+
+        .sidebar h3 {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 0;
+        }
+
+        .sidebar.collapsed h3 {
+            display: none;
+        }
+
+        .filter-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .filter-group label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.25rem;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            width: 100%;
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .filter-count {
+            padding: 0.75rem;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .filter-count .count {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent-green);
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+
+        .btn:hover { background: var(--border-color); }
+        .btn-primary { background: var(--accent-green); border-color: var(--accent-green); color: #000; }
+        .btn-primary:hover { background: #16a34a; }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .header-stat {
+            text-align: right;
+        }
+
+        .header-stat .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .header-stat .label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.25rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab {
+            padding: 0.75rem 1.25rem;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.95rem;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover { color: var(--text-primary); }
+        .tab.active {
+            color: var(--accent-green);
+            border-bottom-color: var(--accent-green);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Cards */
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .card-title {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.25rem;
+        }
+
+        .card-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+        }
+
+        .card-subtitle {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .trend-up { color: var(--accent-green); }
+        .trend-down { color: var(--accent-red); }
+
+        /* Charts */
+        .chart-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-container canvas {
+            max-height: 300px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .chart-title {
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        /* Tables */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .data-table th {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+        }
+
+        .data-table th:hover { color: var(--text-primary); }
+
+        .data-table tr:hover { background: var(--bg-tertiary); }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .status-completed { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+        .status-failed { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+
+        /* Comparison boxes */
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .comparison-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .comparison-box h4 {
+            margin-bottom: 0.75rem;
+            font-size: 0.95rem;
+        }
+
+        .comparison-box.high { border-color: var(--accent-green); }
+        .comparison-box.low { border-color: var(--accent-red); }
+
+        /* Insights */
+        .insights {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .insights h4 {
+            color: var(--accent-green);
+            margin-bottom: 0.5rem;
+        }
+
+        .insights ul {
+            list-style: none;
+            padding-left: 1rem;
+        }
+
+        .insights li {
+            position: relative;
+            margin-bottom: 0.5rem;
+        }
+
+        .insights li::before {
+            content: '→';
+            position: absolute;
+            left: -1rem;
+            color: var(--accent-green);
+        }
+
+        /* Utility */
+        .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+
+        /* Typeahead Multi-select */
+        .typeahead-container {
+            position: relative;
+        }
+
+        .typeahead-input {
+            width: 100%;
+            padding: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .typeahead-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            z-index: 100;
+            display: none;
+        }
+
+        .typeahead-dropdown.show { display: block; }
+
+        .typeahead-option {
+            padding: 0.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+
+        .typeahead-option:hover { background: var(--border-color); }
+        .typeahead-option.selected { background: rgba(34, 197, 94, 0.2); }
+
+        .selected-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            margin-top: 0.5rem;
+        }
+
+        .selected-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.125rem 0.5rem;
+            background: var(--accent-green);
+            color: #000;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .selected-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+            margin-left: 0.25rem;
+        }
+
+        .selected-tag .remove:hover { color: var(--accent-red); }
+    </style>
+</head>
+<body>
+    <!-- Sidebar: Query Builder -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3>Filters</h3>
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle filters">◀</button>
+        </div>
+
+        <div class="sidebar-content">
+            <div class="filter-count">
+                <div class="count" id="filtered-count">0</div>
+                <div>episodes match</div>
+            </div>
+
+            <div class="filter-group">
+                <label>Co-player</label>
+                <div class="typeahead-container">
+                    <input type="text" class="typeahead-input" id="filter-coplayer-input" placeholder="Type to search...">
+                    <div class="typeahead-dropdown" id="filter-coplayer-dropdown"></div>
+                </div>
+                <div class="selected-tags" id="filter-coplayer-tags"></div>
+            </div>
+
+            <div class="filter-group">
+                <label>Team Composition</label>
+                <select id="filter-team" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="6v2">6v2 (majority)</option>
+                    <option value="4v4">4v4 (even)</option>
+                    <option value="2v6">2v6 (minority)</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Status</label>
+                <select id="filter-status" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="completed">Completed</option>
+                    <option value="failed">Failed</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label>Reward Range</label>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="number" id="filter-reward-min" placeholder="Min" step="0.1" onchange="applyFilters()">
+                    <input type="number" id="filter-reward-max" placeholder="Max" step="0.1" onchange="applyFilters()">
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Metric Threshold</label>
+                <select id="filter-metric-name" onchange="applyFilters()">
+                    <option value="">Select metric...</option>
+                </select>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                    <select id="filter-metric-op" style="width: 60px;" onchange="applyFilters()">
+                        <option value=">">&gt;</option>
+                        <option value="<">&lt;</option>
+                        <option value="=">=</option>
+                    </select>
+                    <input type="number" id="filter-metric-value" placeholder="Value" onchange="applyFilters()">
+                </div>
+            </div>
+
+            <div>
+                <button class="btn" onclick="clearFilters()" style="width: 100%;">Clear Filters</button>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <button class="btn" onclick="exportData()" style="width: 100%;">Export JSON</button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+        <header class="header">
+            <div>
+                <h1 id="policy-name">Loading...</h1>
+                <p style="color: var(--text-secondary);" id="policy-meta"></p>
+            </div>
+            <div class="header-stats">
+                <div class="header-stat">
+                    <div class="value" id="stat-rank">-</div>
+                    <div class="label">Rank</div>
+                </div>
+                <div class="header-stat">
+                    <div class="value" id="stat-score">-</div>
+                    <div class="label">Score</div>
+                </div>
+                <div class="header-stat">
+                    <div class="value" id="stat-episodes">-</div>
+                    <div class="label">Episodes</div>
+                </div>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab active" onclick="showTab('overview')">Overview</button>
+            <button class="tab" onclick="showTab('episodes')">Episodes</button>
+            <button class="tab" onclick="showTab('coplayers')">Co-players</button>
+            <button class="tab" onclick="showTab('behavior')">Behavior</button>
+            <button class="tab" onclick="showTab('failures')">Failures</button>
+        </nav>
+
+        <!-- Tab: Overview -->
+        <div id="overview" class="tab-content active">
+            <div class="cards" id="overview-cards"></div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <span class="chart-title">Reward Distribution</span>
+                    <div>
+                        <button class="btn" onclick="setRewardChart('histogram')">Histogram</button>
+                        <button class="btn" onclick="setRewardChart('scatter')">Scatter</button>
+                    </div>
+                </div>
+                <canvas id="reward-chart" height="250"></canvas>
+            </div>
+            <div class="insights" id="overview-insights"></div>
+            <div class="comparison" id="high-low-comparison"></div>
+        </div>
+
+        <!-- Tab: Episodes -->
+        <div id="episodes" class="tab-content">
+            <div class="chart-container">
+                <table class="data-table" id="episodes-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('episode_id')">Episode</th>
+                            <th onclick="sortTable('opponent_name')">Co-player</th>
+                            <th onclick="sortTable('team_composition')">Team</th>
+                            <th onclick="sortTable('reward')">Reward</th>
+                            <th onclick="sortTable('status')">Status</th>
+                            <th onclick="sortTable('steps')">Steps</th>
+                        </tr>
+                    </thead>
+                    <tbody id="episodes-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab: Co-players -->
+        <div id="coplayers" class="tab-content">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <span class="chart-title">Performance by Co-player</span>
+                </div>
+                <canvas id="coplayers-chart" height="300"></canvas>
+            </div>
+            <div class="chart-container">
+                <table class="data-table" id="coplayers-table">
+                    <thead>
+                        <tr>
+                            <th>Co-player</th>
+                            <th>Matches</th>
+                            <th>Avg Reward</th>
+                            <th>Win Rate</th>
+                            <th>Best</th>
+                            <th>Worst</th>
+                        </tr>
+                    </thead>
+                    <tbody id="coplayers-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab: Behavior -->
+        <div id="behavior" class="tab-content">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">Action Distribution</span>
+                    </div>
+                    <canvas id="actions-chart" height="200"></canvas>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <span class="chart-title">Resources</span>
+                    </div>
+                    <canvas id="resources-chart" height="200"></canvas>
+                </div>
+            </div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <span class="chart-title">Junction Control</span>
+                </div>
+                <canvas id="junctions-chart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Tab: Failures -->
+        <div id="failures" class="tab-content">
+            <div class="cards" id="failure-cards"></div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <span class="chart-title">Failure Types</span>
+                </div>
+                <canvas id="failures-chart" height="200"></canvas>
+            </div>
+            <div class="chart-container">
+                <table class="data-table" id="failures-table">
+                    <thead>
+                        <tr>
+                            <th>Job ID</th>
+                            <th>Co-player</th>
+                            <th>Error Type</th>
+                            <th>Steps</th>
+                        </tr>
+                    </thead>
+                    <tbody id="failures-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Dashboard data injected by generator
+        const DATA = {{DASHBOARD_DATA}};
+
+        // State
+        let filteredEpisodes = [];
+        let sortColumn = 'reward';
+        let sortDirection = 'desc';
+        let selectedCoplayers = [];
+        let allCoplayers = [];
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initDashboard();
+        });
+
+        function initDashboard() {
+            // Set header info
+            document.getElementById('policy-name').textContent =
+                `${DATA.policy.name}:v${DATA.policy.version}`;
+            document.getElementById('policy-meta').textContent =
+                `Season: ${DATA.season} | Generated: ${new Date(DATA.generated_at).toLocaleString()}`;
+            document.getElementById('stat-rank').textContent =
+                DATA.policy.rank ? `#${DATA.policy.rank}` : '-';
+            document.getElementById('stat-score').textContent =
+                DATA.policy.score ? DATA.policy.score.toFixed(3) : '-';
+            document.getElementById('stat-episodes').textContent = DATA.episodes.length;
+
+            // Populate filter options
+            populateFilterOptions();
+
+            // Initial filter (all episodes)
+            filteredEpisodes = [...DATA.episodes];
+            updateFilteredCount();
+
+            // Render all tabs
+            renderOverview();
+            renderEpisodes();
+            renderCoplayers();
+            renderBehavior();
+            renderFailures();
+        }
+
+        function populateFilterOptions() {
+            // Co-players typeahead
+            allCoplayers = [...new Set(DATA.episodes.map(e => e.opponent_name))].sort();
+            initCoplayerTypeahead();
+
+            // Metrics
+            const metrics = new Set();
+            DATA.episodes.forEach(e => {
+                Object.keys(e.metrics).forEach(k => {
+                    if (typeof e.metrics[k] === 'number') {
+                        metrics.add(k);
+                    }
+                });
+            });
+            const metricSelect = document.getElementById('filter-metric-name');
+            [...metrics].sort().forEach(m => {
+                const option = document.createElement('option');
+                option.value = m;
+                option.textContent = m;
+                metricSelect.appendChild(option);
+            });
+        }
+
+        function initCoplayerTypeahead() {
+            const input = document.getElementById('filter-coplayer-input');
+            const dropdown = document.getElementById('filter-coplayer-dropdown');
+            const tagsContainer = document.getElementById('filter-coplayer-tags');
+
+            function updateDropdown(filter = '') {
+                const filtered = allCoplayers.filter(cp =>
+                    cp.toLowerCase().includes(filter.toLowerCase()) &&
+                    !selectedCoplayers.includes(cp)
+                );
+
+                dropdown.innerHTML = filtered.slice(0, 10).map(cp =>
+                    `<div class="typeahead-option" data-value="${cp}">${cp}</div>`
+                ).join('');
+
+                if (filtered.length > 0) {
+                    dropdown.classList.add('show');
+                } else {
+                    dropdown.classList.remove('show');
+                }
+            }
+
+            function updateTags() {
+                tagsContainer.innerHTML = selectedCoplayers.map(cp =>
+                    `<span class="selected-tag">${cp}<span class="remove" data-value="${cp}">&times;</span></span>`
+                ).join('');
+            }
+
+            input.addEventListener('input', (e) => {
+                updateDropdown(e.target.value);
+            });
+
+            input.addEventListener('focus', () => {
+                updateDropdown(input.value);
+            });
+
+            dropdown.addEventListener('click', (e) => {
+                if (e.target.classList.contains('typeahead-option')) {
+                    const value = e.target.dataset.value;
+                    if (!selectedCoplayers.includes(value)) {
+                        selectedCoplayers.push(value);
+                        updateTags();
+                        applyFilters();
+                    }
+                    input.value = '';
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            tagsContainer.addEventListener('click', (e) => {
+                if (e.target.classList.contains('remove')) {
+                    const value = e.target.dataset.value;
+                    selectedCoplayers = selectedCoplayers.filter(cp => cp !== value);
+                    updateTags();
+                    applyFilters();
+                }
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('.typeahead-container')) {
+                    dropdown.classList.remove('show');
+                }
+            });
+        }
+
+        function applyFilters() {
+            const team = document.getElementById('filter-team').value;
+            const status = document.getElementById('filter-status').value;
+            const rewardMin = parseFloat(document.getElementById('filter-reward-min').value) || -Infinity;
+            const rewardMax = parseFloat(document.getElementById('filter-reward-max').value) || Infinity;
+            const metricName = document.getElementById('filter-metric-name').value;
+            const metricOp = document.getElementById('filter-metric-op').value;
+            const metricValue = parseFloat(document.getElementById('filter-metric-value').value);
+
+            filteredEpisodes = DATA.episodes.filter(e => {
+                if (selectedCoplayers.length > 0 && !selectedCoplayers.includes(e.opponent_name)) return false;
+                if (team && e.team_composition !== team) return false;
+                if (status && e.status !== status) return false;
+                if (e.reward < rewardMin || e.reward > rewardMax) return false;
+                if (metricName && !isNaN(metricValue)) {
+                    const val = e.metrics[metricName] || 0;
+                    if (metricOp === '>' && val <= metricValue) return false;
+                    if (metricOp === '<' && val >= metricValue) return false;
+                    if (metricOp === '=' && val !== metricValue) return false;
+                }
+                return true;
+            });
+
+            updateFilteredCount();
+            renderOverview();
+            renderEpisodes();
+            renderCoplayers();
+            renderBehavior();
+            renderFailures();
+        }
+
+        function clearFilters() {
+            selectedCoplayers = [];
+            document.getElementById('filter-coplayer-input').value = '';
+            document.getElementById('filter-coplayer-tags').innerHTML = '';
+            document.getElementById('filter-team').value = '';
+            document.getElementById('filter-status').value = '';
+            document.getElementById('filter-reward-min').value = '';
+            document.getElementById('filter-reward-max').value = '';
+            document.getElementById('filter-metric-name').value = '';
+            document.getElementById('filter-metric-value').value = '';
+            filteredEpisodes = [...DATA.episodes];
+            updateFilteredCount();
+            renderOverview();
+            renderEpisodes();
+            renderCoplayers();
+            renderBehavior();
+            renderFailures();
+        }
+
+        function updateFilteredCount() {
+            document.getElementById('filtered-count').textContent = filteredEpisodes.length;
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        function exportData() {
+            const blob = new Blob([JSON.stringify(filteredEpisodes, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `episodes_${DATA.policy.name}_v${DATA.policy.version}.json`;
+            a.click();
+        }
+
+        // ============ Overview Tab ============
+
+        function renderOverview() {
+            const rewards = filteredEpisodes.map(e => e.reward);
+            const avgReward = rewards.length ? rewards.reduce((a, b) => a + b, 0) / rewards.length : 0;
+            const maxReward = rewards.length ? Math.max(...rewards) : 0;
+            const winRate = rewards.length ? rewards.filter(r => r > 1.0).length / rewards.length * 100 : 0;
+            const failRate = filteredEpisodes.length ?
+                filteredEpisodes.filter(e => e.status === 'failed').length / filteredEpisodes.length * 100 : 0;
+
+            // Cards
+            document.getElementById('overview-cards').innerHTML = `
+                <div class="card">
+                    <div class="card-title">Average Reward</div>
+                    <div class="card-value">${avgReward.toFixed(3)}</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Max Reward</div>
+                    <div class="card-value trend-up">${maxReward.toFixed(2)}</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Win Rate (&gt;1.0)</div>
+                    <div class="card-value">${winRate.toFixed(1)}%</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Failure Rate</div>
+                    <div class="card-value ${failRate > 10 ? 'trend-down' : ''}">${failRate.toFixed(1)}%</div>
+                </div>
+            `;
+
+            // Reward histogram
+            renderRewardChart('histogram');
+
+            // High vs Low comparison
+            renderHighLowComparison();
+
+            // Insights
+            renderInsights();
+        }
+
+        let rewardChart;
+        function renderRewardChart(type) {
+            const ctx = document.getElementById('reward-chart').getContext('2d');
+            if (rewardChart) rewardChart.destroy();
+
+            const rewards = filteredEpisodes.map(e => e.reward);
+
+            if (type === 'histogram') {
+                const bins = [0, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100];
+                const labels = ['0', '0-0.1', '0.1-0.5', '0.5-1', '1-2', '2-5', '5-10', '10-20', '20-50', '50+'];
+                const counts = new Array(bins.length).fill(0);
+                rewards.forEach(r => {
+                    if (r === 0) counts[0]++;
+                    else if (r <= 0.1) counts[1]++;
+                    else if (r <= 0.5) counts[2]++;
+                    else if (r <= 1) counts[3]++;
+                    else if (r <= 2) counts[4]++;
+                    else if (r <= 5) counts[5]++;
+                    else if (r <= 10) counts[6]++;
+                    else if (r <= 20) counts[7]++;
+                    else if (r <= 50) counts[8]++;
+                    else counts[9]++;
+                });
+
+                rewardChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Episodes',
+                            data: counts,
+                            backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                            borderColor: 'rgba(34, 197, 94, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: '#30363d' } },
+                            x: { grid: { color: '#30363d' } }
+                        }
+                    }
+                });
+            } else {
+                rewardChart = new Chart(ctx, {
+                    type: 'scatter',
+                    data: {
+                        datasets: [{
+                            label: 'Reward',
+                            data: rewards.map((r, i) => ({ x: i, y: r })),
+                            backgroundColor: 'rgba(34, 197, 94, 0.5)',
+                            pointRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { title: { display: true, text: 'Reward' }, grid: { color: '#30363d' } },
+                            x: { title: { display: true, text: 'Episode Index' }, grid: { color: '#30363d' } }
+                        }
+                    }
+                });
+            }
+        }
+
+        function setRewardChart(type) {
+            renderRewardChart(type);
+        }
+
+        function renderHighLowComparison() {
+            if (filteredEpisodes.length < 10) {
+                document.getElementById('high-low-comparison').innerHTML = '<p style="color: var(--text-secondary);">Need at least 10 episodes for comparison.</p>';
+                return;
+            }
+
+            const sorted = [...filteredEpisodes].sort((a, b) => b.reward - a.reward);
+            const top20 = sorted.slice(0, Math.ceil(sorted.length * 0.2));
+            const bottom20 = sorted.slice(-Math.ceil(sorted.length * 0.2));
+
+            function avgMetric(episodes, metric) {
+                const vals = episodes.map(e => e.metrics[metric] || 0);
+                return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+            }
+
+            const metrics = ['move.success', 'move.failed', 'junction.aligned', 'heart.gained'];
+            let highHtml = '<h4 style="color: var(--accent-green);">Top 20% (High Scoring)</h4><ul style="list-style: none;">';
+            let lowHtml = '<h4 style="color: var(--accent-red);">Bottom 20% (Low Scoring)</h4><ul style="list-style: none;">';
+
+            metrics.forEach(m => {
+                const highVal = avgMetric(top20, m);
+                const lowVal = avgMetric(bottom20, m);
+                highHtml += `<li>${m}: <strong>${highVal.toFixed(1)}</strong></li>`;
+                lowHtml += `<li>${m}: <strong>${lowVal.toFixed(1)}</strong></li>`;
+            });
+
+            highHtml += '</ul>';
+            lowHtml += '</ul>';
+
+            document.getElementById('high-low-comparison').innerHTML = `
+                <div class="comparison-box high">${highHtml}</div>
+                <div class="comparison-box low">${lowHtml}</div>
+            `;
+        }
+
+        function renderInsights() {
+            const insights = [];
+
+            // Check for high failure rate
+            const failRate = filteredEpisodes.filter(e => e.status === 'failed').length / filteredEpisodes.length;
+            if (failRate > 0.1) {
+                insights.push(`High failure rate: ${(failRate * 100).toFixed(1)}% of episodes failed`);
+            }
+
+            // Check for zero-reward episodes
+            const zeroReward = filteredEpisodes.filter(e => e.reward === 0).length;
+            if (zeroReward > filteredEpisodes.length * 0.3) {
+                insights.push(`${zeroReward} episodes (${(zeroReward / filteredEpisodes.length * 100).toFixed(0)}%) have zero reward`);
+            }
+
+            // Check for junction activity
+            const avgJunction = filteredEpisodes.reduce((sum, e) => sum + (e.metrics['junction.aligned'] || 0), 0) / filteredEpisodes.length;
+            if (avgJunction < 1) {
+                insights.push('Low junction activity: consider enabling aligner/scrambler behavior');
+            }
+
+            if (insights.length === 0) {
+                insights.push('No major issues detected');
+            }
+
+            document.getElementById('overview-insights').innerHTML = `
+                <h4>Key Insights</h4>
+                <ul>${insights.map(i => `<li>${i}</li>`).join('')}</ul>
+            `;
+        }
+
+        // ============ Episodes Tab ============
+
+        function renderEpisodes() {
+            const sorted = [...filteredEpisodes].sort((a, b) => {
+                let aVal = a[sortColumn];
+                let bVal = b[sortColumn];
+                if (typeof aVal === 'string') {
+                    return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            const tbody = document.getElementById('episodes-tbody');
+            tbody.innerHTML = sorted.map(e => `
+                <tr>
+                    <td class="mono truncate" title="${e.episode_id}">${e.episode_id.slice(0, 8)}...</td>
+                    <td>${e.opponent_name}:v${e.opponent_version}</td>
+                    <td>${e.team_composition}</td>
+                    <td style="color: ${e.reward > 5 ? 'var(--accent-green)' : e.reward < 0.5 ? 'var(--accent-red)' : 'inherit'}">${e.reward.toFixed(3)}</td>
+                    <td><span class="status-badge status-${e.status}">${e.status}</span></td>
+                    <td>${e.steps}</td>
+                </tr>
+            `).join('');
+        }
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'desc';
+            }
+            renderEpisodes();
+        }
+
+        // ============ Co-players Tab ============
+
+        let coplayersChart = null;
+        function renderCoplayers() {
+            const byCoplayer = {};
+            filteredEpisodes.forEach(e => {
+                const key = `${e.opponent_name}:v${e.opponent_version}`;
+                if (!byCoplayer[key]) {
+                    byCoplayer[key] = { rewards: [], name: e.opponent_name, version: e.opponent_version };
+                }
+                byCoplayer[key].rewards.push(e.reward);
+            });
+
+            const coplayers = Object.entries(byCoplayer).map(([key, data]) => ({
+                name: key,
+                matches: data.rewards.length,
+                avgReward: data.rewards.reduce((a, b) => a + b, 0) / data.rewards.length,
+                winRate: data.rewards.filter(r => r > 1.0).length / data.rewards.length * 100,
+                best: Math.max(...data.rewards),
+                worst: Math.min(...data.rewards)
+            })).sort((a, b) => b.avgReward - a.avgReward);
+
+            // Table
+            document.getElementById('coplayers-tbody').innerHTML = coplayers.map(o => `
+                <tr>
+                    <td>${o.name}</td>
+                    <td>${o.matches}</td>
+                    <td style="color: ${o.avgReward > 2 ? 'var(--accent-green)' : o.avgReward < 1 ? 'var(--accent-red)' : 'inherit'}">${o.avgReward.toFixed(3)}</td>
+                    <td>${o.winRate.toFixed(1)}%</td>
+                    <td class="trend-up">${o.best.toFixed(2)}</td>
+                    <td class="trend-down">${o.worst.toFixed(2)}</td>
+                </tr>
+            `).join('');
+
+            // Chart
+            if (coplayersChart) coplayersChart.destroy();
+            const ctx = document.getElementById('coplayers-chart').getContext('2d');
+            coplayersChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: coplayers.map(o => o.name),
+                    datasets: [{
+                        label: 'Avg Reward',
+                        data: coplayers.map(o => o.avgReward),
+                        backgroundColor: coplayers.map(o =>
+                            o.avgReward > 2 ? 'rgba(34, 197, 94, 0.7)' :
+                            o.avgReward < 1 ? 'rgba(239, 68, 68, 0.7)' : 'rgba(59, 130, 246, 0.7)'
+                        )
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { beginAtZero: true, grid: { color: '#30363d' } },
+                        y: { grid: { color: '#30363d' } }
+                    }
+                }
+            });
+        }
+
+        // ============ Behavior Tab ============
+
+        let actionsChart = null;
+        let resourcesChart = null;
+        let junctionsChart = null;
+
+        function renderBehavior() {
+            // Aggregate metrics across all filtered episodes
+            const aggregated = {};
+            filteredEpisodes.forEach(e => {
+                Object.entries(e.metrics).forEach(([k, v]) => {
+                    if (typeof v === 'number') {
+                        aggregated[k] = (aggregated[k] || 0) + v;
+                    }
+                });
+            });
+
+            // Average per episode
+            const count = filteredEpisodes.length || 1;
+            Object.keys(aggregated).forEach(k => {
+                aggregated[k] /= count;
+            });
+
+            // Destroy existing charts before recreating
+            if (actionsChart) actionsChart.destroy();
+            if (resourcesChart) resourcesChart.destroy();
+            if (junctionsChart) junctionsChart.destroy();
+
+            // Actions chart
+            const actionsCtx = document.getElementById('actions-chart').getContext('2d');
+            actionsChart = new Chart(actionsCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Move Success', 'Move Failed', 'Noop'],
+                    datasets: [{
+                        label: 'Avg per Episode',
+                        data: [
+                            aggregated['move.success'] || 0,
+                            aggregated['move.failed'] || 0,
+                            aggregated['noop'] || 0
+                        ],
+                        backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
+                }
+            });
+
+            // Resources chart
+            const resourcesCtx = document.getElementById('resources-chart').getContext('2d');
+            resourcesChart = new Chart(resourcesCtx, {
+                type: 'radar',
+                data: {
+                    labels: ['Carbon', 'Oxygen', 'Silicon', 'Germanium'],
+                    datasets: [{
+                        label: 'Avg Deposited',
+                        data: [
+                            aggregated['carbon.deposited'] || 0,
+                            aggregated['oxygen.deposited'] || 0,
+                            aggregated['silicon.deposited'] || 0,
+                            aggregated['germanium.deposited'] || 0
+                        ],
+                        backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                        borderColor: 'rgba(34, 197, 94, 1)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Junctions chart
+            const junctionsCtx = document.getElementById('junctions-chart').getContext('2d');
+            junctionsChart = new Chart(junctionsCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Aligned', 'Scrambled', 'Hearts Gained', 'Influence (÷100)'],
+                    datasets: [{
+                        label: 'Avg per Episode',
+                        data: [
+                            aggregated['junction.aligned'] || aggregated['cogs.junction.gained'] || 0,
+                            aggregated['junction.scrambled'] || 0,
+                            aggregated['heart.gained'] || 0,
+                            (aggregated['influence.gained'] || 0) / 100
+                        ],
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
+                }
+            });
+        }
+
+        // ============ Failures Tab ============
+
+        let failuresChart = null;
+
+        function renderFailures() {
+            const failed = filteredEpisodes.filter(e => e.status === 'failed');
+            const lowScoring = filteredEpisodes.filter(e => e.status === 'completed' && e.reward < 0.1);
+
+            // Cards
+            const errorTypes = {};
+            failed.forEach(e => {
+                const type = e.error_type || 'unknown';
+                errorTypes[type] = (errorTypes[type] || 0) + 1;
+            });
+
+            document.getElementById('failure-cards').innerHTML = `
+                <div class="card">
+                    <div class="card-title">Total Failures</div>
+                    <div class="card-value trend-down">${failed.length}</div>
+                    <div class="card-subtitle">${(failed.length / filteredEpisodes.length * 100).toFixed(1)}% of episodes</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Low Scoring (&lt;0.1)</div>
+                    <div class="card-value">${lowScoring.length}</div>
+                    <div class="card-subtitle">Completed but poor</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Timeout</div>
+                    <div class="card-value">${errorTypes['timeout'] || 0}</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">OOM</div>
+                    <div class="card-value">${errorTypes['oom'] || 0}</div>
+                </div>
+            `;
+
+            // Destroy existing chart before recreating
+            if (failuresChart) failuresChart.destroy();
+
+            // Failures chart
+            const ctx = document.getElementById('failures-chart').getContext('2d');
+            failuresChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(errorTypes),
+                    datasets: [{
+                        data: Object.values(errorTypes),
+                        backgroundColor: ['rgba(239, 68, 68, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(107, 114, 128, 0.7)']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'right' } }
+                }
+            });
+
+            // Failures table
+            document.getElementById('failures-tbody').innerHTML = failed.map(e => `
+                <tr>
+                    <td class="mono truncate" title="${e.job_id}">${e.job_id.slice(0, 8)}...</td>
+                    <td>${e.opponent_name}:v${e.opponent_version}</td>
+                    <td><span class="status-badge status-failed">${e.error_type || 'unknown'}</span></td>
+                    <td>${e.steps}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Chart.js defaults
+        Chart.defaults.color = '#8b949e';
+        Chart.defaults.borderColor = '#30363d';
+    </script>
+</body>
+</html>
