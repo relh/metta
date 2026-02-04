@@ -288,23 +288,32 @@ class ClipsCurriculumConfig(CurriculumConfig):
         registry_id = self._registry_id
         assert self._mission is not None
         total_junctions = self._mission.total_junctions
-        max_steps = self._mission.max_steps
 
         class PerformanceUpdater(TrainerComponent):
             def __init__(self):
                 super().__init__(epoch_interval=1)
 
-            def on_epoch(self, stats):
+            def on_epoch_end(self, epoch: int) -> None:
                 performance = _PERFORMANCE_REGISTRY.get(registry_id)
                 if performance is None:
                     return
 
-                if JUNCTION_HELD_STAT not in stats:
+                stats_reporter = getattr(self.context, "stats_reporter", None)
+                if stats_reporter is None:
                     return
 
-                avg_junctions_held = stats[JUNCTION_HELD_STAT] / max_steps
-                junction_percentage = avg_junctions_held / total_junctions
+                stats = stats_reporter.get_latest_payload()
+                if stats is None or JUNCTION_HELD_STAT not in stats:
+                    return
+
+                # stats[JUNCTION_HELD_STAT] is already mean junctions held per step
+                mean_junctions_held = stats[JUNCTION_HELD_STAT]
+                junction_percentage = mean_junctions_held / total_junctions
                 performance.update(junction_percentage)
+
+                # Log intensity to wandb for debugging
+                if stats_reporter.wandb_run is not None:
+                    stats_reporter.wandb_run.log({"curriculum/clips_intensity": performance.intensity}, commit=False)
 
         return [PerformanceUpdater()]
 
