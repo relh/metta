@@ -264,7 +264,7 @@ Task(
   Run the /pr.submit skill:
   1. Run /pr.cool to clean up backwards compat code
   2. Check for disabled tests (@pytest.mark.skip etc) - fix or remove them
-  3. Run lint: metta lint (fix any errors)
+  3. Run lint: /cb.lint-fix (ensures prettier available, fixes errors)
   4. Stage and commit: git add -A && gt modify --no-interactive
   5. Submit: gt submit --no-interactive (CI starts running remotely)
   6. Run tests locally (parallel with CI): metta pytest --changed -v

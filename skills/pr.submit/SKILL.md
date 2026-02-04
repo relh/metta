@@ -113,22 +113,13 @@ grep -rn "# def test_\|#def test_\|# async def test_" tests/ --include="*.py"
 **CRITICAL:** Lint MUST pass before submitting. Skipping lint causes CI failures. This step is non-negotiable even if
 tests pass.
 
-```bash
-# Run linting - this MUST exit cleanly (exit code 0)
-metta lint
+Invoke `/cb.lint-fix` to ensure all formatters (including prettier) are available and run lint:
+
+```
+Use Skill tool: skill="cb.lint-fix"
 ```
 
-If lint fails:
-
-1. Fix the errors (line length, unused imports, formatting, etc.)
-2. Re-run `metta lint` to verify the fix
-3. **Do NOT proceed to Step 5 until lint passes with exit code 0**
-
-Common lint issues:
-
-- Line too long (> 120 chars) → break into multiple lines
-- Unused imports → remove them
-- Formatting → `ruff format .`
+**Do NOT proceed to Step 5 until lint passes with exit code 0.**
 
 ## Step 5: Commit Changes
 
@@ -216,8 +207,11 @@ For each failing test:
 
 5. **Once fixed, re-lint, re-commit, and re-submit:**
 
+   ```
+   Use Skill tool: skill="cb.lint-fix"
+   ```
+
    ```bash
-   metta lint
    git add -A
    gt modify --no-interactive
    gt submit --no-interactive
@@ -236,7 +230,7 @@ repo.
 | -------------- | ------------------------------ | ---------------------------- |
 | Cool           | `/pr.cool` skill               | Clean up compat code         |
 | Check disabled | `grep -rn "@pytest.mark.skip"` | Fix test or code             |
-| Lint           | `metta lint`                   | Fix lint errors              |
+| Lint           | `/cb.lint-fix`                 | Fix lint errors              |
 | Commit         | `gt modify --no-interactive`   | Stage changes                |
 | Submit         | `gt submit --no-interactive`   | Push to Graphite (CI starts) |
 | Test           | `metta pytest --changed`       | Run locally parallel with CI |

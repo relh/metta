@@ -51,7 +51,14 @@ Loop per commit:
 ```bash
 # Make changes...
 git status --short
-metta lint --fix <touched paths>
+```
+
+```
+# Run lint (ensures prettier available)
+Use Skill tool: skill="cb.lint-fix"
+```
+
+```bash
 metta pytest --changed
 git add -A
 git commit -m "fix: <small, reviewable change>"
@@ -65,8 +72,12 @@ only” PRs unless the tests are genuinely independent).
 
 Before splitting:
 
+```
+# Run lint (ensures prettier available)
+Use Skill tool: skill="cb.lint-fix"
+```
+
 ```bash
-metta lint
 metta pytest
 ```
 

@@ -289,9 +289,11 @@ After all threads are handled:
 ```bash
 # Run ALL tests affected by changes (both new regression tests and existing)
 metta pytest --changed
+```
 
-# Run linting
-metta lint
+```
+# Run lint (ensures prettier available)
+Use Skill tool: skill="cb.lint-fix"
 ```
 
 **For each failing test:**

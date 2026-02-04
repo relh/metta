@@ -124,7 +124,7 @@ gh api repos/$OWNER/$REPO/commits/$HEAD_SHA/check-runs \
 | Type          | Indicators                           | Action                     |
 | ------------- | ------------------------------------ | -------------------------- |
 | Test failures | `FAILED`, `AssertionError`, `pytest` | Fix the test or code       |
-| Lint errors   | `flake8`, `eslint`, `ruff`           | Run `metta lint` and fix   |
+| Lint errors   | `flake8`, `eslint`, `ruff`           | Run `/cb.lint-fix`         |
 | Type errors   | `mypy`, `pyright`, `tsc`             | Fix type annotations       |
 | Build errors  | `ImportError`, `ModuleNotFound`      | Fix imports/dependencies   |
 | Timeout       | `timed out`, `exceeded`              | Optimize or increase limit |
@@ -149,13 +149,10 @@ uv run pytest tests/path/to/test.py::test_name -v
 
 **For lint errors:**
 
-```bash
-# Run linter to see all issues
-metta lint
+Invoke `/cb.lint-fix` to ensure all formatters (including prettier) are available and fix lint issues:
 
-# Or for specific tools
-uv run ruff check --fix .
-uv run black .
+```
+Use Skill tool: skill="cb.lint-fix"
 ```
 
 **For type errors:**
@@ -176,11 +173,17 @@ uv run mypy path/to/file.py
 ### Step 6: Verify Locally
 
 ```bash
-# Run the same checks that CI runs
-metta pytest --changed  # Tests
-metta lint              # Linting
+# Run tests
+metta pytest --changed
+```
 
-# For full verification, run what CI runs
+```
+# Run lint (ensures prettier available)
+Use Skill tool: skill="cb.lint-fix"
+```
+
+```bash
+# For full verification
 uv run pytest tests/ -v
 ```
 

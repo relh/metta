@@ -44,12 +44,10 @@ wt switch "$BRANCH_NAME" || wt switch --create "$BRANCH_NAME"
 
 **CRITICAL:** Lint MUST pass before committing. Skipping causes CI failures.
 
-```bash
-# Run lint - MUST exit cleanly before proceeding
-metta lint
+Invoke `/cb.lint-fix` to ensure all formatters (including prettier) are available and run lint:
 
-# If metta lint fails on markdown/prettier, use npx:
-npx prettier --write skills/ docs/ai/skills.md
+```
+Use Skill tool: skill="cb.lint-fix"
 ```
 
 **Do NOT proceed to Step 3 until lint passes.** Fix all errors first.

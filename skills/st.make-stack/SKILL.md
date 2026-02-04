@@ -257,9 +257,11 @@ gt modify --no-interactive
 ```bash
 # Run tests to verify this chunk works
 metta pytest --changed
+```
 
-# Run linting
-metta lint
+```
+# Run lint (ensures prettier available)
+Use Skill tool: skill="cb.lint-fix"
 ```
 
 **If tests fail:**
