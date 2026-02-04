@@ -14,7 +14,3 @@ SEASONS: dict[str, Callable[[], CommissionerBase]] = {
     "beta-cvc-no-clips": BetaCvcNoClipsCommissioner,
     "test-season": BetaTestCommissioner,
 }
-
-HIDDEN_SEASONS: list[str] = ["test-season", "beta"]
-
-DEFAULT_SEASON: str = "beta-cvc"

@@ -25,8 +25,9 @@ from metta.app_backend.models.tournament import (
     Season,
 )
 from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.tournament.registry import DEFAULT_SEASON, HIDDEN_SEASONS, SEASONS
+from metta.app_backend.tournament.registry import SEASONS
 from metta.app_backend.tournament.season_resolver import get_season_versions, parse_season_ref, resolve_season
+from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
 
 
 async def get_session():

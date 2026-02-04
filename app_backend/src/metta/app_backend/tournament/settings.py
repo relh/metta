@@ -1,5 +1,8 @@
 from pydantic_settings import BaseSettings
 
+HIDDEN_SEASONS: list[str] = ["test-season", "beta"]
+DEFAULT_SEASON: str = "beta-cvc"
+
 POLL_INTERVAL_SECONDS: float = 30.0
 POLL_INTERVAL_FAST_SECONDS: float = 2.0
 MAX_OUTSTANDING_MATCHES: int = 20
