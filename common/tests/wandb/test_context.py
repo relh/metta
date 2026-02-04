@@ -123,7 +123,7 @@ def test_successful_initialization_and_parameters(monkeypatch):
     assert "my_config" in kwargs["config"]
 
     # Verify save calls
-    assert len(save_calls) == 3  # .log, .yaml, .json
+    assert len(save_calls) == 4  # .log, logs/*.log, .yaml, .json
 
     # Verify cleanup
     assert len(finish_calls) == 1
@@ -215,9 +215,10 @@ def test_file_saving_behavior(monkeypatch):
     with WandbContext(cfg_with_dir, None):
         pass
 
-    assert len(save_calls) == 3
+    assert len(save_calls) == 4
     patterns = [call["pattern"] for call in save_calls]
     assert "/data/*.log" in patterns
+    assert "/data/logs/*.log" in patterns  # Logs from the logs/ subdirectory
     assert "/data/*.yaml" in patterns
     assert "/data/*.json" in patterns
     assert all(call["base_path"] == "/data" for call in save_calls)

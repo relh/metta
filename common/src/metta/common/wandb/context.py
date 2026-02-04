@@ -143,6 +143,12 @@ class WandbContext:
                     base_path=self.wandb_config.data_dir,
                     policy="live",
                 )
+                # Also sync logs from the logs/ subdirectory where they are actually written
+                wandb.save(
+                    os.path.join(self.wandb_config.data_dir, "logs", "*.log"),
+                    base_path=self.wandb_config.data_dir,
+                    policy="live",
+                )
                 wandb.save(
                     os.path.join(self.wandb_config.data_dir, "*.yaml"),
                     base_path=self.wandb_config.data_dir,
