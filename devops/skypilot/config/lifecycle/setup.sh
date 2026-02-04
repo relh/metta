@@ -3,17 +3,54 @@
 set -eu
 REPO_DIR="/workspace/metta"
 DEPLOY_KEY_SECRET="github/metta-deploy-key"
-AWS_CLI_PATH="/usr/local/aws-cli/aws"
+AWS_CLI_PATH=""
 
-# Ensure AWS CLI v2 is present (installed in the training image).
-# Explicitly use version installed in Docker container path.
+# Ensure AWS CLI v2 is present (install on-demand for AMI-based runs).
 ensure_aws_cli_v2() {
-  if command -v $AWS_CLI_PATH &> /dev/null && $AWS_CLI_PATH --version 2> /dev/null | grep -q "aws-cli/2"; then
+  AWS_CLI_PATH="$(command -v aws || true)"
+  if [ -n "${AWS_CLI_PATH:-}" ] && "$AWS_CLI_PATH" --version 2> /dev/null | grep -q "aws-cli/2"; then
+    export AWS_CLI_PATH
     return 0
   fi
 
-  echo "[SETUP] AWS CLI v2 not found. Rebuild the training image to include AWS CLI v2." >&2
-  exit 1
+  echo "[SETUP] AWS CLI v2 not found. Installing..." >&2
+
+  local sudo_cmd=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo &> /dev/null; then
+    sudo_cmd="sudo"
+  fi
+
+  pkgs=()
+  if ! command -v curl &> /dev/null; then
+    pkgs+=("curl")
+  fi
+  if ! command -v unzip &> /dev/null; then
+    pkgs+=("unzip")
+  fi
+  if [ "${#pkgs[@]}" -gt 0 ]; then
+    ${sudo_cmd} apt-get update -y
+    ${sudo_cmd} apt-get install -y "${pkgs[@]}"
+  fi
+
+  local arch aws_arch tmpdir
+  arch="$(uname -m)"
+  case "$arch" in
+    x86_64) aws_arch="x86_64" ;;
+    aarch64 | arm64) aws_arch="aarch64" ;;
+    *)
+      echo "[SETUP] Unsupported architecture for AWS CLI: $arch" >&2
+      exit 1
+      ;;
+  esac
+
+  tmpdir="$(mktemp -d)"
+  curl -sS "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "${tmpdir}/awscliv2.zip"
+  unzip -q "${tmpdir}/awscliv2.zip" -d "${tmpdir}"
+  ${sudo_cmd} "${tmpdir}/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update
+  rm -rf "${tmpdir}"
+
+  AWS_CLI_PATH="/usr/local/bin/aws"
+  export AWS_CLI_PATH
 }
 
 ensure_aws_cli_v2
