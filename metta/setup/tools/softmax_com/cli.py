@@ -10,6 +10,7 @@ import typer
 
 from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI
 from metta.common.util.fs import get_repo_root
+from metta.setup.tools.observatory.cli import LOCAL_OBSERVATORY_AUTH_SECRET
 from metta.setup.utils import error, info
 from softmax.aws.secrets_manager import get_secretsmanager_secret
 
@@ -88,9 +89,18 @@ def _postgres_env() -> dict[str, str]:
 def up(
     services: Annotated[list[str] | None, typer.Argument(help="Services to start (default: all)")] = None,
     tui: Annotated[bool, typer.Option("-t", "--tui", help="Enable TUI mode")] = False,
+    backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
 ):
     compose_file = Path(__file__).parent / "process-compose.yaml"
     env = _postgres_env()
+
+    if backend == "local":
+        env["OBSERVATORY_API_URL"] = DEV_STATS_SERVER_URI
+        env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
+    else:
+        env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
+    info(f"Using backend: {backend} ({env['OBSERVATORY_API_URL']})")
+
     cmd = ["process-compose", "-f", str(compose_file), "-p", str(PROCESS_COMPOSE_PORT)]
     if not tui:
         cmd.append("-t=false")
@@ -137,10 +147,13 @@ def frontend(
     env["GITHUB_CLIENT_ID"] = oauth_secret["GITHUB_CLIENT_ID"]
     env["GITHUB_CLIENT_SECRET"] = oauth_secret["GITHUB_CLIENT_SECRET"]
 
-    if backend == "local":
-        env["OBSERVATORY_API_URL"] = DEV_STATS_SERVER_URI
-    else:
-        env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
+    # Respect OBSERVATORY_API_URL from environment (set by `up` command), otherwise use --backend flag
+    if "OBSERVATORY_API_URL" not in env:
+        if backend == "local":
+            env["OBSERVATORY_API_URL"] = DEV_STATS_SERVER_URI
+            env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
+        else:
+            env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
 
     info(f"Observatory API URL: {env.get('OBSERVATORY_API_URL')}")
     info("Generating Prisma client")

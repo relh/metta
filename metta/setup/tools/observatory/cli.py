@@ -80,6 +80,9 @@ LOCAL_DB_URI = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{LOCALHOST}:{POS
 LOCAL_BACKEND_URL = f"http://{LOCALHOST}:{SERVER_PORT}"
 LOCAL_MACHINE_TOKEN = "local-dev-user@example.com"
 LOCAL_AWS_PROFILE = "softmax"
+LOCAL_OBSERVATORY_AUTH_SECRET = "local-observatory-auth-secret"
+LOCAL_LOGIN_SERVICE_URL = f"http://{LOCALHOST}:3002"  # Local softmax.com frontend
+PROD_LOGIN_SERVICE_URL = "https://softmax.com"
 
 
 def _get_backend_url_from_k8s() -> str:
@@ -220,6 +223,7 @@ def _local_dev_env() -> dict[str, str]:
     env["LOCAL_DEV"] = "true"
     env["LOCAL_DEV_K8S_CONTEXT"] = _get_k8s_context()
     env["LOCAL_DEV_AWS_PROFILE"] = LOCAL_AWS_PROFILE
+    env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
 
     aws_path = os.path.expanduser("~/.aws")
     source_mounts = [
@@ -301,9 +305,17 @@ def _process_compose_env() -> dict[str, str]:
 def up(
     services: Annotated[list[str] | None, typer.Argument(help="Services to start (default: all)")] = None,
     tui: Annotated[bool, typer.Option("-t", "--tui", help="Enable TUI mode")] = False,
+    login_server: Annotated[str, typer.Option("--login-server", "-l", help="Login server: local or prod")] = "local",
 ):
     compose_file = Path(__file__).parent / "process-compose.yaml"
     env = _process_compose_env()
+
+    if login_server == "local":
+        env["LOGIN_SERVICE_URL"] = LOCAL_LOGIN_SERVICE_URL
+    else:
+        env["LOGIN_SERVICE_URL"] = PROD_LOGIN_SERVICE_URL
+    info(f"Using login server: {env['LOGIN_SERVICE_URL']}")
+
     cmd = ["process-compose", "-f", str(compose_file), "-p", str(PROCESS_COMPOSE_PORT)]
     if not tui:
         cmd.append("-t=false")
@@ -331,7 +343,9 @@ def postgres(ctx: typer.Context):
 
 @app.command(name="server", help="Run the backend server on host")
 @handle_errors
-def server():
+def server(
+    login_server: Annotated[str, typer.Option("--login-server", "-l", help="Login server: local or prod")] = "local",
+):
     env = _local_dev_env()
     env["HOST"] = "0.0.0.0"
     env["PORT"] = str(SERVER_PORT)
@@ -344,6 +358,14 @@ def server():
     env["S3_PRESIGNED_ENDPOINT"] = LOCALSTACK_ENDPOINT_K8S
     env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
     env["POLICY_S3_BUCKET"] = LOCAL_EVAL_BUCKET
+
+    # Respect LOGIN_SERVICE_URL from environment (set by `up` command), otherwise use --login-server flag
+    if "LOGIN_SERVICE_URL" not in env:
+        if login_server == "local":
+            env["LOGIN_SERVICE_URL"] = LOCAL_LOGIN_SERVICE_URL
+        else:
+            env["LOGIN_SERVICE_URL"] = PROD_LOGIN_SERVICE_URL
+    info(f"Login server URL: {env['LOGIN_SERVICE_URL']}")
 
     info("Starting backend server...")
     subprocess.run(
