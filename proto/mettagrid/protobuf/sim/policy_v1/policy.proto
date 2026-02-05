@@ -110,6 +110,38 @@ message GameRules {
     repeated Action actions = 2 [json_name="actions"];
 }
 
+// PolicyEnvInterface describes the environment interface for policy
+// initialization. This provides all the information a policy needs to
+// understand the observation and action spaces.
+message PolicyEnvInterface {
+    // Feature specifications for parsing token-based observations.
+    // Each token has a feature ID that maps to a spec.
+    repeated GameRules.Feature obs_features = 1 [json_name="obs_features"];
+
+    // Alphabetically-sorted list of object tags (e.g., 'agent', 'wall', 'chest').
+    // Tag IDs in observations are indices into this list.
+    repeated string tags = 2 [json_name="tags"];
+
+    // Ordered list of action names (e.g., ['noop', 'move_north', ...]).
+    // Action indices in the policy output correspond to this list.
+    repeated string action_names = 3 [json_name="action_names"];
+
+    // Energy cost for a single move action. -1 means not configured.
+    int32 move_energy_cost = 4 [json_name="move_energy_cost"];
+
+    // Number of agents in the environment.
+    int32 num_agents = 5 [json_name="num_agents"];
+
+    // Shape of the observation tensor, typically [num_tokens, token_dim].
+    repeated int32 observation_shape = 6 [json_name="observation_shape"];
+
+    // Height of the egocentric observation window in grid cells.
+    int32 obs_height = 7 [json_name="obs_height"];
+
+    // Width of the egocentric observation window in grid cells.
+    int32 obs_width = 8 [json_name="obs_width"];
+}
+
 // PreparePolicyRequest informs the policy of the upcoming game's
 // configuration, including the caller's expectations for which agents the
 // policy will control.
@@ -124,6 +156,10 @@ message PreparePolicyRequest {
     repeated int32 agent_ids = 3 [json_name="agent_ids"]; // list of policy's agents
 
     AgentObservations.Format observations_format = 4 [json_name="observations_format"];
+
+    // Environment interface providing observation/action space info.
+    // This replaces the out-of-band file-based passing of PolicyEnvInterface.
+    PolicyEnvInterface env_interface = 5 [json_name="env_interface"];
 }
 
 message PreparePolicyResponse {
