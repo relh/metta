@@ -89,13 +89,8 @@ jobs:
             chmod +x /usr/local/bin/bazelisk
             ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
 
-            # Build Nim from source (pre-built binaries require glibc > 2.34)
+            # Install nimby and use it to install Nim
             NIM_VERSION=$(cat {project}/.nim-version)
-            yum install -y git
-            git clone --depth 1 --branch "v${NIM_VERSION}" https://github.com/nim-lang/Nim.git /opt/nim
-            cd /opt/nim && sh build_all.sh && cd -
-
-            # Install nimby binary (for nimby sync)
             NIMBY_VERSION=$(cat {project}/.nimby-version)
             if [ "$ARCH" = "aarch64" ]; then
               NIMBY_PLATFORM="Linux-ARM64"
@@ -104,10 +99,16 @@ jobs:
             else
               echo "Unexpected architecture: $ARCH" && exit 1
             fi
-            curl -fsSL -o /opt/nim/bin/nimby \
+            TMP_DIR="$(mktemp -d)"
+            curl -fsSL -o "$TMP_DIR/nimby" \
               "https://github.com/treeform/nimby/releases/download/${NIMBY_VERSION}/nimby-${NIMBY_PLATFORM}"
-            chmod +x /opt/nim/bin/nimby
-          CIBW_ENVIRONMENT_LINUX: PATH="/opt/nim/bin:$PATH"
+            chmod +x "$TMP_DIR/nimby"
+            "$TMP_DIR/nimby" use "$NIM_VERSION"
+            install_dir="$HOME/.nimby/nim/bin"
+            mkdir -p "$install_dir"
+            mv -f "$TMP_DIR/nimby" "$install_dir/nimby"
+            rm -rf "$TMP_DIR"
+          CIBW_ENVIRONMENT_LINUX: PATH="$HOME/.nimby/nim/bin:$PATH"
           CIBW_BEFORE_ALL_MACOS: |
             python3 -m pip install "pip<25"
             NIM_VERSION=$(cat {project}/.nim-version)
