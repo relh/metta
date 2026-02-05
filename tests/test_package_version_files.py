@@ -3,8 +3,8 @@ import pytest
 from metta.common.util.fs import get_repo_root
 
 SYNCED_FILES: list[tuple[str, str]] = [
-    (".nim-version", "packages/cogames-agents/.nim-version"),
-    (".nimby-version", "packages/cogames-agents/.nimby-version"),
+    (".nim-version", "packages/cogames-agents/src/cogames_agents/policy/nim_agents/.nim-version"),
+    (".nimby-version", "packages/cogames-agents/src/cogames_agents/policy/nim_agents/.nimby-version"),
     (".nim-version", "packages/mettagrid/.nim-version"),
     (".nimby-version", "packages/mettagrid/.nimby-version"),
 ]
