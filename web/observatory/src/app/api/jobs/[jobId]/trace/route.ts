@@ -27,10 +27,8 @@ async function fetchTraceResponse(
   includeBody: boolean
 ): Promise<NextResponse> {
   const { jobId } = await params
-  const hostname = request.nextUrl.hostname
-  const allowQueryToken = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
   // TODO: Accept a dedicated short-lived trace token here instead of full auth token fallback.
-  const tokenFromQuery = allowQueryToken ? request.nextUrl.searchParams.get('auth_token') : null
+  const tokenFromQuery = request.nextUrl.searchParams.get('auth_token')
   const tokenFromCookie = await getAuthToken()
   const token = tokenFromQuery ?? tokenFromCookie
   const headers = getCorsHeaders(request)

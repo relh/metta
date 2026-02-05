@@ -125,10 +125,6 @@ function getCookieValue(name: string): string | null {
   return null
 }
 
-function isLocalhost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-}
-
 const ExpandDownloadRow: FC<{ label: string; data: unknown; show: boolean; onToggle: () => void }> = ({
   label,
   data,
@@ -257,8 +253,9 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const openTraceViewer = useCallback(() => {
     const token = getCookieValue(AUTH_COOKIE_NAME)
     const traceUrl = new URL(`${window.location.origin}/api/jobs/${job.id}/trace`)
-    if (token && isLocalhost(window.location.hostname)) {
+    if (token) {
       // TODO: Replace forwarding auth token in URL with a short-lived signed trace token.
+      // Perfetto does cross-origin fetches and cannot rely on Observatory cookies.
       traceUrl.searchParams.set('auth_token', token)
     }
     const perfettoUrl = `https://ui.perfetto.dev/#!/?url=${encodeURIComponent(traceUrl.toString())}`
