@@ -13,6 +13,7 @@ resources
 .vscode/PythonImportHelper-v2-Completion.json
 .idea/
 .task
+.omc/
 *.local.code-workspace
 
 # OS-specific
