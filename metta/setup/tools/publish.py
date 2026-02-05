@@ -166,7 +166,7 @@ def _pin_dependency_versions(*, package: str, pins: dict[str, str], dry_run: boo
 
     info(f"Creating Graphite branch {new_branch_name} with auto-merge...")
     subprocess.run(
-        ["gt", "create", new_branch_name, "-m", new_commit_msg, "--no-interactive"],
+        ["gt", "create", new_branch_name, "-m", new_commit_msg, "--no-interactive", "--no-verify"],
         check=True,
     )
     subprocess.run(
