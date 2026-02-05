@@ -586,8 +586,8 @@ export class Repo {
     return this.apiCall<JobRequest[]>(`/jobs${query ? `?${query}` : ''}`)
   }
 
-  async getJobLogs(jobId: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/jobs/${jobId}/logs`, {
+  async getJobArtifact(jobId: string, artifactType: string): Promise<string> {
+    const response = await fetch(`${this.baseUrl}/jobs/${jobId}/artifacts/${artifactType}`, {
       headers: this.getHeaders(),
     })
     if (!response.ok) {

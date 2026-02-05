@@ -1,11 +1,12 @@
 'use client'
 import { FC, useCallback, useRef, useState } from 'react'
 
+import { AUTH_COOKIE_NAME } from '@/auth/constants'
 import { normalizeReplayUrl, normalizeVibescopeUrl } from '@/components/ReplayViewer'
 import { StyledLink } from '@/components/StyledLink'
 import { TD, TR } from '@/components/Table'
-import { JobRequest } from '@/lib/repo'
 import { METTA_GITHUB_ORGANIZATION, METTA_GITHUB_REPO } from '@/constants'
+import { JobRequest } from '@/lib/repo'
 import { formatDurationBetween, formatDurationSince } from '@/utils/datetime'
 
 import { LabelRow, LabelValueTable } from './LabelValueTable'
@@ -111,6 +112,21 @@ function truncateValue(value: unknown, depth: number = 0): unknown {
 function fmt(v: number | null | undefined): string {
   if (v == null) return '-'
   return v.toFixed(4)
+}
+
+function getCookieValue(name: string): string | null {
+  const prefix = `${name}=`
+  for (const item of document.cookie.split(';')) {
+    const cookie = item.trim()
+    if (cookie.startsWith(prefix)) {
+      return cookie.slice(prefix.length)
+    }
+  }
+  return null
+}
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
 const ExpandDownloadRow: FC<{ label: string; data: unknown; show: boolean; onToggle: () => void }> = ({
@@ -238,6 +254,34 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const agentStats = attrs?.stats?.agent
 
   const timeDisplay = getTimeDisplay(job)
+  const openTraceViewer = useCallback(() => {
+    const token = getCookieValue(AUTH_COOKIE_NAME)
+    const traceUrl = new URL(`${window.location.origin}/api/jobs/${job.id}/trace`)
+    if (token && isLocalhost(window.location.hostname)) {
+      // TODO: Replace forwarding auth token in URL with a short-lived signed trace token.
+      traceUrl.searchParams.set('auth_token', token)
+    }
+    const perfettoUrl = `https://ui.perfetto.dev/#!/?url=${encodeURIComponent(traceUrl.toString())}`
+    window.open(perfettoUrl, '_blank', 'noopener,noreferrer')
+  }, [job.id])
+
+  const downloadTrace = useCallback(() => {
+    fetch(`/api/jobs/${job.id}/trace`)
+      .then((response) => {
+        if (!response.ok) return null
+        return response.text()
+      })
+      .then((trace) => {
+        if (!trace) return
+        const blob = new Blob([trace], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `job-${job.id}-trace.json`
+        a.click()
+        URL.revokeObjectURL(url)
+      })
+  }, [job.id])
 
   return (
     <>
@@ -461,6 +505,24 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                       show={showAgentStats}
                       onToggle={() => setShowAgentStats(!showAgentStats)}
                     />
+                  )}
+                  {(job.status === 'completed' || job.status === 'failed') && (
+                    <LabelRow label="Trace">
+                      <span className="flex gap-1.5 justify-end">
+                        <button
+                          onClick={openTraceViewer}
+                          className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={downloadTrace}
+                          className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+                        >
+                          Download
+                        </button>
+                      </span>
+                    </LabelRow>
                   )}
                   {(job.status === 'completed' || job.status === 'failed') && (
                     <LabelRow label="Logs">

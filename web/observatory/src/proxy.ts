@@ -13,7 +13,12 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const token = appConfig.authToken ?? request.cookies.get(AUTH_COOKIE_NAME)
+  const isTraceRequest = pathname.startsWith('/api/jobs/') && pathname.endsWith('/trace')
+  const cookieToken = request.cookies.get(AUTH_COOKIE_NAME)?.value
+  const queryToken = isTraceRequest ? request.nextUrl.searchParams.get('auth_token') : null
+  // TODO: Replace auth_token query fallback with short-lived signed trace tokens.
+  // Perfetto loads from ui.perfetto.dev and can't send localhost cookies.
+  const token = appConfig.authToken ?? cookieToken ?? queryToken
 
   if (!token) {
     const authUrl = new URL(`${appConfig.authServerUrl}/tokens/cli`)

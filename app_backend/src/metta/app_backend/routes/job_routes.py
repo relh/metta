@@ -2,9 +2,12 @@
 # SQLModel type stubs cause false positives; route handlers appear "unused" inside factory function
 
 import asyncio
+import io
 import json
 import logging
+import zipfile
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -12,7 +15,7 @@ from uuid import UUID
 
 import boto3
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
@@ -22,7 +25,14 @@ from metta.app_backend.auth import CheckSoftmaxUser, CheckUser
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
-from metta.app_backend.job_runner.job_artifacts import job_debug_key, job_logs_key
+from metta.app_backend.job_runner.job_artifacts import (
+    job_debug_key,
+    job_logs_key,
+    job_replay_key,
+    job_results_key,
+    job_runtime_info_key,
+    job_spec_key,
+)
 from metta.app_backend.metta_scheme_resolver import parse_policy_identifier
 from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import (
@@ -415,9 +425,28 @@ def create_job_router() -> APIRouter:
             responses.append(JobRequestResponse.from_job(jr, episode=episode_info, match=match_info))
         return responses
 
-    @router.get("/{job_id}/logs")
+    def _extract_trace(body: bytes) -> bytes:
+        with zipfile.ZipFile(io.BytesIO(body)) as zf:
+            return zf.open("trace.json").read()
+
+    ARTIFACT_TYPES: dict[str, tuple[Callable[[UUID], str], str, Callable[[bytes], bytes]]] = {
+        "logs": (job_logs_key, "text/plain", lambda b: b),
+        "spec": (job_spec_key, "application/json", lambda b: b),
+        "results": (job_results_key, "application/json", lambda b: b),
+        "runtime_info": (job_runtime_info_key, "application/json", lambda b: b),
+        "replay": (job_replay_key, "application/octet-stream", lambda b: b),
+        "debug": (job_debug_key, "application/zip", lambda b: b),
+        "trace": (job_debug_key, "application/json", _extract_trace),
+    }
+
+    @router.get("/{job_id}/artifacts/{artifact_type}")
     @timed_http_handler
-    async def get_job_logs(job_id: UUID, _user: CheckSoftmaxUser) -> PlainTextResponse:
+    async def get_job_artifact(job_id: UUID, artifact_type: str, _user: CheckSoftmaxUser) -> Response:
+        if artifact_type not in ARTIFACT_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unknown artifact type: {artifact_type}")
+
+        key_fn, media_type, extract = ARTIFACT_TYPES[artifact_type]
+
         async with db_session() as session:
             result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
             if not result.scalar_one_or_none():
@@ -425,21 +454,21 @@ def create_job_router() -> APIRouter:
 
         cfg = get_dispatch_config()
         if not cfg.EVAL_S3_BUCKET:
-            raise HTTPException(status_code=501, detail="Log storage not configured")
+            raise HTTPException(status_code=501, detail="Storage not configured")
 
-        def _read_logs() -> str:
+        def _read() -> bytes:
             s3 = boto3.client("s3")
-            resp = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=job_logs_key(job_id))
-            return resp["Body"].read().decode("utf-8")
+            body = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=key_fn(job_id))["Body"].read()
+            return extract(body)
 
         try:
-            logs = await asyncio.to_thread(_read_logs)
-            return PlainTextResponse(content=logs)
+            content = await asyncio.to_thread(_read)
+            return Response(content=content, media_type=media_type)
         except Exception as e:
-            if "NoSuchKey" in type(e).__name__ or "NoSuchKey" in str(e):
-                raise HTTPException(status_code=404, detail=f"No logs found for job {job_id}") from None
-            logger.error(f"Failed to read logs for job {job_id}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to read logs") from e
+            if "NoSuchKey" in type(e).__name__ or "NoSuchKey" in str(e) or isinstance(e, KeyError):
+                raise HTTPException(status_code=404, detail=f"No {artifact_type} found for job {job_id}") from None
+            logger.error(f"Failed to read {artifact_type} for job {job_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to read {artifact_type}") from e
 
     @router.get("/{job_id}/episode-stats")
     @timed_http_handler

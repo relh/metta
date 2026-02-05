@@ -6,7 +6,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { jobId } = await params
   try {
     const repo = await getRepo()
-    const logs = await repo.getJobLogs(jobId)
+    const logs = await repo.getJobArtifact(jobId, 'logs')
     return new NextResponse(logs, {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
