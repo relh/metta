@@ -224,7 +224,10 @@ def parse_observation(
     token_value_base = None
 
     for tok in obs.tokens:
-        obs_r, obs_c = tok.location
+        location = tok.location
+        if location is None:
+            continue
+        obs_r, obs_c = location
         feature_name = tok.feature.name
         value = tok.value
 
