@@ -34,9 +34,12 @@ Deployed 6 monitors to production Datadog (critical thresholds only, no warnings
 2. **crashloopbackoff** - alerts when pods stuck in crashloop
 3. **too many nodes** - alerts when node count exceeds 200 (cost protection)
 
-**Tournament (3):** 4. **high job failure rate** - alerts when >20 failures in 15 min 5. **job queue buildup** - alerts
-when total outstanding jobs >180 (approaching backpressure limit of 200) 6. **high pending queue** - alerts when >100
-jobs pending for >10 min
+**Tournament (3):**
+
+4. **high job failure rate (infrastructure)** - alerts when >20 infrastructure failures in 15 min (excludes policy
+   errors)
+5. **job queue buildup** - alerts when total outstanding jobs >180 (approaching backpressure limit of 200)
+6. **high pending queue** - alerts when >100 jobs pending for >10 min
 
 **Not deployed (to avoid false positives):**
 

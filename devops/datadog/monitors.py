@@ -167,17 +167,22 @@ def job_queue_buildup_monitor() -> dict:
 
 
 def job_failure_rate_monitor() -> dict:
-    """Monitor for high job failure rate.
+    """Monitor for high job failure rate (infrastructure/lifecycle errors only).
 
     Alerts when the rate of job failures is elevated, indicating systematic issues
-    with job execution (OOM, policy errors, timeouts, etc).
+    with infrastructure (OOM, timeouts, pod issues, etc). Excludes policy errors
+    (policy spawn/registration failures) which are user errors, not infra issues.
     """
     return {
-        "name": "[Tournament] High Job Failure Rate",
+        "name": "[Tournament] High Job Failure Rate (Infrastructure)",
         "type": "query alert",
-        "query": "sum(last_15m):sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count() > 20",
+        "query": (
+            "sum(last_15m):sum:job.state_transition{"
+            "to_status:failed,!error_type:policy_error,service:observatory-backend"
+            "}.as_count() > 20"
+        ),
         "message": (
-            "{{value}} jobs failed in the last 15 minutes.\n\n"
+            "{{value}} infrastructure job failures in the last 15 minutes (excludes policy errors).\n\n"
             "Check error types in Datadog or: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
