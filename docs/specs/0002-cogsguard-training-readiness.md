@@ -106,7 +106,7 @@ existing assumptions or require manual patching.
 ### Evaluation and mission listing
 
 - Extend mission discovery in `cogames.cli.mission` and `cogames.evaluate` to include Cogsguard missions.
-- Ensure `packages/cogames/scripts/run_evaluation.py` and diagnose flows can target Cogsguard.
+- Ensure `cogames diagnose`/`cogames run` evaluation flows can target Cogsguard.
 - Update Gridworks mission listing endpoints to include Cogsguard missions.
 
 ## Open Questions

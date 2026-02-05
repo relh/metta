@@ -242,10 +242,10 @@ Notes:
 
 ### /cogames-eval
 
-- Intent: Run evaluation script and summarize results.
-- Typical ask: "Run run_evaluation.py for agent X and summarize the outcome."
+- Intent: Run a `cogames diagnose` evaluation suite and summarize results.
+- Typical ask: "Run `cogames diagnose` for agent X and summarize the outcome."
 - Template:
-  - Run `uv run packages/cogames/scripts/run_evaluation.py --agent <agent> --cogs <n> --repeats <n>`.
+  - Run `uv run cogames diagnose <policy> --cogs <n> -e <n>`.
   - Summarize results/regressions.
 
 ### /relh.tr.run-recipe
@@ -297,7 +297,7 @@ include_lint (optional). Template:
 
 ### /eval-script
 
-Purpose: run evaluation scripts (evaluate_scripted_agents.py or run_evaluation.py), compare branch vs main, and debug
+Purpose: run evaluation scripts (evaluate_scripted_agents.py or cogames diagnose), compare branch vs main, and debug
 errors or speed issues. Inputs: eval_cmd (required), compare_to=origin/main (optional), focus=performance|correctness.
 Template:
 

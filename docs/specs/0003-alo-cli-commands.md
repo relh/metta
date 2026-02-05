@@ -49,8 +49,8 @@ missing scrimmage command, set pickup defaults, and add tests for all four comma
 2. `cogames diagnose`
 
 - Runs diagnostic evaluation suites for a policy checkpoint.
-- Uses `packages/cogames/scripts/run_evaluation.py` under the hood.
-- Uses Alo single-episode runner.
+- Uses the MettaGrid rollout helpers directly (`mettagrid/runner/rollout.py`).
+- Runs per-mission multi-episode rollouts (no separate evaluation script).
 
 3. `cogames pickup`
 

@@ -167,16 +167,15 @@ cogames replay <replay_path>
 
 ## 5. Wandb Integration Points
 
-**There is no wandb integration in the eval command.**
+**There is no wandb integration in the eval/diagnose commands.**
 
-The `cogames eval`/`scrimmage` pipeline does not import or call wandb. No metrics are logged to wandb during evaluation.
+The `cogames run`/`scrimmage`/`diagnose` pipelines do not import or call wandb. No metrics are logged to wandb during
+evaluation.
 
-Wandb integration exists in:
+Wandb integration exists only in:
 
 - The **training pipeline** (`cogames train`) -- logs training curves, losses, and periodic eval metrics during
   training.
-- The standalone **`scripts/run_evaluation.py`** -- has optional wandb logging for batch evaluation runs (this is a
-  separate script, not the CLI command).
 
 This is a significant observability gap. Eval results are ephemeral unless captured via `--format json` to a file.
 

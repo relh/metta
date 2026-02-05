@@ -401,7 +401,7 @@ uv run cogames play --mission recipes.experiment.cogsguard.play \
 
 ```bash
 # Full evaluation across all diagnostic missions
-uv run python packages/cogames/scripts/run_evaluation.py --policy my_agent
+uv run cogames diagnose my_agent -S diagnostic_evals
 ```
 
 ## 8. Code Examples from Existing Agents
