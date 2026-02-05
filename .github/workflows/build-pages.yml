@@ -12,6 +12,7 @@ on:
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
+  pull-requests: read
   pages: write
   id-token: write
 
@@ -26,6 +27,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Detect Scope Changes
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            mettascope:
+              - "packages/mettagrid/nim/mettascope/**"
+            vibescope:
+              - "packages/mettagrid/nim/vibescope/**"
 
       - name: Setup Environment
         uses: ./.github/actions/setup-environment
@@ -57,32 +68,42 @@ jobs:
 
       # Build Mettascope first with its dependencies
       - name: Install Mettascope Dependencies
+        if: github.ref == 'refs/heads/main' || steps.changes.outputs.mettascope == 'true'
         run: |
           cd ..
           nimby sync -g metta/packages/mettagrid/nim/mettascope/nimby.lock
 
       - name: Build mettascope
+        if: github.ref == 'refs/heads/main' || steps.changes.outputs.mettascope == 'true'
         run: |
           mkdir -p packages/mettagrid/nim/mettascope/dist
-          nim c -d:emscripten packages/mettagrid/nim/mettascope/src/mettascope.nim
+          # mettascope has emscripten-only shader string rewrites using `.replace`,
+          # which requires `std/strutils` to be in scope.
+          nim c -d:emscripten --import:std/strutils packages/mettagrid/nim/mettascope/src/mettascope.nim
           ls -la packages/mettagrid/nim/mettascope/dist
 
       # Then build Vibescope with its dependencies
       - name: Install Vibescope Dependencies
+        if: github.ref == 'refs/heads/main' || steps.changes.outputs.vibescope == 'true'
         run: |
           cd ..
           nimby sync -g metta/packages/mettagrid/nim/vibescope/nimby.lock
 
       - name: Build vibescope
+        if: github.ref == 'refs/heads/main' || steps.changes.outputs.vibescope == 'true'
         run: |
           mkdir -p packages/mettagrid/nim/vibescope/dist
           nim c -d:emscripten packages/mettagrid/nim/vibescope/src/vibescope.nim
           ls -la packages/mettagrid/nim/vibescope/dist
 
       - name: Setup Pages
+        # Only needed when deploying.
+        if: github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v4
 
       - name: Create deployment directory
+        # Only needed when deploying.
+        if: github.ref == 'refs/heads/main'
         run: |
           mkdir -p deploy/mettascope
           cp -r packages/mettagrid/nim/mettascope/dist/* deploy/mettascope/

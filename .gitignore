@@ -136,6 +136,8 @@ packages/mettagrid/nim/vibescope/dist/
 packages/mettagrid/nim/vibescope/bindings/generated/
 vibescope.out
 packages/mettagrid/nim/vibescope/src/tmp
+packages/mettagrid/nim/vibescope/tools/gen_atlas
+packages/mettagrid/nim/vibescope/tests/test_load_replays
 packages/mettagrid/python/src/mettagrid/nim/vibescope/
 packages/mettagrid/nim/vibescope/nim.cfg
 !packages/mettagrid/nim/vibescope/data/resources/
