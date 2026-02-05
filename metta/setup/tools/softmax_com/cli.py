@@ -124,7 +124,7 @@ def frontend(
     backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
 ):
     env = _base_env()
-    env["NEXTAUH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
+    env["NEXTAUTH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
     env["NEXTAUTH_SECRET"] = "dev-nextauth-secret"
     env["DATABASE_URL"] = LOCAL_DB_URI
 

@@ -25,7 +25,7 @@ class WandbStore:
     """WandB implementation of adaptive experiment store."""
 
     # WandB run states
-    # TODO We shuold probably just put this into a string enum
+    # TODO We should probably just put this into a string enum
     STATUS_RUNNING = "running"
     STATUS_FINISHED = "finished"
     STATUS_CRASHED = "crashed"

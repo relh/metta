@@ -4,7 +4,7 @@ Frequently reused layers are in the lib folder for convenient reuse in your poli
 but be sure to add an 'initialize' method to your configs to allow others to auto build with your layers. Ideally, all
 layers take a tensordict as input and read and write from it using unique keys. This allows you to access any tensor in
 your policy for use in calculating losses. For these tensors, be sure to update the experience spec which tells the
-experience buffer what to store. If the layer has additional requirments like initialization to the environment then it
+experience buffer what to store. If the layer has additional requirements like initialization to the environment then it
 should manage those methods on its own, not expecting the policy object to handle these methods for it, allows the
 policy to be more agnostic to its parts. Further in the spirit of intelligent layers, layers can manage their own memory
 if necessary or set a spec for the experience buffer.
@@ -32,7 +32,7 @@ future. For an example of this path, look at fast.py.
 
 # Data Structures
 
-Trainer passes a TensorDict to the policy and expects to recieve one, populated with the keys specified in your losses.
+Trainer passes a TensorDict to the policy and expects to receive one, populated with the keys specified in your losses.
 The tensordict will input environment observations, an environment ID during rollout, rewards, dones, and truncateds.
 
 # Architecture Overview 06-18-2025

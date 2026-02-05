@@ -184,5 +184,5 @@ class SlicedScriptedCloner(Loss):
         self.ppo_mask = rand_assignments >= teacher_threshold
 
     def _update_slices(self) -> None:
-        # we count on the hyperparmeter scheduler to update the cfg proportions
+        # we count on the hyperparameter scheduler to update the cfg proportions
         self._create_slices(self.rollout_batch_size)

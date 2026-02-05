@@ -95,7 +95,7 @@ class EvalTaskOrchestrator:
     def _compute_num_cpus(self, parallelism: int) -> int:
         """Compute the number of CPUs to request for a given parallelism. Our nodes have 4, 8, 12, or 16 CPUs.
         Kubernetes nodes have "allocatable" resources that are less than total capacity because kubelet,
-        os-level daemons (sytemd), etc end up consuming some of the total capacity.
+        os-level daemons (systemd), etc end up consuming some of the total capacity.
         So if we want to allocate on a machine with 4 vpcpus in total, we need to request an allocation of fewer
         than 4. Thus we request 3, 7, 11, or 15.
         """
