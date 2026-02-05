@@ -1,5 +1,7 @@
 #!/usr/bin/env -S uv run
 # ruff: noqa: E402
+from typing_extensions import get_type_hints
+
 from devops.skypilot.utils.job_helpers import skypilot_sanity_check
 from metta.common.util.log_config import suppress_noisy_logs
 
@@ -30,7 +32,7 @@ from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load
 from metta.common.util.cli import get_user_confirmation
 from metta.common.util.fs import cd_repo_root
 from metta.common.util.log_config import init_logging
-from metta.common.util.text_styles import red
+from metta.common.util.text_styles import red, yellow
 from metta.tools.utils.auto_config import auto_run_name
 
 logger = logging.getLogger("devops.skypilot.launch")
@@ -81,6 +83,20 @@ def _should_pass_run(module_path: str) -> bool:
 
     if inspect.isclass(tool_maker) and issubclass(tool_maker, Tool):
         return _tool_has_field(tool_maker, "run")
+
+    if inspect.isfunction(tool_maker):
+        try:
+            return_type = get_type_hints(tool_maker).get("return")
+            if inspect.isclass(return_type) and issubclass(return_type, Tool):
+                return _tool_has_field(return_type, "run")
+        except Exception:
+            print(
+                yellow(
+                    "WARN: Skypilot Launch detected tool maker as function "
+                    "but could not introspect its return type, likely not "
+                    "a concrete type and 'run' arg might not be passed"
+                )
+            )
 
     try:
         sig = inspect.signature(tool_maker)
