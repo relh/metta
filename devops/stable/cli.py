@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
@@ -12,107 +11,18 @@ from typing import Annotated
 import typer
 
 from devops.datadog.datadog_client import DatadogMetricsClient
+from devops.runners.core import Runner
+from devops.runners.reporters.datadog import report_datadog_metrics
+from devops.runners.reporters.discord import write_discord_summary
+from devops.runners.reporters.github import report_gh_step_summary
+from devops.runners.reporters.shared import build_categorized_jobs
+from devops.runners.reporters.stdout import print_failed_logs
 from devops.stable.asana_bugs import check_blockers
-from devops.stable.datadog_metrics import jobs_to_metrics
 from devops.stable.registry import Suite, discover_jobs, specs_to_jobs
-from devops.stable.runner import Job, Runner
 
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(add_completion=False, invoke_without_command=True)
-
-
-def _failed(job: Job) -> bool:
-    return job.status.value == "failed" or (job.status.value == "succeeded" and job.acceptance_passed is False)
-
-
-def _status(job: Job) -> str:
-    if _failed(job):
-        return "FAILED"
-    return job.status.value.upper()
-
-
-def _write_summary(runner: Runner, state_dir: Path) -> None:
-    jobs = list(runner.jobs.values())
-    failed = [j for j in jobs if _failed(j)]
-    passed = [j for j in jobs if j.status.value == "succeeded" and not _failed(j)]
-    skipped = [j for j in jobs if j.status.value == "skipped"]
-
-    header = f"{len(passed)} passed, {len(failed)} failed, {len(skipped)} skipped"
-    table = []
-    for job in jobs:
-        name = job.name.split(".")[-1]
-        duration = f"{job.duration_s:.0f}s" if job.duration_s else "-"
-        table.append(f"{name:<40} {_status(job):<10} {duration}")
-
-    # Discord summary (file)
-    state_dir.mkdir(parents=True, exist_ok=True)
-    lines = [f"**Jobs**: {header}", "", "```", *table, "```"]
-
-    # Add failure details
-    if failed:
-        lines.append("")
-        lines.append("**Failure Details:**")
-        for job in failed:
-            job_short_name = job.name.split(".")[-1]
-            if job.acceptance_failures:
-                lines.append(f"- `{job_short_name}`: acceptance criteria not met")
-                for failure in job.acceptance_failures:
-                    lines.append(f"  - {failure}")
-            elif job.error:
-                lines.append(f"- `{job_short_name}`: {job.error}")
-            else:
-                lines.append(f"- `{job_short_name}`: unknown error")
-
-    gh_server = os.environ.get("GITHUB_SERVER_URL")
-    gh_repo = os.environ.get("GITHUB_REPOSITORY")
-    gh_run_id = os.environ.get("GITHUB_RUN_ID")
-    if gh_server and gh_repo and gh_run_id:
-        lines.append(f"\n<{gh_server}/{gh_repo}/actions/runs/{gh_run_id}>")
-    (state_dir / "discord_summary.txt").write_text("\n".join(lines))
-
-    # GitHub summary (env var)
-    gh_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if gh_path:
-        md = [
-            "# Stable Release Validation",
-            "",
-            f"**Result**: {'PASSED' if not failed else 'FAILED'}",
-            f"**Jobs**: {header}",
-            "",
-            "| Job | Status | Duration |",
-            "|-----|--------|----------|",
-        ]
-        for job in jobs:
-            duration = f"{job.duration_s:.0f}s" if job.duration_s else "-"
-            md.append(f"| {job.name} | {_status(job)} | {duration} |")
-        with open(gh_path, "a") as f:
-            f.write("\n".join(md))
-
-
-def _print_failed_logs(runner: Runner, tail_lines: int = 50) -> None:
-    failed = [j for j in runner.jobs.values() if _failed(j)]
-    if not failed:
-        return
-
-    print("\n" + "=" * 60)
-    print("Failed Job Logs")
-    print("=" * 60)
-    for job in failed:
-        print(f"\n--- {job.name} ---")
-        if job.acceptance_failures:
-            print("Acceptance criteria failures:")
-            for failure in job.acceptance_failures:
-                print(f"  - {failure}")
-            print()
-        if job.logs_path and Path(job.logs_path).exists():
-            lines = Path(job.logs_path).read_text().splitlines()
-            for line in lines[-tail_lines:]:
-                print(line)
-        elif job.error:
-            print(job.error)
-        else:
-            print("(no logs available)")
 
 
 @app.callback()
@@ -161,35 +71,18 @@ def main(
 
     runner.run_all()
 
-    # Emit Datadog metrics for completed jobs
-    metrics = jobs_to_metrics(runner.jobs)
-    if metrics:
-        # Dump metrics to file if requested
-        if dump_metrics:
-            payload = [m.to_dict() for m in metrics]
-            dump_metrics.parent.mkdir(parents=True, exist_ok=True)
-            dump_metrics.write_text(json.dumps(payload, indent=2))
-            print(f"\nWrote {len(metrics)} metrics to {dump_metrics}")
+    report_datadog_metrics(datadog_client, runner, skip_submitting_metrics, dump_metrics)
 
-        if not skip_submitting_metrics:
-            logger.info("Emitting %d Datadog metrics from job results", len(metrics))
-            assert datadog_client is not None
-            datadog_client.submit(metrics)
-            logger.info("Successfully emitted Datadog metrics")
-        else:
-            logger.info("Skipping submission of %d Datadog metrics from job results", len(metrics))
-    else:
-        logger.debug("No metrics")
-
-    failed = [j for j in runner.jobs.values() if _failed(j)]
-    _print_failed_logs(runner)
-    _write_summary(runner, state_dir)
+    categorized_jobs = build_categorized_jobs(runner)
+    print_failed_logs(categorized_jobs)
+    write_discord_summary(categorized_jobs, state_dir)
+    report_gh_step_summary(categorized_jobs, title="Stable Release Validation")
 
     if has_blockers:
         print("\nFAILED: Blocking bugs found in Asana")
         sys.exit(1)
 
-    sys.exit(0 if not failed else 1)
+    sys.exit(0 if not categorized_jobs["failed"] else 1)
 
 
 if __name__ == "__main__":

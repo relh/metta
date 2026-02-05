@@ -141,7 +141,7 @@ class MetricSample(BaseModel):
         # Fallback to GAUGE if DISTRIBUTION is not available
         if self.kind == MetricKind.DISTRIBUTION:
             if hasattr(MetricIntakeType, "DISTRIBUTION"):
-                intake_type = MetricIntakeType.DISTRIBUTION
+                intake_type = MetricIntakeType.DISTRIBUTION  # pyright: ignore[reportAttributeAccessIssue]
             else:
                 # DISTRIBUTION not supported, use GAUGE as fallback
                 intake_type = MetricIntakeType.GAUGE

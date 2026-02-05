@@ -9,8 +9,8 @@ from typing import Optional
 
 import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
+from devops.runners.acceptance_criterion import AcceptanceCriterion
 from devops.stable.registry import stable_job
-from devops.stable.runner import AcceptanceCriterion
 from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (

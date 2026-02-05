@@ -1,75 +1,18 @@
-"""Stable job runner used by GitHub Actions."""
+"""Local and Remote Job runner used by GitHub Actions."""
 
 from __future__ import annotations
 
-import subprocess
 import threading
 import time
+from collections import defaultdict
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass
 from datetime import datetime, timedelta
-from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Protocol
 
-import sky
-import sky.jobs.client.sdk as sky_jobs_sdk
 import wandb
-from pydantic import BaseModel, Field
 
+from devops.runners.job import ExecutorType, Job, JobHandle, JobStatus
 from metta.common.util.constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
-
-
-class JobStatus(StrEnum):
-    NOT_STARTED = "pending"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-
-Operator = Literal[">=", ">", "<=", "<", "==", "in"]
-
-
-class AcceptanceCriterion(BaseModel):
-    metric: str
-    threshold: float | tuple[float, float]
-    operator: Operator = ">="
-    metric_name: str | None = None
-
-
-class Job(BaseModel):
-    name: str
-    cmd: list[str]
-    timeout_s: int = 3600
-    remote_gpus: int | None = None
-    remote_nodes: int | None = None
-    dependencies: list[str] = Field(default_factory=list)
-    acceptance: list[AcceptanceCriterion] = Field(default_factory=list)
-    wandb_run_name: str | None = None
-
-    status: JobStatus = JobStatus.NOT_STARTED
-    exit_code: int | None = None
-    started_at: datetime | None = None
-    completed_at: datetime | None = None
-    duration_s: float | None = None
-    logs_path: str | None = None
-    skypilot_job_id: str | None = None
-    metrics: dict[str, float] = Field(default_factory=dict)
-    acceptance_passed: bool | None = None
-    criterion_results: dict[str, bool] = Field(default_factory=dict)
-    acceptance_failures: list[str] = Field(default_factory=list)
-    error: str | None = None
-
-    @property
-    def is_remote(self) -> bool:
-        return self.remote_gpus is not None or self.remote_nodes is not None
-
-    @property
-    def wandb_url(self) -> str | None:
-        if not self.wandb_run_name:
-            return None
-        return f"https://wandb.ai/{METTA_WANDB_ENTITY}/{METTA_WANDB_PROJECT}/runs/{self.wandb_run_name}"
 
 
 def _now() -> datetime:
@@ -144,29 +87,6 @@ class _AcceptanceEvaluator:
         return True
 
 
-class _JobHandle(Protocol):
-    @property
-    def futures(self) -> list[Future]: ...
-
-
-@dataclass(frozen=True)
-class _LocalHandle:
-    future: Future[int]
-
-    @property
-    def futures(self) -> list[Future]:
-        return [self.future]
-
-
-@dataclass(frozen=True)
-class _RemoteHandle:
-    launch_future: Future[str | None]
-
-    @property
-    def futures(self) -> list[Future]:
-        return [self.launch_future]
-
-
 class Runner:
     _STATUS_EVERY = timedelta(minutes=10)
     _REMOTE_POLL_EVERY_S = 5.0
@@ -179,7 +99,7 @@ class Runner:
         self.logs_dir.mkdir(exist_ok=True)
 
         self.jobs: dict[str, Job] = {}
-        self._handles: dict[str, _JobHandle] = {}
+        self._handles: dict[str, JobHandle] = {}
         self._executor: ThreadPoolExecutor | None = None
         self._output_lock = threading.Lock()
         self._acceptance = _AcceptanceEvaluator()
@@ -273,12 +193,11 @@ class Runner:
 
         if job.is_remote:
             self._print(f"[{job.name}] Launching remote: {' '.join(job.cmd)}")
-            launch_future = self._executor.submit(_run_remote_launch, job.cmd, Path(job.logs_path))
-            self._handles[job.name] = _RemoteHandle(launch_future=launch_future)
         else:
             self._print(f"[{job.name}] Starting: {' '.join(job.cmd)}")
-            future = self._executor.submit(_run_local_cmd, job.cmd, Path(job.logs_path), job.timeout_s)
-            self._handles[job.name] = _LocalHandle(future=future)
+
+        handle = job.executor.launch(job, Path(job.logs_path), self._executor)
+        self._handles[job.name] = handle
 
     def _drain_completed_futures(self) -> None:
         completed: list[tuple[str, Future]] = []
@@ -291,26 +210,22 @@ class Runner:
             self._on_future_done(self.jobs[name], future)
 
     def _on_future_done(self, job: Job, future: Future) -> None:
-        try:
-            result = future.result()
-        except Exception as e:
-            self._finish(job, JobStatus.FAILED, 1, str(e))
-            return
+        callback_result = job.executor.on_future_done(job, future)
 
-        if job.is_remote:
-            job_id = result
-            if not job_id:
-                self._finish(job, JobStatus.FAILED, 1, "Remote launch succeeded but no job id was found")
-                return
-            job.skypilot_job_id = job_id
+        if callback_result is not None:
+            return self._finish(
+                callback_result.job, callback_result.status, callback_result.exit_code, error=callback_result.error
+            )
+
+        if job.remote_id:
             self._remote_not_found_deadline[job.name] = _now() + self._REMOTE_NOT_FOUND_GRACE
-            self._print(f"[{job.name}] Launched: job_id={job.skypilot_job_id}")
+            self._print(f"[{job.name}] Launched: job_id={job.remote_id}")
             return
-
-        exit_code = int(result)
-        status = JobStatus.SUCCEEDED if exit_code == 0 else JobStatus.FAILED
-        error = f"Timeout after {job.timeout_s}s" if exit_code == 124 else None
-        self._finish(job, status, exit_code, error=error)
+        else:
+            raise ValueError(
+                "job.executor.on_future_done did not return a JobResult therefore "
+                "expected job.remote_id to be set for remote polling, found None."
+            )
 
     def _poll_remote_jobs(self) -> None:
         running = [j for j in self.jobs.values() if j.status == JobStatus.RUNNING and j.is_remote]
@@ -323,46 +238,30 @@ class Runner:
         for job in running:
             if job.started_at and now - job.started_at > timedelta(seconds=job.timeout_s):
                 self._finish(job, JobStatus.FAILED, 124, f"Timeout after {job.timeout_s}s")
-                if job.skypilot_job_id:
-                    subprocess.run(["sky", "jobs", "cancel", "-y", job.skypilot_job_id], capture_output=True)
+                job.executor.cancel(job)
 
         running = [j for j in self.jobs.values() if j.status == JobStatus.RUNNING and j.is_remote]
-        job_ids = [int(j.skypilot_job_id) for j in running if j.skypilot_job_id]
-        if not job_ids:
+        if not running:
             return
 
-        # Poll SkyPilot - if it fails, just log and retry next cycle
-        # Timeouts above are the safety net for stuck jobs
-        try:
-            request_id = sky_jobs_sdk.queue(refresh=False, job_ids=job_ids)
-            queue_data = sky.get(request_id)
-            if not isinstance(queue_data, list):
-                raise TypeError(f"Expected list, got {type(queue_data).__name__}")
-            status_by_id = {
-                str(item.get("job_id") if isinstance(item, dict) else getattr(item, "job_id", None)): item
-                for item in queue_data
-            }
-        except Exception as e:
-            self._print(f"[WARN] SkyPilot poll failed (will retry): {e}")
-            return
+        running_jobs_per_executor: defaultdict[ExecutorType, list[Job]] = defaultdict(list)
 
-        for job in running:
-            if not job.skypilot_job_id:
+        for j in running:
+            running_jobs_per_executor[j.executor.ex_type].append(j)
+
+        for k in running_jobs_per_executor.keys():
+            executor = running_jobs_per_executor[k][0].executor
+            try:
+                result = executor.poll(running_jobs_per_executor[k], self._remote_not_found_deadline)
+            except Exception as e:
+                self._print(f"[WARN]: {type(executor).__name__} Failed to poll remote job status (will retry): {e}")
                 continue
 
-            sky_job = status_by_id.get(job.skypilot_job_id)
-            if not sky_job:
-                deadline = self._remote_not_found_deadline.get(job.name)
-                if deadline and now >= deadline:
-                    self._finish(job, JobStatus.FAILED, 1, "Job not found in SkyPilot queue")
+            if result is None:
                 continue
 
-            status = sky_job.get("status") if isinstance(sky_job, dict) else getattr(sky_job, "status", None)
-            sky_status = str(status or "").upper()
-            if "SUCCEEDED" in sky_status:
-                self._finish(job, JobStatus.SUCCEEDED, 0)
-            elif any(s in sky_status for s in ("FAILED", "CANCELLED")):
-                self._finish(job, JobStatus.FAILED, 1, f"SkyPilot status: {sky_status}")
+            for r in result:
+                self._finish(r.job, r.status, r.exit_code, r.error)
 
     def _finish(self, job: Job, status: JobStatus, exit_code: int, error: str | None = None) -> None:
         job.status = status
@@ -428,51 +327,6 @@ class Runner:
             elapsed = ""
             if job.started_at and job.status == JobStatus.RUNNING:
                 elapsed = f" ({int((now - job.started_at).total_seconds())}s)"
-            sky = f" [sky:{job.skypilot_job_id}]" if job.skypilot_job_id else ""
-            self._print(f"  {job.name}: {job.status.value}{elapsed}{sky}")
+            remote = f" [remote:{job.remote_id}]" if job.remote_id else ""
+            self._print(f"  {job.name}: {job.status.value}{elapsed}{remote}")
         self._print("")
-
-
-def _run_local_cmd(cmd: list[str], log_path: Path, timeout_s: int) -> int:
-    with open(log_path, "w") as log_file:
-        try:
-            proc = subprocess.run(
-                cmd,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                text=True,
-                timeout=timeout_s,
-                check=False,
-            )
-            return int(proc.returncode)
-        except subprocess.TimeoutExpired:
-            return 124
-
-
-def _run_remote_launch(cmd: list[str], log_path: Path) -> str | None:
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-
-    job_id: str | None = None
-    with open(log_path, "w") as log_file:
-        assert proc.stdout is not None
-        last_flush = time.monotonic()
-        for line in proc.stdout:
-            log_file.write(line)
-            now = time.monotonic()
-            if now - last_flush >= 0.5:
-                log_file.flush()
-                last_flush = now
-            if "Job ID:" in line:
-                job_id = line.split(":")[-1].strip()
-        log_file.flush()
-
-    proc.wait()
-    if proc.returncode != 0:
-        raise RuntimeError(f"launch.py exited with code {proc.returncode}")
-    return job_id

@@ -6,7 +6,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Callable, get_type_hints
 
-from devops.stable.runner import AcceptanceCriterion, Job
+from devops.runners.acceptance_criterion import AcceptanceCriterion
+from devops.runners.executors.local import LocalExecutor
+from devops.runners.executors.skypilot import SkypilotExecutor
+from devops.runners.job import Job
 from metta.common.tool import Tool
 from metta.common.wandb.context import WandbConfig
 from metta.tools.train import TrainTool
@@ -150,6 +153,8 @@ def specs_to_jobs(specs: list[JobSpec], prefix: str) -> list[Job]:
         List of Job objects ready for the runner.
     """
     jobs: list[Job] = []
+    local_executor = LocalExecutor()
+    skypilot_executor = SkypilotExecutor()
 
     spec_to_job_name: dict[Callable, str] = {}
     for spec in specs:
@@ -202,10 +207,15 @@ def specs_to_jobs(specs: list[JobSpec], prefix: str) -> list[Job]:
                 inject_args.append(f"{param_name}={value}")
             cmd.extend(inject_args)
 
+        executor = (
+            skypilot_executor if spec.remote_gpus is not None or spec.remote_nodes is not None else local_executor
+        )
+
         jobs.append(
             Job(
                 name=job_name,
                 cmd=cmd,
+                executor=executor,
                 timeout_s=spec.timeout_s,
                 remote_gpus=spec.remote_gpus,
                 remote_nodes=spec.remote_nodes,

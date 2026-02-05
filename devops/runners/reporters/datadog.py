@@ -1,11 +1,13 @@
-"""Convert stable runner Job results to Datadog MetricSamples."""
-
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
+from typing import Optional
 
+from devops.datadog.datadog_client import DatadogMetricsClient
 from devops.datadog.models import MetricSample
-from devops.stable.runner import Job, JobStatus
+from devops.runners.core import Job, JobStatus, Runner
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ def _normalize_criterion_name(metric: str) -> str:
     return metric.replace("/", "_").replace(".", "_")
 
 
-def job_to_metrics(job: Job) -> list[MetricSample]:
+def _job_to_metrics(job: Job) -> list[MetricSample]:
     """Convert a Job result to Datadog MetricSamples using unified acceptance schema.
 
     Emits triples (value, target, status) for:
@@ -162,7 +164,7 @@ def job_to_metrics(job: Job) -> list[MetricSample]:
     return samples
 
 
-def jobs_to_metrics(jobs: dict[str, Job]) -> list[MetricSample]:
+def _jobs_to_metrics(jobs: dict[str, Job]) -> list[MetricSample]:
     """Convert all job results to Datadog metrics.
 
     Args:
@@ -173,6 +175,32 @@ def jobs_to_metrics(jobs: dict[str, Job]) -> list[MetricSample]:
     """
     all_samples: list[MetricSample] = []
     for job in jobs.values():
-        samples = job_to_metrics(job)
+        samples = _job_to_metrics(job)
         all_samples.extend(samples)
     return all_samples
+
+
+def report_datadog_metrics(
+    client: Optional[DatadogMetricsClient], runner: Runner, skip: bool = False, dump: Optional[Path] = None
+):
+    """Emit Datadog metrics for completed jobs"""
+    metrics = _jobs_to_metrics(runner.jobs)
+    if metrics:
+        # Dump metrics to file if requested
+        if dump:
+            payload = [m.to_dict() for m in metrics]
+            dump.parent.mkdir(parents=True, exist_ok=True)
+            dump.write_text(json.dumps(payload, indent=2))
+            print(f"\nWrote {len(metrics)} metrics to {dump}")
+
+        if not skip:
+            if client is None:
+                raise TypeError("Datadog reporter expected DatadogMetricsClient, received None")
+
+            logger.info("Emitting %d Datadog metrics from job results", len(metrics))
+            client.submit(metrics)
+            logger.info("Successfully emitted Datadog metrics")
+        else:
+            logger.info("Skipping submission of %d Datadog metrics from job results", len(metrics))
+    else:
+        logger.debug("No metrics")
