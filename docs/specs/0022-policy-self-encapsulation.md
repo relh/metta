@@ -43,8 +43,8 @@ environment.
 
 ## Goals
 
-- [ ] Each policy server gets its own venv with mettagrid + torch from uv cache
-- [ ] Runner image contains only mettagrid + torch (pinned public PyPI versions), no private code
+- [x] Each policy server gets its own venv with mettagrid + torch from uv cache
+- [x] Runner image contains only mettagrid + torch (pinned public PyPI versions), no private code
 - [x] `cogames validate-bundle` exercises the isolated-env flow locally
 - [ ] Runner image published to DockerHub, tagged by mettagrid version
 
@@ -90,11 +90,11 @@ The current `Dockerfile.policy_evaluator` image serves double duty: it runs the 
 and is also used as the episode runner image (`EPISODE_RUNNER_IMAGE`). The orchestrator needs `metta.app_backend` and
 stays heavy; the episode runner is what we slim down.
 
-- [ ] **PR 1: Per-policy venvs in the policy server manager.** Replace `uv run --no-project --with` with `uv venv` +
+- [x] **PR 1: Per-policy venvs in the policy server manager.** Replace `uv run --no-project --with` with `uv venv` +
       `uv pip install` per policy. Each policy server gets its own venv in `/tmp/policy-<hash>/`. Setup scripts run
       inside the venv. Uses uv's cache so base packages install near-instantly.
 
-- [ ] **PR 2: New slim Dockerfile for the episode runner.** Add `Dockerfile.episode_runner` alongside the existing
+- [x] **PR 2: New slim Dockerfile for the episode runner.** Add `Dockerfile.episode_runner` alongside the existing
       `Dockerfile.policy_evaluator`. Base image with uv, mettagrid, and torch pre-cached. Entrypoint runs the episode
       runner module from mettagrid. No kubectl, no metta repo clone. The existing orchestrator Dockerfile stays
       unchanged.
