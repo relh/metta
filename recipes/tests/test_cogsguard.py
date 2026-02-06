@@ -105,17 +105,18 @@ class TestCogsguardEnvironment:
 
         # Check that key object types exist
         assert "wall" in objects
-        assert "hub" in objects  # hub
-        assert "junction" in objects  # clips junction
-        assert "chest" in objects
+        # Station object names are team-prefixed (e.g. "c:hub"), while render_name
+        # is unprefixed (e.g. "hub").
+        assert "c:hub" in objects
+        assert "junction" in objects
 
         # Check extractors for all elements
         for element in CvCConfig.ELEMENTS:
             assert f"{element}_extractor" in objects
 
-        # Check gear stations
+        # Check gear stations (team-prefixed object names).
         for gear_type in CvCConfig.GEAR:
-            assert f"{gear_type}_station" in objects
+            assert f"c:{gear_type}" in objects
 
     def test_collectives_configured(self) -> None:
         """Test that collectives are properly configured."""
@@ -124,7 +125,7 @@ class TestCogsguardEnvironment:
         # collectives is a dict[str, CollectiveConfig]
         collective_names = list(env_config.game.collectives.keys())
         assert "cogs" in collective_names
-        assert "clips" not in collective_names
+        assert "clips" in collective_names
 
         # Check cogs collective has initial resources
         cogs = env_config.game.collectives["cogs"]

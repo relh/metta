@@ -532,7 +532,7 @@ def sweep(
     variants: Optional[Sequence[str]] = ("milestones", "credit"),
     sweep_reward_variants: bool = True,
     max_trials: int = 80,
-    num_parallel_trials: int = 4,
+    num_parallel_trials: int = 12,
 ) -> tools.SweepTool:
     # Basic sweep search space (simplified from cogs_v_clips)
     search_space: dict[str, object] = {}

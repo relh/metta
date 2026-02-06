@@ -171,7 +171,7 @@ def sweep(
     num_cogs: int = 4,
     eval_difficulty: str | None = "standard",
     max_trials: int = 80,
-    num_parallel_trials: int = 4,
+    num_parallel_trials: int = 12,
 ) -> tools.SweepTool:
     """Hyperparameter sweep targeting train_sweep (heart_chorus baked in)."""
     search_space = get_cvc_sweep_search_space()
