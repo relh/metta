@@ -384,12 +384,15 @@ proc actScout(agent: CogsguardAgent, invScout: int): int =
     return agent.moveTo(unseen.get())
   return agent.explore()
 
-proc actAligner(agent: CogsguardAgent, invAligner: int, hearts: int): int =
+proc actAligner(agent: CogsguardAgent, invAligner: int, hearts: int, cargo: int): int =
   if invAligner == 0:
     return agent.getGear("aligner_station")
   if hearts == 0:
-    if agent.chest.isSome():
-      return agent.moveTo(agent.chest.get())
+    if cargo > 0:
+      if agent.hub.isSome():
+        return agent.moveTo(agent.hub.get())
+    if agent.hub.isSome():
+      return agent.moveTo(agent.hub.get())
     return agent.explore()
 
   let target = agent.nearestDepot(0)
@@ -397,12 +400,15 @@ proc actAligner(agent: CogsguardAgent, invAligner: int, hearts: int): int =
     return agent.moveTo(target.get())
   return agent.explore()
 
-proc actScrambler(agent: CogsguardAgent, invScrambler: int, hearts: int): int =
+proc actScrambler(agent: CogsguardAgent, invScrambler: int, hearts: int, cargo: int): int =
   if invScrambler == 0:
     return agent.getGear("scrambler_station")
   if hearts == 0:
-    if agent.chest.isSome():
-      return agent.moveTo(agent.chest.get())
+    if cargo > 0:
+      if agent.hub.isSome():
+        return agent.moveTo(agent.hub.get())
+    if agent.hub.isSome():
+      return agent.moveTo(agent.hub.get())
     return agent.explore()
 
   let target = agent.nearestDepot(-1)
@@ -487,9 +493,9 @@ proc step*(
     elif vibeName == "scout":
       action = agent.actScout(invScout)
     elif vibeName == "aligner":
-      action = agent.actAligner(invAligner, invHeart)
+      action = agent.actAligner(invAligner, invHeart, cargo)
     elif vibeName == "scrambler":
-      action = agent.actScrambler(invScrambler, invHeart)
+      action = agent.actScrambler(invScrambler, invHeart, cargo)
     else:
       action = agent.cfg.actions.noop
 

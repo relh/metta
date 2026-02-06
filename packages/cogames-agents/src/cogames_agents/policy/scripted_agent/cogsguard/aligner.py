@@ -177,11 +177,12 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         return self._use_object_at(s, station_pos)
 
     def _get_resources(self, s: CogsguardAgentState, need_influence: bool, need_heart: bool) -> Action:
-        """Get hearts from the chest (primary source).
+        """Get hearts from the hub (primary source).
 
-        The chest can produce hearts from resources:
-        1. First tries to withdraw existing hearts from cogs commons (get_heart handler)
-        2. If no hearts available, converts 1 of each element into 1 heart (make_heart handler)
+        The hub can produce hearts from resources:
+        1. Agent first deposits any minerals by bumping the hub
+        2. Hub tries to withdraw existing hearts from cogs commons (get_heart handler)
+        3. If no hearts available, converts 1 of each element into 1 heart (make_heart handler)
 
         So as long as miners deposit resources, aligners can get hearts.
         If we've been trying to get hearts for too long, go explore instead.
@@ -196,28 +197,32 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 s._heart_wait_start = 0
                 return self._explore_for_junctions(s)
 
-            # Try chest first - it's the primary heart source
-            chest_pos = s.get_structure_position(StructureType.CHEST)
-            if chest_pos is not None:
-                if DEBUG and s.step_count % 10 == 0:
-                    adj = is_adjacent((s.row, s.col), chest_pos)
-                    print(f"[A{s.agent_id}] ALIGNER: Getting hearts from chest at {chest_pos}, adjacent={adj}")
-                if not is_adjacent((s.row, s.col), chest_pos):
-                    return self._move_towards(s, chest_pos, reach_adjacent=True)
-                return self._use_object_at(s, chest_pos)
-
-            # Try hub as fallback (may have heart AOE or deposit function)
+            # Use hub as primary heart source
             hub_pos = s.get_structure_position(StructureType.HUB)
             if hub_pos is not None:
-                if DEBUG:
-                    print(f"[A{s.agent_id}] ALIGNER: No chest found, trying hub at {hub_pos}")
+                # Check if we have minerals to deposit first
+                has_minerals = s.carbon > 0 or s.oxygen > 0 or s.germanium > 0 or s.silicon > 0
+
                 if not is_adjacent((s.row, s.col), hub_pos):
+                    if DEBUG and s.step_count % 10 == 0:
+                        print(f"[A{s.agent_id}] ALIGNER: Moving to hub at {hub_pos} for hearts")
                     return self._move_towards(s, hub_pos, reach_adjacent=True)
+
+                # Adjacent to hub - deposit minerals if we have any, otherwise get heart
+                if has_minerals:
+                    if DEBUG:
+                        print(
+                            f"[A{s.agent_id}] ALIGNER: Depositing minerals at hub "
+                            f"(C:{s.carbon} O:{s.oxygen} G:{s.germanium} Si:{s.silicon})"
+                        )
+                else:
+                    if DEBUG and s.step_count % 10 == 0:
+                        print(f"[A{s.agent_id}] ALIGNER: Getting hearts from hub at {hub_pos}")
                 return self._use_object_at(s, hub_pos)
 
-            # Neither found - explore to find them
+            # Hub not found - explore to find it
             if DEBUG:
-                print(f"[A{s.agent_id}] ALIGNER: No chest/hub found, exploring")
+                print(f"[A{s.agent_id}] ALIGNER: No hub found, exploring")
             s._heart_wait_start = 0
             return self._explore(s)
 

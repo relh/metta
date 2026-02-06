@@ -13,10 +13,12 @@ if TYPE_CHECKING:
 
 
 class GetHeartsGoal(Goal):
-    """Navigate to a chest to acquire hearts.
+    """Navigate to hub to acquire hearts.
 
     Hearts cost 1 of each element from the collective. Skip if the
-    collective can't afford it to avoid wasting time at the chest.
+    collective can't afford it to avoid wasting time at the hub.
+    The agent must first deposit any minerals by bumping the hub,
+    then bump again to get or make a heart.
     """
 
     name = "GetHearts"
@@ -50,23 +52,22 @@ class GetHeartsGoal(Goal):
         return False
 
     def execute(self, ctx: PlankyContext) -> Action:
-        # Find own team's chest
+        # Find own team's hub (primary source of hearts)
         pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-        result = ctx.map.find_nearest(ctx.state.position, type_contains="chest", property_filter=pf)
-        if result is None:
-            # Try hub as fallback
-            result = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
+        result = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
-        chest_pos, _ = result
+        hub_pos, _ = result
         if ctx.trace:
-            ctx.trace.nav_target = chest_pos
+            ctx.trace.nav_target = hub_pos
 
-        dist = _manhattan(ctx.state.position, chest_pos)
+        dist = _manhattan(ctx.state.position, hub_pos)
         if dist <= 1:
-            return _move_toward(ctx.state.position, chest_pos)
-        return ctx.navigator.get_action(ctx.state.position, chest_pos, ctx.map, reach_adjacent=True)
+            # If carrying cargo, deposit first before getting heart
+            # The bump will automatically deposit minerals or get/make heart
+            return _move_toward(ctx.state.position, hub_pos)
+        return ctx.navigator.get_action(ctx.state.position, hub_pos, ctx.map, reach_adjacent=True)
 
 
 class EmergencyMineGoal(Goal):

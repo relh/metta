@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 
 
 class GetHeartsGoal(Goal):
-    """Navigate to a chest to acquire hearts.
+    """Navigate to hub to acquire hearts.
 
     Hearts cost 1 of each element from the collective. Skip if the
-    collective can't afford it to avoid wasting time at the chest.
+    collective can't afford it to avoid wasting time at the hub.
     """
 
     name = "GetHearts"
@@ -51,23 +51,31 @@ class GetHeartsGoal(Goal):
         return False
 
     def execute(self, ctx: CogasContext) -> Action:
-        # Find own team's chest
+        # If carrying cargo, deposit it first before getting hearts
+        if ctx.state.cargo_total > 0:
+            depot_pos = _find_deposit(ctx)
+            if depot_pos is not None:
+                if ctx.trace:
+                    ctx.trace.nav_target = depot_pos
+                dist = _manhattan(ctx.state.position, depot_pos)
+                if dist <= 1:
+                    return _move_toward(ctx.state.position, depot_pos)
+                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
+
+        # Find own team's hub (primary source for hearts)
         pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-        result = ctx.map.find_nearest(ctx.state.position, type_contains="chest", property_filter=pf)
-        if result is None:
-            # Try hub as fallback
-            result = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
+        result = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
-        chest_pos, _ = result
+        hub_pos, _ = result
         if ctx.trace:
-            ctx.trace.nav_target = chest_pos
+            ctx.trace.nav_target = hub_pos
 
-        dist = _manhattan(ctx.state.position, chest_pos)
+        dist = _manhattan(ctx.state.position, hub_pos)
         if dist <= 1:
-            return _move_toward(ctx.state.position, chest_pos)
-        return ctx.navigator.get_action(ctx.state.position, chest_pos, ctx.map, reach_adjacent=True)
+            return _move_toward(ctx.state.position, hub_pos)
+        return ctx.navigator.get_action(ctx.state.position, hub_pos, ctx.map, reach_adjacent=True)
 
 
 class FallbackMineGoal(Goal):

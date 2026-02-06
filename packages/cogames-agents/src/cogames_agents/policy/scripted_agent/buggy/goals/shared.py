@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 
 
 class GetHeartsGoal(Goal):
-    """Navigate to a chest to acquire hearts.
+    """Navigate to hub to acquire hearts.
 
-    In CogsGuard, hearts are obtained from the hub chest (withdraw if available,
+    In CogsGuard, hearts are obtained from the hub (withdraw if available,
     otherwise craft if the collective has enough elements). Since Planky cannot
     always observe the collective heart inventory directly, we primarily rely on
     "try and back off" behavior rather than hard-gating on affordability.
@@ -61,19 +61,27 @@ class GetHeartsGoal(Goal):
             ctx.blackboard[self._bb_bump_count_key] = 0
         ctx.blackboard[self._bb_prev_heart_key] = ctx.state.heart
 
-        # Find chest
-        result = ctx.map.find_nearest(ctx.state.position, type="chest")
-        if result is None:
-            # Try assembler as fallback
-            result = ctx.map.find_nearest(ctx.state.position, type="hub")
+        # If carrying cargo, deposit it first before getting hearts
+        if ctx.state.cargo_total > 0:
+            depot_pos = _find_deposit(ctx)
+            if depot_pos is not None:
+                if ctx.trace:
+                    ctx.trace.nav_target = depot_pos
+                dist = _manhattan(ctx.state.position, depot_pos)
+                if dist <= 1:
+                    return _move_toward(ctx.state.position, depot_pos)
+                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
+
+        # Find hub (primary source for hearts)
+        result = ctx.map.find_nearest(ctx.state.position, type="hub")
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
 
-        chest_pos, _ = result
+        hub_pos, _ = result
         if ctx.trace:
-            ctx.trace.nav_target = chest_pos
+            ctx.trace.nav_target = hub_pos
 
-        dist = _manhattan(ctx.state.position, chest_pos)
+        dist = _manhattan(ctx.state.position, hub_pos)
         if dist <= 1:
             bump_count = ctx.blackboard.get(self._bb_bump_count_key, 0) + 1
             ctx.blackboard[self._bb_bump_count_key] = bump_count
@@ -84,8 +92,8 @@ class GetHeartsGoal(Goal):
                 if ctx.trace:
                     ctx.trace.activate(self.name, "no hearts, backing off")
                 return None
-            return _move_toward(ctx.state.position, chest_pos)
-        return ctx.navigator.get_action(ctx.state.position, chest_pos, ctx.map, reach_adjacent=True)
+            return _move_toward(ctx.state.position, hub_pos)
+        return ctx.navigator.get_action(ctx.state.position, hub_pos, ctx.map, reach_adjacent=True)
 
 
 class FallbackMineGoal(Goal):

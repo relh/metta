@@ -198,11 +198,12 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         return self._use_object_at(s, station_pos)
 
     def _get_hearts(self, s: CogsguardAgentState) -> Action:
-        """Get hearts from chest (primary source for hearts).
+        """Get hearts from hub (primary source for hearts).
 
-        The chest can produce hearts from resources:
-        1. First tries to withdraw existing hearts from cogs commons (get_heart handler)
-        2. If no hearts available, converts 1 of each element into 1 heart (make_heart handler)
+        The hub can produce hearts from resources:
+        1. If agent has cargo (minerals), first deposit them by bumping hub
+        2. Then bump hub again to get or make a heart
+        3. Hub converts 1 of each element into 1 heart (make_heart handler)
 
         So as long as miners deposit resources, scramblers can get hearts.
         If we've been trying to get hearts for too long, go explore instead.
@@ -217,28 +218,30 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             s._heart_wait_start = 0
             return self._explore_for_junctions(s)
 
-        # Try chest first - it's the primary heart source
-        chest_pos = s.get_structure_position(StructureType.CHEST)
-        if chest_pos is not None:
-            if DEBUG and s.step_count % 10 == 0:
-                adj = is_adjacent((s.row, s.col), chest_pos)
-                print(f"[A{s.agent_id}] SCRAMBLER: Getting hearts from chest at {chest_pos}, adjacent={adj}")
-            if not is_adjacent((s.row, s.col), chest_pos):
-                return self._move_towards(s, chest_pos, reach_adjacent=True)
-            return self._use_object_at(s, chest_pos)
-
-        # Try hub as fallback (may have heart AOE or deposit function)
+        # Try hub first - it's the primary heart source
         hub_pos = s.get_structure_position(StructureType.HUB)
         if hub_pos is not None:
-            if DEBUG:
-                print(f"[A{s.agent_id}] SCRAMBLER: No chest found, trying hub at {hub_pos}")
+            if DEBUG and s.step_count % 10 == 0:
+                adj = is_adjacent((s.row, s.col), hub_pos)
+                cargo = s.total_cargo
+                print(f"[A{s.agent_id}] SCRAMBLER: Getting hearts from hub at {hub_pos}, adjacent={adj}, cargo={cargo}")
+
+            # Navigate to hub if not adjacent
             if not is_adjacent((s.row, s.col), hub_pos):
                 return self._move_towards(s, hub_pos, reach_adjacent=True)
+
+            # If we have cargo, deposit it first by bumping hub
+            if s.total_cargo > 0:
+                if DEBUG:
+                    print(f"[A{s.agent_id}] SCRAMBLER: Depositing {s.total_cargo} cargo at hub before getting hearts")
+                return self._use_object_at(s, hub_pos)
+
+            # Otherwise, bump hub to get hearts
             return self._use_object_at(s, hub_pos)
 
-        # Neither found - explore to find them
+        # Hub not found - explore to find it
         if DEBUG:
-            print(f"[A{s.agent_id}] SCRAMBLER: No chest/hub found, exploring")
+            print(f"[A{s.agent_id}] SCRAMBLER: No hub found, exploring")
         s._heart_wait_start = 0
         return self._explore(s)
 
