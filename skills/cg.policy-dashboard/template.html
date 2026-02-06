@@ -2598,6 +2598,60 @@
           }
       }
 
+      // Shared helper: compute P20/P80 for a list of metric keys across episodes
+      function computePercentiles(episodes, metricExtractors) {
+          function pct(arr, p) {
+              if (!arr.length) return 0;
+              const sorted = [...arr].sort((a, b) => a - b);
+              const idx = (p / 100) * (sorted.length - 1);
+              const lo = Math.floor(idx), hi = Math.ceil(idx);
+              return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+          }
+          const completed = episodes.filter(e => e.status === 'completed');
+          return metricExtractors.map(fn => ({
+              p20: pct(completed.map(fn), 20),
+              p80: pct(completed.map(fn), 80)
+          }));
+      }
+
+      // Create P20/P80 scatter datasets for a vertical bar chart (category x-axis)
+      function percentileDatasets(pctData) {
+          return [
+              {
+                  label: 'P20',
+                  type: 'scatter',
+                  data: pctData.map((p, i) => ({ x: i, y: p.p20 })),
+                  pointStyle: 'triangle',
+                  rotation: 180,
+                  pointRadius: 7,
+                  pointBorderWidth: 2,
+                  pointBorderColor: 'rgba(234, 179, 8, 0.8)',
+                  backgroundColor: 'rgba(234, 179, 8, 0.8)',
+                  order: -1
+              },
+              {
+                  label: 'P80',
+                  type: 'scatter',
+                  data: pctData.map((p, i) => ({ x: i, y: p.p80 })),
+                  pointStyle: 'triangle',
+                  pointRadius: 7,
+                  pointBorderWidth: 2,
+                  pointBorderColor: 'rgba(96, 165, 250, 0.8)',
+                  backgroundColor: 'rgba(96, 165, 250, 0.8)',
+                  order: -1
+              }
+          ];
+      }
+
+      function percentileTooltipCallback(pctData) {
+          return function(ctx) {
+              const dsLabel = ctx.dataset.label;
+              if (dsLabel === 'P20') return `P20: ${ctx.parsed.y.toFixed(1)}`;
+              if (dsLabel === 'P80') return `P80: ${ctx.parsed.y.toFixed(1)}`;
+              return `${dsLabel}: ${ctx.parsed.y.toFixed(1)}`;
+          };
+      }
+
       function renderBehavior() {
           // Zero-count banner
           renderZeroCountBanner();
@@ -2629,7 +2683,10 @@
           if (junctionsChart) junctionsChart.destroy();
           if (gearChart) gearChart.destroy();
 
-          // Actions chart
+          // --- Actions chart ---
+          const actionKeys = ['action.move.success', 'action.move.failed', 'action.noop.success', 'action.change_vibe.success', 'actions.swap'];
+          const actionPct = computePercentiles(filteredEpisodes, actionKeys.map(k => e => e.metrics[k] || 0));
+
           const actionsCtx = document.getElementById('actions-chart').getContext('2d');
           actionsChart = new Chart(actionsCtx, {
               type: 'bar',
@@ -2637,29 +2694,27 @@
                   labels: ['Move Success', 'Move Failed', 'Noop', 'Change Vibe', 'Swap'],
                   datasets: [{
                       label: 'Avg per Episode',
-                      data: [
-                          aggregated['action.move.success'] || 0,
-                          aggregated['action.move.failed'] || 0,
-                          aggregated['action.noop.success'] || 0,
-                          aggregated['action.change_vibe.success'] || 0,
-                          aggregated['actions.swap'] || 0
-                      ],
+                      data: actionKeys.map(k => aggregated[k] || 0),
                       backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(251, 191, 36, 0.7)', 'rgba(59, 130, 246, 0.7)']
-                  }]
+                  }, ...percentileDatasets(actionPct)]
               },
               options: {
                   responsive: true,
-                  plugins: { legend: { display: false } },
+                  plugins: {
+                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
+                      tooltip: { callbacks: { label: percentileTooltipCallback(actionPct) } }
+                  },
                   scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
               }
           });
 
-          // Resources chart - grouped bar (gained vs lost) with net amount line
+          // --- Resources chart - grouped bar (gained vs lost) with net amount line ---
           const resourceLabels = ['Carbon', 'Oxygen', 'Silicon', 'Germanium', 'Heart'];
           const resourceKeys = ['carbon', 'oxygen', 'silicon', 'germanium', 'heart'];
           const resGained = resourceKeys.map(r => aggregated[`${r}.gained`] || 0);
           const resLost = resourceKeys.map(r => aggregated[`${r}.lost`] || 0);
           const resNet = resourceKeys.map(r => aggregated[`${r}.amount`] || 0);
+          const resNetPct = computePercentiles(filteredEpisodes, resourceKeys.map(r => e => (e.metrics[`${r}.amount`] || 0)));
 
           const resourcesCtx = document.getElementById('resources-chart').getContext('2d');
           resourcesChart = new Chart(resourcesCtx, {
@@ -2691,16 +2746,15 @@
                           pointRadius: 4,
                           pointBackgroundColor: 'rgba(59, 130, 246, 1)',
                           fill: false
-                      }
+                      },
+                      ...percentileDatasets(resNetPct)
                   ]
               },
               options: {
                   responsive: true,
                   plugins: {
-                      legend: {
-                          display: true,
-                          labels: { color: '#8b949e' }
-                      }
+                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
+                      tooltip: { callbacks: { label: percentileTooltipCallback(resNetPct) } }
                   },
                   scales: {
                       y: { beginAtZero: true, grid: { color: '#30363d' } },
@@ -2709,7 +2763,15 @@
               }
           });
 
-          // Junctions chart
+          // --- Junctions chart ---
+          const junctionExtractors = [
+              e => e.metrics['junction.aligned_by_agent'] || 0,
+              e => e.metrics['junction.scrambled_by_agent'] || 0,
+              e => e.metrics['heart.gained'] || 0,
+              e => (e.metrics['aligned.junction.held'] || 0) / 100
+          ];
+          const junctionPct = computePercentiles(filteredEpisodes, junctionExtractors);
+
           const junctionsCtx = document.getElementById('junctions-chart').getContext('2d');
           junctionsChart = new Chart(junctionsCtx, {
               type: 'bar',
@@ -2724,16 +2786,25 @@
                           (aggregated['aligned.junction.held'] || 0) / 100
                       ],
                       backgroundColor: 'rgba(59, 130, 246, 0.7)'
-                  }]
+                  }, ...percentileDatasets(junctionPct)]
               },
               options: {
                   responsive: true,
-                  plugins: { legend: { display: false } },
+                  plugins: {
+                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
+                      tooltip: { callbacks: { label: percentileTooltipCallback(junctionPct) } }
+                  },
                   scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
               }
           });
 
-          // Gear chart - aligner/scrambler gained vs lost
+          // --- Gear chart - aligner/scrambler gained vs lost ---
+          const gearExtractors = [
+              e => e.metrics['aligner.gained'] || 0,
+              e => e.metrics['scrambler.gained'] || 0
+          ];
+          const gearPct = computePercentiles(filteredEpisodes, gearExtractors);
+
           const gearCtx = document.getElementById('gear-chart').getContext('2d');
           gearChart = new Chart(gearCtx, {
               type: 'bar',
@@ -2759,16 +2830,15 @@
                           backgroundColor: 'rgba(239, 68, 68, 0.7)',
                           borderColor: 'rgba(239, 68, 68, 1)',
                           borderWidth: 1
-                      }
+                      },
+                      ...percentileDatasets(gearPct)
                   ]
               },
               options: {
                   responsive: true,
                   plugins: {
-                      legend: {
-                          display: true,
-                          labels: { color: '#8b949e' }
-                      }
+                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
+                      tooltip: { callbacks: { label: percentileTooltipCallback(gearPct) } }
                   },
                   scales: {
                       y: { beginAtZero: true, grid: { color: '#30363d' } },
@@ -2836,6 +2906,55 @@
           if (efficiencyChart) efficiencyChart.destroy();
           const ctx = document.getElementById('efficiency-chart').getContext('2d');
 
+          // Per-episode KPI calculators
+          const resources = ['carbon', 'heart', 'oxygen', 'silicon', 'germanium'];
+          function safeDiv(a, b) { return b > 0 ? a / b : 0; }
+          function epMoveEff(e) {
+              const s = e.metrics['action.move.success'] || 0, f = e.metrics['action.move.failed'] || 0;
+              return safeDiv(s, s + f);
+          }
+          function epActionSuccess(e) {
+              let total = 0;
+              for (const [k, v] of Object.entries(e.metrics)) {
+                  if (k.startsWith('action.') && k.includes('.success')) total += v;
+              }
+              const failed = e.metrics['action.failed'] || 0;
+              total += failed;
+              return safeDiv(total - failed, total);
+          }
+          function epVibeRate(e) {
+              let total = 0;
+              for (const [k, v] of Object.entries(e.metrics)) {
+                  if (k.startsWith('action.') && k.includes('.success')) total += v;
+              }
+              total += (e.metrics['action.failed'] || 0);
+              return safeDiv(e.metrics['action.change_vibe.success'] || 0, total);
+          }
+          function epResourceRetention(e) {
+              const gained = resources.reduce((s, r) => s + (e.metrics[r + '.gained'] || 0), 0);
+              const amount = resources.reduce((s, r) => s + (e.metrics[r + '.amount'] || 0), 0);
+              return safeDiv(amount, gained);
+          }
+          function epJunctionControl(e) {
+              const a = e.metrics['junction.aligned_by_agent'] || 0;
+              const sc = e.metrics['junction.scrambled_by_agent'] || 0;
+              return safeDiv(a, a + sc);
+          }
+
+          // Compute percentiles from per-episode values
+          function percentile(arr, p) {
+              if (!arr.length) return 0;
+              const sorted = [...arr].sort((a, b) => a - b);
+              const idx = (p / 100) * (sorted.length - 1);
+              const lo = Math.floor(idx), hi = Math.ceil(idx);
+              return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+          }
+
+          const completed = filteredEpisodes.filter(e => e.status === 'completed');
+          const epCalcs = [epMoveEff, epActionSuccess, epVibeRate, epResourceRetention, epJunctionControl];
+          const p20 = epCalcs.map(fn => percentile(completed.map(fn), 20));
+          const p80 = epCalcs.map(fn => percentile(completed.map(fn), 80));
+
           const metrics = [
               { label: 'Move Efficiency', value: kpis.move_efficiency || 0 },
               { label: 'Action Success', value: kpis.action_success_rate || 0 },
@@ -2844,37 +2963,67 @@
               { label: 'Junction Control', value: kpis.junction_control_rate || 0 }
           ];
 
+          function rangeColor(value, lo, hi, alpha) {
+              if (value > hi) return `rgba(34, 197, 94, ${alpha})`;
+              if (value >= lo) return `rgba(234, 179, 8, ${alpha})`;
+              return `rgba(239, 68, 68, ${alpha})`;
+          }
+
           efficiencyChart = new Chart(ctx, {
               type: 'bar',
               data: {
                   labels: metrics.map(m => m.label),
                   datasets: [{
-                      label: 'Efficiency',
+                      label: 'Actual',
                       data: metrics.map(m => m.value * 100),
-                      backgroundColor: metrics.map(m => {
-                          if (m.value >= 0.7) return 'rgba(34, 197, 94, 0.7)';
-                          if (m.value >= 0.4) return 'rgba(234, 179, 8, 0.7)';
-                          return 'rgba(239, 68, 68, 0.7)';
-                      }),
-                      borderColor: metrics.map(m => {
-                          if (m.value >= 0.7) return 'rgba(34, 197, 94, 1)';
-                          if (m.value >= 0.4) return 'rgba(234, 179, 8, 1)';
-                          return 'rgba(239, 68, 68, 1)';
-                      }),
+                      backgroundColor: metrics.map((m, i) => rangeColor(m.value, p20[i], p80[i], 0.7)),
+                      borderColor: metrics.map((m, i) => rangeColor(m.value, p20[i], p80[i], 1)),
                       borderWidth: 1
+                  }, {
+                      label: 'P20',
+                      type: 'scatter',
+                      data: p20.map((v, i) => ({ x: v * 100, y: i })),
+                      pointStyle: 'triangle',
+                      rotation: 270,
+                      pointRadius: 7,
+                      pointBorderWidth: 2,
+                      pointBorderColor: 'rgba(234, 179, 8, 0.8)',
+                      backgroundColor: 'rgba(234, 179, 8, 0.8)'
+                  }, {
+                      label: 'P80',
+                      type: 'scatter',
+                      data: p80.map((v, i) => ({ x: v * 100, y: i })),
+                      pointStyle: 'triangle',
+                      rotation: 90,
+                      pointRadius: 7,
+                      pointBorderWidth: 2,
+                      pointBorderColor: 'rgba(96, 165, 250, 0.8)',
+                      backgroundColor: 'rgba(96, 165, 250, 0.8)'
                   }]
               },
               options: {
                   indexAxis: 'y',
                   responsive: true,
                   maintainAspectRatio: false,
-                  plugins: { legend: { display: false } },
+                  plugins: {
+                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
+                      tooltip: {
+                          callbacks: {
+                              label: function(ctx) {
+                                  if (ctx.datasetIndex === 1) return `P20: ${ctx.parsed.x.toFixed(1)}%`;
+                                  if (ctx.datasetIndex === 2) return `P80: ${ctx.parsed.x.toFixed(1)}%`;
+                                  const i = ctx.dataIndex;
+                                  return `Actual: ${ctx.parsed.x.toFixed(1)}% (P20: ${(p20[i]*100).toFixed(1)}%, P80: ${(p80[i]*100).toFixed(1)}%)`;
+                              }
+                          }
+                      }
+                  },
                   scales: {
                       x: {
                           beginAtZero: true,
                           max: 100,
                           grid: { color: '#30363d' },
-                          title: { display: true, text: 'Efficiency %', color: '#8b949e' }
+                          title: { display: true, text: '%', color: '#8b949e' }
                       },
                       y: { grid: { color: '#30363d' } }
                   }

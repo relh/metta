@@ -691,6 +691,30 @@ def test_high_low_comparison_metrics():
     assert len(bare_refs) == 0, f"Found bare junction.aligned references: {bare_refs}"
 
 
+def test_alignment_stability_formula():
+    """Bug: alignment_stability divides by aligned_gained*100, should be just aligned_gained.
+
+    If aligned_held=50 and aligned_gained=100, stability should be 0.5 (held/gained).
+    The bug makes it 50/(100*100) = 0.005 instead.
+    """
+    episodes = [
+        _make_episode(
+            metrics={
+                "junction.aligned_by_agent": 100,
+                "aligned.junction.gained": 100,
+                "aligned.junction.lost": 30,
+                "aligned.junction.held": 50,
+                "action.move.success": 500,
+            }
+        )
+    ]
+    derived = compute_derived_metrics(episodes)
+    # held/gained = 50/100 = 0.5
+    assert abs(derived.alignment_stability - 0.5) < 0.01, (
+        f"alignment_stability should be 0.5 (held/gained), got {derived.alignment_stability}"
+    )
+
+
 def main():
     """Run all tests."""
     tests = [
@@ -729,6 +753,8 @@ def main():
         # Phase 6 - collective/game stats
         test_collective_stat_ingestion,
         test_game_stat_ingestion,
+        # Bug regression tests
+        test_alignment_stability_formula,
     ]
 
     passed = 0

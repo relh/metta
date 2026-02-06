@@ -373,7 +373,7 @@ def compute_derived_metrics(episodes: list[EpisodeData]) -> DerivedMetrics:
     aligned_gained = get("aligned.junction.gained", junction_aligned)
     aligned_lost = get("aligned.junction.lost")
     aligned_held = get("aligned.junction.held")
-    alignment_stability = safe_div(aligned_held, aligned_gained * 100) if aligned_gained > 0 else 0.0
+    alignment_stability = safe_div(aligned_held, aligned_gained) if aligned_gained > 0 else 0.0
     net_alignment_rate = safe_div(aligned_gained - aligned_lost, aligned_gained)
 
     # === Strategy Profile Scores (0-100) ===
@@ -1014,8 +1014,8 @@ def generate_demo_data() -> DashboardData:
             vibe_change_success = 0
             vibe_change_failed = 0
         else:
-            vibe_change_success = int(random.uniform(5, 30) * base_perf)
-            vibe_change_failed = int(random.uniform(1, 10) / base_perf)
+            vibe_change_success = int(random.uniform(20, 80) * base_perf)
+            vibe_change_failed = int(random.uniform(2, 15) / base_perf)
 
         # Noop count - elevated for ~30% of episodes to trigger high noop diagnostic
         if i % 3 == 2:
