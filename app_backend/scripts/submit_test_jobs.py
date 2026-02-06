@@ -17,7 +17,7 @@ SERVERS = {
 
 def main():
     parser = argparse.ArgumentParser(description="Submit test episode jobs")
-    parser.add_argument("--server", choices=["dev", "prod"], default="dev", help="Target environment")
+    parser.add_argument("--server", choices=["dev", "prod"], default="prod", help="Target environment")
     parser.add_argument("--num-agents", type=int, default=2, help="Number of agents")
     parser.add_argument("--num-jobs", type=int, default=1, help="Number of jobs to submit")
     parser.add_argument("--policy-uri", help="Policy URI")
