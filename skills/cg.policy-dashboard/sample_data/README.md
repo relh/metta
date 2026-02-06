@@ -46,8 +46,8 @@ Sample data files can include optional metadata fields (prefixed with `_`) to de
 | `01_dominant_win`         | Top-tier performance | High rewards (55-62), excellent success rates |
 | `02_close_match`          | Competitive game     | Mid-range rewards, mixed results              |
 | `03_crushing_defeat`      | Poor performance     | Very low rewards, high failures               |
-| `04_resource_hoarder`     | Resource strategy    | High energy/carbon, zero attacks              |
-| `05_aggressive_fighter`   | Combat focus         | High attack counts, resource churn            |
+| `04_resource_hoarder`     | Resource strategy    | High carbon/silicon, focus on gathering       |
+| `05_aggressive_fighter`   | Junction focus       | High junction alignment, resource churn       |
 | `06_junction_master`      | Junction optimized   | 52-65 aligned per agent                       |
 | `07_timeout_prone`        | Latency issues       | 25-45 timeouts per agent                      |
 | `08_early_termination`    | Short episode        | 2,500 steps only                              |
@@ -56,16 +56,16 @@ Sample data files can include optional metadata fields (prefixed with `_`) to de
 
 ### Opponent Matches (2v2) - Episodes 11-15, 22-24
 
-| File                           | Opponent            | Outcome  | Features                                    |
-| ------------------------------ | ------------------- | -------- | ------------------------------------------- |
-| `11_vs_aggressive_bot_win`     | aggressive-bot v3   | Win      | Our policy outperforms aggressive opponent  |
-| `12_vs_aggressive_bot_loss`    | aggressive-bot v3   | Loss     | Opponent dominates with high attack success |
-| `13_vs_defensive_turtle`       | defensive-turtle v7 | Close    | Long game against passive opponent          |
-| `14_vs_random_chaos`           | random-chaos v1     | Easy win | Opponent has many timeouts and failures     |
-| `15_vs_top_ranked`             | champion-v2 v15     | Loss     | Elite opponent with perfect efficiency      |
-| `22_vs_aggressive_bot_rematch` | aggressive-bot v3   | Draw     | Close rematch, improved performance         |
-| `23_vs_defensive_turtle_close` | defensive-turtle v7 | Draw     | Extended marathon, 18k steps                |
-| `24_mirror_match`              | demo-policy v1      | Draw     | Self-play, nearly identical stats           |
+| File                           | Opponent            | Outcome  | Features                                     |
+| ------------------------------ | ------------------- | -------- | -------------------------------------------- |
+| `11_vs_aggressive_bot_win`     | aggressive-bot v3   | Win      | Our policy outperforms opponent              |
+| `12_vs_aggressive_bot_loss`    | aggressive-bot v3   | Loss     | Opponent dominates with better junction ctrl |
+| `13_vs_defensive_turtle`       | defensive-turtle v7 | Close    | Long game against passive opponent           |
+| `14_vs_random_chaos`           | random-chaos v1     | Easy win | Opponent has many timeouts and failures      |
+| `15_vs_top_ranked`             | champion-v2 v15     | Loss     | Elite opponent with perfect efficiency       |
+| `22_vs_aggressive_bot_rematch` | aggressive-bot v3   | Draw     | Close rematch, improved performance          |
+| `23_vs_defensive_turtle_close` | defensive-turtle v7 | Draw     | Extended marathon, 18k steps                 |
+| `24_mirror_match`              | demo-policy v1      | Draw     | Self-play, nearly identical stats            |
 
 ### Failure Episodes - Episodes 16-19
 
@@ -112,9 +112,8 @@ Sample data files can include optional metadata fields (prefixed with `_`) to de
 ### Behavior Tab
 
 - **Action Efficiency**: Compare move success/fail ratios
-- **Resource Management**: Energy/carbon gain vs loss
-- **Junction Performance**: Aligned vs misaligned ratios
-- **Combat Analysis**: Attack success rates by opponent type
+- **Resource Management**: Carbon/silicon gain vs loss
+- **Junction Performance**: Aligned vs scrambled ratios
 
 ### Failures Tab
 
@@ -134,11 +133,21 @@ Sample data files can include optional metadata fields (prefixed with `_`) to de
 | Action Timeouts    | 0             | 1-5     | 25-52  |
 | Failed Episodes    | 4 of 25 (16%) | -       | -      |
 
+## CogsGuard Actions
+
+The sample data uses the actual CogsGuard action set:
+
+| Action        | Description             |
+| ------------- | ----------------------- |
+| `move`        | Move in a direction     |
+| `noop`        | Do nothing              |
+| `change_vibe` | Change agent vibe state |
+
 ## Opponent Summary
 
 | Opponent            | Matches | Wins | Losses | Draws | Style                              |
 | ------------------- | ------- | ---- | ------ | ----- | ---------------------------------- |
-| aggressive-bot v3   | 3       | 1    | 1      | 1     | High attack, medium defense        |
+| aggressive-bot v3   | 3       | 1    | 1      | 1     | High junction activity             |
 | defensive-turtle v7 | 2       | 0    | 0      | 2     | Passive, high noop, resource hoard |
 | random-chaos v1     | 1       | 1    | 0      | 0     | Unpredictable, many timeouts       |
 | champion-v2 v15     | 1       | 0    | 1      | 0     | Elite efficiency, top-tier         |

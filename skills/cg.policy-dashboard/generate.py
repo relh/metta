@@ -4,6 +4,7 @@
 Usage:
     python generate.py [--policy NAME:VERSION] [--limit N] [--output PATH] [--season SEASON]
     python generate.py --local-results DIR [--policy-name NAME] [--limit N] [--output PATH]
+    python generate.py --demo [--output PATH]
 """
 
 from __future__ import annotations
@@ -11,6 +12,8 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import random
+import statistics
 import sys
 import webbrowser
 from dataclasses import dataclass, field
@@ -63,6 +66,44 @@ class EpisodeData:
 
 
 @dataclass
+class DerivedMetrics:
+    """Computed KPIs derived from episode metrics."""
+
+    # Efficiency KPIs (0-1 scale)
+    move_efficiency: float = 0.0  # move.success / (move.success + move.failed)
+    action_success_rate: float = 0.0  # 1 - (action.failed / total_actions)
+    vibe_change_rate: float = 0.0  # change_vibe.success / total_actions
+
+    # Resource KPIs
+    resource_retention: float = 0.0  # amount / gained (how well we keep resources)
+
+    # Vulnerability KPIs
+    freeze_vulnerability: float = 0.0  # frozen.ticks / steps (% time frozen)
+
+    # Junction KPIs
+    junction_control_rate: float = 0.0  # aligned.junction / total_junctions
+    alignment_stability: float = 0.0  # held / gained (how long held)
+    net_alignment_rate: float = 0.0  # (gained - lost) / gained
+
+    # New KPIs
+    noop_rate: float = 0.0  # action.noop.success / total_actions
+    resource_efficiency_per_step: float = 0.0  # sum(resource.gained) / total_steps
+    hearts_to_junction_rate: float = 0.0  # junction.aligned_by_agent / heart.lost
+    reward_consistency: float = 0.0  # 1 - (std/mean) clamped 0-1
+    reward_nonzero_pct: float = 0.0  # % episodes with reward > 0.1
+
+    # Strategy profile scores (0-100)
+    profile_aggressive: float = 0.0
+    profile_defensive: float = 0.0
+    profile_resource_hoarder: float = 0.0
+    profile_junction_hunter: float = 0.0
+    profile_mobile_scout: float = 0.0
+
+    # Diagnostic flags
+    diagnostics: list[str] = field(default_factory=list)
+
+
+@dataclass
 class DashboardData:
     """All data needed for dashboard."""
 
@@ -70,6 +111,7 @@ class DashboardData:
     episodes: list[EpisodeData]
     season: str
     generated_at: str
+    derived: DerivedMetrics = field(default_factory=DerivedMetrics)
 
 
 class TournamentAPI:
@@ -269,6 +311,362 @@ def aggregate_agent_metrics(
     return aggregated
 
 
+def compute_derived_metrics(episodes: list[EpisodeData]) -> DerivedMetrics:
+    """Compute policy-level KPIs from episode metrics."""
+    if not episodes:
+        return DerivedMetrics()
+
+    # Aggregate all metrics across episodes
+    totals: dict[str, float] = {}
+    total_steps = 0
+    completed_episodes = [e for e in episodes if e.status == "completed"]
+
+    for ep in completed_episodes:
+        total_steps += ep.steps
+        for key, value in ep.metrics.items():
+            if isinstance(value, (int, float)):
+                totals[key] = totals.get(key, 0) + value
+
+    n_episodes = len(completed_episodes) or 1
+
+    # Helper to safely get metric
+    def get(key: str, default: float = 0.0) -> float:
+        return totals.get(key, default)
+
+    # Helper for safe division
+    def safe_div(a: float, b: float, default: float = 0.0) -> float:
+        return a / b if b > 0 else default
+
+    # === Efficiency KPIs ===
+    move_success = get("action.move.success")
+    move_failed = get("action.move.failed")
+    move_efficiency = safe_div(move_success, move_success + move_failed)
+
+    # Action success rate
+    action_failed = get("action.failed")
+    total_actions = sum(v for k, v in totals.items() if k.startswith("action.") and ".success" in k)
+    total_actions += action_failed
+    action_success_rate = safe_div(total_actions - action_failed, total_actions)
+
+    # Vibe change rate (CogsGuard-specific action)
+    vibe_change_success = get("action.change_vibe.success")
+    vibe_change_rate = safe_div(vibe_change_success, total_actions)
+
+    # === Resource KPIs ===
+    # Sum all resource amounts and gained (real CogsGuard resources)
+    resources = ["carbon", "heart", "oxygen", "silicon", "germanium"]
+    total_amount = sum(get(f"{r}.amount") for r in resources)
+    total_gained = sum(get(f"{r}.gained") for r in resources)
+    resource_retention = safe_div(total_amount, total_gained)
+
+    # === Vulnerability KPIs ===
+    frozen_ticks = get("status.frozen.ticks")
+    freeze_vulnerability = safe_div(frozen_ticks, total_steps) if total_steps > 0 else 0.0
+
+    # === Junction KPIs ===
+    junction_aligned = get("junction.aligned_by_agent")
+    junction_scrambled = get("junction.scrambled_by_agent")
+    junction_total = junction_aligned + junction_scrambled
+    junction_control_rate = safe_div(junction_aligned, junction_total)
+
+    # From collective stats (if available in agent metrics)
+    aligned_gained = get("aligned.junction.gained", junction_aligned)
+    aligned_lost = get("aligned.junction.lost")
+    aligned_held = get("aligned.junction.held")
+    alignment_stability = safe_div(aligned_held, aligned_gained * 100) if aligned_gained > 0 else 0.0
+    net_alignment_rate = safe_div(aligned_gained - aligned_lost, aligned_gained)
+
+    # === Strategy Profile Scores (0-100) ===
+    # Aggressive: high junction scrambling, high vibe changes
+    profile_aggressive = min(100, (junction_scrambled / n_episodes) * 10 + (vibe_change_success / n_episodes) * 5)
+
+    # Defensive: high noop, low movement
+    noop_count = get("action.noop.success")
+    move_rate = safe_div(move_success, move_success + noop_count)
+    profile_defensive = min(100, (noop_count / n_episodes / 10) + (1 - move_rate) * 50)
+
+    # Resource Hoarder: high deposits, high amounts
+    profile_resource_hoarder = min(100, resource_retention * 50 + (total_amount / n_episodes / 10))
+
+    # Junction Hunter: high junction activity
+    profile_junction_hunter = min(100, (junction_aligned / n_episodes) * 3 + junction_control_rate * 50)
+
+    # Mobile Scout: high move success, low noop
+    noop_rate_profile = safe_div(noop_count, move_success + noop_count)
+    profile_mobile_scout = min(100, move_efficiency * 50 + (1 - noop_rate_profile) * 50)
+
+    # === New KPIs ===
+    # Noop rate: noop / total_actions
+    noop_rate = safe_div(noop_count, total_actions)
+
+    # Resource efficiency per step: sum(resource.gained) / total_steps
+    resource_efficiency_per_step = safe_div(total_gained, total_steps) if total_steps > 0 else 0.0
+
+    # Hearts to junction rate: junction.aligned_by_agent / heart.lost
+    heart_lost = get("heart.lost")
+    hearts_to_junction_rate = safe_div(junction_aligned, heart_lost)
+
+    # Reward consistency: 1 - (std/mean) clamped 0-1
+    rewards = [e.reward for e in completed_episodes]
+    if len(rewards) >= 2:
+        mean_reward = statistics.mean(rewards)
+        std_reward = statistics.stdev(rewards)
+        if mean_reward > 0:
+            reward_consistency = max(0.0, min(1.0, 1.0 - (std_reward / mean_reward)))
+        else:
+            reward_consistency = 0.0
+    else:
+        reward_consistency = 0.0
+
+    # Reward nonzero pct: % episodes with reward > 0.1
+    nonzero_count = sum(1 for r in rewards if r > 0.1)
+    reward_nonzero_pct = safe_div(nonzero_count, len(rewards))
+
+    # === Diagnostic Insights ===
+    diagnostics: list[str] = []
+
+    # High movement failures
+    if move_efficiency < 0.7 and move_failed > n_episodes * 10:
+        diagnostics.append("High movement failures - check pathfinding or obstacle handling")
+
+    # Action timeouts
+    action_timeout = get("action.timeout")
+    if action_timeout > n_episodes * 5:
+        timeout_per_ep = action_timeout / n_episodes
+        diagnostics.append(f"Action timeouts detected ({timeout_per_ep:.1f}/ep) - policy may have latency issues")
+
+    # Freeze vulnerability
+    if freeze_vulnerability > 0.1:
+        diagnostics.append(f"Spending {freeze_vulnerability * 100:.1f}% of time frozen - improve combat avoidance")
+
+    # Low junction activity with heart activity
+    heart_gained = get("heart.gained")
+    if junction_aligned < n_episodes * 2 and heart_gained > n_episodes * 3:
+        diagnostics.append("Hearts collected but low junction alignment - check aligner activation")
+
+    # No vibe changes detected
+    if vibe_change_success == 0 and n_episodes >= 5:
+        diagnostics.append("No vibe changes detected - policy may not be using change_vibe action")
+
+    # Resource loss
+    total_lost = sum(get(f"{r}.lost") for r in resources)
+    if total_lost > total_gained * 0.5:
+        diagnostics.append("High resource loss - resources being lost faster than gained")
+
+    # Early termination pattern
+    avg_steps = total_steps / n_episodes if n_episodes > 0 else 0
+    short_episodes = sum(1 for e in completed_episodes if e.steps < avg_steps * 0.5)
+    if short_episodes > n_episodes * 0.2:
+        diagnostics.append(f"{short_episodes} episodes terminated early - possible stability issues")
+
+    # === Phase 3: New Diagnostics ===
+
+    # High noop rate
+    if noop_rate > 0.15 and noop_count > n_episodes * 100:
+        diagnostics.append(f"High noop rate ({noop_rate * 100:.1f}%) - policy may be indecisive or stuck")
+
+    # Matchup disparity
+    by_opponent: dict[str, list[float]] = {}
+    for e in completed_episodes:
+        by_opponent.setdefault(e.opponent_name, []).append(e.reward)
+    opponent_avgs = {opp: sum(rs) / len(rs) for opp, rs in by_opponent.items() if len(rs) >= 3}
+    if opponent_avgs:
+        best_avg = max(opponent_avgs.values())
+        worst_avg = min(opponent_avgs.values())
+        if best_avg > 2.0 and worst_avg < 0.5:
+            best_opp = max(opponent_avgs, key=opponent_avgs.get)  # type: ignore[arg-type]
+            worst_opp = min(opponent_avgs, key=opponent_avgs.get)  # type: ignore[arg-type]
+            diagnostics.append(
+                f"Matchup disparity - best avg {best_avg:.1f} vs {best_opp}, worst avg {worst_avg:.1f} vs {worst_opp}"
+            )
+
+    # Declining rewards (linear regression slope)
+    if len(rewards) >= 10:
+        n_r = len(rewards)
+        x_mean = (n_r - 1) / 2.0
+        y_mean = sum(rewards) / n_r
+        numerator = sum((i - x_mean) * (rewards[i] - y_mean) for i in range(n_r))
+        denominator = sum((i - x_mean) ** 2 for i in range(n_r))
+        if denominator > 0:
+            slope = numerator / denominator
+            if slope < -0.05:
+                diagnostics.append(f"Declining rewards (slope={slope:.3f}) - recent episodes scoring worse")
+
+    # High freeze + low reward
+    if len(completed_episodes) >= 5:
+        avg_reward_all = sum(e.reward for e in completed_episodes) / n_episodes
+        frozen_low_count = sum(
+            1
+            for e in completed_episodes
+            if e.steps > 0
+            and e.metrics.get("status.frozen.ticks", 0) / e.steps > 0.15
+            and e.reward < avg_reward_all * 0.5
+        )
+        if frozen_low_count > n_episodes * 0.15:
+            diagnostics.append(
+                f"High freeze time and low reward in {frozen_low_count} episodes "
+                f"({frozen_low_count / n_episodes * 100:.0f}%) - check combat avoidance"
+            )
+
+    # === Phase 4: Team comp red flag ===
+    comp_rewards: dict[str, list[float]] = {}
+    for e in completed_episodes:
+        comp_rewards.setdefault(e.team_composition, []).append(e.reward)
+    avg_6v2 = sum(comp_rewards.get("6v2", [0])) / max(len(comp_rewards.get("6v2", [0])), 1)
+    avg_2v6 = sum(comp_rewards.get("2v6", [0])) / max(len(comp_rewards.get("2v6", [0])), 1)
+    if avg_2v6 > 0 and avg_6v2 / avg_2v6 > 3.0 and len(comp_rewards.get("6v2", [])) >= 3:
+        diagnostics.append(
+            f"Over-reliance on agent count - 6v2 avg {avg_6v2:.1f} vs 2v6 avg {avg_2v6:.1f} "
+            f"(ratio {avg_6v2 / avg_2v6:.1f}x)"
+        )
+
+    # === Phase 5: Zero-count detection ===
+    # CogsGuard actions: move, noop, change_vibe
+    capability_metrics = [
+        "junction.aligned_by_agent",
+        "junction.scrambled_by_agent",
+        "action.change_vibe.success",
+    ]
+    zero_capabilities = []
+    for metric in capability_metrics:
+        if all(e.metrics.get(metric, 0) == 0 for e in completed_episodes):
+            zero_capabilities.append(metric)
+    if zero_capabilities:
+        names = ", ".join(zero_capabilities)
+        diagnostics.append(f"Unused capabilities (always zero): {names}")
+
+    return DerivedMetrics(
+        move_efficiency=move_efficiency,
+        action_success_rate=action_success_rate,
+        vibe_change_rate=vibe_change_rate,
+        resource_retention=resource_retention,
+        freeze_vulnerability=freeze_vulnerability,
+        junction_control_rate=junction_control_rate,
+        alignment_stability=alignment_stability,
+        net_alignment_rate=net_alignment_rate,
+        noop_rate=noop_rate,
+        resource_efficiency_per_step=resource_efficiency_per_step,
+        hearts_to_junction_rate=hearts_to_junction_rate,
+        reward_consistency=reward_consistency,
+        reward_nonzero_pct=reward_nonzero_pct,
+        profile_aggressive=profile_aggressive,
+        profile_defensive=profile_defensive,
+        profile_resource_hoarder=profile_resource_hoarder,
+        profile_junction_hunter=profile_junction_hunter,
+        profile_mobile_scout=profile_mobile_scout,
+        diagnostics=diagnostics,
+    )
+
+
+# === Phase 2: Benchmarks ===
+
+BENCHMARKS = {
+    "avg_reward": {"bottom": 1.0, "top10": 2.0, "elite": 4.0, "label": "Avg Reward"},
+    "aligned_junction_gained": {"bottom": 2, "top10": 4, "elite": 8, "label": "Junction Aligned"},
+    "move_success_rate": {"bottom": 0.75, "top10": 0.80, "elite": 0.85, "label": "Move Success Rate"},
+    "resource_total_gained": {"bottom": 150, "top10": 200, "elite": 300, "label": "Resource Total"},
+    "nonzero_episode_pct": {"bottom": 0.40, "top10": 0.60, "elite": 0.90, "label": "Non-Zero Episode %"},
+}
+
+
+def compute_benchmark_tiers(episodes: list[EpisodeData], derived: DerivedMetrics) -> dict[str, dict[str, Any]]:
+    """Compute benchmark tiers for each metric."""
+    completed = [e for e in episodes if e.status == "completed"]
+    if not completed:
+        return {}
+
+    n = len(completed)
+    rewards = [e.reward for e in completed]
+    avg_reward = sum(rewards) / n if n else 0
+
+    total_junction = sum(e.metrics.get("junction.aligned_by_agent", 0) for e in completed)
+    avg_junction = total_junction / n
+
+    resources = ["carbon", "heart", "oxygen", "silicon", "germanium"]
+    total_resource = sum(sum(e.metrics.get(f"{r}.gained", 0) for r in resources) for e in completed) / n
+
+    nonzero_pct = sum(1 for r in rewards if r > 0.1) / n if n else 0
+
+    values = {
+        "avg_reward": avg_reward,
+        "aligned_junction_gained": avg_junction,
+        "move_success_rate": derived.move_efficiency,
+        "resource_total_gained": total_resource,
+        "nonzero_episode_pct": nonzero_pct,
+    }
+
+    result = {}
+    for key, bench in BENCHMARKS.items():
+        value = values.get(key, 0)
+        if value >= bench["elite"]:
+            tier = "elite"
+        elif value >= bench["top10"]:
+            tier = "top10"
+        elif value >= bench["bottom"]:
+            tier = "average"
+        else:
+            tier = "bottom"
+        result[key] = {
+            "value": round(value, 4),
+            "tier": tier,
+            "label": bench["label"],
+            "thresholds": {"bottom": bench["bottom"], "top10": bench["top10"], "elite": bench["elite"]},
+        }
+
+    return result
+
+
+# === Phase 4: Team Composition Analysis ===
+
+
+@dataclass
+class TeamCompStats:
+    """Per-composition KPI breakdown."""
+
+    composition: str
+    count: int
+    avg_reward: float
+    avg_move_efficiency: float
+    avg_junction_aligned: float
+    avg_resource_gained: float
+
+
+def compute_team_comp_analysis(episodes: list[EpisodeData]) -> list[TeamCompStats]:
+    """Compute per-composition KPI breakdown."""
+    by_comp: dict[str, list[EpisodeData]] = {}
+    for e in episodes:
+        if e.status == "completed":
+            by_comp.setdefault(e.team_composition, []).append(e)
+
+    result = []
+    for comp, eps in sorted(by_comp.items()):
+        n = len(eps)
+        avg_reward = sum(e.reward for e in eps) / n
+
+        total_move_success = sum(e.metrics.get("action.move.success", 0) for e in eps)
+        total_move_failed = sum(e.metrics.get("action.move.failed", 0) for e in eps)
+        total_move = total_move_success + total_move_failed
+        move_eff = total_move_success / total_move if total_move > 0 else 0
+
+        avg_junction = sum(e.metrics.get("junction.aligned_by_agent", 0) for e in eps) / n
+
+        resources = ["carbon", "heart", "oxygen", "silicon", "germanium"]
+        avg_resource = sum(sum(e.metrics.get(f"{r}.gained", 0) for r in resources) for e in eps) / n
+
+        result.append(
+            TeamCompStats(
+                composition=comp,
+                count=n,
+                avg_reward=round(avg_reward, 4),
+                avg_move_efficiency=round(move_eff, 4),
+                avg_junction_aligned=round(avg_junction, 4),
+                avg_resource_gained=round(avg_resource, 4),
+            )
+        )
+
+    return result
+
+
 def result_to_episode_data(
     result_dict: dict,
     episode_id: str,
@@ -293,6 +691,20 @@ def result_to_episode_data(
     stats = result_dict.get("stats", {})
     agent_stats = stats.get("agent", [])
     metrics = aggregate_agent_metrics(agent_stats, len(assignments), policy_index, assignments)
+
+    # Extract collective stats with namespace prefix
+    collective_stats = stats.get("collective", {})
+    if isinstance(collective_stats, dict):
+        for key, value in collective_stats.items():
+            if value is not None and isinstance(value, (int, float)):
+                metrics[f"collective.{key}"] = value
+
+    # Extract game stats with namespace prefix
+    game_stats = stats.get("game", {})
+    if isinstance(game_stats, dict):
+        for key, value in game_stats.items():
+            if value is not None and isinstance(value, (int, float)):
+                metrics[f"game.{key}"] = value
 
     # Reward: average over our agents
     rewards = result_dict.get("rewards", [])
@@ -417,11 +829,14 @@ def fetch_dashboard_data(
             episodes_data.append(episode)
             progress.advance(task)
 
+    derived = compute_derived_metrics(episodes_data)
+
     return DashboardData(
         policy=policy,
         episodes=episodes_data,
         season=season,
         generated_at=datetime.now().isoformat(),
+        derived=derived,
     )
 
 
@@ -503,11 +918,243 @@ def load_local_results(results_dir: Path, policy_name: str, limit: int) -> Dashb
     if skipped:
         console.print(f"[yellow]Skipped {skipped} file(s)[/yellow]")
 
+    derived = compute_derived_metrics(episodes)
+
     return DashboardData(
         policy=PolicyVersion(id="local", name=policy_name, version=0),
         episodes=episodes,
         season="local",
         generated_at=datetime.now().isoformat(),
+        derived=derived,
+    )
+
+
+def generate_demo_data() -> DashboardData:
+    """Generate comprehensive demo data to showcase all dashboard features.
+
+    Creates varied episodes that demonstrate:
+    - Different KPI values (good and bad to show color coding)
+    - Multiple opponents with different performance levels
+    - Various team compositions (6v2, 4v4, 2v6)
+    - Some failed episodes with different error types
+    - Extreme values for worst/best examples
+    - Enough diagnostic triggers to show alerts
+    """
+    random.seed(42)  # Reproducible demo data
+
+    # Define opponents with different difficulty profiles
+    opponents = [
+        ("npc-basic", 1, 1.4),  # (name, version, skill_multiplier) - easy
+        ("npc-scout", 2, 1.2),  # slightly easy
+        ("team-alpha", 3, 1.0),  # balanced
+        ("rushbot", 5, 0.7),  # hard - we do worse
+        ("defender-v2", 2, 0.85),  # moderately hard
+        ("junction-hunter", 4, 0.6),  # very hard
+        ("random-walker", 1, 1.3),  # easy
+        ("resource-hoarder", 3, 0.9),  # moderate
+    ]
+
+    # Team compositions: [our_count, opponent_count, assignments]
+    team_comps = [
+        (6, 2, [0, 0, 0, 0, 0, 0, 1, 1]),  # majority
+        (4, 4, [0, 0, 0, 0, 1, 1, 1, 1]),  # even
+        (2, 6, [0, 0, 1, 1, 1, 1, 1, 1]),  # minority
+    ]
+
+    episodes: list[EpisodeData] = []
+
+    # Generate 80 episodes with varied characteristics
+    for i in range(80):
+        opponent_name, opponent_version, opponent_difficulty = random.choice(opponents)
+        our_count, opp_count, assignments = random.choice(team_comps)
+        team_comp = f"{our_count}v{opp_count}"
+
+        # Base performance varies by opponent and some randomness
+        base_perf = opponent_difficulty * random.uniform(0.7, 1.3)
+
+        # Adjust for team composition
+        if our_count > opp_count:
+            base_perf *= 1.15  # Advantage
+        elif our_count < opp_count:
+            base_perf *= 0.75  # Disadvantage
+
+        # Episode length
+        # Determine if this episode has specific issues (for diagnostics)
+        # Aggressive settings to ensure diagnostic thresholds are hit
+        has_movement_issues = i % 4 == 0  # ~20 episodes with bad movement
+        has_freeze_issues = i % 3 == 0  # ~27 episodes frozen a lot (need >10% aggregate)
+        has_timeout_issues = i % 4 == 1  # ~20 episodes with timeouts (need >400 total)
+        has_low_junction = i % 3 == 0  # ~27 episodes with low junction
+        has_no_vibe_changes = i % 6 == 0  # ~13 episodes with no vibe changes
+        is_failed = i % 20 == 0  # ~4 failed episodes
+        is_exceptional = i < 5 or (35 <= i <= 39)  # First few + mid-range are extreme
+        is_short_episode = i % 4 == 2  # ~20 early termination episodes (need >20%)
+
+        # Episode length - some episodes terminate early
+        if is_short_episode:
+            steps = random.randint(300, 600)  # Short episodes for early termination diagnostic
+        else:
+            steps = random.randint(800, 2000)
+
+        # Generate metrics
+        if has_movement_issues:
+            move_success = int(random.uniform(150, 350) * base_perf)
+            move_failed = int(random.uniform(120, 250))  # High failures
+        else:
+            move_success = int(random.uniform(400, 900) * base_perf)
+            move_failed = int(random.uniform(10, 60) / base_perf)
+
+        if is_exceptional and i < 5:
+            # Worst episodes - extreme poor performance
+            move_failed = int(move_failed * 4)
+            base_perf *= 0.3
+
+        # Vibe change action (CogsGuard-specific)
+        if has_no_vibe_changes:
+            vibe_change_success = 0
+            vibe_change_failed = 0
+        else:
+            vibe_change_success = int(random.uniform(5, 30) * base_perf)
+            vibe_change_failed = int(random.uniform(1, 10) / base_perf)
+
+        # Noop count - elevated for ~30% of episodes to trigger high noop diagnostic
+        if i % 3 == 2:
+            noop_count = int(random.uniform(200, 500))  # High noop episodes
+        else:
+            noop_count = int(random.uniform(30, 150))
+
+        # Frozen time - more severe for freeze issues (need >10% aggregate)
+        if has_freeze_issues:
+            frozen_ticks = int(steps * random.uniform(0.20, 0.40))  # 20-40% frozen
+        else:
+            frozen_ticks = int(random.uniform(5, 50) / base_perf)
+
+        # Action timeouts - need >400 total across 80 episodes
+        action_timeout = int(random.uniform(20, 40)) if has_timeout_issues else random.randint(0, 3)
+
+        # Resources (real CogsGuard resources - no energy)
+        carbon_gained = int(random.uniform(50, 180) * base_perf)
+        carbon_lost = int(random.uniform(10, 70) / base_perf)
+        heart_gained = int(random.uniform(3, 20) * base_perf)
+        silicon_gained = int(random.uniform(20, 80) * base_perf)
+        oxygen_gained = int(random.uniform(10, 50) * base_perf)
+        germanium_gained = int(random.uniform(5, 30) * base_perf)
+        # Aligner/scrambler pickups
+        aligner_gained = int(random.uniform(1, 8) * base_perf)
+        scrambler_gained = int(random.uniform(1, 6) * base_perf)
+
+        # Junction activity
+        if has_low_junction:
+            junction_aligned = random.randint(0, 2)
+            junction_scrambled = random.randint(0, 3)
+        else:
+            junction_aligned = int(random.uniform(2, 15) * base_perf)
+            junction_scrambled = int(random.uniform(1, 8) / base_perf)
+
+        aligned_held = junction_aligned * int(random.uniform(40, 200))
+        aligned_gained = junction_aligned
+        aligned_lost = int(junction_aligned * random.uniform(0, 0.4))
+
+        # Build metrics dict (real CogsGuard metrics only)
+        metrics = {
+            "action.move.success": move_success,
+            "action.move.failed": move_failed,
+            "action.change_vibe.success": vibe_change_success,
+            "action.change_vibe.failed": vibe_change_failed,
+            "action.noop.success": noop_count,
+            "action.failed": move_failed + vibe_change_failed,
+            "action.timeout": action_timeout,
+            "status.frozen.ticks": frozen_ticks,
+            "carbon.gained": carbon_gained,
+            "carbon.lost": carbon_lost,
+            "carbon.amount": max(0, carbon_gained - carbon_lost),
+            "heart.gained": heart_gained,
+            "heart.lost": max(0, int(heart_gained * random.uniform(0.3, 0.8))),
+            "heart.amount": heart_gained,
+            "silicon.gained": silicon_gained,
+            "silicon.lost": int(silicon_gained * random.uniform(0.2, 0.6)),
+            "silicon.amount": silicon_gained,
+            "oxygen.gained": oxygen_gained,
+            "oxygen.lost": int(oxygen_gained * random.uniform(0.1, 0.5)),
+            "oxygen.amount": oxygen_gained,
+            "germanium.gained": germanium_gained,
+            "germanium.lost": int(germanium_gained * random.uniform(0.1, 0.4)),
+            "germanium.amount": germanium_gained,
+            "aligner.gained": aligner_gained,
+            "aligner.lost": int(aligner_gained * random.uniform(0, 0.3)),
+            "scrambler.gained": scrambler_gained,
+            "scrambler.lost": int(scrambler_gained * random.uniform(0, 0.3)),
+            "actions.swap": int(random.uniform(0, 10) * base_perf),
+            "status.max_steps_without_motion": int(random.uniform(0, 30) / base_perf),
+            "junction.aligned_by_agent": junction_aligned,
+            "junction.scrambled_by_agent": junction_scrambled,
+            "aligned.junction.held": aligned_held,
+            "aligned.junction.gained": aligned_gained,
+            "aligned.junction.lost": aligned_lost,
+            # Collective/game stats (namespaced)
+            "collective.carbon.deposited": int(carbon_gained * random.uniform(0.3, 0.7)),
+            "collective.oxygen.deposited": int(oxygen_gained * random.uniform(0.3, 0.7)),
+            "collective.aligned.junction.held": aligned_held,
+            "game.total_junctions": random.randint(8, 16),
+            "game.episode_length": steps,
+        }
+
+        # Calculate reward based on performance (using real CogsGuard metrics)
+        reward = (
+            junction_aligned * 0.5
+            + heart_gained * 0.15
+            + carbon_gained * 0.005
+            + vibe_change_success * 0.08
+            + move_success * 0.001
+            - frozen_ticks * 0.002
+            - move_failed * 0.01
+            + random.uniform(-0.5, 0.5)
+        ) * base_perf
+
+        if is_exceptional and 35 <= i <= 39:
+            reward *= 2.5  # Best episodes have high rewards
+
+        # Add reward decline in last 20 episodes to trigger declining rewards diagnostic
+        if i >= 60:
+            decline_factor = 1.0 - (i - 60) * 0.03  # 3% decline per episode
+            reward *= max(0.3, decline_factor)
+
+        reward = max(0, reward)
+
+        # Status
+        status = "failed" if is_failed else "completed"
+        error_type = random.choice(["timeout", "oom", "crash"]) if is_failed else None
+
+        episode = EpisodeData(
+            episode_id=f"demo-ep-{i:04d}-{random.randint(1000, 9999)}",
+            job_id=f"demo-job-{i:03d}",
+            opponent_name=opponent_name,
+            opponent_version=opponent_version,
+            team_composition=team_comp,
+            reward=round(reward, 4),
+            status=status,
+            error_type=error_type,
+            steps=steps,
+            metrics=metrics,
+        )
+        episodes.append(episode)
+
+    # Compute derived metrics
+    derived = compute_derived_metrics(episodes)
+
+    return DashboardData(
+        policy=PolicyVersion(
+            id="demo-policy-001",
+            name="demo-policy",
+            version=42,
+            rank=7,
+            score=1.234,
+            matches=80,
+        ),
+        episodes=episodes,
+        season="demo",
+        generated_at=datetime.now().isoformat(),
+        derived=derived,
     )
 
 
@@ -519,11 +1166,42 @@ def main():
     parser.add_argument("--season", default=DEFAULT_SEASON, help="Tournament season")
     parser.add_argument("--local-results", help="Directory of episode result JSON files (local mode)")
     parser.add_argument("--policy-name", help="Policy name for local mode (default: directory name)")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Generate dashboard with sample data to demonstrate features",
+    )
     args = parser.parse_args()
 
     console.print("[bold blue]CoGames Policy Dashboard Generator[/bold blue]\n")
 
-    if args.local_results:
+    if args.demo:
+        # Demo mode - generate sample data
+        console.print("[bold magenta]Demo mode:[/bold magenta] Generating sample data...\n")
+        data = generate_demo_data()
+        console.print(f"[green]Generated {len(data.episodes)} demo episodes[/green]")
+        console.print(f"  Policy: {data.policy.name}:v{data.policy.version}")
+        console.print(f"  Rank: #{data.policy.rank}, Score: {data.policy.score:.3f}")
+
+        # Show diagnostic summary
+        if data.derived.diagnostics:
+            console.print(f"\n[yellow]Diagnostics triggered: {len(data.derived.diagnostics)}[/yellow]")
+            for diag in data.derived.diagnostics[:3]:
+                console.print(f"  - {diag[:60]}...")
+
+        # Generate dashboard
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = args.output or f"cg_dashboard_demo_{timestamp}.html"
+        output_path = Path(output_path)
+
+        console.print("\n[bold]Generating dashboard...[/bold]")
+        generate_dashboard(data, output_path)
+
+        console.print(f"\n[bold green]Dashboard saved to:[/bold green] {output_path}")
+        console.print("[dim]Opening in browser...[/dim]")
+        webbrowser.open(f"file://{output_path.absolute()}")
+
+    elif args.local_results:
         # Local mode - no auth needed
         results_dir = Path(args.local_results)
         if not results_dir.is_dir():
@@ -630,7 +1308,74 @@ def data_to_dict(data: DashboardData) -> dict:
         ],
         "season": data.season,
         "generated_at": data.generated_at,
+        "derived": {
+            "kpis": {
+                "move_efficiency": data.derived.move_efficiency,
+                "action_success_rate": data.derived.action_success_rate,
+                "vibe_change_rate": data.derived.vibe_change_rate,
+                "resource_retention": data.derived.resource_retention,
+                "freeze_vulnerability": data.derived.freeze_vulnerability,
+                "junction_control_rate": data.derived.junction_control_rate,
+                "alignment_stability": data.derived.alignment_stability,
+                "net_alignment_rate": data.derived.net_alignment_rate,
+                "noop_rate": data.derived.noop_rate,
+                "resource_efficiency_per_step": data.derived.resource_efficiency_per_step,
+                "hearts_to_junction_rate": data.derived.hearts_to_junction_rate,
+                "reward_consistency": data.derived.reward_consistency,
+                "reward_nonzero_pct": data.derived.reward_nonzero_pct,
+            },
+            "strategy_profile": {
+                "aggressive": data.derived.profile_aggressive,
+                "defensive": data.derived.profile_defensive,
+                "resource_hoarder": data.derived.profile_resource_hoarder,
+                "junction_hunter": data.derived.profile_junction_hunter,
+                "mobile_scout": data.derived.profile_mobile_scout,
+            },
+            "diagnostics": data.derived.diagnostics,
+            "benchmarks": compute_benchmark_tiers(data.episodes, data.derived),
+            "team_comp": [
+                {
+                    "composition": tc.composition,
+                    "count": tc.count,
+                    "avg_reward": tc.avg_reward,
+                    "avg_move_efficiency": tc.avg_move_efficiency,
+                    "avg_junction_aligned": tc.avg_junction_aligned,
+                    "avg_resource_gained": tc.avg_resource_gained,
+                }
+                for tc in compute_team_comp_analysis(data.episodes)
+            ],
+            "opponent_metrics": _compute_opponent_metrics(data.episodes),
+        },
     }
+
+
+def _compute_opponent_metrics(episodes: list[EpisodeData]) -> dict[str, Any]:
+    """Pre-compute per-opponent metric aggregation."""
+    by_opponent: dict[str, list[EpisodeData]] = {}
+    for e in episodes:
+        if e.status == "completed":
+            by_opponent.setdefault(e.opponent_name, []).append(e)
+
+    result = {}
+    for opp, eps in by_opponent.items():
+        n = len(eps)
+        total_reward = sum(e.reward for e in eps)
+        avg_reward = total_reward / n
+        summed_metrics: dict[str, float] = {}
+        for e in eps:
+            for k, v in e.metrics.items():
+                if isinstance(v, (int, float)):
+                    summed_metrics[k] = summed_metrics.get(k, 0) + v
+
+        avg_metrics = {k: v / n for k, v in summed_metrics.items()}
+        result[opp] = {
+            "count": n,
+            "total_reward": round(total_reward, 4),
+            "avg_reward": round(avg_reward, 4),
+            "avg_metrics": {k: round(v, 4) for k, v in avg_metrics.items()},
+        }
+
+    return result
 
 
 def create_minimal_dashboard(data: DashboardData) -> str:

@@ -13,67 +13,77 @@ Reference guide for analyzing CoGames tournament policy performance. Used by ana
 
 ### Agent Action Metrics
 
-Aggregated across all agents controlled by your policy.
+Aggregated across all agents controlled by your policy. CogsGuard has three actions: `move`, `noop`, and `change_vibe`.
 
-| Metric         | Description                          | Typical Range | Good Value        |
-| -------------- | ------------------------------------ | ------------- | ----------------- |
-| `move.success` | Successful movement actions          | 5000-9000     | >7000             |
-| `move.failed`  | Failed movement attempts             | 1000-3000     | <2000             |
-| `move.blocked` | Movement blocked by obstacles/agents | 500-2000      | <1500             |
-| `noop`         | No-operation actions                 | 200-2000      | Context-dependent |
+| Metric                       | Description                       | Typical Range | Good Value        |
+| ---------------------------- | --------------------------------- | ------------- | ----------------- |
+| `action.move.success`        | Successful movement actions       | 200-900       | >500              |
+| `action.move.failed`         | Failed movement attempts          | 10-250        | <100              |
+| `action.noop.success`        | No-operation actions              | 30-150        | Context-dependent |
+| `action.change_vibe.success` | Successful vibe changes           | 0-50          | Context-dependent |
+| `action.change_vibe.failed`  | Failed vibe change attempts       | 0-20          | <10               |
+| `action.failed`              | Total failed actions              | varies        | Lower is better   |
+| `action.timeout`             | Action timeouts (policy too slow) | 0-40          | <5                |
+| `actions.swap`               | Successful agent swaps            | 0-20          | Context-dependent |
 
 ### Resource Metrics
 
-| Metric                | Description                      | Typical Range | Notes |
-| --------------------- | -------------------------------- | ------------- | ----- |
-| `carbon.gathered`     | Carbon extracted from extractors | 0-500         |       |
-| `carbon.deposited`    | Carbon deposited at hub          | 0-400         |       |
-| `oxygen.gathered`     | Oxygen extracted                 | 0-500         |       |
-| `oxygen.deposited`    | Oxygen deposited                 | 0-400         |       |
-| `silicon.gathered`    | Silicon extracted                | 0-500         |       |
-| `silicon.deposited`   | Silicon deposited                | 0-400         |       |
-| `germanium.gathered`  | Germanium extracted              | 0-500         |       |
-| `germanium.deposited` | Germanium deposited              | 0-400         |       |
+Resources tracked with `.gained`, `.lost`, and `.amount` suffixes.
+
+| Metric             | Description            | Typical Range | Notes                  |
+| ------------------ | ---------------------- | ------------- | ---------------------- |
+| `carbon.gained`    | Carbon collected       | 50-180        | Element resource       |
+| `carbon.lost`      | Carbon deposited/used  | 10-70         |                        |
+| `carbon.amount`    | Net carbon held        | 0-150         |                        |
+| `oxygen.gained`    | Oxygen collected       | 10-50         | Element resource       |
+| `oxygen.lost`      | Oxygen deposited/used  | 0-30          |                        |
+| `oxygen.amount`    | Net oxygen held        | 0-50          |                        |
+| `silicon.gained`   | Silicon collected      | 20-80         | Element resource       |
+| `silicon.lost`     | Silicon deposited/used | 0-40          |                        |
+| `silicon.amount`   | Net silicon held       | 0-80          |                        |
+| `germanium.gained` | Germanium collected    | 0-50          | Rarer element          |
+| `germanium.lost`   | Germanium deposited    | 0-30          |                        |
+| `germanium.amount` | Net germanium held     | 0-50          |                        |
+| `heart.gained`     | Hearts collected       | 3-20          | Required for alignment |
+| `heart.lost`       | Hearts used/lost       | 0-15          |                        |
+| `heart.amount`     | Net hearts held        | 0-20          |                        |
 
 ### Gear Metrics
 
 | Metric             | Description            | Notes                       |
 | ------------------ | ---------------------- | --------------------------- |
-| `miner.gained`     | Miner gear pickups     | Enables resource extraction |
-| `miner.lost`       | Miner gear lost        | Death or dropped            |
 | `aligner.gained`   | Aligner gear pickups   | Enables junction alignment  |
 | `aligner.lost`     | Aligner gear lost      |                             |
 | `scrambler.gained` | Scrambler gear pickups | Enables junction scrambling |
 | `scrambler.lost`   | Scrambler gear lost    |                             |
-| `scout.gained`     | Scout gear pickups     | Enables exploration bonuses |
-| `scout.lost`       | Scout gear lost        |                             |
-| `heart.gained`     | Hearts collected       | Required for align/scramble |
-| `heart.lost`       | Hearts used/lost       |                             |
 
-### Junction Metrics (Collective)
+### Junction Metrics
 
-| Metric                  | Description                     | Notes                 |
-| ----------------------- | ------------------------------- | --------------------- |
-| `cogs.junction`         | Current cogs-aligned junctions  | End-of-episode count  |
-| `cogs.junction.gained`  | Junctions aligned to cogs       | During episode        |
-| `cogs.junction.lost`    | Cogs junctions lost             | Scrambled by opponent |
-| `clips.junction`        | Current clips-aligned junctions |                       |
-| `clips.junction.gained` | Junctions aligned to clips      |                       |
-| `clips.junction.lost`   | Clips junctions lost            |                       |
+| Metric                        | Description                       | Notes                   |
+| ----------------------------- | --------------------------------- | ----------------------- |
+| `junction.aligned_by_agent`   | Junctions aligned by our agents   | Primary junction metric |
+| `junction.scrambled_by_agent` | Junctions scrambled by our agents |                         |
+| `aligned.junction.gained`     | Collective junctions aligned      | During episode          |
+| `aligned.junction.lost`       | Aligned junctions lost            | Scrambled by opponent   |
+| `aligned.junction.held`       | Ticks junctions held aligned      | Stability measure       |
 
-### Influence Metrics
+### Collective Metrics
 
-| Metric             | Description           | Typical Range |
-| ------------------ | --------------------- | ------------- |
-| `influence.gained` | Influence accumulated | 0-50000       |
-| `influence.lost`   | Influence spent/lost  | 0-10000       |
+| Metric                            | Description                     | Notes              |
+| --------------------------------- | ------------------------------- | ------------------ |
+| `collective.carbon.deposited`     | Carbon deposited to collective  | Team resource pool |
+| `collective.oxygen.deposited`     | Oxygen deposited to collective  |                    |
+| `collective.silicon.deposited`    | Silicon deposited to collective |                    |
+| `collective.germanium.deposited`  | Germanium deposited             |                    |
+| `collective.<resource>.withdrawn` | Resources withdrawn             |                    |
+| `collective.<resource>.amount`    | Current collective inventory    |                    |
 
-### Combat/HP Metrics
+### Status Metrics
 
-| Metric      | Description     | Notes                      |
-| ----------- | --------------- | -------------------------- |
-| `hp.gained` | HP regenerated  | From healing stations      |
-| `hp.lost`   | HP damage taken | From combat or environment |
+| Metric                            | Description                | Notes                      |
+| --------------------------------- | -------------------------- | -------------------------- |
+| `status.frozen.ticks`             | Ticks spent frozen         | From combat or environment |
+| `status.max_steps_without_motion` | Max consecutive idle steps | Stuck detection            |
 
 ---
 
@@ -83,36 +93,39 @@ Aggregated across all agents controlled by your policy.
 
 These metrics have the strongest correlation with tournament score:
 
-1. **Junction Control** - `cogs.junction.gained`, `clips.junction.gained`
+1. **Junction Control** - `junction.aligned_by_agent`
    - Active junction manipulation is the biggest differentiator between top and bottom policies
    - Zero junction activity almost guarantees low scores
 
-2. **Influence** - `influence.gained`
-   - Proxy for overall game participation and territorial control
-   - Top policies: 5000-15000 avg
-   - Bottom policies: 0-1000 avg
-
-3. **Reward Distribution**
+2. **Reward Distribution**
    - Consistent non-zero rewards beats occasional high scores
    - Target: >80% of episodes with reward > 0.1
 
+3. **Average Reward**
+   - Direct measure of policy quality
+   - Bottom 50%: <1.0, Top 10%: 2.0-4.0, Elite: 4.0+
+
 ### Tier 2: Efficiency Metrics
 
-4. **Resource Efficiency** - `{resource}.deposited` / steps
-   - Good: >0.05 resources per step
-   - Indicates agents are gathering and depositing, not stuck
+4. **Resource Efficiency** - `sum(resource.gained)` / steps
+   - Good: >0.1 resources per step
+   - Indicates agents are gathering and not stuck
 
-5. **Hearts Usage** - `junction.gained` / `heart.lost`
+5. **Hearts-to-Junction Rate** - `junction.aligned_by_agent` / `heart.lost`
    - Efficiency of converting hearts to junction control
    - Good: >0.5 junctions per heart
 
+6. **Reward Consistency** - `1 - (std/mean)` clamped 0-1
+   - How consistent is reward across episodes
+   - Good: >0.5
+
 ### Tier 3: Health Indicators
 
-6. **Movement Success Rate** - `move.success` / (`move.success` + `move.failed`)
+7. **Movement Success Rate** - `action.move.success` / (`action.move.success` + `action.move.failed`)
    - Good: >75%
-   - Low rates indicate pathfinding issues or opponent blocking
+   - Low rates indicate pathfinding issues or blocked paths
 
-7. **Noop Rate** - `noop` / total_actions
+8. **Noop Rate** - `action.noop.success` / total_actions
    - Good: <15%
    - High rates indicate policy indecision or stuck states
 
@@ -120,37 +133,37 @@ These metrics have the strongest correlation with tournament score:
 
 ## Diagnostic Patterns
 
-### High move_blocked + Low reward
+### High movement failures + Low reward
 
-**Diagnosis:** Pathfinding issue or opponent crash
+**Diagnosis:** Pathfinding issue or blocked paths
 
-- Check if opponent policy crashed mid-game (common with CCC policies)
-- Crashed agents become immobile obstacles
-- Look for: `move.blocked` > 5000, movement success < 30%
+- Agents may be stuck against walls or other agents
+- Look for: movement success < 70%, `action.move.failed` > 100 per episode
 
 ### Zero junction activity + Non-zero hearts
 
 **Diagnosis:** Aligner/scrambler not activating
 
 - Policy acquires hearts but doesn't use them
-- Check gear acquisition: does policy get aligner/scrambler gear?
+- Check gear acquisition: does policy get aligner gear?
 - May indicate goal-tree or decision logic bug
 
-### High noop count
+### High noop rate
 
 **Diagnosis:** Policy indecision or stuck state
 
-- Noop > 2000 suggests policy frequently choosing to do nothing
+- `noop_rate` > 15% suggests policy frequently choosing to do nothing
 - May indicate: unclear goals, navigation deadlock, or bug
 
-### High rewards with one opponent, zero with another
+### Matchup disparity
 
 **Diagnosis:** Opponent-specific interaction issue
 
+- Best opponent avg > 2.0 and worst opponent avg < 0.5
 - Some opponent behaviors may break your policy's assumptions
-- Check if low-scoring opponent crashes or has unusual behavior
+- Check if low-scoring opponent has unusual behavior
 
-### Decreasing rewards over episode index
+### Declining rewards over episode index
 
 **Diagnosis:** Learning/adaptation problem or meta-game shift
 
@@ -159,13 +172,20 @@ These metrics have the strongest correlation with tournament score:
   - Bug introduced in recent policy version
   - Seasonal meta-game change
 
-### High HP lost + Low reward
+### High freeze time + Low reward
 
-**Diagnosis:** Losing combat encounters
+**Diagnosis:** Spending too much time frozen
 
-- Policy may be engaging in fights it can't win
-- Or: not retreating when low HP
-- Check survival rate and retreat behavior
+- Episodes where frozen > 15% of steps AND reward < 50% of average
+- Policy may be in contested territory too long
+- Or: not retreating when at risk of being frozen
+
+### High action timeouts
+
+**Diagnosis:** Policy inference too slow
+
+- `action.timeout` > 5 per episode indicates latency issues
+- Policy may need optimization or simpler architecture
 
 ---
 
@@ -173,14 +193,13 @@ These metrics have the strongest correlation with tournament score:
 
 Based on top-10 leaderboard policies (as of current season):
 
-| Metric             | Bottom 50% | Top 10%    | Elite (#1-3) |
-| ------------------ | ---------- | ---------- | ------------ |
-| Avg Reward         | 0-1.0      | 2.0-4.0    | 4.0+         |
-| Junction Aligned   | 0-2        | 4-8        | 8+           |
-| Influence Gained   | 0-2000     | 5000-15000 | 10000+       |
-| Move Success Rate  | 60-75%     | 80-90%     | 85-95%       |
-| Resource Total     | 50-150     | 200-400    | 300+         |
-| Non-Zero Episode % | 10-40%     | 60-80%     | 90%+         |
+| Metric             | Bottom 50% | Top 10% | Elite (#1-3) |
+| ------------------ | ---------- | ------- | ------------ |
+| Avg Reward         | <1.0       | 2.0-4.0 | 4.0+         |
+| Junction Aligned   | <2         | 4-8     | 8+           |
+| Move Success Rate  | <75%       | 80-85%  | 85%+         |
+| Resource Total     | <150       | 200-300 | 300+         |
+| Non-Zero Episode % | <40%       | 60-80%  | 90%+         |
 
 ---
 
@@ -291,3 +310,51 @@ behavior.
 - Other failure
 - Cause: Infrastructure issue, network, etc.
 - Action: Check logs, may be transient
+
+---
+
+## Dashboard Features
+
+How the dashboard implements each analysis workflow from this guide.
+
+### Debugging a Score Regression
+
+| Workflow Step                | Dashboard Feature                                           |
+| ---------------------------- | ----------------------------------------------------------- |
+| Compare reward distributions | Overview tab: reward histogram + KPI cards                  |
+| Check failure rate           | Failures tab: error breakdown chart + table                 |
+| Compare behavioral metrics   | Overview tab: High/Low comparison table (top vs bottom 20%) |
+| Identify changed matchups    | Co-players tab: click opponent row for metric comparison    |
+| Review low-scoring episodes  | Episodes tab: sort by reward, expand for details            |
+
+### Understanding a Bad Matchup
+
+| Workflow Step                 | Dashboard Feature                                           |
+| ----------------------------- | ----------------------------------------------------------- |
+| Segment by opponent           | Co-players tab: click opponent row to filter                |
+| Compare metrics vs overall    | Co-players tab: opponent comparison panel (>2x highlighted) |
+| Check team composition        | Overview tab: Team Composition cards                        |
+| Watch replay of worst episode | Episodes tab: sort by reward ascending                      |
+
+### Identifying Behavioral Gaps
+
+| Workflow Step                  | Dashboard Feature                                                   |
+| ------------------------------ | ------------------------------------------------------------------- |
+| Benchmark against top policies | Overview tab: Benchmarks table (Bottom 50% / Top 10% / Elite tiers) |
+| Check role coverage            | Behavior tab: Strategy Profile radar chart                          |
+| Analyze high vs low episodes   | Overview tab: High/Low comparison with >2x gap highlighting         |
+| Look for zero-count metrics    | Behavior tab: Unused Capabilities banner                            |
+
+### Diagnostic Patterns
+
+All diagnostic patterns from this guide are auto-detected and shown in the Overview tab's diagnostic panel. Click any
+diagnostic to see affected episodes:
+
+- High movement failures
+- Action timeouts
+- High noop rate
+- Matchup disparity
+- Declining rewards
+- High freeze time + low reward
+- Zero junction alignment
+- Unused capabilities (zero-count detection)

@@ -1,1305 +1,2957 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Policy Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --bg-primary: #0d1117;
-            --bg-secondary: #161b22;
-            --bg-tertiary: #21262d;
-            --text-primary: #f0f6fc;
-            --text-secondary: #8b949e;
-            --border-color: #30363d;
-            --accent-green: #22c55e;
-            --accent-red: #ef4444;
-            --accent-yellow: #eab308;
-            --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            line-height: 1.6;
-            display: flex;
-            min-height: 100vh;
-        }
-
-        /* Sidebar / Query Builder */
-        .sidebar {
-            width: 280px;
-            background: var(--bg-secondary);
-            border-right: 1px solid var(--border-color);
-            padding: 1rem;
-            overflow-y: auto;
-            flex-shrink: 0;
-            transition: width 0.2s, padding 0.2s;
-        }
-
-        .sidebar.collapsed {
-            width: 48px;
-            padding: 0.5rem;
-            overflow: hidden;
-        }
-
-        .sidebar.collapsed .sidebar-content {
-            display: none;
-        }
-
-        .sidebar.collapsed .sidebar-toggle {
-            transform: rotate(180deg);
-        }
-
-        .sidebar-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.75rem;
-        }
-
-        .sidebar-toggle {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 1.25rem;
-            padding: 0.25rem;
-            transition: transform 0.2s;
-        }
-
-        .sidebar-toggle:hover {
-            color: var(--text-primary);
-        }
-
-        .sidebar h3 {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin: 0;
-        }
-
-        .sidebar.collapsed h3 {
-            display: none;
-        }
-
-        .filter-group {
-            margin-bottom: 1.5rem;
-        }
-
-        .filter-group label {
-            display: block;
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            margin-bottom: 0.25rem;
-        }
-
-        .filter-group select,
-        .filter-group input {
-            width: 100%;
-            padding: 0.5rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .filter-count {
-            padding: 0.75rem;
-            background: var(--bg-tertiary);
-            border-radius: 6px;
-            text-align: center;
-            margin-bottom: 1rem;
-        }
-
-        .filter-count .count {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: var(--accent-green);
-        }
-
-        .btn {
-            padding: 0.5rem 1rem;
-            border: 1px solid var(--border-color);
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.875rem;
-            transition: all 0.2s;
-        }
-
-        .btn:hover { background: var(--border-color); }
-        .btn-primary { background: var(--accent-green); border-color: var(--accent-green); color: #000; }
-        .btn-primary:hover { background: #16a34a; }
-
-        /* Main Content */
-        .main {
-            flex: 1;
-            padding: 1.5rem;
-            overflow-y: auto;
-        }
-
-        /* Header */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .header h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-
-        .header-stats {
-            display: flex;
-            gap: 1.5rem;
-        }
-
-        .header-stat {
-            text-align: right;
-        }
-
-        .header-stat .value {
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .header-stat .label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-        }
-
-        /* Tabs */
-        .tabs {
-            display: flex;
-            gap: 0.25rem;
-            margin-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .tab {
-            padding: 0.75rem 1.25rem;
-            border: none;
-            background: transparent;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 0.95rem;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .tab:hover { color: var(--text-primary); }
-        .tab.active {
-            color: var(--accent-green);
-            border-bottom-color: var(--accent-green);
-        }
-
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        /* Cards */
-        .cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
-        }
-
-        .card-title {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 0.25rem;
-        }
-
-        .card-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-        }
-
-        .card-subtitle {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-        }
-
-        .trend-up { color: var(--accent-green); }
-        .trend-down { color: var(--accent-red); }
-
-        /* Charts */
-        .chart-container {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .chart-container canvas {
-            max-height: 300px;
-        }
-
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .chart-title {
-            font-size: 1rem;
-            font-weight: 600;
-        }
-
-        /* Tables */
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .data-table th,
-        .data-table td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .data-table th {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            cursor: pointer;
-        }
-
-        .data-table th:hover { color: var(--text-primary); }
-
-        .data-table tr:hover { background: var(--bg-tertiary); }
-
-        .status-badge {
-            display: inline-block;
-            padding: 0.125rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-
-        .status-completed { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
-        .status-failed { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
-
-        /* Comparison boxes */
-        .comparison {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
-        }
-
-        .comparison-box {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1rem;
-        }
-
-        .comparison-box h4 {
-            margin-bottom: 0.75rem;
-            font-size: 0.95rem;
-        }
-
-        .comparison-box.high { border-color: var(--accent-green); }
-        .comparison-box.low { border-color: var(--accent-red); }
-
-        /* Insights */
-        .insights {
-            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1.5rem;
-        }
-
-        .insights h4 {
-            color: var(--accent-green);
-            margin-bottom: 0.5rem;
-        }
-
-        .insights ul {
-            list-style: none;
-            padding-left: 1rem;
-        }
-
-        .insights li {
-            position: relative;
-            margin-bottom: 0.5rem;
-        }
-
-        .insights li::before {
-            content: '→';
-            position: absolute;
-            left: -1rem;
-            color: var(--accent-green);
-        }
-
-        /* Utility */
-        .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
-        .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
-
-        /* Typeahead Multi-select */
-        .typeahead-container {
-            position: relative;
-        }
-
-        .typeahead-input {
-            width: 100%;
-            padding: 0.5rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .typeahead-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            max-height: 200px;
-            overflow-y: auto;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            border-top: none;
-            border-radius: 0 0 6px 6px;
-            z-index: 100;
-            display: none;
-        }
-
-        .typeahead-dropdown.show { display: block; }
-
-        .typeahead-option {
-            padding: 0.5rem;
-            cursor: pointer;
-            font-size: 0.875rem;
-        }
-
-        .typeahead-option:hover { background: var(--border-color); }
-        .typeahead-option.selected { background: rgba(34, 197, 94, 0.2); }
-
-        .selected-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.25rem;
-            margin-top: 0.5rem;
-        }
-
-        .selected-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.125rem 0.5rem;
-            background: var(--accent-green);
-            color: #000;
-            border-radius: 4px;
-            font-size: 0.75rem;
-        }
-
-        .selected-tag .remove {
-            cursor: pointer;
-            font-weight: bold;
-            margin-left: 0.25rem;
-        }
-
-        .selected-tag .remove:hover { color: var(--accent-red); }
+      :root {
+        --bg-primary: #0d1117;
+        --bg-secondary: #161b22;
+        --bg-tertiary: #21262d;
+        --text-primary: #f0f6fc;
+        --text-secondary: #8b949e;
+        --border-color: #30363d;
+        --accent-green: #22c55e;
+        --accent-red: #ef4444;
+        --accent-yellow: #eab308;
+        --accent-blue: #3b82f6;
+        --accent-purple: #8b5cf6;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        line-height: 1.6;
+        display: flex;
+        min-height: 100vh;
+      }
+
+      /* Sidebar / Query Builder */
+      .sidebar {
+        width: 280px;
+        background: var(--bg-secondary);
+        border-right: 1px solid var(--border-color);
+        padding: 1rem;
+        overflow-y: auto;
+        flex-shrink: 0;
+        transition:
+          width 0.2s,
+          padding 0.2s;
+      }
+
+      .sidebar.collapsed {
+        width: 48px;
+        padding: 0.5rem;
+        overflow: hidden;
+      }
+
+      .sidebar.collapsed .sidebar-content {
+        display: none;
+      }
+
+      .sidebar.collapsed .sidebar-toggle {
+        transform: rotate(180deg);
+      }
+
+      .sidebar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+
+      .sidebar-toggle {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 1.25rem;
+        padding: 0.25rem;
+        transition: transform 0.2s;
+      }
+
+      .sidebar-toggle:hover {
+        color: var(--text-primary);
+      }
+
+      .sidebar h3 {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0;
+      }
+
+      .sidebar.collapsed h3 {
+        display: none;
+      }
+
+      .filter-group {
+        margin-bottom: 1.5rem;
+      }
+
+      .filter-group label {
+        display: block;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+      }
+
+      .filter-group select,
+      .filter-group input {
+        width: 100%;
+        padding: 0.5rem;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: var(--text-primary);
+        font-size: 0.875rem;
+      }
+
+      .filter-count {
+        padding: 0.75rem;
+        background: var(--bg-tertiary);
+        border-radius: 6px;
+        text-align: center;
+        margin-bottom: 1rem;
+      }
+
+      .filter-count .count {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: var(--accent-green);
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        border: 1px solid var(--border-color);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+      }
+
+      .btn:hover {
+        background: var(--border-color);
+      }
+      .btn-primary {
+        background: var(--accent-green);
+        border-color: var(--accent-green);
+        color: #000;
+      }
+      .btn-primary:hover {
+        background: #16a34a;
+      }
+
+      /* Main Content */
+      .main {
+        flex: 1;
+        padding: 1.5rem;
+        overflow-y: auto;
+      }
+
+      /* Header */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .header h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+      }
+
+      .header-stats {
+        display: flex;
+        gap: 1.5rem;
+      }
+
+      .header-stat {
+        text-align: right;
+      }
+
+      .header-stat .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+      }
+
+      .header-stat .label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+      }
+
+      /* Tabs */
+      .tabs {
+        display: flex;
+        gap: 0.25rem;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .tab {
+        padding: 0.75rem 1.25rem;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-size: 0.95rem;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+      }
+
+      .tab:hover {
+        color: var(--text-primary);
+      }
+      .tab.active {
+        color: var(--accent-green);
+        border-bottom-color: var(--accent-green);
+      }
+
+      .tab-content {
+        display: none;
+      }
+      .tab-content.active {
+        display: block;
+      }
+
+      /* Cards */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1rem;
+      }
+
+      .card-title {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.25rem;
+      }
+
+      .card-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+      }
+
+      .card-subtitle {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+
+      .trend-up {
+        color: var(--accent-green);
+      }
+      .trend-down {
+        color: var(--accent-red);
+      }
+
+      /* Charts */
+      .chart-container {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .chart-container canvas {
+        max-height: 300px;
+      }
+
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      .chart-title {
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      /* Tables */
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .data-table th,
+      .data-table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .data-table th {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+      }
+
+      .data-table th:hover {
+        color: var(--text-primary);
+      }
+
+      .data-table tr:hover {
+        background: var(--bg-tertiary);
+      }
+
+      .status-badge {
+        display: inline-block;
+        padding: 0.125rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .status-completed {
+        background: rgba(34, 197, 94, 0.2);
+        color: var(--accent-green);
+      }
+      .status-failed {
+        background: rgba(239, 68, 68, 0.2);
+        color: var(--accent-red);
+      }
+
+      /* Comparison boxes */
+      .comparison {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+
+      .comparison-box {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 1rem;
+      }
+
+      .comparison-box h4 {
+        margin-bottom: 0.75rem;
+        font-size: 0.95rem;
+      }
+
+      .comparison-box.high {
+        border-color: var(--accent-green);
+      }
+      .comparison-box.low {
+        border-color: var(--accent-red);
+      }
+
+      /* Insights */
+      .insights {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .insights h4 {
+        color: var(--accent-green);
+        margin-bottom: 0.5rem;
+      }
+
+      .insights ul {
+        list-style: none;
+        padding-left: 1rem;
+      }
+
+      .insights li {
+        position: relative;
+        margin-bottom: 0.5rem;
+      }
+
+      .insights li::before {
+        content: '→';
+        position: absolute;
+        left: -1rem;
+        color: var(--accent-green);
+      }
+
+      /* Utility */
+      .mono {
+        font-family: 'SF Mono', 'Fira Code', monospace;
+      }
+      .truncate {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 150px;
+      }
+
+      /* Clickable KPI cards */
+      .card.clickable {
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .card.clickable:hover {
+        border-color: var(--accent-green);
+        transform: translateY(-2px);
+      }
+
+      /* Filter badge on tabs */
+      .tab .filter-badge {
+        display: inline-block;
+        background: var(--accent-green);
+        color: #000;
+        font-size: 0.65rem;
+        padding: 0.1rem 0.4rem;
+        border-radius: 8px;
+        margin-left: 0.5rem;
+        font-weight: 600;
+      }
+
+      /* Active filter indicator */
+      .active-filter-banner {
+        background: rgba(34, 197, 94, 0.15);
+        border: 1px solid var(--accent-green);
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .active-filter-banner .filter-text {
+        color: var(--accent-green);
+        font-size: 0.875rem;
+      }
+      .active-filter-banner .clear-btn {
+        background: transparent;
+        border: 1px solid var(--accent-green);
+        color: var(--accent-green);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.75rem;
+      }
+      .active-filter-banner .clear-btn:hover {
+        background: var(--accent-green);
+        color: #000;
+      }
+
+      /* Modal styles */
+      .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.2s;
+      }
+      .modal-overlay.show {
+        opacity: 1;
+        visibility: visible;
+      }
+      .modal {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        max-width: 800px;
+        width: 90%;
+        max-height: 80vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transform: translateY(-20px);
+        transition: transform 0.2s;
+      }
+      .modal-overlay.show .modal {
+        transform: translateY(0);
+      }
+      .modal-header {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+      }
+      .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+      }
+      .modal-close:hover {
+        color: var(--text-primary);
+      }
+      .modal-body {
+        padding: 1rem;
+        overflow-y: auto;
+        flex: 1;
+      }
+      .modal-stats {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+      .modal-stat {
+        background: var(--bg-tertiary);
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+      }
+      .modal-stat .value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--accent-green);
+      }
+      .modal-stat .label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+      }
+
+      /* Episode detail panel */
+      .episode-detail {
+        background: var(--bg-tertiary);
+        border-top: 1px solid var(--border-color);
+        padding: 1rem;
+        display: none;
+      }
+      .episode-detail.expanded {
+        display: block;
+      }
+      .episode-row.expanded {
+        background: var(--bg-secondary);
+      }
+      .episode-row {
+        cursor: pointer;
+      }
+      .episode-row:hover {
+        background: var(--bg-tertiary);
+      }
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+      }
+      .detail-section {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 0.75rem;
+      }
+      .detail-section h5 {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        margin-bottom: 0.5rem;
+        letter-spacing: 0.05em;
+      }
+      .detail-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.875rem;
+        padding: 0.25rem 0;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .detail-row:last-child {
+        border-bottom: none;
+      }
+      .detail-row .label {
+        color: var(--text-secondary);
+      }
+      .detail-row .value {
+        font-weight: 500;
+      }
+      .detail-row .value.good {
+        color: var(--accent-green);
+      }
+      .detail-row .value.bad {
+        color: var(--accent-red);
+      }
+
+      /* Worst/Best mini-tables in KPI cards */
+      .kpi-examples {
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border-color);
+        font-size: 0.75rem;
+      }
+      .kpi-examples-header {
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-secondary);
+        margin-bottom: 0.25rem;
+      }
+      .kpi-example {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.15rem 0;
+        cursor: pointer;
+      }
+      .kpi-example:hover {
+        color: var(--accent-green);
+      }
+      .kpi-example .opponent {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 100px;
+      }
+      .kpi-example.worst .metric {
+        color: var(--accent-red);
+      }
+      .kpi-example.best .metric {
+        color: var(--accent-green);
+      }
+
+      /* Clickable diagnostic items */
+      .insights li {
+        cursor: pointer;
+        transition: color 0.2s;
+      }
+      .insights li:hover {
+        color: var(--accent-green);
+      }
+
+      /* Typeahead Multi-select */
+      .typeahead-container {
+        position: relative;
+      }
+
+      .typeahead-input {
+        width: 100%;
+        padding: 0.5rem;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: var(--text-primary);
+        font-size: 0.875rem;
+      }
+
+      .typeahead-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        max-height: 200px;
+        overflow-y: auto;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+        z-index: 100;
+        display: none;
+      }
+
+      .typeahead-dropdown.show {
+        display: block;
+      }
+
+      .typeahead-option {
+        padding: 0.5rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+      }
+
+      .typeahead-option:hover {
+        background: var(--border-color);
+      }
+      .typeahead-option.selected {
+        background: rgba(34, 197, 94, 0.2);
+      }
+
+      .selected-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-top: 0.5rem;
+      }
+
+      .selected-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.125rem 0.5rem;
+        background: var(--accent-green);
+        color: #000;
+        border-radius: 4px;
+        font-size: 0.75rem;
+      }
+
+      .selected-tag .remove {
+        cursor: pointer;
+        font-weight: bold;
+        margin-left: 0.25rem;
+      }
+
+      .selected-tag .remove:hover {
+        color: var(--accent-red);
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <!-- Sidebar: Query Builder -->
     <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <h3>Filters</h3>
-            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle filters">◀</button>
+      <div class="sidebar-header">
+        <h3>Filters</h3>
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle filters">◀</button>
+      </div>
+
+      <div class="sidebar-content">
+        <div class="filter-count">
+          <div class="count" id="filtered-count">0</div>
+          <div>episodes match</div>
         </div>
 
-        <div class="sidebar-content">
-            <div class="filter-count">
-                <div class="count" id="filtered-count">0</div>
-                <div>episodes match</div>
-            </div>
-
-            <div class="filter-group">
-                <label>Co-player</label>
-                <div class="typeahead-container">
-                    <input type="text" class="typeahead-input" id="filter-coplayer-input" placeholder="Type to search...">
-                    <div class="typeahead-dropdown" id="filter-coplayer-dropdown"></div>
-                </div>
-                <div class="selected-tags" id="filter-coplayer-tags"></div>
-            </div>
-
-            <div class="filter-group">
-                <label>Team Composition</label>
-                <select id="filter-team" onchange="applyFilters()">
-                    <option value="">All</option>
-                    <option value="6v2">6v2 (majority)</option>
-                    <option value="4v4">4v4 (even)</option>
-                    <option value="2v6">2v6 (minority)</option>
-                </select>
-            </div>
-
-            <div class="filter-group">
-                <label>Status</label>
-                <select id="filter-status" onchange="applyFilters()">
-                    <option value="">All</option>
-                    <option value="completed">Completed</option>
-                    <option value="failed">Failed</option>
-                </select>
-            </div>
-
-            <div class="filter-group">
-                <label>Reward Range</label>
-                <div style="display: flex; gap: 0.5rem;">
-                    <input type="number" id="filter-reward-min" placeholder="Min" step="0.1" onchange="applyFilters()">
-                    <input type="number" id="filter-reward-max" placeholder="Max" step="0.1" onchange="applyFilters()">
-                </div>
-            </div>
-
-            <div class="filter-group">
-                <label>Metric Threshold</label>
-                <select id="filter-metric-name" onchange="applyFilters()">
-                    <option value="">Select metric...</option>
-                </select>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                    <select id="filter-metric-op" style="width: 60px;" onchange="applyFilters()">
-                        <option value=">">&gt;</option>
-                        <option value="<">&lt;</option>
-                        <option value="=">=</option>
-                    </select>
-                    <input type="number" id="filter-metric-value" placeholder="Value" onchange="applyFilters()">
-                </div>
-            </div>
-
-            <div>
-                <button class="btn" onclick="clearFilters()" style="width: 100%;">Clear Filters</button>
-            </div>
-
-            <div style="margin-top: 1.5rem;">
-                <button class="btn" onclick="exportData()" style="width: 100%;">Export JSON</button>
-            </div>
+        <div class="filter-group">
+          <label>Co-player</label>
+          <div class="typeahead-container">
+            <input type="text" class="typeahead-input" id="filter-coplayer-input" placeholder="Type to search..." />
+            <div class="typeahead-dropdown" id="filter-coplayer-dropdown"></div>
+          </div>
+          <div class="selected-tags" id="filter-coplayer-tags"></div>
         </div>
+
+        <div class="filter-group">
+          <label>Team Composition</label>
+          <select id="filter-team" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="6v2">6v2 (majority)</option>
+            <option value="4v4">4v4 (even)</option>
+            <option value="2v6">2v6 (minority)</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Status</label>
+          <select id="filter-status" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label>Reward Range</label>
+          <div style="display: flex; gap: 0.5rem">
+            <input type="number" id="filter-reward-min" placeholder="Min" step="0.1" onchange="applyFilters()" />
+            <input type="number" id="filter-reward-max" placeholder="Max" step="0.1" onchange="applyFilters()" />
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <label>Metric Threshold</label>
+          <select id="filter-metric-name" onchange="applyFilters()">
+            <option value="">Select metric...</option>
+          </select>
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem">
+            <select id="filter-metric-op" style="width: 60px" onchange="applyFilters()">
+              <option value=">">&gt;</option>
+              <option value="<">&lt;</option>
+              <option value="=">=</option>
+            </select>
+            <input type="number" id="filter-metric-value" placeholder="Value" onchange="applyFilters()" />
+          </div>
+        </div>
+
+        <div>
+          <button class="btn" onclick="clearFilters()" style="width: 100%">Clear Filters</button>
+        </div>
+
+        <div style="margin-top: 1.5rem">
+          <button class="btn" onclick="exportData()" style="width: 100%">Export JSON</button>
+        </div>
+      </div>
     </aside>
 
     <!-- Main Content -->
     <main class="main">
-        <header class="header">
+      <header class="header">
+        <div>
+          <h1 id="policy-name">Loading...</h1>
+          <p style="color: var(--text-secondary)" id="policy-meta"></p>
+        </div>
+        <div class="header-stats">
+          <div class="header-stat">
+            <div class="value" id="stat-rank">-</div>
+            <div class="label">Rank</div>
+          </div>
+          <div class="header-stat">
+            <div class="value" id="stat-score">-</div>
+            <div class="label">Score</div>
+          </div>
+          <div class="header-stat">
+            <div class="value" id="stat-episodes">-</div>
+            <div class="label">Episodes</div>
+          </div>
+        </div>
+      </header>
+
+      <nav class="tabs">
+        <button class="tab active" onclick="showTab('overview')">Overview</button>
+        <button class="tab" onclick="showTab('episodes')">Episodes</button>
+        <button class="tab" onclick="showTab('coplayers')">Co-players</button>
+        <button class="tab" onclick="showTab('behavior')">Behavior</button>
+        <button class="tab" onclick="showTab('failures')">Failures</button>
+      </nav>
+
+      <!-- Tab: Overview -->
+      <div id="overview" class="tab-content active">
+        <div class="cards" id="overview-cards"></div>
+
+        <!-- KPI Cards Section -->
+        <div style="margin-bottom: 1.5rem">
+          <h3 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.75rem">Efficiency KPIs</h3>
+          <div class="cards" id="kpi-cards"></div>
+        </div>
+
+        <!-- Benchmarks Section (Phase 2) -->
+        <div class="chart-container" id="benchmarks-section" style="display: none">
+          <div class="chart-header">
+            <span class="chart-title">Comparative Benchmarks</span>
+          </div>
+          <table class="data-table" id="benchmarks-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Your Value</th>
+                <th>Bottom 50%</th>
+                <th>Top 10%</th>
+                <th>Elite</th>
+                <th>Tier</th>
+              </tr>
+            </thead>
+            <tbody id="benchmarks-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Team Composition Section (Phase 4) -->
+        <div id="team-comp-section" style="display: none; margin-bottom: 1.5rem">
+          <h3 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.75rem">Team Composition</h3>
+          <div
+            id="team-comp-warning"
+            class="insights"
+            style="
+              display: none;
+              background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(249, 115, 22, 0.1) 100%);
+              border-color: rgba(239, 68, 68, 0.3);
+            "
+          >
+            <h4 style="color: var(--accent-red)" id="team-comp-warning-text"></h4>
+          </div>
+          <div class="chart-container" id="team-comp-chart-container" style="display: none; margin-bottom: 1rem">
+            <canvas id="team-comp-chart" height="200"></canvas>
+          </div>
+          <div class="cards" id="team-comp-cards"></div>
+        </div>
+
+        <!-- Diagnostic Insights -->
+        <div class="insights" id="diagnostic-insights" style="display: none">
+          <h4>Diagnostic Alerts</h4>
+          <ul id="diagnostic-list"></ul>
+        </div>
+
+        <div class="chart-container">
+          <div class="chart-header">
+            <span class="chart-title">Reward Distribution</span>
             <div>
-                <h1 id="policy-name">Loading...</h1>
-                <p style="color: var(--text-secondary);" id="policy-meta"></p>
+              <button class="btn" onclick="setRewardChart('histogram')">Histogram</button>
+              <button class="btn" onclick="setRewardChart('scatter')">Scatter</button>
             </div>
-            <div class="header-stats">
-                <div class="header-stat">
-                    <div class="value" id="stat-rank">-</div>
-                    <div class="label">Rank</div>
-                </div>
-                <div class="header-stat">
-                    <div class="value" id="stat-score">-</div>
-                    <div class="label">Score</div>
-                </div>
-                <div class="header-stat">
-                    <div class="value" id="stat-episodes">-</div>
-                    <div class="label">Episodes</div>
-                </div>
-            </div>
-        </header>
+          </div>
+          <canvas id="reward-chart" height="250"></canvas>
+        </div>
+        <div class="insights" id="overview-insights"></div>
+        <div class="comparison" id="high-low-comparison"></div>
+      </div>
 
-        <nav class="tabs">
-            <button class="tab active" onclick="showTab('overview')">Overview</button>
-            <button class="tab" onclick="showTab('episodes')">Episodes</button>
-            <button class="tab" onclick="showTab('coplayers')">Co-players</button>
-            <button class="tab" onclick="showTab('behavior')">Behavior</button>
-            <button class="tab" onclick="showTab('failures')">Failures</button>
-        </nav>
+      <!-- Tab: Episodes -->
+      <div id="episodes" class="tab-content">
+        <div id="episodes-filter-banner" class="active-filter-banner" style="display: none">
+          <span class="filter-text" id="episodes-filter-text">Filtered by: ...</span>
+          <button class="clear-btn" onclick="clearKpiFilter()">Clear Filter</button>
+        </div>
+        <div class="chart-container">
+          <table class="data-table" id="episodes-table">
+            <thead>
+              <tr>
+                <th onclick="sortTable('episode_id')">Episode</th>
+                <th onclick="sortTable('opponent_name')">Co-player</th>
+                <th onclick="sortTable('team_composition')">Team</th>
+                <th onclick="sortTable('reward')">Reward</th>
+                <th onclick="sortTable('status')">Status</th>
+                <th onclick="sortTable('steps')">Steps</th>
+              </tr>
+            </thead>
+            <tbody id="episodes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
 
-        <!-- Tab: Overview -->
-        <div id="overview" class="tab-content active">
-            <div class="cards" id="overview-cards"></div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <span class="chart-title">Reward Distribution</span>
-                    <div>
-                        <button class="btn" onclick="setRewardChart('histogram')">Histogram</button>
-                        <button class="btn" onclick="setRewardChart('scatter')">Scatter</button>
-                    </div>
-                </div>
-                <canvas id="reward-chart" height="250"></canvas>
+      <!-- Tab: Co-players -->
+      <div id="coplayers" class="tab-content">
+        <div class="chart-container">
+          <div class="chart-header">
+            <span class="chart-title">Performance by Co-player</span>
+          </div>
+          <canvas id="coplayers-chart" height="300"></canvas>
+        </div>
+        <div class="chart-container">
+          <table class="data-table" id="coplayers-table">
+            <thead>
+              <tr>
+                <th>Co-player</th>
+                <th>Matches</th>
+                <th>Avg Reward</th>
+                <th>Win Rate</th>
+                <th>Best</th>
+                <th>Worst</th>
+              </tr>
+            </thead>
+            <tbody id="coplayers-tbody"></tbody>
+          </table>
+        </div>
+        <div id="opponent-comparison-panel" class="chart-container" style="display: none">
+          <div class="chart-header">
+            <span class="chart-title" id="opponent-comparison-title">Opponent Metric Comparison</span>
+          </div>
+          <div id="opponent-comparison-content"></div>
+        </div>
+      </div>
+
+      <!-- Tab: Behavior -->
+      <div id="behavior" class="tab-content">
+        <!-- Zero-count banner (Phase 5) -->
+        <div
+          id="zero-count-banner"
+          class="insights"
+          style="
+            display: none;
+            background: linear-gradient(135deg, rgba(234, 179, 8, 0.1) 0%, rgba(249, 115, 22, 0.1) 100%);
+            border-color: rgba(234, 179, 8, 0.3);
+          "
+        >
+          <h4 style="color: var(--accent-yellow)">Unused Capabilities</h4>
+          <p id="zero-count-text" style="color: var(--text-secondary); font-size: 0.875rem"></p>
+        </div>
+        <!-- Strategy Profile -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem">
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">Strategy Profile</span>
             </div>
-            <div class="insights" id="overview-insights"></div>
-            <div class="comparison" id="high-low-comparison"></div>
+            <canvas id="profile-chart" height="250"></canvas>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">Efficiency Breakdown</span>
+            </div>
+            <canvas id="efficiency-chart" height="250"></canvas>
+          </div>
         </div>
 
-        <!-- Tab: Episodes -->
-        <div id="episodes" class="tab-content">
-            <div class="chart-container">
-                <table class="data-table" id="episodes-table">
-                    <thead>
-                        <tr>
-                            <th onclick="sortTable('episode_id')">Episode</th>
-                            <th onclick="sortTable('opponent_name')">Co-player</th>
-                            <th onclick="sortTable('team_composition')">Team</th>
-                            <th onclick="sortTable('reward')">Reward</th>
-                            <th onclick="sortTable('status')">Status</th>
-                            <th onclick="sortTable('steps')">Steps</th>
-                        </tr>
-                    </thead>
-                    <tbody id="episodes-tbody"></tbody>
-                </table>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem">
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">Action Distribution</span>
             </div>
+            <canvas id="actions-chart" height="200"></canvas>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">Resources (Avg per Episode)</span>
+            </div>
+            <canvas id="resources-chart" height="200"></canvas>
+          </div>
         </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem">
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">Junction Control</span>
+            </div>
+            <canvas id="junctions-chart" height="200"></canvas>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">Gear Pickups (Avg per Episode)</span>
+            </div>
+            <canvas id="gear-chart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
 
-        <!-- Tab: Co-players -->
-        <div id="coplayers" class="tab-content">
-            <div class="chart-container">
-                <div class="chart-header">
-                    <span class="chart-title">Performance by Co-player</span>
-                </div>
-                <canvas id="coplayers-chart" height="300"></canvas>
-            </div>
-            <div class="chart-container">
-                <table class="data-table" id="coplayers-table">
-                    <thead>
-                        <tr>
-                            <th>Co-player</th>
-                            <th>Matches</th>
-                            <th>Avg Reward</th>
-                            <th>Win Rate</th>
-                            <th>Best</th>
-                            <th>Worst</th>
-                        </tr>
-                    </thead>
-                    <tbody id="coplayers-tbody"></tbody>
-                </table>
-            </div>
+      <!-- Tab: Failures -->
+      <div id="failures" class="tab-content">
+        <div class="cards" id="failure-cards"></div>
+        <div class="chart-container">
+          <div class="chart-header">
+            <span class="chart-title">Failure Types</span>
+          </div>
+          <canvas id="failures-chart" height="200"></canvas>
         </div>
-
-        <!-- Tab: Behavior -->
-        <div id="behavior" class="tab-content">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-                <div class="chart-container">
-                    <div class="chart-header">
-                        <span class="chart-title">Action Distribution</span>
-                    </div>
-                    <canvas id="actions-chart" height="200"></canvas>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-header">
-                        <span class="chart-title">Resources</span>
-                    </div>
-                    <canvas id="resources-chart" height="200"></canvas>
-                </div>
-            </div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <span class="chart-title">Junction Control</span>
-                </div>
-                <canvas id="junctions-chart" height="200"></canvas>
-            </div>
+        <div class="chart-container">
+          <table class="data-table" id="failures-table">
+            <thead>
+              <tr>
+                <th>Job ID</th>
+                <th>Co-player</th>
+                <th>Error Type</th>
+                <th>Steps</th>
+              </tr>
+            </thead>
+            <tbody id="failures-tbody"></tbody>
+          </table>
         </div>
-
-        <!-- Tab: Failures -->
-        <div id="failures" class="tab-content">
-            <div class="cards" id="failure-cards"></div>
-            <div class="chart-container">
-                <div class="chart-header">
-                    <span class="chart-title">Failure Types</span>
-                </div>
-                <canvas id="failures-chart" height="200"></canvas>
-            </div>
-            <div class="chart-container">
-                <table class="data-table" id="failures-table">
-                    <thead>
-                        <tr>
-                            <th>Job ID</th>
-                            <th>Co-player</th>
-                            <th>Error Type</th>
-                            <th>Steps</th>
-                        </tr>
-                    </thead>
-                    <tbody id="failures-tbody"></tbody>
-                </table>
-            </div>
-        </div>
+      </div>
     </main>
 
+    <!-- Modal for diagnostic/KPI drill-down -->
+    <div class="modal-overlay" id="drill-down-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3 id="modal-title">Episodes</h3>
+          <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="modal-stats" id="modal-stats"></div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Episode</th>
+                <th>Opponent</th>
+                <th>Team</th>
+                <th>Reward</th>
+                <th>Key Metric</th>
+              </tr>
+            </thead>
+            <tbody id="modal-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <script>
-        // Dashboard data injected by generator
-        const DATA = {{DASHBOARD_DATA}};
-
-        // State
-        let filteredEpisodes = [];
-        let sortColumn = 'reward';
-        let sortDirection = 'desc';
-        let selectedCoplayers = [];
-        let allCoplayers = [];
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            initDashboard();
-        });
-
-        function initDashboard() {
-            // Set header info
-            document.getElementById('policy-name').textContent =
-                `${DATA.policy.name}:v${DATA.policy.version}`;
-            document.getElementById('policy-meta').textContent =
-                `Season: ${DATA.season} | Generated: ${new Date(DATA.generated_at).toLocaleString()}`;
-            document.getElementById('stat-rank').textContent =
-                DATA.policy.rank ? `#${DATA.policy.rank}` : '-';
-            document.getElementById('stat-score').textContent =
-                DATA.policy.score ? DATA.policy.score.toFixed(3) : '-';
-            document.getElementById('stat-episodes').textContent = DATA.episodes.length;
-
-            // Populate filter options
-            populateFilterOptions();
-
-            // Initial filter (all episodes)
-            filteredEpisodes = [...DATA.episodes];
-            updateFilteredCount();
-
-            // Render all tabs
-            renderOverview();
-            renderEpisodes();
-            renderCoplayers();
-            renderBehavior();
-            renderFailures();
-        }
-
-        function populateFilterOptions() {
-            // Co-players typeahead
-            allCoplayers = [...new Set(DATA.episodes.map(e => e.opponent_name))].sort();
-            initCoplayerTypeahead();
-
-            // Metrics
-            const metrics = new Set();
-            DATA.episodes.forEach(e => {
-                Object.keys(e.metrics).forEach(k => {
-                    if (typeof e.metrics[k] === 'number') {
-                        metrics.add(k);
-                    }
-                });
-            });
-            const metricSelect = document.getElementById('filter-metric-name');
-            [...metrics].sort().forEach(m => {
-                const option = document.createElement('option');
-                option.value = m;
-                option.textContent = m;
-                metricSelect.appendChild(option);
-            });
-        }
-
-        function initCoplayerTypeahead() {
-            const input = document.getElementById('filter-coplayer-input');
-            const dropdown = document.getElementById('filter-coplayer-dropdown');
-            const tagsContainer = document.getElementById('filter-coplayer-tags');
-
-            function updateDropdown(filter = '') {
-                const filtered = allCoplayers.filter(cp =>
-                    cp.toLowerCase().includes(filter.toLowerCase()) &&
-                    !selectedCoplayers.includes(cp)
-                );
-
-                dropdown.innerHTML = filtered.slice(0, 10).map(cp =>
-                    `<div class="typeahead-option" data-value="${cp}">${cp}</div>`
-                ).join('');
-
-                if (filtered.length > 0) {
-                    dropdown.classList.add('show');
-                } else {
-                    dropdown.classList.remove('show');
-                }
-            }
-
-            function updateTags() {
-                tagsContainer.innerHTML = selectedCoplayers.map(cp =>
-                    `<span class="selected-tag">${cp}<span class="remove" data-value="${cp}">&times;</span></span>`
-                ).join('');
-            }
-
-            input.addEventListener('input', (e) => {
-                updateDropdown(e.target.value);
-            });
-
-            input.addEventListener('focus', () => {
-                updateDropdown(input.value);
-            });
-
-            dropdown.addEventListener('click', (e) => {
-                if (e.target.classList.contains('typeahead-option')) {
-                    const value = e.target.dataset.value;
-                    if (!selectedCoplayers.includes(value)) {
-                        selectedCoplayers.push(value);
-                        updateTags();
-                        applyFilters();
-                    }
-                    input.value = '';
-                    dropdown.classList.remove('show');
-                }
-            });
-
-            tagsContainer.addEventListener('click', (e) => {
-                if (e.target.classList.contains('remove')) {
-                    const value = e.target.dataset.value;
-                    selectedCoplayers = selectedCoplayers.filter(cp => cp !== value);
-                    updateTags();
-                    applyFilters();
-                }
-            });
-
-            document.addEventListener('click', (e) => {
-                if (!e.target.closest('.typeahead-container')) {
-                    dropdown.classList.remove('show');
-                }
-            });
-        }
-
-        function applyFilters() {
-            const team = document.getElementById('filter-team').value;
-            const status = document.getElementById('filter-status').value;
-            const rewardMin = parseFloat(document.getElementById('filter-reward-min').value) || -Infinity;
-            const rewardMax = parseFloat(document.getElementById('filter-reward-max').value) || Infinity;
-            const metricName = document.getElementById('filter-metric-name').value;
-            const metricOp = document.getElementById('filter-metric-op').value;
-            const metricValue = parseFloat(document.getElementById('filter-metric-value').value);
-
-            filteredEpisodes = DATA.episodes.filter(e => {
-                if (selectedCoplayers.length > 0 && !selectedCoplayers.includes(e.opponent_name)) return false;
-                if (team && e.team_composition !== team) return false;
-                if (status && e.status !== status) return false;
-                if (e.reward < rewardMin || e.reward > rewardMax) return false;
-                if (metricName && !isNaN(metricValue)) {
-                    const val = e.metrics[metricName] || 0;
-                    if (metricOp === '>' && val <= metricValue) return false;
-                    if (metricOp === '<' && val >= metricValue) return false;
-                    if (metricOp === '=' && val !== metricValue) return false;
-                }
-                return true;
-            });
-
-            updateFilteredCount();
-            renderOverview();
-            renderEpisodes();
-            renderCoplayers();
-            renderBehavior();
-            renderFailures();
-        }
-
-        function clearFilters() {
-            selectedCoplayers = [];
-            document.getElementById('filter-coplayer-input').value = '';
-            document.getElementById('filter-coplayer-tags').innerHTML = '';
-            document.getElementById('filter-team').value = '';
-            document.getElementById('filter-status').value = '';
-            document.getElementById('filter-reward-min').value = '';
-            document.getElementById('filter-reward-max').value = '';
-            document.getElementById('filter-metric-name').value = '';
-            document.getElementById('filter-metric-value').value = '';
-            filteredEpisodes = [...DATA.episodes];
-            updateFilteredCount();
-            renderOverview();
-            renderEpisodes();
-            renderCoplayers();
-            renderBehavior();
-            renderFailures();
-        }
-
-        function updateFilteredCount() {
-            document.getElementById('filtered-count').textContent = filteredEpisodes.length;
-        }
-
-        function showTab(tabId) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
-            document.getElementById(tabId).classList.add('active');
-        }
-
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('collapsed');
-        }
-
-        function exportData() {
-            const blob = new Blob([JSON.stringify(filteredEpisodes, null, 2)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `episodes_${DATA.policy.name}_v${DATA.policy.version}.json`;
-            a.click();
-        }
-
-        // ============ Overview Tab ============
-
-        function renderOverview() {
-            const rewards = filteredEpisodes.map(e => e.reward);
-            const avgReward = rewards.length ? rewards.reduce((a, b) => a + b, 0) / rewards.length : 0;
-            const maxReward = rewards.length ? Math.max(...rewards) : 0;
-            const winRate = rewards.length ? rewards.filter(r => r > 1.0).length / rewards.length * 100 : 0;
-            const failRate = filteredEpisodes.length ?
-                filteredEpisodes.filter(e => e.status === 'failed').length / filteredEpisodes.length * 100 : 0;
-
-            // Cards
-            document.getElementById('overview-cards').innerHTML = `
-                <div class="card">
-                    <div class="card-title">Average Reward</div>
-                    <div class="card-value">${avgReward.toFixed(3)}</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Max Reward</div>
-                    <div class="card-value trend-up">${maxReward.toFixed(2)}</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Win Rate (&gt;1.0)</div>
-                    <div class="card-value">${winRate.toFixed(1)}%</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Failure Rate</div>
-                    <div class="card-value ${failRate > 10 ? 'trend-down' : ''}">${failRate.toFixed(1)}%</div>
-                </div>
-            `;
-
-            // Reward histogram
-            renderRewardChart('histogram');
-
-            // High vs Low comparison
-            renderHighLowComparison();
-
-            // Insights
-            renderInsights();
-        }
-
-        let rewardChart;
-        function renderRewardChart(type) {
-            const ctx = document.getElementById('reward-chart').getContext('2d');
-            if (rewardChart) rewardChart.destroy();
-
-            const rewards = filteredEpisodes.map(e => e.reward);
-
-            if (type === 'histogram') {
-                const bins = [0, 0.1, 0.5, 1, 2, 5, 10, 20, 50, 100];
-                const labels = ['0', '0-0.1', '0.1-0.5', '0.5-1', '1-2', '2-5', '5-10', '10-20', '20-50', '50+'];
-                const counts = new Array(bins.length).fill(0);
-                rewards.forEach(r => {
-                    if (r === 0) counts[0]++;
-                    else if (r <= 0.1) counts[1]++;
-                    else if (r <= 0.5) counts[2]++;
-                    else if (r <= 1) counts[3]++;
-                    else if (r <= 2) counts[4]++;
-                    else if (r <= 5) counts[5]++;
-                    else if (r <= 10) counts[6]++;
-                    else if (r <= 20) counts[7]++;
-                    else if (r <= 50) counts[8]++;
-                    else counts[9]++;
-                });
-
-                rewardChart = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Episodes',
-                            data: counts,
-                            backgroundColor: 'rgba(34, 197, 94, 0.7)',
-                            borderColor: 'rgba(34, 197, 94, 1)',
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { beginAtZero: true, grid: { color: '#30363d' } },
-                            x: { grid: { color: '#30363d' } }
-                        }
-                    }
-                });
-            } else {
-                rewardChart = new Chart(ctx, {
-                    type: 'scatter',
-                    data: {
-                        datasets: [{
-                            label: 'Reward',
-                            data: rewards.map((r, i) => ({ x: i, y: r })),
-                            backgroundColor: 'rgba(34, 197, 94, 0.5)',
-                            pointRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            y: { title: { display: true, text: 'Reward' }, grid: { color: '#30363d' } },
-                            x: { title: { display: true, text: 'Episode Index' }, grid: { color: '#30363d' } }
-                        }
-                    }
-                });
-            }
-        }
-
-        function setRewardChart(type) {
-            renderRewardChart(type);
-        }
-
-        function renderHighLowComparison() {
-            if (filteredEpisodes.length < 10) {
-                document.getElementById('high-low-comparison').innerHTML = '<p style="color: var(--text-secondary);">Need at least 10 episodes for comparison.</p>';
-                return;
-            }
-
-            const sorted = [...filteredEpisodes].sort((a, b) => b.reward - a.reward);
-            const top20 = sorted.slice(0, Math.ceil(sorted.length * 0.2));
-            const bottom20 = sorted.slice(-Math.ceil(sorted.length * 0.2));
-
-            function avgMetric(episodes, metric) {
-                const vals = episodes.map(e => e.metrics[metric] || 0);
-                return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-            }
-
-            const metrics = ['move.success', 'move.failed', 'junction.aligned', 'heart.gained'];
-            let highHtml = '<h4 style="color: var(--accent-green);">Top 20% (High Scoring)</h4><ul style="list-style: none;">';
-            let lowHtml = '<h4 style="color: var(--accent-red);">Bottom 20% (Low Scoring)</h4><ul style="list-style: none;">';
-
-            metrics.forEach(m => {
-                const highVal = avgMetric(top20, m);
-                const lowVal = avgMetric(bottom20, m);
-                highHtml += `<li>${m}: <strong>${highVal.toFixed(1)}</strong></li>`;
-                lowHtml += `<li>${m}: <strong>${lowVal.toFixed(1)}</strong></li>`;
-            });
-
-            highHtml += '</ul>';
-            lowHtml += '</ul>';
-
-            document.getElementById('high-low-comparison').innerHTML = `
-                <div class="comparison-box high">${highHtml}</div>
-                <div class="comparison-box low">${lowHtml}</div>
-            `;
-        }
-
-        function renderInsights() {
-            const insights = [];
-
-            // Check for high failure rate
-            const failRate = filteredEpisodes.filter(e => e.status === 'failed').length / filteredEpisodes.length;
-            if (failRate > 0.1) {
-                insights.push(`High failure rate: ${(failRate * 100).toFixed(1)}% of episodes failed`);
-            }
-
-            // Check for zero-reward episodes
-            const zeroReward = filteredEpisodes.filter(e => e.reward === 0).length;
-            if (zeroReward > filteredEpisodes.length * 0.3) {
-                insights.push(`${zeroReward} episodes (${(zeroReward / filteredEpisodes.length * 100).toFixed(0)}%) have zero reward`);
-            }
-
-            // Check for junction activity
-            const avgJunction = filteredEpisodes.reduce((sum, e) => sum + (e.metrics['junction.aligned'] || 0), 0) / filteredEpisodes.length;
-            if (avgJunction < 1) {
-                insights.push('Low junction activity: consider enabling aligner/scrambler behavior');
-            }
-
-            if (insights.length === 0) {
-                insights.push('No major issues detected');
-            }
-
-            document.getElementById('overview-insights').innerHTML = `
-                <h4>Key Insights</h4>
-                <ul>${insights.map(i => `<li>${i}</li>`).join('')}</ul>
-            `;
-        }
-
-        // ============ Episodes Tab ============
-
-        function renderEpisodes() {
-            const sorted = [...filteredEpisodes].sort((a, b) => {
-                let aVal = a[sortColumn];
-                let bVal = b[sortColumn];
-                if (typeof aVal === 'string') {
-                    return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-                }
-                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-            });
-
-            const tbody = document.getElementById('episodes-tbody');
-            tbody.innerHTML = sorted.map(e => `
-                <tr>
-                    <td class="mono truncate" title="${e.episode_id}">${e.episode_id.slice(0, 8)}...</td>
-                    <td>${e.opponent_name}:v${e.opponent_version}</td>
-                    <td>${e.team_composition}</td>
-                    <td style="color: ${e.reward > 5 ? 'var(--accent-green)' : e.reward < 0.5 ? 'var(--accent-red)' : 'inherit'}">${e.reward.toFixed(3)}</td>
-                    <td><span class="status-badge status-${e.status}">${e.status}</span></td>
-                    <td>${e.steps}</td>
-                </tr>
-            `).join('');
-        }
-
-        function sortTable(column) {
-            if (sortColumn === column) {
-                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                sortColumn = column;
-                sortDirection = 'desc';
-            }
-            renderEpisodes();
-        }
-
-        // ============ Co-players Tab ============
-
-        let coplayersChart = null;
-        function renderCoplayers() {
-            const byCoplayer = {};
-            filteredEpisodes.forEach(e => {
-                const key = `${e.opponent_name}:v${e.opponent_version}`;
-                if (!byCoplayer[key]) {
-                    byCoplayer[key] = { rewards: [], name: e.opponent_name, version: e.opponent_version };
-                }
-                byCoplayer[key].rewards.push(e.reward);
-            });
-
-            const coplayers = Object.entries(byCoplayer).map(([key, data]) => ({
-                name: key,
-                matches: data.rewards.length,
-                avgReward: data.rewards.reduce((a, b) => a + b, 0) / data.rewards.length,
-                winRate: data.rewards.filter(r => r > 1.0).length / data.rewards.length * 100,
-                best: Math.max(...data.rewards),
-                worst: Math.min(...data.rewards)
-            })).sort((a, b) => b.avgReward - a.avgReward);
-
-            // Table
-            document.getElementById('coplayers-tbody').innerHTML = coplayers.map(o => `
-                <tr>
-                    <td>${o.name}</td>
-                    <td>${o.matches}</td>
-                    <td style="color: ${o.avgReward > 2 ? 'var(--accent-green)' : o.avgReward < 1 ? 'var(--accent-red)' : 'inherit'}">${o.avgReward.toFixed(3)}</td>
-                    <td>${o.winRate.toFixed(1)}%</td>
-                    <td class="trend-up">${o.best.toFixed(2)}</td>
-                    <td class="trend-down">${o.worst.toFixed(2)}</td>
-                </tr>
-            `).join('');
-
-            // Chart
-            if (coplayersChart) coplayersChart.destroy();
-            const ctx = document.getElementById('coplayers-chart').getContext('2d');
-            coplayersChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: coplayers.map(o => o.name),
-                    datasets: [{
-                        label: 'Avg Reward',
-                        data: coplayers.map(o => o.avgReward),
-                        backgroundColor: coplayers.map(o =>
-                            o.avgReward > 2 ? 'rgba(34, 197, 94, 0.7)' :
-                            o.avgReward < 1 ? 'rgba(239, 68, 68, 0.7)' : 'rgba(59, 130, 246, 0.7)'
-                        )
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { beginAtZero: true, grid: { color: '#30363d' } },
-                        y: { grid: { color: '#30363d' } }
-                    }
-                }
-            });
-        }
-
-        // ============ Behavior Tab ============
-
-        let actionsChart = null;
-        let resourcesChart = null;
-        let junctionsChart = null;
-
-        function renderBehavior() {
-            // Aggregate metrics across all filtered episodes
-            const aggregated = {};
-            filteredEpisodes.forEach(e => {
-                Object.entries(e.metrics).forEach(([k, v]) => {
-                    if (typeof v === 'number') {
-                        aggregated[k] = (aggregated[k] || 0) + v;
-                    }
-                });
-            });
-
-            // Average per episode
-            const count = filteredEpisodes.length || 1;
-            Object.keys(aggregated).forEach(k => {
-                aggregated[k] /= count;
-            });
-
-            // Destroy existing charts before recreating
-            if (actionsChart) actionsChart.destroy();
-            if (resourcesChart) resourcesChart.destroy();
-            if (junctionsChart) junctionsChart.destroy();
-
-            // Actions chart
-            const actionsCtx = document.getElementById('actions-chart').getContext('2d');
-            actionsChart = new Chart(actionsCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['Move Success', 'Move Failed', 'Noop'],
-                    datasets: [{
-                        label: 'Avg per Episode',
-                        data: [
-                            aggregated['move.success'] || 0,
-                            aggregated['move.failed'] || 0,
-                            aggregated['noop'] || 0
-                        ],
-                        backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
-                }
-            });
-
-            // Resources chart
-            const resourcesCtx = document.getElementById('resources-chart').getContext('2d');
-            resourcesChart = new Chart(resourcesCtx, {
-                type: 'radar',
-                data: {
-                    labels: ['Carbon', 'Oxygen', 'Silicon', 'Germanium'],
-                    datasets: [{
-                        label: 'Avg Deposited',
-                        data: [
-                            aggregated['carbon.deposited'] || 0,
-                            aggregated['oxygen.deposited'] || 0,
-                            aggregated['silicon.deposited'] || 0,
-                            aggregated['germanium.deposited'] || 0
-                        ],
-                        backgroundColor: 'rgba(34, 197, 94, 0.2)',
-                        borderColor: 'rgba(34, 197, 94, 1)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } }
-                }
-            });
-
-            // Junctions chart
-            const junctionsCtx = document.getElementById('junctions-chart').getContext('2d');
-            junctionsChart = new Chart(junctionsCtx, {
-                type: 'bar',
-                data: {
-                    labels: ['Aligned', 'Scrambled', 'Hearts Gained', 'Influence (÷100)'],
-                    datasets: [{
-                        label: 'Avg per Episode',
-                        data: [
-                            aggregated['junction.aligned'] || aggregated['cogs.junction.gained'] || 0,
-                            aggregated['junction.scrambled'] || 0,
-                            aggregated['heart.gained'] || 0,
-                            (aggregated['influence.gained'] || 0) / 100
-                        ],
-                        backgroundColor: 'rgba(59, 130, 246, 0.7)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } },
-                    scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
-                }
-            });
-        }
-
-        // ============ Failures Tab ============
-
-        let failuresChart = null;
-
-        function renderFailures() {
-            const failed = filteredEpisodes.filter(e => e.status === 'failed');
-            const lowScoring = filteredEpisodes.filter(e => e.status === 'completed' && e.reward < 0.1);
-
-            // Cards
-            const errorTypes = {};
-            failed.forEach(e => {
-                const type = e.error_type || 'unknown';
-                errorTypes[type] = (errorTypes[type] || 0) + 1;
-            });
-
-            document.getElementById('failure-cards').innerHTML = `
-                <div class="card">
-                    <div class="card-title">Total Failures</div>
-                    <div class="card-value trend-down">${failed.length}</div>
-                    <div class="card-subtitle">${(failed.length / filteredEpisodes.length * 100).toFixed(1)}% of episodes</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Low Scoring (&lt;0.1)</div>
-                    <div class="card-value">${lowScoring.length}</div>
-                    <div class="card-subtitle">Completed but poor</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">Timeout</div>
-                    <div class="card-value">${errorTypes['timeout'] || 0}</div>
-                </div>
-                <div class="card">
-                    <div class="card-title">OOM</div>
-                    <div class="card-value">${errorTypes['oom'] || 0}</div>
-                </div>
-            `;
-
-            // Destroy existing chart before recreating
-            if (failuresChart) failuresChart.destroy();
-
-            // Failures chart
-            const ctx = document.getElementById('failures-chart').getContext('2d');
-            failuresChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: Object.keys(errorTypes),
-                    datasets: [{
-                        data: Object.values(errorTypes),
-                        backgroundColor: ['rgba(239, 68, 68, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(107, 114, 128, 0.7)']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { position: 'right' } }
-                }
-            });
-
-            // Failures table
-            document.getElementById('failures-tbody').innerHTML = failed.map(e => `
-                <tr>
-                    <td class="mono truncate" title="${e.job_id}">${e.job_id.slice(0, 8)}...</td>
-                    <td>${e.opponent_name}:v${e.opponent_version}</td>
-                    <td><span class="status-badge status-failed">${e.error_type || 'unknown'}</span></td>
-                    <td>${e.steps}</td>
-                </tr>
-            `).join('');
-        }
-
-        // Chart.js defaults
-        Chart.defaults.color = '#8b949e';
-        Chart.defaults.borderColor = '#30363d';
+      // Dashboard data injected by generator
+      const DATA = {{DASHBOARD_DATA}};
+
+      // State
+      let filteredEpisodes = [];
+      let sortColumn = 'reward';
+      let sortDirection = 'desc';
+      let selectedCoplayers = [];
+      let allCoplayers = [];
+      let activeKpiFilter = null;  // Track active KPI filter for banner
+      let expandedEpisodeId = null;  // Track which episode row is expanded
+
+      // Initialize
+      document.addEventListener('DOMContentLoaded', () => {
+          initDashboard();
+      });
+
+      function initDashboard() {
+          // Set header info
+          document.getElementById('policy-name').textContent =
+              `${DATA.policy.name}:v${DATA.policy.version}`;
+          document.getElementById('policy-meta').textContent =
+              `Season: ${DATA.season} | Generated: ${new Date(DATA.generated_at).toLocaleString()}`;
+          document.getElementById('stat-rank').textContent =
+              DATA.policy.rank ? `#${DATA.policy.rank}` : '-';
+          document.getElementById('stat-score').textContent =
+              DATA.policy.score ? DATA.policy.score.toFixed(3) : '-';
+          document.getElementById('stat-episodes').textContent = DATA.episodes.length;
+
+          // Populate filter options
+          populateFilterOptions();
+
+          // Initial filter (all episodes)
+          filteredEpisodes = [...DATA.episodes];
+          updateFilteredCount();
+
+          // Render all tabs
+          renderOverview();
+          renderEpisodes();
+          renderCoplayers();
+          renderBehavior();
+          renderFailures();
+      }
+
+      function populateFilterOptions() {
+          // Co-players typeahead
+          allCoplayers = [...new Set(DATA.episodes.map(e => e.opponent_name))].sort();
+          initCoplayerTypeahead();
+
+          // Metrics
+          const metrics = new Set();
+          DATA.episodes.forEach(e => {
+              Object.keys(e.metrics).forEach(k => {
+                  if (typeof e.metrics[k] === 'number') {
+                      metrics.add(k);
+                  }
+              });
+          });
+          const metricSelect = document.getElementById('filter-metric-name');
+          [...metrics].sort().forEach(m => {
+              const option = document.createElement('option');
+              option.value = m;
+              option.textContent = m;
+              metricSelect.appendChild(option);
+          });
+      }
+
+      function initCoplayerTypeahead() {
+          const input = document.getElementById('filter-coplayer-input');
+          const dropdown = document.getElementById('filter-coplayer-dropdown');
+          const tagsContainer = document.getElementById('filter-coplayer-tags');
+
+          function updateDropdown(filter = '') {
+              const filtered = allCoplayers.filter(cp =>
+                  cp.toLowerCase().includes(filter.toLowerCase()) &&
+                  !selectedCoplayers.includes(cp)
+              );
+
+              dropdown.innerHTML = filtered.slice(0, 10).map(cp =>
+                  `<div class="typeahead-option" data-value="${cp}">${cp}</div>`
+              ).join('');
+
+              if (filtered.length > 0) {
+                  dropdown.classList.add('show');
+              } else {
+                  dropdown.classList.remove('show');
+              }
+          }
+
+          function updateTags() {
+              tagsContainer.innerHTML = selectedCoplayers.map(cp =>
+                  `<span class="selected-tag">${cp}<span class="remove" data-value="${cp}">&times;</span></span>`
+              ).join('');
+          }
+
+          input.addEventListener('input', (e) => {
+              updateDropdown(e.target.value);
+          });
+
+          input.addEventListener('focus', () => {
+              updateDropdown(input.value);
+          });
+
+          dropdown.addEventListener('click', (e) => {
+              if (e.target.classList.contains('typeahead-option')) {
+                  const value = e.target.dataset.value;
+                  if (!selectedCoplayers.includes(value)) {
+                      selectedCoplayers.push(value);
+                      updateTags();
+                      applyFilters();
+                  }
+                  input.value = '';
+                  dropdown.classList.remove('show');
+              }
+          });
+
+          tagsContainer.addEventListener('click', (e) => {
+              if (e.target.classList.contains('remove')) {
+                  const value = e.target.dataset.value;
+                  selectedCoplayers = selectedCoplayers.filter(cp => cp !== value);
+                  updateTags();
+                  applyFilters();
+              }
+          });
+
+          document.addEventListener('click', (e) => {
+              if (!e.target.closest('.typeahead-container')) {
+                  dropdown.classList.remove('show');
+              }
+          });
+      }
+
+      function applyFilters() {
+          const team = document.getElementById('filter-team').value;
+          const status = document.getElementById('filter-status').value;
+          const rewardMin = parseFloat(document.getElementById('filter-reward-min').value) || -Infinity;
+          const rewardMax = parseFloat(document.getElementById('filter-reward-max').value) || Infinity;
+          const metricName = document.getElementById('filter-metric-name').value;
+          const metricOp = document.getElementById('filter-metric-op').value;
+          const metricValue = parseFloat(document.getElementById('filter-metric-value').value);
+
+          filteredEpisodes = DATA.episodes.filter(e => {
+              if (selectedCoplayers.length > 0 && !selectedCoplayers.includes(e.opponent_name)) return false;
+              if (team && e.team_composition !== team) return false;
+              if (status && e.status !== status) return false;
+              if (e.reward < rewardMin || e.reward > rewardMax) return false;
+              if (metricName && !isNaN(metricValue)) {
+                  const val = e.metrics[metricName] || 0;
+                  if (metricOp === '>' && val <= metricValue) return false;
+                  if (metricOp === '<' && val >= metricValue) return false;
+                  if (metricOp === '=' && val !== metricValue) return false;
+              }
+              return true;
+          });
+
+          updateFilteredCount();
+          renderOverview();
+          renderEpisodes();
+          renderCoplayers();
+          renderBehavior();
+          renderFailures();
+      }
+
+      function clearFilters() {
+          selectedCoplayers = [];
+          document.getElementById('filter-coplayer-input').value = '';
+          document.getElementById('filter-coplayer-tags').innerHTML = '';
+          document.getElementById('filter-team').value = '';
+          document.getElementById('filter-status').value = '';
+          document.getElementById('filter-reward-min').value = '';
+          document.getElementById('filter-reward-max').value = '';
+          document.getElementById('filter-metric-name').value = '';
+          document.getElementById('filter-metric-value').value = '';
+          filteredEpisodes = [...DATA.episodes];
+          updateFilteredCount();
+          renderOverview();
+          renderEpisodes();
+          renderCoplayers();
+          renderBehavior();
+          renderFailures();
+      }
+
+      function updateFilteredCount() {
+          document.getElementById('filtered-count').textContent = filteredEpisodes.length;
+      }
+
+      function showTab(tabId) {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+          document.querySelector(`[onclick="showTab('${tabId}')"]`).classList.add('active');
+          document.getElementById(tabId).classList.add('active');
+      }
+
+      function toggleSidebar() {
+          document.getElementById('sidebar').classList.toggle('collapsed');
+      }
+
+      function exportData() {
+          const blob = new Blob([JSON.stringify(filteredEpisodes, null, 2)], {type: 'application/json'});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `episodes_${DATA.policy.name}_v${DATA.policy.version}.json`;
+          a.click();
+      }
+
+      // ============ Overview Tab ============
+
+      function renderOverview() {
+          const rewards = filteredEpisodes.map(e => e.reward);
+          const avgReward = rewards.length ? rewards.reduce((a, b) => a + b, 0) / rewards.length : 0;
+          const maxReward = rewards.length ? Math.max(...rewards) : 0;
+          const winRate = rewards.length ? rewards.filter(r => r > 1.0).length / rewards.length * 100 : 0;
+          const failRate = filteredEpisodes.length ?
+              filteredEpisodes.filter(e => e.status === 'failed').length / filteredEpisodes.length * 100 : 0;
+
+          // Cards
+          document.getElementById('overview-cards').innerHTML = `
+              <div class="card">
+                  <div class="card-title">Average Reward</div>
+                  <div class="card-value">${avgReward.toFixed(3)}</div>
+              </div>
+              <div class="card">
+                  <div class="card-title">Max Reward</div>
+                  <div class="card-value trend-up">${maxReward.toFixed(2)}</div>
+              </div>
+              <div class="card">
+                  <div class="card-title">Win Rate (&gt;1.0)</div>
+                  <div class="card-value">${winRate.toFixed(1)}%</div>
+              </div>
+              <div class="card">
+                  <div class="card-title">Failure Rate</div>
+                  <div class="card-value ${failRate > 10 ? 'trend-down' : ''}">${failRate.toFixed(1)}%</div>
+              </div>
+          `;
+
+          // KPI Cards
+          renderKPICards();
+
+          // Benchmarks (Phase 2)
+          renderBenchmarks();
+
+          // Team Composition (Phase 4)
+          renderTeamComp();
+
+          // Diagnostic Insights (from Python)
+          renderDiagnostics();
+
+          // Reward histogram
+          renderRewardChart('histogram');
+
+          // High vs Low comparison
+          renderHighLowComparison();
+
+          // Insights
+          renderInsights();
+      }
+
+      // KPI definitions with filter logic
+      const KPI_DEFINITIONS = {
+          move_efficiency: {
+              name: 'Move Efficiency',
+              subtitle: 'success / (success + failed)',
+              goodThreshold: 0.8,
+              badThreshold: 0.5,
+              getEpisodeValue: (e) => {
+                  const success = e.metrics['action.move.success'] || 0;
+                  const failed = e.metrics['action.move.failed'] || 0;
+                  return (success + failed) > 0 ? success / (success + failed) : 1;
+              },
+              filterCondition: (e) => {
+                  const success = e.metrics['action.move.success'] || 0;
+                  const failed = e.metrics['action.move.failed'] || 0;
+                  return (success + failed) > 0 && failed / (success + failed) > 0.2;
+              },
+              filterLabel: 'Low Move Efficiency (>20% failures)'
+          },
+          vibe_change_rate: {
+              name: 'Vibe Change Rate',
+              subtitle: 'vibe changes / total actions',
+              goodThreshold: 0.1,
+              badThreshold: 0.02,
+              getEpisodeValue: (e) => {
+                  const success = e.metrics['action.change_vibe.success'] || 0;
+                  const moveSuccess = e.metrics['action.move.success'] || 0;
+                  const total = moveSuccess + success;
+                  return total > 0 ? success / total : 0;
+              },
+              filterCondition: (e) => {
+                  const success = e.metrics['action.change_vibe.success'] || 0;
+                  return success === 0;
+              },
+              filterLabel: 'No Vibe Changes'
+          },
+          action_success_rate: {
+              name: 'Action Success Rate',
+              subtitle: 'successful / total actions',
+              goodThreshold: 0.8,
+              badThreshold: 0.6,
+              getEpisodeValue: (e) => {
+                  const failed = e.metrics['action.failed'] || 0;
+                  let total = failed;
+                  Object.keys(e.metrics).forEach(k => {
+                      if (k.startsWith('action.') && k.includes('.success')) {
+                          total += e.metrics[k] || 0;
+                      }
+                  });
+                  return total > 0 ? (total - failed) / total : 1;
+              },
+              filterCondition: (e) => {
+                  const failed = e.metrics['action.failed'] || 0;
+                  let total = failed;
+                  Object.keys(e.metrics).forEach(k => {
+                      if (k.startsWith('action.') && k.includes('.success')) {
+                          total += e.metrics[k] || 0;
+                      }
+                  });
+                  return total > 0 && (total - failed) / total < 0.7;
+              },
+              filterLabel: 'Low Action Success (<70%)'
+          },
+          freeze_vulnerability: {
+              name: 'Freeze Vulnerability',
+              subtitle: '% time frozen',
+              goodThreshold: 0.05,  // Lower is better
+              badThreshold: 0.1,
+              inverted: true,  // Lower is better
+              getEpisodeValue: (e) => {
+                  const frozen = e.metrics['status.frozen.ticks'] || 0;
+                  return e.steps > 0 ? frozen / e.steps : 0;
+              },
+              filterCondition: (e) => {
+                  const frozen = e.metrics['status.frozen.ticks'] || 0;
+                  return e.steps > 0 && frozen / e.steps > 0.1;
+              },
+              filterLabel: 'High Freeze Vulnerability (>10% frozen)'
+          },
+          junction_control_rate: {
+              name: 'Junction Control',
+              subtitle: 'aligned / total',
+              goodThreshold: 0.7,
+              badThreshold: 0.3,
+              getEpisodeValue: (e) => {
+                  const aligned = e.metrics['junction.aligned_by_agent'] || 0;
+                  const scrambled = e.metrics['junction.scrambled_by_agent'] || 0;
+                  return (aligned + scrambled) > 0 ? aligned / (aligned + scrambled) : 0;
+              },
+              filterCondition: (e) => {
+                  const aligned = e.metrics['junction.aligned_by_agent'] || 0;
+                  const scrambled = e.metrics['junction.scrambled_by_agent'] || 0;
+                  return scrambled > aligned;
+              },
+              filterLabel: 'Poor Junction Control'
+          },
+          resource_retention: {
+              name: 'Resource Retention',
+              subtitle: 'kept / gained',
+              goodThreshold: 0.5,
+              badThreshold: 0.2,
+              getEpisodeValue: (e) => {
+                  const resources = ['carbon', 'heart', 'oxygen', 'silicon', 'germanium'];
+                  let amount = 0, gained = 0;
+                  resources.forEach(r => {
+                      amount += e.metrics[`${r}.amount`] || 0;
+                      gained += e.metrics[`${r}.gained`] || 0;
+                  });
+                  return gained > 0 ? amount / gained : 0;
+              },
+              filterCondition: (e) => {
+                  const resources = ['carbon', 'heart', 'oxygen', 'silicon', 'germanium'];
+                  let amount = 0, gained = 0;
+                  resources.forEach(r => {
+                      amount += e.metrics[`${r}.amount`] || 0;
+                      gained += e.metrics[`${r}.gained`] || 0;
+                  });
+                  return gained > 0 && amount / gained < 0.3;
+              },
+              filterLabel: 'Low Resource Retention (<30%)'
+          },
+          noop_rate: {
+              name: 'Noop Rate',
+              subtitle: 'noop / total actions',
+              goodThreshold: 0.1,
+              badThreshold: 0.2,
+              inverted: true,
+              getEpisodeValue: (e) => {
+                  const noop = e.metrics['action.noop.success'] || 0;
+                  let total = noop;
+                  Object.keys(e.metrics).forEach(k => {
+                      if (k.startsWith('action.') && k.includes('.success') && k !== 'action.noop.success') {
+                          total += e.metrics[k] || 0;
+                      }
+                  });
+                  total += e.metrics['action.failed'] || 0;
+                  return total > 0 ? noop / total : 0;
+              },
+              filterCondition: (e) => {
+                  const noop = e.metrics['action.noop.success'] || 0;
+                  let total = noop;
+                  Object.keys(e.metrics).forEach(k => {
+                      if (k.startsWith('action.') && k.includes('.success') && k !== 'action.noop.success') {
+                          total += e.metrics[k] || 0;
+                      }
+                  });
+                  total += e.metrics['action.failed'] || 0;
+                  return total > 0 && noop / total > 0.15;
+              },
+              filterLabel: 'High Noop Rate (>15%)'
+          },
+          resource_efficiency_per_step: {
+              name: 'Resource Efficiency',
+              subtitle: 'resources gained / step',
+              goodThreshold: 0.15,
+              badThreshold: 0.05,
+              getEpisodeValue: (e) => {
+                  const resources = ['carbon', 'heart', 'oxygen', 'silicon', 'germanium'];
+                  let gained = 0;
+                  resources.forEach(r => { gained += e.metrics[`${r}.gained`] || 0; });
+                  return e.steps > 0 ? gained / e.steps : 0;
+              },
+              filterCondition: (e) => {
+                  const resources = ['carbon', 'heart', 'oxygen', 'silicon', 'germanium'];
+                  let gained = 0;
+                  resources.forEach(r => { gained += e.metrics[`${r}.gained`] || 0; });
+                  return e.steps > 0 && gained / e.steps < 0.05;
+              },
+              filterLabel: 'Low Resource Efficiency (<0.05/step)'
+          },
+          hearts_to_junction_rate: {
+              name: 'Hearts to Junction',
+              subtitle: 'junctions / hearts lost',
+              goodThreshold: 0.5,
+              badThreshold: 0.1,
+              getEpisodeValue: (e) => {
+                  const junctions = e.metrics['junction.aligned_by_agent'] || 0;
+                  const heartsLost = e.metrics['heart.lost'] || 0;
+                  return heartsLost > 0 ? junctions / heartsLost : 0;
+              },
+              filterCondition: (e) => {
+                  const heartsLost = e.metrics['heart.lost'] || 0;
+                  const junctions = e.metrics['junction.aligned_by_agent'] || 0;
+                  return heartsLost > 0 && junctions / heartsLost < 0.1;
+              },
+              filterLabel: 'Low Hearts-to-Junction Conversion'
+          },
+          reward_consistency: {
+              name: 'Reward Consistency',
+              subtitle: '1 - (std/mean)',
+              goodThreshold: 0.5,
+              badThreshold: 0.2,
+              getEpisodeValue: () => 0,
+              filterCondition: () => false,
+              filterLabel: 'Low Reward Consistency',
+              policyLevel: true
+          }
+      };
+
+      function renderKPICards() {
+          const kpis = DATA.derived?.kpis || {};
+          const pct = (v) => (v * 100).toFixed(1) + '%';
+
+          const kpiColor = (kpiKey) => {
+              const def = KPI_DEFINITIONS[kpiKey];
+              const v = kpis[kpiKey] || 0;
+              if (def.inverted) {
+                  if (v <= def.goodThreshold) return 'trend-up';
+                  if (v >= def.badThreshold) return 'trend-down';
+              } else {
+                  if (v >= def.goodThreshold) return 'trend-up';
+                  if (v <= def.badThreshold) return 'trend-down';
+              }
+              return '';
+          };
+
+          // Generate worst/best examples for each KPI
+          function getExamples(kpiKey) {
+              const def = KPI_DEFINITIONS[kpiKey];
+              const completed = DATA.episodes.filter(e => e.status === 'completed');
+              const withValues = completed.map(e => ({
+                  episode: e,
+                  value: def.getEpisodeValue(e)
+              }));
+
+              // Sort by value (worst first for normal KPIs, best first for inverted)
+              const sorted = withValues.sort((a, b) => def.inverted ? b.value - a.value : a.value - b.value);
+              const worst = sorted.slice(0, 3);
+              const best = sorted.slice(-3).reverse();
+
+              return { worst, best };
+          }
+
+          let html = '';
+          Object.entries(KPI_DEFINITIONS).forEach(([key, def]) => {
+              const value = kpis[key] || 0;
+              const displayValue = key === 'resource_efficiency_per_step' ? value.toFixed(3) : pct(value);
+
+              if (def.policyLevel) {
+                  // Policy-level KPIs without per-episode breakdown
+                  html += `
+                      <div class="card">
+                          <div class="card-title">${def.name}</div>
+                          <div class="card-value ${kpiColor(key)}">${displayValue}</div>
+                          <div class="card-subtitle">${def.subtitle}</div>
+                      </div>
+                  `;
+                  return;
+              }
+
+              const examples = getExamples(key);
+              const fmtValue = (v) => key === 'resource_efficiency_per_step' ? v.toFixed(3) : (v * 100).toFixed(0) + '%';
+
+              html += `
+                  <div class="card clickable" onclick="filterByKpi('${key}')">
+                      <div class="card-title">${def.name}</div>
+                      <div class="card-value ${kpiColor(key)}">${displayValue}</div>
+                      <div class="card-subtitle">${def.subtitle}</div>
+                      <div class="kpi-examples">
+                          <div class="kpi-examples-header">
+                              <span>Worst</span>
+                              <span>Value</span>
+                          </div>
+                          ${examples.worst.map(ex => `
+                              <div class="kpi-example worst" onclick="event.stopPropagation(); showEpisodeInTable('${ex.episode.episode_id}')">
+                                  <span class="opponent">${ex.episode.opponent_name}</span>
+                                  <span class="metric">${fmtValue(ex.value)}</span>
+                              </div>
+                          `).join('')}
+                          <div class="kpi-examples-header" style="margin-top: 0.5rem;">
+                              <span>Best</span>
+                              <span>Value</span>
+                          </div>
+                          ${examples.best.map(ex => `
+                              <div class="kpi-example best" onclick="event.stopPropagation(); showEpisodeInTable('${ex.episode.episode_id}')">
+                                  <span class="opponent">${ex.episode.opponent_name}</span>
+                                  <span class="metric">${fmtValue(ex.value)}</span>
+                              </div>
+                          `).join('')}
+                      </div>
+                  </div>
+              `;
+          });
+
+          document.getElementById('kpi-cards').innerHTML = html;
+      }
+
+      function filterByKpi(kpiKey) {
+          const def = KPI_DEFINITIONS[kpiKey];
+          activeKpiFilter = { key: kpiKey, label: def.filterLabel };
+
+          // Apply the filter
+          filteredEpisodes = DATA.episodes.filter(e => e.status === 'completed' && def.filterCondition(e));
+
+          // Show banner and switch to Episodes tab
+          document.getElementById('episodes-filter-banner').style.display = 'flex';
+          document.getElementById('episodes-filter-text').textContent = `Filtered by: ${def.filterLabel}`;
+
+          // Update tab badge
+          updateTabBadge();
+
+          updateFilteredCount();
+          renderEpisodes();
+          showTab('episodes');
+      }
+
+      function clearKpiFilter() {
+          activeKpiFilter = null;
+          document.getElementById('episodes-filter-banner').style.display = 'none';
+          updateTabBadge();
+          clearFilters();
+      }
+
+      function updateTabBadge() {
+          const episodesTab = document.querySelector('[onclick="showTab(\'episodes\')"]');
+          const badge = episodesTab.querySelector('.filter-badge');
+          if (badge) badge.remove();
+
+          if (activeKpiFilter) {
+              episodesTab.innerHTML = `Episodes <span class="filter-badge">${filteredEpisodes.length}</span>`;
+          } else {
+              episodesTab.textContent = 'Episodes';
+          }
+      }
+
+      function showEpisodeInTable(episodeId) {
+          // Clear filters to show all episodes
+          clearFilters();
+          showTab('episodes');
+
+          // Find and expand the episode row
+          setTimeout(() => {
+              const row = document.querySelector(`[data-episode-id="${episodeId}"]`);
+              if (row) {
+                  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  row.click();
+              }
+          }, 100);
+      }
+
+      // Diagnostic definitions with filter conditions
+      const DIAGNOSTIC_FILTERS = {
+          'High movement failures': (e) => {
+              const success = e.metrics['action.move.success'] || 0;
+              const failed = e.metrics['action.move.failed'] || 0;
+              return failed > 10 || (success + failed > 0 && failed / (success + failed) > 0.2);
+          },
+          'Action timeouts detected': (e) => (e.metrics['action.timeout'] || 0) > 5,
+          'frozen': (e) => {
+              const frozen = e.metrics['status.frozen.ticks'] || 0;
+              return e.steps > 0 && frozen / e.steps > 0.1;
+          },
+          'low junction alignment': (e) => (e.metrics['junction.aligned_by_agent'] || 0) < 2,
+          'No vibe changes': (e) => (e.metrics['action.change_vibe.success'] || 0) === 0,
+          'High resource loss': (e) => {
+              const resources = ['carbon', 'heart', 'oxygen', 'silicon', 'germanium'];
+              let lost = 0, gained = 0;
+              resources.forEach(r => {
+                  lost += e.metrics[`${r}.lost`] || 0;
+                  gained += e.metrics[`${r}.gained`] || 0;
+              });
+              return gained > 0 && lost > gained * 0.5;
+          },
+          'terminated early': (e) => e.steps < 500,
+          'High noop rate': (e) => {
+              let total = 0;
+              Object.keys(e.metrics).forEach(k => {
+                  if (k.startsWith('action.') && k.includes('.success')) total += e.metrics[k] || 0;
+              });
+              total += (e.metrics['action.failed'] || 0);
+              const noop = e.metrics['action.noop.success'] || 0;
+              return total > 0 && noop / total > 0.15;
+          },
+          'Matchup disparity': () => true,  // Cross-episode pattern, show all
+          'Declining rewards': () => true,   // Trend-level pattern, show all
+          'high freeze time and low reward': (e) => {
+              const frozen = e.metrics['status.frozen.ticks'] || 0;
+              const avgReward = filteredEpisodes.reduce((s, ep) => s + ep.reward, 0) / (filteredEpisodes.length || 1);
+              return e.steps > 0 && frozen / e.steps > 0.15 && e.reward < avgReward * 0.5;
+          }
+      };
+
+      function findDiagnosticFilter(diagnosticText) {
+          // Find matching filter based on diagnostic text
+          for (const [key, filterFn] of Object.entries(DIAGNOSTIC_FILTERS)) {
+              if (diagnosticText.toLowerCase().includes(key.toLowerCase())) {
+                  return { key, filterFn };
+              }
+          }
+          return null;
+      }
+
+      function renderDiagnostics() {
+          const diagnostics = DATA.derived?.diagnostics || [];
+          const container = document.getElementById('diagnostic-insights');
+          const list = document.getElementById('diagnostic-list');
+
+          if (diagnostics.length === 0) {
+              container.style.display = 'none';
+              return;
+          }
+
+          container.style.display = 'block';
+          container.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(249, 115, 22, 0.1) 100%)';
+          container.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          container.querySelector('h4').style.color = 'var(--accent-red)';
+
+          list.innerHTML = diagnostics.map((d, i) => `<li onclick="showDiagnosticModal(${i})" title="Click to see affected episodes">${d}</li>`).join('');
+      }
+
+      // Phase 2: Render benchmarks table
+      function renderBenchmarks() {
+          const benchmarks = DATA.derived?.benchmarks || {};
+          const section = document.getElementById('benchmarks-section');
+          const tbody = document.getElementById('benchmarks-tbody');
+
+          if (Object.keys(benchmarks).length === 0) {
+              section.style.display = 'none';
+              return;
+          }
+
+          section.style.display = 'block';
+          const tierColors = {
+              'bottom': 'var(--accent-red)',
+              'average': 'var(--accent-yellow)',
+              'top10': 'var(--accent-green)',
+              'elite': '#fbbf24'
+          };
+          const tierLabels = {
+              'bottom': 'Bottom 50%',
+              'average': 'Average',
+              'top10': 'Top 10%',
+              'elite': 'Elite'
+          };
+
+          tbody.innerHTML = Object.entries(benchmarks).map(([key, b]) => {
+              const isPercent = key.includes('rate') || key.includes('pct');
+              const fmtVal = isPercent ? (b.value * 100).toFixed(1) + '%' : b.value.toFixed(2);
+              const fmtThresh = (v) => isPercent ? (v * 100).toFixed(0) + '%' : v.toFixed(0);
+              const color = tierColors[b.tier] || 'inherit';
+              return `
+                  <tr>
+                      <td>${b.label}</td>
+                      <td style="font-weight: 600;">${fmtVal}</td>
+                      <td style="color: var(--text-secondary);">&lt;${fmtThresh(b.thresholds.bottom)}</td>
+                      <td style="color: var(--text-secondary);">${fmtThresh(b.thresholds.top10)}+</td>
+                      <td style="color: var(--text-secondary);">${fmtThresh(b.thresholds.elite)}+</td>
+                      <td><span class="status-badge" style="background: ${color}22; color: ${color};">${tierLabels[b.tier]}</span></td>
+                  </tr>
+              `;
+          }).join('');
+      }
+
+      // Phase 4: Render team composition cards
+      let teamCompChart = null;
+
+      function renderTeamComp() {
+          const teamComp = DATA.derived?.team_comp || [];
+          const section = document.getElementById('team-comp-section');
+          const cardsEl = document.getElementById('team-comp-cards');
+          const warningEl = document.getElementById('team-comp-warning');
+          const warningText = document.getElementById('team-comp-warning-text');
+          const chartContainer = document.getElementById('team-comp-chart-container');
+
+          if (teamComp.length === 0) {
+              section.style.display = 'none';
+              return;
+          }
+
+          section.style.display = 'block';
+
+          // Check for red flag
+          const diagnostics = DATA.derived?.diagnostics || [];
+          const redFlag = diagnostics.find(d => d.toLowerCase().includes('over-reliance'));
+          if (redFlag) {
+              warningEl.style.display = 'block';
+              warningText.textContent = redFlag;
+          } else {
+              warningEl.style.display = 'none';
+          }
+
+          // Team comp bar chart (only show with 2+ compositions)
+          if (teamCompChart) teamCompChart.destroy();
+          if (teamComp.length >= 2) {
+              chartContainer.style.display = 'block';
+              const ctx = document.getElementById('team-comp-chart').getContext('2d');
+              teamCompChart = new Chart(ctx, {
+                  type: 'bar',
+                  data: {
+                      labels: teamComp.map(tc => tc.composition),
+                      datasets: [
+                          {
+                              label: 'Avg Reward',
+                              data: teamComp.map(tc => tc.avg_reward),
+                              backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                              borderColor: 'rgba(34, 197, 94, 1)',
+                              borderWidth: 1
+                          },
+                          {
+                              label: 'Avg Junction Aligned',
+                              data: teamComp.map(tc => tc.avg_junction_aligned),
+                              backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                              borderColor: 'rgba(59, 130, 246, 1)',
+                              borderWidth: 1
+                          }
+                      ]
+                  },
+                  options: {
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                          legend: {
+                              display: true,
+                              labels: { color: '#8b949e' }
+                          }
+                      },
+                      scales: {
+                          y: { beginAtZero: true, grid: { color: '#30363d' } },
+                          x: { grid: { color: '#30363d' } }
+                      }
+                  }
+              });
+          } else {
+              chartContainer.style.display = 'none';
+          }
+
+          // Find best opponent (highest avg reward, min 3 matches)
+          const oppMetrics = DATA.derived?.opponent_metrics || {};
+          let bestOpp = null;
+          let bestOppAvg = -Infinity;
+          for (const [name, info] of Object.entries(oppMetrics)) {
+              if (info.count >= 3 && info.avg_reward > bestOppAvg) {
+                  bestOppAvg = info.avg_reward;
+                  bestOpp = name;
+              }
+          }
+
+          // Compute per-comp stats vs best opponent
+          const compVsBest = {};
+          if (bestOpp) {
+              const completed = DATA.episodes.filter(e => e.status === 'completed' && e.opponent_name === bestOpp);
+              const byComp = {};
+              for (const e of completed) {
+                  (byComp[e.team_composition] = byComp[e.team_composition] || []).push(e);
+              }
+              for (const [comp, eps] of Object.entries(byComp)) {
+                  compVsBest[comp] = {
+                      count: eps.length,
+                      avg_reward: eps.reduce((s, e) => s + e.reward, 0) / eps.length,
+                      avg_junction: eps.reduce((s, e) => s + (e.metrics['junction.aligned_by_agent'] || 0), 0) / eps.length
+                  };
+              }
+          }
+
+          cardsEl.innerHTML = teamComp.map(tc => {
+              const vs = bestOpp ? compVsBest[tc.composition] : null;
+              const vsHtml = vs
+                  ? `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-size: 0.75rem;">
+                      <div style="color: var(--accent-blue); margin-bottom: 0.25rem;">vs ${bestOpp} (${vs.count} ep)</div>
+                      <div style="color: var(--text-secondary);">Reward: <span style="color: ${vs.avg_reward >= tc.avg_reward ? 'var(--accent-green)' : 'var(--accent-red)'};">${vs.avg_reward.toFixed(2)}</span></div>
+                      <div style="color: var(--text-secondary);">Junction: ${vs.avg_junction.toFixed(1)}/ep</div>
+                    </div>`
+                  : (bestOpp
+                      ? `<div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-size: 0.75rem; color: var(--text-secondary);">No matches vs ${bestOpp}</div>`
+                      : '');
+              return `
+              <div class="card clickable" onclick="filterByTeamComp('${tc.composition}')">
+                  <div class="card-title">${tc.composition}</div>
+                  <div class="card-value">${tc.avg_reward.toFixed(2)}</div>
+                  <div class="card-subtitle">avg reward (${tc.count} episodes)</div>
+                  <div style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                      <div>Move Eff: ${(tc.avg_move_efficiency * 100).toFixed(1)}%</div>
+                      <div>Junction: ${tc.avg_junction_aligned.toFixed(1)}/ep</div>
+                      <div>Resources: ${tc.avg_resource_gained.toFixed(0)}/ep</div>
+                  </div>
+                  ${vsHtml}
+              </div>
+          `}).join('');
+      }
+
+      function filterByTeamComp(comp) {
+          activeKpiFilter = { key: 'team_comp', label: `Team: ${comp}` };
+          filteredEpisodes = DATA.episodes.filter(e => e.team_composition === comp);
+          document.getElementById('episodes-filter-banner').style.display = 'flex';
+          document.getElementById('episodes-filter-text').textContent = `Filtered by: Team composition ${comp}`;
+          updateTabBadge();
+          updateFilteredCount();
+          renderEpisodes();
+          showTab('episodes');
+      }
+
+      function showDiagnosticModal(diagnosticIndex) {
+          const diagnostics = DATA.derived?.diagnostics || [];
+          const diagnostic = diagnostics[diagnosticIndex];
+          if (!diagnostic) return;
+
+          const filter = findDiagnosticFilter(diagnostic);
+          let affectedEpisodes = [];
+
+          if (filter) {
+              affectedEpisodes = DATA.episodes.filter(e => e.status === 'completed' && filter.filterFn(e));
+          }
+
+          // Populate modal
+          document.getElementById('modal-title').textContent = `Episodes: ${diagnostic.split(' - ')[0]}`;
+
+          document.getElementById('modal-stats').innerHTML = `
+              <div class="modal-stat">
+                  <div class="value">${affectedEpisodes.length}</div>
+                  <div class="label">affected episodes</div>
+              </div>
+              <div class="modal-stat">
+                  <div class="value">${((affectedEpisodes.length / DATA.episodes.length) * 100).toFixed(1)}%</div>
+                  <div class="label">of total</div>
+              </div>
+          `;
+
+          // Sort by reward (worst first)
+          const sorted = affectedEpisodes.sort((a, b) => a.reward - b.reward).slice(0, 20);
+
+          document.getElementById('modal-tbody').innerHTML = sorted.map(e => {
+              // Find the most relevant metric for this diagnostic
+              let keyMetric = '';
+              if (diagnostic.includes('movement')) {
+                  const failed = e.metrics['action.move.failed'] || 0;
+                  const success = e.metrics['action.move.success'] || 0;
+                  keyMetric = `${failed}/${success + failed} failed`;
+              } else if (diagnostic.includes('frozen')) {
+                  const frozen = e.metrics['status.frozen.ticks'] || 0;
+                  keyMetric = `${((frozen / e.steps) * 100).toFixed(1)}% frozen`;
+              } else if (diagnostic.includes('junction')) {
+                  keyMetric = `${e.metrics['junction.aligned_by_agent'] || 0} aligned`;
+              } else if (diagnostic.includes('vibe')) {
+                  keyMetric = `${e.metrics['action.change_vibe.success'] || 0} vibe changes`;
+              } else if (diagnostic.includes('timeout')) {
+                  keyMetric = `${e.metrics['action.timeout'] || 0} timeouts`;
+              } else {
+                  keyMetric = `${e.steps} steps`;
+              }
+
+              return `
+                  <tr onclick="closeModal(); showEpisodeInTable('${e.episode_id}')" style="cursor: pointer;">
+                      <td class="mono truncate">${e.episode_id.slice(0, 8)}...</td>
+                      <td>${e.opponent_name}</td>
+                      <td>${e.team_composition}</td>
+                      <td>${e.reward.toFixed(3)}</td>
+                      <td>${keyMetric}</td>
+                  </tr>
+              `;
+          }).join('');
+
+          // Show modal
+          document.getElementById('drill-down-modal').classList.add('show');
+      }
+
+      function closeModal() {
+          document.getElementById('drill-down-modal').classList.remove('show');
+      }
+
+      // Close modal on overlay click
+      document.getElementById('drill-down-modal').addEventListener('click', (e) => {
+          if (e.target.classList.contains('modal-overlay')) {
+              closeModal();
+          }
+      });
+
+      // Close modal on escape key
+      document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closeModal();
+      });
+
+      // Reward bins for histogram filtering
+      const REWARD_BINS = [
+          { min: 0, max: 0, label: '0' },
+          { min: 0, max: 0.1, label: '0-0.1' },
+          { min: 0.1, max: 0.5, label: '0.1-0.5' },
+          { min: 0.5, max: 1, label: '0.5-1' },
+          { min: 1, max: 2, label: '1-2' },
+          { min: 2, max: 5, label: '2-5' },
+          { min: 5, max: 10, label: '5-10' },
+          { min: 10, max: 20, label: '10-20' },
+          { min: 20, max: 50, label: '20-50' },
+          { min: 50, max: Infinity, label: '50+' }
+      ];
+
+      function getBinIndex(reward) {
+          if (reward === 0) return 0;
+          if (reward <= 0.1) return 1;
+          if (reward <= 0.5) return 2;
+          if (reward <= 1) return 3;
+          if (reward <= 2) return 4;
+          if (reward <= 5) return 5;
+          if (reward <= 10) return 6;
+          if (reward <= 20) return 7;
+          if (reward <= 50) return 8;
+          return 9;
+      }
+
+      let rewardChart;
+      function renderRewardChart(type) {
+          const ctx = document.getElementById('reward-chart').getContext('2d');
+          if (rewardChart) rewardChart.destroy();
+
+          const rewards = filteredEpisodes.map(e => e.reward);
+
+          if (type === 'histogram') {
+              const labels = REWARD_BINS.map(b => b.label);
+              const counts = new Array(REWARD_BINS.length).fill(0);
+              rewards.forEach(r => {
+                  counts[getBinIndex(r)]++;
+              });
+
+              rewardChart = new Chart(ctx, {
+                  type: 'bar',
+                  data: {
+                      labels: labels,
+                      datasets: [{
+                          label: 'Episodes',
+                          data: counts,
+                          backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                          borderColor: 'rgba(34, 197, 94, 1)',
+                          borderWidth: 1
+                      }]
+                  },
+                  options: {
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                          legend: { display: false },
+                          tooltip: {
+                              callbacks: {
+                                  footer: () => 'Click to filter episodes'
+                              }
+                          }
+                      },
+                      scales: {
+                          y: { beginAtZero: true, grid: { color: '#30363d' } },
+                          x: { grid: { color: '#30363d' } }
+                      },
+                      onClick: (event, elements) => {
+                          if (elements.length > 0) {
+                              const binIndex = elements[0].index;
+                              filterByRewardBin(binIndex);
+                          }
+                      },
+                      onHover: (event, elements) => {
+                          event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                      }
+                  }
+              });
+          } else {
+              // Scatter plot with tooltips showing episode info
+              const scatterData = filteredEpisodes.map((e, i) => ({
+                  x: i,
+                  y: e.reward,
+                  episodeId: e.episode_id,
+                  opponent: e.opponent_name
+              }));
+
+              // Compute linear regression for trend line
+              const n = scatterData.length;
+              let trendDatasets = [];
+              if (n >= 2) {
+                  const xMean = (n - 1) / 2;
+                  const yMean = scatterData.reduce((s, d) => s + d.y, 0) / n;
+                  let num = 0, den = 0;
+                  for (let i = 0; i < n; i++) {
+                      num += (i - xMean) * (scatterData[i].y - yMean);
+                      den += (i - xMean) * (i - xMean);
+                  }
+                  const slope = den > 0 ? num / den : 0;
+                  const intercept = yMean - slope * xMean;
+                  const trendLine = [
+                      { x: 0, y: intercept },
+                      { x: n - 1, y: slope * (n - 1) + intercept }
+                  ];
+                  const slopeLabel = slope >= 0 ? `+${slope.toFixed(4)}` : slope.toFixed(4);
+                  trendDatasets.push({
+                      label: `Trend (slope: ${slopeLabel})`,
+                      data: trendLine,
+                      type: 'line',
+                      borderColor: 'rgba(234, 179, 8, 0.8)',
+                      borderWidth: 2,
+                      borderDash: [6, 4],
+                      pointRadius: 0,
+                      fill: false
+                  });
+              }
+
+              rewardChart = new Chart(ctx, {
+                  type: 'scatter',
+                  data: {
+                      datasets: [{
+                          label: 'Reward',
+                          data: scatterData,
+                          backgroundColor: 'rgba(34, 197, 94, 0.5)',
+                          pointRadius: 4,
+                          pointHoverRadius: 8
+                      }, ...trendDatasets]
+                  },
+                  options: {
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                          legend: {
+                              display: trendDatasets.length > 0,
+                              labels: { color: '#8b949e' }
+                          },
+                          tooltip: {
+                              callbacks: {
+                                  label: (ctx) => {
+                                      const point = ctx.raw;
+                                      if (point.opponent) {
+                                          return [
+                                              `Reward: ${point.y.toFixed(3)}`,
+                                              `Opponent: ${point.opponent}`,
+                                              `Click to view details`
+                                          ];
+                                      }
+                                      return `y = ${point.y.toFixed(3)}`;
+                                  }
+                              }
+                          }
+                      },
+                      scales: {
+                          y: { title: { display: true, text: 'Reward' }, grid: { color: '#30363d' } },
+                          x: { title: { display: true, text: 'Episode Index' }, grid: { color: '#30363d' } }
+                      },
+                      onClick: (event, elements) => {
+                          if (elements.length > 0) {
+                              const datasetIndex = elements[0].datasetIndex;
+                              if (datasetIndex === 0) {
+                                  const dataIndex = elements[0].index;
+                                  const episodeId = scatterData[dataIndex].episodeId;
+                                  showEpisodeInTable(episodeId);
+                              }
+                          }
+                      },
+                      onHover: (event, elements) => {
+                          event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                      }
+                  }
+              });
+          }
+      }
+
+      function filterByRewardBin(binIndex) {
+          const bin = REWARD_BINS[binIndex];
+          activeKpiFilter = { key: 'reward_bin', label: `Reward: ${bin.label}` };
+
+          if (binIndex === 0) {
+              // Exact zero
+              filteredEpisodes = DATA.episodes.filter(e => e.reward === 0);
+          } else {
+              filteredEpisodes = DATA.episodes.filter(e => e.reward > bin.min && e.reward <= bin.max);
+          }
+
+          document.getElementById('episodes-filter-banner').style.display = 'flex';
+          document.getElementById('episodes-filter-text').textContent = `Filtered by: Reward range ${bin.label}`;
+          updateTabBadge();
+          updateFilteredCount();
+          renderEpisodes();
+          showTab('episodes');
+      }
+
+      function setRewardChart(type) {
+          renderRewardChart(type);
+      }
+
+      function renderHighLowComparison() {
+          if (filteredEpisodes.length < 10) {
+              document.getElementById('high-low-comparison').innerHTML = '<p style="color: var(--text-secondary);">Need at least 10 episodes for comparison.</p>';
+              return;
+          }
+
+          const sorted = [...filteredEpisodes].sort((a, b) => b.reward - a.reward);
+          const top20 = sorted.slice(0, Math.ceil(sorted.length * 0.2));
+          const bottom20 = sorted.slice(-Math.ceil(sorted.length * 0.2));
+
+          function avgMetric(episodes, metric) {
+              const vals = episodes.map(e => e.metrics[metric] || 0);
+              return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+          }
+
+          const metrics = ['action.move.success', 'action.move.failed', 'junction.aligned_by_agent', 'heart.gained',
+              'action.noop.success', 'status.frozen.ticks', 'carbon.gained', 'silicon.gained',
+              'action.change_vibe.success', 'aligned.junction.held'];
+
+          let tableHtml = '<table class="data-table" style="font-size: 0.85rem;"><thead><tr><th>Metric</th><th style="color: var(--accent-green);">Top 20%</th><th style="color: var(--accent-red);">Bottom 20%</th><th>Gap</th></tr></thead><tbody>';
+
+          metrics.forEach(m => {
+              const highVal = avgMetric(top20, m);
+              const lowVal = avgMetric(bottom20, m);
+              const ratio = lowVal > 0 ? highVal / lowVal : (highVal > 0 ? Infinity : 1);
+              const bigGap = ratio > 2 || ratio < 0.5;
+              const style = bigGap ? 'font-weight: bold; background: rgba(234, 179, 8, 0.1);' : '';
+              const gapText = ratio === Infinity ? '>2x' : `${ratio.toFixed(1)}x`;
+              const gapColor = bigGap ? 'color: var(--accent-yellow);' : '';
+              tableHtml += `<tr style="${style}"><td>${m}</td><td>${highVal.toFixed(1)}</td><td>${lowVal.toFixed(1)}</td><td style="${gapColor}">${gapText}</td></tr>`;
+          });
+
+          tableHtml += '</tbody></table>';
+          if (metrics.some(m => { const h = avgMetric(top20, m), l = avgMetric(bottom20, m); return l > 0 && (h/l > 2 || h/l < 0.5); })) {
+              tableHtml += '<p style="color: var(--accent-yellow); font-size: 0.75rem; margin-top: 0.5rem;">Highlighted rows show >2x gap between top and bottom performers.</p>';
+          }
+
+          document.getElementById('high-low-comparison').innerHTML = tableHtml;
+      }
+
+      function renderInsights() {
+          const insights = [];
+
+          // Check for high failure rate
+          const failRate = filteredEpisodes.filter(e => e.status === 'failed').length / filteredEpisodes.length;
+          if (failRate > 0.1) {
+              insights.push(`High failure rate: ${(failRate * 100).toFixed(1)}% of episodes failed`);
+          }
+
+          // Check for zero-reward episodes
+          const zeroReward = filteredEpisodes.filter(e => e.reward === 0).length;
+          if (zeroReward > filteredEpisodes.length * 0.3) {
+              insights.push(`${zeroReward} episodes (${(zeroReward / filteredEpisodes.length * 100).toFixed(0)}%) have zero reward`);
+          }
+
+          // Check for junction activity
+          const avgJunction = filteredEpisodes.reduce((sum, e) => sum + (e.metrics['junction.aligned_by_agent'] || 0), 0) / filteredEpisodes.length;
+          if (avgJunction < 1) {
+              insights.push('Low junction activity: consider enabling aligner/scrambler behavior');
+          }
+
+          if (insights.length === 0) {
+              insights.push('No major issues detected');
+          }
+
+          document.getElementById('overview-insights').innerHTML = `
+              <h4>Key Insights</h4>
+              <ul>${insights.map(i => `<li>${i}</li>`).join('')}</ul>
+          `;
+      }
+
+      // ============ Episodes Tab ============
+
+      function renderEpisodes() {
+          const sorted = [...filteredEpisodes].sort((a, b) => {
+              let aVal = a[sortColumn];
+              let bVal = b[sortColumn];
+              if (typeof aVal === 'string') {
+                  return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+              }
+              return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+          });
+
+          const tbody = document.getElementById('episodes-tbody');
+          tbody.innerHTML = sorted.map(e => `
+              <tr class="episode-row ${expandedEpisodeId === e.episode_id ? 'expanded' : ''}"
+                  data-episode-id="${e.episode_id}"
+                  onclick="toggleEpisodeDetail('${e.episode_id}')">
+                  <td class="mono truncate" title="${e.episode_id}">${e.episode_id.slice(0, 8)}...</td>
+                  <td>${e.opponent_name}:v${e.opponent_version}</td>
+                  <td>${e.team_composition}</td>
+                  <td style="color: ${e.reward > 5 ? 'var(--accent-green)' : e.reward < 0.5 ? 'var(--accent-red)' : 'inherit'}">${e.reward.toFixed(3)}</td>
+                  <td><span class="status-badge status-${e.status}">${e.status}</span></td>
+                  <td>${e.steps}</td>
+              </tr>
+              <tr class="episode-detail-row" data-detail-for="${e.episode_id}" style="display: ${expandedEpisodeId === e.episode_id ? 'table-row' : 'none'};">
+                  <td colspan="6" style="padding: 0;">
+                      <div class="episode-detail ${expandedEpisodeId === e.episode_id ? 'expanded' : ''}">
+                          ${renderEpisodeDetailContent(e)}
+                      </div>
+                  </td>
+              </tr>
+          `).join('');
+      }
+
+      function toggleEpisodeDetail(episodeId) {
+          if (expandedEpisodeId === episodeId) {
+              expandedEpisodeId = null;
+          } else {
+              expandedEpisodeId = episodeId;
+          }
+          renderEpisodes();
+      }
+
+      function renderEpisodeDetailContent(e) {
+          // Helper for formatting metric values
+          const fmtNum = (v) => (v || 0).toFixed(1);
+          const fmtPct = (v, total) => total > 0 ? ((v / total) * 100).toFixed(1) + '%' : 'N/A';
+
+          // Extract metrics
+          const m = e.metrics;
+          const moveSuccess = m['action.move.success'] || 0;
+          const moveFailed = m['action.move.failed'] || 0;
+          const vibeSuccess = m['action.change_vibe.success'] || 0;
+          const vibeFailed = m['action.change_vibe.failed'] || 0;
+          const noopCount = m['action.noop.success'] || 0;
+
+          // Resources
+          const resources = ['carbon', 'silicon', 'oxygen', 'germanium', 'heart'];
+          const resourceRows = resources.map(r => {
+              const gained = m[`${r}.gained`] || 0;
+              const lost = m[`${r}.lost`] || 0;
+              const amount = m[`${r}.amount`] || 0;
+              if (gained === 0 && lost === 0 && amount === 0) return '';
+              return `
+                  <div class="detail-row">
+                      <span class="label">${r}</span>
+                      <span class="value">+${fmtNum(gained)} / -${fmtNum(lost)} = ${fmtNum(amount)}</span>
+                  </div>
+              `;
+          }).filter(r => r).join('');
+
+          // Status stats
+          const frozenTicks = m['status.frozen.ticks'] || 0;
+
+          // Junction stats
+          const junctionAligned = m['junction.aligned_by_agent'] || 0;
+          const junctionScrambled = m['junction.scrambled_by_agent'] || 0;
+          const alignedHeld = m['aligned.junction.held'] || 0;
+
+          return `
+              <div class="detail-grid">
+                  <div class="detail-section">
+                      <h5>Summary</h5>
+                      <div class="detail-row">
+                          <span class="label">Episode ID</span>
+                          <span class="value mono">${e.episode_id}</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Opponent</span>
+                          <span class="value">${e.opponent_name}:v${e.opponent_version}</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Team Comp</span>
+                          <span class="value">${e.team_composition}</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Reward</span>
+                          <span class="value ${e.reward > 5 ? 'good' : e.reward < 0.5 ? 'bad' : ''}">${e.reward.toFixed(4)}</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Steps</span>
+                          <span class="value">${e.steps}</span>
+                      </div>
+                  </div>
+
+                  <div class="detail-section">
+                      <h5>Action Breakdown</h5>
+                      <div class="detail-row">
+                          <span class="label">Move</span>
+                          <span class="value ${moveFailed > moveSuccess * 0.3 ? 'bad' : 'good'}">${moveSuccess} ok / ${moveFailed} fail (${fmtPct(moveSuccess, moveSuccess + moveFailed)})</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Change Vibe</span>
+                          <span class="value">${vibeSuccess} ok / ${vibeFailed} fail</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Noop</span>
+                          <span class="value">${noopCount}</span>
+                      </div>
+                  </div>
+
+                  <div class="detail-section">
+                      <h5>Resources</h5>
+                      ${resourceRows || '<div class="detail-row"><span class="label">No resource data</span></div>'}
+                  </div>
+
+                  <div class="detail-section">
+                      <h5>Status</h5>
+                      <div class="detail-row">
+                          <span class="label">Frozen Ticks</span>
+                          <span class="value ${frozenTicks > e.steps * 0.1 ? 'bad' : ''}">${frozenTicks} (${fmtPct(frozenTicks, e.steps)} of episode)</span>
+                      </div>
+                  </div>
+
+                  <div class="detail-section">
+                      <h5>Junction Activity</h5>
+                      <div class="detail-row">
+                          <span class="label">Aligned</span>
+                          <span class="value ${junctionAligned > 0 ? 'good' : ''}">${junctionAligned}</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Scrambled</span>
+                          <span class="value">${junctionScrambled}</span>
+                      </div>
+                      <div class="detail-row">
+                          <span class="label">Held Time</span>
+                          <span class="value">${alignedHeld}</span>
+                      </div>
+                  </div>
+              </div>
+          `;
+      }
+
+      function sortTable(column) {
+          if (sortColumn === column) {
+              sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+          } else {
+              sortColumn = column;
+              sortDirection = 'desc';
+          }
+          renderEpisodes();
+      }
+
+      // ============ Co-players Tab ============
+
+      let coplayersChart = null;
+      let coplayersData = [];  // Store for click handler
+
+      function renderCoplayers() {
+          const byCoplayer = {};
+          filteredEpisodes.forEach(e => {
+              const key = `${e.opponent_name}:v${e.opponent_version}`;
+              if (!byCoplayer[key]) {
+                  byCoplayer[key] = { rewards: [], name: e.opponent_name, version: e.opponent_version };
+              }
+              byCoplayer[key].rewards.push(e.reward);
+          });
+
+          coplayersData = Object.entries(byCoplayer).map(([key, data]) => ({
+              name: key,
+              opponentName: data.name,
+              opponentVersion: data.version,
+              matches: data.rewards.length,
+              avgReward: data.rewards.reduce((a, b) => a + b, 0) / data.rewards.length,
+              winRate: data.rewards.filter(r => r > 1.0).length / data.rewards.length * 100,
+              best: Math.max(...data.rewards),
+              worst: Math.min(...data.rewards)
+          })).sort((a, b) => b.avgReward - a.avgReward);
+
+          // Table - make rows clickable (single-click shows comparison, double-click filters)
+          document.getElementById('coplayers-tbody').innerHTML = coplayersData.map(o => `
+              <tr onclick="showOpponentComparison('${o.opponentName}')" ondblclick="filterByCoplayer('${o.opponentName}')" style="cursor: pointer;" title="Click to compare metrics, double-click to filter episodes">
+                  <td>${o.name}</td>
+                  <td>${o.matches}</td>
+                  <td style="color: ${o.avgReward > 2 ? 'var(--accent-green)' : o.avgReward < 1 ? 'var(--accent-red)' : 'inherit'}">${o.avgReward.toFixed(3)}</td>
+                  <td>${o.winRate.toFixed(1)}%</td>
+                  <td class="trend-up">${o.best.toFixed(2)}</td>
+                  <td class="trend-down">${o.worst.toFixed(2)}</td>
+              </tr>
+          `).join('');
+
+          // Chart with click interactivity
+          if (coplayersChart) coplayersChart.destroy();
+          const ctx = document.getElementById('coplayers-chart').getContext('2d');
+          coplayersChart = new Chart(ctx, {
+              type: 'bar',
+              data: {
+                  labels: coplayersData.map(o => o.name),
+                  datasets: [{
+                      label: 'Avg Reward',
+                      data: coplayersData.map(o => o.avgReward),
+                      backgroundColor: coplayersData.map(o =>
+                          o.avgReward > 2 ? 'rgba(34, 197, 94, 0.7)' :
+                          o.avgReward < 1 ? 'rgba(239, 68, 68, 0.7)' : 'rgba(59, 130, 246, 0.7)'
+                      )
+                  }]
+              },
+              options: {
+                  indexAxis: 'y',
+                  responsive: true,
+                  plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                          callbacks: {
+                              afterBody: (ctx) => {
+                                  const idx = ctx[0].dataIndex;
+                                  const coplayer = coplayersData[idx];
+                                  return [
+                                      `Matches: ${coplayer.matches}`,
+                                      `Win Rate: ${coplayer.winRate.toFixed(1)}%`,
+                                      '',
+                                      'Click to filter episodes'
+                                  ];
+                              }
+                          }
+                      }
+                  },
+                  scales: {
+                      x: { beginAtZero: true, grid: { color: '#30363d' } },
+                      y: { grid: { color: '#30363d' } }
+                  },
+                  onClick: (event, elements) => {
+                      if (elements.length > 0) {
+                          const idx = elements[0].index;
+                          const coplayer = coplayersData[idx];
+                          filterByCoplayer(coplayer.opponentName);
+                      }
+                  },
+                  onHover: (event, elements) => {
+                      event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+                  }
+              }
+          });
+      }
+
+      function filterByCoplayer(opponentName) {
+          activeKpiFilter = { key: 'coplayer', label: `Opponent: ${opponentName}` };
+
+          filteredEpisodes = DATA.episodes.filter(e => e.opponent_name === opponentName);
+
+          document.getElementById('episodes-filter-banner').style.display = 'flex';
+          document.getElementById('episodes-filter-text').textContent = `Filtered by: Opponent ${opponentName}`;
+          updateTabBadge();
+          updateFilteredCount();
+          renderEpisodes();
+          showTab('episodes');
+      }
+
+      function showOpponentComparison(opponentName) {
+          const panel = document.getElementById('opponent-comparison-panel');
+          const content = document.getElementById('opponent-comparison-content');
+          const title = document.getElementById('opponent-comparison-title');
+
+          // Compute per-opponent avg metrics
+          const oppEpisodes = DATA.episodes.filter(e => e.opponent_name === opponentName);
+          if (oppEpisodes.length === 0) { panel.style.display = 'none'; return; }
+
+          // Overall averages
+          const overallAvg = {};
+          const oppAvg = {};
+          const metricKeys = ['action.move.success', 'action.move.failed', 'action.change_vibe.success',
+              'action.noop.success', 'junction.aligned_by_agent', 'heart.gained', 'silicon.gained',
+              'carbon.gained', 'status.frozen.ticks'];
+
+          metricKeys.forEach(k => {
+              overallAvg[k] = DATA.episodes.reduce((s, e) => s + (e.metrics[k] || 0), 0) / DATA.episodes.length;
+              oppAvg[k] = oppEpisodes.reduce((s, e) => s + (e.metrics[k] || 0), 0) / oppEpisodes.length;
+          });
+
+          title.textContent = `Metric Comparison vs ${opponentName} (${oppEpisodes.length} episodes)`;
+
+          let html = '<table class="data-table" style="margin-top: 0.5rem;"><thead><tr><th>Metric</th><th>vs This Opponent</th><th>Overall Avg</th><th>Ratio</th></tr></thead><tbody>';
+          metricKeys.forEach(k => {
+              const oVal = oppAvg[k];
+              const aVal = overallAvg[k];
+              const ratio = aVal > 0 ? oVal / aVal : 0;
+              const highlight = ratio > 2 || ratio < 0.5;
+              const color = highlight ? (ratio > 2 ? 'var(--accent-green)' : 'var(--accent-red)') : 'inherit';
+              html += `<tr style="${highlight ? 'font-weight: bold;' : ''}">
+                  <td>${k}</td>
+                  <td style="color: ${color}">${oVal.toFixed(1)}</td>
+                  <td>${aVal.toFixed(1)}</td>
+                  <td style="color: ${color}">${ratio.toFixed(2)}x</td>
+              </tr>`;
+          });
+          html += '</tbody></table><p style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 0.5rem;">Highlighted: >2x or <0.5x difference. Double-click row to filter episodes.</p>';
+
+          content.innerHTML = html;
+          panel.style.display = 'block';
+      }
+
+      // ============ Behavior Tab ============
+
+      let actionsChart = null;
+      let resourcesChart = null;
+      let junctionsChart = null;
+      let gearChart = null;
+      let profileChart = null;
+      let efficiencyChart = null;
+
+      function renderZeroCountBanner() {
+          const banner = document.getElementById('zero-count-banner');
+          const text = document.getElementById('zero-count-text');
+          const diagnostics = DATA.derived?.diagnostics || [];
+          const zeroCountDiag = diagnostics.find(d => d.includes('Unused capabilities'));
+          if (zeroCountDiag) {
+              const match = zeroCountDiag.match(/always zero\): (.+)/);
+              text.textContent = match ? `These capabilities were never used across all episodes: ${match[1]}` : zeroCountDiag;
+              banner.style.display = 'block';
+          } else {
+              banner.style.display = 'none';
+          }
+      }
+
+      function renderBehavior() {
+          // Zero-count banner
+          renderZeroCountBanner();
+
+          // Strategy Profile Radar Chart
+          renderStrategyProfile();
+
+          // Efficiency Breakdown
+          renderEfficiencyChart();
+          // Aggregate metrics across all filtered episodes
+          const aggregated = {};
+          filteredEpisodes.forEach(e => {
+              Object.entries(e.metrics).forEach(([k, v]) => {
+                  if (typeof v === 'number') {
+                      aggregated[k] = (aggregated[k] || 0) + v;
+                  }
+              });
+          });
+
+          // Average per episode
+          const count = filteredEpisodes.length || 1;
+          Object.keys(aggregated).forEach(k => {
+              aggregated[k] /= count;
+          });
+
+          // Destroy existing charts before recreating
+          if (actionsChart) actionsChart.destroy();
+          if (resourcesChart) resourcesChart.destroy();
+          if (junctionsChart) junctionsChart.destroy();
+          if (gearChart) gearChart.destroy();
+
+          // Actions chart
+          const actionsCtx = document.getElementById('actions-chart').getContext('2d');
+          actionsChart = new Chart(actionsCtx, {
+              type: 'bar',
+              data: {
+                  labels: ['Move Success', 'Move Failed', 'Noop', 'Change Vibe', 'Swap'],
+                  datasets: [{
+                      label: 'Avg per Episode',
+                      data: [
+                          aggregated['action.move.success'] || 0,
+                          aggregated['action.move.failed'] || 0,
+                          aggregated['action.noop.success'] || 0,
+                          aggregated['action.change_vibe.success'] || 0,
+                          aggregated['actions.swap'] || 0
+                      ],
+                      backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(251, 191, 36, 0.7)', 'rgba(59, 130, 246, 0.7)']
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  plugins: { legend: { display: false } },
+                  scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
+              }
+          });
+
+          // Resources chart - grouped bar (gained vs lost) with net amount line
+          const resourceLabels = ['Carbon', 'Oxygen', 'Silicon', 'Germanium', 'Heart'];
+          const resourceKeys = ['carbon', 'oxygen', 'silicon', 'germanium', 'heart'];
+          const resGained = resourceKeys.map(r => aggregated[`${r}.gained`] || 0);
+          const resLost = resourceKeys.map(r => aggregated[`${r}.lost`] || 0);
+          const resNet = resourceKeys.map(r => aggregated[`${r}.amount`] || 0);
+
+          const resourcesCtx = document.getElementById('resources-chart').getContext('2d');
+          resourcesChart = new Chart(resourcesCtx, {
+              type: 'bar',
+              data: {
+                  labels: resourceLabels,
+                  datasets: [
+                      {
+                          label: 'Gained',
+                          data: resGained,
+                          backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                          borderColor: 'rgba(34, 197, 94, 1)',
+                          borderWidth: 1
+                      },
+                      {
+                          label: 'Lost',
+                          data: resLost,
+                          backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                          borderColor: 'rgba(239, 68, 68, 1)',
+                          borderWidth: 1
+                      },
+                      {
+                          label: 'Net Amount',
+                          data: resNet,
+                          type: 'line',
+                          borderColor: 'rgba(59, 130, 246, 1)',
+                          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                          borderWidth: 2,
+                          pointRadius: 4,
+                          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                          fill: false
+                      }
+                  ]
+              },
+              options: {
+                  responsive: true,
+                  plugins: {
+                      legend: {
+                          display: true,
+                          labels: { color: '#8b949e' }
+                      }
+                  },
+                  scales: {
+                      y: { beginAtZero: true, grid: { color: '#30363d' } },
+                      x: { grid: { color: '#30363d' } }
+                  }
+              }
+          });
+
+          // Junctions chart
+          const junctionsCtx = document.getElementById('junctions-chart').getContext('2d');
+          junctionsChart = new Chart(junctionsCtx, {
+              type: 'bar',
+              data: {
+                  labels: ['Aligned', 'Scrambled', 'Hearts Gained', 'Held (÷100)'],
+                  datasets: [{
+                      label: 'Avg per Episode',
+                      data: [
+                          aggregated['junction.aligned_by_agent'] || 0,
+                          aggregated['junction.scrambled_by_agent'] || 0,
+                          aggregated['heart.gained'] || 0,
+                          (aggregated['aligned.junction.held'] || 0) / 100
+                      ],
+                      backgroundColor: 'rgba(59, 130, 246, 0.7)'
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  plugins: { legend: { display: false } },
+                  scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
+              }
+          });
+
+          // Gear chart - aligner/scrambler gained vs lost
+          const gearCtx = document.getElementById('gear-chart').getContext('2d');
+          gearChart = new Chart(gearCtx, {
+              type: 'bar',
+              data: {
+                  labels: ['Aligner', 'Scrambler'],
+                  datasets: [
+                      {
+                          label: 'Gained',
+                          data: [
+                              aggregated['aligner.gained'] || 0,
+                              aggregated['scrambler.gained'] || 0
+                          ],
+                          backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                          borderColor: 'rgba(34, 197, 94, 1)',
+                          borderWidth: 1
+                      },
+                      {
+                          label: 'Lost',
+                          data: [
+                              aggregated['aligner.lost'] || 0,
+                              aggregated['scrambler.lost'] || 0
+                          ],
+                          backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                          borderColor: 'rgba(239, 68, 68, 1)',
+                          borderWidth: 1
+                      }
+                  ]
+              },
+              options: {
+                  responsive: true,
+                  plugins: {
+                      legend: {
+                          display: true,
+                          labels: { color: '#8b949e' }
+                      }
+                  },
+                  scales: {
+                      y: { beginAtZero: true, grid: { color: '#30363d' } },
+                      x: { grid: { color: '#30363d' } }
+                  }
+              }
+          });
+      }
+
+      function renderStrategyProfile() {
+          const profile = DATA.derived?.strategy_profile || {};
+
+          if (profileChart) profileChart.destroy();
+          const ctx = document.getElementById('profile-chart').getContext('2d');
+
+          profileChart = new Chart(ctx, {
+              type: 'radar',
+              data: {
+                  labels: ['Aggressive', 'Defensive', 'Resource Hoarder', 'Junction Hunter', 'Mobile Scout'],
+                  datasets: [{
+                      label: 'Policy Profile',
+                      data: [
+                          profile.aggressive || 0,
+                          profile.defensive || 0,
+                          profile.resource_hoarder || 0,
+                          profile.junction_hunter || 0,
+                          profile.mobile_scout || 0
+                      ],
+                      backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                      borderColor: 'rgba(34, 197, 94, 1)',
+                      borderWidth: 2,
+                      pointBackgroundColor: 'rgba(34, 197, 94, 1)',
+                      pointRadius: 4
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                      legend: { display: false }
+                  },
+                  scales: {
+                      r: {
+                          beginAtZero: true,
+                          max: 100,
+                          grid: { color: '#30363d' },
+                          angleLines: { color: '#30363d' },
+                          pointLabels: {
+                              color: '#8b949e',
+                              font: { size: 11 }
+                          },
+                          ticks: {
+                              color: '#8b949e',
+                              backdropColor: 'transparent'
+                          }
+                      }
+                  }
+              }
+          });
+      }
+
+      function renderEfficiencyChart() {
+          const kpis = DATA.derived?.kpis || {};
+
+          if (efficiencyChart) efficiencyChart.destroy();
+          const ctx = document.getElementById('efficiency-chart').getContext('2d');
+
+          const metrics = [
+              { label: 'Move Efficiency', value: kpis.move_efficiency || 0 },
+              { label: 'Action Success', value: kpis.action_success_rate || 0 },
+              { label: 'Vibe Change Rate', value: kpis.vibe_change_rate || 0 },
+              { label: 'Resource Retention', value: kpis.resource_retention || 0 },
+              { label: 'Junction Control', value: kpis.junction_control_rate || 0 }
+          ];
+
+          efficiencyChart = new Chart(ctx, {
+              type: 'bar',
+              data: {
+                  labels: metrics.map(m => m.label),
+                  datasets: [{
+                      label: 'Efficiency',
+                      data: metrics.map(m => m.value * 100),
+                      backgroundColor: metrics.map(m => {
+                          if (m.value >= 0.7) return 'rgba(34, 197, 94, 0.7)';
+                          if (m.value >= 0.4) return 'rgba(234, 179, 8, 0.7)';
+                          return 'rgba(239, 68, 68, 0.7)';
+                      }),
+                      borderColor: metrics.map(m => {
+                          if (m.value >= 0.7) return 'rgba(34, 197, 94, 1)';
+                          if (m.value >= 0.4) return 'rgba(234, 179, 8, 1)';
+                          return 'rgba(239, 68, 68, 1)';
+                      }),
+                      borderWidth: 1
+                  }]
+              },
+              options: {
+                  indexAxis: 'y',
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: { legend: { display: false } },
+                  scales: {
+                      x: {
+                          beginAtZero: true,
+                          max: 100,
+                          grid: { color: '#30363d' },
+                          title: { display: true, text: 'Efficiency %', color: '#8b949e' }
+                      },
+                      y: { grid: { color: '#30363d' } }
+                  }
+              }
+          });
+      }
+
+      // ============ Failures Tab ============
+
+      let failuresChart = null;
+
+      function renderFailures() {
+          const failed = filteredEpisodes.filter(e => e.status === 'failed');
+          const lowScoring = filteredEpisodes.filter(e => e.status === 'completed' && e.reward < 0.1);
+
+          // Cards
+          const errorTypes = {};
+          failed.forEach(e => {
+              const type = e.error_type || 'unknown';
+              errorTypes[type] = (errorTypes[type] || 0) + 1;
+          });
+
+          document.getElementById('failure-cards').innerHTML = `
+              <div class="card">
+                  <div class="card-title">Total Failures</div>
+                  <div class="card-value trend-down">${failed.length}</div>
+                  <div class="card-subtitle">${(failed.length / filteredEpisodes.length * 100).toFixed(1)}% of episodes</div>
+              </div>
+              <div class="card">
+                  <div class="card-title">Low Scoring (&lt;0.1)</div>
+                  <div class="card-value">${lowScoring.length}</div>
+                  <div class="card-subtitle">Completed but poor</div>
+              </div>
+              <div class="card">
+                  <div class="card-title">Timeout</div>
+                  <div class="card-value">${errorTypes['timeout'] || 0}</div>
+              </div>
+              <div class="card">
+                  <div class="card-title">OOM</div>
+                  <div class="card-value">${errorTypes['oom'] || 0}</div>
+              </div>
+          `;
+
+          // Destroy existing chart before recreating
+          if (failuresChart) failuresChart.destroy();
+
+          // Failures chart
+          const ctx = document.getElementById('failures-chart').getContext('2d');
+          failuresChart = new Chart(ctx, {
+              type: 'pie',
+              data: {
+                  labels: Object.keys(errorTypes),
+                  datasets: [{
+                      data: Object.values(errorTypes),
+                      backgroundColor: ['rgba(239, 68, 68, 0.7)', 'rgba(249, 115, 22, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(107, 114, 128, 0.7)']
+                  }]
+              },
+              options: {
+                  responsive: true,
+                  plugins: { legend: { position: 'right' } }
+              }
+          });
+
+          // Failures table
+          document.getElementById('failures-tbody').innerHTML = failed.map(e => `
+              <tr>
+                  <td class="mono truncate" title="${e.job_id}">${e.job_id.slice(0, 8)}...</td>
+                  <td>${e.opponent_name}:v${e.opponent_version}</td>
+                  <td><span class="status-badge status-failed">${e.error_type || 'unknown'}</span></td>
+                  <td>${e.steps}</td>
+              </tr>
+          `).join('');
+      }
+
+      // Chart.js defaults
+      Chart.defaults.color = '#8b949e';
+      Chart.defaults.borderColor = '#30363d';
     </script>
-</body>
+  </body>
 </html>

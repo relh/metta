@@ -21,14 +21,14 @@
         "action.change_vibe.success": 12.0,
         "action.failed": 55.0,
         "action.timeout": 45.0,
-        "energy.amount": 68.0,
-        "energy.gained": 55.0,
-        "energy.lost": 48.0,
         "carbon.amount": 22.0,
         "carbon.gained": 18.0,
         "carbon.lost": 25.0,
         "junction.aligned": 8.0,
-        "junction.misaligned": 12.0
+        "junction.misaligned": 12.0,
+        "action.change_vibe.failed": 3.0,
+        "scrambler.gained": 2.0,
+        "scrambler.lost": 1.0
       },
       {
         "action.move.success": 165.0,
@@ -37,14 +37,14 @@
         "action.change_vibe.success": 10.0,
         "action.failed": 62.0,
         "action.timeout": 52.0,
-        "energy.amount": 62.0,
-        "energy.gained": 48.0,
-        "energy.lost": 52.0,
         "carbon.amount": 18.0,
         "carbon.gained": 15.0,
         "carbon.lost": 28.0,
         "junction.aligned": 6.0,
-        "junction.misaligned": 14.0
+        "junction.misaligned": 14.0,
+        "action.change_vibe.failed": 3.0,
+        "scrambler.gained": 2.0,
+        "scrambler.lost": 1.0
       },
       {
         "action.move.success": 245.0,
@@ -53,14 +53,14 @@
         "action.change_vibe.success": 22.0,
         "action.failed": 28.0,
         "action.timeout": 8.0,
-        "energy.amount": 105.0,
-        "energy.gained": 92.0,
-        "energy.lost": 32.0,
         "carbon.amount": 38.0,
         "carbon.gained": 32.0,
         "carbon.lost": 15.0,
         "junction.aligned": 15.0,
-        "junction.misaligned": 8.0
+        "junction.misaligned": 8.0,
+        "action.change_vibe.failed": 3.0,
+        "scrambler.gained": 2.0,
+        "scrambler.lost": 1.0
       },
       {
         "action.move.success": 262.0,
@@ -69,14 +69,14 @@
         "action.change_vibe.success": 25.0,
         "action.failed": 25.0,
         "action.timeout": 12.0,
-        "energy.amount": 115.0,
-        "energy.gained": 100.0,
-        "energy.lost": 28.0,
         "carbon.amount": 42.0,
         "carbon.gained": 36.0,
         "carbon.lost": 12.0,
         "junction.aligned": 18.0,
-        "junction.misaligned": 6.0
+        "junction.misaligned": 6.0,
+        "action.change_vibe.failed": 3.0,
+        "scrambler.gained": 2.0,
+        "scrambler.lost": 1.0
       }
     ],
     "collective": {
