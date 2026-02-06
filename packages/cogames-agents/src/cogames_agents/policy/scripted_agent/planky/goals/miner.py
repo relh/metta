@@ -286,11 +286,10 @@ class DepositCargoGoal(Goal):
             return False  # Keep depositing until empty
 
         # Not currently depositing - check if we should start
-        # Deposit when at least 50% full (but always deposit if cargo == capacity)
+        # Deposit only when cargo is full — keep bumping extractors until then
         capacity = ctx.state.cargo_capacity
-        threshold = max(2, capacity // 2)
 
-        if cargo >= threshold:
+        if cargo >= capacity:
             ctx.blackboard["_depositing"] = True
             return False  # Start depositing
 

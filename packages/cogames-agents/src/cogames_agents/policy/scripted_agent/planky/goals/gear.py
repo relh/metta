@@ -33,11 +33,13 @@ class GetGearGoal(Goal):
         station_type: str,
         goal_name: str,
         gear_cost: dict[str, int] | None = None,
+        min_step: int = 0,
     ) -> None:
         self.name = goal_name
         self._gear_attr = gear_attr  # e.g. "miner_gear"
         self._station_type = station_type  # e.g. "miner"
         self._gear_cost = gear_cost or {}
+        self._min_step = min_step  # Don't attempt gear until this step (lets miners gear up first)
         self._bb_attempts_key = f"{goal_name}_total_attempts"
         self._bb_giveup_step_key = f"{goal_name}_giveup_step"
         self._bb_bump_count_key = f"{goal_name}_bump_count"
@@ -66,6 +68,11 @@ class GetGearGoal(Goal):
             # Got gear - reset attempts for next time
             ctx.blackboard[self._bb_attempts_key] = 0
             ctx.blackboard[self._bb_bump_count_key] = 0
+            return True
+        # Early-game gate: let miners gear up first
+        if self._min_step > 0 and ctx.step < self._min_step:
+            if ctx.trace:
+                ctx.trace.skip(self.name, f"waiting for miners (step {ctx.step} < {self._min_step})")
             return True
         # Also "satisfied" (skip) if we gave up recently
         giveup_step = ctx.blackboard.get(self._bb_giveup_step_key, -9999)

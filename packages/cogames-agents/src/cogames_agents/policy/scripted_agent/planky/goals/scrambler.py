@@ -17,7 +17,10 @@ JUNCTION_AOE_RANGE = 10
 
 
 class GetScramblerGearGoal(GetGearGoal):
-    """Get scrambler gear (costs C1 O3 G1 S1 from collective)."""
+    """Get scrambler gear (costs C1 O3 G1 S1 from collective).
+
+    Waits 25 steps before attempting so miners can gear up first.
+    """
 
     def __init__(self) -> None:
         super().__init__(
@@ -25,6 +28,7 @@ class GetScramblerGearGoal(GetGearGoal):
             station_type="scrambler",
             goal_name="GetScramblerGear",
             gear_cost={"carbon": 1, "oxygen": 3, "germanium": 1, "silicon": 1},
+            min_step=25,
         )
 
 

@@ -19,11 +19,16 @@ class GetHeartsGoal(Goal):
     collective can't afford it to avoid wasting time at the hub.
     The agent must first deposit any minerals by bumping the hub,
     then bump again to get or make a heart.
+
+    Tracks bump attempts to avoid getting stuck at the hub when hearts
+    can't actually be made (e.g., multiple agents competing for resources).
     """
 
     name = "GetHearts"
     # Cost per heart: 1 of each element
     HEART_COST = {"carbon": 1, "oxygen": 1, "germanium": 1, "silicon": 1}
+    MAX_HUB_BUMPS = 5  # Give up after this many bumps without getting a heart
+    COOLDOWN_STEPS = 30  # Wait this many steps before trying again
 
     def __init__(self, min_hearts: int = 1) -> None:
         self._min_hearts = min_hearts
@@ -43,11 +48,20 @@ class GetHeartsGoal(Goal):
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
         if ctx.state.heart >= self._min_hearts:
+            # Got a heart — reset bump tracking
+            ctx.blackboard.pop("_heart_hub_bumps", None)
+            ctx.blackboard.pop("_heart_cooldown_until", None)
             return True
         # Skip if collective can't afford a heart
         if not self._collective_can_afford_heart(ctx):
             if ctx.trace:
                 ctx.trace.skip(self.name, "collective lacks resources for heart")
+            return True
+        # Skip if on cooldown after too many failed bumps
+        cooldown_until = ctx.blackboard.get("_heart_cooldown_until", 0)
+        if ctx.step < cooldown_until:
+            if ctx.trace:
+                ctx.trace.skip(self.name, f"cooldown until step {cooldown_until}")
             return True
         return False
 
@@ -64,9 +78,27 @@ class GetHeartsGoal(Goal):
 
         dist = _manhattan(ctx.state.position, hub_pos)
         if dist <= 1:
+            # Track bumps at hub without getting a heart
+            bumps = ctx.blackboard.get("_heart_hub_bumps", 0) + 1
+            ctx.blackboard["_heart_hub_bumps"] = bumps
+
+            if bumps > self.MAX_HUB_BUMPS:
+                # Too many bumps — enter cooldown so FallbackMine can kick in
+                ctx.blackboard["_heart_cooldown_until"] = ctx.step + self.COOLDOWN_STEPS
+                ctx.blackboard["_heart_hub_bumps"] = 0
+                if ctx.trace:
+                    ctx.trace.activate(self.name, f"giving up after {bumps} bumps, mining instead")
+                return ctx.navigator.explore(
+                    ctx.state.position,
+                    ctx.map,
+                    direction_bias=["north", "east", "south", "west"][ctx.agent_id % 4],
+                )
+
             # If carrying cargo, deposit first before getting heart
             # The bump will automatically deposit minerals or get/make heart
             return _move_toward(ctx.state.position, hub_pos)
+        # Moving toward hub — reset bump counter
+        ctx.blackboard["_heart_hub_bumps"] = 0
         return ctx.navigator.get_action(ctx.state.position, hub_pos, ctx.map, reach_adjacent=True)
 
 

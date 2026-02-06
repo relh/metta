@@ -17,7 +17,10 @@ JUNCTION_AOE_RANGE = 10
 
 
 class GetAlignerGearGoal(GetGearGoal):
-    """Get aligner gear (costs C3 O1 G1 S1 from collective)."""
+    """Get aligner gear (costs C3 O1 G1 S1 from collective).
+
+    Waits 25 steps before attempting so miners can gear up first.
+    """
 
     def __init__(self) -> None:
         super().__init__(
@@ -25,6 +28,7 @@ class GetAlignerGearGoal(GetGearGoal):
             station_type="aligner",
             goal_name="GetAlignerGear",
             gear_cost={"carbon": 3, "oxygen": 1, "germanium": 1, "silicon": 1},
+            min_step=25,
         )
 
 
