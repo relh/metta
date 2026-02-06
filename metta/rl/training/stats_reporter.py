@@ -212,7 +212,7 @@ class StatsReporter(TrainerComponent):
         trainer_cfg: Any,
         optimizer: torch.optim.Optimizer | None,
     ) -> None:
-        timing_context = timer("_process_stats") if callable(timer) else nullcontext()
+        timing_context = timer("_process_stats") if timer is not None else nullcontext()
 
         with timing_context:
             payload = self._build_wandb_payload(
