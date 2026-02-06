@@ -1,6 +1,7 @@
 import json
 import logging
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -375,30 +376,23 @@ def normalize_config(config: Any) -> dict[str, Any]:
         return dict(config)
 
     if hasattr(config, "to_dict"):
-        try:
+        with suppress(AttributeError, TypeError, ValueError):
             return dict(config.to_dict())
-        except Exception:
-            pass
 
     if hasattr(config, "json_config"):
-        try:
+        parsed = None
+        with suppress(AttributeError, TypeError, ValueError):
             parsed = json.loads(config.json_config)
-            if isinstance(parsed, Mapping):
-                return dict(parsed)
-        except Exception:
-            pass
+        if isinstance(parsed, Mapping):
+            return dict(parsed)
 
     if hasattr(config, "key_vals"):
-        try:
+        with suppress(AttributeError, TypeError, ValueError):
             return dict(config.key_vals)
-        except Exception:
-            pass
 
     if hasattr(config, "_wandb"):
-        try:
+        with suppress(AttributeError, TypeError, ValueError):
             return dict(config._wandb)
-        except Exception:
-            pass
 
     if isinstance(config, str):
         config = config.strip()
@@ -413,5 +407,5 @@ def normalize_config(config: Any) -> dict[str, Any]:
 
     try:
         return dict(config)
-    except Exception:
+    except (TypeError, ValueError):
         return {}
