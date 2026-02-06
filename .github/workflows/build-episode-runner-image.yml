@@ -1,15 +1,9 @@
 name: "Build Episode Runner Image"
 
 on:
-  push:
-    tags:
-      - mettagrid-v*
-    branches:
-      - main
-    paths:
-      - "packages/mettagrid/**"
-      - "packages/mettagrid/Dockerfile.episode_runner"
-      - ".github/workflows/build-episode-runner-image.yml"
+  workflow_run:
+    workflows: ["Build and publish mettagrid"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       mettagrid_version:
@@ -22,6 +16,7 @@ env:
 
 jobs:
   resolve-version:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
       mettagrid_version: ${{ steps.version.outputs.mettagrid_version }}
@@ -31,11 +26,8 @@ jobs:
         run: |
           if [[ -n "${{ inputs.mettagrid_version }}" ]]; then
             echo "mettagrid_version=${{ inputs.mettagrid_version }}" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_REF}" == refs/tags/mettagrid-v* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/mettagrid-v}"
-            echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
           else
-            # For branch pushes, fetch latest from PyPI
+            # After mettagrid publish or manual dispatch, use latest from PyPI
             VERSION=$(curl -s https://pypi.org/pypi/mettagrid/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
             echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
           fi
@@ -66,11 +58,7 @@ jobs:
         run: |
           REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           VERSION="${{ needs.resolve-version.outputs.mettagrid_version }}"
-          TAGS="${REPO}:mettagrid-${VERSION}"
-
-          if [[ "${GITHUB_REF}" == refs/heads/main || "${GITHUB_REF}" == refs/tags/mettagrid-v* ]]; then
-            TAGS="${TAGS},${REPO}:latest"
-          fi
+          TAGS="${REPO}:mettagrid-${VERSION},${REPO}:latest"
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
