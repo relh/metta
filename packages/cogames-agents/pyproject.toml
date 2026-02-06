@@ -1,6 +1,7 @@
 [build-system]
 requires = ["setuptools==80.9.0", "wheel==0.45.1", "setuptools_scm==8.1.0"]
-build-backend = "setuptools.build_meta"
+build-backend = "nim_build"
+backend-path = ["."]
 
 [project]
 name = "cogames-agents"
@@ -35,6 +36,8 @@ include-package-data = true
   # Nim source files for building
   "policy/nim_agents/*.nim",
   "policy/nim_agents/*.nims",
+  "policy/nim_agents/.nim-version",
+  "policy/nim_agents/.nimby-version",
   "policy/nim_agents/nimby.lock",
   # Compiled Nim binaries
   "policy/nim_agents/bindings/generated/*.so",
@@ -61,6 +64,8 @@ git_describe_command = [
 
 [tool.uv]
 cache-keys = [
+  { file = "nim_build.py" },
+  { file = "nim_build_support.py" },
   { file = "src/cogames_agents/policy/nim_agents/nim_agents.nim" },
   { file = "src/cogames_agents/policy/nim_agents/nim_agents.nims" },
   { file = "src/cogames_agents/policy/nim_agents/common.nim" },
