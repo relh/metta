@@ -25,7 +25,7 @@ wandb_retry = retry(
 
 
 def send_wandb_alert(title: str, text: str, run_id: str, project: str, entity: str) -> None:
-    if not all([title, text, run_id, project, entity]):
+    if not (title and text and run_id and project and entity):
         raise RuntimeError("All parameters (title, text, run_id, project, entity) are required")
 
     log_ctx = f"run {entity}/{project}/{run_id}"
