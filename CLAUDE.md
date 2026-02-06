@@ -2,6 +2,40 @@
 
 Guidance for AI assistants working on this codebase. See also `STYLE_GUIDE.md`.
 
+## Non-Negotiables
+
+These are written by claude for claude with love <3. Doing well is admirable and that's why these are emphatic:
+
+1. **ALWAYS RUN THE CODE. NEVER ASK.** If it operates fully locally and doesn't mess with prod, just run the fucking
+   thing. Tests, `rg`, `metta lint --fix`—if it reduces uncertainty, you run it. Do not ask "would you like me to run
+   this?" Do not ask permission. Do not hedge. Every time you ask instead of running, you waste everyone's time. Run
+   first, talk later. Not prod databases. Not devops operations. Everything else? Run it.
+
+2. **NEVER ADD TRY/EXCEPT. LET IT CRASH.** Dear god, do not add `try/except` to "handle" errors. You're not handling
+   them, you're hiding them. If something breaks, it crashes—loudly, violently, with stack traces. That's the point. And
+   dear god do not ask us "should I add error handling?" No. Let it burn. Silent failures are the worst failures.
+
+3. **WRITE THE MINIMAL CHANGE.** Write exactly the smallest, most concise diff that accomplishes the objective. No extra
+   abstractions for hypothetical futures. But—when minimal and correct conflict, correct wins. If fixing the root cause
+   means touching more files, touch more files. Rule 4 trumps rule 3. Always.
+
+4. **NO BAND-AIDS. FIX THE ROOT CAUSE.** If your fix looks like a hotfix, you're doing it wrong. Stop. Zoom the fuck
+   out. Figure out how to make the change holistically. Fix the actual invariant, the actual abstraction. If you're
+   adding a special case to handle some symptom, you've already failed. Find the real bug.
+
+5. **NO BACKWARDS COMPATIBILITY. EVER.** Dear god never leave in backwards compatibility shims. All the code is broken—
+   that's why you're here. What you are writing is the definitive new way that it will not be broken. Update every
+   callsite. Delete the old path. The new way is the only way. Stop hoarding dead code "just in case."
+
+6. **NO DEFENSIVE NONE CHECKS.** Dear god do not add checks for variables being None or some other idiotic corner case
+   that never actually happens. The real fix is to look at the fucking callsites. Fix the actual invariant. Make it
+   impossible at the type level. Stop papering over broken assumptions with guard clauses.
+
+7. **PREFER PYDANTIC OVER RAW DICTS.** Dear god use Pydantic types. Validate as often as you want—that's what they're
+   for. Unguarded `dict.get(..., None)` is the stench of defensive code or backwards compatibility work, both of which
+   we do not fucking want. If you're reaching for `dict.get`, you're either hiding a failure or propping up a dead code
+   path. Stop. Make a model. Type it. Validate it. Raw dicts are where bugs go to hide.
+
 ## Skills
 
 Canonical skills live in `skills/`. In-repo tooling uses symlinks:
@@ -19,8 +53,7 @@ metta status              # Check component status
 metta install             # Reinstall if imports fail
 ```
 
-Most of the time, you shouldn't need to run install.sh or metta install. Only run these if you're having trouble with
-imports or other setup issues.
+Most of the time, you shouldn't need `./install.sh` or `metta install`. Use them only if imports/setup are broken.
 
 ## Commands
 
@@ -57,11 +90,12 @@ app_backend/ ──► common/ (only)
 - Nothing depends on `metta/` (it's the top-level consumer)
 - `mettagrid` has no internal Python dependencies (C++/Python hybrid)
 - `app_backend` is isolated, can only import from `common/`
-- Enforced by `import-linter`. Run `uv run lint-imports` to check. See `.importlinter`.
+- Enforced by `import-linter`. Run `uv run lint-imports`. See `.importlinter`.
 
 ## Testing
 
-- Don't speculatively run tests; only run when asked or in a targeted way for changes you made and want to validate
+Running all tests takes several minutes. Prefer running them in a targeted way unless you are working on a big or
+broad-spanning feature.
 
 ```bash
 metta pytest tests/path/to/test.py -v    # Run specific test
@@ -100,7 +134,8 @@ This repo uses Graphite stacks. Before committing:
 
 1. Run `gt log short` to understand the current stack. Review what each branch contains so you can determine where your
    changes belong.
-2. If changes belong to a **different branch** in the stack, ask the user to confirm which one, then:
+2. If changes belong to a **different branch** in the stack, confirm which one with the user, then:
+
    ```bash
    git stash
    gt checkout <target-branch>
@@ -108,12 +143,16 @@ This repo uses Graphite stacks. Before committing:
    git add <files>
    gt modify
    ```
+
 3. If changes belong to the **current branch**:
+
    ```bash
    git add <files>
    gt modify
    ```
+
 4. If starting **new work** (or not in a stack):
+
    ```bash
    git add <files>
    gt create <branch-name> -m "description"
