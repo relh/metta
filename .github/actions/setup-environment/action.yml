@@ -47,9 +47,9 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.nimby
-        key: nimby-2.2.6-${{ runner.os }}-${{ steps.get-week.outputs.yearweek }}
+        key: nimby-0.1.21-nim-2.2.6-${{ runner.os }}-${{ steps.get-week.outputs.yearweek }}
         restore-keys: |
-          nimby-2.2.6-${{ runner.os }}-
+          nimby-0.1.21-nim-2.2.6-${{ runner.os }}-
 
     - name: Set up nim
       if: steps.cache-nimby.outputs.cache-hit != 'true'
