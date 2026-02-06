@@ -15,6 +15,8 @@ const nuqsParams = {
   jobId: parseAsString.withDefault(''),
   policyVersionId: parseAsString.withDefault(''),
   status: parseAsStringLiteral(ALL_JOB_STATUSES),
+  seasonId: parseAsString.withDefault(''),
+  poolId: parseAsString.withDefault(''),
   page: parseAsInteger.withDefault(0),
 }
 
@@ -22,25 +24,38 @@ const parseSearchParams = createLoader(nuqsParams)
 
 export default async function EpisodeJobsPage({ searchParams: rawSearchParams }: PageProps<'/episode-jobs'>) {
   const searchParams = await parseSearchParams(rawSearchParams)
-  const { jobId: jobIdFilter, policyVersionId: policyVersionIdFilter, status: statusFilter, page } = searchParams
+  const {
+    jobId: jobIdFilter,
+    policyVersionId: policyVersionIdFilter,
+    status: statusFilter,
+    seasonId: seasonIdFilter,
+    poolId: poolIdFilter,
+    page,
+  } = searchParams
 
   const repo = await getRepo()
   const pageSize = 50
-  const jobs = await repo.getJobs({
-    job_type: 'episode',
-    statuses: statusFilter ? [statusFilter] : undefined,
-    job_id: jobIdFilter || undefined,
-    policy_version_id: policyVersionIdFilter || undefined,
-    limit: pageSize,
-    offset: page * pageSize,
-  })
+
+  const [jobs, seasons] = await Promise.all([
+    repo.getJobs({
+      job_type: 'episode',
+      statuses: statusFilter ? [statusFilter] : undefined,
+      job_id: jobIdFilter || undefined,
+      policy_version_id: policyVersionIdFilter || undefined,
+      season_id: seasonIdFilter || undefined,
+      pool_id: poolIdFilter || undefined,
+      limit: pageSize,
+      offset: page * pageSize,
+    }),
+    repo.getSeasons(),
+  ])
 
   return (
     <div className="p-5 max-w-[1600px] mx-auto">
       <AutoRefresh />
       <Card title="Episode Jobs">
         <div className="mb-4 flex flex-wrap gap-3 items-end">
-          <JobFilters />
+          <JobFilters seasons={seasons} />
           <div>
             <div className="text-xs text-gray-500 mb-1">Job ID</div>
             <div className="w-64">

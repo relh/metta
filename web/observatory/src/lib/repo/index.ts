@@ -164,12 +164,14 @@ export type JobStatus = (typeof ALL_JOB_STATUSES)[number]
 export type MatchStatus = 'pending' | 'scheduled' | 'running' | 'completed' | 'failed'
 
 export type PoolInfo = {
+  id: string | null
   name: string
   description: string
   config_id: string | null
 }
 
 export type SeasonDetail = {
+  id: string
   name: string
   version: number
   canonical: boolean
@@ -568,6 +570,8 @@ export class Repo {
     statuses?: JobStatus[]
     job_id?: string
     policy_version_id?: string
+    season_id?: string
+    pool_id?: string
     limit?: number
     offset?: number
   }): Promise<JobRequest[]> {
@@ -575,6 +579,8 @@ export class Repo {
     if (params?.job_type) searchParams.append('job_type', params.job_type)
     if (params?.job_id) searchParams.append('job_id', params.job_id)
     if (params?.policy_version_id) searchParams.append('policy_version_id', params.policy_version_id)
+    if (params?.season_id) searchParams.append('season_id', params.season_id)
+    if (params?.pool_id) searchParams.append('pool_id', params.pool_id)
     if (params?.statuses) {
       for (const status of params.statuses) {
         searchParams.append('statuses', status)

@@ -320,36 +320,33 @@ def create_job_router() -> APIRouter:
         _user: CheckSoftmaxUser,
         job_type: JobType | None = Query(default=None),
         statuses: list[JobStatus] | None = Query(default=None),
-        job_id: str | None = Query(default=None),
-        policy_version_id: str | None = Query(default=None),
+        job_id: UUID | None = Query(default=None),
+        policy_version_id: UUID | None = Query(default=None),
+        season_id: UUID | None = Query(default=None),
+        pool_id: UUID | None = Query(default=None),
         limit: int = Query(default=100, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
     ) -> list[JobRequestResponse]:
-        job_id_uuid: UUID | None = None
-        policy_version_id_uuid: UUID | None = None
-        if job_id:
-            try:
-                job_id_uuid = UUID(job_id)
-            except ValueError:
-                return []
-        if policy_version_id:
-            try:
-                policy_version_id_uuid = UUID(policy_version_id)
-            except ValueError:
-                return []
         async with db_session() as session:
             id_query = select(JobRequest.id).order_by(col(JobRequest.created_at).desc()).offset(offset).limit(limit)
-            if job_id_uuid:
-                id_query = id_query.where(JobRequest.id == job_id_uuid)
+            if job_id:
+                id_query = id_query.where(JobRequest.id == job_id)
             if statuses:
                 id_query = id_query.where(col(JobRequest.status).in_(statuses))
             if job_type:
                 id_query = id_query.where(col(JobRequest.job_type) == job_type)
-            if policy_version_id_uuid:
+            if policy_version_id:
                 policy_job_ids = select(JobPolicyVersion.job_id).where(
-                    JobPolicyVersion.policy_version_id == policy_version_id_uuid
+                    JobPolicyVersion.policy_version_id == policy_version_id
                 )
                 id_query = id_query.where(col(JobRequest.id).in_(policy_job_ids))
+            if season_id or pool_id:
+                match_pool_query = select(Match.job_id).join(Pool, Pool.id == Match.pool_id)
+                if pool_id:
+                    match_pool_query = match_pool_query.where(Pool.id == pool_id)
+                if season_id:
+                    match_pool_query = match_pool_query.where(Pool.season_id == season_id)
+                id_query = id_query.where(col(JobRequest.id).in_(match_pool_query))
             id_result = await session.execute(id_query)
             job_ids = [row[0] for row in id_result.all()]
             if not job_ids:

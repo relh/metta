@@ -101,9 +101,10 @@ class MembershipHistoryEntry(BaseModel):
 
 
 class PoolInfo(BaseModel):
+    id: UUID | None = None
     name: str
     description: str
-    config_id: str | None = None
+    config_id: UUID | None = None
 
 
 class SeasonVersionInfo(BaseModel):
@@ -114,6 +115,7 @@ class SeasonVersionInfo(BaseModel):
 
 
 class SeasonResponse(BaseModel):
+    id: UUID
     name: str
     version: int
     canonical: bool
@@ -126,13 +128,15 @@ class SeasonResponse(BaseModel):
     @classmethod
     def from_commissioner(
         cls,
+        season_id: UUID,
         season_name: str,
         version: int = 1,
         canonical: bool = True,
-        pool_config_ids: dict[str, str] | None = None,
+        pools_by_name: dict[str, Pool] | None = None,
     ) -> "SeasonResponse":
         if season_name not in SEASONS:
             return cls(
+                id=season_id,
                 name=season_name,
                 version=version,
                 canonical=canonical,
@@ -142,8 +146,9 @@ class SeasonResponse(BaseModel):
             )
         commissioner = SEASONS[season_name]()
         desc = commissioner.description_for_version(version)
-        config_ids = pool_config_ids or {}
+        db_pools = pools_by_name or {}
         return cls(
+            id=season_id,
             name=season_name,
             version=version,
             canonical=canonical,
@@ -152,20 +157,20 @@ class SeasonResponse(BaseModel):
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
             pools=[
-                PoolInfo(name=p.name, description=p.description, config_id=config_ids.get(p.name)) for p in desc.pools
+                PoolInfo(
+                    id=db_pools[p.name].id if p.name in db_pools else None,
+                    name=p.name,
+                    description=p.description,
+                    config_id=db_pools[p.name].env_config_id if p.name in db_pools else None,
+                )
+                for p in desc.pools
             ],
         )
 
 
-async def _get_pool_config_ids(session: AsyncSession, season_id: UUID) -> dict[str, str]:
-    rows = (
-        await session.execute(
-            select(Pool.name, Pool.env_config_id)
-            .where(Pool.season_id == season_id)
-            .where(Pool.env_config_id.is_not(None))  # type: ignore[union-attr]
-        )
-    ).all()
-    return {name: str(config_id) for name, config_id in rows}
+async def _get_pools_by_name(session: AsyncSession, season_id: UUID) -> dict[str, Pool]:
+    pools = (await session.execute(select(Pool).where(Pool.season_id == season_id))).scalars().all()
+    return {p.name: p for p in pools if p.name}
 
 
 def create_tournament_router() -> APIRouter:
@@ -186,8 +191,8 @@ def create_tournament_router() -> APIRouter:
 
         results = []
         for s in seasons:
-            config_ids = await _get_pool_config_ids(session, s.id)
-            results.append(SeasonResponse.from_commissioner(s.name, s.version, s.canonical, config_ids))
+            pools_by_name = await _get_pools_by_name(session, s.id)
+            results.append(SeasonResponse.from_commissioner(s.id, s.name, s.version, s.canonical, pools_by_name))
         return results
 
     @router.get("/seasons/{season_name}")
@@ -201,8 +206,8 @@ def create_tournament_router() -> APIRouter:
         if not season:
             raise HTTPException(status_code=404, detail="Season version not found")
 
-        config_ids = await _get_pool_config_ids(session, season.id)
-        return SeasonResponse.from_commissioner(name, season.version, season.canonical, config_ids)
+        pools_by_name = await _get_pools_by_name(session, season.id)
+        return SeasonResponse.from_commissioner(season.id, name, season.version, season.canonical, pools_by_name)
 
     @router.get("/seasons/{season_name}/pools/{pool_name}/config")
     @timed_http_handler

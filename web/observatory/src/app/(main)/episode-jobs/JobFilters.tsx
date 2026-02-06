@@ -1,11 +1,11 @@
 'use client'
 import { parseAsString, useQueryState } from 'nuqs'
-import { FC, useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { FC, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import Select from 'react-select'
 import AsyncSelect from 'react-select/async'
 
 import { Spinner } from '@/components/Spinner'
-import { ALL_JOB_STATUSES, JobStatus, PublicPolicyVersionRow } from '@/lib/repo'
+import { ALL_JOB_STATUSES, JobStatus, PublicPolicyVersionRow, SeasonDetail } from '@/lib/repo'
 
 const selectStyles = {
   control: (base: any) => ({
@@ -49,7 +49,7 @@ async function searchPolicies(query: string): Promise<Option[]> {
 
 const DEBOUNCE_MS = 300
 
-const PolicySelect: FC = () => {
+const PolicySelect: FC<{ defaultPolicyVersionId?: string }> = ({ defaultPolicyVersionId }) => {
   const [isPending, startTransition] = useTransition()
   const [policyVersionId, setPolicyVersionId] = useQueryState(
     'policyVersionId',
@@ -60,19 +60,23 @@ const PolicySelect: FC = () => {
     })
   )
 
+  const effectiveId = policyVersionId || defaultPolicyVersionId || ''
   const [selected, setSelected] = useState<Option | null>(null)
-  const resolvedRef = useRef(false)
+  const lastResolvedId = useRef('')
 
   useEffect(() => {
-    if (policyVersionId && !resolvedRef.current) {
-      resolvedRef.current = true
+    if (effectiveId && effectiveId !== lastResolvedId.current) {
+      lastResolvedId.current = effectiveId
       searchPolicies('').then((options) => {
-        const match = options.find((o) => o.value === policyVersionId)
+        const match = options.find((o) => o.value === effectiveId)
         if (match) setSelected(match)
-        else setSelected({ value: policyVersionId, label: policyVersionId.slice(0, 8) })
+        else setSelected({ value: effectiveId, label: effectiveId.slice(0, 8) })
       })
+    } else if (!effectiveId) {
+      lastResolvedId.current = ''
+      setSelected(null)
     }
-  }, [policyVersionId])
+  }, [effectiveId])
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const loadOptions = useCallback((inputValue: string, callback: (options: Option[]) => void) => {
@@ -100,7 +104,9 @@ const PolicySelect: FC = () => {
           cacheOptions
         />
       </div>
-      {isPending && <Spinner />}
+      <span className={isPending ? 'visible' : 'invisible'}>
+        <Spinner />
+      </span>
     </div>
   )
 }
@@ -132,21 +138,125 @@ const StatusSelect: FC = () => {
           instanceId="status-select"
         />
       </div>
-      {isPending && <Spinner />}
+      <span className={isPending ? 'visible' : 'invisible'}>
+        <Spinner />
+      </span>
     </div>
   )
 }
 
-export const JobFilters: FC = () => {
+const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
+  const [isPending, startTransition] = useTransition()
+  const [seasonId, setSeasonId] = useQueryState(
+    'seasonId',
+    parseAsString.withDefault('').withOptions({
+      shallow: false,
+      history: 'replace',
+      startTransition,
+    })
+  )
+
+  type SeasonOption = Option & { version: number }
+  const options: SeasonOption[] = useMemo(
+    () => seasons.map((s) => ({ value: s.id, label: s.name, version: s.version })),
+    [seasons]
+  )
+  const selected = options.find((o) => o.value === seasonId) ?? null
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-48">
+        <Select<SeasonOption>
+          options={options}
+          value={selected}
+          onChange={(opt) => setSeasonId(opt?.value ?? null)}
+          formatOptionLabel={(opt) => (
+            <span>
+              {opt.label} <span className="text-gray-400">(v{opt.version})</span>
+            </span>
+          )}
+          placeholder="All seasons"
+          styles={selectStyles}
+          isClearable
+          instanceId="season-select"
+        />
+      </div>
+      <span className={isPending ? 'visible' : 'invisible'}>
+        <Spinner />
+      </span>
+    </div>
+  )
+}
+
+const PoolSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
+  const [isPending, startTransition] = useTransition()
+  const [seasonId] = useQueryState('seasonId', parseAsString.withDefault(''))
+  const [poolId, setPoolId] = useQueryState(
+    'poolId',
+    parseAsString.withDefault('').withOptions({
+      shallow: false,
+      history: 'replace',
+      startTransition,
+    })
+  )
+
+  const options: Option[] = useMemo(() => {
+    if (!seasonId) return []
+    const season = seasons.find((s) => s.id === seasonId)
+    if (!season) return []
+    return season.pools.flatMap((p) => (p.id ? [{ value: p.id, label: p.name }] : []))
+  }, [seasons, seasonId])
+
+  useEffect(() => {
+    if (poolId && !options.find((o) => o.value === poolId)) {
+      setPoolId(null)
+    }
+  }, [options, poolId, setPoolId])
+
+  const selected = options.find((o) => o.value === poolId) ?? null
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-48">
+        <Select<Option>
+          options={options}
+          value={selected}
+          onChange={(opt) => setPoolId(opt?.value ?? null)}
+          placeholder={seasonId ? 'All pools' : 'Select a season first'}
+          isDisabled={!seasonId}
+          styles={selectStyles}
+          isClearable
+          instanceId="pool-select"
+        />
+      </div>
+      <span className={isPending ? 'visible' : 'invisible'}>
+        <Spinner />
+      </span>
+    </div>
+  )
+}
+
+export const JobFilters: FC<{ seasons: SeasonDetail[]; defaultPolicyVersionId?: string }> = ({
+  seasons,
+  defaultPolicyVersionId,
+}) => {
   return (
     <>
       <div>
         <div className="text-xs text-gray-500 mb-1">Policy</div>
-        <PolicySelect />
+        <PolicySelect defaultPolicyVersionId={defaultPolicyVersionId} />
       </div>
       <div>
         <div className="text-xs text-gray-500 mb-1">Status</div>
         <StatusSelect />
+      </div>
+      <div>
+        <div className="text-xs text-gray-500 mb-1">Season</div>
+        <SeasonSelect seasons={seasons} />
+      </div>
+      <div>
+        <div className="text-xs text-gray-500 mb-1">Pool</div>
+        <PoolSelect seasons={seasons} />
       </div>
     </>
   )
