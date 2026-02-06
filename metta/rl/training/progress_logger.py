@@ -201,5 +201,4 @@ class ProgressLogger(TrainerComponent):
         stats_reporter = getattr(self.context, "stats_reporter", None)
         if stats_reporter is None:
             return {}
-        payload = stats_reporter.get_latest_payload()
-        return payload if payload else {}
+        return stats_reporter.get_latest_payload() or {}
