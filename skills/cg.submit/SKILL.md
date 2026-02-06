@@ -96,10 +96,19 @@ Use `--skip-validation` since we already verified in Step 3.
 
 ## Step 5: Show Observatory Link
 
-After upload succeeds, show:
+After upload succeeds, extract the version UUID so you can link directly to the policy page:
+
+```bash
+uv run cogames submissions --season <season> --policy <name> --json 2>/dev/null \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['policy']['id'])"
+```
+
+The first entry in the JSON array is the most recent submission. Use its `policy.id` to construct the URL.
+
+Show:
 
 ```
-Tournament:   https://observatory.softmax-research.net/tournament/<season>/players
+Policy page:  https://observatory.softmax-research.net/policies/versions/<version-uuid>
 Check status: uv run cogames submissions --season <season>
 Leaderboard:  uv run cogames leaderboard --season <season>
 ```
