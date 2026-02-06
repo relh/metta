@@ -70,12 +70,14 @@ def k8s_crashloopbackoff_monitor() -> dict:
     been in CrashLoopBackOff for the entire 10-minute window.
 
     Excludes:
+    - monitoring namespace: datadog agent and other infra pods
     - skypilot-monitor*: expected to crash when no skypilot cluster exists
     - pr-similarity-cache-*: transient job pods
     """
 
     exclude_tags = ", ".join(
         [
+            "!kube_namespace:monitoring",
             "!pod_name:skypilot-monitor*",
             "!pod_name:pr-similarity-cache-*",
             "!pod_name:observatory-pr-*",
