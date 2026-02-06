@@ -2774,7 +2774,6 @@ source = { editable = "packages/mettagrid" }
 dependencies = [
     { name = "boto3" },
     { name = "botocore" },
-    { name = "fastapi" },
     { name = "gymnasium" },
     { name = "httpx" },
     { name = "importnb" },
@@ -2787,7 +2786,7 @@ dependencies = [
     { name = "requests" },
     { name = "scipy-stubs" },
     { name = "typer" },
-    { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.dev-dependencies]
@@ -2810,7 +2809,6 @@ testing = [
 requires-dist = [
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "botocore", specifier = ">=1.38.29" },
-    { name = "fastapi", specifier = ">=0.115.0" },
     { name = "gymnasium", specifier = ">=1.1.1" },
     { name = "httpx", specifier = ">=0.28.0" },
     { name = "importnb", specifier = ">=2023.11.1" },
@@ -2823,7 +2821,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.0" },
     { name = "scipy-stubs", specifier = ">=1.17.0.0" },
     { name = "typer", specifier = ">=0.15.0" },
-    { name = "uvicorn", specifier = ">=0.34.0" },
+    { name = "websockets", specifier = ">=13.0" },
 ]
 
 [package.metadata.requires-dev]
