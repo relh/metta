@@ -104,7 +104,7 @@ stays heavy; the episode runner is what we slim down.
       `episode-runner:<mettagrid-version>`. Keep pushing to same ECR registries so Helm charts pick it up without infra
       changes.
 
-- [ ] **PR 4: Switch episode runner jobs to the slim image.** Update `observatory-backend/values.yaml` to point
+- [x] **PR 4: Switch episode runner jobs to the slim image.** Update `observatory-backend/values.yaml` to point
       `episodeRunnerImage` at the new slim image tag. The orchestrator deployment continues using the existing heavy
       image. This is the production cutover -- deploy behind a feature flag or canary if possible.
 

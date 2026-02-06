@@ -60,6 +60,7 @@ See _get_orbstack_kubeconfig_for_container() for the implementation.
 import os
 import subprocess
 import sys
+import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -72,7 +73,7 @@ from metta.setup.utils import error, info, success, warning
 repo_root = get_repo_root()
 
 NAMESPACE = "jobs"
-IMAGE = "metta-policy-evaluator-local:latest"
+IMAGE = "episode-runner-local:latest"
 
 
 def _is_running_in_container() -> bool:
@@ -397,22 +398,32 @@ def _import_image_to_k3d() -> None:
 def _build_image() -> None:
     old_id = subprocess.run(["docker", "images", "-q", IMAGE], capture_output=True, text=True).stdout.strip()
 
-    info(f"Building {IMAGE}...")
-    subprocess.run(
-        [
-            "docker",
-            "build",
-            "-t",
-            IMAGE,
-            "-f",
-            "devops/docker/Dockerfile.policy_evaluator",
-            "--platform",
-            "linux/amd64",
-            ".",
-        ],
-        check=True,
-        cwd=repo_root,
-    )
+    info(f"Building {IMAGE} (slim episode runner)...")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        subprocess.run(
+            ["uv", "build", "packages/mettagrid", "--wheel", "--out-dir", tmpdir],
+            check=True,
+            cwd=repo_root,
+        )
+        subprocess.run(
+            ["uv", "build", "packages/cogames", "--wheel", "--out-dir", tmpdir],
+            check=True,
+            cwd=repo_root,
+        )
+        subprocess.run(
+            [
+                "docker",
+                "build",
+                "-t",
+                IMAGE,
+                "-f",
+                str(repo_root / "packages" / "cogames" / "Dockerfile.episode_runner"),
+                "--platform",
+                "linux/amd64",
+                tmpdir,
+            ],
+            check=True,
+        )
 
     if old_id:
         new_id = subprocess.run(["docker", "images", "-q", IMAGE], capture_output=True, text=True).stdout.strip()

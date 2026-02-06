@@ -87,8 +87,6 @@ def _collect_runtime_info(settings: ExecutorSettings) -> RuntimeInfo:
 def main() -> None:
     settings = ExecutorSettings()
 
-    os.environ["EPISODE_RUNNER_USE_ISOLATED_VENVS"] = "0"
-
     if not settings.JOB_SPEC_URI:
         print("Set JOB_SPEC_URI, RESULTS_URI, REPLAY_URI env vars")
         sys.exit(1)

@@ -195,14 +195,6 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
                             security_context=client.V1SecurityContext(
                                 capabilities=client.V1Capabilities(add=["PERFMON"]),
                             ),
-                            command=[
-                                "uv",
-                                "run",
-                                "--no-sync",
-                                "python",
-                                "-m",
-                                "metta.app_backend.job_runner.executor",
-                            ],
                             env=env_vars,
                             volume_mounts=volume_mounts,
                             resources=client.V1ResourceRequirements(

@@ -16,12 +16,6 @@ on:
       - "devops/charts/orchestrator/**"
   workflow_dispatch: {}
 
-env:
-  PRIMARY_REGISTRY: 751442549699.dkr.ecr.us-east-1.amazonaws.com
-  TOURNAMENT_REGISTRY: 583928386201.dkr.ecr.us-east-1.amazonaws.com
-  PRIMARY_IMAGE_NAME: metta-policy-evaluator
-  TOURNAMENT_IMAGE_NAME: episode-runner
-
 jobs:
   build-and-push-image:
     permissions:
@@ -36,50 +30,3 @@ jobs:
       namespace: orchestrator
       release: orchestrator
       chart: ./devops/charts/orchestrator
-
-  push-to-tournament-ecr:
-    needs: build-and-push-image
-    if: github.ref == 'refs/heads/main'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    permissions:
-      id-token: write
-      contents: read
-
-    steps:
-      - name: Configure AWS credentials (primary account)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE }}
-          aws-region: us-east-1
-
-      - name: Login to primary ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Login to tournament ECR
-        uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registries: "583928386201"
-
-      - name: Pull, retag, and push to tournament ECR
-        run: |
-          PRIMARY="${{ env.PRIMARY_REGISTRY }}/${{ env.PRIMARY_IMAGE_NAME }}"
-          TOURNAMENT="${{ env.TOURNAMENT_REGISTRY }}/${{ env.TOURNAMENT_IMAGE_NAME }}"
-
-          SOURCE_TAG="sha-${GITHUB_SHA}"
-          docker pull "${PRIMARY}:${SOURCE_TAG}"
-
-          SHA_TAG="${GITHUB_SHA}"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-
-          docker tag "${PRIMARY}:${SOURCE_TAG}" "${TOURNAMENT}:${SHA_TAG}"
-          docker tag "${PRIMARY}:${SOURCE_TAG}" "${TOURNAMENT}:${SHORT_SHA}"
-          docker tag "${PRIMARY}:${SOURCE_TAG}" "${TOURNAMENT}:latest"
-
-          docker push "${TOURNAMENT}:${SHA_TAG}"
-          docker push "${TOURNAMENT}:${SHORT_SHA}"
-          docker push "${TOURNAMENT}:latest"
-
-          echo "Pushed to tournament ECR:"
-          echo "  - ${TOURNAMENT}:${SHA_TAG}"
-          echo "  - ${TOURNAMENT}:${SHORT_SHA}"
-          echo "  - ${TOURNAMENT}:latest"

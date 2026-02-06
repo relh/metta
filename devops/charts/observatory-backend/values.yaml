@@ -20,8 +20,8 @@ cert_manager_issuer: letsencrypt
 replicaCount: 2
 
 episodeRunnerImage:
-  registry: 583928386201.dkr.ecr.us-east-1.amazonaws.com
-  name: episode-runner
+  registry: ghcr.io
+  name: metta-ai/episode-runner
   tag: latest
 
 env:
