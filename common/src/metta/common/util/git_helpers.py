@@ -18,6 +18,15 @@ logger = logging.getLogger(__name__)
 GitError = gitta.GitError
 
 
+def _should_validate_git_state(skip_git_check: bool) -> bool:
+    if skip_git_check:
+        return False
+    if os.getenv("SKYPILOT_TASK_ID"):
+        logger.info("Running on SkyPilot, skipping git validation")
+        return False
+    return True
+
+
 def get_task_commit_hash(
     target_repo: Optional[str] = None,
     skip_git_check: bool = False,
@@ -50,11 +59,7 @@ def get_task_commit_hash(
         return None
 
     # Skip validation if requested or on SkyPilot
-    if skip_git_check:
-        return commit_hash
-
-    if os.getenv("SKYPILOT_TASK_ID"):
-        logger.info("Running on SkyPilot, skipping git validation")
+    if not _should_validate_git_state(skip_git_check):
         return commit_hash
 
     # Perform full validation
@@ -98,11 +103,7 @@ def get_current_git_branch(
         return None
 
     # Skip validation if requested or on SkyPilot
-    if skip_git_check:
-        return branch_name
-
-    if os.getenv("SKYPILOT_TASK_ID"):
-        logger.info("Running on SkyPilot, skipping git validation")
+    if not _should_validate_git_state(skip_git_check):
         return branch_name
 
     # Perform validation to ensure we're in a clean state
