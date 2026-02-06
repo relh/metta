@@ -2,7 +2,7 @@
 
 import pytest
 
-from metta.rl.metta_scheme_resolver import MettaSchemeResolver
+from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from mettagrid.util.uri_resolvers.schemes import parse_uri
 
 

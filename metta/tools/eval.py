@@ -7,11 +7,11 @@ from typing import Sequence
 from pydantic import Field
 
 from metta.app_backend.clients.stats_client import StatsClient
+from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.routes.stats_routes import PolicyVersionWithName
 from metta.common.tool import Tool
 from metta.common.tool.tool import ToolResult, ToolWithResult
 from metta.common.wandb.context import WandbRunAppendContext
-from metta.rl.metta_scheme_resolver import MettaSchemeResolver
 from metta.sim.handle_results import render_eval_summary
 from metta.sim.runner import SimulationRunConfig, SimulationRunResult
 from metta.sim.simulate_and_record import (
