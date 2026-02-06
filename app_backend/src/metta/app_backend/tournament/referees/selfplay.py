@@ -18,7 +18,7 @@ class SelfPlayRefereeBase(RefereeBase):
         match_counts: MatchCounts,
         limit: int = 0,
     ) -> list[MatchRequest]:
-        assignments = tuple([0] * self.num_agents)
+        assignments = (0,) * self.num_agents
         requests: list[MatchRequest] = []
         for player in players:
             key = ((player.id,), assignments)

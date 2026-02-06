@@ -68,7 +68,7 @@ def test_selfplay_schedules_correct_count(referee):
 @pytest.mark.parametrize("referee", SELF_PLAY_REFEREES, ids=lambda r: type(r).__name__)
 def test_selfplay_skips_completed_players(referee):
     p = _make_player()
-    assignments = tuple([0] * referee.num_agents)
+    assignments = (0,) * referee.num_agents
     counts = {((p.id,), assignments): (referee.matches_per_player, 0, 0)}
     requests = referee.get_matches_to_schedule([p], counts)
     assert len(requests) == 0
@@ -77,7 +77,7 @@ def test_selfplay_skips_completed_players(referee):
 @pytest.mark.parametrize("referee", SELF_PLAY_REFEREES, ids=lambda r: type(r).__name__)
 def test_selfplay_skips_in_progress_players(referee):
     p = _make_player()
-    assignments = tuple([0] * referee.num_agents)
+    assignments = (0,) * referee.num_agents
     counts = {((p.id,), assignments): (0, 0, 1)}
     requests = referee.get_matches_to_schedule([p], counts)
     assert len(requests) == 0
@@ -86,7 +86,7 @@ def test_selfplay_skips_in_progress_players(referee):
 @pytest.mark.parametrize("referee", SELF_PLAY_REFEREES, ids=lambda r: type(r).__name__)
 def test_selfplay_skips_after_max_failures(referee):
     p = _make_player()
-    assignments = tuple([0] * referee.num_agents)
+    assignments = (0,) * referee.num_agents
     counts = {((p.id,), assignments): (0, 3, 0)}
     requests = referee.get_matches_to_schedule([p], counts)
     assert len(requests) == 0
