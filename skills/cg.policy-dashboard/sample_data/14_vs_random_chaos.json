@@ -1,0 +1,91 @@
+{
+  "_opponent_name": "random-chaos",
+  "_opponent_version": 1,
+  "_assignments": [0, 0, 1, 1],
+  "rewards": [55.0, 58.0, 8.0, 12.0],
+  "action_timeouts": [0, 0, 15, 18],
+  "steps": 8000,
+  "stats": {
+    "game": {
+      "assembler.heart.created": 35.0,
+      "chest.heart.deposited_by_agent": 28.0,
+      "chest.heart.withdrawn_by_agent": 4.0
+    },
+    "agent": [
+      {
+        "action.move.success": 680.0,
+        "action.move.failed": 22.0,
+        "action.noop.success": 45.0,
+        "action.change_vibe.success": 48.0,
+        "action.attack.success": 35.0,
+        "action.attack.failed": 8.0,
+        "action.failed": 12.0,
+        "energy.amount": 295.0,
+        "energy.gained": 265.0,
+        "energy.lost": 35.0,
+        "carbon.amount": 95.0,
+        "carbon.gained": 88.0,
+        "carbon.lost": 10.0,
+        "junction.aligned": 45.0,
+        "junction.misaligned": 3.0
+      },
+      {
+        "action.move.success": 710.0,
+        "action.move.failed": 18.0,
+        "action.noop.success": 40.0,
+        "action.change_vibe.success": 52.0,
+        "action.attack.success": 38.0,
+        "action.attack.failed": 6.0,
+        "action.failed": 10.0,
+        "energy.amount": 312.0,
+        "energy.gained": 282.0,
+        "energy.lost": 32.0,
+        "carbon.amount": 102.0,
+        "carbon.gained": 95.0,
+        "carbon.lost": 8.0,
+        "junction.aligned": 48.0,
+        "junction.misaligned": 2.0
+      },
+      {
+        "action.move.success": 280.0,
+        "action.move.failed": 185.0,
+        "action.noop.success": 220.0,
+        "action.change_vibe.success": 85.0,
+        "action.attack.success": 42.0,
+        "action.attack.failed": 95.0,
+        "action.failed": 125.0,
+        "action.timeout": 15.0,
+        "energy.amount": 45.0,
+        "energy.gained": 38.0,
+        "energy.lost": 145.0,
+        "carbon.amount": 12.0,
+        "carbon.gained": 8.0,
+        "carbon.lost": 55.0,
+        "junction.aligned": 5.0,
+        "junction.misaligned": 28.0
+      },
+      {
+        "action.move.success": 295.0,
+        "action.move.failed": 172.0,
+        "action.noop.success": 235.0,
+        "action.change_vibe.success": 78.0,
+        "action.attack.success": 38.0,
+        "action.attack.failed": 102.0,
+        "action.failed": 118.0,
+        "action.timeout": 18.0,
+        "energy.amount": 52.0,
+        "energy.gained": 42.0,
+        "energy.lost": 138.0,
+        "carbon.amount": 15.0,
+        "carbon.gained": 10.0,
+        "carbon.lost": 48.0,
+        "junction.aligned": 6.0,
+        "junction.misaligned": 25.0
+      }
+    ],
+    "collective": {
+      "total.hearts.produced": 35.0,
+      "team.coordination.score": 0.88
+    }
+  }
+}

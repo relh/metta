@@ -1,0 +1,67 @@
+{
+  "rewards": [0.5, 1.2, 0.8, 0.3],
+  "action_timeouts": [5, 8, 3, 10],
+  "steps": 2000,
+  "stats": {
+    "game": {
+      "assembler.heart.created": 0.0,
+      "chest.heart.deposited_by_agent": 0.0,
+      "chest.heart.withdrawn_by_agent": 0.0
+    },
+    "agent": [
+      {
+        "action.move.success": 50.0,
+        "action.move.failed": 150.0,
+        "action.noop.success": 300.0,
+        "action.change_vibe.success": 2.0,
+        "action.failed": 80.0,
+        "energy.amount": 20.0,
+        "energy.gained": 10.0,
+        "carbon.amount": 5.0,
+        "carbon.gained": 2.0,
+        "carbon.lost": 15.0,
+        "junction.aligned": 0.0
+      },
+      {
+        "action.move.success": 60.0,
+        "action.move.failed": 140.0,
+        "action.noop.success": 280.0,
+        "action.change_vibe.success": 3.0,
+        "action.failed": 75.0,
+        "energy.amount": 25.0,
+        "energy.gained": 12.0,
+        "carbon.amount": 6.0,
+        "carbon.gained": 3.0,
+        "carbon.lost": 12.0,
+        "junction.aligned": 1.0
+      },
+      {
+        "action.move.success": 45.0,
+        "action.move.failed": 160.0,
+        "action.noop.success": 320.0,
+        "action.change_vibe.success": 1.0,
+        "action.failed": 90.0,
+        "energy.amount": 15.0,
+        "energy.gained": 8.0,
+        "carbon.amount": 4.0,
+        "carbon.gained": 1.0,
+        "carbon.lost": 18.0,
+        "junction.aligned": 0.0
+      },
+      {
+        "action.move.success": 40.0,
+        "action.move.failed": 170.0,
+        "action.noop.success": 350.0,
+        "action.change_vibe.success": 0.0,
+        "action.failed": 100.0,
+        "energy.amount": 10.0,
+        "energy.gained": 5.0,
+        "carbon.amount": 3.0,
+        "carbon.gained": 0.0,
+        "carbon.lost": 20.0,
+        "junction.aligned": 0.0
+      }
+    ],
+    "collective": {}
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "rewards": [5.0],
+  "action_timeouts": [0],
+  "steps": 1000,
+  "stats": {
+    "game": {},
+    "agent": [
+      {
+        "action.move.success": 100.0
+      }
+    ],
+    "collective": {}
+  }
+}
