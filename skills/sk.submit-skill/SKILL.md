@@ -44,11 +44,18 @@ wt switch "$BRANCH_NAME" || wt switch --create "$BRANCH_NAME"
 
 **CRITICAL:** Lint MUST pass before committing. Skipping causes CI failures.
 
-Invoke `/cb.lint-fix` to ensure all formatters (including prettier) are available and run lint:
+**ALWAYS invoke the `/cb.lint-fix` skill** to ensure all formatters (including prettier) are available and fix lint
+errors:
 
 ```
-Use Skill tool: skill="cb.lint-fix"
+Skill(skill="cb.lint-fix")
 ```
+
+This is NOT optional. You MUST run this skill before proceeding. The skill will:
+
+1. Ensure prettier and other formatters are available
+2. Run lint autofix on all changed files
+3. Report any remaining errors that need manual fixes
 
 **Do NOT proceed to Step 3 until lint passes.** Fix all errors first.
 
