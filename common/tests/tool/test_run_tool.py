@@ -1,10 +1,12 @@
 """Integration tests for run_tool main() focusing on user-facing behavior."""
 
 import os
+import sys
 
 import pytest
 
 from metta.common.tests_support import run_tool_in_process
+from metta.common.tool.recipe_registry import recipe_registry
 
 
 @pytest.fixture
@@ -13,6 +15,13 @@ def with_extra_imports_root(monkeypatch):
     extra_imports_root = os.path.join(os.path.dirname(__file__), "fixtures/extra-import-root")
     monkeypatch.setenv("PYTHONPATH", extra_imports_root)
     monkeypatch.syspath_prepend(extra_imports_root)
+
+    # Clear cached imports and recipe registry to prevent CI flakiness
+    # when tests are retried or run in parallel (Datadog retries, pytest-xdist)
+    test_modules = [k for k in sys.modules.keys() if k.startswith("mypackage")]
+    for mod_name in test_modules:
+        sys.modules.pop(mod_name, None)
+    recipe_registry.clear()
 
 
 @pytest.fixture

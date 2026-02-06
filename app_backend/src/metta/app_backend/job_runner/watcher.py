@@ -421,12 +421,21 @@ def _handle_pod_terminal(
             if phase == "Succeeded":
                 _handle_pod_succeeded(stats_client, job_id, pod_name, result_data=result_data)
             elif phase == "Failed":
-                error = _get_pod_error(batch_v1, pod)
+                # Try to extract meaningful error from logs first
+                k8s_error = _get_pod_error(batch_v1, pod)
+                log_error = _extract_error_from_logs_with_retry(job_id)
+
+                # Prefer log error if available, otherwise fall back to K8s error
+                error = log_error if log_error else k8s_error
                 error_type = _classify_error(error)
+
                 _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
                 if result_data:
                     stats_client.update_job(job_id, JobRequestUpdate(result=result_data))
-                logger.info(f"Job {job_id} failed (pod {pod_name}): {error}")
+
+                # Log which error source was used for debugging
+                error_source = "logs" if log_error else "k8s"
+                logger.info(f"Job {job_id} failed (pod {pod_name}, error_source={error_source}): {error}")
         _cleanup_terminated_pod(core_v1, batch_v1, pod, job_id)
     except Exception:
         logger.error(f"Unhandled error processing terminal pod {pod_name} for job {job_id}", exc_info=True)
@@ -520,26 +529,272 @@ def _get_pod_error(batch_v1: client.BatchV1Api, pod: client.V1Pod) -> str:
     return (pod.status.message if pod.status else None) or "Pod failed"
 
 
+def _extract_python_traceback(lines: list[str]) -> str | None:
+    """Extract the final exception from a Python traceback.
+
+    Looks for:
+    - "Traceback (most recent call last):"
+    - Exception line (e.g., "ValueError: invalid value")
+    - Extracts exception with 2-3 lines of context
+    """
+    # Scan backwards for traceback marker
+    traceback_start = -1
+    for i in range(len(lines) - 1, -1, -1):
+        if "Traceback (most recent call last):" in lines[i]:
+            traceback_start = i
+            break
+
+    if traceback_start == -1:
+        return None
+
+    # Look for the final exception (last line that matches exception pattern)
+    exception_keywords = [
+        "Error:",
+        "Exception:",
+        "Error",
+        "Exception",
+        "AssertionError",
+        "ValueError",
+        "RuntimeError",
+        "TypeError",
+        "AttributeError",
+        "KeyError",
+        "IndexError",
+        "ModuleNotFoundError",
+        "ImportError",
+        "PolicyStepError",
+        "TimeoutError",
+        "ConnectionError",
+    ]
+
+    exception_line = -1
+    for i in range(len(lines) - 1, traceback_start, -1):
+        line = lines[i].strip()
+        if any(keyword in line for keyword in exception_keywords):
+            exception_line = i
+            break
+
+    if exception_line == -1:
+        # No clear exception found, return traceback header with some context
+        end_idx = min(traceback_start + 10, len(lines))
+        return "\n".join(lines[traceback_start:end_idx])
+
+    # Extract exception with context (2 lines before, exception line, 2 lines after)
+    start_idx = max(traceback_start, exception_line - 2)
+    end_idx = min(exception_line + 3, len(lines))
+    context_lines = [line for line in lines[start_idx:end_idx] if line.strip()]
+
+    # Limit total length to ~500 chars
+    result = "\n".join(context_lines)
+    if len(result) > 500:
+        result = result[:500] + "..."
+
+    return result
+
+
+def _extract_policy_server_error(lines: list[str]) -> str | None:
+    """Extract policy server-specific errors.
+
+    Looks for:
+    - "Policy server failed during episode execution"
+    - "Policy server returned {status_code}"
+    - "Policy server request failed"
+    - RuntimeError from manager.py with log tails
+    """
+    policy_error_markers = [
+        "Policy server failed",
+        "Policy server returned",
+        "Policy server request failed",
+        "Policy server exited",
+        "PolicyStepError",
+        "failed to connect",
+        "connection refused",
+        "grpc",
+    ]
+
+    # Scan backwards for policy-related errors (case-insensitive to match varied log output)
+    for i in range(len(lines) - 1, max(0, len(lines) - 100), -1):
+        line = lines[i]
+        line_lower = line.lower()
+        if any(marker.lower() in line_lower for marker in policy_error_markers):
+            # Extract this line and next 3-5 lines of context
+            start_idx = max(0, i - 2)
+            end_idx = min(i + 5, len(lines))
+            context_lines = [ln for ln in lines[start_idx:end_idx] if ln.strip()]
+
+            result = "\n".join(context_lines)
+            if len(result) > 500:
+                result = result[:500] + "..."
+            return result
+
+    return None
+
+
+def _extract_generic_error(lines: list[str]) -> str | None:
+    """Extract any error-like message from logs.
+
+    Fallback strategy that looks for:
+    - Lines containing ERROR, CRITICAL, FAILED
+    - Lines with "error:", "failed:", "exception:"
+    """
+    error_patterns = [
+        "ERROR",
+        "CRITICAL",
+        "FAILED",
+        "FATAL",
+        "error:",
+        "Error:",
+        "failed:",
+        "Failed:",
+        "exception:",
+        "Exception:",
+        "abort",
+        "crash",
+    ]
+
+    # Scan backwards for any error-like content (case-insensitive)
+    for i in range(len(lines) - 1, max(0, len(lines) - 100), -1):
+        line = lines[i]
+        line_lower = line.lower()
+        if any(pattern.lower() in line_lower for pattern in error_patterns):
+            # Extract with minimal context
+            start_idx = max(0, i - 1)
+            end_idx = min(i + 3, len(lines))
+            context_lines = [ln for ln in lines[start_idx:end_idx] if ln.strip()]
+
+            result = "\n".join(context_lines)
+            if len(result) > 500:
+                result = result[:500] + "..."
+            return result
+
+    return None
+
+
+def _extract_error_from_logs(job_id: UUID, max_lines: int = 200) -> str | None:
+    """Extract meaningful error message from pod logs stored in S3.
+
+    Args:
+        job_id: The job ID to extract logs for
+        max_lines: Maximum number of lines from end of log to scan (default: 200)
+
+    Returns:
+        Extracted error message or None if extraction failed
+    """
+    cfg = get_dispatch_config()
+    s3 = _get_s3_client()
+
+    # Read logs from S3
+    try:
+        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=job_logs_key(job_id))
+        logs = response["Body"].read().decode("utf-8", errors="replace")
+    except s3.exceptions.NoSuchKey:
+        logger.debug(f"No logs found in S3 for job {job_id}")
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to read logs from S3 for job {job_id}: {e}")
+        return None
+
+    if not logs:
+        return None
+
+    # Get last N lines efficiently
+    lines = logs.split("\n")
+    tail_lines = lines[-max_lines:] if len(lines) > max_lines else lines
+
+    # Try multiple extraction strategies in order of specificity
+    error = _extract_python_traceback(tail_lines)
+    if error:
+        logger.debug(f"Extracted Python traceback error for job {job_id}")
+        return error
+
+    error = _extract_policy_server_error(tail_lines)
+    if error:
+        logger.debug(f"Extracted policy server error for job {job_id}")
+        return error
+
+    error = _extract_generic_error(tail_lines)
+    if error:
+        logger.debug(f"Extracted generic error for job {job_id}")
+        return error
+
+    return None
+
+
+def _extract_error_from_logs_with_retry(job_id: UUID) -> str | None:
+    """Extract error from logs with retry logic.
+
+    Logs may not be immediately available in S3 after _capture_pod_logs() completes
+    due to S3 eventual consistency. Retry with exponential backoff similar to
+    _read_results_with_retry().
+    """
+    delays = [0.5, 1, 2]  # Shorter delays than results (logs uploaded by watcher, not pod)
+
+    for i, delay in enumerate(delays):
+        error = _extract_error_from_logs(job_id)
+        if error:
+            return error
+        if i < len(delays) - 1:
+            time.sleep(delay)
+
+    return None
+
+
 def _classify_error(error: str) -> str:
-    """Classify error into a low-cardinality bucket for metrics."""
+    """Classify error into a low-cardinality bucket for metrics.
+
+    Errors from spawning policy servers or policy server failures are classified as policy_error.
+    """
     error_lower = error.lower()
+
+    # Infrastructure errors take precedence
     if "timeout" in error_lower or "deadline" in error_lower:
         return "timeout"
     if "oom" in error_lower or "out of memory" in error_lower or "oomkilled" in error_lower:
         return "oom"
-    if any(
-        marker in error_lower
-        for marker in (
-            "policy",
-            "policy_uri",
-            "policy_uris",
-            "file not found",
-            "no such file",
-            "does_not_exist",
-            "zipfile",
-        )
-    ):
+
+    # Exclude known infrastructure errors (image pull, container runtime) from policy classification
+    infra_markers = (
+        "image pull",
+        "imagepullbackoff",
+        "errimagepull",
+        "pull access denied",
+        "manifest not found",
+        "container runtime",
+        "failed to pull image",
+    )
+    if any(marker in error_lower for marker in infra_markers):
+        return "unknown"
+
+    # Policy-related errors: includes spawning failures and server errors
+    policy_markers = (
+        # Explicit policy references
+        "policy",
+        "policy_uri",
+        "policy_uris",
+        "policy server",
+        "policy-server",
+        # File/loading errors (often policy artifacts)
+        "file not found",
+        "no such file",
+        "does_not_exist",
+        "zipfile",
+        # gRPC and server connectivity (policy server communication)
+        "grpc",
+        "rpc error",
+        "connection refused",
+        "connection error",
+        "connection failed",
+        "failed to connect",
+        "cannot connect",
+        # Server-side errors from policy execution
+        "server error",
+        "server failed",
+        "server crashed",
+    )
+
+    if any(marker in error_lower for marker in policy_markers):
         return "policy_error"
+
     return "unknown"
 
 
