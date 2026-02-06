@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mettagrid_version:
-        description: "mettagrid version to install (e.g. 0.2.0.84). Leave empty to auto-detect from tag."
+        description: "mettagrid version to install (e.g. 0.2.0.84). Leave empty to use latest from PyPI."
         required: false
 
 env:
@@ -25,12 +25,14 @@ jobs:
         id: version
         run: |
           if [[ -n "${{ inputs.mettagrid_version }}" ]]; then
-            echo "mettagrid_version=${{ inputs.mettagrid_version }}" >> "$GITHUB_OUTPUT"
+            VERSION="${{ inputs.mettagrid_version }}"
           else
-            # After mettagrid publish or manual dispatch, use latest from PyPI
             VERSION=$(curl -s https://pypi.org/pypi/mettagrid/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
-            echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
           fi
+          # Strip tag prefixes like "mettagrid-v" or "v"
+          VERSION="${VERSION#mettagrid-v}"
+          VERSION="${VERSION#v}"
+          echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     needs: resolve-version
