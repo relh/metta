@@ -23,22 +23,7 @@ from metta.agent.components.obs_shim import (
     ObsShimTokens,
     ObsShimTokensConfig,
 )
-
-try:
-    from metta.rl.utils import ensure_sequence_metadata
-except ImportError:
-    # Fallback implementation if not found
-    def ensure_sequence_metadata(
-        td: TensorDict,
-        *,
-        batch_size: int,
-        time_steps: int,
-        cache: dict[tuple[str, int, int], tuple[torch.Tensor, torch.Tensor]] | None = None,
-    ) -> None:
-        """Fallback implementation that does nothing."""
-        pass
-
-
+from metta.agent.utils import ensure_sequence_metadata
 from mettagrid.base_config import Config
 from mettagrid.policy.lstm import obs_to_obs_tensor
 from mettagrid.policy.policy import (
