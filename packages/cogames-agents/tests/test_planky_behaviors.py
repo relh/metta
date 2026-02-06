@@ -214,7 +214,7 @@ class TestPlankyAligner:
             )
 
     def test_aligner_gets_hearts(self) -> None:
-        """Aligner with gear should get hearts from chest."""
+        """Aligner with gear should get hearts from hub."""
         stats = run_planky_episode(
             PlankyAlignerHearts,
             max_steps=200,

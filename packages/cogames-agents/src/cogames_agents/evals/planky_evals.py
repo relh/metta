@@ -191,7 +191,7 @@ class PlankyAlignerGear(_PlankyDiagnosticBase):
 
 class PlankyAlignerHearts(_PlankyDiagnosticBase):
     name: str = "planky_aligner_hearts"
-    description: str = "Aligner with gear gets hearts from chest."
+    description: str = "Aligner with gear gets hearts from hub."
     map_name: str = "aligner_hearts.map"
     max_steps: int = Field(default=200)
     inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"aligner": 1})
