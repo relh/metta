@@ -109,6 +109,7 @@ def run_planky_episode(
     policy_uri: str,
     mission: str = "cogsguard_machina_1.basic",
     steps: Optional[int] = None,
+    collective_initial: Optional[dict[str, int]] = None,
     seed: int = 42,
 ) -> EpisodeResult:
     """Run a single Planky episode and return structured results + trace."""
@@ -116,6 +117,13 @@ def run_planky_episode(
 
     if steps is not None:
         env_cfg.game.max_steps = steps
+    if collective_initial is not None:
+        for collective_name, collective_cfg in env_cfg.game.collectives.items():
+            if collective_name == "clips":
+                continue
+            merged = dict(collective_cfg.inventory.initial)
+            merged.update({k: int(v) for k, v in collective_initial.items()})
+            collective_cfg.inventory.initial = merged
 
     policy_spec = policy_spec_from_uri(policy_uri, device="cpu")
     num_agents = env_cfg.game.num_agents

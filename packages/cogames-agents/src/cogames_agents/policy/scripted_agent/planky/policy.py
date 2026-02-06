@@ -375,6 +375,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         policy_env_info: PolicyEnvInterface,
         agent_id: int,
         role: str,
+        disable_role_switching: bool = False,
         trace_enabled: bool = False,
         trace_level: int = 1,
         trace_agent: int = -1,
@@ -383,6 +384,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         self._agent_id = agent_id
         self._policy_env_info = policy_env_info
         self._role = role
+        self._disable_role_switching = disable_role_switching
         self._obs_parser = ObsParser(policy_env_info)
         self._action_names = policy_env_info.action_names
 
@@ -459,61 +461,62 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         # "gear" → stem mode (role selection)
         # any valid role → run that role's goals
 
-        # Time-based role conversion: aligner → scrambler at specified step
-        if (
-            self._convert_to_scrambler_at_step is not None
-            and agent_state.step == self._convert_to_scrambler_at_step
-            and agent_state.role == "aligner"
-        ):
-            if self._trace_enabled:
-                print(f"[planky][t={agent_state.step} a={self._agent_id}] converting aligner→scrambler")
-            agent_state.blackboard["change_role"] = "scrambler"
-
-        # Resource-based role conversion: miner → aligner when collective is well-stocked
-        # Uses state.vibe (not agent_state.role) so the check stops firing once the
-        # vibe changes to "aligner", allowing the vibe-to-role mapping to run.
-        if state.vibe == "miner" and state.cargo_total == 0:
-            from .goals.miner import COLLECTIVE_SUFFICIENT_THRESHOLD  # noqa: PLC0415
-
+        if not self._disable_role_switching:
+            # Time-based role conversion: aligner → scrambler at specified step
             if (
-                state.collective_carbon > COLLECTIVE_SUFFICIENT_THRESHOLD
-                and state.collective_oxygen > COLLECTIVE_SUFFICIENT_THRESHOLD
-                and state.collective_germanium > COLLECTIVE_SUFFICIENT_THRESHOLD
-                and state.collective_silicon > COLLECTIVE_SUFFICIENT_THRESHOLD
+                self._convert_to_scrambler_at_step is not None
+                and agent_state.step == self._convert_to_scrambler_at_step
+                and agent_state.role == "aligner"
             ):
                 if self._trace_enabled:
-                    print(
-                        f"[planky][t={agent_state.step} a={self._agent_id}]"
-                        " converting miner→aligner (resources sufficient)"
-                    )
-                agent_state.blackboard["change_role"] = "aligner"
+                    print(f"[planky][t={agent_state.step} a={self._agent_id}] converting aligner→scrambler")
+                agent_state.blackboard["change_role"] = "scrambler"
 
-        # Reverse conversion: aligner → miner when collective can't support aligners
-        # Only convert if the aligner is idle (no gear AND no hearts) and collective
-        # can't afford either aligner gear (C1 O1 G3 S1 + reserve) or hearts (C1 O1 G1 S1 + reserve).
-        # Uses state.vibe (not agent_state.role) so the check stops firing once the
-        # vibe changes to "miner", allowing the vibe-to-role mapping to run.
-        if state.vibe == "aligner" and not state.aligner_gear and state.heart == 0:
-            can_afford_gear = (
-                state.collective_carbon >= 2
-                and state.collective_oxygen >= 2
-                and state.collective_germanium >= 4  # aligner gear costs G3 + reserve 1
-                and state.collective_silicon >= 2
-            )
-            can_afford_hearts = (
-                state.collective_carbon >= 2
-                and state.collective_oxygen >= 2
-                and state.collective_germanium >= 2  # heart costs G1 + reserve 1
-                and state.collective_silicon >= 2
-            )
-            if not can_afford_gear and not can_afford_hearts:
-                if self._trace_enabled:
-                    print(
-                        f"[planky][t={agent_state.step} a={self._agent_id}] converting aligner→miner "
-                        f"(can't afford gear or hearts: C={state.collective_carbon} O={state.collective_oxygen} "
-                        f"G={state.collective_germanium} S={state.collective_silicon})"
-                    )
-                agent_state.blackboard["change_role"] = "miner"
+            # Resource-based role conversion: miner → aligner when collective is well-stocked
+            # Uses state.vibe (not agent_state.role) so the check stops firing once the
+            # vibe changes to "aligner", allowing the vibe-to-role mapping to run.
+            if state.vibe == "miner" and state.cargo_total == 0:
+                from .goals.miner import COLLECTIVE_SUFFICIENT_THRESHOLD  # noqa: PLC0415
+
+                if (
+                    state.collective_carbon > COLLECTIVE_SUFFICIENT_THRESHOLD
+                    and state.collective_oxygen > COLLECTIVE_SUFFICIENT_THRESHOLD
+                    and state.collective_germanium > COLLECTIVE_SUFFICIENT_THRESHOLD
+                    and state.collective_silicon > COLLECTIVE_SUFFICIENT_THRESHOLD
+                ):
+                    if self._trace_enabled:
+                        print(
+                            f"[planky][t={agent_state.step} a={self._agent_id}]"
+                            " converting miner→aligner (resources sufficient)"
+                        )
+                    agent_state.blackboard["change_role"] = "aligner"
+
+            # Reverse conversion: aligner → miner when collective can't support aligners
+            # Only convert if the aligner is idle (no gear AND no hearts) and collective
+            # can't afford either aligner gear (C1 O1 G3 S1 + reserve) or hearts (C1 O1 G1 S1 + reserve).
+            # Uses state.vibe (not agent_state.role) so the check stops firing once the
+            # vibe changes to "miner", allowing the vibe-to-role mapping to run.
+            if state.vibe == "aligner" and not state.aligner_gear and state.heart == 0:
+                can_afford_gear = (
+                    state.collective_carbon >= 2
+                    and state.collective_oxygen >= 2
+                    and state.collective_germanium >= 4  # aligner gear costs G3 + reserve 1
+                    and state.collective_silicon >= 2
+                )
+                can_afford_hearts = (
+                    state.collective_carbon >= 2
+                    and state.collective_oxygen >= 2
+                    and state.collective_germanium >= 2  # heart costs G1 + reserve 1
+                    and state.collective_silicon >= 2
+                )
+                if not can_afford_gear and not can_afford_hearts:
+                    if self._trace_enabled:
+                        print(
+                            f"[planky][t={agent_state.step} a={self._agent_id}] converting aligner→miner "
+                            f"(can't afford gear or hearts: C={state.collective_carbon} O={state.collective_oxygen} "
+                            f"G={state.collective_germanium} S={state.collective_silicon})"
+                        )
+                    agent_state.blackboard["change_role"] = "miner"
 
         # Check if goals want to change role (via blackboard)
         if "change_role" in agent_state.blackboard:
@@ -797,6 +800,7 @@ class PlankyPolicy(MultiAgentPolicy):
 
     URI parameters:
         ?miner=4&scout=0&aligner=2&scrambler=4  — role counts
+        ?disable_role_switching=1               — disable miner↔aligner and aligner→scrambler conversions
         ?trace=1&trace_level=2&trace_agent=0     — tracing
     """
 
@@ -818,6 +822,7 @@ class PlankyPolicy(MultiAgentPolicy):
         trace_agent: int = -1,
         bio: int = 0,
         stats: int = 0,
+        disable_role_switching: bool | int = 0,
         # Accept any extra kwargs
         **kwargs: object,
     ) -> None:
@@ -832,6 +837,7 @@ class PlankyPolicy(MultiAgentPolicy):
         self._trace_agent = trace_agent
         self._bio_enabled = bool(bio)
         self._stats_enabled = bool(stats)
+        self._disable_role_switching = bool(disable_role_switching)
 
         # Resolve defaults: if stem > 0 and miner/aligner/scrambler not explicitly set, zero them
         # If ANY explicit role is provided (not -1), treat unset roles as 0 to avoid surprises
@@ -872,7 +878,7 @@ class PlankyPolicy(MultiAgentPolicy):
 
         if self._trace_enabled:
             print(f"[planky] Role distribution ({num_teams} teams): {self._role_distribution}")
-            if self._first_aligner_id is not None:
+            if self._first_aligner_id is not None and not self._disable_role_switching:
                 print(f"[planky] First aligner (agent {self._first_aligner_id}) will convert to scrambler at step 1000")
 
         self._agent_policies: dict[int, StatefulAgentPolicy[PlankyAgentState]] = {}
@@ -887,12 +893,15 @@ class PlankyPolicy(MultiAgentPolicy):
             role = self._role_distribution[agent_id] if agent_id < len(self._role_distribution) else "default"
 
             # First aligner converts to scrambler at step 1000
-            convert_to_scrambler_at_step = 1000 if agent_id == self._first_aligner_id else None
+            convert_to_scrambler_at_step = (
+                None if self._disable_role_switching else 1000 if agent_id == self._first_aligner_id else None
+            )
 
             brain = PlankyBrain(
                 policy_env_info=self._policy_env_info,
                 agent_id=agent_id,
                 role=role,
+                disable_role_switching=self._disable_role_switching,
                 trace_enabled=self._trace_enabled,
                 trace_level=self._trace_level,
                 trace_agent=self._trace_agent,
