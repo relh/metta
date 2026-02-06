@@ -265,13 +265,15 @@ jobs:
             INDEX_ARGS=""
           fi
 
-          # Install cogames from PyPI
+          # Install cogames from PyPI (--refresh bypasses uv's index cache which
+          # can lag behind the PyPI JSON API, causing "no version" errors right
+          # after publish)
           if [ -n "$VERSION" ]; then
             echo "Installing cogames==$VERSION from PyPI..."
-            uv pip install $INDEX_ARGS "cogames==$VERSION"
+            uv pip install --refresh $INDEX_ARGS "cogames==$VERSION"
           else
             echo "Installing latest cogames from PyPI..."
-            uv pip install $INDEX_ARGS cogames
+            uv pip install --refresh $INDEX_ARGS cogames
           fi
 
           # Smoke test 1: Check version command works
@@ -286,3 +288,36 @@ jobs:
 
           echo ""
           echo "✓ cogames smoke tests passed!"
+
+  notify-discord:
+    name: Notify Discord on success
+    needs: [verify-pypi-install]
+    if: success()
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref_name }}" == cogames-v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#cogames-v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+      - name: Post to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "No Discord webhook URL configured, skipping"
+            exit 0
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "No version found, skipping"
+            exit 0
+          fi
+          PYPI_URL="https://pypi.org/project/cogames/${VERSION}/"
+          MSG="✅ **cogames v${VERSION}** published to [PyPI](${PYPI_URL})"
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": $(echo "$MSG" | jq -Rs .), \"flags\": 4}"

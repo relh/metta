@@ -101,6 +101,15 @@ All workflows use PyPI trusted publishers (OIDC) -- no API tokens needed. Each r
 
 Workflows also support manual dispatch (`workflow_dispatch`) with options to target testpypi for safe testing.
 
+## Discord Notifications
+
+Two Discord messages are sent per package:
+
+1. **"releasing..."** -- sent by `publish.py` when the tag is pushed (before CI runs). Uses the webhook URL from AWS
+   Secrets Manager (`discord/channel-webhook/updates`).
+2. **"published to PyPI"** -- sent by the CI workflow after successful publish. Uses the `DISCORD_WEBHOOK_URL` GitHub
+   Actions secret (must be configured in the repo).
+
 ## What You End Up With
 
 After a full `metta publish cogames-agents`:

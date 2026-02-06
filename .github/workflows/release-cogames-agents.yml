@@ -268,3 +268,36 @@ jobs:
               environment_url: process.env.DEPLOY_URL,
               description: 'Publish failed',
             });
+
+  notify-discord:
+    name: Notify Discord on success
+    needs: [publish]
+    if: success()
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [[ "${{ github.ref_name }}" == cogames-agents-v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#cogames-agents-v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+      - name: Post to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "No Discord webhook URL configured, skipping"
+            exit 0
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "No version found, skipping"
+            exit 0
+          fi
+          PYPI_URL="https://pypi.org/project/cogames-agents/${VERSION}/"
+          MSG="✅ **cogames-agents v${VERSION}** published to [PyPI](${PYPI_URL})"
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": $(echo "$MSG" | jq -Rs .), \"flags\": 4}"

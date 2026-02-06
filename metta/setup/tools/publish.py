@@ -212,13 +212,13 @@ def _post_to_discord(
     tag_url = f"https://github.com/{METTA_GITHUB_ORGANIZATION}/{METTA_GITHUB_REPO}/releases/tag/{tag_name}"
     commit_url = f"https://github.com/{METTA_GITHUB_ORGANIZATION}/{METTA_GITHUB_REPO}/commit/{commit}"
 
-    message = f"🚀 **{package.value} v{version}** released!\n\n"
+    message = f"🚀 **{package.value} v{version}** releasing...\n\n"
     message += f"Tag: `{tag_name}`\n"
     message += f"Commit: [{commit[:7]}]({commit_url})\n"
     message += f"Release: [View on GitHub]({tag_url})\n"
 
     if release_workflow_url := _RELEASE_WORKFLOW_URL_FOR_PACKAGE.get(package):
-        message += f"\n📦 Triggered [release workflow]({release_workflow_url}) to publish to PyPI."
+        message += f"\n📦 [Release workflow]({release_workflow_url}) triggered — will publish to PyPI."
 
     if dry_run:
         info("Would post following message to Discord:")
