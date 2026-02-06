@@ -29,6 +29,9 @@ Shared skills live in `skills/`:
 - `cb.simplify-diff`
 - `cb.sync-nim-python`
 - `cf.really`
+- `cg.play`
+- `cg.policy-dashboard`
+- `cg.submit`
 - `db.fix-traceback`
 - `db.run-and-triage`
 - `db.test-triage`

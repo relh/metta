@@ -12,6 +12,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 | `db.`   | Debugging / triage                                   | db.fix-traceback                    |
 | `do.`   | DevOps / infra / ops                                 | do.mettabox-ops, do.worktrunk       |
 | `cb.`   | Codebase analysis/refactor/cleanup                   | cb.review-main, cb.cleanup-refactor |
+| `cg.`   | CoGames play / submit / dashboard                    | cg.play, cg.submit                  |
 | `sk.`   | Skill management (create/update/submit/sync skills)  | sk.make-skill, sk.submit-skill      |
 | `t.`    | Testing                                              | t.run-tests                         |
 | `wt.`   | Git worktree utilities                               | wt.cleanup                          |
