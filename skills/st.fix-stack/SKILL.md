@@ -115,7 +115,17 @@ This gives you the full stack in bottom-up order, ready to process.
 
 ### Step 3: Dispatch Sub-Agent for Each Branch
 
-For each branch in bottom-up order, dispatch a sub-agent:
+For each branch in bottom-up order, **first check if it's already merged**:
+
+```bash
+STATE=$(gh pr view <branch-name> --json state -q '.state' 2>/dev/null)
+if [ "$STATE" = "MERGED" ]; then
+  echo "Skipping <branch-name> — already merged"
+  # Continue to next branch
+fi
+```
+
+If not merged, dispatch a sub-agent:
 
 ```
 Task(
@@ -193,6 +203,9 @@ By dispatching each branch as a sub-agent:
 - **Sequential, not parallel**: Each fix may change code that affects branches above
 - **Restack propagates**: When you modify and submit a lower branch, upper branches may need restacking
 - **Skip trunk**: Never run fix-branch on main/trunk
+- **Skip merged branches**: Before processing each branch, check if its PR is already merged. Use
+  `gh pr view <branch> --json state -q '.state'`. If `MERGED`, skip it and move to the next branch. This avoids wasting
+  time on branches that have already landed in trunk
 - **Worktrees per branch**: Each branch in the stack gets its own worktree (e.g., `.worktrees/branch-1`,
   `.worktrees/branch-2`)
 - **CRITICAL: Check CI correctly** - Use `gh api repos/{owner}/{repo}/commits/$(git rev-parse HEAD)/check-runs` instead

@@ -345,6 +345,52 @@ Task(
 https://app.graphite.dev/github/pr/<OWNER>/<REPO>/<PR_NUMBER>
 ```
 
+### Step 5b: Post-Submit CI Verification (CRITICAL)
+
+After submitting, **poll CI on the new remote HEAD commit** until all checks complete. The submit creates a new commit
+with a new SHA — CI must pass on _that_ commit, not the pre-submit one.
+
+```bash
+OWNER=$(gh repo view --json owner -q '.owner.login')
+REPO=$(gh repo view --json name -q '.name')
+PR_NUMBER=$(gh pr view --json number -q '.number')
+
+# Get the REMOTE head SHA (not local — submit may have amended)
+REMOTE_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid -q '.headRefOid')
+
+# Poll until all checks complete (up to 10 minutes)
+for i in $(seq 1 20); do
+  RESULTS=$(gh api "repos/$OWNER/$REPO/commits/$REMOTE_SHA/check-runs" \
+    --jq '.check_runs[] | "\(.name)|\(.status)|\(.conclusion // "pending")"')
+
+  IN_PROGRESS=$(echo "$RESULTS" | grep -c "|in_progress|" || true)
+  QUEUED=$(echo "$RESULTS" | grep -c "|queued|" || true)
+  FAILURES=$(echo "$RESULTS" | grep "|completed|failure" || true)
+
+  if [ "$IN_PROGRESS" -eq 0 ] && [ "$QUEUED" -eq 0 ]; then
+    # All checks done
+    if [ -n "$FAILURES" ]; then
+      echo "CI FAILURES on new commit $REMOTE_SHA:"
+      echo "$FAILURES"
+      break
+    else
+      echo "All CI checks passing on $REMOTE_SHA"
+      break
+    fi
+  fi
+  echo "Waiting for CI... ($IN_PROGRESS in progress, $QUEUED queued)"
+  sleep 30
+done
+```
+
+**If CI fails on the new commit:**
+
+1. Jump back to Step 4 (Fix CI sub-agent) with the new commit's failure logs
+2. After fixing, re-run Step 5 (Submit) and Step 5b (verify CI again)
+3. Loop until CI passes or 3 attempts exhausted (then escalate to user)
+
+**If CI passes:** Proceed to Step 6 (Worktree Cleanup).
+
 ## Quick Reference
 
 | Step | Action                     | Method    | Purpose                               |
@@ -357,6 +403,7 @@ https://app.graphite.dev/github/pr/<OWNER>/<REPO>/<PR_NUMBER>
 | 3c   | **Verify code matches**    | Direct    | **Read code, confirm fix is correct** |
 | 4    | Fix CI                     | Sub-agent | Fix any CI failures                   |
 | 5    | Submit                     | Sub-agent | Test, clean, submit branch            |
+| 5b   | Post-submit CI verify      | Direct    | Poll CI on new commit, loop if fail   |
 
 ## Why Sub-Agents?
 
