@@ -1,7 +1,6 @@
 'use client'
 import { FC, useCallback, useRef, useState } from 'react'
 
-import { AUTH_COOKIE_NAME } from '@/auth/constants'
 import { normalizeReplayUrl, normalizeVibescopeUrl } from '@/components/ReplayViewer'
 import { StyledLink } from '@/components/StyledLink'
 import { TD, TR } from '@/components/Table'
@@ -112,17 +111,6 @@ function truncateValue(value: unknown, depth: number = 0): unknown {
 function fmt(v: number | null | undefined): string {
   if (v == null) return '-'
   return v.toFixed(4)
-}
-
-function getCookieValue(name: string): string | null {
-  const prefix = `${name}=`
-  for (const item of document.cookie.split(';')) {
-    const cookie = item.trim()
-    if (cookie.startsWith(prefix)) {
-      return cookie.slice(prefix.length)
-    }
-  }
-  return null
 }
 
 const ExpandDownloadRow: FC<{ label: string; data: unknown; show: boolean; onToggle: () => void }> = ({
@@ -243,6 +231,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const [logs, setLogs] = useState<string | null>(null)
   const [showGameStats, setShowGameStats] = useState(false)
   const [showAgentStats, setShowAgentStats] = useState(false)
+  const [traceLoading, setTraceLoading] = useState(false)
 
   const policyStatsMap = new Map((job.episode?.policy_stats ?? []).map((s) => [s.policy_version_id, s]))
   const attrs = job.episode?.attributes
@@ -250,16 +239,48 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const agentStats = attrs?.stats?.agent
 
   const timeDisplay = getTimeDisplay(job)
-  const openTraceViewer = useCallback(() => {
-    const token = getCookieValue(AUTH_COOKIE_NAME)
-    const traceUrl = new URL(`${window.location.origin}/api/jobs/${job.id}/trace`)
-    if (token) {
-      // TODO: Replace forwarding auth token in URL with a short-lived signed trace token.
-      // Perfetto does cross-origin fetches and cannot rely on Observatory cookies.
-      traceUrl.searchParams.set('auth_token', token)
+  const openTraceViewer = useCallback(async () => {
+    setTraceLoading(true)
+    const handle = window.open('https://ui.perfetto.dev')
+    if (!handle) {
+      setTraceLoading(false)
+      return
     }
-    const perfettoUrl = `https://ui.perfetto.dev/#!/?url=${encodeURIComponent(traceUrl.toString())}`
-    window.open(perfettoUrl, '_blank', 'noopener,noreferrer')
+
+    const response = await fetch(`/api/jobs/${job.id}/trace`)
+    if (!response.ok) {
+      handle.close()
+      setTraceLoading(false)
+      return
+    }
+    const buffer = await response.arrayBuffer()
+
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => handle.postMessage('PING', '*'), 100)
+      const cleanup = () => {
+        clearInterval(interval)
+        clearTimeout(timeout)
+        window.removeEventListener('message', onMessage)
+        resolve()
+      }
+      const onMessage = (e: MessageEvent) => {
+        if (e.data === 'PONG') cleanup()
+      }
+      const timeout = setTimeout(cleanup, 10000)
+      window.addEventListener('message', onMessage)
+    })
+
+    handle.postMessage(
+      {
+        perfetto: {
+          buffer,
+          title: `Job ${job.id}`,
+          fileName: `job-${job.id}-trace.pftrace`,
+        },
+      },
+      '*'
+    )
+    setTraceLoading(false)
   }, [job.id])
 
   const downloadTrace = useCallback(() => {
@@ -508,9 +529,17 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                       <span className="flex gap-1.5 justify-end">
                         <button
                           onClick={openTraceViewer}
-                          className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+                          disabled={traceLoading}
+                          className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 disabled:opacity-50 disabled:cursor-default"
                         >
-                          View
+                          {traceLoading ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                              Loading
+                            </span>
+                          ) : (
+                            'View'
+                          )}
                         </button>
                         <button
                           onClick={downloadTrace}
