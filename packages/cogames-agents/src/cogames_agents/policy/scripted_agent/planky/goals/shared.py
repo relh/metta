@@ -121,6 +121,12 @@ class EmergencyMineGoal(Goal):
                 ctx.trace.skip(self.name, f"has {ctx.state.heart} hearts")
             return True
 
+        # Agents without miner gear can't mine effectively — let them get gear first
+        if not ctx.state.miner_gear:
+            if ctx.trace:
+                ctx.trace.skip(self.name, "no miner gear")
+            return True
+
         s = ctx.state
         resources = [s.collective_carbon, s.collective_oxygen, s.collective_germanium, s.collective_silicon]
         min_resource = min(resources)
@@ -161,17 +167,6 @@ class EmergencyMineGoal(Goal):
         if ctx.trace:
             ctx.trace.activate(self.name, f"EMERGENCY: {lowest_resource}={collective[lowest_resource]}")
 
-        # If carrying resources, deposit first
-        if ctx.state.cargo_total > 0:
-            depot_pos = _find_deposit(ctx)
-            if depot_pos is not None:
-                if ctx.trace:
-                    ctx.trace.nav_target = depot_pos
-                dist = _manhattan(ctx.state.position, depot_pos)
-                if dist <= 1:
-                    return _move_toward(ctx.state.position, depot_pos)
-                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
-
         # Find extractor for the lowest resource
         target_pos: tuple[int, int] | None = None
         best_dist = 9999
@@ -202,6 +197,26 @@ class EmergencyMineGoal(Goal):
                         best_dist = d
                         target_pos = pos
 
+        # If adjacent to extractor and cargo just increased, keep bumping
+        if target_pos is not None and best_dist <= 1:
+            last_cargo = ctx.blackboard.get("_emg_last_cargo", None)
+            cargo_increased = last_cargo is not None and ctx.state.cargo_total > last_cargo
+            ctx.blackboard["_emg_last_cargo"] = ctx.state.cargo_total
+            if cargo_increased and ctx.state.cargo_total < ctx.state.cargo_capacity:
+                return _move_toward(ctx.state.position, target_pos)
+
+        # Deposit if we have cargo and aren't actively mining
+        if ctx.state.cargo_total > 0:
+            depot_pos = _find_deposit(ctx)
+            if depot_pos is not None:
+                if ctx.trace:
+                    ctx.trace.nav_target = depot_pos
+                dist = _manhattan(ctx.state.position, depot_pos)
+                if dist <= 1:
+                    return _move_toward(ctx.state.position, depot_pos)
+                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
+
+        # Navigate to extractor
         if target_pos is not None:
             if ctx.trace:
                 ctx.trace.nav_target = target_pos
@@ -237,17 +252,6 @@ class FallbackMineGoal(Goal):
     def execute(self, ctx: PlankyContext) -> Action:
         from .miner import RESOURCE_TYPES, _extractor_recently_failed  # noqa: PLC0415
 
-        # If carrying resources, deposit first
-        if ctx.state.cargo_total > 0:
-            depot_pos = _find_deposit(ctx)
-            if depot_pos is not None:
-                if ctx.trace:
-                    ctx.trace.nav_target = depot_pos
-                dist = _manhattan(ctx.state.position, depot_pos)
-                if dist <= 1:
-                    return _move_toward(ctx.state.position, depot_pos)
-                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
-
         # Find nearest usable extractor (any resource type)
         best: tuple[int, tuple[int, int]] | None = None
         for resource in RESOURCE_TYPES:
@@ -262,6 +266,26 @@ class FallbackMineGoal(Goal):
                 if best is None or d < best[0]:
                     best = (d, pos)
 
+        # If adjacent to extractor and cargo just increased, keep bumping
+        if best is not None and best[0] <= 1:
+            last_cargo = ctx.blackboard.get("_fb_last_cargo", None)
+            cargo_increased = last_cargo is not None and ctx.state.cargo_total > last_cargo
+            ctx.blackboard["_fb_last_cargo"] = ctx.state.cargo_total
+            if cargo_increased and ctx.state.cargo_total < ctx.state.cargo_capacity:
+                return _move_toward(ctx.state.position, best[1])
+
+        # Deposit if we have cargo and aren't actively mining
+        if ctx.state.cargo_total > 0:
+            depot_pos = _find_deposit(ctx)
+            if depot_pos is not None:
+                if ctx.trace:
+                    ctx.trace.nav_target = depot_pos
+                dist = _manhattan(ctx.state.position, depot_pos)
+                if dist <= 1:
+                    return _move_toward(ctx.state.position, depot_pos)
+                return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
+
+        # Navigate to extractor
         if best is not None:
             if ctx.trace:
                 ctx.trace.nav_target = best[1]

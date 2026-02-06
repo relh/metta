@@ -265,9 +265,14 @@ def _extractor_recently_failed(ctx: PlankyContext, pos: tuple[int, int]) -> bool
 
 
 class DepositCargoGoal(Goal):
-    """Deposit resources at nearest cogs-aligned building when cargo is reasonably full.
+    """Deposit resources at nearest cogs-aligned building.
 
-    Triggers when cargo is >= 50% full (or >= 10 resources for small capacity).
+    Triggers when:
+    - Cargo is full (at capacity), OR
+    - Agent was at an extractor (_at_extractor flag from MineResource) and
+      cargo stopped increasing (extractor depleted)
+
+    Does NOT trigger when cargo is flat due to walking or being blocked.
     Once triggered, keeps depositing until cargo is EMPTY.
     Tracks attempts and marks depots as failed if cargo doesn't decrease.
     """
@@ -278,24 +283,53 @@ class DepositCargoGoal(Goal):
     def is_satisfied(self, ctx: PlankyContext) -> bool:
         cargo = ctx.state.cargo_total
 
+        # Hard guard: never deposit with 0 cargo regardless of blackboard state
+        if cargo == 0:
+            if ctx.blackboard.get("_depositing", False):
+                ctx.blackboard["_depositing"] = False
+            ctx.blackboard["_deposit_last_cargo"] = 0
+            return True
+
         # If we're currently depositing (flag set), keep going until empty
         if ctx.blackboard.get("_depositing", False):
-            if cargo == 0:
-                ctx.blackboard["_depositing"] = False
-                return True
             return False  # Keep depositing until empty
 
-        # Not currently depositing - check if we should start
-        # Deposit only when cargo is full — keep bumping extractors until then
-        capacity = ctx.state.cargo_capacity
-
-        if cargo >= capacity:
+        # Full cargo — always deposit
+        if cargo >= ctx.state.cargo_capacity:
             ctx.blackboard["_depositing"] = True
-            return False  # Start depositing
+            if ctx.trace:
+                ctx.trace.skip(self.name, f"full cargo={cargo}/{ctx.state.cargo_capacity}")
+            return False
 
-        return True  # Don't need to deposit yet
+        # Track cargo to detect when extractor stops producing
+        last_cargo = ctx.blackboard.get("_deposit_last_cargo", 0)
+        cargo_increased = cargo > last_cargo
+        ctx.blackboard["_deposit_last_cargo"] = cargo
+
+        # If cargo just increased, keep mining — extractor still producing
+        if cargo_increased:
+            if ctx.trace:
+                ctx.trace.skip(self.name, f"mining cargo={cargo}")
+            return True
+
+        # Cargo didn't increase — only deposit if we were actually at an extractor
+        # (set by MineResource when adjacent). If walking/blocked, keep trying to mine.
+        if ctx.blackboard.get("_at_extractor", False):
+            ctx.blackboard["_depositing"] = True
+            if ctx.trace:
+                ctx.trace.skip(self.name, f"extractor depleted, deposit cargo={cargo}")
+            return False
+
+        # Not at extractor and cargo flat — keep trying to reach one
+        return True
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
+        # Safety: if cargo is 0, stop depositing
+        if ctx.state.cargo_total == 0:
+            ctx.blackboard["_depositing"] = False
+            ctx.blackboard["_deposit_last_cargo"] = 0
+            return None
+
         # Track cargo to detect successful deposit
         prev_cargo = ctx.blackboard.get("prev_deposit_cargo", ctx.state.cargo_total)
         current_cargo = ctx.state.cargo_total
@@ -393,6 +427,9 @@ class MineResourceGoal(Goal):
 
         dist = _manhattan(ctx.state.position, target_pos)
         if dist <= 1:
+            # Signal to DepositCargoGoal that we're actively mining
+            ctx.blackboard["_at_extractor"] = True
+
             # Adjacent to extractor — track attempts
             attempts_key = f"mine_attempts_{target_pos}"
             attempts = ctx.blackboard.get(attempts_key, 0) + 1
@@ -409,6 +446,7 @@ class MineResourceGoal(Goal):
                     ctx.blackboard[attempts_key] = 0
                     # Also clear target resource to force re-evaluation
                     ctx.blackboard.pop("target_resource", None)
+                    ctx.blackboard["_at_extractor"] = False
                     if ctx.trace:
                         ctx.trace.activate(self.name, f"giving up on {target_pos}")
                     return ctx.navigator.explore(
@@ -419,7 +457,8 @@ class MineResourceGoal(Goal):
 
             return _move_toward(ctx.state.position, target_pos)
 
-        # Don't reset attempts when moving away - only reset on successful mine
+        # Walking to extractor — not at one yet
+        ctx.blackboard["_at_extractor"] = False
         return ctx.navigator.get_action(ctx.state.position, target_pos, ctx.map, reach_adjacent=True)
 
     def _find_extractor(self, ctx: PlankyContext, resource: str) -> Optional[tuple[int, int]]:
@@ -442,30 +481,28 @@ class MineResourceGoal(Goal):
 
 
 def _find_cogs_depot(ctx: PlankyContext) -> tuple[int, int] | None:
-    """Find nearest cogs-aligned depot, prioritizing hub."""
-    from cogames_agents.policy.scripted_agent.planky.policy import SPAWN_POS  # noqa: PLC0415
-
+    """Find nearest cogs-aligned depot (hub or aligned junction)."""
     pos = ctx.state.position
 
     def recently_failed(p: tuple[int, int]) -> bool:
         failed_step = ctx.blackboard.get(f"deposit_failed_{p}", -9999)
         return ctx.step - failed_step < 100
 
-    # Prioritize own team's hub
+    candidates: list[tuple[int, tuple[int, int]]] = []
+
+    # Own team's hub
     hub_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
     for apos, _ in ctx.map.find(type_contains="hub", property_filter=hub_filter):
         if not recently_failed(apos):
-            return apos
+            candidates.append((_manhattan(pos, apos), apos))
 
-    # Fallback: nearest cogs junction near hub
-    candidates: list[tuple[int, tuple[int, int]]] = []
+    # Any cogs-aligned junction
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
-        if not recently_failed(jpos) and _manhattan(jpos, SPAWN_POS) <= 15:
+        if not recently_failed(jpos):
             candidates.append((_manhattan(pos, jpos), jpos))
 
     if not candidates:
-        # Last resort: navigate to hub area
-        return SPAWN_POS
+        return None
     candidates.sort()
     return candidates[0][1]
 

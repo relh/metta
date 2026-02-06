@@ -68,6 +68,11 @@ def evaluate_goals(goals: list[Goal], ctx: PlankyContext) -> Action:
 
         return action
 
+    # All goals satisfied — clear stale active goal
+    ctx.blackboard["_active_goal"] = "idle"
+    if ctx.trace:
+        ctx.trace.active_goal_chain = "idle"
+        ctx.trace.action_name = "noop"
     return Action(name="noop")
 
 

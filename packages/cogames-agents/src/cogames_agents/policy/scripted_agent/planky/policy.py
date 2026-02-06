@@ -232,7 +232,7 @@ def _atexit_dump_all_stats() -> None:
     print("-" * 90)
     zero_stats = {"ticks": 0, "gear": 0, "moving": 0, "still": 0}
     team_totals: dict[str, dict[str, int]] = {
-        "c": dict(zero_stats),
+        "cogs": dict(zero_stats),
         "clips": dict(zero_stats),
     }
     for _, _, collective_id, stats in all_agent_stats:
@@ -244,7 +244,7 @@ def _atexit_dump_all_stats() -> None:
         team_totals[team]["moving"] += sum(stats.ticks_moving_by_role.values())
         team_totals[team]["still"] += sum(stats.ticks_still_by_role.values())
 
-    for team in ["c", "clips"]:
+    for team in ["cogs", "clips"]:
         t = team_totals[team]
         ticks = t["ticks"]
         if ticks == 0:
@@ -469,6 +469,52 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
                 print(f"[planky][t={agent_state.step} a={self._agent_id}] converting aligner→scrambler")
             agent_state.blackboard["change_role"] = "scrambler"
 
+        # Resource-based role conversion: miner → aligner when collective is well-stocked
+        # Uses state.vibe (not agent_state.role) so the check stops firing once the
+        # vibe changes to "aligner", allowing the vibe-to-role mapping to run.
+        if state.vibe == "miner" and state.cargo_total == 0:
+            from .goals.miner import COLLECTIVE_SUFFICIENT_THRESHOLD  # noqa: PLC0415
+
+            if (
+                state.collective_carbon > COLLECTIVE_SUFFICIENT_THRESHOLD
+                and state.collective_oxygen > COLLECTIVE_SUFFICIENT_THRESHOLD
+                and state.collective_germanium > COLLECTIVE_SUFFICIENT_THRESHOLD
+                and state.collective_silicon > COLLECTIVE_SUFFICIENT_THRESHOLD
+            ):
+                if self._trace_enabled:
+                    print(
+                        f"[planky][t={agent_state.step} a={self._agent_id}]"
+                        " converting miner→aligner (resources sufficient)"
+                    )
+                agent_state.blackboard["change_role"] = "aligner"
+
+        # Reverse conversion: aligner → miner when collective can't support aligners
+        # Only convert if the aligner is idle (no gear AND no hearts) and collective
+        # can't afford either aligner gear (C1 O1 G3 S1 + reserve) or hearts (C1 O1 G1 S1 + reserve).
+        # Uses state.vibe (not agent_state.role) so the check stops firing once the
+        # vibe changes to "miner", allowing the vibe-to-role mapping to run.
+        if state.vibe == "aligner" and not state.aligner_gear and state.heart == 0:
+            can_afford_gear = (
+                state.collective_carbon >= 2
+                and state.collective_oxygen >= 2
+                and state.collective_germanium >= 4  # aligner gear costs G3 + reserve 1
+                and state.collective_silicon >= 2
+            )
+            can_afford_hearts = (
+                state.collective_carbon >= 2
+                and state.collective_oxygen >= 2
+                and state.collective_germanium >= 2  # heart costs G1 + reserve 1
+                and state.collective_silicon >= 2
+            )
+            if not can_afford_gear and not can_afford_hearts:
+                if self._trace_enabled:
+                    print(
+                        f"[planky][t={agent_state.step} a={self._agent_id}] converting aligner→miner "
+                        f"(can't afford gear or hearts: C={state.collective_carbon} O={state.collective_oxygen} "
+                        f"G={state.collective_germanium} S={state.collective_silicon})"
+                    )
+                agent_state.blackboard["change_role"] = "miner"
+
         # Check if goals want to change role (via blackboard)
         if "change_role" in agent_state.blackboard:
             new_role = agent_state.blackboard.pop("change_role")
@@ -595,6 +641,17 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         target_resource = agent_state.blackboard.get("target_resource")
         if target_resource:
             info["mining"] = target_resource
+        # Always show cargo so we can diagnose deposit-with-0-cargo issues
+        parts = []
+        if state.carbon > 0:
+            parts.append(f"C{state.carbon}")
+        if state.oxygen > 0:
+            parts.append(f"O{state.oxygen}")
+        if state.germanium > 0:
+            parts.append(f"G{state.germanium}")
+        if state.silicon > 0:
+            parts.append(f"S{state.silicon}")
+        info["cargo"] = " ".join(parts) if parts else "0"
         self._infos = info
 
         # Track action for failed-move detection
@@ -978,7 +1035,7 @@ class PlankyPolicy(MultiAgentPolicy):
         print("-" * 90)
         zero_stats = {"ticks": 0, "gear": 0, "moving": 0, "still": 0}
         team_totals: dict[str, dict[str, int]] = {
-            "c": dict(zero_stats),
+            "cogs": dict(zero_stats),
             "clips": dict(zero_stats),
         }
         for _, _, collective_id, stats in agent_stats:
@@ -990,7 +1047,7 @@ class PlankyPolicy(MultiAgentPolicy):
             team_totals[team]["moving"] += sum(stats.ticks_moving_by_role.values())
             team_totals[team]["still"] += sum(stats.ticks_still_by_role.values())
 
-        for team in ["c", "clips"]:
+        for team in ["cogs", "clips"]:
             t = team_totals[team]
             ticks = t["ticks"]
             if ticks == 0:
