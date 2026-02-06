@@ -2,12 +2,12 @@ name: "Build Episode Runner Image"
 
 on:
   workflow_run:
-    workflows: ["Build and publish mettagrid"]
+    workflows: ["Build and publish cogames"]
     types: [completed]
   workflow_dispatch:
     inputs:
-      mettagrid_version:
-        description: "mettagrid version to install (e.g. 0.2.0.84). Leave empty to use latest from PyPI."
+      cogames_version:
+        description: "cogames version to install (e.g. 0.1.0). Leave empty to use latest from PyPI."
         required: false
 
 env:
@@ -19,20 +19,19 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     outputs:
-      mettagrid_version: ${{ steps.version.outputs.mettagrid_version }}
+      cogames_version: ${{ steps.version.outputs.cogames_version }}
     steps:
-      - name: Resolve mettagrid version
+      - name: Resolve cogames version
         id: version
         run: |
-          if [[ -n "${{ inputs.mettagrid_version }}" ]]; then
-            VERSION="${{ inputs.mettagrid_version }}"
+          if [[ -n "${{ inputs.cogames_version }}" ]]; then
+            VERSION="${{ inputs.cogames_version }}"
           else
-            VERSION=$(curl -s https://pypi.org/pypi/mettagrid/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
+            VERSION=$(curl -s https://pypi.org/pypi/cogames/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
           fi
-          # Strip tag prefixes like "mettagrid-v" or "v"
-          VERSION="${VERSION#mettagrid-v}"
+          VERSION="${VERSION#cogames-v}"
           VERSION="${VERSION#v}"
-          echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "cogames_version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   build-and-push:
     needs: resolve-version
@@ -59,8 +58,8 @@ jobs:
         id: tags
         run: |
           REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          VERSION="${{ needs.resolve-version.outputs.mettagrid_version }}"
-          TAGS="${REPO}:mettagrid-${VERSION},${REPO}:latest"
+          VERSION="${{ needs.resolve-version.outputs.cogames_version }}"
+          TAGS="${REPO}:cogames-${VERSION},${REPO}:latest"
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
@@ -68,9 +67,9 @@ jobs:
         uses: useblacksmith/build-push-action@v2
         with:
           context: .
-          file: ./packages/mettagrid/python/src/mettagrid/runner/Dockerfile
+          file: ./packages/cogames/Dockerfile.episode_runner
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           build-args: |
-            METTAGRID_VERSION=${{ needs.resolve-version.outputs.mettagrid_version }}
+            COGAMES_VERSION=${{ needs.resolve-version.outputs.cogames_version }}
             GIT_COMMIT=${{ github.sha }}

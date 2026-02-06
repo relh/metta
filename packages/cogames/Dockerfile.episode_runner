@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-ARG METTAGRID_VERSION=""
+ARG COGAMES_VERSION=""
 ARG GIT_COMMIT=""
 ENV GIT_COMMIT=${GIT_COMMIT}
 
@@ -21,15 +21,15 @@ RUN curl -fsSL "https://github.com/treeform/nimby/releases/download/${NIMBY_VERS
     nimby use ${NIM_VERSION}
 ENV PATH="/root/.nimby/nim/bin:$PATH"
 
-# Install Python and create the executor venv with mettagrid.
+# Install Python and create the executor venv with cogames (pulls in mettagrid).
 RUN uv python install 3.12 && uv venv /opt/executor
 RUN --mount=type=bind,target=/ctx \
     if ls /ctx/*.whl 1>/dev/null 2>&1; then \
         uv pip install --python /opt/executor/bin/python /ctx/*.whl; \
-    elif [ -n "${METTAGRID_VERSION}" ]; then \
-        uv pip install --python /opt/executor/bin/python "mettagrid==${METTAGRID_VERSION}"; \
+    elif [ -n "${COGAMES_VERSION}" ]; then \
+        uv pip install --python /opt/executor/bin/python "cogames==${COGAMES_VERSION}"; \
     else \
-        echo "ERROR: provide .whl in build context or set METTAGRID_VERSION" && exit 1; \
+        echo "ERROR: provide .whl in build context or set COGAMES_VERSION" && exit 1; \
     fi
 
 # Pre-warm uv cache with torch so per-policy venv creation is near-instant.
