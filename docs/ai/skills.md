@@ -23,6 +23,7 @@ The shared skills catalog is described in `.cursor/rules/skills.mdc`.
 
 Shared skills live in `skills/`:
 
+- `cb.cleanup-pr-sweep`
 - `cb.cleanup-refactor`
 - `cb.lint-fix`
 - `cb.review-main`
