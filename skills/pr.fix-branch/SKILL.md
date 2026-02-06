@@ -40,11 +40,16 @@ digraph fix_branch {
   sync [label="Step 1: gt sync"];
   restack [label="Step 2: gt restack"];
   fix_comments [label="Step 3: Sub-agent → /pr.fix-comments"];
+  verify_threads [label="Step 3b: Verify threads resolved"];
+  verify_code [label="Step 3c: Verify code matches feedback"];
   fix_ci [label="Step 4: Sub-agent → /pr.fix-ci"];
   push [label="Step 5: Sub-agent → /pr.submit"];
   done [label="Done"];
 
-  worktree -> sync -> restack -> fix_comments -> fix_ci -> push -> done;
+  worktree -> sync -> restack -> fix_comments -> verify_threads -> verify_code;
+  verify_code -> fix_ci [label="verified"];
+  verify_code -> fix_comments [label="mismatch found"];
+  fix_ci -> push -> done;
 }
 ```
 
@@ -213,7 +218,60 @@ RESOLVED_NO_REPLY=$(echo "$ALL_THREADS" | jq -r --arg bot "$BOT_LOGIN" '
 2. Re-dispatch the fix-comments sub-agent to add replies to those threads (the thread may need to be unresolved first,
    replied to, then re-resolved)
 
-**Only proceed to Step 4 when all actionable comments have been addressed and responded to.**
+**Only proceed to Step 3c when all threads are resolved and have responses.**
+
+### Step 3c: Verify Code Changes Match Feedback (CRITICAL)
+
+**Don't trust thread resolution status alone.** After verifying threads are resolved, **independently verify the code
+changes actually address the feedback**.
+
+For each resolved thread:
+
+1. **Read the reviewer's original comment** (what did they ask for?)
+2. **Read the file at the line they commented on** (what does the code say now?)
+3. **Verify the code change matches the feedback**
+
+```bash
+# For each resolved thread, verify the fix
+for each THREAD in RESOLVED_THREADS:
+  COMMENT_BODY = thread.comments[0].body
+  FILE_PATH = thread.path
+  LINE_NUMBER = thread.line
+
+  # Read the current code at that location
+  CURRENT_CODE=$(sed -n "${LINE_NUMBER}p" "$FILE_PATH")
+
+  # Compare: does the code now match what the reviewer asked for?
+  # If not, the thread was resolved incorrectly
+```
+
+**Red flags that indicate a bad fix:**
+
+| Reviewer Said        | But Code Shows         | Problem                 |
+| -------------------- | ---------------------- | ----------------------- |
+| "Change X to Y"      | X is still there       | Fix not applied         |
+| "Remove this"        | Code still exists      | Fix not applied         |
+| "Add validation"     | No validation added    | Fix incomplete          |
+| "Use version 4"      | Still uses version 3   | Fix incomplete          |
+| "These should match" | They still don't match | Inconsistency not fixed |
+
+**If verification fails:**
+
+1. **Log the mismatch:** "Thread resolved but fix incomplete: reviewer asked for X, code shows Y"
+2. **Unresolve the thread:**
+   ```bash
+   gh api graphql -f query='
+     mutation($threadId: ID!) {
+       unresolveReviewThread(input: {threadId: $threadId}) {
+         thread { isResolved }
+       }
+     }
+   ' -f threadId=$THREAD_ID
+   ```
+3. **Re-dispatch fix-comments sub-agent** with specific instructions for this thread
+4. **Loop back to Step 3b** to verify again
+
+**Only proceed to Step 4 when code changes are verified to match feedback.**
 
 ### Step 4: Fix CI (Sub-Agent)
 
@@ -289,15 +347,16 @@ https://app.graphite.dev/github/pr/<OWNER>/<REPO>/<PR_NUMBER>
 
 ## Quick Reference
 
-| Step | Action                     | Method    | Purpose                          |
-| ---- | -------------------------- | --------- | -------------------------------- |
-| 0    | Worktree setup             | Direct    | Isolation                        |
-| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks        |
-| 2    | `gt restack`               | Direct    | Rebase current stack             |
-| 3    | Fix comments               | Sub-agent | Address PR review comments       |
-| 3b   | Verify comments addressed  | Direct    | Ensure all comments responded to |
-| 4    | Fix CI                     | Sub-agent | Fix any CI failures              |
-| 5    | Submit                     | Sub-agent | Test, clean, submit branch       |
+| Step | Action                     | Method    | Purpose                               |
+| ---- | -------------------------- | --------- | ------------------------------------- |
+| 0    | Worktree setup             | Direct    | Isolation                             |
+| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks             |
+| 2    | `gt restack`               | Direct    | Rebase current stack                  |
+| 3    | Fix comments               | Sub-agent | Address PR review comments            |
+| 3b   | Verify threads resolved    | Direct    | Ensure all threads resolved w/ reply  |
+| 3c   | **Verify code matches**    | Direct    | **Read code, confirm fix is correct** |
+| 4    | Fix CI                     | Sub-agent | Fix any CI failures                   |
+| 5    | Submit                     | Sub-agent | Test, clean, submit branch            |
 
 ## Why Sub-Agents?
 
@@ -315,6 +374,11 @@ By dispatching these as sub-agents:
 - The user sees high-level progress without scrolling through logs
 
 ## Common Mistakes
+
+**Trusting thread resolution status without verifying code**
+
+- **Problem:** Sub-agent resolves threads but fix is incomplete or wrong
+- **Fix:** Always run Step 3c - read the actual code at the commented line and verify it matches the feedback
 
 **Skipping sync/restack**
 
