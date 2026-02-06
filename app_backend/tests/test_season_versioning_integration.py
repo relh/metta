@@ -40,7 +40,9 @@ async def test_season_version_flow(stats_repo: str) -> None:  # noqa: ARG001
         active_pv_ids = {pv_a.id, pv_b.id}
 
     async with db_session() as session:
-        season_v2 = await roll_season_version(session, "integration-test", entry_pool="qualifying")
+        season_v2 = await roll_season_version(
+            session, "integration-test", entry_pool="qualifying", migrate_members=True
+        )
         assert season_v2.version == 2
         assert season_v2.canonical is True
         season_v2_id = season_v2.id

@@ -433,24 +433,23 @@ def tournament_run():
     )
 
 
+ROLL_SEASON_SCRIPT = str(repo_root / "app_backend/src/metta/app_backend/tournament/scripts/roll_season.py")
+
+
 @tournament_app.command(name="roll-season")
 @handle_errors
 def tournament_roll_season(
     season_name: Annotated[str, typer.Argument(help="Season name to roll (e.g. beta-cogsguard)")],
+    migrate_players: Annotated[
+        bool, typer.Option("--migrate-players", help="Migrate active players to the new season")
+    ] = False,
 ):
-    """Roll a season to a new version, migrating active members."""
+    """Roll a season to a new version."""
     env = _local_dev_env()
-    subprocess.run(
-        [
-            "uv",
-            "run",
-            "python",
-            "-c",
-            f"from metta.app_backend.tournament.cli import roll_season; roll_season({season_name!r})",
-        ],
-        env=env,
-        check=True,
-    )
+    cmd = ["uv", "run", "python", ROLL_SEASON_SCRIPT, season_name]
+    if migrate_players:
+        cmd.append("--migrate-players")
+    subprocess.run(cmd, env=env, check=True)
 
 
 app.add_typer(tournament_app, name="tournament")

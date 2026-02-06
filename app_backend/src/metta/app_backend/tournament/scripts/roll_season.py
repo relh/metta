@@ -1,4 +1,6 @@
 # pyright: reportArgumentType=false
+import argparse
+import asyncio
 import logging
 from datetime import UTC, datetime
 from uuid import UUID
@@ -18,7 +20,9 @@ from metta.app_backend.models.tournament import (
 logger = logging.getLogger(__name__)
 
 
-async def roll_season_version(session: AsyncSession, season_name: str, entry_pool: str) -> Season:
+async def roll_season_version(
+    session: AsyncSession, season_name: str, entry_pool: str, *, migrate_members: bool = False
+) -> Season:
     old_season = (
         await session.execute(
             select(Season)
@@ -56,38 +60,69 @@ async def roll_season_version(session: AsyncSession, season_name: str, entry_poo
 
     logger.info(f"Rolled season '{season_name}' from v{old_season.version} to v{new_season.version}")
 
-    active_policy_ids: set[UUID] = set()
-    for old_pool in old_season.pools:
-        players = (
-            (
-                await session.execute(
-                    select(PoolPlayer).where(PoolPlayer.pool_id == old_pool.id, col(PoolPlayer.retired).is_(False))
+    if migrate_members:
+        active_policy_ids: set[UUID] = set()
+        for old_pool in old_season.pools:
+            players = (
+                (
+                    await session.execute(
+                        select(PoolPlayer).where(PoolPlayer.pool_id == old_pool.id, col(PoolPlayer.retired).is_(False))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for p in players:
+                active_policy_ids.add(p.policy_version_id)
+
+        for policy_version_id in active_policy_ids:
+            new_player = PoolPlayer(
+                pool_id=new_entry_pool.id,
+                policy_version_id=policy_version_id,
+                retired=False,
+            )
+            session.add(new_player)
+            await session.flush()
+
+            session.add(
+                MembershipChange(
+                    pool_player_id=new_player.id,
+                    action=MembershipAction.add,
+                    notes=f"Migrated from v{old_season.version}",
                 )
             )
-            .scalars()
-            .all()
-        )
-        for p in players:
-            active_policy_ids.add(p.policy_version_id)
 
-    for policy_version_id in active_policy_ids:
-        new_player = PoolPlayer(
-            pool_id=new_entry_pool.id,
-            policy_version_id=policy_version_id,
-            retired=False,
-        )
-        session.add(new_player)
-        await session.flush()
-
-        session.add(
-            MembershipChange(
-                pool_player_id=new_player.id,
-                action=MembershipAction.add,
-                notes=f"Migrated from v{old_season.version}",
-            )
-        )
-
-    logger.info(f"Migrated {len(active_policy_ids)} active members to entry pool '{entry_pool}'")
+        logger.info(f"Migrated {len(active_policy_ids)} active members to entry pool '{entry_pool}'")
+    else:
+        logger.info("Skipped member migration")
 
     await session.commit()
     return new_season
+
+
+def main() -> None:
+    from metta.app_backend.database import db_session  # noqa: PLC0415
+    from metta.app_backend.tournament.registry import SEASONS  # noqa: PLC0415
+
+    parser = argparse.ArgumentParser(description="Roll a tournament season to a new version")
+    parser.add_argument("season_name", help=f"Season to roll (one of {list(SEASONS.keys())})")
+    parser.add_argument("--migrate-players", action="store_true", help="Migrate active players to the new season")
+    args = parser.parse_args()
+
+    commissioner_cls = SEASONS.get(args.season_name)
+    if not commissioner_cls:
+        parser.error(f"Unknown season '{args.season_name}', expected one of {list(SEASONS.keys())}")
+    entry_pool = commissioner_cls().entry_pool
+
+    async def run() -> None:
+        async with db_session() as session:
+            new_season = await roll_season_version(
+                session, args.season_name, entry_pool, migrate_members=args.migrate_players
+            )
+            print(f"Rolled {args.season_name} to v{new_season.version}")
+
+    asyncio.run(run())
+
+
+if __name__ == "__main__":
+    main()
