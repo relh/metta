@@ -9,6 +9,8 @@ from pydantic import ConfigDict, Field
 
 from mettagrid.base_config import Config
 
+_SEED_UPPER_BOUND = 1_000_000
+
 
 def guess_device() -> str:
     if platform.system() == "Darwin":
@@ -19,9 +21,7 @@ def guess_device() -> str:
     if not torch.cuda.is_available():
         return "cpu"
 
-    local_rank = 0
-    if "LOCAL_RANK" in os.environ:
-        local_rank = int(os.environ["LOCAL_RANK"])
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
 
     return f"cuda:{local_rank}"
 
@@ -33,14 +33,12 @@ def guess_vectorization() -> Literal["serial", "multiprocessing"]:
 
 
 def guess_data_dir() -> Path:
-    if os.environ.get("DATA_DIR"):
-        return Path(os.environ["DATA_DIR"])
-    return Path("./train_dir")
+    return Path(os.environ.get("DATA_DIR") or "./train_dir")
 
 
 class SystemConfig(Config):
     vectorization: Literal["serial", "multiprocessing"] = Field(default_factory=guess_vectorization)
-    seed: int = Field(default_factory=lambda: np.random.randint(0, 1000000))
+    seed: int = Field(default_factory=lambda: int(np.random.randint(0, _SEED_UPPER_BOUND)))
     torch_deterministic: bool = Field(default=True)
     device: str = Field(default_factory=guess_device)
     data_dir: Path = Field(default_factory=guess_data_dir)
