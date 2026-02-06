@@ -524,11 +524,7 @@ def create_clone_teams(
     Returns:
         List of clone teams (one per policy).
     """
-    teams = []
-    for policy in policies:
-        team_policies = tuple([policy] * team_size)
-        teams.append(team_factory(team_policies))
-    return teams
+    return [team_factory((policy,) * team_size) for policy in policies]
 
 
 def sample_teams_weighted(
