@@ -1,113 +1,59 @@
-from typing import TYPE_CHECKING, ClassVar
-
-import torch
 from pydantic import Field
 
-from metta.agent.policy import DistributedPolicy, Policy
-from metta.rl.loss import contrastive_config
-from metta.rl.loss.action_supervised import ActionSupervisedConfig
-from metta.rl.loss.cmpo import CMPOConfig
-from metta.rl.loss.eer_cloner import EERClonerConfig
-from metta.rl.loss.eer_kickstarter import EERKickstarterConfig
-from metta.rl.loss.future_latent_ema import FutureLatentEMALossConfig
-from metta.rl.loss.grpo import GRPOConfig
-from metta.rl.loss.kickstarter import KickstarterConfig
-from metta.rl.loss.logit_kickstarter import LogitKickstarterConfig
-from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.loss.loss import LossConfig
 from metta.rl.loss.ppo_actor import PPOActorConfig
 from metta.rl.loss.ppo_critic import PPOCriticConfig
-from metta.rl.loss.quantile_ppo_critic import QuantilePPOCriticConfig
-from metta.rl.loss.sl_checkpointed_kickstarter import SLCheckpointedKickstarterConfig
-from metta.rl.loss.sliced_kickstarter import SlicedKickstarterConfig
-from metta.rl.loss.sliced_scripted_cloner import SlicedScriptedClonerConfig
-from metta.rl.loss.stable_latent import StableLatentStateConfig
-from metta.rl.loss.vit_reconstruction import ViTReconstructionLossConfig
-from metta.rl.training import TrainingEnvironment
 from mettagrid.base_config import Config
-
-# Keep: heavy module + manages circular dependency (loss <-> trainer)
-if TYPE_CHECKING:
-    from metta.rl.trainer_config import TrainerConfig
 
 
 class LossesConfig(Config):
-    _LOSS_ORDER: ClassVar[tuple[str, ...]] = (
-        "sliced_kickstarter",
-        "sliced_scripted_cloner",
-        "eer_kickstarter",
-        "eer_cloner",
-        "ppo_critic",
-        "quantile_ppo_critic",
-        "ppo_actor",
-        "cmpo",
-        "vit_reconstruction",
-        "contrastive",
-        "stable_latent",
-        "future_latent_ema",
-        "grpo",
-        "supervisor",
-        "sl_checkpointed_kickstarter",
-        "kickstarter",
-        "logit_kickstarter",
-    )
+    # Loss configs are stored in insertion order.
+    losses: dict[str, LossConfig] = Field(default_factory=lambda: LossesConfig._default_losses())
 
-    # ENABLED BY DEFAULT: PPO split into two terms for flexibility, simplicity, and separation of concerns
-    ppo_actor: PPOActorConfig = Field(default_factory=lambda: PPOActorConfig(enabled=True))
-    ppo_critic: PPOCriticConfig = Field(default_factory=lambda: PPOCriticConfig(enabled=True))
-
-    quantile_ppo_critic: QuantilePPOCriticConfig = Field(default_factory=lambda: QuantilePPOCriticConfig(enabled=False))
-    cmpo: CMPOConfig = Field(default_factory=lambda: CMPOConfig(enabled=False))
-
-    # other aux losses below
-    contrastive: contrastive_config.ContrastiveConfig = Field(
-        default_factory=lambda: contrastive_config.ContrastiveConfig(enabled=False)
-    )
-    stable_latent: StableLatentStateConfig = Field(default_factory=lambda: StableLatentStateConfig(enabled=False))
-    future_latent_ema: FutureLatentEMALossConfig = Field(
-        default_factory=lambda: FutureLatentEMALossConfig(enabled=False)
-    )
-    supervisor: ActionSupervisedConfig = Field(default_factory=lambda: ActionSupervisedConfig(enabled=False))
-    grpo: GRPOConfig = Field(default_factory=lambda: GRPOConfig(enabled=False))
-    kickstarter: KickstarterConfig = Field(default_factory=lambda: KickstarterConfig(enabled=False))
-    sliced_kickstarter: SlicedKickstarterConfig = Field(default_factory=lambda: SlicedKickstarterConfig(enabled=False))
-    logit_kickstarter: LogitKickstarterConfig = Field(default_factory=lambda: LogitKickstarterConfig(enabled=False))
-    sliced_scripted_cloner: SlicedScriptedClonerConfig = Field(
-        default_factory=lambda: SlicedScriptedClonerConfig(enabled=False)
-    )
-    sl_checkpointed_kickstarter: SLCheckpointedKickstarterConfig = Field(
-        default_factory=lambda: SLCheckpointedKickstarterConfig(enabled=False)
-    )
-    eer_kickstarter: EERKickstarterConfig = Field(default_factory=lambda: EERKickstarterConfig(enabled=False))
-    eer_cloner: EERClonerConfig = Field(default_factory=lambda: EERClonerConfig(enabled=False))
-    vit_reconstruction: ViTReconstructionLossConfig = Field(
-        default_factory=lambda: ViTReconstructionLossConfig(enabled=False)
-    )
+    @classmethod
+    def _default_losses(cls) -> dict[str, LossConfig]:
+        # Insertion order defines execution order. You can override, remove, or add entries after init.
+        return {
+            "ppo_critic": PPOCriticConfig(),
+            "ppo_actor": PPOActorConfig(),
+        }
 
     def _configs(self) -> dict[str, LossConfig]:
-        # losses are run in the order they are listed here. This is not ideal and we should refactor this config.
-        # also, the way it's setup doesn't let the experimenter give names to losses.
-        loss_configs = {
-            name: cfg for name, cfg in ((name, getattr(self, name)) for name in self._LOSS_ORDER) if cfg.enabled
-        }
-        return loss_configs
+        # Return losses in insertion order.
+        return self.losses
 
     @property
     def loss_configs(self) -> dict[str, LossConfig]:
         return self._configs()
 
-    def init_losses(
-        self,
-        policy: Policy | DistributedPolicy,
-        trainer_cfg: "TrainerConfig",
-        env: TrainingEnvironment,
-        device: torch.device,
-    ) -> dict[str, Loss]:
-        return {
-            loss_name: loss_cfg.create(policy, trainer_cfg, env, device, loss_name)
-            for loss_name, loss_cfg in self._configs().items()
-        }
-
     def __iter__(self):
-        """Iterate over (name, config) pairs for all loss configs."""
-        for name in self._LOSS_ORDER:
-            yield name, getattr(self, name)
+        """Iterate over (name, config) pairs for all loss configs (in insertion order)."""
+        for name, cfg in self.losses.items():
+            yield name, cfg
+
+    def __getattr__(self, item: str) -> LossConfig:
+        losses = object.__getattribute__(self, "losses")
+        if item in losses:
+            return losses[item]
+        return super().__getattr__(item)
+
+    def has_loss(self, key: str) -> bool:
+        return key in self.losses
+
+    def add_loss(self, key: str, value: LossConfig) -> None:
+        if key in self.losses:
+            raise KeyError(f"Loss '{key}' already exists.")
+        self.losses[key] = value
+
+    def replace_loss(self, key: str, value: LossConfig) -> None:
+        self.losses[key] = value
+
+    # Convenience dict-style access
+    def __getitem__(self, key: str) -> LossConfig:
+        return self.losses[key]
+
+    def __setitem__(self, key: str, value: LossConfig) -> None:
+        self.losses[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self.losses[key]

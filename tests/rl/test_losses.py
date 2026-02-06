@@ -13,6 +13,7 @@ from metta.agent.policy import Policy
 from metta.rl.loss.cmpo import CMPOConfig
 from metta.rl.loss.loss import Loss
 from metta.rl.loss.stable_latent import StableLatentStateConfig
+from metta.rl.training.trajectory_isolation import TrajectoryIsolationSliceConfig
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 try:
@@ -158,7 +159,6 @@ def test_cmpo_config_initializes_world_model() -> None:
     trainer_cfg = SimpleNamespace(
         total_timesteps=1024,
         batch_size=64,
-        advantage=SimpleNamespace(gamma=0.99, gae_lambda=0.95, vtrace_rho_clip=1.0, vtrace_c_clip=1.0),
     )
 
     cmpo_loss = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo")
@@ -234,6 +234,17 @@ def test_cmpo_state_dict_with_prior_model() -> None:
 
     # Create first instance with prior model
     cmpo1 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo1")
+    cmpo1.attach_context(
+        SimpleNamespace(
+            current_slice_cfg=TrajectoryIsolationSliceConfig(
+                name="ppo",
+                env_ratio=1.0,
+                policies=["learner0"],
+            ),
+            policy_assets={"learner0": cmpo1.policy_assets},
+        )
+    )
+    cmpo1._ensure_policy_state()
     assert cmpo1.prior_model is not None
 
     # Modify prior model weights to be different
@@ -247,6 +258,17 @@ def test_cmpo_state_dict_with_prior_model() -> None:
 
     # Create second instance and load state
     cmpo2 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo2")
+    cmpo2.attach_context(
+        SimpleNamespace(
+            current_slice_cfg=TrajectoryIsolationSliceConfig(
+                name="ppo",
+                env_ratio=1.0,
+                policies=["learner0"],
+            ),
+            policy_assets={"learner0": cmpo2.policy_assets},
+        )
+    )
+    cmpo2._ensure_policy_state()
     cmpo2.load_state_dict(state, strict=False)
 
     # Verify prior model weights were restored

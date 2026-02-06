@@ -1,4 +1,4 @@
-"""Arena recipe with shaped rewards - STABLE
+"""Arena recipe with shaped rewards (scratch PPO) - STABLE
 This recipe is automatically validated in CI and release processes.
 
 TODO (cogsguard migration): This stable release recipe uses Escape from Machina (arena) missions.
@@ -10,7 +10,7 @@ from typing import Optional
 import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
 from devops.runners.acceptance_criterion import AcceptanceCriterion
-from devops.stable.registry import stable_job
+from devops.stable.registry import ci_job, stable_job
 from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -18,10 +18,16 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
+from metta.common.wandb.context import WandbConfig
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TorchProfilerConfig, TrainerConfig
-from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
+from metta.rl.training import CheckpointerConfig, EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
+from metta.rl.training.trajectory_isolation import (
+    TrajectoryIsolationConfig,
+    TrajectoryIsolationSliceConfig,
+)
 from metta.sim.simulation_config import SimulationConfig
 from metta.sweep.core import Distribution as D
 from metta.sweep.core import SweepParameters as SP
@@ -105,30 +111,42 @@ def train(
     eval_simulations = simulations()
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum)
-    teacher = teacher or TeacherConfig()  # Uses the default teacher preset unless overridden.
 
-    if policy_architecture is None:
-        policy_architecture = ViTDefaultConfig()
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture or ViTDefaultConfig())}
 
-    # Enable optional teacher phases (e.g., sliced_cloner) when provided.
-    scheduler_run_gates: list[LossRunGate] = []
-    scheduler_rules: list[ScheduleRule] = []
-    apply_teacher_phase(
-        trainer_cfg=trainer_cfg,
-        training_env_cfg=training_env_cfg,
-        scheduler_rules=scheduler_rules,
-        scheduler_run_gates=scheduler_run_gates,
-        teacher_cfg=teacher,
+    trajectory_isolation = TrajectoryIsolationConfig(
+        slices=[
+            TrajectoryIsolationSliceConfig(
+                name="ppo",
+                env_ratio=1.0,
+                policies=["learner0"],
+                losses=["ppo_critic", "ppo_actor"],
+            ),
+        ]
     )
 
     tt = TrainTool(
         trainer=trainer_cfg,
         training_env=training_env_cfg,
         evaluator=EvaluatorConfig(simulations=eval_simulations, epoch_interval=300),
-        policy_architecture=policy_architecture,
+        policy_assets=policy_assets,
+        trajectory_isolation=trajectory_isolation,
         torch_profiler=TorchProfilerConfig(),
     )
-    if scheduler_run_gates or scheduler_rules:
+
+    if teacher and teacher.enabled:
+        scheduler_run_gates: list[LossRunGate] = []
+        scheduler_rules: list[ScheduleRule] = []
+        apply_teacher_phase(
+            trainer_cfg=trainer_cfg,
+            losses=trainer_cfg.losses,
+            training_env_cfg=training_env_cfg,
+            policy_assets=tt.policy_assets,
+            scheduler_rules=scheduler_rules,
+            scheduler_run_gates=scheduler_run_gates,
+            teacher_cfg=teacher,
+            trajectory_isolation=tt.trajectory_isolation,
+        )
         tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
     return tt
 
@@ -261,6 +279,33 @@ def sweep(sweep_name: str) -> SweepTool:
     )
 
 
+def train_ci() -> TrainTool:
+    """Minimal train for CI smoke test."""
+    return TrainTool(
+        trainer=TrainerConfig(total_timesteps=100),
+        training_env=TrainingEnvironmentConfig(
+            curriculum=make_curriculum(),
+            forward_pass_minibatch_target_size=96,
+            vectorization="serial",
+        ),
+        evaluator=EvaluatorConfig(evaluate_local=False, evaluate_remote=False),
+        checkpointer=CheckpointerConfig(epoch_interval=1),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
+        wandb=WandbConfig.Off(),
+    )
+
+
+@ci_job(timeout_s=120)
+def play_ci() -> PlayTool:
+    """Play test with random policy."""
+    return PlayTool(
+        sim=simulations()[0],
+        max_steps=10,
+        render="log",
+        open_browser_on_start=False,
+    )
+
+
 def evaluate_ci(policy_uri: str) -> EvaluateTool:
     """Evaluate the trained policy from train_ci."""
     sim = mettagrid(num_agents=6)
@@ -284,7 +329,7 @@ def train_100m() -> TrainTool:
     return TrainTool(
         trainer=TrainerConfig(total_timesteps=100_000_000),
         training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
-        policy_architecture=ViTDefaultConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
     )
 
 
@@ -301,5 +346,5 @@ def train_2b() -> TrainTool:
     return TrainTool(
         trainer=TrainerConfig(total_timesteps=2_000_000_000),
         training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
-        policy_architecture=ViTDefaultConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
     )

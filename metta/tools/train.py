@@ -1,8 +1,10 @@
 import contextlib
 import logging
+import math
 import multiprocessing
 import os
 import platform
+import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
@@ -20,6 +22,8 @@ from metta.common.util.heartbeat import record_heartbeat
 from metta.common.util.log_config import getRankAwareLogger, init_logging
 from metta.common.wandb.context import WandbConfig, WandbContext, WandbRun
 from metta.rl.checkpoint_manager import CheckpointManager
+from metta.rl.loss.losses import LossesConfig
+from metta.rl.policy_assets import PolicyAssetConfig, PolicyAssetRegistry
 from metta.rl.trainer import Trainer
 from metta.rl.trainer_config import TorchProfilerConfig, TrainerConfig
 from metta.rl.training import (
@@ -45,6 +49,11 @@ from metta.rl.training import (
     WandbAborterConfig,
 )
 from metta.rl.training.scheduler import LossScheduler, SchedulerConfig
+from metta.rl.training.trajectory_isolation import (
+    TrajectoryIsolationConfig,
+    TrajectoryIsolationSliceConfig,
+    default_trajectory_isolation_config,
+)
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import (
     PolicyStorageDecision,
@@ -68,25 +77,23 @@ def _default_policy_architecture() -> PolicyArchitecture:
 
 class TrainTool(Tool):
     run: Optional[str] = None
-
+    initial_policy_uri: Optional[str] = None
     trainer: TrainerConfig = Field(default_factory=TrainerConfig)
     training_env: TrainingEnvironmentConfig
-    policy_architecture: PolicyArchitecture = Field(default_factory=_default_policy_architecture)
-    initial_policy_uri: Optional[str] = None
+    policy_assets: dict[str, PolicyAssetConfig] = Field(default_factory=lambda: {"learner0": PolicyAssetConfig()})
+    losses: LossesConfig | None = None
+    trajectory_isolation: TrajectoryIsolationConfig = Field(default_factory=default_trajectory_isolation_config)
     checkpointer: CheckpointerConfig = Field(default_factory=CheckpointerConfig)
     gradient_reporter: GradientReporterConfig = Field(default_factory=GradientReporterConfig)
-
     stats_server_uri: Optional[str] = auto_stats_server_uri()
     wandb: WandbConfig = WandbConfig.Unconfigured()
     group: Optional[str] = None
     evaluator: EvaluatorConfig = Field(default_factory=EvaluatorConfig)
     torch_profiler: TorchProfilerConfig = Field(default_factory=TorchProfilerConfig)
     scheduler: SchedulerConfig | None = None
-
     context_checkpointer: dict[str, Any] = Field(default_factory=dict)
     stats_reporter: StatsReporterConfig = Field(default_factory=StatsReporterConfig)
     wandb_aborter: WandbAborterConfig = Field(default_factory=WandbAborterConfig)
-
     map_preview_uri: str | None = None
     disable_macbook_optimize: bool = False
     sandbox: bool = False
@@ -102,7 +109,44 @@ class TrainTool(Tool):
             policy_uri = f"file://{self.system.data_dir / job_name / 'checkpoints'}"
         return {"policy_uri": policy_uri}
 
+    def _sanitize_checkpoint_namespace(self, value: str) -> str:
+        sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
+        return sanitized or "policy"
+
+    def _checkpoint_namespace_for_asset(self, asset: PolicyAssetConfig) -> str:
+        if asset.run:
+            return asset.run
+        if asset.uri:
+            try:
+                parsed = resolve_uri(asset.uri)
+            except ValueError:
+                return self._sanitize_checkpoint_namespace(asset.uri)
+            if parsed.checkpoint_info:
+                return parsed.checkpoint_info[0]
+            return self._sanitize_checkpoint_namespace(parsed.canonical)
+        raise ValueError("Policy asset must define run or uri to determine checkpoint namespace")
+
+    def _checkpoint_manager_for_asset(
+        self,
+        base_manager: CheckpointManager,
+        asset: PolicyAssetConfig,
+    ) -> CheckpointManager:
+        try:
+            namespace = self._checkpoint_namespace_for_asset(asset)
+        except ValueError:
+            if not asset.trainable:
+                return base_manager
+            raise
+        if namespace == base_manager.run_name:
+            return base_manager
+        return CheckpointManager(
+            run=namespace,
+            system_cfg=self.system,
+            require_remote_enabled=self.evaluator.evaluate_remote,
+        )
+
     def invoke(self, args: dict[str, str]) -> int | None:
+        run_from_cli = "run" in args
         if "run" in args:
             assert self.run is None, "run cannot be set via args if already provided in TrainTool config"
             self.run = args["run"]
@@ -111,6 +155,10 @@ class TrainTool(Tool):
 
         if self.run is None:
             self.run = auto_run_name(prefix="local")
+
+        self._finalize_policy_assets(run_from_cli=run_from_cli)
+        if run_from_cli and self.group:
+            self._validate_sweep_compatibility()
 
         if self.wandb == WandbConfig.Unconfigured():
             self.wandb = auto_wandb_config(self.run)
@@ -163,16 +211,14 @@ class TrainTool(Tool):
                 class_path = resolve_policy_class_path(sup_uri)
                 supervisor_policy_spec = PolicySpec(class_path=class_path)
 
-        run_name = self.run or "default"
+        run_name = self.run
         preflight_executor: ThreadPoolExecutor | None = None
         storage_future: Future[PolicyStorageDecision] | None = None
         stats_future: Future[Optional[StatsClient]] | None = None
         storage_decision: PolicyStorageDecision | None = None
         stats_client: Optional[StatsClient] = None
         needs_preflight = not self.system.local_only or (distributed_helper.is_master() and self.stats_server_uri)
-        start_method = multiprocessing.get_start_method(allow_none=True)
-        if start_method is None:
-            start_method = multiprocessing.get_context().get_start_method()
+        start_method = multiprocessing.get_start_method()
         can_thread_preflight = needs_preflight and (
             self.training_env.vectorization == "serial" or start_method != "fork"
         )
@@ -206,23 +252,56 @@ class TrainTool(Tool):
         init_logging(run_dir=checkpoint_manager.run_dir)
         record_heartbeat()
 
-        checkpointer = Checkpointer(
-            config=self.checkpointer,
-            checkpoint_manager=checkpoint_manager,
-            distributed_helper=distributed_helper,
-            policy_architecture=self.policy_architecture,
-        )
-        policy = checkpointer.load_or_create_policy(
-            env.policy_env_info,
-            policy_uri=self.initial_policy_uri,
+        # ------------------------------------------------------------------
+        # Policy asset registry: load/create all declared policies and add them to the registry.
+        # ------------------------------------------------------------------
+        loaded_policies: dict[str, Policy] = {}
+        for policy_name, asset in self.policy_assets.items():
+            asset_checkpoint_manager = self._checkpoint_manager_for_asset(checkpoint_manager, asset)
+            loader_checkpointer = Checkpointer(
+                config=self.checkpointer,
+                checkpoint_manager=asset_checkpoint_manager,
+                distributed_helper=distributed_helper,
+                policy_architecture=asset.architecture,
+                policy_name=policy_name,
+            )
+            policy_obj = loader_checkpointer.load_or_create_policy(
+                env.policy_env_info,
+                policy_uri=asset.uri,
+            )
+            if asset.architecture is None and loader_checkpointer.policy_architecture is not None:
+                asset.architecture = loader_checkpointer.policy_architecture
+
+            if not asset.trainable:
+                policy_obj.eval()
+                for param in policy_obj.parameters():
+                    param.requires_grad = False
+
+            loaded_policies[policy_name] = policy_obj
+
+        policy_assets = PolicyAssetRegistry(
+            configs=self.policy_assets,
+            policies=loaded_policies,
         )
 
         if distributed_helper.is_master():
-            total_params = sum(param.numel() for param in policy.parameters())
-            trainable_params = sum(param.numel() for param in policy.parameters() if param.requires_grad)
-            logging.info("policy parameters: total=%d trainable=%d", total_params, trainable_params)
+            for policy_name, policy in policy_assets.policies.items():
+                total_params = sum(param.numel() for param in policy.parameters())
+                trainable_params = sum(param.numel() for param in policy.parameters() if param.requires_grad)
+                logging.info(
+                    "policy[%s] parameters: total=%d trainable=%d",
+                    policy_name,
+                    total_params,
+                    trainable_params,
+                )
 
-        trainer = self._initialize_trainer(env, policy, distributed_helper)
+        # Normalize losses to a single source: self.trainer.losses
+        # If self.losses is set, use it; otherwise use self.trainer.losses (which has defaults).
+        # The scheduler mutates self.trainer.losses, so we always use that as the source of truth.
+        if self.losses is not None:
+            self.trainer.losses = self.losses
+
+        trainer = self._initialize_trainer(env, policy_assets, distributed_helper)
 
         self._log_run_configuration(distributed_helper, checkpoint_manager, env)
 
@@ -242,7 +321,7 @@ class TrainTool(Tool):
                     distributed_helper=distributed_helper,
                     checkpoint_manager=checkpoint_manager,
                     stats_client=stats_client,
-                    policy_checkpointer=checkpointer,
+                    policy_assets=policy_assets,
                     run_name=self.run,
                     wandb_run=wandb_run,
                 )
@@ -263,7 +342,7 @@ class TrainTool(Tool):
 
         finally:
             env.close()
-            if stats_client and hasattr(stats_client, "close"):
+            if stats_client:
                 stats_client.close()
             distributed_helper.cleanup()
             sdpa_stack = getattr(self, "_sdpa_context_stack", None)
@@ -274,14 +353,16 @@ class TrainTool(Tool):
     def _initialize_trainer(
         self,
         env: VectorizedTrainingEnvironment,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         distributed_helper: DistributedHelper,
     ) -> Trainer:
         trainer = Trainer(
             self.trainer,
             env,
-            policy,
-            torch.device(self.system.device),
+            policy_assets=policy_assets,
+            losses_cfg=self.trainer.losses,
+            trajectory_isolation=self.trajectory_isolation,
+            device=torch.device(self.system.device),
             distributed_helper=distributed_helper,
             run_name=self.run,
         )
@@ -290,6 +371,62 @@ class TrainTool(Tool):
             self.gradient_reporter.epoch_interval = self.stats_reporter.grad_mean_variance_interval
 
         return trainer
+
+    def _finalize_policy_assets(self, *, run_from_cli: bool) -> None:
+        trainable_assets = [
+            (name, cfg) for name, cfg in self.policy_assets.items() if cfg.trainable and cfg.optimizer is not None
+        ]
+
+        if run_from_cli:
+            if len(trainable_assets) != 1:
+                raise ValueError(
+                    "CLI run is only supported when exactly one trainable policy asset is configured. "
+                    "Set run per policy asset for multi-policy training."
+                )
+            _name, cfg = trainable_assets[0]
+            cfg.run = self.run
+
+        if len(trainable_assets) == 1:
+            _name, cfg = trainable_assets[0]
+            if cfg.run is None and cfg.uri is None:
+                cfg.run = self.run
+
+    def _validate_sweep_compatibility(self) -> None:
+        trainable_assets = [name for name, cfg in self.policy_assets.items() if cfg.trainable]
+        non_trainable_assets = [name for name, cfg in self.policy_assets.items() if not cfg.trainable]
+
+        if non_trainable_assets:
+            raise ValueError(
+                "Sweeps require all policy assets to be trainable. "
+                f"Non-trainable policies configured: {', '.join(non_trainable_assets)}"
+            )
+
+        if len(trainable_assets) != 1:
+            raise ValueError(
+                "Sweeps require exactly one trainable policy asset. "
+                f"Found {len(trainable_assets)}: {', '.join(trainable_assets) or 'none'}"
+            )
+
+        trainable_policy = trainable_assets[0]
+        slices = self.trajectory_isolation.slices
+        if len(slices) != 1:
+            raise ValueError(f"Sweeps require exactly one trajectory isolation slice. Found {len(slices)} slices.")
+
+        slice_cfg: TrajectoryIsolationSliceConfig = slices[0]
+        if not math.isclose(slice_cfg.env_ratio, 1.0, rel_tol=0.0, abs_tol=1e-9):
+            raise ValueError(
+                f"Sweeps require a single monolithic slice with env_ratio=1.0. Found env_ratio={slice_cfg.env_ratio}."
+            )
+        if slice_cfg.policies != [trainable_policy]:
+            raise ValueError(
+                "Sweeps require the trajectory slice policies to contain only the trainable policy. "
+                f"Found policies={slice_cfg.policies}."
+            )
+        if slice_cfg.primary_policy != trainable_policy:
+            raise ValueError(
+                "Sweeps require the trajectory slice primary_policy to match the trainable policy. "
+                f"Found primary_policy={slice_cfg.primary_policy}."
+            )
 
     def _apply_resume_hints(self) -> None:
         if not self.initial_policy_uri:
@@ -314,7 +451,7 @@ class TrainTool(Tool):
         distributed_helper: DistributedHelper,
         checkpoint_manager: CheckpointManager,
         stats_client: Optional[StatsClient],
-        policy_checkpointer: Checkpointer,
+        policy_assets: PolicyAssetRegistry,
         run_name: str,
         wandb_run: WandbRun | None,
     ) -> None:
@@ -341,7 +478,21 @@ class TrainTool(Tool):
             )
             components.append(stats_component)
 
-            components.append(policy_checkpointer)
+            # Register per-policy checkpointers for policies that request checkpointing.
+            for policy_name, asset in policy_assets.configs.items():
+                if not asset.checkpoint:
+                    continue
+                asset_checkpoint_manager = self._checkpoint_manager_for_asset(checkpoint_manager, asset)
+                components.append(
+                    Checkpointer(
+                        config=self.checkpointer,
+                        checkpoint_manager=asset_checkpoint_manager,
+                        distributed_helper=distributed_helper,
+                        policy_architecture=asset.architecture,
+                        policy_getter=lambda name=policy_name: policy_assets.get(name),
+                        policy_name=policy_name,
+                    )
+                )
 
             self.evaluator = self.evaluator.model_copy(deep=True)
             components.append(
@@ -357,8 +508,6 @@ class TrainTool(Tool):
 
             components.append(Monitor(enabled=reporting_enabled))
             components.append(ProgressLogger())
-        else:
-            components.append(policy_checkpointer)
 
         if self.context_checkpointer:
             logger.debug(

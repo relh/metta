@@ -7,10 +7,9 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous
 
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
-from metta.rl.loss.teacher_policy import load_teacher_policy
-from metta.rl.training import ComponentContext
+from metta.rl.policy_assets import PolicyAssetRegistry
+from metta.rl.training import ComponentContext, TrainingEnvironment
 
 # Keep: heavy module + manages circular dependency (loss <-> trainer)
 if TYPE_CHECKING:
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class KickstarterConfig(LossConfig):
-    teacher_uri: str = Field(default="")
+    teacher: str = Field(default="teacher0")  # key in the policy_assets dict
     action_loss_coef: float = Field(default=0.6, ge=0, le=1.0)
     value_loss_coef: float = Field(default=1.0, ge=0, le=1.0)
     temperature: float = Field(default=2.0, gt=0)
@@ -26,14 +25,21 @@ class KickstarterConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
     ) -> "Kickstarter":
         """Create Kickstarter loss instance."""
-        return Kickstarter(policy, trainer_cfg, vec_env, device, instance_name, self)
+        return Kickstarter(
+            policy_assets,
+            trainer_cfg,
+            vec_env,
+            device,
+            instance_name,
+            self,
+        )
 
 
 class Kickstarter(Loss):
@@ -47,15 +53,15 @@ class Kickstarter(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: "TrainerConfig",
-        vec_env: Any,
+        env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: "KickstarterConfig",
     ):
-        super().__init__(policy, trainer_cfg, vec_env, device, instance_name, cfg)
-        self.teacher_policy = load_teacher_policy(self.env, policy_uri=self.cfg.teacher_uri, device=self.device)
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
+        self.teacher_policy = policy_assets.get(cfg.teacher)
 
     def get_experience_spec(self) -> Composite:
         # Get action space size for logits shape
@@ -70,23 +76,18 @@ class Kickstarter(Loss):
             teacher_values=scalar_f32,
         )
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
-        with torch.no_grad():
-            teacher_td = td.clone()
-            self.teacher_policy.forward(teacher_td)
-            teacher_actions: Tensor = teacher_td["actions"]
-            td["teacher_logits"] = teacher_td["logits"]
-            td["teacher_values"] = teacher_td["values"]
-            self.policy.forward(td)
-
-        # Store experience
-        env_slice = self._training_env_id(context)
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
+    def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
+        teacher_td = td.get(self.cfg.teacher, None)
+        primary_policy_name = self._primary_policy_name()
+        student_td = td.get(primary_policy_name, None)
+        # move teacher's logits and values to the student's td, under the keys listed in our experience spec.
+        # we only pass the student_td to the buffer for saving by key listed in the experience spec.
+        student_td.set("teacher_logits", teacher_td.get("logits"))
+        student_td.set("teacher_values", teacher_td.get("values"))
 
         if torch.rand(1) < self.cfg.teacher_led_proportion:
             # overwrite student actions w teacher actions with some probability. anneal this.
-            td["actions"] = teacher_actions
+            student_td["actions"] = teacher_td["actions"]
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"logits", "values"}

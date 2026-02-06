@@ -8,8 +8,8 @@ from tensordict import TensorDict
 from torch import Tensor
 from torch.nn import functional as F
 
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 from metta.rl.utils import ensure_sequence_metadata
 
@@ -20,14 +20,14 @@ class EMAConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: Any,
         vec_env: Any,
         device: torch.device,
         instance_name: str,
     ) -> "EMA":
         """Create EMA loss instance."""
-        return EMA(policy, trainer_cfg, vec_env, device, instance_name, self)
+        return EMA(policy_assets, trainer_cfg, vec_env, device, instance_name, self)
 
 
 class EMA(Loss):
@@ -37,21 +37,19 @@ class EMA(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         vec_env: Any,
         device: torch.device,
         instance_name: str,
         cfg: "EMAConfig",
     ):
-        super().__init__(policy, trainer_cfg, vec_env, device, instance_name, cfg)
-
-        self.target_model = copy.deepcopy(self.policy)
-        for param in self.target_model.parameters():
-            param.requires_grad = False
+        super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
+        self.target_model = None
 
     def update_target_model(self):
         """Update target model with exponential moving average"""
+        self._ensure_target_model()
         with torch.no_grad():
             for target_param, online_param in zip(
                 self.target_model.parameters(), self.policy.parameters(), strict=False
@@ -67,6 +65,7 @@ class EMA(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
+        self._ensure_target_model()
         self.update_target_model()
         policy_td = cast(TensorDict, shared_loss_data["policy_td"])
         B, TT = policy_td.batch_size
@@ -75,8 +74,10 @@ class EMA(Loss):
 
         pred_flat: Tensor = policy_td["EMA_pred_output_2"].to(dtype=torch.float32)
 
-        assert self.policy_experience_spec is not None
-        target_td = policy_td.select(*self.policy_experience_spec.keys(include_nested=True)).clone()
+        if context.current_slice_cfg is None:
+            raise RuntimeError("EMA requires a trajectory slice to select policy experience spec.")
+        policy_spec = self.policy.get_agent_experience_spec()
+        target_td = policy_td.select(*policy_spec.keys(include_nested=True)).clone()
         ensure_sequence_metadata(target_td, batch_size=B, time_steps=TT)
 
         with torch.no_grad():
@@ -87,6 +88,13 @@ class EMA(Loss):
         self.loss_tracker["EMA_mse_loss"].append(float(loss.item()))
         shared_loss_data["policy_td"] = policy_td.reshape(B, TT)
         return loss, shared_loss_data, False
+
+    def _ensure_target_model(self) -> None:
+        if self.target_model is not None:
+            return
+        self.target_model = copy.deepcopy(self.policy)
+        for param in self.target_model.parameters():
+            param.requires_grad = False
 
     # ------------------------------------------------------------------
     # State dict methods for checkpointing

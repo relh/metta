@@ -6,9 +6,8 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous
 
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
-from metta.rl.loss.teacher_policy import load_teacher_policy
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 
 if TYPE_CHECKING:
@@ -16,21 +15,29 @@ if TYPE_CHECKING:
 
 
 class EERKickstarterConfig(LossConfig):
-    teacher_uri: str = Field(default="")
+    policy: str = Field(default="primary")
+    teacher: str = Field(default="teacher")
     action_loss_coef: float = Field(default=0.6, ge=0, le=1.0)
     value_loss_coef: float = Field(default=1.0, ge=0, le=1.0)
     r_lambda: float = Field(default=0.01, ge=0)  # scale the teacher log likelihoods that are added to rewards
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
     ) -> "EERKickstarter":
         """Create EERKickstarter loss instance."""
-        return EERKickstarter(policy, trainer_cfg, vec_env, device, instance_name, self)
+        return EERKickstarter(
+            policy_assets,
+            trainer_cfg,
+            vec_env,
+            device,
+            instance_name,
+            self,
+        )
 
 
 class EERKickstarter(Loss):
@@ -44,19 +51,18 @@ class EERKickstarter(Loss):
 
     cfg: EERKickstarterConfig
 
-    __slots__ = ("teacher_policy", "last_teacher_log_probs", "has_last_probs")
+    __slots__ = ("last_teacher_log_probs", "has_last_probs")
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
         cfg: "EERKickstarterConfig",
     ):
-        super().__init__(policy, trainer_cfg, vec_env, device, instance_name, cfg)
-        self.teacher_policy = load_teacher_policy(self.env, policy_uri=self.cfg.teacher_uri, device=self.device)
+        super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
 
         # Cache for teacher log probs from previous step, needed for reward shaping R_{t-1} + log(pi(A_{t-1}))
         # We need this because run_rollout receives R_t (reward for action at t-1), but computes pi(S_t).
@@ -78,29 +84,26 @@ class EERKickstarter(Loss):
             teacher_values=scalar_f32,
         )
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
+    def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
+        teacher_td = td.get(self.cfg.teacher, None)
+        primary_policy_name = self._primary_policy_name()
+        student_td = td.get(primary_policy_name, None)
+
         with torch.no_grad():
-            env_slice = self._training_env_id(context)
-            teacher_td = td.clone()
-            self.teacher_policy.forward(teacher_td)
-
-            # Store teacher outputs for auxiliary loss and value loss
-            td["teacher_full_log_probs"] = teacher_td["full_log_probs"]
-            td["teacher_values"] = teacher_td["values"]
-
-            self.policy.forward(td)
+            # Store teacher outputs for action and value losses
+            student_td["teacher_full_log_probs"] = teacher_td["full_log_probs"]
+            student_td["teacher_values"] = teacher_td["values"]
 
             # --- Reward Shaping ---
             # td["rewards"] contains R_{t-1}. We want to add r_lambda * log(pi_teacher(A_{t-1}|S_{t-1})).
             # We use cached teacher probs from the previous step.
-            indices = torch.arange(env_slice.start, env_slice.stop, device=self.device)
-
-            valid_mask = self.has_last_probs[indices]
+            agent_ids = student_td["training_env_ids"].squeeze(-1).to(dtype=torch.long)
+            valid_mask = self.has_last_probs[agent_ids]
             if valid_mask.any():
-                last_probs = self.last_teacher_log_probs[indices]
+                last_probs = self.last_teacher_log_probs[agent_ids]
 
                 # Get actions taken at t-1: (batch,)
-                last_actions = td["last_actions"]
+                last_actions = student_td["last_actions"]
                 if last_actions.dim() > 1:
                     last_actions = last_actions.squeeze(-1)
                 last_actions = last_actions.long()
@@ -109,15 +112,11 @@ class EERKickstarter(Loss):
                 intrinsic_reward = last_probs.gather(1, last_actions.unsqueeze(1)).squeeze(1)
 
                 # Add to rewards in place (modifies the buffer view)
-                td["rewards"] += self.cfg.r_lambda * intrinsic_reward * valid_mask.float()
+                student_td["rewards"] += self.cfg.r_lambda * intrinsic_reward * valid_mask.float()
 
             # Update cache for next step
-            self.last_teacher_log_probs[indices] = teacher_td["full_log_probs"]
-            self.has_last_probs[indices] = True
-
-        # Store experience
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
+            self.last_teacher_log_probs[agent_ids] = teacher_td["full_log_probs"]
+            self.has_last_probs[agent_ids] = True
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"full_log_probs", "values"}

@@ -218,10 +218,11 @@ def test_environment_scales_with_agents(num_agents: int) -> None:
 
 def test_train_with_smart_gear_teacher_policy_uri() -> None:
     teacher_uri = "metta://policy/role?gear=10"
-    teacher = TeacherConfig(policy_uri=teacher_uri, mode="sliced_cloner")
+    teacher = TeacherConfig(policy_uri=teacher_uri, mode="scripted.eer_cloner.sliced")
 
     tool = cogsguard.train(teacher=teacher)
 
     assert tool.training_env.supervisor_policy_uri == teacher_uri
-    assert tool.trainer.losses.sliced_scripted_cloner.enabled
+    assert tool.trainer.losses.has_loss("teacher_led")
+    assert tool.trainer.losses.has_loss("student_led")
     assert tool.scheduler is not None

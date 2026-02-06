@@ -7,14 +7,13 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous
 
-from metta.agent.policy import Policy
 from metta.rl.advantage import normalize_advantage_distributed
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
 
 class PPOActorConfig(LossConfig):
-    # PPO hyperparameters
     # Clip coefficient (0.1-0.3 typical; Schulman et al. 2017)
     clip_coef: float = Field(default=0.22017136216163635, gt=0, le=1.0)
     # Entropy term weight from sweep
@@ -28,13 +27,13 @@ class PPOActorConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
     ) -> "PPOActor":
-        return PPOActor(policy, trainer_cfg, env, device, instance_name, self)
+        return PPOActor(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class PPOActor(Loss):
@@ -46,14 +45,14 @@ class PPOActor(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: "PPOActorConfig",
     ):
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
 
     def get_experience_spec(self) -> Composite:
         return Composite(act_log_prob=UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32))
@@ -101,7 +100,12 @@ class PPOActor(Loss):
 
         adv = shared_loss_data.get("advantages_pg", None)
         if adv is None:
-            adv: Tensor = shared_loss_data["advantages"]
+            adv = shared_loss_data.get("advantages", None)
+        if adv is None:
+            raise RuntimeError(
+                "PPOActor expected advantages in shared_loss_data, but none were found. "
+                "Ensure PPOCritic runs before PPOActor."
+            )
         adv = adv.detach()
 
         # Normalize advantages with distributed support, then apply prioritized weights

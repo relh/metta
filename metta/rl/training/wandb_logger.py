@@ -20,7 +20,15 @@ class WandbLogger(TrainerComponent):
     def register(self, context) -> None:  # type: ignore[override]
         super().register(context)
         setup_wandb_metrics(self._wandb_run)
-        log_model_parameters(self.context.policy, self._wandb_run)
+        policy_assets = getattr(self.context, "policy_assets", None)
+        policies = getattr(policy_assets, "policies", {}) if policy_assets is not None else {}
+        legacy_policy = getattr(self.context, "policy", None)
+
+        if policies:
+            for _, policy in policies.items():
+                log_model_parameters(policy, self._wandb_run)
+        elif legacy_policy is not None:
+            log_model_parameters(legacy_policy, self._wandb_run)
 
     def on_epoch_end(self, epoch: int) -> None:  # noqa: D401 - documented in base class
         context = self.context

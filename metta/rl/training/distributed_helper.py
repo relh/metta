@@ -160,6 +160,11 @@ class DistributedHelper:
         if device is None:
             device = torch.device(self.config.device)
 
+        has_trainable_params = any(param.requires_grad for param in policy.parameters())
+        if not has_trainable_params:
+            logger.info("Skipping DDP wrap for policy with no trainable params on rank %s", self.get_rank())
+            return policy
+
         distributed_policy = DistributedPolicy(policy, device)
         logger.info(f"Wrapped policy with DDP on rank {self.get_rank()}")
         return distributed_policy

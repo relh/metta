@@ -30,6 +30,7 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
     DiscreteRandomConfig,
 )
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.clips_curriculum import ClipsCurriculumConfig
@@ -425,30 +426,7 @@ def train(
         trainer_cfg.optimizer.warmup_steps = 1752
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
-    scheduler = None
 
-    if teacher and teacher.enabled:
-        scheduler_run_gates: list[LossRunGate] = []
-        scheduler_rules: list[ScheduleRule] = []
-        apply_teacher_phase(
-            trainer_cfg=trainer_cfg,
-            training_env_cfg=training_env_cfg,
-            scheduler_rules=scheduler_rules,
-            scheduler_run_gates=scheduler_run_gates,
-            teacher_cfg=teacher,
-        )
-        scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
-
-    tt = tools.TrainTool(
-        trainer=trainer_cfg,
-        training_env=training_env_cfg,
-        evaluator=evaluator_cfg,
-        scheduler=scheduler,
-    )
-    tt.stats_reporter.progress_metric = "env_collective/cogs/aligned.junction.held"
-    tt.stats_reporter.default_zero_metrics = tt.stats_reporter.default_zero_metrics + (
-        "env_collective/cogs/aligned.junction.held",
-    )
     default_architecture = ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
     if sweep_mode:
         default_architecture = ViTDefaultConfig(
@@ -460,7 +438,35 @@ def train(
             core_num_heads=4,
             core_num_latents=16,
         )
-    tt.policy_architecture = policy_architecture or default_architecture
+
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)}
+
+    tt = tools.TrainTool(
+        trainer=trainer_cfg,
+        training_env=training_env_cfg,
+        evaluator=evaluator_cfg,
+        policy_assets=policy_assets,
+    )
+
+    if teacher and teacher.enabled:
+        scheduler_run_gates: list[LossRunGate] = []
+        scheduler_rules: list[ScheduleRule] = []
+        apply_teacher_phase(
+            trainer_cfg=trainer_cfg,
+            losses=trainer_cfg.losses,
+            training_env_cfg=training_env_cfg,
+            policy_assets=tt.policy_assets,
+            scheduler_rules=scheduler_rules,
+            scheduler_run_gates=scheduler_run_gates,
+            teacher_cfg=teacher,
+            trajectory_isolation=tt.trajectory_isolation,
+        )
+        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    tt.stats_reporter.progress_metric = "env_collective/cogs/aligned.junction.held"
+    tt.stats_reporter.default_zero_metrics = tt.stats_reporter.default_zero_metrics + (
+        "env_collective/cogs/aligned.junction.held",
+    )
     return tt
 
 

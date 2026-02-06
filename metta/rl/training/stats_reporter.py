@@ -210,7 +210,7 @@ class StatsReporter(TrainerComponent):
         policy: Any,
         timer: Timer | None,
         trainer_cfg: Any,
-        optimizer: torch.optim.Optimizer,
+        optimizer: torch.optim.Optimizer | None,
     ) -> None:
         timing_context = timer("_process_stats") if callable(timer) else nullcontext()
 
@@ -282,7 +282,7 @@ class StatsReporter(TrainerComponent):
             policy=ctx.policy,
             timer=ctx.stopwatch,
             trainer_cfg=ctx.config,
-            optimizer=ctx.optimizer,
+            optimizer=getattr(ctx.policy, "optimizer", None),
         )
 
     def on_training_complete(self) -> None:
@@ -323,7 +323,7 @@ class StatsReporter(TrainerComponent):
         agent_step: int,
         epoch: int,
         timer: Any,
-        optimizer: torch.optim.Optimizer,
+        optimizer: torch.optim.Optimizer | None,
     ) -> dict[str, float]:
         """Convert collected stats into a flat wandb payload."""
 

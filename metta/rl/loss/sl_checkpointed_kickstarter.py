@@ -7,9 +7,9 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite
 
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
 from metta.rl.loss.teacher_policy import load_teacher_policy
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 from metta.rl.utils import prepare_policy_forward_td
 from mettagrid.util.uri_resolvers.schemes import (
@@ -35,14 +35,14 @@ class SLCheckpointedKickstarterConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
     ) -> "SLCheckpointedKickstarter":
         """Create SLCheckpointedKickstarter loss instance."""
-        return SLCheckpointedKickstarter(policy, trainer_cfg, vec_env, device, instance_name, self)
+        return SLCheckpointedKickstarter(policy_assets, trainer_cfg, vec_env, device, instance_name, self)
 
 
 class SLCheckpointedKickstarter(Loss):
@@ -65,14 +65,14 @@ class SLCheckpointedKickstarter(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
         cfg: "SLCheckpointedKickstarterConfig",
     ) -> None:
-        super().__init__(policy, trainer_cfg, vec_env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
         self.temperature = self.cfg.temperature
         self.teacher_uri = self.cfg.teacher_uri
         self._base_teacher_uri = self.cfg.teacher_uri  # Store original URI for checkpoint reloading

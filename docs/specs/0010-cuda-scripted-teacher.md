@@ -21,7 +21,7 @@ uv run ./tools/run.py recipes.experiment.cogsguard.train \
   run=relh.machina1_cloner.120.teacherbc.1 \
   layout=machina_1 \
   teacher.policy_uri=metta://policy/thinky \
-  teacher.mode=sliced_cloner \
+  teacher.mode=scripted.supervisor.mixed \
 ```
 
 ### PPO only (no teacher)

@@ -78,13 +78,13 @@ To disable the default teacher, override the policy URI:
 ### Custom teacher overrides
 
 You can also specify a custom teacher by providing a `teacher.policy_uri` and choosing a mode. Two modes that work well
-currently are `sliced_cloner` and `supervisor`.
+currently are `scripted.eer_cloner.sliced` and `scripted.supervisor.mixed`.
 
 **Dict-style (single quoted override):**
 
 ```bash
 ./devops/skypilot/launch.py recipes.experiment.cogsguard.train --gpus 8 --max-runtime-hours 120 -- \
-  'teacher={mode: sliced_cloner, policy_uri: "metta://policy/cogsguard?gear=10", teacher_led_proportion: 0.5, student_led_proportion: 0.5, steps: 1_000_000_000, anneal_start_step: 0, ppo_begin_step: 0}' \
+  'teacher={mode: scripted.eer_cloner.sliced, policy_uri: "metta://policy/cogsguard?gear=10", teacher_led_proportion: 0.5, student_led_proportion: 0.5, steps: 1_000_000_000, anneal_start_step: 0, ppo_begin_step: 0}' \
   run=your_run_name
 ```
 
@@ -94,7 +94,7 @@ currently are `sliced_cloner` and `supervisor`.
 ./devops/skypilot/launch.py recipes.experiment.cogsguard.train --gpus 8 --max-runtime-hours 120 -- \
   run=your_run_name \
   teacher.policy_uri='metta://policy/cogsguard?gear=10' \
-  teacher.mode=sliced_cloner \
+  teacher.mode=scripted.eer_cloner.sliced \
   teacher.teacher_led_proportion=0.5 \
   teacher.student_led_proportion=0.5
 ```

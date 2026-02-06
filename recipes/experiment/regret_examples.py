@@ -4,7 +4,7 @@ from typing import List, Optional
 
 import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
-from metta.agent.policies.vit_sliding_trans import ViTSlidingTransConfig
+from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
@@ -12,7 +12,7 @@ from metta.cogworks.curriculum.curriculum import (
 from metta.cogworks.curriculum.prioritized_regret_algorithm import PrioritizedRegretConfig
 from metta.cogworks.curriculum.regret_learning_progress_algorithm import RegretLearningProgressConfig
 from metta.rl.loss.losses import LossesConfig
-from metta.rl.loss.ppo import PPOConfig
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
@@ -55,15 +55,16 @@ def _make_arena_tasks(arena_env: MettaGridConfig):
 def _build_train_tool(
     curriculum: CurriculumConfig, policy_architecture: Optional[PolicyArchitecture] = None
 ) -> TrainTool:
-    trainer_cfg = TrainerConfig(losses=LossesConfig(ppo=PPOConfig()))
-    policy_config = policy_architecture or ViTSlidingTransConfig()
+    trainer_cfg = TrainerConfig(losses=LossesConfig())
+    policy_config = policy_architecture or ViTDefaultConfig()
     evaluator = EvaluatorConfig(simulations=make_evals())
     training_env = TrainingEnvironmentConfig(curriculum=curriculum)
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_config)}
     return TrainTool(
         trainer=trainer_cfg,
         training_env=training_env,
         evaluator=evaluator,
-        policy_architecture=policy_config,
+        policy_assets=policy_assets,
     )
 
 

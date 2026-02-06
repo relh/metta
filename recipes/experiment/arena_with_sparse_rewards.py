@@ -12,8 +12,7 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
-from metta.rl.loss.contrastive_config import ContrastiveConfig
-from metta.rl.loss.losses import LossesConfig
+from metta.rl.loss.contrastive import ContrastiveConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
@@ -98,16 +97,16 @@ def train(
     curriculum = curriculum or make_curriculum(enable_detailed_slice_logging=enable_detailed_slice_logging)
 
     contrastive_config = ContrastiveConfig(
-        enabled=enable_contrastive,
         temperature=temperature,
         contrastive_coef=contrastive_coef,
         embedding_dim=128,
         use_projection_head=True,
     )
 
-    trainer_config = TrainerConfig(
-        losses=LossesConfig(contrastive=contrastive_config),
-    )
+    trainer_config = TrainerConfig()
+
+    if enable_contrastive:
+        trainer_config.losses.add_loss("contrastive", contrastive_config)
 
     return tools.TrainTool(
         trainer=trainer_config,

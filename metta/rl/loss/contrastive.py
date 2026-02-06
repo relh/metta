@@ -1,25 +1,50 @@
 # metta/rl/loss/contrastive.py
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import Any, Optional, cast
 
 import torch
+from pydantic import Field
 from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite
 
-from metta.agent.policy import Policy
-from metta.rl.loss.loss import Loss
+from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
-if TYPE_CHECKING:
-    from metta.rl.loss.contrastive_config import ContrastiveConfig
+
+class ContrastiveConfig(LossConfig):
+    """Configuration for contrastive loss."""
+
+    temperature: float = Field(default=0.1902943104505539, gt=0, description="Temperature for contrastive learning")
+    contrastive_coef: float = Field(default=0.0006806607125326991, ge=0, description="Coefficient for contrastive loss")
+    discount: float = Field(
+        default=0.977, ge=0, lt=1, description="Discount factor (gamma) used for geometric positive sampling"
+    )
+    embedding_dim: int = Field(default=128, gt=0, description="Dimension of contrastive embeddings")
+    use_projection_head: bool = Field(default=True, description="Whether to use projection head")
+    log_similarities: bool = Field(
+        default=False, description="Whether to log positive/negative similarities to console"
+    )
+    log_frequency: int = Field(default=100, gt=0, description="Log similarities every N training steps")
+
+    def create(
+        self,
+        policy_assets: Any,
+        trainer_cfg: Any,
+        env: TrainingEnvironment,
+        device: torch.device,
+        instance_name: str,
+    ) -> "ContrastiveLoss":
+        """Create the contrastive loss instance."""
+        return ContrastiveLoss(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class ContrastiveLoss(Loss):
     """Contrastive loss for representation learning."""
 
-    cfg: "ContrastiveConfig"
+    cfg: ContrastiveConfig
 
     _EMBEDDING_CANDIDATES = ("encoder_output", "encoded_obs", "core", "hidden_state", "features")
 
@@ -39,14 +64,14 @@ class ContrastiveLoss(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: Any,
     ):
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
 
         self.temperature = self.cfg.temperature
         self.contrastive_coef = self.cfg.contrastive_coef

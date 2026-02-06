@@ -8,9 +8,9 @@ from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 from typing_extensions import Literal
 
-from metta.agent.policy import Policy
-from metta.rl.advantage import td_lambda_reverse_scan
+from metta.rl.advantage import compute_advantage, compute_delta_lambda, td_lambda_reverse_scan
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
 
@@ -26,41 +26,28 @@ class PPOCriticConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
     ) -> "PPOCritic":
-        return PPOCritic(policy, trainer_cfg, env, device, instance_name, self)
+        return PPOCritic(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class PPOCritic(Loss):
     """PPO value loss."""
 
-    cfg: "PPOCriticConfig"
-
-    __slots__ = (
-        "burn_in_steps",
-        "burn_in_steps_iter",
-    )
-
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: "PPOCriticConfig",
     ):
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
-
-        if hasattr(self.policy, "burn_in_steps"):
-            self.burn_in_steps: int = cast(int, self.policy.burn_in_steps)
-        else:
-            self.burn_in_steps = 0
-        self.burn_in_steps_iter = 0
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
 
     def get_experience_spec(self) -> Composite:
         act_space = self.env.single_action_space
@@ -74,24 +61,6 @@ class PPOCritic(Loss):
             dones=scalar_f32,
             truncateds=scalar_f32,
         )
-
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
-        with torch.no_grad():
-            # If another loss already produced actions (e.g., sliced_cloner teacher slice),
-            # reuse them to avoid overwriting while still computing values/logprobs.
-            if "actions" in td.keys():
-                actions: Tensor = td["actions"]
-                self.policy.forward(td, action=actions)
-            else:
-                self.policy.forward(td)
-
-        if self.burn_in_steps_iter < self.burn_in_steps:
-            self.burn_in_steps_iter += 1
-            return
-
-        env_slice = self._training_env_id(context)
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         if self.cfg.critic_update == "gtd_lambda":
@@ -112,7 +81,6 @@ class PPOCritic(Loss):
         delta_lambda = torch.zeros_like(values)
         if tt <= 1:
             return delta_lambda
-
         terminal_next = dones[:, 1:]
         mask_next = 1.0 - terminal_next
 
@@ -125,6 +93,60 @@ class PPOCritic(Loss):
 
         return delta_lambda
 
+    def _ensure_advantages_pg(self, shared_loss_data: TensorDict, context: ComponentContext) -> None:
+        if "advantages_pg" in shared_loss_data:
+            return
+
+        minibatch = shared_loss_data["sampled_mb"]
+        if context.current_slice_cfg is None:
+            raise RuntimeError("PPOCritic requires a trajectory slice to select advantage config.")
+        advantage_cfg = context.current_slice_cfg.advantage
+        if self.cfg.critic_update == "gtd_lambda":
+            if "values" not in minibatch.keys():
+                raise RuntimeError("delta_lambda advantages require minibatch['values']")
+
+            policy_td = shared_loss_data["policy_td"]
+            new_values = policy_td["values"]
+            if new_values.dim() == 3 and new_values.shape[-1] == 1:
+                new_values = new_values.squeeze(-1)
+            new_values = new_values.reshape(minibatch["values"].shape)
+
+            centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
+            shared_loss_data["advantages_pg"] = compute_delta_lambda(
+                values=new_values,
+                rewards=centered_rewards,
+                dones=minibatch["dones"],
+                gamma=float(advantage_cfg.gamma),
+                gae_lambda=float(advantage_cfg.gae_lambda),
+            )
+            return
+
+        values_for_adv = minibatch["values"] if "values" in minibatch.keys() else None
+        if values_for_adv is not None:
+            if values_for_adv.dim() > 2:
+                values_for_adv = values_for_adv.mean(dim=-1)
+
+            importance_sampling_ratio = shared_loss_data.get("importance_sampling_ratio", None)
+            if importance_sampling_ratio is None:
+                importance_sampling_ratio = torch.ones_like(values_for_adv)
+
+            with torch.no_grad():
+                centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
+                shared_loss_data["advantages_pg"] = compute_advantage(
+                    values_for_adv,
+                    centered_rewards,
+                    minibatch["dones"],
+                    importance_sampling_ratio,
+                    shared_loss_data["advantages"].clone(),
+                    advantage_cfg.gamma,
+                    advantage_cfg.gae_lambda,
+                    self.device,
+                    advantage_cfg.vtrace_rho_clip,
+                    advantage_cfg.vtrace_c_clip,
+                )
+        else:
+            shared_loss_data["advantages_pg"] = shared_loss_data["advantages"]
+
     def run_train(
         self, shared_loss_data: TensorDict, context: ComponentContext, mb_idx: int
     ) -> tuple[Tensor, TensorDict, bool]:
@@ -136,7 +158,8 @@ class PPOCritic(Loss):
         if minibatch.batch_size.numel() == 0:  # early exit if minibatch is empty
             return self._zero(), shared_loss_data, False
 
-        # Advantages are computed in the core loop and passed through shared_loss_data.
+        self._ensure_advantages_pg(shared_loss_data, context)
+
         # Keep the full advantages around for explained variance logging and prioritized sampling.
         old_values: Tensor = minibatch["values"]
         if self.cfg.critic_update == "gtd_lambda":
@@ -166,17 +189,15 @@ class PPOCritic(Loss):
                     self.loss_tracker["teacher_td_lambda_rho_clipfrac"].append(
                         float((rho_trim > rho_clip).float().mean().item())
                     )
-                    mb_rewards: Tensor = minibatch["rewards"]
-                    mb_reward_baseline: Tensor = minibatch["reward_baseline"]
-                    mb_dones: Tensor = minibatch["dones"]
-                    centered_rewards = mb_rewards - mb_reward_baseline
+                    centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
+                    advantage_cfg = context.current_slice_cfg.advantage
                     corrected = self._importance_sampled_delta_lambda(
                         values=new_values[teacher_mask],
                         rewards=centered_rewards[teacher_mask],
-                        dones=mb_dones[teacher_mask],
+                        dones=minibatch["dones"][teacher_mask],
                         rho=rho.detach()[teacher_mask],
-                        gamma=float(context.config.advantage.gamma),
-                        gae_lambda=float(context.config.advantage.gae_lambda),
+                        gamma=float(advantage_cfg.gamma),
+                        gae_lambda=float(advantage_cfg.gae_lambda),
                     )
                     delta_lambda = delta_lambda.clone()
                     delta_lambda[teacher_mask] = corrected

@@ -17,6 +17,7 @@ from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
 from metta.agent.policy import DistributedPolicy, Policy
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, Experience, TrainingEnvironment
 from metta.rl.utils import add_dummy_loss_for_unused_params, ensure_sequence_metadata, forward_policy_for_training
 from mettagrid.base_config import Config
@@ -65,13 +66,13 @@ class CMPOConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
     ) -> "CMPO":
-        return CMPO(policy, trainer_cfg, env, device, instance_name, self)
+        return CMPO(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class FeedForwardDynamics(nn.Module):
@@ -157,16 +158,14 @@ class CMPO(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: CMPOConfig,
     ) -> None:
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
-        self.burn_in_steps = getattr(self.policy, "burn_in_steps", 0)
-        self.burn_in_steps_iter = 0
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
 
         obs_space = env.single_observation_space
         self.obs_shape = tuple(int(dim) for dim in obs_space.shape)
@@ -179,12 +178,8 @@ class CMPO(Loss):
         self.transition_buffer = TransitionBuffer(cfg.world_model.buffer_size)
 
         self.prior_model: Policy | DistributedPolicy | None = None
-        if cfg.prior_ema_decay is not None:
-            # π_prior in CMPO; EMA helps stabilize off-policy updates.
-            self.prior_model = copy.deepcopy(self.policy).to(device)
-            assert self.prior_model is not None
-            for param in self.prior_model.parameters():
-                param.requires_grad = False
+        self.burn_in_steps_iter = 0
+        self.register_state_attr("burn_in_steps_iter")
 
         self._prev_obs = torch.empty((0, self.obs_dim), dtype=torch.float32, device=device)
         self._prev_action_enc = torch.empty((0, self.action_dim), dtype=torch.float32, device=device)
@@ -213,32 +208,28 @@ class CMPO(Loss):
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"full_log_probs", "values"}
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
-        with torch.no_grad():
-            if "actions" in td.keys():
-                self.policy.forward(td, action=td["actions"])
-            else:
-                self.policy.forward(td)
+    def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
+        primary_policy_name = self._primary_policy_name()
+        student_td = td.get(primary_policy_name, None)
+        if student_td is None:
+            return
 
-        env_slice = self._training_env_id(
-            context,
-            error="ComponentContext.training_env_id is required for CMPO rollout",
-        )
-
-        rewards = td["rewards"].to(dtype=torch.float32)
-        dones = td["dones"].to(dtype=torch.float32)
-        truncateds = td["truncateds"].to(dtype=torch.float32)
+        rewards = student_td["rewards"].to(dtype=torch.float32)
+        dones = student_td["dones"].to(dtype=torch.float32)
+        truncateds = student_td["truncateds"].to(dtype=torch.float32)
         terminals = torch.logical_or(dones > 0.5, truncateds > 0.5)
 
-        obs = td["env_obs"]
+        obs = student_td["env_obs"]
         obs_flat = self._flatten_obs(obs)
-        actions = td["actions"]
+        actions = student_td["actions"]
         actions_enc = self._encode_action(actions)
 
-        if self._has_prev[env_slice].any():
-            mask = self._has_prev[env_slice]
-            prev_states = self._prev_obs[env_slice][mask]
-            prev_actions_enc = self._prev_action_enc[env_slice][mask]
+        agent_ids = student_td["training_env_ids"].squeeze(-1).to(dtype=torch.long)
+
+        if self._has_prev[agent_ids].any():
+            mask = self._has_prev[agent_ids]
+            prev_states = self._prev_obs[agent_ids][mask]
+            prev_actions_enc = self._prev_action_enc[agent_ids][mask]
 
             current_states = obs_flat[mask]
             current_rewards = rewards[mask]
@@ -250,15 +241,9 @@ class CMPO(Loss):
                 next_states=current_states,
             )
 
-        if self.burn_in_steps_iter < self.burn_in_steps:
-            self.burn_in_steps_iter += 1
-        else:
-            assert self.replay is not None
-            self.replay.store(data_td=td, env_id=env_slice)
-
-        self._prev_obs[env_slice] = obs_flat.detach()
-        self._prev_action_enc[env_slice] = actions_enc.detach()
-        self._has_prev[env_slice] = ~terminals.bool()
+        self._prev_obs[agent_ids] = obs_flat.detach()
+        self._prev_action_enc[agent_ids] = actions_enc.detach()
+        self._has_prev[agent_ids] = ~terminals.bool()
 
     def run_train(
         self,
@@ -267,6 +252,7 @@ class CMPO(Loss):
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
         stop_update_epoch = False
+        self._ensure_policy_state(context)
         if mb_idx > 0 and self.cfg.target_kl is not None:
             approx_kl = self.loss_tracker["approx_kl"]
             avg_kl = sum(approx_kl) / len(approx_kl) if approx_kl else 0.0
@@ -290,9 +276,15 @@ class CMPO(Loss):
         if self._valid_action_mask is None:
             self._valid_action_mask = (log_pi > -1e8).any(dim=(0, 1))
         assert self._valid_action_mask is not None
-        valid_action_mask = self._valid_action_mask
-        prior_log_probs = self._get_prior_log_probs(minibatch, policy_td)
-        q_values = self._compute_q_values(minibatch["env_obs"], valid_action_mask=valid_action_mask)  # [B, T, A]
+        prior_log_probs = self._get_prior_log_probs(minibatch, policy_td, context)
+        if context.current_slice_cfg is None:
+            raise RuntimeError("CMPO requires a trajectory slice to select advantage config.")
+        gamma = float(context.current_slice_cfg.advantage.gamma)
+        q_values = self._compute_q_values(
+            minibatch["env_obs"],
+            valid_action_mask=self._valid_action_mask,
+            gamma=gamma,
+        )  # [B, T, A]
         pi_prior = prior_log_probs.exp()
         v_prior = (pi_prior * q_values).sum(dim=-1, keepdim=True)
         advantages = q_values - v_prior
@@ -339,17 +331,29 @@ class CMPO(Loss):
             for prior_buf, online_buf in zip(self.prior_model.buffers(), self.policy.buffers(), strict=False):
                 prior_buf.copy_(online_buf)
 
-    def _get_prior_log_probs(self, minibatch: TensorDict, policy_td: TensorDict) -> Tensor:
+    def _ensure_policy_state(self, context: ComponentContext | None = None) -> None:
+        if self.cfg.prior_ema_decay is None:
+            return
+        self._ensure_context(context)
+        if self.prior_model is None:
+            # π_prior in CMPO; EMA helps stabilize off-policy updates.
+            self.prior_model = copy.deepcopy(self.policy).to(self.device)
+            for param in self.prior_model.parameters():
+                param.requires_grad = False
+
+    def _get_prior_log_probs(self, minibatch: TensorDict, policy_td: TensorDict, context: ComponentContext) -> Tensor:
         B, TT = minibatch.batch_size
         if self.prior_model is None:
             return policy_td["full_log_probs"].reshape(B, TT, -1).detach()
 
         with torch.no_grad():
-            assert self.policy_experience_spec is not None
-            prior_td = forward_policy_for_training(self.prior_model, minibatch, self.policy_experience_spec)
+            if context.current_slice_cfg is None:
+                raise RuntimeError("CMPO requires a trajectory slice to select policy experience spec.")
+            policy_spec = self.policy.get_agent_experience_spec()
+            prior_td = forward_policy_for_training(self.prior_model, minibatch, policy_spec)
         return prior_td["full_log_probs"].reshape(B, TT, -1).detach()
 
-    def _compute_q_values(self, obs: Tensor, valid_action_mask: Tensor) -> Tensor:
+    def _compute_q_values(self, obs: Tensor, valid_action_mask: Tensor, *, gamma: float) -> Tensor:
         if self.prior_model is not None:
             value_model = self.prior_model
         else:
@@ -388,9 +392,7 @@ class CMPO(Loss):
                 next_obs = self._unflatten_obs(next_state)
                 next_values = self._value_from_obs(value_model, next_obs)
 
-            q_chunk = reward.view(end - start, num_actions) + (
-                self.trainer_cfg.advantage.gamma * next_values.view(end - start, num_actions)
-            )
+            q_chunk = reward.view(end - start, num_actions) + gamma * next_values.view(end - start, num_actions)
             q_values[start:end].index_copy_(1, valid_action_indices, q_chunk)
 
         return q_values.view(B, TT, self.action_dim)
@@ -477,9 +479,6 @@ class CMPO(Loss):
         if self.prior_model is not None:
             state["prior_model"] = {k: v.cpu() for k, v in self.prior_model.state_dict().items()}
 
-        # Save burn-in counter
-        state["burn_in_steps_iter"] = self.burn_in_steps_iter
-
         return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any], *, strict: bool = True) -> tuple[list[str], list[str]]:
@@ -518,13 +517,10 @@ class CMPO(Loss):
             missing.append("transition_buffer")
 
         # Load prior model if it exists
-        if "prior_model" in state_dict and self.prior_model is not None:
-            self.prior_model.load_state_dict(state_dict["prior_model"])
-
-        # Load burn-in counter
-        if "burn_in_steps_iter" in state_dict:
-            self.burn_in_steps_iter = state_dict["burn_in_steps_iter"]
-        elif strict:
-            missing.append("burn_in_steps_iter")
+        if "prior_model" in state_dict:
+            if self.prior_model is None and self.cfg.prior_ema_decay is not None and self._context is not None:
+                self._ensure_policy_state()
+            if self.prior_model is not None:
+                self.prior_model.load_state_dict(state_dict["prior_model"])
 
         return missing, unexpected

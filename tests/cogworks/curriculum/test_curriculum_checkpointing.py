@@ -354,12 +354,10 @@ class TestCheckpointManagerIntegration:
             curriculum_state = curriculum.get_state()
 
             # Save trainer state with curriculum
-            import torch  # noqa: PLC0415
-
-            optimizer = torch.optim.Adam([torch.tensor(1.0, requires_grad=True)])
-
             checkpoint_manager.save_trainer_state(
-                optimizer=optimizer, epoch=5, agent_step=1000, curriculum_state=curriculum_state
+                epoch=5,
+                agent_step=1000,
+                curriculum_state=curriculum_state,
             )
 
             # Load trainer state
@@ -383,11 +381,7 @@ class TestCheckpointManagerIntegration:
             checkpoint_manager = CheckpointManager(run="test_backward_compat", system_cfg=system_config)
 
             # Save trainer state without curriculum
-            import torch  # noqa: PLC0415
-
-            optimizer = torch.optim.Adam([torch.tensor(1.0, requires_grad=True)])
-
-            checkpoint_manager.save_trainer_state(optimizer=optimizer, epoch=3, agent_step=500)
+            checkpoint_manager.save_trainer_state(epoch=3, agent_step=500)
 
             # Load trainer state
             loaded_state = checkpoint_manager.load_trainer_state()

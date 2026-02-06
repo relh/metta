@@ -8,9 +8,9 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
-from metta.agent.policy import Policy
 from metta.rl.advantage import compute_advantage
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
 
@@ -22,13 +22,13 @@ class QuantilePPOCriticConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
     ) -> "QuantilePPOCritic":
-        return QuantilePPOCritic(policy, trainer_cfg, env, device, instance_name, self)
+        return QuantilePPOCritic(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class QuantilePPOCritic(Loss):
@@ -36,35 +36,23 @@ class QuantilePPOCritic(Loss):
 
     cfg: QuantilePPOCriticConfig
 
-    __slots__ = (
-        "advantages",
-        "burn_in_steps",
-        "burn_in_steps_iter",
-        "num_quantiles",
-        "tau_hat",
-    )
+    __slots__ = ("advantages", "num_quantiles", "tau_hat")
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: "QuantilePPOCriticConfig",
     ):
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
         self.advantages = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-
-        if hasattr(self.policy, "burn_in_steps"):
-            self.burn_in_steps: int = cast(int, self.policy.burn_in_steps)
-        else:
-            self.burn_in_steps = 0
-        self.burn_in_steps_iter = 0
 
         if not hasattr(self.policy, "critic_quantiles"):
             raise ValueError("Policy must expose 'critic_quantiles' attribute for QuantilePPOCritic")
-        self.num_quantiles: int = cast(int, self.policy.critic_quantiles)
+        self.num_quantiles = cast(int, self.policy.critic_quantiles)
 
         # Pre-compute tau_hat (quantile midpoints)
         # Shape: [1, N]
@@ -86,22 +74,6 @@ class QuantilePPOCritic(Loss):
             truncateds=scalar_f32,
         )
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
-        """Rollout step: forward policy and store experience with optional burn-in."""
-        with torch.no_grad():
-            if "actions" in td.keys():
-                self.policy.forward(td, action=td["actions"])
-            else:
-                self.policy.forward(td)
-
-        if self.burn_in_steps_iter < self.burn_in_steps:
-            self.burn_in_steps_iter += 1
-            return
-
-        env_slice = self._training_env_id(context)
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
-
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"values"}
 
@@ -113,6 +85,7 @@ class QuantilePPOCritic(Loss):
         indices = shared_loss_data["indices"][:, 0]
         # compute advantages on the first mb
         if mb_idx == 0:
+            advantage_cfg = context.current_slice_cfg.advantage
             # Calculate mean values for GAE
             values_quantiles = self.replay.buffer["values"]  # [T, B, N]
             values_mean = values_quantiles.mean(dim=-1)  # [T, B]
@@ -124,8 +97,8 @@ class QuantilePPOCritic(Loss):
                 self.replay.buffer["dones"],
                 torch.ones_like(values_mean),
                 torch.zeros_like(values_mean, device=self.device),
-                self.trainer_cfg.advantage.gamma,
-                self.trainer_cfg.advantage.gae_lambda,
+                advantage_cfg.gamma,
+                advantage_cfg.gae_lambda,
                 self.device,
                 1.0,  # v-trace is used in PPO actor instead. 1.0 means no v-trace
                 1.0,  # v-trace is used in PPO actor instead. 1.0 means no v-trace

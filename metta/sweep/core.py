@@ -3,6 +3,8 @@
 This module hosts the canonical parameter configuration types used to define
 hyperparameter search spaces, along with convenience builders and a thin
 factory (`make_sweep`) for constructing sweep tools.
+
+Note: This module is set up only for runs with a single slice and single trainable policy.
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ class SweepParameters:
 
     # Learning rate
     LEARNING_RATE = {
-        "trainer.optimizer.learning_rate": ParameterConfig(
+        "policy_assets.learner0.optimizer.learning_rate": ParameterConfig(
             min=1e-5,
             max=1e-2,
             distribution="log_normal",
@@ -74,7 +76,7 @@ class SweepParameters:
 
     # PPO specific parameters
     PPO_CLIP_COEF = {
-        "trainer.losses.ppo_actor.clip_coef": ParameterConfig(
+        "trainer.losses.losses.ppo_actor.clip_coef": ParameterConfig(
             min=0.05,
             max=0.3,
             distribution="uniform",
@@ -84,7 +86,7 @@ class SweepParameters:
     }
 
     PPO_ENT_COEF = {
-        "trainer.losses.ppo_actor.ent_coef": ParameterConfig(
+        "trainer.losses.losses.ppo_actor.ent_coef": ParameterConfig(
             min=0.0001,
             max=0.03,
             distribution="log_normal",
@@ -94,7 +96,7 @@ class SweepParameters:
     }
 
     PPO_GAE_LAMBDA = {
-        "trainer.advantage.gae_lambda": ParameterConfig(
+        "trajectory_isolation.slices.0.advantage.gae_lambda": ParameterConfig(
             min=0.8,
             max=0.99,
             distribution="uniform",
@@ -104,7 +106,7 @@ class SweepParameters:
     }
 
     PPO_VF_COEF = {
-        "trainer.losses.ppo_critic.vf_coef": ParameterConfig(
+        "trainer.losses.losses.ppo_critic.vf_coef": ParameterConfig(
             min=0.1,
             max=1.0,
             distribution="uniform",
@@ -115,7 +117,7 @@ class SweepParameters:
 
     # Optimizer parameters
     ADAM_EPS = {
-        "trainer.optimizer.eps": ParameterConfig(
+        "policy_assets.learner0.optimizer.eps": ParameterConfig(
             min=1e-8,
             max=1e-4,
             distribution="log_normal",

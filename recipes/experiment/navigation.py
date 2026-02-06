@@ -12,6 +12,7 @@ from metta.cogworks.curriculum.curriculum import (
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
 from metta.cogworks.curriculum.task_generator import Span
 from metta.map.terrain_from_numpy import NavigationFromNumpy
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.config.mettagrid_config import AsciiMapBuilder, MettaGridConfig
@@ -181,7 +182,7 @@ def train(
     return tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=resolved_curriculum),
         evaluator=evaluator_cfg,
-        policy_architecture=get_architecture(arch_type),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=get_architecture(arch_type))},
     )
 
 

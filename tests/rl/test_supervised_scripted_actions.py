@@ -10,6 +10,7 @@ from cogames.cli.mission import get_mission
 from metta.agent.policy import Policy
 from metta.rl.loss.action_supervised import ActionSupervised, ActionSupervisedConfig
 from metta.rl.training.experience import Experience
+from metta.rl.training.trajectory_isolation import TrajectoryIsolationSliceConfig
 from mettagrid.envs.mettagrid_puffer_env import MettaGridPufferEnv
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
@@ -69,7 +70,7 @@ def test_supervised_loss_uses_scripted_teacher_actions() -> None:
         policy_env_info = PolicyEnvInterface.from_mg_cfg(env_cfg)
         policy = ConstantActionPolicy(policy_env_info)
 
-        loss_cfg = ActionSupervisedConfig(enabled=True, teacher_led_proportion=1.0)
+        loss_cfg = ActionSupervisedConfig(teacher_led_proportion=1.0)
         loss = ActionSupervised(
             policy,
             SimpleNamespace(),
@@ -80,7 +81,7 @@ def test_supervised_loss_uses_scripted_teacher_actions() -> None:
         )
 
         num_agents = env_cfg.game.num_agents
-        experience = Experience.from_losses(
+        Experience.from_losses(
             total_agents=num_agents,
             batch_size=num_agents,
             bptt_horizon=1,
@@ -89,31 +90,34 @@ def test_supervised_loss_uses_scripted_teacher_actions() -> None:
             policy_experience_spec=policy.get_agent_experience_spec(),
             losses={"supervisor": loss},
             device="cpu",
-            sampling_config=SimpleNamespace(method="sequential", prio_alpha=0.0, prio_beta0=0.0),
         )
 
-        td = TensorDict(
+        student_td = TensorDict(
             {
-                "env_obs": torch.as_tensor(observations, dtype=torch.uint8),
-                "rewards": torch.zeros(num_agents, dtype=torch.float32),
-                "dones": torch.zeros(num_agents, dtype=torch.float32),
-                "truncateds": torch.zeros(num_agents, dtype=torch.float32),
+                "actions": torch.zeros(num_agents, dtype=torch.long),
                 "teacher_actions": teacher_actions,
-                "reward_baseline": torch.zeros(num_agents, dtype=torch.float32),
+                "act_log_prob": torch.zeros(num_agents, dtype=torch.float32),
             },
             batch_size=[num_agents],
         )
+        td = TensorDict({"learner0": student_td}, batch_size=[num_agents])
 
-        context = SimpleNamespace(training_env_id=slice(0, num_agents))
-        loss.run_rollout(td, context)
+        context = SimpleNamespace(
+            training_env_id=slice(0, num_agents),
+            current_slice_cfg=TrajectoryIsolationSliceConfig(
+                name="ppo",
+                env_ratio=1.0,
+                policies=["learner0"],
+            ),
+            policy_assets={"learner0": policy},
+        )
+        loss.rollout_preprocess(td, context)
+        loss.rollout_postprocess(td, context)
 
-        assert td["teacher_mask"].all()
-        assert torch.equal(td["actions"], teacher_actions.to(dtype=td["actions"].dtype))
-
-        stored = experience.buffer["teacher_actions"][:num_agents, 0]
-        assert torch.equal(stored, teacher_actions)
+        assert loss.teacher_mask.all()
+        assert torch.equal(student_td["actions"], teacher_actions.to(dtype=student_td["actions"].dtype))
 
         if not torch.all(teacher_actions == policy.action_value):
-            assert not torch.all(td["actions"] == policy.action_value)
+            assert not torch.all(student_td["actions"] == policy.action_value)
     finally:
         env.close()

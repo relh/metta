@@ -188,6 +188,7 @@ jobs:
         shell: bash
         env:
           DD_CIVISIBILITY_LOG_LEVEL: warning
+          EPISODE_RUNNER_USE_ISOLATED_VENVS: "0"
         run: |
           set -eo pipefail
           ARGS=()
@@ -195,7 +196,6 @@ jobs:
             ARGS+=(--skip-package app_backend)
           fi
           uv run python .github/scripts/run_ci_stage.py python-tests -- "${ARGS[@]}"
-
       - name: Python type checking
         run: uv run python .github/scripts/run_ci_stage.py pyright
 

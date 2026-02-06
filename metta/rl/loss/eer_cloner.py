@@ -8,8 +8,8 @@ from torchrl.data import Composite, UnboundedDiscrete
 
 if TYPE_CHECKING:
     from metta.rl.trainer_config import TrainerConfig
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 
 
@@ -22,14 +22,14 @@ class EERClonerConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
     ) -> "EERCloner":
         """Create EERCloner loss instance."""
-        return EERCloner(policy, trainer_cfg, vec_env, device, instance_name, self)
+        return EERCloner(policy_assets, trainer_cfg, vec_env, device, instance_name, self)
 
 
 class EERCloner(Loss):
@@ -39,14 +39,14 @@ class EERCloner(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
         cfg: "EERClonerConfig",
     ):
-        super().__init__(policy, trainer_cfg, vec_env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
 
         # Cache for teacher actions from previous step, needed for reward shaping R_{t-1} + log(pi(A_{t-1}))
         num_agents = self.env.total_parallel_agents
@@ -56,11 +56,11 @@ class EERCloner(Loss):
     def get_experience_spec(self) -> Composite:
         return Composite(teacher_actions=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.long))
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
-        with torch.no_grad():
-            self.policy.forward(td)
-
-        env_slice = self._training_env_id(context)
+    def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
+        primary_policy_name = self._primary_policy_name()
+        student_td = td.get(primary_policy_name, None)
+        if student_td is None:
+            return
 
         # --- Reward Shaping ---
         # td["rewards"] contains R_{t-1}. We want to add r_lambda * log(pi_teacher(A_{t-1}|S_{t-1})).
@@ -69,16 +69,15 @@ class EERCloner(Loss):
         # If A_{t-1} == TeacherAction_{t-1}: log(prob) then loss is log(1) = 0
         # If A_{t-1} != TeacherAction_{t-1}: log(prob) then loss is log(epsilon)
 
-        indices = torch.arange(env_slice.start, env_slice.stop, device=self.device)
-
-        valid_mask = self.has_last_actions[indices]
+        agent_ids = student_td["training_env_ids"].squeeze(-1).to(dtype=torch.long)
+        valid_mask = self.has_last_actions[agent_ids]
 
         if valid_mask.any():
             # Get cached teacher actions from t-1
-            last_teacher_acts = self.last_teacher_actions[indices]
+            last_teacher_acts = self.last_teacher_actions[agent_ids]
 
             # Get actions actually taken at t-1
-            last_actions = td["last_actions"]
+            last_actions = student_td["last_actions"]
             if last_actions.dim() > 1:
                 last_actions = last_actions.squeeze(-1)
             last_actions = last_actions.long()
@@ -91,13 +90,11 @@ class EERCloner(Loss):
             intrinsic_reward = torch.log(probs)
 
             # Add to rewards in place
-            td["rewards"] += self.cfg.r_lambda * intrinsic_reward * valid_mask.float()
+            student_td["rewards"] += self.cfg.r_lambda * intrinsic_reward * valid_mask.float()
 
-        teacher_actions = td["teacher_actions"]
-        self.last_teacher_actions[indices] = teacher_actions
-        self.has_last_actions[indices] = True
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
+        teacher_actions = student_td["teacher_actions"]
+        self.last_teacher_actions[agent_ids] = teacher_actions
+        self.has_last_actions[agent_ids] = True
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"full_log_probs"}

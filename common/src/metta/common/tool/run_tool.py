@@ -10,7 +10,6 @@ suppress_noisy_logs()
 # Standard library + non-tool imports
 import argparse
 import copy
-import functools
 import inspect
 import json
 import logging
@@ -155,13 +154,55 @@ def deep_merge(dst: dict, src: dict) -> dict:
     return dst
 
 
+def _nested_container_for(part: str) -> Any:
+    """Choose list/dict container for dot-path overrides used by sweeps."""
+    if part.isdigit():
+        return []
+    return {}
+
+
+def _set_nested_value(root: dict[str, Any], parts: list[str], value: Any) -> None:
+    """Set a dotted key into nested dicts/lists for sweep-friendly overrides.
+    For instance, this can be used to set the advantage.gamma for the first slice in a trajectory isolation config."""
+    node: Any = root
+    for idx, part in enumerate(parts):
+        is_last = idx == len(parts) - 1
+        next_part = parts[idx + 1] if not is_last else None
+
+        if part.isdigit():
+            if not isinstance(node, list):
+                raise ValueError(f"Expected list while processing index {part} in {'.'.join(parts)}")
+            slot = int(part)
+            while len(node) <= slot:
+                node.append(None)
+            if is_last:
+                node[slot] = value
+                return
+            if node[slot] is None:
+                node[slot] = _nested_container_for(next_part or "")
+            node = node[slot]
+            continue
+
+        if not isinstance(node, dict):
+            raise ValueError(f"Expected dict while processing key {part} in {'.'.join(parts)}")
+        if is_last:
+            node[part] = value
+            return
+        if part not in node or node[part] is None:
+            node[part] = _nested_container_for(next_part or "")
+        node = node[part]
+
+
 def nestify(flat: dict[str, Any]) -> dict[str, Any]:
-    """Turn {'a.b.c': 1, 'x': 2} into {'a': {'b': {'c': 1}}, 'x': 2}."""
+    """Turn {'a.b.0.c': 1, 'x': 2} into {'a': {'b': [{'c': 1}]}, 'x': 2}.
+
+    Supports sweep-style overrides that target list entries via numeric path
+    segments (e.g., trajectory_isolation.slices.0.advantage.gamma).
+    """
     out: dict[str, Any] = {}
     for k, v in flat.items():
         parts = k.split(".")
-        node = functools.reduce(lambda acc, p: {p: acc}, reversed(parts), v)
-        deep_merge(out, node)
+        _set_nested_value(out, parts, v)
     return out
 
 

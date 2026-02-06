@@ -18,10 +18,12 @@ from metta.cogworks.curriculum.curriculum import (
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
 from metta.rl.loss.losses import LossesConfig
-from metta.rl.trainer_config import AdvantageConfig, OptimizerConfig, TorchProfilerConfig, TrainerConfig
+from metta.rl.policy_assets import PolicyAssetConfig
+from metta.rl.trainer_config import OptimizerConfig, TorchProfilerConfig, TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
+from metta.rl.training.trajectory_isolation import default_trajectory_isolation_config
 from metta.sim.simulation_config import SimulationConfig
 from metta.sweep.core import Distribution as D
 from metta.sweep.core import SweepParameters as SP
@@ -36,7 +38,6 @@ def _trainer_and_env_overrides() -> tuple[dict[str, object], dict[str, object]]:
         "minibatch_size": 8192,
         "bptt_horizon": 256,
         "optimizer": OptimizerConfig(learning_rate=1e-4),
-        "advantage": AdvantageConfig(gae_lambda=0.95, gamma=0.999),
     }
 
     env_updates = {
@@ -147,7 +148,7 @@ def train(
     losses_config = LossesConfig()
     teacher = teacher or TeacherConfig(
         policy_uri="s3://softmax-public/policies/subho.abes.vit_baseline/subho.abes.vit_baseline:v2340.mpt",
-        mode="eer_kickstarter",
+        mode="learned.eer_kickstarter.mixed",
     )
     # losses_config.eer_kickstarter.action_loss_coef = 1.0
     # losses_config.eer_kickstarter.value_loss_coef = 0.0
@@ -158,21 +159,32 @@ def train(
     training_env = TrainingEnvironmentConfig(curriculum=curriculum)
     training_env = training_env.model_copy(update=env_updates)
 
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture)}
+
+    trajectory_isolation = default_trajectory_isolation_config()
+    trajectory_isolation.slices[0].advantage.gae_lambda = 0.95
+    trajectory_isolation.slices[0].advantage.gamma = 0.999
+
     tt = tools.TrainTool(
         trainer=trainer_cfg,
         training_env=training_env,
         evaluator=EvaluatorConfig(simulations=eval_simulations),
-        policy_architecture=policy_architecture,
+        policy_assets=policy_assets,
+        trajectory_isolation=trajectory_isolation,
         torch_profiler=TorchProfilerConfig(),
     )
+    tt.losses = losses_config
     scheduler_run_gates: list[LossRunGate] = []
     scheduler_rules: list[ScheduleRule] = []
     apply_teacher_phase(
         trainer_cfg=tt.trainer,
+        losses=tt.losses,
         training_env_cfg=tt.training_env,
+        policy_assets=tt.policy_assets,
         scheduler_rules=scheduler_rules,
         scheduler_run_gates=scheduler_run_gates,
         teacher_cfg=teacher,
+        trajectory_isolation=tt.trajectory_isolation,
     )
     tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
     return tt

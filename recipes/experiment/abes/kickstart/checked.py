@@ -12,10 +12,8 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
-from metta.rl.loss.losses import LossesConfig
-from metta.rl.loss.ppo_actor import PPOActorConfig
-from metta.rl.loss.ppo_critic import PPOCriticConfig
 from metta.rl.loss.sl_checkpointed_kickstarter import SLCheckpointedKickstarterConfig
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TorchProfilerConfig, TrainerConfig
 from metta.rl.training import (
     CheckpointerConfig,
@@ -105,12 +103,18 @@ def train(
 
     eval_simulations = simulations()
 
-    loss_config = LossesConfig(
-        ppo_actor=PPOActorConfig(enabled=True),
-        ppo_critic=PPOCriticConfig(enabled=True),
-        sl_checkpointed_kickstarter=SLCheckpointedKickstarterConfig(
-            enabled=True,
-            teacher_uri="s3://softmax-public/policies/av.teach.24checks.11.10.10/av.teach.24checks.11.10.10:v8016",
+    trainer_cfg = TrainerConfig()
+    policy_assets: dict[str, PolicyAssetConfig] = {"learner0": PolicyAssetConfig(architecture=policy_architecture)}
+    policy_assets["teacher0"] = PolicyAssetConfig(
+        uri="s3://softmax-public/policies/av.teach.24checks.11.10.10/av.teach.24checks.11.10.10:v8016.mpt",
+        checkpoint=False,
+        trainable=False,
+    )
+
+    trainer_cfg.losses.add_loss(
+        "sl_checkpointed_kickstarter",
+        SLCheckpointedKickstarterConfig(
+            teacher="teacher0",
             checkpointed_interval=24,
             epochs_per_checkpoint=1,
             terminating_epoch=334,
@@ -118,12 +122,9 @@ def train(
         ),
     )
 
-    trainer_cfg = TrainerConfig(
-        losses=loss_config,
-    )
-
     if policy_architecture is None:
         policy_architecture = ViTDefaultConfig()
+    policy_assets["learner0"].architecture = policy_architecture
 
     # Configure scheduler with run gates
     scheduler = SchedulerConfig(
@@ -170,7 +171,7 @@ def train(
         trainer=trainer_cfg,
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         evaluator=EvaluatorConfig(simulations=eval_simulations),
-        policy_architecture=policy_architecture,
+        policy_assets=policy_assets,
         torch_profiler=TorchProfilerConfig(),
         scheduler=scheduler,
         checkpointer=CheckpointerConfig(epoch_interval=24),

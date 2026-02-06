@@ -113,9 +113,10 @@ class TestCheckpointManagerFlows:
             state_dict=mock_agent.state_dict(),
         )
 
-        mock_optimizer = torch.optim.Adam([torch.tensor(1.0)])
         checkpoint_manager.save_trainer_state(
-            mock_optimizer, epoch=5, agent_step=1000, stopwatch_state={"elapsed_time": 123.45}
+            epoch=5,
+            agent_step=1000,
+            stopwatch_state={"elapsed_time": 123.45},
         )
 
         loaded = checkpoint_manager.load_trainer_state()
@@ -123,7 +124,23 @@ class TestCheckpointManagerFlows:
         assert loaded["epoch"] == 5
         assert loaded["agent_step"] == 1000
         assert loaded["stopwatch_state"]["elapsed_time"] == 123.45
-        assert "optimizer" in loaded
+        assert "optimizers" not in loaded
+
+    def test_policy_optimizer_state_save_and_restore(self, checkpoint_manager, mock_agent, mock_policy_architecture):
+        """Optimizer state should live in policy checkpoint bundles."""
+        optimizer = torch.optim.Adam([torch.tensor(1.0)])
+        optimizer_state = optimizer.state_dict()
+
+        uri = checkpoint_manager.save_policy_checkpoint(
+            state_dict=mock_agent.state_dict(),
+            architecture=mock_policy_architecture,
+            epoch=1,
+            optimizer_state=optimizer_state,
+        )
+
+        loaded_state = checkpoint_manager.load_policy_optimizer_state(uri)
+        assert loaded_state is not None
+        assert "param_groups" in loaded_state
 
     def test_resolve_latest_uri(self, checkpoint_manager, mock_agent, mock_policy_architecture):
         """The :latest suffix is used by eval tools to find the newest checkpoint."""

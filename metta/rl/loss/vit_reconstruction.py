@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 import torch.nn as nn
@@ -9,8 +9,8 @@ from torch import Tensor
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from metta.agent.components.obs_tokenizers import ObsAttrEmbedFourier
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 
 # Keep: heavy modules, TrainerConfig manages circular dep (loss <-> trainer)
@@ -35,13 +35,13 @@ class ViTReconstructionLossConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
-        trainer_cfg: "TrainerConfig",
+        policy_assets: Any,
+        trainer_cfg: Any,
         env: "TrainingEnvironment",
         device: torch.device,
         instance_name: str,
     ) -> "ViTReconstructionLoss":
-        return ViTReconstructionLoss(policy, trainer_cfg, env, device, instance_name, self)
+        return ViTReconstructionLoss(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class ViTReconstructionDecoder(nn.Module):
@@ -161,14 +161,14 @@ class ViTReconstructionLoss(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: "TrainerConfig",
         env: "TrainingEnvironment",
         device: torch.device,
         instance_name: str,
         cfg: ViTReconstructionLossConfig,
     ) -> None:
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
         self.decoder = None
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
@@ -222,8 +222,7 @@ class ViTReconstructionLoss(Loss):
         ).to(self.device)
 
         # Register new parameters with the optimizer since they were created after optimizer init
-        if context.optimizer is not None:
-            context.optimizer.add_param_group({"params": self.decoder.parameters()})
+        self.policy.optimizer.add_param_group({"params": self.decoder.parameters()})
 
         # Handle distributed training: wrap decoder in DDP if needed
         # The policy is already DDP wrapped by Trainer, but this new module is not.

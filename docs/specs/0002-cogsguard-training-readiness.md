@@ -82,25 +82,23 @@ Ensure PPO runs on Cogsguard with no manual code edits:
 
 ### Behavioral cloning support
 
-BC has three modes that must be validated on Cogsguard:
+We support action-supervised, kickstarter, and EER losses for Cogsguard. Each has trajectory-isolated variants.
 
-1. Supervised (teacher actions)
+1. Scripted teachers
 
-- Loss: `metta/rl/loss/action_supervised.py` (exposed as `losses.supervisor`).
-- Activated via `TeacherConfig(mode="supervisor")` in `metta/rl/training/teacher.py`.
+- Losses include: `metta/rl/loss/action_supervised.py`.
+- Activated via `TeacherConfig(mode="scripted.supervisor.mixed")` in `metta/rl/training/teacher.py`.
 
-2. Scripted cloner (sliced cloner)
+2. Kickstarting from pre-trained agents
 
-- Loss: `metta/rl/loss/sliced_scripted_cloner.py`.
-- Recipes: `recipes/experiment/cvc/cloner.py`, `recipes/experiment/cvc/sliced_cloner.py`,
-  `recipes/experiment/cvc/machina1_cloner.py`.
-
-3. Kickstarting from pre-trained agents
-
-- Losses: `kickstarter`, `sliced_kickstarter`, `logit_kickstarter`, `eer_kickstarter`, `sl_checkpointed_kickstarter`.
+- Losses: `kickstarter`, `eer_kickstarter`, `sl_checkpointed_kickstarter`.
 - Recipes: `recipes/experiment/abes/kickstart/*`.
 
-All three modes rely on stable action and observation layouts. Cogsguard resources and vibes must not invalidate
+3. EER losses
+
+- Losses: `eer_kickstarter`, `eer_cloner`.
+
+All supported modes rely on stable action and observation layouts. Cogsguard resources and vibes must not invalidate
 existing assumptions or require manual patching.
 
 ### Evaluation and mission listing

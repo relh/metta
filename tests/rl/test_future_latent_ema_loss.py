@@ -113,5 +113,6 @@ def test_future_latent_ema_loss_skips_when_predictions_missing() -> None:
 
 
 def test_loss_config_enables_future_latent_ema_by_flag() -> None:
-    cfg = LossesConfig(future_latent_ema=FutureLatentEMALossConfig(enabled=True))
+    cfg = LossesConfig()
+    cfg.add_loss("future_latent_ema", FutureLatentEMALossConfig())
     assert "future_latent_ema" in cfg.loss_configs

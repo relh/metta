@@ -29,7 +29,7 @@ class Monitor(TrainerComponent):
             return
 
         memory_monitor, system_monitor = self._setup(
-            policy=context.policy,
+            policies=context.policy_assets.policies,
             experience=context.experience,
             timer=context.stopwatch,
         )
@@ -54,10 +54,11 @@ class Monitor(TrainerComponent):
         self._system_monitor = None
 
     @staticmethod
-    def _setup(*, policy, experience, timer) -> tuple[MemoryMonitor, SystemMonitor]:
+    def _setup(*, policies, experience, timer) -> tuple[MemoryMonitor, SystemMonitor]:
         memory_monitor = MemoryMonitor()
         memory_monitor.add(experience, name="Experience", track_attributes=True)
-        memory_monitor.add(policy, name="Policy", track_attributes=False)
+        for name, policy in policies.items():
+            memory_monitor.add(policy, name=f"Policy[{name}]", track_attributes=False)
 
         system_monitor = SystemMonitor(
             sampling_interval_sec=1.0,

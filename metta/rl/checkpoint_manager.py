@@ -9,13 +9,14 @@ import torch
 from safetensors.torch import save_file as save_safetensors_file
 
 from metta.rl.system_config import SystemConfig
-from metta.rl.training.optimizer import is_schedulefree_optimizer
 from metta.tools.utils.auto_config import PolicyStorageDecision, auto_policy_storage_decision
 from mettagrid.policy.submission import POLICY_SPEC_FILENAME, SubmissionPolicySpec, write_submission_policy_spec
 from mettagrid.util.file import local_copy, write_file
 from mettagrid.util.uri_resolvers.schemes import resolve_uri
 
 logger = logging.getLogger(__name__)
+
+OPTIMIZER_STATE_FILENAME = "optimizer_state.pt"
 
 
 def write_checkpoint_bundle(
@@ -62,6 +63,8 @@ class CheckpointManager:
         require_remote_enabled: bool = False,
         storage_decision: PolicyStorageDecision | None = None,
     ):
+        self._system_cfg = system_cfg
+        self._require_remote_enabled = require_remote_enabled
         self.run_name = run
         self.run_dir = system_cfg.data_dir / self.run_name
         self.checkpoint_dir = self.run_dir / "checkpoints"
@@ -75,6 +78,22 @@ class CheckpointManager:
             self._setup_remote_prefix(storage_decision)
         if require_remote_enabled and self._remote_prefix is None:
             raise ValueError("Remote checkpoints are required but remote prefix is not set")
+
+    def for_namespace(self, namespace: str) -> "CheckpointManager":
+        """Return a checkpoint manager for a run/URI namespace."""
+
+        if not namespace or not namespace.strip():
+            raise ValueError("checkpoint namespace cannot be empty")
+        if namespace == self.run_name:
+            return self
+        return CheckpointManager(
+            run=namespace,
+            system_cfg=self._system_cfg,
+            require_remote_enabled=self._require_remote_enabled,
+        )
+
+    def for_policy(self, policy_name: str) -> "CheckpointManager":
+        return self.for_namespace(policy_name)
 
     def _setup_remote_prefix(self, storage_decision: PolicyStorageDecision | None = None) -> None:
         if storage_decision is None:
@@ -109,13 +128,21 @@ class CheckpointManager:
         candidates = [c for c in [local, remote] if c]
         return max(candidates, key=lambda x: x[1])[0] if candidates else None
 
-    def save_policy_checkpoint(self, state_dict: dict, architecture, epoch: int) -> str:
+    def save_policy_checkpoint(
+        self,
+        state_dict: dict,
+        architecture,
+        epoch: int,
+        optimizer_state: dict[str, Any] | None = None,
+    ) -> str:
         checkpoint_dir = (self.checkpoint_dir / f"{self.run_name}:v{epoch}").expanduser().resolve()
         write_checkpoint_bundle(
             checkpoint_dir,
             architecture_spec=architecture.to_spec(),
             state_dict=state_dict,
         )
+        if optimizer_state is not None:
+            self._write_optimizer_state(checkpoint_dir, optimizer_state)
 
         if self._remote_prefix:
             remote_zip = f"{self.output_uri.rstrip('/')}/{checkpoint_dir.name}.zip"
@@ -143,6 +170,51 @@ class CheckpointManager:
 
         logger.debug("Policy checkpoint saved locally to %s", checkpoint_dir.as_uri())
         return checkpoint_dir.as_uri()
+
+    def load_policy_optimizer_state(self, policy_uri: str | None) -> Optional[Dict[str, Any]]:
+        if not policy_uri:
+            return None
+        try:
+            parsed = resolve_uri(policy_uri)
+        except ValueError as exc:
+            logger.debug("Skipping optimizer state for %s: %s", policy_uri, exc)
+            return None
+
+        if parsed.local_path and parsed.local_path.is_dir():
+            optimizer_path = parsed.local_path / OPTIMIZER_STATE_FILENAME
+            if optimizer_path.exists():
+                return torch.load(optimizer_path, map_location="cpu", weights_only=False)
+            return None
+
+        if not parsed.canonical.endswith(".zip"):
+            return None
+
+        try:
+            with local_copy(parsed.canonical) as local_path, zipfile.ZipFile(local_path, "r") as zipf:
+                with zipf.open(OPTIMIZER_STATE_FILENAME) as handle:
+                    return torch.load(handle, map_location="cpu", weights_only=False)
+        except KeyError:
+            return None
+        except (OSError, zipfile.BadZipFile) as exc:
+            logger.debug("Failed to read optimizer state from %s: %s", parsed.canonical, exc)
+            return None
+
+    def _write_optimizer_state(self, checkpoint_dir: Path, optimizer_state: dict[str, Any]) -> None:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            dir=checkpoint_dir,
+            prefix=f".{OPTIMIZER_STATE_FILENAME}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp_file:
+            tmp_path = Path(tmp_file.name)
+        try:
+            torch.save(optimizer_state, tmp_path)
+            tmp_path.replace(checkpoint_dir / OPTIMIZER_STATE_FILENAME)
+        except Exception:
+            if tmp_path.exists():
+                tmp_path.unlink()
+            raise
 
     def load_trainer_state(self, policy_uri: str | None = None) -> Optional[Dict[str, Any]]:
         trainer_file = self.checkpoint_dir / "trainer_state.pt"
@@ -178,7 +250,6 @@ class CheckpointManager:
 
     def save_trainer_state(
         self,
-        optimizer,
         epoch: int,
         agent_step: int,
         avg_reward: torch.Tensor | float | None = None,
@@ -186,11 +257,10 @@ class CheckpointManager:
         curriculum_state: Optional[Dict[str, Any]] = None,
         loss_states: Optional[Dict[str, Any]] = None,
     ):
-        is_schedulefree = is_schedulefree_optimizer(optimizer)
-        if is_schedulefree:
-            optimizer.eval()
+        self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        trainer_file = self.checkpoint_dir / "trainer_state.pt"
 
-        state: dict[str, Any] = {"optimizer": optimizer.state_dict(), "epoch": epoch, "agent_step": agent_step}
+        state: dict[str, Any] = {"epoch": epoch, "agent_step": agent_step}
         if avg_reward is not None:
             state["avg_reward"] = torch.as_tensor(avg_reward).detach().to(device="cpu")
         if stopwatch_state:
@@ -207,8 +277,10 @@ class CheckpointManager:
             delete=False,
         ) as tmp_file:
             tmp_path = Path(tmp_file.name)
-            torch.save(state, tmp_path)
-            tmp_path.replace(self.checkpoint_dir / "trainer_state.pt")
-
-        if is_schedulefree:
-            optimizer.train()
+            try:
+                torch.save(state, tmp_path)
+                tmp_path.replace(trainer_file)
+            except Exception:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+                raise

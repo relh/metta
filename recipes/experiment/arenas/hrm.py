@@ -2,6 +2,7 @@
 
 from metta.agent.policies.hrm import HRMTinyConfig
 from metta.agent.policy import PolicyArchitecture
+from metta.rl.policy_assets import PolicyAssetConfig
 from recipes.experiment import arena as base
 
 mettagrid = base.mettagrid
@@ -24,7 +25,12 @@ def train(
         enable_detailed_slice_logging=enable_detailed_slice_logging,
     )
     # Update policy architecture
-    tool = tool.model_copy(update={"policy_architecture": policy_architecture or HRMTinyConfig()})
+    resolved_arch = policy_architecture or HRMTinyConfig()
+    learner_cfg = tool.policy_assets.get("learner0")
+    if learner_cfg is None:
+        tool.policy_assets["learner0"] = PolicyAssetConfig(architecture=resolved_arch)
+    else:
+        learner_cfg.architecture = resolved_arch
     return tool
 
 
@@ -36,7 +42,12 @@ def train_shaped(
     """Train with HRM policy architecture using shaped rewards (defaults to HRMTinyConfig)."""
     tool = base.train_shaped(rewards=rewards, converters=converters)
     # Update policy architecture
-    tool = tool.model_copy(update={"policy_architecture": policy_architecture or HRMTinyConfig()})
+    resolved_arch = policy_architecture or HRMTinyConfig()
+    learner_cfg = tool.policy_assets.get("learner0")  # this recipe assumes a single trainable policy
+    if learner_cfg is None:
+        tool.policy_assets["learner0"] = PolicyAssetConfig(architecture=resolved_arch)
+    else:
+        learner_cfg.architecture = resolved_arch
     return tool
 
 

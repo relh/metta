@@ -61,7 +61,8 @@ class PolicyArchitecture(Config):
 
     def to_spec(self) -> str:
         """Serialize this architecture to a string specification."""
-        class_path = f"{self.__class__.__module__}.{self.__class__.__qualname__}"
+        module_name = self.__class__.__module__
+        class_path = f"{module_name}.{self.__class__.__qualname__}"
         config_data = self.model_dump(mode="json")
         config_data.pop("class_path", None)
 
@@ -153,6 +154,7 @@ class Policy(MultiAgentPolicy, nn.Module):
             env_obs=UnboundedDiscrete(shape=torch.Size([200, 3]), dtype=torch.uint8),
             dones=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.float32),
             truncateds=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.float32),
+            training_env_ids=UnboundedDiscrete(shape=torch.Size([1]), dtype=torch.int64),
         )
 
     def initialize_to_environment(self, policy_env_info: PolicyEnvInterface, device: torch.device):
@@ -271,6 +273,11 @@ class CheckpointPolicy(Policy):
     def get_agent_experience_spec(self) -> Composite:
         return self._policy.get_agent_experience_spec()
 
+    def initialize_to_environment(self, policy_env_info: PolicyEnvInterface, device: torch.device) -> None:
+        initialize = getattr(self._policy, "initialize_to_environment", None)
+        if callable(initialize):
+            initialize(policy_env_info, device)
+
     @property
     def device(self) -> torch.device:
         return self._policy.device
@@ -313,6 +320,10 @@ class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=Pol
     module: "Policy"
 
     def __init__(self, policy: "Policy", device: torch.device):
+        # `DistributedDataParallel` sets `self.module`, but only after its __init__ runs.
+        # `MultiAgentPolicy.__init__` may access attributes during initialization, which
+        # can route through our `__getattr__`. Set `module` up-front to avoid recursion.
+        object.__setattr__(self, "module", policy)
         MultiAgentPolicy.__init__(self, policy.policy_env_info)
 
         # Then initialize DistributedDataParallel
@@ -329,7 +340,8 @@ class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=Pol
         try:
             return super().__getattr__(name)
         except AttributeError:
-            return getattr(self.module, name)
+            module = object.__getattribute__(self, "module")
+            return getattr(module, name)
 
     def agent_policy(self, agent_id: int) -> AgentPolicy:
         """Delegate to wrapped policy."""

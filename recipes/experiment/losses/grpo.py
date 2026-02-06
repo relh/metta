@@ -6,7 +6,10 @@ import metta.tools as tools
 from metta.agent.policies.vit_grpo import ViTGRPOConfig
 from metta.rl.loss.grpo import GRPOConfig
 from metta.rl.loss.losses import LossesConfig
-from metta.rl.trainer_config import OptimizerConfig, TrainerConfig
+from metta.rl.loss.ppo_actor import PPOActorConfig
+from metta.rl.loss.ppo_critic import PPOCriticConfig
+from metta.rl.policy_assets import OptimizerConfig, PolicyAssetConfig
+from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 
 # Import everything from the base arena recipe
@@ -54,17 +57,24 @@ def train(
     )
 
     trainer_config = TrainerConfig(
-        losses=LossesConfig(grpo=grpo_config),
-        optimizer=optimizer_config,
+        losses=LossesConfig(
+            losses={
+                "ppo_actor": PPOActorConfig(),
+                "ppo_critic": PPOCriticConfig(),
+                "grpo": grpo_config,
+            }
+        ),
         total_timesteps=50_000_000_000,
     )
 
-    return tools.TrainTool(
+    tt = tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         trainer=trainer_config,
         evaluator=EvaluatorConfig(simulations=simulations()),
-        policy_architecture=ViTGRPOConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTGRPOConfig())},
     )
+    tt.policy_assets["learner0"].optimizer = optimizer_config
+    return tt
 
 
 def train_shaped(rewards: bool = True, converters: bool = True) -> tools.TrainTool:
@@ -88,7 +98,11 @@ def train_shaped(rewards: bool = True, converters: bool = True) -> tools.TrainTo
     )
 
     loss_config = LossesConfig(
-        grpo=grpo_config,
+        losses={
+            "ppo_actor": PPOActorConfig(),
+            "ppo_critic": PPOCriticConfig(),
+            "grpo": grpo_config,
+        }
     )
 
     # Configure optimizer
@@ -104,16 +118,17 @@ def train_shaped(rewards: bool = True, converters: bool = True) -> tools.TrainTo
 
     trainer_config = TrainerConfig(
         losses=loss_config,
-        optimizer=optimizer_config,
         total_timesteps=50_000_000_000,
     )
 
-    return tools.TrainTool(
+    tt = tools.TrainTool(
         training_env=base_tool.training_env,
         trainer=trainer_config,
         evaluator=base_tool.evaluator,
-        policy_architecture=ViTGRPOConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTGRPOConfig())},
     )
+    tt.policy_assets["learner0"].optimizer = optimizer_config
+    return tt
 
 
 def basic_easy_shaped() -> tools.TrainTool:
@@ -137,7 +152,11 @@ def basic_easy_shaped() -> tools.TrainTool:
     )
 
     loss_config = LossesConfig(
-        grpo=grpo_config,
+        losses={
+            "ppo_actor": PPOActorConfig(),
+            "ppo_critic": PPOCriticConfig(),
+            "grpo": grpo_config,
+        }
     )
 
     # Configure optimizer
@@ -153,13 +172,14 @@ def basic_easy_shaped() -> tools.TrainTool:
 
     trainer_config = TrainerConfig(
         losses=loss_config,
-        optimizer=optimizer_config,
         total_timesteps=50_000_000_000,
     )
 
-    return tools.TrainTool(
+    tt = tools.TrainTool(
         training_env=base_tool.training_env,
         trainer=trainer_config,
         evaluator=base_tool.evaluator,
-        policy_architecture=ViTGRPOConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTGRPOConfig())},
     )
+    tt.policy_assets["learner0"].optimizer = optimizer_config
+    return tt

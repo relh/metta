@@ -1,10 +1,11 @@
 import importlib
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Iterable, Optional
 
 import torch
+from torchrl.data import Composite
 
-from metta.agent.policy import DistributedPolicy, Policy
 from metta.common.util.log_config import getRankAwareLogger
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import (
@@ -18,7 +19,8 @@ from metta.rl.training import (
     TrainerState,
     TrainingEnvironment,
 )
-from metta.rl.training.optimizer import ScheduleFreeOptimizer, create_optimizer, is_schedulefree_optimizer
+from metta.rl.training.optimizer import create_optimizer, is_schedulefree_optimizer
+from metta.rl.training.trajectory_isolation import TrajectoryIsolationConfig, TrajectoryIsolator
 from mettagrid.profiling.stopwatch import Stopwatch
 
 logger = getRankAwareLogger(__name__)
@@ -31,7 +33,10 @@ class Trainer:
         self,
         cfg: TrainerConfig,
         env: TrainingEnvironment,
-        policy: Policy,
+        *,
+        policy_assets: PolicyAssetRegistry,
+        losses_cfg: Any,
+        trajectory_isolation: TrajectoryIsolationConfig,
         device: torch.device,
         distributed_helper: Optional[DistributedHelper] = None,
         run_name: Optional[str] = None,
@@ -41,12 +46,12 @@ class Trainer:
         Args:
             cfg: Trainer configuration
             env: TrainingEnvironment instance for experience generation
-            policy: The policy/agent to train
             distributed_helper: Optional helper managing torch.distributed lifecycle
         """
         self._env = env
-        self._policy = policy
+        self._policy_assets = policy_assets
         self._cfg = cfg
+        self._trajectory_isolation = trajectory_isolation
         self._device = device
         try:
             importlib.import_module("pufferlib._C")
@@ -63,14 +68,79 @@ class Trainer:
         self.timer = Stopwatch(log_level=logger.getEffectiveLevel())
         self.timer.start()
 
-        self._policy.to(self._device)
-        self._policy.initialize_to_environment(self._env.policy_env_info, self._device)
-        self._policy.train()
+        # Initialize all policy assets (trainable and non-trainable) but only wrap if trainable.
+        for name, pol in list(policy_assets.policies.items()):
+            asset_cfg = policy_assets.get_config(name)
+            pol.to(self._device)
+            pol.initialize_to_environment(self._env.policy_env_info, self._device)
+            # If the policy was frozen upstream, keep it in eval mode.
+            if any(p.requires_grad for p in pol.parameters()):
+                pol.train()
+            else:
+                pol.eval()
 
-        self._policy: Policy | DistributedPolicy = self._distributed_helper.wrap_policy(self._policy, self._device)
-        self._policy.to(self._device)
-        losses = self._cfg.losses.init_losses(self._policy, self._cfg, self._env, self._device)
-        self._policy.train()
+            if not asset_cfg.trainable:
+                policy_assets.policies[name] = pol
+            else:
+                wrapped = self._distributed_helper.wrap_policy(pol, self._device)
+                # TODO: remove wrapped policy assets if they stop being used in losses.
+                policy_assets.policies[name] = wrapped
+
+        # Create an optimizer per trainable policy and attach it to the policy instance.
+        for name, pol in self._policy_assets.policies.items():
+            asset_cfg = self._policy_assets.get_config(name)
+            optimizer_cfg = getattr(asset_cfg, "optimizer", None)
+            if not asset_cfg.trainable:
+                continue
+            if optimizer_cfg is None:
+                raise ValueError(f"policy_assets['{name}'] is trainable=True but optimizer=None")
+            if not any(p.requires_grad for p in pol.parameters()):
+                raise ValueError(
+                    f"policy_assets['{name}'] is trainable=True but the policy has no parameters with "
+                    "requires_grad=True"
+                )
+
+            optimizer = create_optimizer(optimizer_cfg, pol)
+            pol.optimizer = optimizer
+
+        losses = {
+            loss_name: loss_cfg.create(policy_assets, self._cfg, self._env, self._device, loss_name)
+            for loss_name, loss_cfg in losses_cfg.losses.items()
+        }
+
+        for pol in self._policy_assets.policies.values():
+            if any(p.requires_grad for p in pol.parameters()):
+                pol.train()
+            else:
+                pol.eval()
+
+        # Merge all trainable policy experience specs so Experience knows about every key
+        # that might be produced during rollout/training, regardless of which policy is active.
+        def _merge_policy_specs(specs: list[Composite]) -> Composite:
+            merged: dict = {}
+            for spec in specs:
+                for key, value in spec.items():
+                    if key in merged:
+                        existing = merged[key]
+                        if (
+                            getattr(existing, "shape", None) != getattr(value, "shape", None)
+                            or getattr(existing, "dtype", None) != getattr(value, "dtype", None)
+                            or type(existing) is not type(value)
+                        ):
+                            raise ValueError(
+                                f"Conflicting policy experience specs for key {key!r}: existing={existing} new={value}"
+                            )
+                    merged[key] = value
+            return Composite(merged)
+
+        trainable_policy_specs = [
+            pol.get_agent_experience_spec()
+            for name, pol in self._policy_assets.policies.items()
+            if self._policy_assets.get_config(name).trainable
+        ]
+        if not trainable_policy_specs:
+            raise ValueError("No trainable policies in policy_assets; cannot build experience buffer.")
+        merged_policy_spec = _merge_policy_specs(trainable_policy_specs)
 
         batch_info = self._env.batch_info
 
@@ -84,20 +154,15 @@ class Trainer:
             bptt_horizon=self._cfg.bptt_horizon,
             minibatch_size=self._cfg.minibatch_size,
             max_minibatch_size=self._cfg.minibatch_size,
-            policy_experience_spec=self._policy.get_agent_experience_spec(),
+            policy_experience_spec=merged_policy_spec,
             losses=losses,
             device=self._device,
-            sampling_config=self._cfg.sampling,
         )
 
-        self.optimizer = create_optimizer(self._cfg.optimizer, self._policy)
-        self._is_schedulefree = is_schedulefree_optimizer(self.optimizer)
-
         self._state = TrainerState()
-        reward_centering = self._cfg.advantage.reward_centering
         self._state.avg_reward = torch.full(
             (parallel_agents,),
-            float(reward_centering.initial_reward_mean),
+            0.0,  # TODO: the code doesn't yet resolve which slice the reward centering should come from
             device=self._device,
             dtype=torch.float32,
         )
@@ -109,10 +174,10 @@ class Trainer:
 
         self._context = ComponentContext(
             state=self._state,
-            policy=self._policy,
+            policy_assets=policy_assets,
+            device=self._device,
             env=self._env,
             experience=self._experience,
-            optimizer=self.optimizer,
             config=self._cfg,
             stopwatch=self.timer,
             distributed=self._distributed_helper,
@@ -121,14 +186,22 @@ class Trainer:
             run_name=self._run_name,
             curriculum=curriculum,
         )
+        self._context.policy_assets = policy_assets
+
+        # Validate trajectory isolation references once all inputs exist.
+        # This is cross-object validation: slice policy/loss names must exist in the policy registry / losses config.
+        self._trajectory_isolation.validate_references(policy_assets=policy_assets.configs, losses=losses_cfg)
+
+        trajectory_isolator = TrajectoryIsolator(config=self._trajectory_isolation)
+        self.register(trajectory_isolator)
+        self._state.avg_reward = trajectory_isolator.reward_centering_initial_means()
 
         self.core_loop = CoreTrainingLoop(
-            policy=self._policy,
             experience=self._experience,
             losses=losses,
-            optimizer=self.optimizer,
             device=self._device,
             context=self._context,
+            trajectory_isolator=trajectory_isolator,
         )
 
         self._losses = losses
@@ -172,8 +245,8 @@ class Trainer:
         # Rollout phase
         with self.timer("_rollout"):
             # Ensure ScheduleFree optimizer is in eval mode during rollout
-            if self._is_schedulefree:
-                cast(ScheduleFreeOptimizer, self.optimizer).eval()
+            for optimizer in self._iter_schedulefree_optimizers():
+                optimizer.eval()
 
             rollout_result = self.core_loop.rollout_phase(self._env, self._context)
             self._context.training_env_id = rollout_result.training_env_id
@@ -189,8 +262,8 @@ class Trainer:
         # Training phase
         with self.timer("_train"):
             # ScheduleFree optimizer is in train mode for training phase
-            if self._is_schedulefree:
-                cast(ScheduleFreeOptimizer, self.optimizer).train()
+            for optimizer in self._iter_schedulefree_optimizers():
+                optimizer.train()
 
             losses_stats, epochs_trained = self.core_loop.training_phase(
                 context=self._context,
@@ -209,31 +282,11 @@ class Trainer:
         # registered on other ranks.
         self._invoke_callback(TrainerCallback.EPOCH_END)
 
-        # Progress logging handled by ProgressLogger component
-
-    @staticmethod
-    def load_or_create(
-        checkpoint_path: str,
-        cfg: TrainerConfig,
-        training_env: TrainingEnvironment,
-        policy: Policy,
-        device: torch.device,
-        distributed_helper: Optional[DistributedHelper] = None,
-        run_name: Optional[str] = None,
-    ) -> "Trainer":
-        """Create a trainer from a configuration.
-
-        Args:
-            distributed_helper: Optional helper to reuse existing process group
-        """
-        return Trainer(
-            cfg,
-            training_env,
-            policy,
-            device,
-            distributed_helper=distributed_helper,
-            run_name=run_name,
-        )
+    def _iter_schedulefree_optimizers(self) -> Iterable[torch.optim.Optimizer]:
+        for policy in self._policy_assets.policies.values():
+            optimizer = getattr(policy, "optimizer", None)
+            if optimizer is not None and is_schedulefree_optimizer(optimizer):
+                yield optimizer
 
     def register(self, component: TrainerComponent) -> None:
         """Register a training component.

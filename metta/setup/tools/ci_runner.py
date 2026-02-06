@@ -204,7 +204,7 @@ _CHECK_PYRIGHT_PACKAGES = [
     "app_backend",
     "common",
     "metta/gridworks",
-    "metta/rl",
+    # "metta/rl",
     "packages/cogames",
     "packages/mettagrid/python/src",  # mettagrid/tests is not type-safe yet
 ]

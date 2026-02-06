@@ -7,8 +7,8 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, TrainingEnvironment
 
 
@@ -38,13 +38,13 @@ class GRPOConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
     ) -> "GRPO":
-        return GRPO(policy, trainer_cfg, env, device, instance_name, self)
+        return GRPO(policy_assets, trainer_cfg, env, device, instance_name, self)
 
 
 class GRPO(Loss):
@@ -57,30 +57,20 @@ class GRPO(Loss):
 
     cfg: GRPOConfig
 
-    __slots__ = (
-        "advantages",
-        "burn_in_steps",
-        "burn_in_steps_iter",
-        "last_action",
-    )
+    __slots__ = ("advantages", "last_action")
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: Any,
         env: TrainingEnvironment,
         device: torch.device,
         instance_name: str,
         cfg: "GRPOConfig",
     ) -> None:
-        super().__init__(policy, trainer_cfg, env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
         self.advantages = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-        self.burn_in_steps: int = 0
-        if hasattr(self.policy, "burn_in_steps"):
-            self.burn_in_steps = cast(int, self.policy.burn_in_steps)
-        self.burn_in_steps_iter = 0
         self.last_action = None
-        self.register_state_attr("burn_in_steps_iter")
 
     def get_experience_spec(self) -> Composite:
         """Get experience specification without value predictions."""
@@ -96,24 +86,6 @@ class GRPO(Loss):
             act_log_prob=scalar_f32,
         )
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
-        """Run policy rollout without value prediction."""
-        with torch.no_grad():
-            self.policy.forward(td)
-
-        if self.burn_in_steps_iter < self.burn_in_steps:
-            self.burn_in_steps_iter += 1
-            return
-
-        # Store experience
-        env_slice = self._training_env_id(
-            context, error="ComponentContext.training_env_id is required for GRPO rollout"
-        )
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
-
-        return
-
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"act_log_prob", "entropy"}
 
@@ -125,7 +97,6 @@ class GRPO(Loss):
         config = self.cfg
         stop_update_epoch = False
         self.policy.reset_memory()
-        self.burn_in_steps_iter = 0
 
         if config.target_kl is not None and mb_idx > 0:
             avg_kl = np.mean(self.loss_tracker["approx_kl"]) if self.loss_tracker["approx_kl"] else 0.0

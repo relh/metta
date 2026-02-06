@@ -1,9 +1,9 @@
 """Arena recipe with regular Adam optimizer for comparison testing."""
 
-from __future__ import annotations
-
 import metta.tools as tools
-from metta.rl.trainer_config import OptimizerConfig, TrainerConfig
+from metta.agent.policies.vit import ViTDefaultConfig
+from metta.rl.policy_assets import OptimizerConfig, PolicyAssetConfig
+from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from recipes.experiment.arena import (
     make_curriculum,
@@ -34,15 +34,17 @@ def train(
     )
 
     trainer_config = TrainerConfig(
-        optimizer=optimizer_config,
         total_timesteps=50_000_000_000,
     )
 
-    return tools.TrainTool(
+    tt = tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         trainer=trainer_config,
         evaluator=EvaluatorConfig(simulations=simulations()),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
     )
+    tt.policy_assets["learner0"].optimizer = optimizer_config  # this recipe assumes a single trainable policy
+    return tt
 
 
 def train_shaped(rewards: bool = True) -> tools.TrainTool:
@@ -67,13 +69,15 @@ def train_shaped(rewards: bool = True) -> tools.TrainTool:
     )
 
     trainer_config = TrainerConfig(
-        optimizer=optimizer_config,
         total_timesteps=50_000_000_000,
     )
 
     # Return a new TrainTool with the shaped environment but regular Adam optimizer
-    return tools.TrainTool(
+    tt = tools.TrainTool(
         training_env=base_tool.training_env,
         trainer=trainer_config,
         evaluator=base_tool.evaluator,
+        policy_assets={"learner0": base_tool.policy_assets["learner0"].model_copy(deep=True)},
     )
+    tt.policy_assets["learner0"].optimizer = optimizer_config
+    return tt

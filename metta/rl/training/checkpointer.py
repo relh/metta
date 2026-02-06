@@ -1,5 +1,7 @@
 """Policy checkpoint management component."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Any, Callable, Optional, cast
@@ -8,9 +10,10 @@ import torch
 from pydantic import Field
 from safetensors.torch import load_file as load_safetensors_file
 
-from metta.agent.policy import PolicyArchitecture
+from metta.agent.policy import Policy, PolicyArchitecture
 from metta.rl.checkpoint_manager import CheckpointManager
 from metta.rl.training import DistributedHelper, TrainerComponent
+from metta.rl.training.optimizer import is_schedulefree_optimizer
 from mettagrid.base_config import Config
 from mettagrid.policy.loader import initialize_or_load_policy
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
@@ -33,20 +36,33 @@ class Checkpointer(TrainerComponent):
         config: CheckpointerConfig,
         checkpoint_manager: CheckpointManager,
         distributed_helper: DistributedHelper,
-        policy_architecture: PolicyArchitecture,
+        policy_architecture: PolicyArchitecture | None,
+        policy_getter: Callable[[], Policy] | None = None,
+        policy_name: str | None = None,
     ) -> None:
         super().__init__(epoch_interval=max(1, config.epoch_interval))
         self._master_only = True
         self._config = config
         self._checkpoint_manager = checkpoint_manager
         self._distributed = distributed_helper
-        self._policy_architecture: PolicyArchitecture = policy_architecture
+        self._policy_architecture: PolicyArchitecture | None = policy_architecture
         self._latest_policy_uri: Optional[str] = None
+        self._policy_getter = policy_getter
+        self._policy_name = policy_name
+
+    @property
+    def policy_architecture(self) -> PolicyArchitecture | None:
+        return self._policy_architecture
 
     def register(self, context) -> None:
         super().register(context)
-        context.latest_policy_uri_fn = self.get_latest_policy_uri
-        context.latest_policy_uri_value = self.get_latest_policy_uri()
+        if not self._policy_name:
+            raise ValueError("Checkpointer requires policy_name when using multi-policy assets")
+        latest_uris = getattr(context, "latest_policy_uris", None)
+        if latest_uris is None:
+            latest_uris = {}
+            context.latest_policy_uris = latest_uris
+        latest_uris[self._policy_name] = self.get_latest_policy_uri()
 
     def load_or_create_policy(
         self,
@@ -78,6 +94,11 @@ class Checkpointer(TrainerComponent):
                 assert payload is not None, "broadcast_from_master must return non-None payload"
                 class_path, init_kwargs, state_dict = payload
                 init_kwargs = dict(init_kwargs)
+                self._ensure_policy_code_available(
+                    normalized_uri=normalized_uri,
+                    class_path=class_path,
+                    init_kwargs=init_kwargs,
+                )
                 self._set_architecture_from_checkpoint(class_path, init_kwargs)
                 if "device" in init_kwargs:
                     init_kwargs["device"] = str(load_device)
@@ -104,6 +125,8 @@ class Checkpointer(TrainerComponent):
             return policy
 
         logger.info("Creating new policy for training run")
+        if self._policy_architecture is None:
+            raise ValueError("Cannot create a new policy without a policy_architecture")
         return self._policy_architecture.make_policy(policy_env_info)
 
     def _set_architecture_from_checkpoint(self, class_path: str, init_kwargs: dict[str, object]) -> None:
@@ -113,6 +136,28 @@ class Checkpointer(TrainerComponent):
         if not isinstance(architecture_spec, str) or not architecture_spec:
             raise ValueError("Checkpoint policy spec is missing architecture_spec.")
         self._policy_architecture = PolicyArchitecture.from_spec(architecture_spec)
+
+    def _ensure_policy_code_available(
+        self,
+        *,
+        normalized_uri: str,
+        class_path: str,
+        init_kwargs: dict[str, object],
+    ) -> None:
+        if self._distributed.is_master():
+            return
+
+        needs_spec = load_symbol(class_path, strict=False) is None
+        if not needs_spec and class_path == "metta.agent.policy.CheckpointPolicy":
+            architecture_spec = init_kwargs.get("architecture_spec")
+            if isinstance(architecture_spec, str) and architecture_spec:
+                try:
+                    PolicyArchitecture.from_spec(architecture_spec)
+                except (ImportError, ModuleNotFoundError, AttributeError, TypeError):
+                    needs_spec = True
+
+        if needs_spec:
+            policy_spec_from_uri(normalized_uri)
 
     def get_latest_policy_uri(self) -> Optional[str]:
         return self._checkpoint_manager.get_latest_checkpoint() or self._latest_policy_uri
@@ -128,14 +173,35 @@ class Checkpointer(TrainerComponent):
         self._save_policy(self.context.epoch)
 
     def _save_policy(self, epoch: int) -> None:
+        policy = self._policy_getter() if self._policy_getter is not None else self.context.policy
+        if policy is None:
+            raise RuntimeError("Checkpointer requires a policy instance to save checkpoints.")
+        if self._policy_architecture is None:
+            raise ValueError("Cannot save policy checkpoint without policy_architecture")
+
+        optimizer_state = None
+        optimizer = getattr(policy, "optimizer", None)
+        if optimizer is not None:
+            is_schedulefree = is_schedulefree_optimizer(optimizer)
+            if is_schedulefree:
+                optimizer.eval()
+            optimizer_state = optimizer.state_dict()
+            if is_schedulefree:
+                optimizer.train()
+
         uri = self._checkpoint_manager.save_policy_checkpoint(
-            state_dict=self.context.policy.state_dict(),
+            state_dict=policy.state_dict(),
             architecture=self._policy_architecture,
             epoch=epoch,
+            optimizer_state=optimizer_state,
         )
 
         self._latest_policy_uri = uri
-        self.context.latest_policy_uri_value = uri
+        latest_uris = getattr(self.context, "latest_policy_uris", None)
+        if latest_uris is None:
+            latest_uris = {}
+            self.context.latest_policy_uris = latest_uris
+        latest_uris[self._policy_name] = uri
         self.context.latest_saved_policy_epoch = epoch
 
         # Log latest checkpoint URI to wandb if available
@@ -146,6 +212,8 @@ class Checkpointer(TrainerComponent):
                 {
                     "checkpoint/latest_uri": uri,
                     "checkpoint/latest_epoch": float(epoch),
+                    f"checkpoint/{self._policy_name}/latest_uri": uri,
+                    f"checkpoint/{self._policy_name}/latest_epoch": float(epoch),
                 },
                 step=self.context.agent_step,
             )

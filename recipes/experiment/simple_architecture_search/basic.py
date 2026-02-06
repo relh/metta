@@ -10,6 +10,7 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TorchProfilerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
@@ -96,11 +97,12 @@ def train(
     if arch_type not in architecture_names():
         raise ValueError(f"Unknown arch_type={arch_type!r} (expected one of: {', '.join(architecture_names())})")
     policy_architecture = get_architecture(arch_type)
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture)}
 
     return tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         evaluator=EvaluatorConfig(simulations=eval_simulations),
-        policy_architecture=policy_architecture,
+        policy_assets=policy_assets,
         torch_profiler=TorchProfilerConfig(),
     )
 

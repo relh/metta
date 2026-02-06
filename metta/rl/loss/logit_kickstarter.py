@@ -7,9 +7,8 @@ from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous
 
-from metta.agent.policy import Policy
 from metta.rl.loss.loss import Loss, LossConfig
-from metta.rl.loss.teacher_policy import load_teacher_policy
+from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 
 # Keep: heavy module + manages circular dependency (loss <-> trainer)
@@ -18,7 +17,9 @@ if TYPE_CHECKING:
 
 
 class LogitKickstarterConfig(LossConfig):
-    teacher_uri: str = Field(default="")
+    # Explicit multi-policy wiring (no implicit URI loading).
+    policy: str = Field(default="primary")
+    teacher: str = Field(default="teacher")
     action_loss_coef: float = Field(default=0.6, ge=0, le=1.0)
     value_loss_coef: float = Field(default=1.0, ge=0, le=1.0)
     temperature: float = Field(default=2.0, gt=0)
@@ -26,14 +27,21 @@ class LogitKickstarterConfig(LossConfig):
 
     def create(
         self,
-        policy: Policy,
+        policy_assets: Any,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
     ) -> "LogitKickstarter":
         """Create LogitKickstarter loss instance."""
-        return LogitKickstarter(policy, trainer_cfg, vec_env, device, instance_name, self)
+        return LogitKickstarter(
+            policy_assets,
+            trainer_cfg,
+            vec_env,
+            device,
+            instance_name,
+            self,
+        )
 
 
 class LogitKickstarter(Loss):
@@ -42,7 +50,6 @@ class LogitKickstarter(Loss):
     cfg: LogitKickstarterConfig
 
     __slots__ = (
-        "teacher_policy",
         "extended_policy_env_info",
         "logit_feature_ids",
         "num_actions",
@@ -50,20 +57,18 @@ class LogitKickstarter(Loss):
 
     def __init__(
         self,
-        policy: Policy,
+        policy_assets: PolicyAssetRegistry,
         trainer_cfg: "TrainerConfig",
         vec_env: Any,
         device: torch.device,
         instance_name: str,
         cfg: "LogitKickstarterConfig",
     ):
-        super().__init__(policy, trainer_cfg, vec_env, device, instance_name, cfg)
+        super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
 
         # Determine action space size
         act_space = self.env.single_action_space
         self.num_actions = int(act_space.n)
-
-        self.teacher_policy = load_teacher_policy(self.env, policy_uri=self.cfg.teacher_uri, device=self.device)
 
     def get_experience_spec(self) -> Composite:
         # Get action space size for logits shape
@@ -75,24 +80,19 @@ class LogitKickstarter(Loss):
             teacher_values=scalar_f32,
         )
 
-    def run_rollout(self, td: TensorDict, context: ComponentContext) -> None:
+    def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
+        teacher_td = td.get(self.cfg.teacher, None)
+        primary_policy_name = self._primary_policy_name()
+        student_td = td.get(primary_policy_name, None)
+
         with torch.no_grad():
-            teacher_td = td.clone()
-            self.teacher_policy.forward(teacher_td)
             teacher_actions = teacher_td["actions"]
-            td["teacher_logits"] = teacher_td["logits"]
-            td["teacher_values"] = teacher_td["values"]
-
-            self.policy.forward(td)
-
-        # Store experience
-        env_slice = self._training_env_id(context)
-        assert self.replay is not None
-        self.replay.store(data_td=td, env_id=env_slice)
+            student_td["teacher_logits"] = teacher_td["logits"]
+            student_td["teacher_values"] = teacher_td["values"]
 
         if torch.rand(1) < self.cfg.teacher_led_proportion:
             # overwrite student actions w teacher actions with some probability. anneal this.
-            td["actions"] = teacher_actions
+            student_td["actions"] = teacher_actions
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"logits", "values"}

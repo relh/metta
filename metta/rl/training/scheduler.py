@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Iterable, Literal, Optional
+from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 import numpy as np
 from pydantic import Field
 from pydantic.json_schema import SkipJsonSchema
 
+from metta.rl.loss.action_supervised import ActionSupervised
+from metta.rl.loss.eer_cloner import EERCloner
 from metta.rl.training.component import TrainerComponent
 from mettagrid.base_config import Config
 
@@ -248,6 +250,8 @@ class LossScheduler(TrainerComponent):
 
     Notes:
     - "target_path" is relative to the TrainerConfig root (e.g., "losses.ppo_actor.ent_coef").
+    - Policy-asset rules can target optimizer settings, e.g.
+      "policy_assets['learner0'].optimizer.learning_rate".
     - For metric-driven rules, "metric_key" must exist in rollout stats accumulated by
       the StatsReporter (flattened keys from env infos).
     """
@@ -294,14 +298,16 @@ class LossScheduler(TrainerComponent):
                 seen_loss_phase.add(key)
             entry[phase] = bool(entry[phase]) or bool(allowed)
 
-        # If a teacher/supervisor rollout loss is gated OFF, disable the supervisor to avoid extra forwards.
+        # If a teacher-action rollout loss is gated OFF, disable the supervisor to avoid extra forwards.
         if phase == "rollout":
             sup_off = False
-            for loss_name, entry in gates.items():
-                if loss_name in {"sliced_scripted_cloner", "supervisor", "sliced_kickstarter", "logit_kickstarter"}:
-                    if entry.get("rollout") is False:
-                        sup_off = True
-                        break
+            for loss_name, loss in self.context.losses.items():
+                if not isinstance(loss, (ActionSupervised, EERCloner)):
+                    continue
+                entry = gates.get(loss_name)
+                if entry and entry.get("rollout") is False:
+                    sup_off = True
+                    break
             if sup_off:
                 env_obj = getattr(self.context, "env", None)
                 driver = getattr(getattr(env_obj, "vecenv", None), "driver_env", None)
@@ -311,8 +317,13 @@ class LossScheduler(TrainerComponent):
                 if te_cfg:
                     te_cfg.supervisor_policy_uri = None
 
-        # 2) Apply unified rules
+        # 2) Apply unified rules (trainer + policy assets)
+        policy_assets = getattr(self.context, "policy_assets", None)
+        policy_asset_target = _PolicyAssetRuleTarget(getattr(policy_assets, "configs", None))
         for rule in self.config.rules:
+            if rule.target_path.startswith("policy_assets") and policy_asset_target.policy_assets is not None:
+                rule.apply(obj=policy_asset_target, ctx=self.context)
+                continue
             rule.apply(obj=self.context.config, ctx=self.context)
 
         # Keep optimizer learning rate in sync with TrainerConfig if it changed.
@@ -371,7 +382,7 @@ class LossScheduler(TrainerComponent):
             spec = loss.get_experience_spec()
             active_keys.update(spec.keys(include_nested=True, leaves_only=True))
 
-        active_keys.add("reward_baseline")
+        active_keys.update(experience.required_store_keys())
 
         # If for some reason no keys were found, fall back to writing all keys.
         if not active_keys:
@@ -381,17 +392,158 @@ class LossScheduler(TrainerComponent):
         experience.set_store_keys(active_keys)
 
     def _sync_optimizer_from_config(self) -> None:
-        """Propagate TrainerConfig optimizer learning_rate into the live optimizer."""
-        optimizer = self.context.optimizer
-        trainer_cfg = self.context.config
-        lr = float(trainer_cfg.optimizer.learning_rate)
-        for group in optimizer.param_groups:
-            group["lr"] = lr
+        policy_assets = getattr(self.context, "policy_assets", None)
+        configs = getattr(policy_assets, "configs", None)
+        policies = getattr(policy_assets, "policies", None)
+        if not configs or not policies:
+            return
+
+        for policy_name, asset_cfg in configs.items():
+            optimizer_cfg = getattr(asset_cfg, "optimizer", None)
+            if optimizer_cfg is None:
+                continue
+            policy = policies.get(policy_name)
+            if policy is None:
+                continue
+            optimizer = getattr(policy, "optimizer", None)
+            if optimizer is None:
+                continue
+
+            params = optimizer_cfg.model_dump()
+            params.pop("type", None)
+            learning_rate = params.pop("learning_rate", None)
+            beta1 = params.pop("beta1", None)
+            beta2 = params.pop("beta2", None)
+
+            for param_group in optimizer.param_groups:
+                if learning_rate is not None:
+                    param_group["lr"] = learning_rate
+                if beta1 is not None and beta2 is not None:
+                    param_group["betas"] = (beta1, beta2)
+                for key, value in params.items():
+                    if key in param_group:
+                        param_group[key] = value
+
+            if learning_rate is not None and hasattr(optimizer, "lr"):
+                optimizer.lr = learning_rate
+            if beta1 is not None and beta2 is not None and hasattr(optimizer, "betas"):
+                optimizer.betas = (beta1, beta2)
+            for key, value in params.items():
+                if hasattr(optimizer, key):
+                    setattr(optimizer, key, value)
+
+
+class _PolicyAssetRuleTarget:
+    def __init__(self, policy_assets) -> None:
+        self.policy_assets = policy_assets
 
 
 def _set_attr_path(obj: object, path: str, value: Any) -> None:
-    parts = path.split(".")
-    target = obj
-    for part in parts[:-1]:
-        target = getattr(target, part)
-    setattr(target, parts[-1], value)
+    ops = _parse_attr_path(path)
+    if not ops:
+        raise ValueError("empty target_path")
+
+    target: Any = obj
+    for kind, payload in ops[:-1]:
+        target = _get_path_item(target, kind, payload)
+
+    last_kind, last_payload = ops[-1]
+    _set_path_item(target, last_kind, last_payload, value)
+
+
+def _parse_attr_path(path: str) -> list[tuple[str, Any]]:
+    """
+    Parse a dotted path with optional bracket selectors.
+
+    Examples:
+    - "losses.ppo_actor.ent_coef"
+    - "slices[0].env_ratio"
+    - 'slices["combat"].sampling.method'
+    """
+
+    ops: list[tuple[str, Any]] = []
+    buf: list[str] = []
+    i = 0
+    while i < len(path):
+        ch = path[i]
+        if ch == ".":
+            if buf:
+                ops.append(("attr", "".join(buf)))
+                buf = []
+            i += 1
+            continue
+        if ch == "[":
+            if buf:
+                ops.append(("attr", "".join(buf)))
+                buf = []
+            end = path.find("]", i + 1)
+            if end < 0:
+                raise ValueError(f"Unclosed '[' in target_path: {path!r}")
+            raw = path[i + 1 : end].strip()
+            if not raw:
+                raise ValueError(f"Empty bracket selector in target_path: {path!r}")
+            # quoted string selector
+            if (raw[0] == raw[-1]) and raw[0] in {"'", '"'}:
+                key = raw[1:-1]
+                ops.append(("key", key))
+            else:
+                try:
+                    ops.append(("index", int(raw)))
+                except ValueError:
+                    ops.append(("key", raw))
+            i = end + 1
+            continue
+        buf.append(ch)
+        i += 1
+
+    if buf:
+        ops.append(("attr", "".join(buf)))
+
+    return ops
+
+
+def _get_path_item(target: Any, kind: str, payload: Any) -> Any:
+    if kind == "attr":
+        if isinstance(target, Mapping) and payload in target:
+            return target[payload]
+        return getattr(target, payload)
+    if kind == "index":
+        if not isinstance(target, Sequence):
+            raise TypeError(f"Cannot index into non-sequence target: {type(target)}")
+        return target[int(payload)]
+    if kind == "key":
+        if isinstance(target, Mapping):
+            return target[payload]
+        if isinstance(target, Sequence):
+            for item in target:
+                if getattr(item, "name", None) == payload:
+                    return item
+            raise KeyError(f"No list item with name={payload!r}")
+        raise TypeError(f"Cannot key-select into target: {type(target)}")
+    raise ValueError(f"Unknown path op kind: {kind!r}")
+
+
+def _set_path_item(target: Any, kind: str, payload: Any, value: Any) -> None:
+    if kind == "attr":
+        if isinstance(target, Mapping):
+            target[payload] = value
+            return
+        setattr(target, payload, value)
+        return
+    if kind == "index":
+        if not isinstance(target, Sequence):
+            raise TypeError(f"Cannot index-set into non-sequence target: {type(target)}")
+        target[int(payload)] = value
+        return
+    if kind == "key":
+        if isinstance(target, Mapping):
+            target[payload] = value
+            return
+        if isinstance(target, Sequence):
+            for idx, item in enumerate(target):
+                if getattr(item, "name", None) == payload:
+                    target[idx] = value
+                    return
+            raise KeyError(f"No list item with name={payload!r}")
+        raise TypeError(f"Cannot key-set into target: {type(target)}")
+    raise ValueError(f"Unknown path op kind: {kind!r}")

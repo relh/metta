@@ -6,6 +6,7 @@ import metta.tools as tools
 from metta.agent.policies.vit import ViTDefaultConfig
 from metta.rl.loss.cmpo import CMPOConfig
 from metta.rl.loss.losses import LossesConfig
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from recipes.experiment.arena import make_curriculum, simulations
@@ -14,10 +15,8 @@ from recipes.prod.arena_basic_easy_shaped import train as arena_basic_easy_shape
 
 
 def cmpo_losses() -> LossesConfig:
-    losses = LossesConfig()
-    losses.ppo_actor.enabled = False
-    losses.ppo_critic.enabled = False
-    losses.cmpo = CMPOConfig(enabled=True)
+    losses = LossesConfig(losses={})
+    losses.add_loss("cmpo", CMPOConfig())
     return losses
 
 
@@ -30,7 +29,7 @@ def _with_cmpo(base_tool: tools.TrainTool) -> tools.TrainTool:
         training_env=base_tool.training_env,
         trainer=_cmpo_trainer_config(),
         evaluator=base_tool.evaluator,
-        policy_architecture=ViTDefaultConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
     )
 
 
@@ -42,7 +41,7 @@ def train(enable_detailed_slice_logging: bool = False) -> tools.TrainTool:
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         trainer=trainer_config,
         evaluator=EvaluatorConfig(simulations=simulations()),
-        policy_architecture=ViTDefaultConfig(),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
     )
 
 

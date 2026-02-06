@@ -8,7 +8,7 @@ import metta.tools as tools
 from metta.agent.policies.agalite import AGaLiTeConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
-from metta.rl.trainer_config import OptimizerConfig
+from metta.rl.policy_assets import OptimizerConfig
 from recipes.prod.arena_basic_easy_shaped import (
     evaluate,
     evaluate_in_sweep,
@@ -56,7 +56,8 @@ def train(
     )
 
     hint = getattr(policy_architecture, "learning_rate_hint", None)
-    optimizer = tool.trainer.optimizer
+    asset = tool.policy_assets["learner0"]  # this recipe assumes a single trainable policy
+    optimizer = asset.optimizer
     default_lr = OptimizerConfig.model_fields["learning_rate"].default
     if hint is not None and optimizer.learning_rate == default_lr:
         optimizer.learning_rate = hint

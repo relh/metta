@@ -9,7 +9,8 @@ from metta.agent.components.actor import ActionProbsConfig
 from metta.agent.policies.fast import FastConfig
 from metta.agent.policy import Policy, PolicyArchitecture
 from metta.cogworks.curriculum import env_curriculum
-from metta.rl.checkpoint_manager import CheckpointManager, write_checkpoint_bundle
+from metta.rl.checkpoint_manager import CheckpointManager
+from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import CheckpointerConfig, EvaluatorConfig, TrainingEnvironmentConfig
@@ -31,6 +32,7 @@ class DummyPolicy(Policy, nn.Module):
     def __init__(self, epoch: int) -> None:
         policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
         super().__init__(policy_env_info)
+        self._dummy_param = nn.Parameter(torch.zeros(1))
         self.register_buffer("epoch_tensor", torch.tensor(epoch, dtype=torch.float32))
 
     def forward(self, td) -> None:
@@ -70,17 +72,18 @@ class FastCheckpointTrainTool(TrainTool):
             {
                 "agent_step": agent_step,
                 "epoch": epoch,
-                "optimizer": {},
             },
             trainer_state_path,
         )
 
         policy = DummyPolicy(epoch)
         architecture = DummyPolicyArchitecture()
-        write_checkpoint_bundle(
-            (checkpoint_manager.checkpoint_dir / f"{run_name}:v{epoch}").expanduser().resolve(),
-            architecture_spec=architecture.to_spec(),
+        optimizer = torch.optim.Adam(policy.parameters(), lr=1e-3)
+        checkpoint_manager.save_policy_checkpoint(
             state_dict=policy.state_dict(),
+            architecture=architecture,
+            epoch=epoch,
+            optimizer_state=optimizer.state_dict(),
         )
 
         return 0
@@ -102,7 +105,7 @@ def run_fast_train_tool(
         system=system_cfg.model_copy(deep=True),
         trainer=trainer_cfg.model_copy(deep=True),
         training_env=training_env_cfg.model_copy(deep=True),
-        policy_architecture=policy_cfg.model_copy(deep=True),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_cfg.model_copy(deep=True))},
         stats_server_uri=None,
         checkpointer=checkpointer or CheckpointerConfig(epoch_interval=1),
         evaluator=evaluator or EvaluatorConfig(epoch_interval=0, evaluate_local=False, evaluate_remote=False),
