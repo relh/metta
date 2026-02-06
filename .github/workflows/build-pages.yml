@@ -77,9 +77,7 @@ jobs:
         if: github.ref == 'refs/heads/main' || steps.changes.outputs.mettascope == 'true'
         run: |
           mkdir -p packages/mettagrid/nim/mettascope/dist
-          # mettascope has emscripten-only shader string rewrites using `.replace`,
-          # which requires `std/strutils` to be in scope.
-          nim c -d:emscripten --import:std/strutils packages/mettagrid/nim/mettascope/src/mettascope.nim
+          nim c -d:emscripten packages/mettagrid/nim/mettascope/src/mettascope.nim
           ls -la packages/mettagrid/nim/mettascope/dist
 
       # Then build Vibescope with its dependencies
