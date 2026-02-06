@@ -33,7 +33,7 @@ digraph fix_comments {
   verify_fail [label="Verify test fails"];
   fix [label="Fix the code"];
   verify_pass [label="Verify test passes"];
-  resolve [label="Resolve thread"];
+  record [label="Record what was done"];
   next [label="Next thread"];
   test [label="Step 4: Run All Tests"];
   submit [label="Step 5: Submit Update"];
@@ -41,8 +41,8 @@ digraph fix_comments {
   worktree -> get_pr -> fetch -> analyze -> understand -> decide;
   decide -> write_test [label="behavioral"];
   decide -> fix [label="style/docs"];
-  write_test -> verify_fail -> fix -> verify_pass -> resolve -> next;
-  fix -> resolve [label="no test needed"];
+  write_test -> verify_fail -> fix -> verify_pass -> record -> next;
+  fix -> record [label="no test needed"];
   next -> understand [label="more threads"];
   next -> test [label="done"];
   test -> submit;
@@ -179,25 +179,24 @@ No test needed since behavior isn't changing.
 
 For these, present the situation and ask for guidance.
 
-### Step 3b: Respond and Resolve Thread
+### Step 3b: Record What Was Done (DO NOT Resolve or Reply Yet)
 
-After fixing or confirming a change, **always reply to the comment** explaining what was done, then resolve the thread.
-Every comment must get a response — never silently resolve.
+After fixing or confirming a change, **DO NOT resolve or reply to the thread**. Instead, record what was done so the
+orchestrator (pr.fix-branch) can verify the fix, push the changes, and then resolve/reply after confirming correctness.
 
-**Reply to the comment:**
+**For each thread, record in your final report:**
 
-```bash
-# Reply to the PR review thread with what was done
-gh api graphql -f query='
-  mutation($threadId: ID!, $body: String!) {
-    addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) {
-      comment { id }
-    }
-  }
-' -f threadId=$THREAD_NODE_ID -f body="$RESPONSE_MESSAGE"
-```
+| Field          | Value                                                       |
+| -------------- | ----------------------------------------------------------- |
+| `thread_id`    | The GraphQL node ID of the thread                           |
+| `path`         | File path the comment was on                                |
+| `line`         | Line number                                                 |
+| `reviewer_ask` | What the reviewer asked for (1 sentence)                    |
+| `action_taken` | What you changed (1-2 sentences)                            |
+| `response_msg` | The reply message to post (see format below)                |
+| `status`       | `fixed`, `already_fixed`, `skipped_design`, `could_not_fix` |
 
-**Response message format:**
+**Response message format (to be posted later by orchestrator):**
 
 | Action Taken                | Response                                                                    |
 | --------------------------- | --------------------------------------------------------------------------- |
@@ -206,19 +205,8 @@ gh api graphql -f query='
 | Already fixed               | "Already addressed in <commit/change>."                                     |
 | Skipped (design)            | "Leaving for discussion — see reply above."                                 |
 
-**Then resolve the thread:**
-
-```bash
-gh api graphql -f query='
-  mutation($threadId: ID!) {
-    resolveReviewThread(input: {threadId: $threadId}) {
-      thread {
-        isResolved
-      }
-    }
-  }
-' -f threadId=$THREAD_NODE_ID
-```
+**DO NOT call resolveReviewThread or addPullRequestReviewThreadReply.** The orchestrator handles this after verifying
+the push landed and code is correct.
 
 ### Step 3c: Write Regression Test
 
@@ -315,14 +303,14 @@ This will stage all changes, run tests, clean up compat code, lint, commit (amen
 
 ## Quick Reference
 
-| Issue Type              | What Claude Does                                          |
-| ----------------------- | --------------------------------------------------------- |
-| **Behavioral bug**      | Write test → Verify fails → Fix → Verify passes → Resolve |
-| **Edge case**           | Write test → Verify fails → Fix → Verify passes → Resolve |
-| **Style/naming**        | Fix directly → Resolve                                    |
-| **Documentation**       | Fix directly → Resolve                                    |
-| **Design disagreement** | Ask user for guidance                                     |
-| **Already fixed**       | Verify change exists → Resolve                            |
+| Issue Type              | What Claude Does                                         |
+| ----------------------- | -------------------------------------------------------- |
+| **Behavioral bug**      | Write test → Verify fails → Fix → Verify passes → Record |
+| **Edge case**           | Write test → Verify fails → Fix → Verify passes → Record |
+| **Style/naming**        | Fix directly → Record                                    |
+| **Documentation**       | Fix directly → Record                                    |
+| **Design disagreement** | Ask user for guidance                                    |
+| **Already fixed**       | Verify change exists → Record                            |
 
 ## Reading Full Conversations
 

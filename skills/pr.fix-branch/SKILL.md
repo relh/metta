@@ -39,17 +39,18 @@ digraph fix_branch {
   worktree [label="Step 0: Worktree Setup"];
   sync [label="Step 1: gt sync"];
   restack [label="Step 2: gt restack"];
-  fix_comments [label="Step 3: Sub-agent → /pr.fix-comments"];
-  verify_threads [label="Step 3b: Verify threads resolved"];
+  fix_comments [label="Step 3: Sub-agent → fix code (no resolve)"];
+  push_verify [label="Step 3b: Push + verify on remote"];
   verify_code [label="Step 3c: Verify code matches feedback"];
+  resolve [label="Step 3d: Resolve + reply to threads"];
   fix_ci [label="Step 4: Sub-agent → /pr.fix-ci"];
-  push [label="Step 5: Sub-agent → /pr.submit"];
+  submit [label="Step 5: Sub-agent → /pr.submit"];
   done [label="Done"];
 
-  worktree -> sync -> restack -> fix_comments -> verify_threads -> verify_code;
-  verify_code -> fix_ci [label="verified"];
+  worktree -> sync -> restack -> fix_comments -> push_verify -> verify_code;
+  verify_code -> resolve [label="verified"];
   verify_code -> fix_comments [label="mismatch found"];
-  fix_ci -> push -> done;
+  resolve -> fix_ci -> submit -> done;
 }
 ```
 
@@ -113,9 +114,10 @@ gt restack
 
 Ensures the current stack has latest changes from downstack branches.
 
-### Step 3: Fix Comments (Sub-Agent)
+### Step 3: Fix Comments (Sub-Agent — Code Only, No Resolve)
 
-Dispatch a sub-agent to handle PR review comments. Use the Task tool:
+Dispatch a sub-agent to handle PR review comments. **The sub-agent must NOT resolve or reply to threads.** It only makes
+code changes and returns a structured report of what was done per thread.
 
 ```
 Task(
@@ -127,14 +129,25 @@ Task(
   Run the /pr.fix-comments skill:
   1. Fetch GitHub and Graphite review comments for the current branch's PR
   2. Address each unresolved comment by making code changes
-  3. Resolve addressed threads
+  3. DO NOT resolve or reply to any threads — the orchestrator will do that after verifying
   4. Run tests to verify fixes: metta pytest --changed
   5. Stage and commit: git add -A && gt modify --no-interactive
 
   Working directory: <worktree_path>
   Branch: <branch>
 
-  Report back: number of comments addressed, any that couldn't be resolved, test results.
+  IMPORTANT: DO NOT call resolveReviewThread or addPullRequestReviewThreadReply.
+
+  Report back a structured list for each thread:
+  - thread_id: the GraphQL node ID
+  - path: file path
+  - line: line number
+  - reviewer_ask: what the reviewer asked for (1 sentence)
+  - action_taken: what you changed (1-2 sentences)
+  - response_msg: the reply message to post (e.g. "Fixed: <what was changed>.")
+  - status: fixed | already_fixed | skipped_design | could_not_fix
+
+  Also report: total comments addressed, any that couldn't be resolved, test results.
   """
 )
 ```
@@ -142,13 +155,114 @@ Task(
 **If sub-agent reports no comments:** Continue to Step 3b. **If sub-agent reports failures:** Review the summary and
 decide whether to retry or escalate.
 
-### Step 3b: Verify All Comments Addressed
+### Step 3b: Push Changes and Verify Push Landed
 
-After the fix-comments sub-agent completes, **verify that every comment has been responded to and resolved**. This
-catches any comments the sub-agent may have missed, **including threads that were resolved without a reply**.
+After the fix-comments sub-agent completes, **push the changes to remote and verify the push succeeded** before doing
+anything with the comment threads. This ensures we don't resolve/reply to comments for changes that aren't actually on
+the remote.
 
 ```bash
-# Re-fetch ALL threads (both resolved and unresolved) with full comment history
+# Stage and push
+git add -A && gt modify --no-interactive
+gt submit --no-interactive
+
+# Verify the push landed by comparing local and remote HEADs
+LOCAL_SHA=$(git rev-parse HEAD)
+PR_NUMBER=$(gh pr view --json number -q '.number')
+REMOTE_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid -q '.headRefOid')
+
+if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+  echo "WARNING: Local SHA ($LOCAL_SHA) != Remote SHA ($REMOTE_SHA)"
+  echo "Submit may have amended. Verifying remote has our changes..."
+  # Check that the remote diff includes our expected changes
+  gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/files --jq '.[].filename' | sort
+fi
+
+echo "Push verified: remote HEAD is $REMOTE_SHA"
+```
+
+**If push fails:** Investigate and fix (merge conflicts, rebase issues, etc.) before proceeding.
+
+**Only proceed to Step 3c when changes are confirmed on remote.**
+
+### Step 3c: Verify Code Changes Match Feedback (CRITICAL)
+
+**Don't trust the sub-agent's report alone.** After confirming the push landed, **independently verify the code changes
+on the remote actually address each reviewer's feedback**.
+
+For each thread the sub-agent reported as `fixed` or `already_fixed`:
+
+1. **Read the reviewer's original comment** (what did they ask for?)
+2. **Read the file at the line they commented on** (what does the code say now?)
+3. **Verify the code change matches the feedback**
+
+```bash
+# For each thread reported by sub-agent, verify the fix
+for each THREAD in SUB_AGENT_REPORT:
+  COMMENT_BODY = thread.reviewer_ask
+  FILE_PATH = thread.path
+  LINE_NUMBER = thread.line
+
+  # Read the current code at that location
+  CURRENT_CODE=$(sed -n "${LINE_NUMBER}p" "$FILE_PATH")
+
+  # Compare: does the code now match what the reviewer asked for?
+  # If not, the fix is incomplete
+```
+
+**Red flags that indicate a bad fix:**
+
+| Reviewer Said        | But Code Shows         | Problem                 |
+| -------------------- | ---------------------- | ----------------------- |
+| "Change X to Y"      | X is still there       | Fix not applied         |
+| "Remove this"        | Code still exists      | Fix not applied         |
+| "Add validation"     | No validation added    | Fix incomplete          |
+| "Use version 4"      | Still uses version 3   | Fix incomplete          |
+| "These should match" | They still don't match | Inconsistency not fixed |
+
+**If verification fails:**
+
+1. **Log the mismatch:** "Fix incomplete: reviewer asked for X, code shows Y"
+2. **Re-dispatch fix-comments sub-agent** with specific instructions for this thread
+3. **Loop back to Step 3b** (push + verify again)
+
+**Only proceed to Step 3d when ALL code changes are verified correct on the remote.**
+
+### Step 3d: Resolve and Reply to Threads (After Verification)
+
+**Only after the push is verified and code correctness confirmed**, resolve and reply to each thread. Use the
+sub-agent's report to determine the response message.
+
+For each thread with status `fixed` or `already_fixed`:
+
+```bash
+# 1. Reply to the thread explaining what was done
+gh api graphql -f query='
+  mutation($threadId: ID!, $body: String!) {
+    addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) {
+      comment { id }
+    }
+  }
+' -f threadId=$THREAD_ID -f body="$RESPONSE_MSG"
+
+# 2. Resolve the thread
+gh api graphql -f query='
+  mutation($threadId: ID!) {
+    resolveReviewThread(input: {threadId: $threadId}) {
+      thread { isResolved }
+    }
+  }
+' -f threadId=$THREAD_ID
+```
+
+For threads with status `skipped_design` or `could_not_fix`: **do not resolve**. Report these to the user.
+
+**Verify after resolving:** Re-fetch all threads and confirm:
+
+- All `fixed`/`already_fixed` threads are now resolved
+- All resolved threads have a reply from the bot
+
+```bash
 OWNER=$(gh repo view --json owner -q '.owner.login')
 REPO=$(gh repo view --json name -q '.name')
 PR_NUMBER=$(gh pr view --json number -q '.number')
@@ -164,114 +278,30 @@ ALL_THREADS=$(gh api graphql -f query='
             isResolved
             path
             comments(first: 100) {
-              nodes {
-                body
-                author { login }
-              }
-              pageInfo {
-                hasNextPage
-              }
+              nodes { body author { login } }
+              pageInfo { hasNextPage }
             }
           }
-          pageInfo {
-            hasNextPage
-          }
+          pageInfo { hasNextPage }
         }
       }
     }
   }
 ' -f owner=$OWNER -f repo=$REPO -F pr=$PR_NUMBER)
 
-# Verify we fetched all threads and comments (fail if pagination needed)
-THREADS_HAS_NEXT=$(echo "$ALL_THREADS" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage')
-COMMENTS_HAS_NEXT=$(echo "$ALL_THREADS" | jq -r '
-  [.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage] | any')
-if [ "$THREADS_HAS_NEXT" = "true" ] || [ "$COMMENTS_HAS_NEXT" = "true" ]; then
-  echo "WARNING: PR has more threads/comments than fetched. Manual review needed."
-fi
-
-# Check 1: Unresolved threads (comments missed entirely)
-UNRESOLVED=$(echo "$ALL_THREADS" | jq -r '
+# Check for any unresolved threads that should have been resolved
+STILL_UNRESOLVED=$(echo "$ALL_THREADS" | jq -r '
   .data.repository.pullRequest.reviewThreads.nodes[]
   | select(.isResolved == false)
-  | "UNRESOLVED: \(.path) - \(.comments.nodes[0].body[0:80])"')
+  | "STILL UNRESOLVED: \(.path) - \(.comments.nodes[0].body[0:80])"')
 
-# Check 2: Resolved threads without a reply from the bot/author
-# (resolved-without-response — violates the "always respond" requirement)
-RESOLVED_NO_REPLY=$(echo "$ALL_THREADS" | jq -r --arg bot "$BOT_LOGIN" '
-  .data.repository.pullRequest.reviewThreads.nodes[]
-  | select(.isResolved == true)
-  | select((.comments.nodes | length) > 0)
-  | select((.comments.nodes | map(.author.login) | any(. == $bot)) | not)
-  | "RESOLVED-NO-REPLY: \(.path) - \(.comments.nodes[0].body[0:80])"')
+if [ -n "$STILL_UNRESOLVED" ]; then
+  echo "WARNING: Some threads still unresolved after Step 3d:"
+  echo "$STILL_UNRESOLVED"
+fi
 ```
 
-**If unresolved threads remain:**
-
-1. Log which comments are still unresolved
-2. Re-dispatch the fix-comments sub-agent for the remaining threads, OR
-3. If they are design disagreements, report them to the user
-
-**If resolved-without-reply threads exist:**
-
-1. Log which threads were resolved without a response
-2. Re-dispatch the fix-comments sub-agent to add replies to those threads (the thread may need to be unresolved first,
-   replied to, then re-resolved)
-
-**Only proceed to Step 3c when all threads are resolved and have responses.**
-
-### Step 3c: Verify Code Changes Match Feedback (CRITICAL)
-
-**Don't trust thread resolution status alone.** After verifying threads are resolved, **independently verify the code
-changes actually address the feedback**.
-
-For each resolved thread:
-
-1. **Read the reviewer's original comment** (what did they ask for?)
-2. **Read the file at the line they commented on** (what does the code say now?)
-3. **Verify the code change matches the feedback**
-
-```bash
-# For each resolved thread, verify the fix
-for each THREAD in RESOLVED_THREADS:
-  COMMENT_BODY = thread.comments[0].body
-  FILE_PATH = thread.path
-  LINE_NUMBER = thread.line
-
-  # Read the current code at that location
-  CURRENT_CODE=$(sed -n "${LINE_NUMBER}p" "$FILE_PATH")
-
-  # Compare: does the code now match what the reviewer asked for?
-  # If not, the thread was resolved incorrectly
-```
-
-**Red flags that indicate a bad fix:**
-
-| Reviewer Said        | But Code Shows         | Problem                 |
-| -------------------- | ---------------------- | ----------------------- |
-| "Change X to Y"      | X is still there       | Fix not applied         |
-| "Remove this"        | Code still exists      | Fix not applied         |
-| "Add validation"     | No validation added    | Fix incomplete          |
-| "Use version 4"      | Still uses version 3   | Fix incomplete          |
-| "These should match" | They still don't match | Inconsistency not fixed |
-
-**If verification fails:**
-
-1. **Log the mismatch:** "Thread resolved but fix incomplete: reviewer asked for X, code shows Y"
-2. **Unresolve the thread:**
-   ```bash
-   gh api graphql -f query='
-     mutation($threadId: ID!) {
-       unresolveReviewThread(input: {threadId: $threadId}) {
-         thread { isResolved }
-       }
-     }
-   ' -f threadId=$THREAD_ID
-   ```
-3. **Re-dispatch fix-comments sub-agent** with specific instructions for this thread
-4. **Loop back to Step 3b** to verify again
-
-**Only proceed to Step 4 when code changes are verified to match feedback.**
+**Only proceed to Step 4 when all fixable threads are resolved with replies and the code is verified on remote.**
 
 ### Step 4: Fix CI (Sub-Agent)
 
@@ -393,17 +423,18 @@ done
 
 ## Quick Reference
 
-| Step | Action                     | Method    | Purpose                               |
-| ---- | -------------------------- | --------- | ------------------------------------- |
-| 0    | Worktree setup             | Direct    | Isolation                             |
-| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks             |
-| 2    | `gt restack`               | Direct    | Rebase current stack                  |
-| 3    | Fix comments               | Sub-agent | Address PR review comments            |
-| 3b   | Verify threads resolved    | Direct    | Ensure all threads resolved w/ reply  |
-| 3c   | **Verify code matches**    | Direct    | **Read code, confirm fix is correct** |
-| 4    | Fix CI                     | Sub-agent | Fix any CI failures                   |
-| 5    | Submit                     | Sub-agent | Test, clean, submit branch            |
-| 5b   | Post-submit CI verify      | Direct    | Poll CI on new commit, loop if fail   |
+| Step | Action                     | Method    | Purpose                                   |
+| ---- | -------------------------- | --------- | ----------------------------------------- |
+| 0    | Worktree setup             | Direct    | Isolation                                 |
+| 1    | `gt sync --no-interactive` | Direct    | Pull trunk, rebase stacks                 |
+| 2    | `gt restack`               | Direct    | Rebase current stack                      |
+| 3    | Fix comments (code only)   | Sub-agent | Make code changes, DO NOT resolve threads |
+| 3b   | Push + verify              | Direct    | Push changes, confirm on remote           |
+| 3c   | **Verify code matches**    | Direct    | **Read code, confirm fix is correct**     |
+| 3d   | Resolve + reply            | Direct    | Reply to and resolve verified threads     |
+| 4    | Fix CI                     | Sub-agent | Fix any CI failures                       |
+| 5    | Submit                     | Sub-agent | Test, clean, submit branch                |
+| 5b   | Post-submit CI verify      | Direct    | Poll CI on new commit, loop if fail       |
 
 ## Why Sub-Agents?
 
@@ -422,10 +453,10 @@ By dispatching these as sub-agents:
 
 ## Common Mistakes
 
-**Trusting thread resolution status without verifying code**
+**Resolving threads before verifying push and code correctness**
 
-- **Problem:** Sub-agent resolves threads but fix is incomplete or wrong
-- **Fix:** Always run Step 3c - read the actual code at the commented line and verify it matches the feedback
+- **Problem:** Sub-agent resolves threads but fix is incomplete, wrong, or not pushed
+- **Fix:** Sub-agent must NOT resolve threads. Push first (3b), verify code (3c), THEN resolve (3d)
 
 **Skipping sync/restack**
 

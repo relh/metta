@@ -43,14 +43,16 @@ digraph fix_branch_team {
   sync [label="Step 1: Sync + restack (master direct)"];
   check [label="Step 2: comment-getter + ci-checker (parallel)"];
   dispatch [label="Step 3: Master groups issues, dispatches fixers"];
-  fix [label="Step 4: Fixers work (parallel where independent)"];
+  fix [label="Step 4: Fixers work (no resolve)"];
   verify [label="Step 5: Verifier — lint, test, submit"];
+  verify_resolve [label="Step 5b: Master verifies push + code, resolves threads"];
   recheck [label="Step 6: tester + comment-getter + ci-checker (parallel)"];
   decide [label="Step 7: Master decides"];
   done [label="Clean — shutdown team"];
   watch [label="Watch — sleep 5 min, re-check"];
 
-  setup -> sync -> check -> dispatch -> fix -> verify -> recheck -> decide;
+  setup -> sync -> check -> dispatch -> fix -> verify -> verify_resolve -> recheck -> decide;
+  verify_resolve -> dispatch [label="code mismatch"];
   decide -> dispatch [label="new issues"];
   decide -> done [label="clean + run-once"];
   decide -> watch [label="clean + watch mode"];
@@ -213,12 +215,20 @@ Task(
   For each issue:
   1. Read the relevant file(s)
   2. Make the fix
-  3. For PR comment issues: reply to the thread explaining what you did, then resolve it
-  4. Stage your changes: git add <files>
+  3. Stage your changes: git add <files>
+
+  DO NOT resolve or reply to PR comment threads. The master will handle that after
+  verifying the push landed and the code is correct.
 
   Do NOT commit or submit — the verifier handles that.
 
-  When done, send a message to branch-master listing what you fixed.
+  When done, send a message to branch-master with a structured report for each thread:
+  - thread_id: the GraphQL node ID
+  - path: file path
+  - reviewer_ask: what the reviewer asked for (1 sentence)
+  - action_taken: what you changed (1-2 sentences)
+  - response_msg: the reply to post (e.g. "Fixed: <what was changed>.")
+  - status: fixed | already_fixed | skipped_design | could_not_fix
   """
 )
 ```
@@ -231,10 +241,10 @@ with new work instead of spawning a new one.
 Fixers work in parallel on their assigned issues. Each fixer:
 
 - Reads files, makes changes, stages them
-- Replies to PR comment threads where applicable
-- Reports completion to master
+- **Does NOT reply to or resolve PR comment threads** — reports what was done instead
+- Reports completion to master with structured thread reports
 
-Master waits for all fixers to report done.
+Master waits for all fixers to report done, then collects all thread reports.
 
 ### Step 5: Verifier — Lint, Test, Submit
 
@@ -261,6 +271,57 @@ Branch: {branch}
 ```
 
 If verifier reports test failures, master dispatches fixers for those failures, then re-runs verifier.
+
+### Step 5b: Master Verifies Push + Code, Then Resolves Threads (CRITICAL)
+
+After the verifier successfully submits, the master **verifies the push landed and code is correct** before resolving
+any comment threads. This prevents resolving threads for changes that aren't actually on the remote.
+
+**1. Verify push landed:**
+
+```bash
+PR_NUMBER=$(gh pr view --json number -q '.number')
+REMOTE_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid -q '.headRefOid')
+echo "Remote HEAD: $REMOTE_SHA"
+```
+
+**2. Verify code matches feedback for each fixer report:**
+
+For each thread reported as `fixed` by a fixer:
+
+- Read the file at the commented line
+- Compare with the reviewer's ask
+- If code doesn't match the feedback → re-dispatch that fixer with specific instructions, then re-run verifier
+
+**3. Resolve and reply to verified threads:**
+
+Only after confirming the code is correct on remote:
+
+```bash
+# For each verified thread:
+# Reply
+gh api graphql -f query='
+  mutation($threadId: ID!, $body: String!) {
+    addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) {
+      comment { id }
+    }
+  }
+' -f threadId=$THREAD_ID -f body="$RESPONSE_MSG"
+
+# Resolve
+gh api graphql -f query='
+  mutation($threadId: ID!) {
+    resolveReviewThread(input: {threadId: $threadId}) {
+      thread { isResolved }
+    }
+  }
+' -f threadId=$THREAD_ID
+```
+
+For threads with status `skipped_design` or `could_not_fix`: **do not resolve**. Report these to the user.
+
+**If verification fails:** Loop back to Step 3 — re-dispatch fixers for the mismatched threads, then re-run verifier and
+verification.
 
 ### Step 6: Post-Submit Parallel Re-Check (CRITICAL)
 
@@ -346,16 +407,17 @@ When done (or cancelled):
 
 ## Quick Reference
 
-| Step | Who                                  | What                          | Parallel?                |
-| ---- | ------------------------------------ | ----------------------------- | ------------------------ |
-| 0    | Master                               | Setup team + worktree         | —                        |
-| 1    | Master                               | gt sync + gt restack          | —                        |
-| 2    | comment-getter + ci-checker          | Detect issues                 | Yes                      |
-| 3    | Master                               | Group issues, dispatch fixers | —                        |
-| 4    | fixer-1..N                           | Implement fixes               | Yes (across file groups) |
-| 5    | Verifier                             | Lint, test, submit            | —                        |
-| 6    | tester + comment-getter + ci-checker | Re-check                      | Yes                      |
-| 7    | Master                               | Decide: loop, done, or watch  | —                        |
+| Step | Who                                  | What                                | Parallel?                |
+| ---- | ------------------------------------ | ----------------------------------- | ------------------------ |
+| 0    | Master                               | Setup team + worktree               | —                        |
+| 1    | Master                               | gt sync + gt restack                | —                        |
+| 2    | comment-getter + ci-checker          | Detect issues                       | Yes                      |
+| 3    | Master                               | Group issues, dispatch fixers       | —                        |
+| 4    | fixer-1..N                           | Implement fixes (no resolve)        | Yes (across file groups) |
+| 5    | Verifier                             | Lint, test, submit                  | —                        |
+| 5b   | Master                               | Verify push + code, resolve threads | —                        |
+| 6    | tester + comment-getter + ci-checker | Re-check                            | Yes                      |
+| 7    | Master                               | Decide: loop, done, or watch        | —                        |
 
 ## Red Flags
 
