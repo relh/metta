@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 import torch
+from cortex.consistent_dropout import reset_consistent_dropout
 from pydantic import ConfigDict
 from tensordict import NonTensorData, TensorDict
 from torch import Tensor
@@ -107,6 +108,11 @@ class CoreTrainingLoop:
         self._validate_trajectory_slices_for_epoch()
         raw_infos: list[dict[str, Any]] = []
         self.experience.reset_for_rollout()
+
+        # Reset consistent dropout masks so fresh masks are generated for this rollout.
+        # These masks will be cached and reused during the training phase to reduce
+        # gradient variance (see: Hausknecht & Wagener, 2022).
+        reset_consistent_dropout(self.policy)
 
         # Notify losses of rollout start
         for loss in self.losses.values():

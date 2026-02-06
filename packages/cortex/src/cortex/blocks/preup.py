@@ -13,6 +13,7 @@ from cortex.blocks.registry import register_block
 from cortex.cells.base import MemoryCell
 from cortex.cells.mlstm import mLSTMCell
 from cortex.config import PreUpBlockConfig
+from cortex.consistent_dropout import ConsistentDropout
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
@@ -28,6 +29,7 @@ class PreUpBlock(BaseBlock):
         self.in_proj = nn.Linear(d_hidden, 2 * self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, d_hidden)
         self.act = nn.SiLU()
+        self.dropout = ConsistentDropout(config.dropout) if config.dropout > 0 else nn.Identity()
         self.learnable_skip = nn.Parameter(torch.ones(self.d_inner))
         assert cell.hidden_size == self.d_inner, "PreUpBlock requires cell.hidden_size == d_inner"
         # Control whether to feed a_act (activated) into the cell for
@@ -77,12 +79,14 @@ class PreUpBlock(BaseBlock):
         if is_step:
             y_skip = y_inner + (self.learnable_skip * a_act)
             y_gate = y_skip * self.act(z)
+            y_gate = self.dropout(y_gate)
             y = self.out_proj(y_gate)
         else:
             # Always [B, T, H]
             B, T, H = y_inner.shape
             y_skip = y_inner + (self.learnable_skip * a_act)
             y_gate = y_skip * self.act(z)
+            y_gate = self.dropout(y_gate)
             y_ = y_gate.reshape(B * T, H)
             y = self.out_proj(y_).reshape(B, T, self.d_hidden)
 

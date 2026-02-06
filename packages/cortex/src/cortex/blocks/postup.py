@@ -11,6 +11,7 @@ from cortex.blocks.base import BaseBlock
 from cortex.blocks.registry import register_block
 from cortex.cells.base import MemoryCell
 from cortex.config import PostUpBlockConfig
+from cortex.consistent_dropout import ConsistentDropout
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
@@ -27,6 +28,7 @@ class PostUpBlock(BaseBlock):
         self.ffn_norm = nn.LayerNorm(d_hidden, elementwise_affine=True, bias=False)
         self.out1 = nn.Linear(d_hidden, self.d_inner)
         self.act = nn.SiLU()
+        self.dropout = ConsistentDropout(config.dropout) if config.dropout > 0 else nn.Identity()
         self.out2 = nn.Linear(self.d_inner, d_hidden)
 
     def forward(
@@ -51,11 +53,13 @@ class PostUpBlock(BaseBlock):
         if is_step:
             y_ffn = self.out1(y_ffn_normed)
             y_ffn = self.act(y_ffn)
+            y_ffn = self.dropout(y_ffn)
             y_ffn = self.out2(y_ffn)
         else:
             B, T, H = y_ffn_normed.shape
             y_ = self.out1(y_ffn_normed.reshape(B * T, H))
             y_ = self.act(y_)
+            y_ = self.dropout(y_)
             y_ffn = self.out2(y_).reshape(B, T, self.d_hidden)
 
         y = ffn_residual + y_ffn

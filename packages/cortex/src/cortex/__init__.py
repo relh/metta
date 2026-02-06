@@ -40,6 +40,11 @@ from cortex.config import (
     mLSTMCellConfig,
     sLSTMCellConfig,
 )
+from cortex.consistent_dropout import (
+    ConsistentDropout,
+    ConsistentDropoutModule,
+    reset_consistent_dropout,
+)
 from cortex.factory import build_cortex, build_from_dict
 from cortex.stacks import CortexStack
 from cortex.types import MaybeState, ResetMask, State, Tensor
@@ -96,4 +101,8 @@ __all__ = [
     # Utils
     "TRITON_AVAILABLE",
     "select_backend",
+    # Dropout
+    "ConsistentDropout",
+    "ConsistentDropoutModule",
+    "reset_consistent_dropout",
 ]

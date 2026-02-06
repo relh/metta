@@ -12,6 +12,7 @@ from cortex.blocks.base import BaseBlock
 from cortex.blocks.registry import register_block
 from cortex.cells.base import MemoryCell
 from cortex.config import PostUpGatedBlockConfig
+from cortex.consistent_dropout import ConsistentDropout
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
@@ -52,9 +53,10 @@ class PostUpGatedBlock(BaseBlock):
         self.norm1 = nn.LayerNorm(d_hidden, elementwise_affine=True, bias=False)
         self.norm2 = nn.LayerNorm(d_hidden, elementwise_affine=True, bias=False)
 
-        # FFN
+        # FFN with consistent dropout
         self.ffn_in = nn.Linear(d_hidden, self.d_inner)
         self.act = nn.SiLU()
+        self.dropout = ConsistentDropout(config.dropout) if config.dropout > 0 else nn.Identity()
         self.ffn_out = nn.Linear(self.d_inner, d_hidden)
 
         # GRU-style gates (GTrXL-inspired)
@@ -81,11 +83,15 @@ class PostUpGatedBlock(BaseBlock):
         y2 = self.norm2(y)
         is_step = y2.dim() == 2
         if is_step:
-            ffn = self.ffn_out(self.act(self.ffn_in(y2)))
+            ffn = self.ffn_in(y2)
+            ffn = self.act(ffn)
+            ffn = self.dropout(ffn)
+            ffn = self.ffn_out(ffn)
         else:
             B, T, H = y2.shape
             ffn = self.ffn_in(y2.reshape(B * T, H))
             ffn = self.act(ffn)
+            ffn = self.dropout(ffn)
             ffn = self.ffn_out(ffn).reshape(B, T, self.d_hidden)
 
         out = self.gate2(y, ffn)
