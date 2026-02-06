@@ -270,11 +270,14 @@ jobs:
             });
 
   notify-discord:
-    name: Notify Discord on success
-    needs: [publish]
-    if: success()
+    name: Notify Discord
+    needs: [build-sdist, build-wheels, test, publish]
+    if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/notify-discord-status
       - name: Extract version from tag
         id: version
         run: |
@@ -283,21 +286,10 @@ jobs:
             VERSION="${VERSION#cogames-agents-v}"
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           fi
-      - name: Post to Discord
-        env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "No Discord webhook URL configured, skipping"
-            exit 0
-          fi
-          if [ -z "$VERSION" ]; then
-            echo "No version found, skipping"
-            exit 0
-          fi
-          PYPI_URL="https://pypi.org/project/cogames-agents/${VERSION}/"
-          MSG="✅ **cogames-agents v${VERSION}** published to [PyPI](${PYPI_URL})"
-          curl -sf -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo "$MSG" | jq -Rs .), \"flags\": 4}"
+      - uses: ./.github/actions/notify-discord-status
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          package-name: cogames-agents
+          version: ${{ steps.version.outputs.version }}
+          success-message: "✅ **cogames-agents v${{ steps.version.outputs.version }}** published to [PyPI](https://pypi.org/project/cogames-agents/${{ steps.version.outputs.version }}/)"
+          needs-context: ${{ toJSON(needs) }}

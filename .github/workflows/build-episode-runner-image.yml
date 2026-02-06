@@ -75,26 +75,18 @@ jobs:
             GIT_COMMIT=${{ github.sha }}
 
   notify-discord:
-    name: Notify Discord on success
+    name: Notify Discord
     needs: [resolve-version, build-and-push]
-    if: success()
+    if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - name: Post to Discord
-        env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          VERSION: ${{ needs.resolve-version.outputs.cogames_version }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "No Discord webhook URL configured, skipping"
-            exit 0
-          fi
-          if [ -z "$VERSION" ]; then
-            echo "No version found, skipping"
-            exit 0
-          fi
-          IMAGE="ghcr.io/metta-ai/episode-runner:cogames-${VERSION}"
-          MSG="✅ **episode-runner** image built and pushed: \`${IMAGE}\`"
-          curl -sf -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo "$MSG" | jq -Rs .), \"flags\": 4}"
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/notify-discord-status
+      - uses: ./.github/actions/notify-discord-status
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          package-name: episode-runner
+          version: ${{ needs.resolve-version.outputs.cogames_version }}
+          success-message: "✅ **episode-runner** image built and pushed: `ghcr.io/metta-ai/episode-runner:cogames-${{ needs.resolve-version.outputs.cogames_version }}`"
+          needs-context: ${{ toJSON(needs) }}

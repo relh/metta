@@ -1,0 +1,56 @@
+name: "Discord Workflow Status"
+description: "Post workflow success/failure to Discord, reporting which jobs failed"
+
+inputs:
+  webhook-url:
+    description: "Discord webhook URL"
+    required: true
+  package-name:
+    description: "Package or component name (e.g. cogames, mettagrid, episode-runner)"
+    required: true
+  version:
+    description: "Version string"
+    required: true
+  success-message:
+    description: "Full Discord message to send on success"
+    required: true
+  needs-context:
+    description: "Pass toJSON(needs) to detect which jobs failed"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Post to Discord
+      shell: bash
+      env:
+        WEBHOOK_URL: ${{ inputs.webhook-url }}
+        PACKAGE_NAME: ${{ inputs.package-name }}
+        VERSION: ${{ inputs.version }}
+        SUCCESS_MESSAGE: ${{ inputs.success-message }}
+        WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        NEEDS_CONTEXT: ${{ inputs.needs-context }}
+      run: |
+        if [ -z "$WEBHOOK_URL" ]; then
+          echo "No Discord webhook URL configured, skipping"
+          exit 0
+        fi
+        if [ -z "$VERSION" ]; then
+          echo "No version found, skipping"
+          exit 0
+        fi
+
+        FAILED_JOBS=$(echo "$NEEDS_CONTEXT" | jq -r '[to_entries[] | select(.value.result == "failure") | .key] | join(", ")')
+        CANCELLED_JOBS=$(echo "$NEEDS_CONTEXT" | jq -r '[to_entries[] | select(.value.result == "cancelled") | .key] | join(", ")')
+
+        if [ -n "$FAILED_JOBS" ]; then
+          MSG="❌ **${PACKAGE_NAME} v${VERSION}** [failed](${WORKFLOW_URL}) at: ${FAILED_JOBS}"
+        elif [ -n "$CANCELLED_JOBS" ]; then
+          MSG="⚠️ **${PACKAGE_NAME} v${VERSION}** [cancelled](${WORKFLOW_URL}) at: ${CANCELLED_JOBS}"
+        else
+          MSG="$SUCCESS_MESSAGE"
+        fi
+
+        curl -sf -X POST "$WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d "{\"content\": $(echo "$MSG" | jq -Rs .), \"flags\": 4}"

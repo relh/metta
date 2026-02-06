@@ -265,16 +265,28 @@ jobs:
             INDEX_ARGS=""
           fi
 
-          # Install cogames from PyPI (--refresh bypasses uv's index cache which
-          # can lag behind the PyPI JSON API, causing "no version" errors right
-          # after publish)
+          # Install cogames from PyPI with retries. Even after the JSON API
+          # confirms the version exists, the Simple API (used by uv/pip for
+          # resolution) can lag behind due to CDN propagation.
+          MAX_RETRIES=10
+          RETRY_DELAY=30
           if [ -n "$VERSION" ]; then
-            echo "Installing cogames==$VERSION from PyPI..."
-            uv pip install --refresh $INDEX_ARGS "cogames==$VERSION"
+            INSTALL_SPEC="cogames==$VERSION"
           else
-            echo "Installing latest cogames from PyPI..."
-            uv pip install --refresh $INDEX_ARGS cogames
+            INSTALL_SPEC="cogames"
           fi
+          for ATTEMPT in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $ATTEMPT/$MAX_RETRIES: Installing $INSTALL_SPEC..."
+            if uv pip install --refresh $INDEX_ARGS "$INSTALL_SPEC" 2>&1; then
+              break
+            fi
+            if [ "$ATTEMPT" -eq "$MAX_RETRIES" ]; then
+              echo "Failed to install $INSTALL_SPEC after $MAX_RETRIES attempts"
+              exit 1
+            fi
+            echo "Install failed, retrying in ${RETRY_DELAY}s..."
+            sleep $RETRY_DELAY
+          done
 
           # Smoke test 1: Check version command works
           echo ""
@@ -290,11 +302,14 @@ jobs:
           echo "✓ cogames smoke tests passed!"
 
   notify-discord:
-    name: Notify Discord on success
-    needs: [verify-pypi-install]
-    if: success()
+    name: Notify Discord
+    needs: [build, test, publish, verify-pypi-install]
+    if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/notify-discord-status
       - name: Extract version from tag
         id: version
         run: |
@@ -303,21 +318,10 @@ jobs:
             VERSION="${VERSION#cogames-v}"
             echo "version=$VERSION" >> $GITHUB_OUTPUT
           fi
-      - name: Post to Discord
-        env:
-          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "No Discord webhook URL configured, skipping"
-            exit 0
-          fi
-          if [ -z "$VERSION" ]; then
-            echo "No version found, skipping"
-            exit 0
-          fi
-          PYPI_URL="https://pypi.org/project/cogames/${VERSION}/"
-          MSG="✅ **cogames v${VERSION}** published to [PyPI](${PYPI_URL})"
-          curl -sf -X POST "$WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": $(echo "$MSG" | jq -Rs .), \"flags\": 4}"
+      - uses: ./.github/actions/notify-discord-status
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          package-name: cogames
+          version: ${{ steps.version.outputs.version }}
+          success-message: "✅ **cogames v${{ steps.version.outputs.version }}** published to [PyPI](https://pypi.org/project/cogames/${{ steps.version.outputs.version }}/)"
+          needs-context: ${{ toJSON(needs) }}
