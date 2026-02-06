@@ -250,9 +250,9 @@ class XLCell(MemoryCell):
         k = self._shape_kv(k_lin)
         v = self._shape_kv(v_lin)
 
-        r = self._relative_positions(L, device, dtype)
-        r = self.r_proj(r)
-        r = r.view(L, self.n_heads, self.d_head).permute(1, 0, 2).contiguous()
+        r = self._relative_positions(L, device, dtype).unsqueeze(0).expand(B, -1, -1)  # [B,L,d_model]
+        r = self.r_proj(r)  # [B,L,n_heads*d_head]
+        r = r.view(B, L, self.n_heads, self.d_head).permute(0, 2, 1, 3).contiguous()  # [B,H,L,D]
         ctx = txl_pytorch(q, k, v, r, seg_full, self.u, self.v, M, self.scale)
 
         y = ctx.transpose(1, 2).contiguous().view(B, T, self.n_heads * self.d_head)

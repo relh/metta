@@ -35,6 +35,7 @@ from cortex.config import (
     PassThroughBlockConfig,
     PostUpBlockConfig,
     PreUpBlockConfig,
+    RoutedAdapterConfig,
     RouterConfig,
     XLCellConfig,
     mLSTMCellConfig,
@@ -46,6 +47,13 @@ from cortex.consistent_dropout import (
     reset_consistent_dropout,
 )
 from cortex.factory import build_cortex, build_from_dict
+from cortex.routed_adapter import (
+    RoutedAdapterHeadwiseLinearExpand,
+    RoutedAdapterLinear,
+    apply_routed_adapter_,
+    get_route_ids,
+    use_route_ids,
+)
 from cortex.stacks import CortexStack
 from cortex.types import MaybeState, ResetMask, State, Tensor
 from cortex.utils import TRITON_AVAILABLE, select_backend
@@ -54,6 +62,7 @@ __all__ = [
     # Configuration
     "BlockConfig",
     "AdapterBlockConfig",
+    "RoutedAdapterConfig",
     "ColumnBlockConfig",
     "PassThroughBlockConfig",
     "PreUpBlockConfig",
@@ -90,6 +99,12 @@ __all__ = [
     "PostUpBlock",
     "register_block",
     "build_block",
+    # Routed adapters
+    "RoutedAdapterLinear",
+    "RoutedAdapterHeadwiseLinearExpand",
+    "apply_routed_adapter_",
+    "get_route_ids",
+    "use_route_ids",
     # Types
     "MaybeState",
     "ResetMask",

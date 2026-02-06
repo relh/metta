@@ -194,6 +194,38 @@ Notes:
 - `cell.hidden_size` is always inferred from the enclosing block/stack and cannot be overridden.
 - Per‑layer targeting is not supported by this API; provide a custom pattern/map if you need per‑layer differences.
 
+### Routed Adapters
+
+Cortex can inject `RoutedAdapter` low-rank adapters into linear-like modules across stacks/blocks/cells.
+
+When enabled, you must pass `route_ids` with shape `[B]` on every `forward`/`step` call:
+
+```python
+import torch
+from cortex import RoutedAdapterConfig
+from cortex.stacks import build_cortex_auto_stack
+
+stack = build_cortex_auto_stack(
+    d_hidden=256,
+    num_layers=2,
+    pattern="AXMS",
+    routed_adapter=RoutedAdapterConfig(num_slots=64, rank=8, dropout=0.0),
+)
+
+B, T = 4, 16
+x = torch.randn(B, T, 256)
+route_ids = torch.tensor([0, 5, 12, 7], dtype=torch.long)  # shape [B]
+out, state = stack(x, route_ids=route_ids)
+```
+
+Notes:
+
+- Adapter slot selection is batch-parallel (`route_ids[i]` selects the adapter for batch row `i`).
+- Sequence inputs `[B, T, H]` use the same routed adapter across all timesteps for each batch row.
+- Works with `build_cortex_auto_stack(...)` pattern DSLs such as `"AXMS"`, `"X^M^S^"`, and custom maps.
+- Standalone DSL blocks support this directly: `build_column_auto_block(..., routed_adapter=RoutedAdapterConfig(...))`.
+- `compile_blocks` is disabled automatically when `routed_adapter` is enabled.
+
 ## Supported Components
 
 ### Memory Cells

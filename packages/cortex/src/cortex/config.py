@@ -205,6 +205,18 @@ class AdapterBlockConfig(BlockConfig):
         return value
 
 
+class RoutedAdapterConfig(BaseModel):
+    """Configuration for route-ID-routed low-rank adapters on linear-like modules."""
+
+    enabled: bool = Field(default=True)
+    num_slots: int = Field(ge=1)
+    rank: int = Field(ge=1)
+    alpha: float | None = Field(default=None, gt=0.0)
+    dropout: float = Field(default=0.0, ge=0.0, le=1.0)
+    freeze_base: bool = Field(default=False)
+    require_route_ids: bool = Field(default=True)
+
+
 class CortexStackConfig(BaseModel):
     """Configuration for a sequential stack of blocks."""
 
@@ -212,6 +224,7 @@ class CortexStackConfig(BaseModel):
     d_hidden: int = Field(ge=1)
     post_norm: bool = Field(default=True)
     compile_blocks: bool = Field(default=True)
+    routed_adapter: RoutedAdapterConfig | None = Field(default=None)
 
     @field_validator("blocks", mode="before")
     @classmethod
@@ -312,6 +325,7 @@ __all__ = [
     "PostUpBlockConfig",
     "PostUpGatedBlockConfig",
     "AdapterBlockConfig",
+    "RoutedAdapterConfig",
     "CortexStackConfig",
     "RouterConfig",
     "ColumnBlockConfig",

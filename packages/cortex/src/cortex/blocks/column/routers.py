@@ -9,13 +9,14 @@ import torch
 import torch.nn as nn
 
 from cortex.config import RouterConfig
+from cortex.routed_adapter import get_route_ids
 from cortex.types import Tensor
 
 
 class BaseRouter(nn.Module):
     """Abstract router that returns a global expert gate via forward()."""
 
-    def forward(self, expert_outputs: Optional[list[Tensor]] = None) -> Tensor:  # shape: [K]
+    def forward(self, expert_outputs: Optional[list[Tensor]] = None) -> Tensor:  # shape: [K] or [B, K]
         raise NotImplementedError
 
 
@@ -42,21 +43,40 @@ class GlobalContextRouter(BaseRouter):
 
     @torch.no_grad()
     def _topk_mask(self, scores: Tensor) -> Tensor:
-        if self.top_k is None or self.top_k >= scores.numel():
+        if self.top_k is None:
             return scores
-        k = self.top_k
-        topk_vals, topk_idx = torch.topk(scores, k)
-        masked = torch.full_like(scores, float("-inf"))
-        masked[topk_idx] = topk_vals
-        return masked
+        k = int(self.top_k)
+        if scores.dim() == 1:
+            if k >= scores.shape[0]:
+                return scores
+            topk_vals, topk_idx = torch.topk(scores, k)
+            masked = torch.full_like(scores, float("-inf"))
+            masked[topk_idx] = topk_vals
+            return masked
+        if scores.dim() == 2:
+            if k >= scores.shape[-1]:
+                return scores
+            topk_vals, topk_idx = torch.topk(scores, k, dim=-1)
+            masked = torch.full_like(scores, float("-inf"))
+            masked.scatter_(dim=-1, index=topk_idx, src=topk_vals)
+            return masked
+        raise ValueError(f"Expected scores with dim 1 or 2, got shape {tuple(scores.shape)}")
 
     def _global_scores(self) -> Tensor:
         """Unnormalized global scores over experts (before temperature and softmax)."""
-        q = self.Wq(self.context)  # [d_k]
-        k_proj = self.Wk(self.keys)  # [E, d_k]
         scale = 1.0 / math.sqrt(self.d_key) if self.use_sqrt_scale else 1.0 / float(self.d_key)
-        scores = torch.einsum("kd,d->k", k_proj, q) * scale  # [E]
-        return scores
+        route_ids = get_route_ids()
+        if route_ids is None:
+            q = self.Wq(self.context)  # [d_k]
+            k_proj = self.Wk(self.keys)  # [E, d_k]
+            return torch.einsum("kd,d->k", k_proj, q) * scale  # [E]
+
+        batch_size = int(route_ids.shape[0])
+        q_in = self.context.unsqueeze(0).expand(batch_size, -1)  # [B, d_hidden]
+        k_in = self.keys.unsqueeze(0).expand(batch_size, -1, -1)  # [B, E, d_k]
+        q = self.Wq(q_in)  # [B, d_k]
+        k_proj = self.Wk(k_in)  # [B, E, d_k]
+        return torch.einsum("bed,bd->be", k_proj, q) * scale  # [B, E]
 
     def global_logits(self, *, restrict_topk: bool = True) -> Tensor:
         scores = self._global_scores()

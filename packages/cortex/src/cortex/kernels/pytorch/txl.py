@@ -34,7 +34,12 @@ def txl_pytorch(
     ac = torch.einsum("bhtd,bhld->bhtl", q_u, k)
 
     q_v = q + v_bias[None, :, None, :]
-    bd = torch.einsum("bhtd,hld->bhtl", q_v, r)
+    if r.dim() == 3:
+        bd = torch.einsum("bhtd,hld->bhtl", q_v, r)
+    elif r.dim() == 4:
+        bd = torch.einsum("bhtd,bhld->bhtl", q_v, r)
+    else:
+        raise ValueError(f"Expected r to have 3 or 4 dims, got {tuple(r.shape)}")
     bd = _rel_shift(bd)
 
     logits = (ac + bd) * scale

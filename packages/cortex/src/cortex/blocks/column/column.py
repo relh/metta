@@ -211,17 +211,23 @@ class ColumnBlock(BaseBlock):
         D_mixed = self.e_mixer(U_tokens, D)  # [B,T,E,H]
 
         restrict = bool(getattr(self.config.router, "restrict_to_topk", True))
-        g_logits = self.router.global_logits(restrict_topk=restrict).to(D_mixed.dtype)  # [E]
+        g_logits = self.router.global_logits(restrict_topk=restrict).to(D_mixed.dtype)  # [E] or [B,E]
+        if g_logits.dim() == 1:
+            g_logits_tokens = g_logits.view(1, 1, -1)
+        elif g_logits.dim() == 2:
+            g_logits_tokens = g_logits.unsqueeze(1)
+        else:
+            raise ValueError(f"Expected global logits with dim 1 or 2, got shape {tuple(g_logits.shape)}")
 
         lam = float(getattr(self.config.router, "whisper_lambda", 0.0))
         if lam > 0.0:
             p_t = self.refiner(U_tokens)  # type: ignore[operator]  # [B,T,E]
-            logits_total = g_logits.view(1, 1, -1) + (lam * p_t)
+            logits_total = g_logits_tokens + (lam * p_t)
             a_t = torch.softmax(logits_total.to(dtype=torch.float32), dim=-1).to(D_mixed.dtype)
         else:
             # Broadcast global prior over tokens
-            a_t = torch.softmax(g_logits.to(dtype=torch.float32), dim=-1).to(D_mixed.dtype)
-            a_t = a_t.view(1, 1, -1).expand(D_mixed.shape[0], D_mixed.shape[1], -1)
+            a_t = torch.softmax(g_logits_tokens.to(dtype=torch.float32), dim=-1).to(D_mixed.dtype)
+            a_t = a_t.expand(D_mixed.shape[0], D_mixed.shape[1], -1)
 
         # Reduce across experts to form the total mixture and then apply ReZero around it:
         # y_total = sum_k a_{t,k} y_k = x + [sum_k a_{t,k} (y_k - u) + (u - x)]

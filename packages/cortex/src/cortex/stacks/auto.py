@@ -7,7 +7,7 @@ from typing import Iterable, List, cast
 from pydantic import BaseModel
 
 from cortex.blocks.column.auto import build_column_auto_config
-from cortex.config import BlockConfig, CortexStackConfig, RouterConfig
+from cortex.config import BlockConfig, CortexStackConfig, RoutedAdapterConfig, RouterConfig
 from cortex.stacks.base import CortexStack
 
 
@@ -21,6 +21,7 @@ def build_cortex_auto_config(
     post_norm: bool = True,
     compile_blocks: bool = True,
     override_global_configs: Iterable[BaseModel] | None = None,
+    routed_adapter: RoutedAdapterConfig | None = None,
 ) -> CortexStackConfig:
     """Build a CortexStackConfig with Column layers from AXMS patterns."""
 
@@ -47,6 +48,7 @@ def build_cortex_auto_config(
         d_hidden=d_hidden,
         post_norm=post_norm,
         compile_blocks=bool(compile_blocks),
+        routed_adapter=routed_adapter,
     )
 
 
@@ -60,6 +62,7 @@ def build_cortex_auto_stack(
     post_norm: bool = True,
     compile_blocks: bool = True,
     override_global_configs: Iterable[BaseModel] | None = None,
+    routed_adapter: RoutedAdapterConfig | None = None,
 ) -> CortexStack:
     """Build a Column-based CortexStack with per-layer patterns."""
     cfg = build_cortex_auto_config(
@@ -71,6 +74,7 @@ def build_cortex_auto_stack(
         post_norm=post_norm,
         compile_blocks=compile_blocks,
         override_global_configs=override_global_configs,
+        routed_adapter=routed_adapter,
     )
     return CortexStack(cfg)
 

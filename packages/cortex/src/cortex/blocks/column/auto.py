@@ -14,12 +14,14 @@ from cortex.blocks.registry import build_block
 from cortex.config import (
     BlockConfig,
     ColumnBlockConfig,
+    RoutedAdapterConfig,
     RouterConfig,
     XLCellConfig,
     mLSTMCellConfig,
     sLSTMCellConfig,
 )
 from cortex.registry import block_config_for_token, get_registered_tokens
+from cortex.routed_adapter import apply_routed_adapter_
 
 
 def _clone_model(model: BaseModel) -> BaseModel:
@@ -114,10 +116,13 @@ def build_column_auto_block(
     pattern: str | None = None,
     router: RouterConfig | None = None,
     custom_map: Dict[str, BlockConfig] | None = None,
+    routed_adapter: RoutedAdapterConfig | None = None,
 ) -> ColumnBlock:
     cfg = build_column_auto_config(d_hidden=d_hidden, pattern=pattern, router=router, custom_map=custom_map)
     block = build_block(config=cfg, d_hidden=d_hidden, cell=None)  # type: ignore[arg-type]
     assert isinstance(block, ColumnBlock)
+    if routed_adapter is not None and routed_adapter.enabled:
+        apply_routed_adapter_(block, routed_adapter)
     return block
 
 

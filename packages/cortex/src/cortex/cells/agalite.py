@@ -171,9 +171,9 @@ class AGaLiTeCell(MemoryCell):
         norm = torch.einsum("tbhD,tbhD->tbh", final_s, queries_t)
         attn_out = kv / (2 * self.r * norm.unsqueeze(-1) + self.eps)
 
-        # Project out
-        y = self.drop(self.out_proj(attn_out.reshape(T, B, self.n_heads * self.d_head)))
-        y = y.transpose(0, 1).contiguous()  # [B,T,H]
+        # Project out in [B,T,H] layout so adapter routing follows batch rows.
+        attn_bth = attn_out.transpose(0, 1).contiguous().reshape(B, T, self.n_heads * self.d_head)
+        y = self.drop(self.out_proj(attn_bth))  # [B,T,H]
         y = y.squeeze(1) if is_step else y
 
         # Update state with last time step
