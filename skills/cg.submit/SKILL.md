@@ -28,18 +28,7 @@ digraph submit {
 
 Determine the policy from args or the current branch/working directory.
 
-**For scripted agents**, resolve the short name to class path and source directory:
-
-```bash
-uv run cogames policies   # list available short names + class paths
-```
-
-The class path and include-files directory follow a pattern. For a policy with short_name `planky`:
-
-- class: `cogames_agents.policy.scripted_agent.planky.policy.PlankyPolicy`
-- include-files: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/planky`
-
-For **trained checkpoints**, the policy arg is the checkpoint URI (e.g., `file://./train_dir/my_run/checkpoints`).
+Run `uv run cogames policies` to list available short names. Default to `planky` if the branch touches planky files.
 
 Derive defaults:
 
@@ -55,40 +44,46 @@ Use AskUserQuestion to confirm/adjust:
 
 ## Step 3: Verify with /cg.play
 
-Run `/cg.play` with the policy to verify it loads and runs:
+Run a headless play test for 1000 steps to verify the policy loads and runs well:
 
 ```bash
 uv run cogames play --mission cogsguard_machina_1.basic \
-  --policy "metta://policy/<short_name>" --render=none --steps=100
+  --policy "metta://policy/<short_name>" --render=none --steps=1000
 ```
 
 If this fails, stop and fix before uploading.
 
+After it completes, report the Episode Stats table (gear, reward) to the user.
+
 ## Step 4: Upload
 
-For **scripted agents** (source code submissions):
+Run from `packages/cogames-agents/`:
 
 ```bash
+cd packages/cogames-agents
 uv run cogames upload \
-  -p "class=<class_path>" \
+  -p "class=<full_class_path>" \
   -n "<name>" \
   --season <season> \
   --skip-validation \
-  --include-files <source_dir>
+  --include-files src/cogames_agents \
+  --setup-script setup_script.py
 ```
 
 Example:
 
 ```bash
+cd packages/cogames-agents
 uv run cogames upload \
   -p "class=cogames_agents.policy.scripted_agent.planky.policy.PlankyPolicy" \
   -n "daveey.planky" \
   --season beta-cvc \
   --skip-validation \
-  --include-files packages/cogames-agents/src/cogames_agents/policy/scripted_agent/planky
+  --include-files src/cogames_agents \
+  --setup-script setup_script.py
 ```
 
-For **trained checkpoints**:
+For **trained checkpoints**, use the checkpoint URI instead of the short name:
 
 ```bash
 uv run cogames upload \
@@ -97,26 +92,27 @@ uv run cogames upload \
   --season <season>
 ```
 
-Use `--skip-validation` for scripted agents since we already verified in Step 3.
+Use `--skip-validation` since we already verified in Step 3.
 
 ## Step 5: Show Observatory Link
 
 After upload succeeds, show:
 
 ```
-Tournament:   https://observatory.softmax-research.net/tournament/<season>
+Tournament:   https://observatory.softmax-research.net/tournament/<season>/players
 Check status: uv run cogames submissions --season <season>
 Leaderboard:  uv run cogames leaderboard --season <season>
 ```
 
 ## Quick Reference
 
-| Field         | Default                        | Override                               |
-| ------------- | ------------------------------ | -------------------------------------- |
-| Name          | `<git-user>.<policy>`          | User chooses                           |
-| Season        | `beta-cvc`                     | From `cogames seasons`                 |
-| Validation    | `--skip-validation` (scripted) | Omit flag for full isolated validation |
-| Include-files | Auto from class path           | Explicit path                          |
+| Field         | Default                   | Override               |
+| ------------- | ------------------------- | ---------------------- |
+| Name          | `<git-user>.<policy>`     | User chooses           |
+| Season        | `beta-cvc`                | From `cogames seasons` |
+| Working dir   | `packages/cogames-agents` | -                      |
+| Include-files | `src/cogames_agents`      | Explicit path          |
+| Setup script  | `setup_script.py`         | Explicit path          |
 
 ## Integration
 
