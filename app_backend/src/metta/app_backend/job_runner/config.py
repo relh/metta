@@ -28,7 +28,6 @@ class JobDispatchConfig(BaseSettings):
     EVAL_S3_BUCKET: str = ""
     # S3 bucket where uploaded policies are stored
     POLICY_S3_BUCKET: str | None = None
-    PRESIGNED_URL_EXPIRATION: int = 7200
     # Alternate S3 endpoint for generating presigned URLs (e.g. host.docker.internal
     # for local dev where pods can't use localhost). Direct S3 ops use AWS_ENDPOINT_URL.
     S3_PRESIGNED_ENDPOINT: str | None = None

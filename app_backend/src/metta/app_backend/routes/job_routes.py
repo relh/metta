@@ -24,7 +24,7 @@ from sqlmodel import col, select
 from metta.app_backend.auth import CheckSoftmaxUser, CheckUser
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
-from metta.app_backend.job_runner.dispatcher import dispatch_job, presign_operation
+from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
     job_debug_key,
     job_logs_key,
@@ -49,7 +49,6 @@ from metta.app_backend.otel.metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.routes.tournament_routes import PolicyVersionSummary
-from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -117,21 +116,6 @@ class JobRequestResponse(BaseModel):
             episode=episode,
             match=match,
         )
-
-
-def _fixup_episode_job(job: JobRequest) -> None:
-    if job.job.get("debug_uri") is None:
-        cfg = get_dispatch_config()
-        if not cfg.EVAL_S3_BUCKET:
-            return
-        debug_uri = presign_operation(
-            "put",
-            cfg.EVAL_S3_BUCKET,
-            job_debug_key(job.id),
-            JOB_TIMEOUT_SECONDS + 60 * 60,
-            cfg.S3_PRESIGNED_ENDPOINT,
-        )
-        job.job = {**job.job, "debug_uri": debug_uri}
 
 
 VALID_TRANSITIONS = {
@@ -240,8 +224,6 @@ def create_job_router() -> APIRouter:
         async with db_session() as session:
             for job_create in jobs:
                 db_job = JobRequest(**job_create.model_dump(), user_id=user.id, status=JobStatus.pending)
-                if db_job.job_type == JobType.episode:
-                    _fixup_episode_job(db_job)
                 session.add(db_job)
                 db_jobs.append(db_job)
             await session.flush()

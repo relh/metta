@@ -14,6 +14,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.job_runner.job_artifacts import (
+    job_debug_key,
     job_replay_key,
     job_results_key,
     job_runtime_info_key,
@@ -59,7 +60,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
             raise ValueError(f"Missing pre-resolved S3 key for policy URI at index {i}: {uri}")
         resolved_s3_keys.append(key)
 
-    exp = cfg.PRESIGNED_URL_EXPIRATION
+    exp = JOB_TIMEOUT_SECONDS + 3600
     endpoint = cfg.S3_PRESIGNED_ENDPOINT
     job_spec["policy_uris"] = [
         presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
@@ -84,6 +85,9 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     if job.job.get("replay_uri") is not None:
         replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_replay_key(job.id), exp, endpoint)
         env_vars.append(client.V1EnvVar(name="REPLAY_URI", value=replay_uri))
+
+    debug_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_debug_key(job.id), exp, endpoint)
+    env_vars.append(client.V1EnvVar(name="DEBUG_URI", value=debug_uri))
 
     if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE:
         env_vars.append(client.V1EnvVar(name="AWS_PROFILE", value=cfg.LOCAL_DEV_AWS_PROFILE))
