@@ -29,6 +29,7 @@ Shared skills live in `skills/`:
 - `cb.review-main`
 - `cb.simplify-diff`
 - `cb.sync-nim-python`
+- `cf.bop-it`
 - `cf.really`
 - `cg.play`
 - `cg.policy-dashboard`
