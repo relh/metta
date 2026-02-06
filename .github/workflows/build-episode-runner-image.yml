@@ -1,0 +1,86 @@
+name: "Build Episode Runner Image"
+
+on:
+  push:
+    tags:
+      - mettagrid-v*
+    branches:
+      - main
+    paths:
+      - "packages/mettagrid/**"
+      - "packages/mettagrid/Dockerfile.episode_runner"
+      - ".github/workflows/build-episode-runner-image.yml"
+  workflow_dispatch:
+    inputs:
+      mettagrid_version:
+        description: "mettagrid version to install (e.g. 0.2.0.84). Leave empty to auto-detect from tag."
+        required: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: metta-ai/episode-runner
+
+jobs:
+  resolve-version:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      mettagrid_version: ${{ steps.version.outputs.mettagrid_version }}
+    steps:
+      - name: Resolve mettagrid version
+        id: version
+        run: |
+          if [[ -n "${{ inputs.mettagrid_version }}" ]]; then
+            echo "mettagrid_version=${{ inputs.mettagrid_version }}" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/tags/mettagrid-v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/mettagrid-v}"
+            echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          else
+            # For branch pushes, fetch latest from PyPI
+            VERSION=$(curl -s https://pypi.org/pypi/mettagrid/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
+            echo "mettagrid_version=${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-push:
+    needs: resolve-version
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: useblacksmith/setup-docker-builder@v1
+
+      - name: Compute tags
+        id: tags
+        run: |
+          REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          VERSION="${{ needs.resolve-version.outputs.mettagrid_version }}"
+          TAGS="${REPO}:mettagrid-${VERSION}"
+
+          if [[ "${GITHUB_REF}" == refs/heads/main || "${GITHUB_REF}" == refs/tags/mettagrid-v* ]]; then
+            TAGS="${TAGS},${REPO}:latest"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: .
+          file: ./packages/mettagrid/Dockerfile.episode_runner
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            METTAGRID_VERSION=${{ needs.resolve-version.outputs.mettagrid_version }}
+            GIT_COMMIT=${{ github.sha }}

@@ -99,7 +99,7 @@ stays heavy; the episode runner is what we slim down.
       runner module from mettagrid. No kubectl, no metta repo clone. The existing orchestrator Dockerfile stays
       unchanged.
 
-- [ ] **PR 3: CI workflow to build and publish the slim image.** New GitHub Actions workflow triggered on mettagrid
+- [x] **PR 3: CI workflow to build and publish the slim image.** New GitHub Actions workflow triggered on mettagrid
       releases (`mettagrid-v*` tags). Builds `Dockerfile.episode_runner`, pushes to ECR as
       `episode-runner:<mettagrid-version>`. Keep pushing to same ECR registries so Helm charts pick it up without infra
       changes.
