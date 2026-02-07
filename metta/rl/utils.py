@@ -10,6 +10,20 @@ from torchrl.data import Composite
 _POLICY_METADATA_CACHE: dict[tuple[str, int, int], tuple[Tensor, Tensor]] = {}
 
 
+def _infer_tensordict_device(td: TensorDict) -> torch.device:
+    device = td.device
+    if device is not None:
+        return device
+
+    # Infer device from the first tensor in the TensorDict.
+    for key in td.keys():
+        val = td[key]
+        if isinstance(val, Tensor):
+            return val.device
+
+    raise ValueError("TensorDict has no device and contains no tensors to infer device from")
+
+
 def _get_policy_metadata_tensors(
     device: torch.device,
     batch_size: int,
@@ -39,21 +53,12 @@ def ensure_sequence_metadata(
 ) -> None:
     """Attach required sequence metadata to ``td`` if missing."""
 
-    keys = td.keys()
-    needs_batch = "batch" not in keys
-    needs_bptt = "bptt" not in keys
+    needs_batch = "batch" not in td.keys()
+    needs_bptt = "bptt" not in td.keys()
     if not (needs_batch or needs_bptt):
         return
-    device = td.device
-    if device is None:
-        # Infer device from first tensor in TensorDict
-        for key in td.keys():
-            val = td[key]
-            if isinstance(val, Tensor):
-                device = val.device
-                break
-    if device is None:
-        raise ValueError("TensorDict has no device and contains no tensors to infer device from")
+
+    device = _infer_tensordict_device(td)
     batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, batch_size, time_steps, cache=cache)
     if needs_batch:
         td.set("batch", batch_tensor)
@@ -79,16 +84,8 @@ def prepare_policy_forward_td(
 
     B, TT = td.batch_size
     td = td.reshape(B * TT)
-    device = td.device
-    if device is None:
-        # Infer device from first tensor in TensorDict
-        for key in td.keys():
-            val = td[key]
-            if isinstance(val, Tensor):
-                device = val.device
-                break
-    if device is None:
-        raise ValueError("TensorDict has no device and contains no tensors to infer device from")
+
+    device = _infer_tensordict_device(td)
     batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, B, TT)
     td.set("batch", batch_tensor)
     td.set("bptt", bptt_tensor)
