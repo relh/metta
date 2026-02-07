@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from pydantic import Field
 from tensordict import TensorDict
 from torch import Tensor
-from torchrl.data import Composite, UnboundedContinuous
+from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
 from metta.rl.loss.loss import Loss, LossConfig
 from metta.rl.policy_assets import PolicyAssetRegistry
@@ -70,10 +70,12 @@ class Kickstarter(Loss):
 
         scalar_f32 = UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32)
         logits_f32 = UnboundedContinuous(shape=torch.Size([num_actions]), dtype=torch.float32)
+        boolean = UnboundedDiscrete(shape=torch.Size([]), dtype=torch.bool)
 
         return Composite(
             teacher_logits=logits_f32,
             teacher_values=scalar_f32,
+            teacher_mask=boolean,
         )
 
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
@@ -85,9 +87,14 @@ class Kickstarter(Loss):
         student_td.set("teacher_logits", teacher_td.get("logits"))
         student_td.set("teacher_values", teacher_td.get("values"))
 
-        if torch.rand(1) < self.cfg.teacher_led_proportion:
-            # overwrite student actions w teacher actions with some probability. anneal this.
-            student_td["actions"] = teacher_td["actions"]
+        forced = bool(torch.rand(1, device=student_td.device) < self.cfg.teacher_led_proportion)
+        teacher_mask = torch.full(student_td.batch_size, forced, dtype=torch.bool, device=student_td.device)
+        student_td["teacher_mask"] = teacher_mask
+        if forced:
+            teacher_actions = teacher_td["actions"]
+            student_td["actions"] = teacher_actions.to(dtype=student_td["actions"].dtype)
+            if "act_log_prob" in student_td.keys() and "act_log_prob" in teacher_td.keys():
+                student_td["act_log_prob"] = teacher_td["act_log_prob"].to(dtype=student_td["act_log_prob"].dtype)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"logits", "values"}

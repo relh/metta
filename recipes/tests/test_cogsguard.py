@@ -230,6 +230,15 @@ def test_train_with_smart_gear_teacher_policy_uri() -> None:
     assert tool.scheduler is not None
 
 
+def test_train_does_not_enable_teacher_by_default() -> None:
+    tool = cogsguard.train()
+
+    assert tool.training_env.supervisor_policy_uri is None
+    assert not tool.trainer.losses.has_loss("teacher_led")
+    assert not tool.trainer.losses.has_loss("student_led")
+    assert tool.scheduler is None
+
+
 def test_sweep_sweeps_hypers_and_fixes_variants_and_timesteps() -> None:
     tool = cogsguard.sweep("cogsguard.test")
     space = tool.search_space

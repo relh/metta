@@ -27,6 +27,8 @@ def _set_sequence_metadata(td: TensorDict, *, batch_size: int, time_steps: int =
 
 def _pad_tensor_like(slice_value: torch.Tensor, rollout_value: torch.Tensor) -> torch.Tensor:
     if slice_value.shape == rollout_value.shape:
+        if slice_value.dtype != rollout_value.dtype:
+            return slice_value.to(dtype=rollout_value.dtype)
         return slice_value
     if slice_value.dim() != rollout_value.dim():
         return rollout_value

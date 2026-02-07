@@ -384,9 +384,7 @@ def train(
     sweep_mode: bool = False,
     use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
-    if teacher is None:
-        teacher = TeacherConfig()
-    elif isinstance(teacher, dict):
+    if isinstance(teacher, dict):
         teacher = TeacherConfig.model_validate(teacher)
 
     if use_clips_curriculum:

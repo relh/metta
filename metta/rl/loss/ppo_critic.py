@@ -183,7 +183,8 @@ class PPOCritic(Loss):
                         raise RuntimeError("Teacher-slice TD(λ) correction requires policy_td['act_log_prob']")
                     act_log_prob: Tensor = policy_td["act_log_prob"]
                     mb_actions: Tensor = minibatch["actions"]
-                    rho = act_log_prob.reshape(mb_actions.shape).exp()
+                    old_log_prob: Tensor = minibatch["act_log_prob"]
+                    rho = (act_log_prob.reshape(mb_actions.shape) - old_log_prob.reshape(mb_actions.shape)).exp()
                     rho_trim = rho.detach()[teacher_mask][:, :-1]
                     rho_clip = float(self.cfg.teacher_offpolicy_rho_clip)
                     self.loss_tracker["teacher_td_lambda_rho_clipfrac"].append(

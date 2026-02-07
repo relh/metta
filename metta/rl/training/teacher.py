@@ -152,6 +152,19 @@ def apply_teacher_phase(
         primary_policy_name=primary_policy_name,
         teacher_policy_name=teacher_policy_name,
     )
+    if not is_sliced:
+        if trajectory_isolation is None:
+            raise ValueError(
+                "trajectory_isolation must be provided when using mixed teacher mode. "
+                "Pass TrainTool.trajectory_isolation or create one with default_trajectory_isolation_config()"
+            )
+        _wire_teacher_loss_into_mixed_slice(
+            trajectory_isolation=trajectory_isolation,
+            teacher_loss_names=teacher_loss_names,
+            primary_policy_name=primary_policy_name,
+            teacher_policy_name=teacher_policy_name,
+            include_teacher_policy=(mode_parts.family in teacher_asset_modes),
+        )
 
     def _gate_loss(name: str, end_at_step: int = total_steps) -> None:
         if end_at_step:
@@ -503,6 +516,7 @@ def _setup_trajectory_isolation(
 
     use_teacher_policy = family not in {"supervisor", "eer_cloner"}
     led_policies = [primary_policy_name] + ([teacher_policy_name] if use_teacher_policy else [])
+    led_losses = ["ppo_critic", "ppo_actor"] if family in {"supervisor", "kickstarter"} else []
 
     if teacher_cfg.teacher_led_proportion > 0:
         slices.append(
@@ -510,7 +524,7 @@ def _setup_trajectory_isolation(
                 name="teacher_led",
                 env_ratio=teacher_cfg.teacher_led_proportion,
                 policies=led_policies,
-                losses=["teacher_led"],
+                losses=led_losses + ["teacher_led"],
             )
         )
     if teacher_cfg.student_led_proportion > 0:
@@ -519,7 +533,7 @@ def _setup_trajectory_isolation(
                 name="student_led",
                 env_ratio=teacher_cfg.student_led_proportion,
                 policies=led_policies,
-                losses=["student_led"],
+                losses=led_losses + ["student_led"],
             )
         )
 
@@ -531,3 +545,37 @@ def _slice_by_name(trajectory_isolation: TrajectoryIsolationConfig, name: str) -
         if slice_cfg.name == name:
             return slice_cfg
     raise KeyError(f"Missing trajectory slice '{name}'")
+
+
+def _wire_teacher_loss_into_mixed_slice(
+    *,
+    trajectory_isolation: TrajectoryIsolationConfig,
+    teacher_loss_names: list[str],
+    primary_policy_name: str,
+    teacher_policy_name: str,
+    include_teacher_policy: bool,
+) -> None:
+    matching_slices = [
+        slice_cfg for slice_cfg in trajectory_isolation.slices if slice_cfg.primary_policy == primary_policy_name
+    ]
+    if len(matching_slices) != 1:
+        raise ValueError(
+            "Mixed teacher mode requires exactly one trajectory isolation slice with "
+            f"primary_policy={primary_policy_name!r}. Found: "
+            f"{[(s.name, s.primary_policy) for s in trajectory_isolation.slices]!r}"
+        )
+
+    target_slice = matching_slices[0]
+
+    for loss_name in teacher_loss_names:
+        used_in = [slice_cfg.name for slice_cfg in trajectory_isolation.slices if loss_name in slice_cfg.losses]
+        if used_in and used_in != [target_slice.name]:
+            raise ValueError(
+                "Mixed teacher mode expects teacher loss to be referenced by a single slice. "
+                f"loss={loss_name!r} referenced by slices={used_in!r}"
+            )
+        if loss_name not in target_slice.losses:
+            target_slice.losses.append(loss_name)
+
+    if include_teacher_policy and teacher_policy_name not in target_slice.policies:
+        target_slice.policies.append(teacher_policy_name)
