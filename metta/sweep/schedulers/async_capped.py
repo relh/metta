@@ -229,7 +229,7 @@ class AsyncCappedOptimizingScheduler:
                 continue
             score = summary.get("sweep/score")
             cost = summary.get("sweep/cost")
-            suggestion = summary.get("sweep/suggestion", {})
+            suggestion = SchedulerState._extract_suggestion(run) or {}
             if score is not None:
                 try:
                     obs.append(

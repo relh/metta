@@ -37,6 +37,7 @@ from metta.rl.training.clips_curriculum import ClipsCurriculumConfig
 from metta.rl.training.scheduler import LossRunGate, SchedulerConfig, ScheduleRule
 from metta.rl.training.teacher import TeacherConfig, apply_teacher_phase
 from metta.sim.simulation_config import SimulationConfig
+from metta.sweep.core import Distribution as D
 from metta.sweep.core import SweepParameters as SP
 from metta.sweep.core import make_sweep
 from mettagrid.config.mettagrid_config import MettaGridConfig
@@ -410,7 +411,7 @@ def train(
         )
     trainer_cfg = TrainerConfig()
     if sweep_mode:
-        # Tuned from docs/experiments/cogsguard_sweep_2026-01-29.md.
+        # Tuned from relh.cg.0204 sweep runs.
         trainer_cfg.sampling.method = "prioritized"
         trainer_cfg.sampling.prio_alpha = 0.3098
         trainer_cfg.sampling.prio_beta0 = 0.7994
@@ -519,7 +520,7 @@ def train_sweep(
         layout=layout,
         sweep_mode=True,
     )
-    tool.trainer.total_timesteps = 1_000_000_000
+    tool.trainer.total_timesteps = 3_000_000_000
     return tool
 
 
@@ -529,27 +530,101 @@ def evaluate_stub(*args: object, **kwargs: object) -> tools.StubTool:
 
 def sweep(
     sweep_name: str,
-    variants: Optional[Sequence[str]] = ("milestones", "credit"),
-    sweep_reward_variants: bool = True,
+    variants: Sequence[str] = ("no_clips", "milestones", "credit", "penalize_vibe_change"),
     max_trials: int = 80,
     num_parallel_trials: int = 12,
 ) -> tools.SweepTool:
-    # Basic sweep search space (simplified from cogs_v_clips)
-    search_space: dict[str, object] = {}
-    if sweep_reward_variants:
-        search_space.update(
-            SP.categorical(
-                "variants",
-                choices=[
-                    "[]",
-                    '["milestones"]',
-                    '["credit"]',
-                    '["milestones","credit"]',
-                ],
-            )
-        )
-    elif variants is not None:
-        search_space["variants"] = list(variants)
+    # Fixed task setup; sweep only PPO/training hyperparameters.
+    # Note: sweep suggestions are applied as post-construction overrides, so these
+    # parameters override the sweep_mode "winner defaults" in train_sweep().
+    parameters: list[dict[str, object]] = [
+        {"variants": list(variants)},
+        {"trainer.total_timesteps": 3_000_000_000},
+        SP.param(
+            "trainer.optimizer.learning_rate",
+            D.LOG_NORMAL,
+            min=1e-4,
+            max=3e-2,
+            search_center=9.24e-3,
+        ),
+        SP.param(
+            "trainer.optimizer.momentum",
+            D.UNIFORM,
+            min=0.90,
+            max=0.995,
+            search_center=0.9724,
+        ),
+        SP.param(
+            "trainer.optimizer.weight_decay",
+            D.LOG_NORMAL,
+            min=1e-4,
+            max=0.30,
+            search_center=0.10,
+        ),
+        SP.param(
+            "trainer.optimizer.eps",
+            D.LOG_NORMAL,
+            min=1e-8,
+            max=1e-4,
+            search_center=2.5e-6,
+        ),
+        SP.param(
+            "trainer.optimizer.warmup_steps",
+            D.INT_UNIFORM,
+            min=500,
+            max=5000,
+            search_center=1752,
+        ),
+        SP.param(
+            "trainer.sampling.prio_alpha",
+            D.UNIFORM,
+            min=0.0,
+            max=1.0,
+            search_center=0.3098,
+        ),
+        SP.param(
+            "trainer.sampling.prio_beta0",
+            D.UNIFORM,
+            min=0.0,
+            max=1.0,
+            search_center=0.7994,
+        ),
+        SP.param(
+            "trainer.advantage.gamma",
+            D.UNIFORM,
+            min=0.99,
+            max=0.9999,
+            search_center=0.9995,
+        ),
+        SP.param(
+            "trainer.advantage.gae_lambda",
+            D.UNIFORM,
+            min=0.80,
+            max=0.99,
+            search_center=0.9161,
+        ),
+        SP.param(
+            "trainer.losses.ppo_actor.clip_coef",
+            D.UNIFORM,
+            min=0.10,
+            max=0.60,
+            search_center=0.3644,
+        ),
+        SP.param(
+            "trainer.losses.ppo_actor.ent_coef",
+            D.LOG_NORMAL,
+            min=1e-4,
+            max=2e-1,
+            search_center=0.0717,
+        ),
+        SP.param(
+            "trainer.losses.ppo_critic.vf_coef",
+            D.UNIFORM,
+            min=0.50,
+            max=2.50,
+            search_center=1.3652,
+        ),
+    ]
 
     return make_sweep(
         name=sweep_name,
@@ -557,7 +632,7 @@ def sweep(
         train_entrypoint="train_sweep",
         eval_entrypoint="evaluate_stub",
         metric_key="env_collective/cogs/aligned.junction.held",
-        search_space=search_space,
+        search_space=parameters,
         cost_key="metric/total_time",
         max_trials=max_trials,
         num_parallel_trials=num_parallel_trials,

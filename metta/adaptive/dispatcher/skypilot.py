@@ -1,5 +1,6 @@
 """Skypilot dispatcher implementation for distributed job execution."""
 
+import json
 import logging
 import subprocess
 import uuid
@@ -34,6 +35,9 @@ class SkypilotDispatcher(Dispatcher):
             SKYPILOT_LAUNCH_PATH,
             "--heartbeat-timeout-seconds=10000",
         ]
+        skip_git_check = self._should_skip_git_check(job.overrides)
+        if skip_git_check:
+            cmd_parts.append("--skip-git-check")
 
         if job.gpus and job.gpus > 0:
             cmd_parts.append(f"--gpus={job.gpus}")
@@ -42,8 +46,8 @@ class SkypilotDispatcher(Dispatcher):
             cmd_parts.append(f"--nodes={job.nodes}")
 
         cmd_parts.append(job.cmd)
-        cmd_parts.extend(f"{k}={v}" for k, v in job.args.items())
-        cmd_parts.extend(f"{k}={v}" for k, v in job.overrides.items())
+        cmd_parts.extend(f"{k}={self._format_cli_value(v)}" for k, v in job.args.items())
+        cmd_parts.extend(f"{k}={self._format_cli_value(v)}" for k, v in job.overrides.items())
 
         logger.info("Skypilot command: %s", " ".join(cmd_parts))
 
@@ -68,8 +72,15 @@ class SkypilotDispatcher(Dispatcher):
 
             if process.returncode != 0:
                 error_msg = f"Skypilot launch failed with return code {process.returncode}: {' '.join(cmd_parts)}"
+                # `devops/skypilot/launch.py` prints most user-facing failures to stdout (not stderr),
+                # so include both streams in the raised error to make triage actionable.
+                output_parts: list[str] = []
+                if stdout:
+                    output_parts.append(f"[stdout]\n{stdout}")
                 if stderr:
-                    error_msg = f"{error_msg}: {stderr}"
+                    output_parts.append(f"[stderr]\n{stderr}")
+                if output_parts:
+                    error_msg = f"{error_msg}\n\n" + "\n".join(output_parts)
                 logger.error("Failed to launch %s on Skypilot: %s", display_id, error_msg, exc_info=True)
                 raise RuntimeError(error_msg)
 
@@ -87,3 +98,22 @@ class SkypilotDispatcher(Dispatcher):
     def check_local_processes(self) -> int:
         """Return number of active local evaluation processes."""
         return self._local_dispatcher.check_processes()
+
+    @staticmethod
+    def _should_skip_git_check(overrides: dict) -> bool:
+        value = overrides.get("evaluator.skip_git_check")
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ("true", "1", "yes")
+        return bool(value)
+
+    @staticmethod
+    def _format_cli_value(value: object) -> str:
+        if isinstance(value, bool):
+            return "True" if value else "False"
+        if isinstance(value, (list, dict)):
+            # METTA_ARGS is later split on whitespace in `devops/skypilot/config/skypilot_run.sh`,
+            # so we must avoid emitting JSON with spaces here.
+            return json.dumps(value, separators=(",", ":"))
+        return str(value)

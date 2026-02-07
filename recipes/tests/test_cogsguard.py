@@ -12,6 +12,7 @@ import pytest
 from cogames.cogs_vs_clips.config import CvCConfig
 from metta.cogworks.curriculum.task_generator import BucketedTaskGenerator, SingleTaskGenerator, TaskGeneratorSet
 from metta.rl.training.teacher import TeacherConfig
+from metta.sweep.parameter_config import ParameterConfig
 
 # Import after cogsguard to avoid circular import issues
 from mettagrid.simulator import Simulation
@@ -109,6 +110,7 @@ class TestCogsguardEnvironment:
         # is unprefixed (e.g. "hub").
         assert "c:hub" in objects
         assert "junction" in objects
+        assert "c:chest" in objects
 
         # Check extractors for all elements
         for element in CvCConfig.ELEMENTS:
@@ -227,3 +229,15 @@ def test_train_with_smart_gear_teacher_policy_uri() -> None:
     assert tool.trainer.losses.has_loss("teacher_led")
     assert tool.trainer.losses.has_loss("student_led")
     assert tool.scheduler is not None
+
+
+def test_sweep_sweeps_hypers_and_fixes_variants_and_timesteps() -> None:
+    tool = cogsguard.sweep("cogsguard.test")
+    space = tool.search_space
+
+    assert space["variants"] == ["no_clips", "milestones", "credit", "penalize_vibe_change"]
+    assert space["trainer.total_timesteps"] == 3_000_000_000
+
+    # Ensure we sweep PPO/training hypers rather than the environment variants.
+    assert isinstance(space["trainer.optimizer.learning_rate"], ParameterConfig)
+    assert isinstance(space["trainer.losses.ppo_actor.clip_coef"], ParameterConfig)

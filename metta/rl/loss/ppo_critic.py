@@ -16,7 +16,7 @@ from metta.rl.training import ComponentContext, TrainingEnvironment
 
 class PPOCriticConfig(LossConfig):
     vf_clip_coef: float = Field(default=0.1, ge=0)
-    vf_coef: float = Field(default=0.49657103419303894, ge=0)
+    vf_coef: float = Field(default=1.3652, ge=0)
     # Value loss clipping toggle
     clip_vloss: bool = True
     critic_update: Literal["mse", "gtd_lambda"] = "gtd_lambda"

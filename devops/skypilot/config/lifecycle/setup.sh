@@ -110,16 +110,34 @@ git remote set-url origin git@github.com:${GITHUB_REPOSITORY}.git
 git remote set-url --push origin https://github.com/${GITHUB_REPOSITORY}.git
 
 # Configure git credential helper for HTTPS pushing
-if [ -n "$GITHUB_PAT" ]; then
+if [ -n "${GITHUB_PAT:-}" ]; then
   echo "[SETUP] Configuring git credentials for pushing..."
   git config --global credential.helper store
   echo "https://x-access-token:${GITHUB_PAT}@github.com" > ~/.git-credentials
   chmod 600 ~/.git-credentials
+
+  # Ensure CLI tools (and our python wrappers) can find a GitHub token without relying on `gh auth`.
+  # We already store the PAT on disk for git pushing; keep `GITHUB_TOKEN`/`GH_TOKEN` consistent.
+  mkdir -p ~/.config/metta
+  cat > ~/.config/metta/credentials.sh << EOF
+export GITHUB_TOKEN="${GITHUB_PAT}"
+export GH_TOKEN="${GITHUB_PAT}"
+EOF
+  chmod 600 ~/.config/metta/credentials.sh
 fi
 
 # Auto-cd to workspace on login
 if ! grep -q "cd /workspace/metta" ~/.bashrc 2> /dev/null; then
   echo "cd /workspace/metta" >> ~/.bashrc
+fi
+
+# Load metta credentials (GitHub token) into interactive shells, including sweep-controller sandboxes.
+if ! grep -q "source ~/.config/metta/credentials.sh" ~/.bashrc 2> /dev/null; then
+  cat >> ~/.bashrc << 'EOF'
+if [ -f ~/.config/metta/credentials.sh ]; then
+  source ~/.config/metta/credentials.sh
+fi
+EOF
 fi
 
 git config advice.detachedHead false

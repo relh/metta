@@ -17,6 +17,7 @@ import sky
 import typer
 import yaml
 from pydantic import BaseModel
+from sky.server.common import ApiServerStatus, get_api_server_status, get_server_url
 from typer import rich_utils
 
 import gitta as git
@@ -97,6 +98,15 @@ def _should_pass_run(module_path: str) -> bool:
                     "a concrete type and 'run' arg might not be passed"
                 )
             )
+
+    try:
+        hints = get_type_hints(tool_maker)
+    except (TypeError, ValueError, NameError):
+        hints = {}
+
+    return_hint = hints.get("return")
+    if inspect.isclass(return_hint) and issubclass(return_hint, Tool):
+        return _tool_has_field(return_hint, "run")
 
     try:
         sig = inspect.signature(tool_maker)
@@ -210,6 +220,11 @@ def main(
     launch.py arena.train --gpus 2 --nodes 4 -- run=test_123 trainer.steps=1000
     launch.py train arena --gpus 2 --nodes 4 -- run=test_123 trainer.steps=1000
     """
+    server_info = get_api_server_status()
+    if server_info.status == ApiServerStatus.NEEDS_AUTH:
+        endpoint = get_server_url()
+        print(red(f"❌ SkyPilot API server requires authentication.\nPlease run: sky api login -e {endpoint}"))
+        raise typer.Exit(code=1)
 
     # First, we need to separate launch flags from tool args
     # We'll parse known args only, allowing unknown ones to be passed as tool args

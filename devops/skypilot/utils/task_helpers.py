@@ -185,12 +185,13 @@ def set_task_secrets(task: sky.Task) -> None:
     # Note: we can't mount these with `file_mounts` because of skypilot bug with service accounts.
     # Also, copying the entire `.netrc` is too much (it could contain other credentials).
 
-    # Lazy import to avoid loading wandb at CLI startup
-    import wandb  # noqa: PLC0415
-
     wandb_password = netrc.netrc(os.path.expanduser("~/.netrc")).hosts["api.wandb.ai"][2]
     if not wandb_password:
         raise ValueError("Failed to get wandb password, run 'metta install' to fix")
+
+    # In our SkyPilot lifecycle, WANDB_PASSWORD is the canonical secret and is used to
+    # populate ~/.netrc on the worker. Keep WANDB_API_KEY aligned to the same value.
+    wandb_api_key = wandb_password
 
     # Lazy import - app_backend is optional and not available in CI
     try:
@@ -203,12 +204,9 @@ def set_task_secrets(task: sky.Task) -> None:
     if not observatory_token:
         observatory_token = ""  # we don't have a token in CI
 
-    if not wandb.api.api_key:
-        raise ValueError("Failed to get wandb api key, run 'metta install' to fix")
-
     task.update_secrets(
         dict(
-            WANDB_API_KEY=wandb.api.api_key,
+            WANDB_API_KEY=wandb_api_key,
             WANDB_PASSWORD=wandb_password,
             OBSERVATORY_TOKEN=observatory_token,
         )

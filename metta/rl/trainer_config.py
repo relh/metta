@@ -8,6 +8,48 @@ from metta.rl.training.update_epochs_tuner import UpdateEpochAutoTunerConfig
 from mettagrid.base_config import Config
 
 
+class OptimizerConfig(Config):
+    type: Literal["adam", "muon", "adamw_schedulefree", "sgd_schedulefree"] = "adamw_schedulefree"
+    # Learning rate tuned from relh.cg.0204 sweep winners (schedule-free AdamW)
+    learning_rate: float = Field(default=0.00924, gt=0, le=1.0)
+    # Beta1: Standard Adam default from Kingma & Ba (2014) "Adam: A Method for Stochastic Optimization"
+    beta1: float = Field(default=0.9, ge=0, le=1.0)
+    # Beta2: Standard Adam default from Kingma & Ba (2014)
+    beta2: float = Field(default=0.999, ge=0, le=1.0)
+    # Epsilon tuned from relh.cg.0204 sweep winners
+    eps: float = Field(default=2.5e-06, gt=0)
+    # Weight decay: modest L2 regularization for AdamW-style optimizers
+    weight_decay: float = Field(default=0.1, ge=0)
+    # ScheduleFree-specific parameters
+    momentum: float = Field(default=0.9724, ge=0, le=1.0)  # Beta parameter for ScheduleFree
+    warmup_steps: int = Field(default=1752, ge=0)  # Number of warmup steps for ScheduleFree
+
+
+class SamplingConfig(Config):
+    """Configuration for minibatch sampling during training."""
+
+    method: Literal["sequential", "prioritized"] = "prioritized"
+    prio_alpha: float = Field(default=0.3098, ge=0, le=1.0)
+    prio_beta0: float = Field(default=0.7994, ge=0, le=1.0)
+
+
+class RewardCenteringConfig(Config):
+    enabled: bool = True
+    beta: float = Field(default=1e-3, gt=0, le=1.0)
+    initial_reward_mean: float = 0.0
+
+
+class AdvantageConfig(Config):
+    vtrace_rho_clip: float = Field(default=1.0, gt=0)
+    vtrace_c_clip: float = Field(default=1.0, gt=0)
+
+    # Average-reward baseline: replace r with (r - r_bar) and update r_bar via EMA.
+    reward_centering: RewardCenteringConfig = Field(default_factory=RewardCenteringConfig)
+
+    gamma: float = Field(default=0.9995, ge=0, le=1.0)
+    gae_lambda: float = Field(default=0.9161, ge=0, le=1.0)
+
+
 class InitialPolicyConfig(Config):
     uri: str | None = None
     type: Literal["top", "latest", "specific"] = "top"
@@ -35,6 +77,9 @@ class TorchProfilerConfig(Config):
 class TrainerConfig(Config):
     total_timesteps: int = Field(default=10_000_000_000, gt=0)
     losses: LossesConfig = Field(default_factory=LossesConfig)
+    optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig)
+    sampling: SamplingConfig = Field(default_factory=SamplingConfig)
+    advantage: AdvantageConfig = Field(default_factory=AdvantageConfig)
 
     require_contiguous_env_ids: bool = False
     verbose: bool = True

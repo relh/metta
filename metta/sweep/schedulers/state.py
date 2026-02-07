@@ -122,4 +122,12 @@ class SchedulerState:
             sg = run.summary.get("sweep/suggestion")
             if isinstance(sg, dict):
                 return dict(sg)
+            prefix = "sweep/suggestion."
+            extracted = {
+                key[len(prefix) :]: value
+                for key, value in run.summary.items()
+                if isinstance(key, str) and key.startswith(prefix)
+            }
+            if extracted:
+                return extracted
         return None
