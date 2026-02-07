@@ -51,7 +51,7 @@ That means evals use the `cogames-agents` version **from the task's git ref**.
 Publishing `cogames-agents` to PyPI does **not** affect the tournament evaluator as long as the policy evaluator image
 and worker checkouts keep using the workspace.
 
-PyPI only matters for external installs (e.g. `pip install cogames[agents]`).
+PyPI only matters for external installs. We no longer publish `cogames-agents` to PyPI.
 
 ## Quick sanity checks
 

@@ -25,7 +25,7 @@ import gitta as git
 from metta.common.util.constants import METTA_GITHUB_ORGANIZATION
 
 # Packages synced to public repos; workspace deps are replaced with git sources
-PUBLIC_PACKAGES = {"mettagrid", "cogames", "cogames-agents"}
+PUBLIC_PACKAGES = {"mettagrid", "cogames"}
 
 
 def get_remote_url(package_name: str, *, use_https: bool = False) -> str:

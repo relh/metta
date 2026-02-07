@@ -22,13 +22,11 @@ DISCORD_CHANNEL_WEBHOOK_URL_SECRET_NAME = "discord/channel-webhook/updates"
 
 class Package(StrEnum):
     COGAMES = "cogames"
-    COGAMES_AGENTS = "cogames-agents"
     METTAGRID = "mettagrid"
 
 
 _RELEASE_WORKFLOW_URL_FOR_PACKAGE = {
     Package.COGAMES: "https://github.com/Metta-AI/metta/actions/workflows/release-cogames.yml",
-    Package.COGAMES_AGENTS: "https://github.com/Metta-AI/metta/actions/workflows/release-cogames-agents.yml",
     Package.METTAGRID: "https://github.com/Metta-AI/metta/actions/workflows/release-mettagrid.yml",
 }
 
@@ -260,7 +258,6 @@ def _publish(
     push_git_history_to_child_repo: bool,
     create_and_push_tag_to_monorepo: bool,
     mettagrid_version_to_pin: Optional[str],
-    cogames_version_to_pin: Optional[str],
     dry_run: bool,
     skip_git_checks: bool,
 ) -> str | None:
@@ -312,59 +309,6 @@ def _publish(
         assert next_version is not None
         assert next_tag is not None
 
-        # For cogames-agents, optionally publish mettagrid + cogames first and pin both dependencies.
-        if package == Package.COGAMES_AGENTS and mettagrid_version_to_pin is None and cogames_version_to_pin is None:
-            if typer.confirm(
-                "Also publish mettagrid and cogames first (and update cogames-agents' dependency pins)?",
-                default=True,
-            ):
-                starting_branch = gitta.get_current_branch()
-                print()
-                print()
-                header("Publishing mettagrid first...")
-                mettagrid_version = _publish(
-                    package=Package.METTAGRID,
-                    version_override=None,
-                    remote=remote,
-                    push_git_history_to_child_repo=push_git_history_to_child_repo,
-                    create_and_push_tag_to_monorepo=create_and_push_tag_to_monorepo,
-                    mettagrid_version_to_pin=None,
-                    cogames_version_to_pin=None,
-                    dry_run=dry_run,
-                    skip_git_checks=skip_git_checks,
-                )
-                assert mettagrid_version is not None
-                header(f"Published mettagrid with version {mettagrid_version}.")
-
-                print()
-                print()
-                header("Publishing cogames next...")
-                cogames_version = _publish(
-                    package=Package.COGAMES,
-                    version_override=None,
-                    remote=remote,
-                    push_git_history_to_child_repo=push_git_history_to_child_repo,
-                    create_and_push_tag_to_monorepo=create_and_push_tag_to_monorepo,
-                    mettagrid_version_to_pin=mettagrid_version,
-                    cogames_version_to_pin=None,
-                    dry_run=dry_run,
-                    skip_git_checks=skip_git_checks,
-                )
-                assert cogames_version is not None
-                header(f"Published cogames with version {cogames_version}.")
-
-                if not dry_run and gitta.get_current_branch() != starting_branch:
-                    info(f"Checking out {starting_branch} before pinning cogames-agents' dependencies.")
-                    gitta.run_git("checkout", starting_branch)
-
-                print()
-                print()
-                header(f"Resuming with publishing {package}...")
-                mettagrid_version_to_pin = mettagrid_version
-                cogames_version_to_pin = cogames_version
-            else:
-                info("Skipping mettagrid/cogames publish; continuing with cogames-agents only.")
-
         # For cogames, optionally publish mettagrid first and pin the mettagrid dependency.
         if package == Package.COGAMES and mettagrid_version_to_pin is None:
             if typer.confirm(
@@ -382,7 +326,6 @@ def _publish(
                     push_git_history_to_child_repo=push_git_history_to_child_repo,
                     create_and_push_tag_to_monorepo=create_and_push_tag_to_monorepo,
                     mettagrid_version_to_pin=None,
-                    cogames_version_to_pin=None,
                     dry_run=dry_run,
                     skip_git_checks=skip_git_checks,
                 )
@@ -403,8 +346,6 @@ def _publish(
         pins: dict[str, str] = {}
         if mettagrid_version_to_pin is not None:
             pins["mettagrid"] = mettagrid_version_to_pin
-        if cogames_version_to_pin is not None:
-            pins["cogames"] = cogames_version_to_pin
         if pins:
             _pin_dependency_versions(package=package.value, pins=pins, dry_run=dry_run)
 
@@ -460,7 +401,6 @@ def cmd_publish(
         create_and_push_tag_to_monorepo=not repo_only,
         push_git_history_to_child_repo=not tag_only,
         mettagrid_version_to_pin=None,
-        cogames_version_to_pin=None,
         dry_run=dry_run,
         skip_git_checks=force,
     )

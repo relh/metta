@@ -1,12 +1,11 @@
 # Publishing Packages
 
-This document describes how `metta publish` works for the three publishable packages: mettagrid, cogames, and
-cogames-agents.
+This document describes how `metta publish` works for the two publishable packages: mettagrid and cogames.
 
 ## Dependency Chain
 
 ```
-cogames-agents → cogames → mettagrid
+cogames → mettagrid
 ```
 
 Each package pins its dependencies to exact versions (`==X.Y.Z`) at publish time. The publish tool handles this
@@ -15,13 +14,12 @@ automatically.
 ## Quick Reference
 
 ```bash
-metta publish cogames-agents          # Full flow: mettagrid → cogames → cogames-agents
-metta publish cogames                 # Partial flow: mettagrid → cogames
+metta publish cogames                 # Full flow: mettagrid → cogames
 metta publish mettagrid               # Just mettagrid
-metta publish cogames-agents --dry-run --force  # Preview without doing anything
+metta publish cogames --dry-run --force  # Preview without doing anything
 ```
 
-## Full Flow: `metta publish cogames-agents`
+## Full Flow: `metta publish cogames`
 
 ### Prerequisites
 
@@ -30,19 +28,17 @@ metta publish cogames-agents --dry-run --force  # Preview without doing anything
 
 ### 1. Setup
 
-Fetches tags from origin, determines the next version by bumping the last component of the latest `cogames-agents-v*`
-tag (e.g., `0.0.0.1` → `0.0.0.2`). Prints a release summary.
+Fetches tags from origin, determines the next version by bumping the last component of the latest `cogames-v*` tag
+(e.g., `0.0.0.1` → `0.0.0.2`). Prints a release summary.
 
 ### 2. Orchestration prompt
 
 ```
-Also publish mettagrid and cogames first (and update cogames-agents' dependency pins)? [Y/n]:
+Also publish mettagrid first (and update cogames' mettagrid pin)? [Y/n]:
 ```
 
-If **no**: skips to step 5, publishes cogames-agents alone with whatever dependency versions are already in
-pyproject.toml.
-
-If **yes**: continues to step 3.
+If **no**: skips to step 4, publishes cogames alone with whatever dependency version is already pinned in
+`packages/cogames/pyproject.toml`.
 
 ### 3. Publish mettagrid
 
@@ -71,30 +67,15 @@ The tag push triggers `.github/workflows/release-cogames.yml`, which builds the 
 version to appear on PyPI (polls every 60s, 25-min timeout), runs smoke tests (`pytest`, `cogames version`,
 `cogames missions`), then publishes.
 
-### 5. Publish cogames-agents
-
-Returns to the starting branch (`main`), then:
-
-- **Pins mettagrid** in cogames-agents: creates branch, writes exact pin, commits, pushes, creates PR
-- **Pins cogames** in cogames-agents: creates another branch (from the mettagrid pin branch), writes exact pin, commits,
-  pushes, creates PR
-- Creates and pushes git tag `cogames-agents-v0.0.0.2` on the current HEAD (which has both pins)
-- Posts to Discord, pushes to `Metta-AI/cogames-agents` child repo
-
-The tag push triggers `.github/workflows/release-cogames-agents.yml`, which builds multi-platform wheels (Linux x86,
-Linux ARM, macOS) -- cogames-agents compiles Nim code into platform-specific binaries -- waits for both pinned mettagrid
-and cogames versions to appear on PyPI, then publishes.
-
 ## CI Workflows
 
 Each package has a release workflow at `.github/workflows/release-{package}.yml` triggered by tag pushes matching
 `{package}-v*`.
 
-| Package        | Build          | Wait gates                        | Tests                      | Publish       |
-| -------------- | -------------- | --------------------------------- | -------------------------- | ------------- |
-| mettagrid      | Multi-platform | None                              | None                       | PyPI via OIDC |
-| cogames        | Pure Python    | mettagrid on PyPI (40 min)        | pytest + CLI smoke tests   | PyPI via OIDC |
-| cogames-agents | Multi-platform | mettagrid + cogames (40 min each) | None (build + twine check) | PyPI via OIDC |
+| Package   | Build          | Wait gates                 | Tests                    | Publish       |
+| --------- | -------------- | -------------------------- | ------------------------ | ------------- |
+| mettagrid | Multi-platform | None                       | None                     | PyPI via OIDC |
+| cogames   | Pure Python    | mettagrid on PyPI (40 min) | pytest + CLI smoke tests | PyPI via OIDC |
 
 All workflows use PyPI trusted publishers (OIDC) -- no API tokens needed. Each requires two GitHub environments:
 `{package}-pypi` and `{package}-testpypi`.
@@ -112,19 +93,12 @@ Two Discord messages are sent per package:
 
 ## What You End Up With
 
-After a full `metta publish cogames-agents`:
+After a full `metta publish cogames`:
 
-- 3 new git tags pushed to origin
-- 3 CI workflows triggered (running in parallel, with wait gates ensuring correct ordering)
-- 2-3 PRs to merge dependency pins back to main
-- Packages appear on PyPI in order: mettagrid first, then cogames, then cogames-agents (each waits for its dependencies)
-
-## Partial Flows
-
-### `metta publish cogames`
-
-Asks whether to publish mettagrid first. If yes: publishes mettagrid, pins mettagrid in cogames, tags cogames. Does
-**not** touch cogames-agents.
+- 2 new git tags pushed to origin
+- 2 CI workflows triggered (running in parallel, with wait gates ensuring correct ordering)
+- 1 PR to merge the mettagrid pin back to main (if you opted into pinning)
+- Packages appear on PyPI in order: mettagrid first, then cogames (cogames waits for mettagrid)
 
 ### `metta publish mettagrid`
 
@@ -132,11 +106,10 @@ Publishes mettagrid only. No orchestration, no dependency pinning.
 
 ## Key Files
 
-| File                                           | Purpose                                      |
-| ---------------------------------------------- | -------------------------------------------- |
-| `metta/setup/tools/publish.py`                 | CLI tool: versioning, tagging, orchestration |
-| `.github/workflows/release-mettagrid.yml`      | CI: multi-platform build + PyPI publish      |
-| `.github/workflows/release-cogames.yml`        | CI: build, wait for mettagrid, test, publish |
-| `.github/workflows/release-cogames-agents.yml` | CI: build, wait for dependencies, publish    |
-| `devops/git/push_child_repo.py`                | Syncs filtered git history to child repos    |
-| `packages/{package}/pyproject.toml`            | Package metadata, setuptools_scm config      |
+| File                                      | Purpose                                      |
+| ----------------------------------------- | -------------------------------------------- |
+| `metta/setup/tools/publish.py`            | CLI tool: versioning, tagging, orchestration |
+| `.github/workflows/release-mettagrid.yml` | CI: multi-platform build + PyPI publish      |
+| `.github/workflows/release-cogames.yml`   | CI: build, wait for mettagrid, test, publish |
+| `devops/git/push_child_repo.py`           | Syncs filtered git history to child repos    |
+| `packages/{package}/pyproject.toml`       | Package metadata, setuptools_scm config      |

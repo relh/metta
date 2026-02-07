@@ -54,8 +54,8 @@ git_describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--mat
 
 ## Step 2: GitHub Actions Release Workflow
 
-Create `.github/workflows/release-{package}.yml`. Use `release-cogames-agents.yml` as a template for pure-Python
-packages, or `release-mettagrid.yml` for packages needing compiled artifacts.
+Create `.github/workflows/release-{package}.yml`. Use `release-cogames.yml` as a template for pure-Python packages, or
+`release-mettagrid.yml` for packages needing compiled artifacts.
 
 Key requirements:
 

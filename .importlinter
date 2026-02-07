@@ -64,6 +64,14 @@ forbidden_modules =
     gitta
     tribal_village
 
+[importlinter:contract:cogames-no-cogames-agents]
+name = cogames cannot import from cogames_agents
+type = forbidden
+source_modules =
+    cogames
+forbidden_modules =
+    cogames_agents
+
 
 [importlinter:contract:cogames-alo-independence]
 name = metta_alo cannot import from metta or cogames (only mettagrid)
@@ -99,6 +107,7 @@ source_modules =
 forbidden_modules =
     metta
     cogames
+    cogames_agents
     metta_alo
     cortex
     gitta
