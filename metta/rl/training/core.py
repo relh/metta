@@ -112,7 +112,8 @@ class CoreTrainingLoop:
         # Reset consistent dropout masks so fresh masks are generated for this rollout.
         # These masks will be cached and reused during the training phase to reduce
         # gradient variance (see: Hausknecht & Wagener, 2022).
-        reset_consistent_dropout(self.policy)
+        for policy in context.policy_assets.policies.values():
+            reset_consistent_dropout(policy)
 
         # Notify losses of rollout start
         for loss in self.losses.values():
