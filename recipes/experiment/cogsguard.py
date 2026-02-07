@@ -530,7 +530,7 @@ def evaluate_stub(*args: object, **kwargs: object) -> tools.StubTool:
 
 def sweep(
     sweep_name: str,
-    variants: Sequence[str] = ("no_clips", "milestones", "credit", "penalize_vibe_change"),
+    variants: Sequence[str] = ("milestones", "credit", "penalize_vibe_change"),
     max_trials: int = 80,
     num_parallel_trials: int = 12,
 ) -> tools.SweepTool:

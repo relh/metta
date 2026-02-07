@@ -110,15 +110,14 @@ class TestCogsguardEnvironment:
         # is unprefixed (e.g. "hub").
         assert "c:hub" in objects
         assert "junction" in objects
-        assert "c:chest" in objects
+        assert "c:miner" in objects
+        assert "c:scout" in objects
+        assert "c:aligner" in objects
+        assert "c:scrambler" in objects
 
         # Check extractors for all elements
         for element in CvCConfig.ELEMENTS:
             assert f"{element}_extractor" in objects
-
-        # Check gear stations (team-prefixed object names).
-        for gear_type in CvCConfig.GEAR:
-            assert f"c:{gear_type}" in objects
 
     def test_collectives_configured(self) -> None:
         """Test that collectives are properly configured."""
@@ -131,8 +130,8 @@ class TestCogsguardEnvironment:
 
         # Check cogs collective has initial resources
         cogs = env_config.game.collectives["cogs"]
-        assert cogs.inventory.initial.get("carbon", 0) > 0
-        assert cogs.inventory.initial.get("heart", 0) > 0
+        for element in CvCConfig.ELEMENTS:
+            assert cogs.inventory.initial.get(element, 0) > 0
 
 
 class TestCogsguardCurriculum:
@@ -235,7 +234,7 @@ def test_sweep_sweeps_hypers_and_fixes_variants_and_timesteps() -> None:
     tool = cogsguard.sweep("cogsguard.test")
     space = tool.search_space
 
-    assert space["variants"] == ["no_clips", "milestones", "credit", "penalize_vibe_change"]
+    assert space["variants"] == ["milestones", "credit", "penalize_vibe_change"]
     assert space["trainer.total_timesteps"] == 3_000_000_000
 
     # Ensure we sweep PPO/training hypers rather than the environment variants.
