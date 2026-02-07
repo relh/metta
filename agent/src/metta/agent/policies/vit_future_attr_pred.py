@@ -45,7 +45,8 @@ class ViTFutureAttrPredConfig(PolicyArchitecture):
     core_compile: bool = False
 
     # Future attribute prediction head configuration
-    future_attr_pred_hidden_dim: int = Field(default=128)
+    future_attr_pred_out_features: int = Field(default=6)
+    future_attr_pred_hidden_dim: List[int] = Field(default=[128, 128])
 
     components: List[ComponentConfig] = []
 
@@ -124,8 +125,8 @@ class ViTFutureAttrPredConfig(PolicyArchitecture):
                 out_key="future_attr_pred",
                 name="future_attr_pred_head",
                 in_features=self.latent_dim,
-                hidden_features=[self.future_attr_pred_hidden_dim],
-                out_features=1,
+                hidden_features=self.future_attr_pred_hidden_dim,
+                out_features=self.future_attr_pred_out_features,
             ),
             ActorHeadConfig(in_key="actor_hidden", out_key="logits", input_dim=self.actor_hidden),
         ]

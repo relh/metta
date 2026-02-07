@@ -14,9 +14,19 @@ from metta.rl.training import ComponentContext, TrainingEnvironment
 
 
 class FutureAttributePredictionLossConfig(LossConfig):
-    """Predict a specific observation attribute value n steps in the future."""
+    """Predict observation attribute values n steps in the future.
 
-    attribute_id: int = Field(ge=0, le=255, description="Observation attribute ID to predict.")
+    Note (2026-02-06): CogsGuard inventory base-token attribute IDs:
+        16=inv:energy, 18=inv:heart, 20=inv:hp, 22=inv:influence, 24=inv:solar,
+        26=inv:oxygen, 28=inv:carbon, 30=inv:germanium, 32=inv:silicon,
+        34=inv:aligner, 36=inv:scrambler, 38=inv:miner, 40=inv:scout.
+    The loss currently ignores the power-digit (p1) tokens that encode values >= 256.
+    """
+
+    attribute_ids: list[int] = Field(
+        default=[16, 18, 26, 28, 30, 32],
+        description="Observation attribute IDs to predict (one output per ID).",
+    )
     prediction_horizon: int = Field(default=1, ge=1, description="Number of steps in the future to predict.")
     loss_coef: float = Field(default=1.0, ge=0.0, description="Multiplier applied to the loss value.")
     hide_target_tokens_from_policy: bool = Field(
@@ -39,7 +49,7 @@ class FutureAttributePredictionLossConfig(LossConfig):
 
 
 class FutureAttributePredictionLoss(Loss):
-    """Aux loss predicting a specific attribute value n steps in the future."""
+    """Aux loss predicting observation attribute values n steps in the future."""
 
     cfg: FutureAttributePredictionLossConfig
 
@@ -49,10 +59,11 @@ class FutureAttributePredictionLoss(Loss):
     def get_experience_spec(self) -> Composite:
         if not self.cfg.hide_target_tokens_from_policy:
             return Composite()
+        num_attrs = len(self.cfg.attribute_ids)
         return Composite(
             **{
-                self._TARGET_VALUE_KEY: UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32),
-                self._TARGET_VALID_KEY: UnboundedDiscrete(shape=torch.Size([]), dtype=torch.bool),
+                self._TARGET_VALUE_KEY: UnboundedContinuous(shape=torch.Size([num_attrs]), dtype=torch.float32),
+                self._TARGET_VALID_KEY: UnboundedDiscrete(shape=torch.Size([num_attrs]), dtype=torch.bool),
             }
         )
 
@@ -86,19 +97,21 @@ class FutureAttributePredictionLoss(Loss):
         if "future_attr_pred" not in policy_td.keys():
             return self._zero(), shared_loss_data, False
 
+        num_attrs = len(self.cfg.attribute_ids)
         pred_vals_raw = policy_td["future_attr_pred"]
-        pred_vals = pred_vals_raw.to(dtype=torch.float32).squeeze(-1)
+        pred_vals = pred_vals_raw.to(dtype=torch.float32)
 
-        # Handle reshaping: if pred_vals is 2D (flattened) and env_obs is 3D, reshape pred_vals to 3D
+        # Handle reshaping: if pred_vals is 2D (flattened) and env_obs is 3D+,
+        # reshape from (batch*time, num_attrs) to (batch, time, num_attrs).
         if pred_vals.dim() == 2 and env_obs.dim() >= 3:
             batch_size = minibatch.batch_size
             if len(batch_size) == 2:
-                # Reshape from (batch*time,) to (batch, time)
-                pred_vals = pred_vals.view(batch_size[0], batch_size[1])
+                pred_vals = pred_vals.view(batch_size[0], batch_size[1], num_attrs)
 
-        # Ensure env_obs matches pred_vals dimensions
-        if env_obs.dim() == 3 and pred_vals.dim() == 3:
-            env_obs = env_obs.view(pred_vals.shape[0], pred_vals.shape[1], env_obs.shape[-2], env_obs.shape[-1])
+        # Ensure env_obs matches batch dimensions for target computation
+        if env_obs.dim() == 3 and len(minibatch.batch_size) == 2:
+            bs = minibatch.batch_size
+            env_obs = env_obs.view(bs[0], bs[1], env_obs.shape[-2], env_obs.shape[-1])
 
         if self.cfg.hide_target_tokens_from_policy:
             target_vals = minibatch[self._TARGET_VALUE_KEY].to(dtype=torch.float32)
@@ -142,9 +155,18 @@ class FutureAttributePredictionLoss(Loss):
         attr_vals = env_obs[..., 2].to(dtype=torch.float32)
         valid_tokens = env_obs[..., 0] != 255
 
-        matches = valid_tokens & (attr_ids == self.cfg.attribute_id)
-        match_counts = matches.sum(dim=-1)
-        summed_vals = (attr_vals * matches).sum(dim=-1)
+        target_attr_ids = torch.tensor(self.cfg.attribute_ids, device=env_obs.device, dtype=torch.long)
+
+        # matches_per_attr: (..., tokens, num_attrs)
+        matches_per_attr = valid_tokens.unsqueeze(-1) & (attr_ids.unsqueeze(-1) == target_attr_ids)
+
+        # any_matches: (..., tokens) – union across all attribute IDs (used for masking)
+        any_matches = matches_per_attr.any(dim=-1)
+
+        # Aggregate per attribute, summing over the token dimension (-2 in expanded tensor)
+        match_counts = matches_per_attr.sum(dim=-2)  # (..., num_attrs)
+        summed_vals = (attr_vals.unsqueeze(-1) * matches_per_attr).sum(dim=-2)  # (..., num_attrs)
         target_vals = summed_vals / match_counts.clamp_min(1)
         valid_targets = match_counts > 0
-        return target_vals, valid_targets, matches
+
+        return target_vals, valid_targets, any_matches
