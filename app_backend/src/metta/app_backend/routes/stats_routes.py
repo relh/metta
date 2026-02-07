@@ -15,15 +15,15 @@ from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
 from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
 
 
-class PolicyRow(BaseModel):
+class PolicyRow(Ownable):
     id: uuid.UUID
     name: str
     created_at: datetime
-    user_id: str
     attributes: dict[str, Any]
     version_count: int
 
@@ -39,12 +39,11 @@ class PolicyRow(BaseModel):
         )
 
 
-class PublicPolicyVersionRow(BaseModel):
+class PublicPolicyVersionRow(Ownable):
     id: uuid.UUID
     policy_id: uuid.UUID
     created_at: datetime
     policy_created_at: datetime
-    user_id: str
     name: str
     version: int
     tags: dict[str, str] = Field(default_factory=dict)
@@ -266,7 +265,9 @@ def create_stats_router() -> APIRouter:
     @timed_http_handler
     async def get_my_policy_versions(user: CheckUser) -> MyPolicyVersionsResponse:
         versions = await policy_queries.get_user_policy_versions(user.id)
-        return MyPolicyVersionsResponse(entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions])
+        entries = [PublicPolicyVersionRow.from_model(pv) for pv in versions]
+        await fill_user_data(entries, current_user=user)
+        return MyPolicyVersionsResponse(entries=entries)
 
     @router.get("/policies/{policy_version_id}")
     @timed_http_handler
@@ -282,7 +283,9 @@ def create_stats_router() -> APIRouter:
         if pv is None:
             raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
 
-        return PublicPolicyVersionRow.from_model(pv)
+        row = PublicPolicyVersionRow.from_model(pv)
+        await fill_user_data([row], current_user=user)
+        return row
 
     @router.put("/policies/versions/{policy_version_id_str}/tags")
     @timed_http_handler
@@ -487,10 +490,9 @@ def create_stats_router() -> APIRouter:
             visible_to_user_id=user.id if user else None,
             filter_visibility=filter_visibility,
         )
-        return PoliciesResponse(
-            entries=[PolicyRow.from_model(p) for p in policies],
-            total_count=total_count,
-        )
+        entries = [PolicyRow.from_model(p) for p in policies]
+        await fill_user_data(entries, current_user=user)
+        return PoliciesResponse(entries=entries, total_count=total_count)
 
     @router.get("/policy-versions")
     @timed_http_handler
@@ -519,10 +521,9 @@ def create_stats_router() -> APIRouter:
             visible_to_user_id=user.id if user else None,
             filter_visibility=filter_visibility,
         )
-        return PolicyVersionsResponse(
-            entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],
-            total_count=total_count,
-        )
+        entries = [PublicPolicyVersionRow.from_model(pv) for pv in versions]
+        await fill_user_data(entries, current_user=user)
+        return PolicyVersionsResponse(entries=entries, total_count=total_count)
 
     @router.get("/policies/{policy_id}/versions")
     @timed_http_handler
@@ -540,10 +541,9 @@ def create_stats_router() -> APIRouter:
             visible_to_user_id=user.id if user else None,
             filter_visibility=filter_visibility,
         )
-        return PolicyVersionsResponse(
-            entries=[PublicPolicyVersionRow.from_model(pv) for pv in versions],
-            total_count=total_count,
-        )
+        entries = [PublicPolicyVersionRow.from_model(pv) for pv in versions]
+        await fill_user_data(entries, current_user=user)
+        return PolicyVersionsResponse(entries=entries, total_count=total_count)
 
     @router.post("/episodes/query")
     @timed_http_handler

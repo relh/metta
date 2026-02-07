@@ -17,6 +17,7 @@ from metta.app_backend.models.eval_task import FinishedTaskStatus, TaskStatus
 from metta.app_backend.queries import eval_task_queries
 from metta.app_backend.queries.eval_task_queries import EvalTaskRow, TaskAttemptRow
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.user_data import fill_user_data
 from metta.common.util.git_repo import REPO_SLUG
 
 OBSERVATORY_S3_BUCKET = "observatory-private"
@@ -130,21 +131,25 @@ def create_eval_task_router() -> APIRouter:
             user_id=user.id,
             data_uri=data_uri,
         )
+        await fill_user_data([task], current_user=user)
         return task
 
     @router.get("/latest", response_model=EvalTaskRow)
     @timed_http_handler
-    async def get_latest_assigned_task_for_worker(assignee: str, _user: CheckSoftmaxUser) -> EvalTaskRow | None:
+    async def get_latest_assigned_task_for_worker(assignee: str, user: CheckSoftmaxUser) -> EvalTaskRow | None:
         task = await eval_task_queries.get_latest_assigned_task_for_worker(assignee=assignee)
+        if task:
+            await fill_user_data([task], current_user=user)
         return task
 
     @router.get("/available")
     @timed_http_handler
     async def get_available_tasks(
-        _user: CheckSoftmaxUser,
+        user: CheckSoftmaxUser,
         limit: int = Query(default=200, ge=1, le=1000),
     ) -> TasksResponse:
         tasks = await eval_task_queries.get_available_tasks(limit=limit)
+        await fill_user_data(tasks, current_user=user)
         return TasksResponse(tasks=tasks)
 
     @router.post("/claim")
@@ -158,8 +163,9 @@ def create_eval_task_router() -> APIRouter:
 
     @router.get("/claimed")
     @timed_http_handler
-    async def get_claimed_tasks(_user: CheckSoftmaxUser, assignee: str | None = Query(None)) -> TasksResponse:
+    async def get_claimed_tasks(user: CheckSoftmaxUser, assignee: str | None = Query(None)) -> TasksResponse:
         tasks = await eval_task_queries.get_claimed_tasks(assignee=assignee)
+        await fill_user_data(tasks, current_user=user)
         return TasksResponse(tasks=tasks)
 
     @router.post("/git-hashes")
@@ -171,7 +177,7 @@ def create_eval_task_router() -> APIRouter:
     @router.get("/all")
     @timed_http_handler
     async def get_all_tasks(
-        _user: CheckSoftmaxUser,
+        user: CheckSoftmaxUser,
         limit: int = Query(default=500, ge=1, le=1000),
         statuses: list[TaskStatus] | None = Query(default=None),
         git_hash: str | None = Query(default=None),
@@ -181,12 +187,13 @@ def create_eval_task_router() -> APIRouter:
             statuses=statuses,
             git_hash=git_hash,
         )
+        await fill_user_data(tasks, current_user=user)
         return TasksResponse(tasks=tasks)
 
     @router.get("/paginated")
     @timed_http_handler
     async def get_tasks_paginated(
-        _user: CheckSoftmaxUser,
+        user: CheckSoftmaxUser,
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=50, ge=1, le=100),
         status: str | None = Query(default=None),
@@ -207,6 +214,7 @@ def create_eval_task_router() -> APIRouter:
             assigned_at=assigned_at,
         )
         total_pages = (total_count + page_size - 1) // page_size
+        await fill_user_data(tasks, current_user=user)
         return PaginatedTasksResponse(
             tasks=tasks,
             total_count=total_count,
@@ -231,11 +239,12 @@ def create_eval_task_router() -> APIRouter:
 
     @router.get("/{task_id}")
     @timed_http_handler
-    async def get_task(task_id: int, _user: CheckSoftmaxUser) -> EvalTaskRow:
+    async def get_task(task_id: int, user: CheckSoftmaxUser) -> EvalTaskRow:
         """Get a single task by ID with full details including attributes."""
         task = await eval_task_queries.get_task_by_id(task_id)
         if not task:
             raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        await fill_user_data([task], current_user=user)
         return task
 
     @router.get("/{task_id}/attempts")

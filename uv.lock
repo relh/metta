@@ -2640,6 +2640,7 @@ source = { editable = "app_backend" }
 dependencies = [
     { name = "aioboto3" },
     { name = "boto3" },
+    { name = "cachetools" },
     { name = "ddtrace" },
     { name = "duckdb" },
     { name = "fastapi" },
@@ -2674,6 +2675,7 @@ dev = [
 requires-dist = [
     { name = "aioboto3", specifier = ">=13.2.0" },
     { name = "boto3", specifier = ">=1.38.32" },
+    { name = "cachetools", specifier = ">=5.3.0" },
     { name = "ddtrace", specifier = ">=2.6.0" },
     { name = "duckdb", specifier = ">=1.3.0" },
     { name = "fastapi", specifier = ">=0.115.5" },

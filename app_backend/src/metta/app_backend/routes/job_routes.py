@@ -49,6 +49,7 @@ from metta.app_backend.otel.metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.routes.tournament_routes import PolicyVersionSummary
+from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
 
@@ -77,12 +78,11 @@ class JobMatchInfo(BaseModel):
     season_name: str | None = None
 
 
-class JobRequestResponse(BaseModel):
+class JobRequestResponse(Ownable):
     id: UUID
     job_type: JobType
     job: dict[str, Any]
     status: JobStatus
-    user_id: str
     created_at: datetime
     dispatched_at: datetime | None
     running_at: datetime | None
@@ -299,7 +299,7 @@ def create_job_router() -> APIRouter:
     @router.get("")
     @timed_http_handler
     async def list_jobs(
-        _user: CheckSoftmaxUser,
+        user: CheckSoftmaxUser,
         job_type: JobType | None = Query(default=None),
         statuses: list[JobStatus] | None = Query(default=None),
         job_id: UUID | None = Query(default=None),
@@ -402,6 +402,7 @@ def create_job_router() -> APIRouter:
                 else None
             )
             responses.append(JobRequestResponse.from_job(jr, episode=episode_info, match=match_info))
+        await fill_user_data(responses, current_user=user)
         return responses
 
     def _extract_trace(body: bytes) -> bytes:
@@ -544,7 +545,7 @@ def create_job_router() -> APIRouter:
 
     @router.get("/{job_id}")
     @timed_http_handler
-    async def get_job(job_id: UUID, _user: CheckSoftmaxUser) -> JobRequestResponse:
+    async def get_job(job_id: UUID, user: CheckSoftmaxUser) -> JobRequestResponse:
         async with db_session() as session:
             query = (
                 select(JobRequest)
@@ -559,7 +560,9 @@ def create_job_router() -> APIRouter:
             row = result.scalar_one_or_none()
             if not row:
                 raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-            return JobRequestResponse.from_job(row)
+            response = JobRequestResponse.from_job(row)
+            await fill_user_data([response], current_user=user)
+            return response
 
     @router.post("/{job_id}")
     @timed_http_handler

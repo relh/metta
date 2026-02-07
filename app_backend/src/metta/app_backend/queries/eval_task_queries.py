@@ -14,9 +14,10 @@ from sqlmodel import select
 
 from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.eval_task import EvalTask, FinishedTaskStatus, TaskAttempt, TaskStatus
+from metta.app_backend.user_data import Ownable
 
 
-class EvalTaskRow(BaseModel):
+class EvalTaskRow(Ownable):
     model_config = {"from_attributes": True}
 
     id: int
@@ -24,7 +25,6 @@ class EvalTaskRow(BaseModel):
     data_uri: str | None
     git_hash: str | None
     attributes: dict[str, Any]
-    user_id: str
     created_at: datetime
     is_finished: bool
     latest_attempt_id: int | None
