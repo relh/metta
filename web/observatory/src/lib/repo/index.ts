@@ -112,7 +112,7 @@ export type EpisodeWithTags = {
   job_id: string | null
 }
 
-export type PolicyVersionWithName = {
+export type PolicyVersionWithName = Ownable & {
   id: string
   policy_id: string
   version: number

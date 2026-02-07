@@ -63,7 +63,7 @@ class PublicPolicyVersionRow(Ownable):
         )
 
 
-class PolicyVersionWithName(BaseModel):
+class PolicyVersionWithName(Ownable):
     id: uuid.UUID
     internal_id: int | None
     policy_id: uuid.UUID
@@ -88,6 +88,7 @@ class PolicyVersionWithName(BaseModel):
             attributes=pv.attributes or {},
             created_at=pv.created_at,
             name=pv.policy.name,
+            user_id=pv.policy.user_id,
         )
 
 
@@ -254,12 +255,14 @@ def create_stats_router() -> APIRouter:
 
     @router.get("/policies/versions/{policy_version_id_str}")
     @timed_http_handler
-    async def get_policy_version(policy_version_id_str: str, _user: CheckSoftmaxUser) -> PolicyVersionWithName:
+    async def get_policy_version(policy_version_id_str: str, user: CheckSoftmaxUser) -> PolicyVersionWithName:
         policy_version_id = uuid.UUID(policy_version_id_str)
         pv = await policy_queries.get_policy_version_with_name(policy_version_id)
         if pv is None:
             raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
-        return PolicyVersionWithName.from_model(pv)
+        result = PolicyVersionWithName.from_model(pv)
+        await fill_user_data([result], current_user=user)
+        return result
 
     @router.get("/policies/my-versions")
     @timed_http_handler

@@ -4,7 +4,6 @@ import { FC, useCallback, useRef, useState } from 'react'
 import { normalizeReplayUrl, normalizeVibescopeUrl } from '@/components/ReplayViewer'
 import { StyledLink } from '@/components/StyledLink'
 import { TD, TR } from '@/components/Table'
-import { UserDisplay } from '@/components/UserDisplay'
 import { METTA_GITHUB_ORGANIZATION, METTA_GITHUB_REPO } from '@/constants'
 import { JobRequest } from '@/lib/repo'
 import { formatDurationBetween, formatDurationSince } from '@/utils/datetime'
@@ -318,9 +317,6 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
           )}
         </TD>
         <TD>
-          <UserDisplay user={job.user} userId={job.user_id} />
-        </TD>
-        <TD>
           {policyVersionEntries.length > 0 ? (
             <div className="flex flex-col gap-1">
               {policyVersionEntries.map((entry, i) => {
@@ -429,7 +425,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
       {/* Expanded detail panel */}
       {expanded && (
         <TR>
-          <TD colSpan={9} className="!p-0">
+          <TD colSpan={8} className="!p-0">
             <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-0">
               {/* Job */}
               <div className="px-3">
@@ -620,14 +616,14 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
       {/* Expansion rows */}
       {expanded && showLogs && logs !== null && (
         <TR>
-          <TD colSpan={9} className="!p-2">
+          <TD colSpan={8} className="!p-2">
             <ExpansionPanel label="Logs" content={logs} onClose={() => setShowLogs(false)} />
           </TD>
         </TR>
       )}
       {expanded && showSpec && job.job && (
         <TR>
-          <TD colSpan={9} className="!p-2">
+          <TD colSpan={8} className="!p-2">
             <ExpansionPanel
               label="Episode Spec"
               content={JSON.stringify(truncateValue(job.job), null, 2)}
@@ -639,7 +635,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
       )}
       {expanded && showGameStats && gameStats && (
         <TR>
-          <TD colSpan={9} className="!p-2">
+          <TD colSpan={8} className="!p-2">
             <ExpansionPanel
               label="Game Stats"
               content={JSON.stringify(gameStats, null, 2)}
@@ -650,7 +646,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
       )}
       {expanded && showAgentStats && agentStats && (
         <TR>
-          <TD colSpan={9} className="!p-2">
+          <TD colSpan={8} className="!p-2">
             <ExpansionPanel
               label="Agent Stats"
               content={JSON.stringify(agentStats, null, 2)}

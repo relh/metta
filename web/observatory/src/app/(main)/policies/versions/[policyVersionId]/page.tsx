@@ -4,6 +4,7 @@ import { Card } from '@/components/Card'
 import { CopyableUri } from '@/components/CopyableUri'
 import { LinkButton } from '@/components/LinkButton'
 import { Spinner } from '@/components/Spinner'
+import { UserDisplay } from '@/components/UserDisplay'
 import { TasksTable } from '@/EvalTasks/TasksTable'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
@@ -31,6 +32,9 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
           <h1 className="text-2xl font-semibold text-gray-900">{policyDisplay}</h1>
           <div className="flex flex-wrap gap-3 text-sm text-gray-600">
             {policyCreatedAt && <span className="text-gray-500">Created: {formatDate(policyCreatedAt)}</span>}
+            <span className="text-gray-500">
+              User: <UserDisplay user={pvInfo.user} userId={pvInfo.user_id} />
+            </span>
             <span className="flex items-center gap-1 text-gray-500">
               Policy Version ID:
               <span className="font-mono text-xs text-gray-700">{pvInfo.id}</span>
