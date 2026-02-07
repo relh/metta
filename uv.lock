@@ -3830,7 +3830,7 @@ wheels = [
 
 [[package]]
 name = "pufferlib-core"
-version = "3.0.15"
+version = "3.0.16"
 source = { editable = "packages/pufferlib-core" }
 dependencies = [
     { name = "gymnasium" },
