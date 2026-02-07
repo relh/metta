@@ -98,7 +98,9 @@ class TrajectoryIsolationSliceConfig(Config):
     """
 
     name: str = Field(min_length=1)
-    env_ratio: float = Field(gt=0.0, le=1.0)  # can be updated by the scheduler from epoch to epoch
+    # Used in env_ratio mode; auto-computed in agent_count mode.
+    env_ratio: float | None = Field(default=None, gt=0.0, le=1.0)
+    agent_count: int | None = Field(default=None, gt=0)  # number of agents per env for this slice (agent_count mode)
     policies: list[str] = Field(min_length=1)
     primary_policy: str | None = None
     losses: list[str] = Field(default_factory=list)
@@ -127,8 +129,21 @@ class TrajectoryIsolationSliceConfig(Config):
 
 
 class TrajectoryIsolationConfig(Config):
-    """Config for trajectory isolation slicing."""
+    """Config for trajectory isolation slicing.
 
+    Two slicing methods are supported:
+
+    - ``env_ratio`` (default): each slice specifies a float ``env_ratio`` and
+      trajectories are randomly assigned in proportion to those ratios.
+    - ``agent_count``: each slice specifies an integer ``agent_count`` representing
+      how many of the ``num_agents_per_env`` agents within each environment belong
+      to the slice.  Assignment is deterministic and contiguous—within every
+      environment the first slice's agents come first, then the second slice's,
+      and so on (see ``_build_plan_agent_count`` for details).
+    """
+
+    slicing_method: Literal["env_ratio", "agent_count"] = "env_ratio"
+    num_agents_per_env: int | None = Field(default=None, gt=0)
     slices: list[TrajectoryIsolationSliceConfig] = Field(default_factory=list)
     rules: list[ScheduleRule] = Field(default_factory=list)
 
@@ -141,9 +156,34 @@ class TrajectoryIsolationConfig(Config):
         if len(set(slice_names)) != len(slice_names):
             raise ValueError(f"Duplicate slice name(s) in trajectory isolation config: {slice_names}")
 
-        total_ratio = sum(float(slice_config.env_ratio) for slice_config in self.slices)
-        if abs(total_ratio - 1.0) > 1e-9:
-            raise ValueError(f"Sum of slice env_ratio must be 1.0 (got {total_ratio})")
+        if self.slicing_method == "env_ratio":
+            for slice_config in self.slices:
+                if slice_config.env_ratio is None:
+                    raise ValueError(
+                        f"Slice '{slice_config.name}' must specify env_ratio when slicing_method is 'env_ratio'"
+                    )
+            total_ratio = sum(float(slice_config.env_ratio) for slice_config in self.slices)
+            if abs(total_ratio - 1.0) > 1e-9:
+                raise ValueError(f"Sum of slice env_ratio must be 1.0 (got {total_ratio})")
+
+        elif self.slicing_method == "agent_count":
+            if self.num_agents_per_env is None:
+                raise ValueError("num_agents_per_env is required when slicing_method is 'agent_count'")
+            for slice_config in self.slices:
+                if slice_config.agent_count is None:
+                    raise ValueError(
+                        f"Slice '{slice_config.name}' must specify agent_count when slicing_method is 'agent_count'"
+                    )
+            total_agents = sum(slice_config.agent_count for slice_config in self.slices)
+            if total_agents != self.num_agents_per_env:
+                raise ValueError(
+                    f"Sum of slice agent_count ({total_agents}) must equal "
+                    f"num_agents_per_env ({self.num_agents_per_env})"
+                )
+            # Auto-compute env_ratio from agent_count so downstream code that reads
+            # env_ratio (e.g. _allocate_slice_counts, schedulers) continues to work.
+            for slice_config in self.slices:
+                slice_config.env_ratio = slice_config.agent_count / self.num_agents_per_env
 
         # Loss names must be globally unique across slices.
         all_loss_names: list[str] = []
@@ -418,38 +458,27 @@ class TrajectoryIsolator(TrainerComponent):
 
     def update_slice_ids(self, context: Any) -> None:
         """Recompute the per-epoch slice plan from the current config.
-        Schedulers may update env_ratio each epoch, so we recompute every epoch.
+
+        Slices are allocated **in definition order**: the first slice in the config
+        receives the first batch of trajectories, the second slice receives the next
+        batch, and so on.  This ordering guarantee holds for both slicing methods.
+
+        For ``env_ratio`` mode, schedulers may update env_ratio each epoch, so we
+        recompute every epoch.  For ``agent_count`` mode, assignment is deterministic
+        and based on within-environment agent position.
         """
-        self._ensure_rand_assignments()
         self._slice_row_indices_sorted = {}
 
-        total_ratio = sum(float(slice.env_ratio) for slice in self.config.slices)
-        if any(float(slice.env_ratio) < 0.0 for slice in self.config.slices):
-            raise ValueError("Slice env_ratio must be >= 0.0")
-        if total_ratio <= 0.0:
-            raise ValueError(f"Sum of slice env_ratio must be > 0.0 (got {total_ratio}) at epoch {context.epoch}")
-        if abs(total_ratio - 1.0) > 0.05:
-            raise ValueError(
-                f"Sum of slice env_ratio must be within 0.05 of 1.0 (got {total_ratio}) at epoch {context.epoch}"
-            )
-        ratio_scale = 1.0 / total_ratio  # leaving a buffer of +/- 0.05 to deal with scheduler imprecision
-
-        plan: list[TrajectoryIsolationSliceRuntime] = []
-        lower = 0.0
-        for slice_cfg in self.config.slices:
-            upper = lower + float(slice_cfg.env_ratio) * ratio_scale
-            env_mask = (self._rand_assignments >= lower) & (self._rand_assignments < upper)
-            env_mask = env_mask.to(device=self.context.device)
-            if bool(env_mask.any()):
-                plan.append(
-                    TrajectoryIsolationSliceRuntime(
-                        cfg=slice_cfg,
-                        lower=float(lower),
-                        upper=float(upper),
-                        env_mask=env_mask,
-                    )
-                )
-            lower = upper
+        if self.config.slicing_method == "agent_count":
+            # agent_count assignment is deterministic—reuse the existing plan unless
+            # this is the first call or the batch size changed (e.g. env resize).
+            batch_size = int(self.context.experience.total_agents)
+            if self._slice_plan and self._slice_plan[0].env_mask.numel() == batch_size:
+                plan = self._slice_plan
+            else:
+                plan = self._build_plan_agent_count()
+        else:
+            plan = self._build_plan_env_ratio(context)
 
         self._slice_plan = plan
 
@@ -480,6 +509,84 @@ class TrajectoryIsolator(TrainerComponent):
             )
             for policy_name in self._training_phase_primary_policy_slices
         }
+
+    def _build_plan_env_ratio(self, context: Any) -> list[TrajectoryIsolationSliceRuntime]:
+        """Build slice plan using random assignment proportional to env_ratio.
+
+        Random assignments are stable across epochs to preserve env-to-slice continuity.
+        """
+        self._ensure_rand_assignments()
+
+        total_ratio = sum(float(slice_cfg.env_ratio) for slice_cfg in self.config.slices)
+        if any(float(slice_cfg.env_ratio) < 0.0 for slice_cfg in self.config.slices):
+            raise ValueError("Slice env_ratio must be >= 0.0")
+        if total_ratio <= 0.0:
+            raise ValueError(f"Sum of slice env_ratio must be > 0.0 (got {total_ratio}) at epoch {context.epoch}")
+        if abs(total_ratio - 1.0) > 0.05:
+            raise ValueError(
+                f"Sum of slice env_ratio must be within 0.05 of 1.0 (got {total_ratio}) at epoch {context.epoch}"
+            )
+        ratio_scale = 1.0 / total_ratio  # leaving a buffer of +/- 0.05 to deal with scheduler imprecision
+
+        plan: list[TrajectoryIsolationSliceRuntime] = []
+        lower = 0.0
+        for slice_cfg in self.config.slices:
+            upper = lower + float(slice_cfg.env_ratio) * ratio_scale
+            env_mask = (self._rand_assignments >= lower) & (self._rand_assignments < upper)
+            env_mask = env_mask.to(device=self.context.device)
+            if bool(env_mask.any()):
+                plan.append(
+                    TrajectoryIsolationSliceRuntime(
+                        cfg=slice_cfg,
+                        lower=float(lower),
+                        upper=float(upper),
+                        env_mask=env_mask,
+                    )
+                )
+            lower = upper
+
+        return plan
+
+    def _build_plan_agent_count(self) -> list[TrajectoryIsolationSliceRuntime]:
+        """Build slice plan using deterministic within-environment agent assignment.
+
+        Environment observations are contiguous: the first ``num_agents_per_env``
+        elements belong to env 0, the next to env 1, and so on.  Within each
+        environment, slices are carved out **in definition order**—the first slice's
+        ``agent_count`` agents come first, followed by the second slice's, etc.
+        This guarantees that slice allocation order matches config definition order.
+        """
+        num_agents_per_env = self.config.num_agents_per_env
+        batch_size = int(self.context.experience.total_agents)
+        device = self.context.device
+
+        if batch_size % num_agents_per_env != 0:
+            raise ValueError(
+                f"total_agents ({batch_size}) must be divisible by "
+                f"num_agents_per_env ({num_agents_per_env}) for slicing by agent count."
+            )
+
+        # within_env_index[i] gives agent i's position inside its environment (0-indexed).
+        agent_indices = torch.arange(batch_size, device=device)
+        within_env_index = agent_indices % num_agents_per_env
+
+        plan: list[TrajectoryIsolationSliceRuntime] = []
+        offset = 0
+        for slice_cfg in self.config.slices:
+            count = slice_cfg.agent_count
+            env_mask = (within_env_index >= offset) & (within_env_index < offset + count)
+            if bool(env_mask.any()):
+                plan.append(
+                    TrajectoryIsolationSliceRuntime(
+                        cfg=slice_cfg,
+                        lower=float(offset / num_agents_per_env),
+                        upper=float((offset + count) / num_agents_per_env),
+                        env_mask=env_mask,
+                    )
+                )
+            offset += count
+
+        return plan
 
     # ----------------- Rollout Methods -----------------
     def prepare_rollout_slices(self, rollout_td: TensorDict) -> None:

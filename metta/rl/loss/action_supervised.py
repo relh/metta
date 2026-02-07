@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 from pydantic import Field
@@ -45,6 +45,9 @@ class ActionSupervised(Loss):
         cfg: "ActionSupervisedConfig",
     ):
         super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
+
+    def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
+        return {"full_log_probs"}
 
     def get_experience_spec(self) -> Composite:
         scalar_f32 = UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32)
