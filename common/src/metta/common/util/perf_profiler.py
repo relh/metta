@@ -106,8 +106,8 @@ class PerfProfiler:
         except FileNotFoundError:
             logger.info("perf not installed, continuing without profiling")
             return False
-        except Exception as e:
-            logger.warning(f"Failed to start perf: {e}")
+        except (OSError, ValueError) as e:
+            logger.warning("Failed to start perf: %s", e)
             return False
 
     def stop(self) -> None:
@@ -142,8 +142,8 @@ class PerfProfiler:
                 logger.info(f"Copied {perf_map} to {dest}")
             except shutil.SameFileError:
                 logger.info(f"Perf map already at {dest}")
-            except Exception as e:
-                logger.warning(f"Failed to copy perf map {perf_map} to {dest}: {e}")
+            except OSError as e:
+                logger.warning("Failed to copy perf map %s to %s: %s", perf_map, dest, e)
 
         if self._file_handler:
             logger.removeHandler(self._file_handler)
