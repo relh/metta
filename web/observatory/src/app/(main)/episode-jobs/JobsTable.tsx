@@ -11,6 +11,7 @@ export const JobsTable: FC<{ jobs: JobRequest[] }> = ({ jobs }) => {
       <TableHeader>
         <TH style={{ width: 30 }} />
         <TH style={{ width: 140 }}>Job</TH>
+        <TH style={{ width: 120 }}>User</TH>
         <TH style={{ width: 200 }}>Policies</TH>
         <TH style={{ width: 70 }}>Agents</TH>
         <TH style={{ width: 90 }}>Reward</TH>

@@ -23,14 +23,25 @@ type TaskStatusMixin = {
   status_details: Record<string, any> | null
 }
 
-export type EvalTask = {
+export type UserRow = {
+  id: string
+  name: string | null
+  email: string | null
+  is_softmax_team_member: boolean | null
+}
+
+type Ownable = {
+  user_id: string
+  user: UserRow | null
+}
+
+export type EvalTask = Ownable & {
   // eval_tasks table columns
   id: number
   command: string
   data_uri: string | null
   git_hash: string | null
   attributes: Record<string, any>
-  user_id: string
   created_at: string
   is_finished: boolean
   latest_attempt_id: number | null
@@ -78,12 +89,11 @@ export type TaskFilters = {
 }
 
 // Policy-based scorecard types
-export type PublicPolicyVersionRow = {
+export type PublicPolicyVersionRow = Ownable & {
   id: string
   policy_id: string
   created_at: string
   policy_created_at: string
-  user_id: string
   name: string
   version: number
   tags: Record<string, string>
@@ -268,12 +278,11 @@ export type JobMatchInfo = {
   season_name: string | null
 }
 
-export type JobRequest = {
+export type JobRequest = Ownable & {
   id: string
   job_type: string
   job: Record<string, any>
   status: JobStatus
-  user_id: string
   worker: string | null
   result: Record<string, any> | null
   error: string | null
@@ -287,11 +296,10 @@ export type JobRequest = {
   match: JobMatchInfo | null
 }
 
-export type PolicyRow = {
+export type PolicyRow = Ownable & {
   id: string
   name: string
   created_at: string
-  user_id: string
   attributes: Record<string, any>
   version_count: number
 }

@@ -8,6 +8,7 @@ import { Spinner } from '../components/Spinner'
 import { StyledLink } from '../components/StyledLink'
 import { Table, TD, TH, TR } from '../components/Table'
 import { TaskBadge } from '../components/TaskBadge'
+import { UserDisplay } from '../components/UserDisplay'
 import { EvalTask, PublicPolicyVersionRow, TaskAttempt } from '../lib/repo'
 import { formatDate, formatDurationBetween } from '../utils/datetime'
 import { TaskAttemptTimeline } from './TaskAttemptTimeline'
@@ -113,6 +114,9 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
             '-'
           )}
         </TD>
+        <TD>
+          <UserDisplay user={task.user} userId={task.user_id} />
+        </TD>
         <TD className="truncate" title={task.command}>
           {parseRecipe(task.command) || '-'}
         </TD>
@@ -140,7 +144,7 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
       </TR>
       {isExpanded && (
         <TR>
-          <TD colSpan={6} className="p-4 bg-gray-100">
+          <TD colSpan={7} className="p-4 bg-gray-100">
             <div className="mb-2 text-xs text-gray-500">Task ID: {task.id}</div>
             <div className="mb-3 text-xs text-gray-700 font-mono break-all">{task.command}</div>
             {isLoadingAttempts ? (

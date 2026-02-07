@@ -22,9 +22,9 @@ export const Tooltip: FC<{
   const { getReferenceProps, getFloatingProps } = useInteractions([hover])
   return (
     <>
-      <div ref={refs.setReference} {...getReferenceProps()}>
+      <span ref={refs.setReference} {...getReferenceProps()}>
         {children}
-      </div>
+      </span>
       {isOpen && (
         <div
           ref={refs.setFloating}

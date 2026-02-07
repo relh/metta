@@ -4,6 +4,7 @@ import { StandardPageLayout } from '@/components/layouts/StandardPageLayout'
 import { LinkButton } from '@/components/LinkButton'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { UserDisplay } from '@/components/UserDisplay'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
@@ -16,7 +17,7 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
 
   const policyName = policyVersions[0]?.name ?? 'Unknown Policy'
   const policyCreatedAt = policyVersions[0]?.policy_created_at ?? null
-  const userId = policyVersions[0]?.user_id
+  const firstVersion = policyVersions[0]
 
   return (
     <StandardPageLayout>
@@ -26,7 +27,11 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
           <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Policy</p>
           <h1 className="text-2xl font-semibold text-gray-900">{policyName}</h1>
           <div className="flex flex-wrap gap-3 text-sm text-gray-600">
-            {userId && <span className="text-gray-500">User: {userId}</span>}
+            {firstVersion?.user_id && (
+              <span className="text-gray-500">
+                User: <UserDisplay user={firstVersion.user} userId={firstVersion.user_id} />
+              </span>
+            )}
             {policyCreatedAt && (
               <span className="text-gray-500" title={formatDate(policyCreatedAt)}>
                 Created: {formatRelativeTime(policyCreatedAt)}

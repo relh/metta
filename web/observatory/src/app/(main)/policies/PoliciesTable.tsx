@@ -3,6 +3,7 @@ import { FC } from 'react'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { UserDisplay } from '@/components/UserDisplay'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
@@ -24,6 +25,7 @@ export const PoliciesTable: FC<{ nameFilter?: string; page?: number }> = async (
       <Table>
         <TableHeader>
           <TH>Name</TH>
+          <TH>User</TH>
           <TH>Versions</TH>
           <TH>Created</TH>
         </TableHeader>
@@ -34,6 +36,9 @@ export const PoliciesTable: FC<{ nameFilter?: string; page?: number }> = async (
                 <StyledLink href={`/policies/${policy.id}`} className="font-medium">
                   {policy.name}
                 </StyledLink>
+              </TD>
+              <TD>
+                <UserDisplay user={policy.user} userId={policy.user_id} />
               </TD>
               <TD>
                 <span className="inline-flex items-center px-2 py-1 text-xs rounded bg-gray-100 border border-gray-200 text-nowrap">

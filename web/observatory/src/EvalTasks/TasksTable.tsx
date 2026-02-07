@@ -140,6 +140,7 @@ export const TasksTable: FC<{
         <Table>
           <Table.Header>
             <TH>Policy</TH>
+            <TH>User</TH>
             <TH>
               <div className="flex flex-col gap-1">
                 Recipe
