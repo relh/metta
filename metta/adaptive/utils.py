@@ -63,15 +63,9 @@ def make_monitor_table(
 
         # Format score and cost
         if include_score:
-            # Try to get score/cost from sweep namespace first, then from observation field (backwards compat)
-            summary = run.summary if isinstance(run.summary, dict) else {}
+            summary = run.summary or {}
             score = summary.get("sweep/score")
             cost = summary.get("sweep/cost")
-
-            # Backwards compatibility: check old observation field
-            if score is None and hasattr(run, "observation") and (run_observation := getattr(run, "observation", None)):
-                score = run_observation.score
-                cost = run_observation.cost
 
             score_str = f"{float(score):.4f}" if score is not None else "N/A"
             cost_str = f"${float(cost):.2f}" if cost is not None else "N/A"
