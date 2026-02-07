@@ -3,6 +3,7 @@ import { FC } from 'react'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
 
@@ -19,6 +20,7 @@ export const PoliciesTable: FC<{ nameFilter?: string; page?: number }> = async (
 
   return (
     <div className="overflow-x-auto">
+      <ServerDebugDrain />
       <Table>
         <TableHeader>
           <TH>Name</TH>

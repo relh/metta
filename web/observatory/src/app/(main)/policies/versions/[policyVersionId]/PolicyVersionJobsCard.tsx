@@ -5,6 +5,7 @@ import { Card } from '@/components/Card'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SearchParamInput } from '@/components/SearchParamInput'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { ALL_JOB_STATUSES } from '@/lib/repo'
 import { getRepo } from '@/lib/repo/server'
 
@@ -47,6 +48,7 @@ export const PolicyVersionJobsCard: FC<{
   return (
     <Card title="Jobs">
       <div className="mb-4 flex flex-wrap gap-3 items-end">
+        <ServerDebugDrain />
         <JobFilters seasons={seasons} defaultPolicyVersionId={policyVersionId} />
         <div>
           <div className="text-xs text-gray-500 mb-1">Job ID</div>

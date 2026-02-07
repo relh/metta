@@ -1,6 +1,7 @@
 import { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 
 export default async function TournamentPage() {
@@ -9,6 +10,7 @@ export default async function TournamentPage() {
   if (seasons.length === 0) {
     return (
       <div className="p-6 max-w-5xl mx-auto flex justify-center py-16">
+        <ServerDebugDrain />
         <div className="text-gray-600">No seasons found</div>
       </div>
     )

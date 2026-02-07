@@ -1,5 +1,6 @@
 import { FC, PropsWithChildren, Suspense } from 'react'
 
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 
 import { SeasonSelect } from './SeasonSelect'
@@ -8,7 +9,12 @@ const InnerSeasonSelect: FC = async () => {
   const repo = await getRepo()
   const seasons = await repo.getSeasons()
 
-  return <SeasonSelect seasons={seasons} />
+  return (
+    <>
+      <SeasonSelect seasons={seasons} />
+      <ServerDebugDrain />
+    </>
+  )
 }
 
 export default function TournamentLayout({ children }: PropsWithChildren) {

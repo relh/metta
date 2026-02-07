@@ -338,10 +338,26 @@ export type EpisodeStatsResponse = {
   steps: number | null
 }
 
+export type RequestLogEntry = {
+  id: string
+  endpoint: string
+  method: string
+  durationMs: number
+  status: number
+  error?: string
+  source: 'server' | 'client'
+  timestamp: number
+}
+
+export type OnRequestCallback = (entry: RequestLogEntry) => void
+
+let nextRequestId = 0
+
 export class Repo {
   constructor(
     public baseUrl: string = 'http://localhost:8000',
-    private token: string | null = null
+    private token: string | null = null,
+    private onRequest?: OnRequestCallback
   ) {}
 
   private getHeaders(contentType?: string): Record<string, string> {
@@ -357,6 +373,20 @@ export class Repo {
     }
 
     return headers
+  }
+
+  private logRequest(endpoint: string, method: string, startTime: number, status: number, error?: string) {
+    if (!this.onRequest) return
+    this.onRequest({
+      id: `req-${nextRequestId++}-${Date.now()}`,
+      endpoint,
+      method,
+      durationMs: Math.round(performance.now() - startTime),
+      status,
+      error,
+      source: typeof window === 'undefined' ? 'server' : 'client',
+      timestamp: Date.now(),
+    })
   }
 
   private async handleErrorResponse(response: Response): Promise<never> {
@@ -387,9 +417,17 @@ export class Repo {
   }
 
   private async apiCall<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      headers: this.getHeaders(),
-    })
+    const startTime = performance.now()
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        headers: this.getHeaders(),
+      })
+    } catch (err: any) {
+      this.logRequest(endpoint, 'GET', startTime, 0, err.message)
+      throw err
+    }
+    this.logRequest(endpoint, 'GET', startTime, response.status, response.ok ? undefined : `${response.status}`)
     if (!response.ok) {
       await this.handleErrorResponse(response)
     }
@@ -397,11 +435,19 @@ export class Repo {
   }
 
   private async apiCallWithBody<T>(endpoint: string, body: any): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'POST',
-      headers: this.getHeaders('application/json'),
-      body: JSON.stringify(body),
-    })
+    const startTime = performance.now()
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: this.getHeaders('application/json'),
+        body: JSON.stringify(body),
+      })
+    } catch (err: any) {
+      this.logRequest(endpoint, 'POST', startTime, 0, err.message)
+      throw err
+    }
+    this.logRequest(endpoint, 'POST', startTime, response.status, response.ok ? undefined : `${response.status}`)
     if (!response.ok) {
       await this.handleErrorResponse(response)
     }
@@ -409,11 +455,19 @@ export class Repo {
   }
 
   private async apiCallWithBodyPut<T>(endpoint: string, body: any): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'PUT',
-      headers: this.getHeaders('application/json'),
-      body: JSON.stringify(body),
-    })
+    const startTime = performance.now()
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'PUT',
+        headers: this.getHeaders('application/json'),
+        body: JSON.stringify(body),
+      })
+    } catch (err: any) {
+      this.logRequest(endpoint, 'PUT', startTime, 0, err.message)
+      throw err
+    }
+    this.logRequest(endpoint, 'PUT', startTime, response.status, response.ok ? undefined : `${response.status}`)
     if (!response.ok) {
       await this.handleErrorResponse(response)
     }
@@ -421,10 +475,18 @@ export class Repo {
   }
 
   private async apiCallDelete(endpoint: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-    })
+    const startTime = performance.now()
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        method: 'DELETE',
+        headers: this.getHeaders(),
+      })
+    } catch (err: any) {
+      this.logRequest(endpoint, 'DELETE', startTime, 0, err.message)
+      throw err
+    }
+    this.logRequest(endpoint, 'DELETE', startTime, response.status, response.ok ? undefined : `${response.status}`)
     if (!response.ok) {
       await this.handleErrorResponse(response)
     }
@@ -593,9 +655,18 @@ export class Repo {
   }
 
   async getJobArtifact(jobId: string, artifactType: string): Promise<string> {
-    const response = await fetch(`${this.baseUrl}/jobs/${jobId}/artifacts/${artifactType}`, {
-      headers: this.getHeaders(),
-    })
+    const endpoint = `/jobs/${jobId}/artifacts/${artifactType}`
+    const startTime = performance.now()
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        headers: this.getHeaders(),
+      })
+    } catch (err: any) {
+      this.logRequest(endpoint, 'GET', startTime, 0, err.message)
+      throw err
+    }
+    this.logRequest(endpoint, 'GET', startTime, response.status, response.ok ? undefined : `${response.status}`)
     if (!response.ok) {
       await this.handleErrorResponse(response)
     }

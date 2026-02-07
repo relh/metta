@@ -4,6 +4,7 @@ import { createLoader } from 'nuqs/server'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatRelativeTime } from '@/utils/datetime'
 
@@ -35,6 +36,7 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
 
   return (
     <div>
+      <ServerDebugDrain />
       <MatchFilters season={season} policies={policies} />
       {filteredMatches.length === 0 ? (
         <div className="text-gray-500 py-4">No matches</div>

@@ -3,6 +3,7 @@ import Link from 'next/link'
 
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatRelativeTime } from '@/utils/datetime'
 
@@ -19,6 +20,7 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
 
   return (
     <div className="space-y-4">
+      <ServerDebugDrain />
       <SubmitForm seasonName={seasonName} existingPolicyVersionIds={existingPolicyVersionIds} />
       {policies.length === 0 ? (
         <div className="text-gray-500 py-4">No players submitted yet</div>

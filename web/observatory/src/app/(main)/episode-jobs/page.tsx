@@ -5,6 +5,7 @@ import { Card } from '@/components/Card'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SearchParamInput } from '@/components/SearchParamInput'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { ALL_JOB_STATUSES } from '@/lib/repo'
 import { getRepo } from '@/lib/repo/server'
 
@@ -52,6 +53,7 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
 
   return (
     <div className="p-5 max-w-[1600px] mx-auto">
+      <ServerDebugDrain />
       <AutoRefresh />
       <Card title="Episode Jobs">
         <div className="mb-4 flex flex-wrap gap-3 items-end">

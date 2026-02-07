@@ -4,6 +4,7 @@ import { StandardPageLayout } from '@/components/layouts/StandardPageLayout'
 import { LinkButton } from '@/components/LinkButton'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
 
@@ -19,6 +20,7 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
 
   return (
     <StandardPageLayout>
+      <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Policy</p>

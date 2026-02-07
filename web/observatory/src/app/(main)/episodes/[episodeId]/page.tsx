@@ -5,6 +5,7 @@ import { StandardPageLayout } from '@/components/layouts/StandardPageLayout'
 import { ReplayViewer } from '@/components/ReplayViewer'
 import { SmallHeader } from '@/components/SmallHeader'
 import { TagList } from '@/components/TagList'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
 
@@ -24,6 +25,7 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
 
   return (
     <StandardPageLayout>
+      <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Episode</p>

@@ -4,6 +4,7 @@ import { FC, Suspense } from 'react'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { LinkTabs } from '@/components/LinkTabs'
 import { Spinner } from '@/components/Spinner'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 
 const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
@@ -15,6 +16,7 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
 
   return (
     <div className="text-gray-500 text-sm">
+      <ServerDebugDrain />
       {season.summary && <div>{season.summary}</div>}
       {season.pools.length > 0 && (
         <div className="mt-1 ml-4 space-y-0.5">

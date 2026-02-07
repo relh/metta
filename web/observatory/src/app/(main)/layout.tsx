@@ -8,6 +8,8 @@ import { AppProvider } from '@/app/(main)/AppContext'
 import { TopMenu } from '@/app/(main)/TopMenu'
 import { getAuthToken } from '@/auth/server'
 import { config } from '@/config'
+import { RequestDebugPanel } from '@/lib/debug/RequestDebugPanel'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 
 export default async function RootLayout({ children }: PropsWithChildren) {
@@ -47,6 +49,8 @@ export default async function RootLayout({ children }: PropsWithChildren) {
 
               <div className="bg-gray-50 flex-1">{children}</div>
             </div>
+            <ServerDebugDrain />
+            <RequestDebugPanel />
           </AppProvider>
         </NuqsAdapter>
       </body>

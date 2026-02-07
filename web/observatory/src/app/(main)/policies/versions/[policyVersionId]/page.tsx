@@ -5,6 +5,7 @@ import { CopyableUri } from '@/components/CopyableUri'
 import { LinkButton } from '@/components/LinkButton'
 import { Spinner } from '@/components/Spinner'
 import { TasksTable } from '@/EvalTasks/TasksTable'
+import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate } from '@/utils/datetime'
 import { formatPolicyVersion } from '@/utils/format'
@@ -23,6 +24,7 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+      <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Policy Version</p>
