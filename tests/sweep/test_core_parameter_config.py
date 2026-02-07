@@ -1,3 +1,5 @@
+import pytest
+
 from metta.sweep.core import SweepParameters
 from metta.sweep.parameter_config import Distribution, ParameterConfig
 
@@ -22,5 +24,12 @@ def test_sweep_parameters_builder_logit_sanitization():
         scale="auto",
     )
     cfg = next(iter(param.values()))
-    assert cfg.min <= 1e-6
-    assert cfg.max >= 1 - 1e-6
+    assert cfg.min >= 1e-6
+    assert cfg.max <= 1 - 1e-6
+
+
+def test_parameter_config_rejects_invalid_bounds() -> None:
+    # Ensure basic bound validation is enforced in the model validator.
+    ParameterConfig(min=0.0, max=1.0, distribution="uniform", mean=0.5, scale="auto")
+    with pytest.raises(ValueError, match="min must be less than max"):
+        ParameterConfig(min=1.0, max=1.0, distribution="uniform", mean=1.0, scale="auto")

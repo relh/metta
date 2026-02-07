@@ -44,14 +44,15 @@ class ParameterConfig(Config):
         v = dict(values)
         dist = v.get("distribution")
 
+        try:
+            v_min = float(v.get("min"))
+            v_max = float(v.get("max"))
+        except (TypeError, ValueError):
+            return v
+
         # Clamp for logit-normal to avoid 0/1 boundary issues
         if dist == "logit_normal":
             eps = 1e-6
-            try:
-                v_min = float(v.get("min"))
-                v_max = float(v.get("max"))
-            except Exception:
-                return v
             v_min = max(v_min, eps)
             v_max = min(v_max, 1 - eps)
             v["min"] = v_min
@@ -59,22 +60,14 @@ class ParameterConfig(Config):
 
         # Default mean if not provided
         if v.get("mean") is None:
-            try:
-                v_min = float(v.get("min"))
-                v_max = float(v.get("max"))
-            except Exception:
-                return v
             if dist in ("log_normal", "uniform_pow2"):
                 v["mean"] = (v_min * v_max) ** 0.5
             else:
                 v["mean"] = (v_min + v_max) / 2.0
 
         # Basic bound validation
-        try:
-            if float(v.get("min")) >= float(v.get("max")):
-                raise ValueError("min must be less than max")
-        except Exception:
-            return v
+        if v_min >= v_max:
+            raise ValueError("min must be less than max")
 
         return v
 
