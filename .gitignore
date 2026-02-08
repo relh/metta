@@ -169,3 +169,7 @@ tools/dev/python_imports/*.txt
 # AI-generated implementation plans (ephemeral, not for review)
 docs/plans/
 .runtime/
+
+# Gas Town (added by gt)
+.claude/
+.logs/
