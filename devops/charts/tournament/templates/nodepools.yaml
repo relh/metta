@@ -21,7 +21,7 @@ spec:
       labels:
         workload-type: {{ .workload }}
     spec:
-      expireAfter: 336h
+      expireAfter: {{ .expireAfter | default "336h" }}
       terminationGracePeriod: 24h
       nodeClassRef:
         group: eks.amazonaws.com

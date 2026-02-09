@@ -2,10 +2,13 @@ pools:
   - name: jobs-warm
     workload: jobs
     replicas: 2
+    expireAfter: 2h
     requirements:
       - key: karpenter.sh/capacity-type
         operator: In
-        values: ["on-demand"]
+        # will prefer spot but fall back to on-demand if spot is not available
+        # expireAfter is important for cycling back to spot
+        values: ["spot", "on-demand"]
 
       - key: node.kubernetes.io/instance-type
         operator: In
