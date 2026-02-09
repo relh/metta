@@ -22,7 +22,6 @@ from generate import (  # noqa: E402
     EpisodeData,
     PolicyVersion,
     aggregate_agent_metrics,
-    compute_benchmark_tiers,
     compute_derived_metrics,
     compute_team_comp_analysis,
     data_to_dict,
@@ -407,45 +406,6 @@ def test_reward_consistency():
 # === Phase 2 Tests ===
 
 
-def test_benchmark_tier_computation():
-    """Test benchmark tier computation with boundary values."""
-    episodes = [
-        _make_episode(
-            reward=3.0,
-            metrics={
-                "junction.aligned_by_agent": 5,
-                "action.move.success": 800,
-                "action.move.failed": 100,
-                "carbon.gained": 200,
-            },
-        )
-        for _ in range(10)
-    ]
-    derived = compute_derived_metrics(episodes)
-    tiers = compute_benchmark_tiers(episodes, derived)
-
-    assert "avg_reward" in tiers
-    assert tiers["avg_reward"]["tier"] == "top10"  # 3.0 >= 2.0
-
-    assert "move_success_rate" in tiers
-
-
-def test_benchmark_serialization():
-    """Test benchmarks appear in data_to_dict output."""
-    episodes = [_make_episode(reward=1.0, metrics={"action.move.success": 100}) for _ in range(3)]
-    derived = compute_derived_metrics(episodes)
-    data = DashboardData(
-        policy=PolicyVersion(id="p1", name="t", version=1),
-        episodes=episodes,
-        season="test",
-        generated_at="2024-01-01",
-        derived=derived,
-    )
-    result = data_to_dict(data)
-    assert "benchmarks" in result["derived"]
-    assert "avg_reward" in result["derived"]["benchmarks"]
-
-
 # === Phase 3 Tests ===
 
 
@@ -734,9 +694,6 @@ def main():
         test_resource_efficiency_per_step,
         test_hearts_to_junction_rate,
         test_reward_consistency,
-        # Phase 2
-        test_benchmark_tier_computation,
-        test_benchmark_serialization,
         # Phase 3
         test_diagnostic_high_noop,
         test_diagnostic_matchup_disparity,

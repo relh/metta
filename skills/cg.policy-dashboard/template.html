@@ -722,9 +722,26 @@
       .selected-tag .remove:hover {
         color: var(--accent-red);
       }
+
+      .y-axis-tooltip {
+        position: fixed;
+        background: #1c2128;
+        border: 1px solid #444c56;
+        color: #c9d1d9;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-family: monospace;
+        pointer-events: none;
+        z-index: 1000;
+        display: none;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      }
     </style>
   </head>
   <body>
+    <div class="y-axis-tooltip" id="y-axis-tooltip"></div>
     <!-- Sidebar: Query Builder -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
@@ -794,6 +811,11 @@
         </div>
 
         <div style="margin-top: 1.5rem">
+          <h3>Overlay Players</h3>
+          <div id="overlay-toggles" style="display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem"></div>
+        </div>
+
+        <div style="margin-top: 1.5rem">
           <button class="btn" onclick="exportData()" style="width: 100%">Export JSON</button>
         </div>
       </div>
@@ -832,33 +854,25 @@
 
       <!-- Tab: Overview -->
       <div id="overview" class="tab-content active">
+        <!-- Diagnostic Insights -->
+        <div class="insights" id="diagnostic-insights" style="display: none">
+          <h4>Diagnostic Alerts</h4>
+          <ul id="diagnostic-list"></ul>
+        </div>
+        <div class="insights" id="overview-insights"></div>
+
         <div class="cards" id="overview-cards"></div>
 
-        <!-- KPI Cards Section -->
-        <div style="margin-bottom: 1.5rem">
-          <h3 style="font-size: 1rem; color: var(--text-secondary); margin-bottom: 0.75rem">Efficiency KPIs</h3>
-          <div class="cards" id="kpi-cards"></div>
+        <!-- Efficiency KPIs Chart -->
+        <div class="chart-container">
+          <div class="chart-header">
+            <span class="chart-title">Efficiency KPIs</span>
+          </div>
+          <div style="height: 350px">
+            <canvas id="overview-kpi-chart"></canvas>
+          </div>
         </div>
 
-        <!-- Benchmarks Section (Phase 2) -->
-        <div class="chart-container" id="benchmarks-section" style="display: none">
-          <div class="chart-header">
-            <span class="chart-title">Comparative Benchmarks</span>
-          </div>
-          <table class="data-table" id="benchmarks-table">
-            <thead>
-              <tr>
-                <th>Metric</th>
-                <th>Your Value</th>
-                <th>Bottom 50%</th>
-                <th>Top 10%</th>
-                <th>Elite</th>
-                <th>Tier</th>
-              </tr>
-            </thead>
-            <tbody id="benchmarks-tbody"></tbody>
-          </table>
-        </div>
 
         <!-- Team Composition Section (Phase 4) -->
         <div id="team-comp-section" style="display: none; margin-bottom: 1.5rem">
@@ -880,12 +894,6 @@
           <div class="cards" id="team-comp-cards"></div>
         </div>
 
-        <!-- Diagnostic Insights -->
-        <div class="insights" id="diagnostic-insights" style="display: none">
-          <h4>Diagnostic Alerts</h4>
-          <ul id="diagnostic-list"></ul>
-        </div>
-
         <div class="chart-container">
           <div class="chart-header">
             <span class="chart-title">Reward Distribution</span>
@@ -896,7 +904,6 @@
           </div>
           <canvas id="reward-chart" height="250"></canvas>
         </div>
-        <div class="insights" id="overview-insights"></div>
         <div class="comparison" id="high-low-comparison"></div>
       </div>
 
@@ -1095,8 +1102,9 @@
               DATA.policy.score ? DATA.policy.score.toFixed(3) : '-';
           document.getElementById('stat-episodes').textContent = DATA.episodes.length;
 
-          // Populate filter options
+          // Populate filter options and overlay toggles
           populateFilterOptions();
+          renderOverlayToggles();
 
           // Initial filter (all episodes)
           filteredEpisodes = [...DATA.episodes];
@@ -1302,11 +1310,9 @@
               </div>
           `;
 
-          // KPI Cards
-          renderKPICards();
+          // KPI Chart
+          renderOverviewKpiChart();
 
-          // Benchmarks (Phase 2)
-          renderBenchmarks();
 
           // Team Composition (Phase 4)
           renderTeamComp();
@@ -1328,7 +1334,7 @@
       const KPI_DEFINITIONS = {
           move_efficiency: {
               name: 'Move Efficiency',
-              subtitle: 'success / (success + failed)',
+              subtitle: 'move.success / (move.success + move.failed)',
               goodThreshold: 0.8,
               badThreshold: 0.5,
               getEpisodeValue: (e) => {
@@ -1345,14 +1351,18 @@
           },
           vibe_change_rate: {
               name: 'Vibe Change Rate',
-              subtitle: 'vibe changes / total actions',
+              subtitle: 'change_vibe.success / total_actions',
               goodThreshold: 0.1,
               badThreshold: 0.02,
               getEpisodeValue: (e) => {
-                  const success = e.metrics['action.change_vibe.success'] || 0;
-                  const moveSuccess = e.metrics['action.move.success'] || 0;
-                  const total = moveSuccess + success;
-                  return total > 0 ? success / total : 0;
+                  const vibe = e.metrics['action.change_vibe.success'] || 0;
+                  let total = vibe + (e.metrics['action.failed'] || 0);
+                  Object.keys(e.metrics).forEach(k => {
+                      if (k.startsWith('action.') && k.includes('.success') && k !== 'action.change_vibe.success') {
+                          total += e.metrics[k] || 0;
+                      }
+                  });
+                  return total > 0 ? vibe / total : 0;
               },
               filterCondition: (e) => {
                   const success = e.metrics['action.change_vibe.success'] || 0;
@@ -1362,7 +1372,7 @@
           },
           action_success_rate: {
               name: 'Action Success Rate',
-              subtitle: 'successful / total actions',
+              subtitle: '(total - failed) / total actions',
               goodThreshold: 0.8,
               badThreshold: 0.6,
               getEpisodeValue: (e) => {
@@ -1389,7 +1399,7 @@
           },
           freeze_vulnerability: {
               name: 'Freeze Vulnerability',
-              subtitle: '% time frozen',
+              subtitle: 'frozen.ticks / episode steps',
               goodThreshold: 0.05,  // Lower is better
               badThreshold: 0.1,
               inverted: true,  // Lower is better
@@ -1405,7 +1415,7 @@
           },
           junction_control_rate: {
               name: 'Junction Control',
-              subtitle: 'aligned / total',
+              subtitle: 'aligned / (aligned + scrambled)',
               goodThreshold: 0.7,
               badThreshold: 0.3,
               getEpisodeValue: (e) => {
@@ -1422,7 +1432,7 @@
           },
           resource_retention: {
               name: 'Resource Retention',
-              subtitle: 'kept / gained',
+              subtitle: 'sum(resource.amount) / sum(resource.gained)',
               goodThreshold: 0.5,
               badThreshold: 0.2,
               getEpisodeValue: (e) => {
@@ -1477,7 +1487,7 @@
           },
           resource_efficiency_per_step: {
               name: 'Resource Efficiency',
-              subtitle: 'resources gained / step',
+              subtitle: 'sum(resource.gained) / steps',
               goodThreshold: 0.15,
               badThreshold: 0.05,
               getEpisodeValue: (e) => {
@@ -1496,7 +1506,7 @@
           },
           hearts_to_junction_rate: {
               name: 'Hearts to Junction',
-              subtitle: 'junctions / hearts lost',
+              subtitle: 'junction.aligned_by_agent / heart.lost',
               goodThreshold: 0.5,
               badThreshold: 0.1,
               getEpisodeValue: (e) => {
@@ -1511,104 +1521,145 @@
               },
               filterLabel: 'Low Hearts-to-Junction Conversion'
           },
+          avg_reward: {
+              name: 'Avg Reward',
+              subtitle: 'mean episode reward',
+              goodThreshold: 2.0,
+              badThreshold: 1.0,
+              rawValue: true,
+              getEpisodeValue: (e) => e.reward,
+              filterCondition: (e) => e.reward < 0.1,
+              filterLabel: 'Near-Zero Reward (<0.1)'
+          },
+          reward_nonzero_pct: {
+              name: 'Non-Zero Episode %',
+              subtitle: '% episodes with reward > 0.1',
+              goodThreshold: 0.6,
+              badThreshold: 0.4,
+              policyLevel: true,
+              filterCondition: (e) => e.reward <= 0.1,
+              filterLabel: 'Zero/Near-Zero Reward'
+          },
           reward_consistency: {
               name: 'Reward Consistency',
-              subtitle: '1 - (std/mean)',
+              subtitle: 'dot: 1-stdev/mean | range: 1-|r-mean|/mean',
               goodThreshold: 0.5,
               badThreshold: 0.2,
-              getEpisodeValue: () => 0,
-              filterCondition: () => false,
-              filterLabel: 'Low Reward Consistency',
-              policyLevel: true
+              getEpisodeValue: (e, episodes) => {
+                  const completed = episodes.filter(ep => ep.status === 'completed');
+                  const mean = completed.reduce((s, ep) => s + ep.reward, 0) / (completed.length || 1);
+                  if (mean <= 0) return 0;
+                  return Math.max(0, Math.min(1, 1 - Math.abs(e.reward - mean) / mean));
+              },
+              filterCondition: (e) => e.reward < 0.1,
+              filterLabel: 'Low Reward Consistency'
           }
       };
 
-      function renderKPICards() {
-          const kpis = DATA.derived?.kpis || {};
-          const pct = (v) => (v * 100).toFixed(1) + '%';
-
-          const kpiColor = (kpiKey) => {
-              const def = KPI_DEFINITIONS[kpiKey];
-              const v = kpis[kpiKey] || 0;
-              if (def.inverted) {
-                  if (v <= def.goodThreshold) return 'trend-up';
-                  if (v >= def.badThreshold) return 'trend-down';
-              } else {
-                  if (v >= def.goodThreshold) return 'trend-up';
-                  if (v <= def.badThreshold) return 'trend-down';
-              }
-              return '';
-          };
-
-          // Generate worst/best examples for each KPI
-          function getExamples(kpiKey) {
-              const def = KPI_DEFINITIONS[kpiKey];
-              const completed = DATA.episodes.filter(e => e.status === 'completed');
-              const withValues = completed.map(e => ({
-                  episode: e,
-                  value: def.getEpisodeValue(e)
-              }));
-
-              // Sort by value (worst first for normal KPIs, best first for inverted)
-              const sorted = withValues.sort((a, b) => def.inverted ? b.value - a.value : a.value - b.value);
-              const worst = sorted.slice(0, 3);
-              const best = sorted.slice(-3).reverse();
-
-              return { worst, best };
+      // Per-player aggregate function for each KPI (Analysis Pipeline Step 2).
+      // Takes filtered episodes, returns scalar result for one player's episode group.
+      function kpiAggregateFn(key, def) {
+          switch (key) {
+              case 'avg_reward':
+                  return eps => {
+                      const c = eps.filter(e => e.status === 'completed');
+                      return c.length ? c.reduce((s, e) => s + e.reward, 0) / c.length : 0;
+                  };
+              case 'reward_nonzero_pct':
+                  return eps => {
+                      const c = eps.filter(e => e.status === 'completed');
+                      return c.length ? c.filter(e => e.reward > 0.1).length / c.length : 0;
+                  };
+              case 'reward_consistency':
+                  return eps => {
+                      const rewards = eps.filter(e => e.status === 'completed').map(e => e.reward);
+                      if (rewards.length < 2) return 0;
+                      const mean = rewards.reduce((a, b) => a + b, 0) / rewards.length;
+                      if (mean <= 0) return 0;
+                      const variance = rewards.reduce((s, r) => s + (r - mean) ** 2, 0) / (rewards.length - 1);
+                      return Math.max(0, Math.min(1, 1 - Math.sqrt(variance) / mean));
+                  };
+              default:
+                  return eps => {
+                      const c = eps.filter(e => e.status === 'completed');
+                      if (!c.length) return 0;
+                      return c.reduce((s, e) => s + def.getEpisodeValue(e, c), 0) / c.length;
+                  };
           }
+      }
 
-          let html = '';
-          Object.entries(KPI_DEFINITIONS).forEach(([key, def]) => {
-              const value = kpis[key] || 0;
-              const displayValue = key === 'resource_efficiency_per_step' ? value.toFixed(3) : pct(value);
+      function renderOverviewKpiChart() {
+          if (overviewKpiChart) overviewKpiChart.destroy();
+          const ctx = document.getElementById('overview-kpi-chart').getContext('2d');
+
+          const keys = Object.keys(KPI_DEFINITIONS);
+          const labels = [];
+          const values = [];
+          const pctData = [];
+          const clamp = v => Math.max(0, Math.min(100, v));
+
+          keys.forEach(key => {
+              const def = KPI_DEFINITIONS[key];
+              labels.push(def.name);
+              const scale = def.rawValue ? 1 : 100;
+              const aggregateFn = kpiAggregateFn(key, def);
+              const policyValue = aggregateFn(filteredEpisodes);
 
               if (def.policyLevel) {
-                  // Policy-level KPIs without per-episode breakdown
-                  html += `
-                      <div class="card">
-                          <div class="card-title">${def.name}</div>
-                          <div class="card-value ${kpiColor(key)}">${displayValue}</div>
-                          <div class="card-subtitle">${def.subtitle}</div>
-                      </div>
-                  `;
-                  return;
+                  const v = clamp(policyValue * scale);
+                  values.push(v);
+                  pctData.push({ min: v, max: v });
+              } else {
+                  values.push(clamp(policyValue * scale));
+                  const range = computePlayerRanges(filteredEpisodes,
+                      [eps => clamp(aggregateFn(eps) * scale)])[0];
+                  pctData.push(range);
               }
-
-              const examples = getExamples(key);
-              const fmtValue = (v) => key === 'resource_efficiency_per_step' ? v.toFixed(3) : (v * 100).toFixed(0) + '%';
-
-              html += `
-                  <div class="card clickable" onclick="filterByKpi('${key}')">
-                      <div class="card-title">${def.name}</div>
-                      <div class="card-value ${kpiColor(key)}">${displayValue}</div>
-                      <div class="card-subtitle">${def.subtitle}</div>
-                      <div class="kpi-examples">
-                          <div class="kpi-examples-header">
-                              <span>Worst</span>
-                              <span>Value</span>
-                          </div>
-                          ${examples.worst.map(ex => `
-                              <div class="kpi-example worst" onclick="event.stopPropagation(); showEpisodeInTable('${ex.episode.episode_id}')">
-                                  <span class="opponent">${ex.episode.opponent_name}</span>
-                                  <span class="metric">${fmtValue(ex.value)}</span>
-                              </div>
-                          `).join('')}
-                          <div class="kpi-examples-header" style="margin-top: 0.5rem;">
-                              <span>Best</span>
-                              <span>Value</span>
-                          </div>
-                          ${examples.best.map(ex => `
-                              <div class="kpi-example best" onclick="event.stopPropagation(); showEpisodeInTable('${ex.episode.episode_id}')">
-                                  <span class="opponent">${ex.episode.opponent_name}</span>
-                                  <span class="metric">${fmtValue(ex.value)}</span>
-                              </div>
-                          `).join('')}
-                      </div>
-                  </div>
-              `;
           });
 
-          document.getElementById('kpi-cards').innerHTML = html;
+          overviewKpiChart = new Chart(ctx, {
+              type: 'bar',
+              data: {
+                  labels,
+                  datasets: lollipopDatasets(values, pctData, {horizontal: true})
+              },
+              options: {
+                  indexAxis: 'y',
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                      lollipopRange: { data: pctData, horizontal: true },
+                      legend: lollipopLegend(),
+                      tooltip: {
+                          filter: lollipopTooltipFilter,
+                          callbacks: {
+                              label: function(ctx) {
+                                  if (ctx.dataset.label === 'Range') return null;
+                                  const v = ctx.parsed.x;
+                                  return `${ctx.dataset.label}: ${v.toFixed(1)}`;
+                              }
+                          }
+                      }
+                  },
+                  scales: {
+                      x: {
+                          min: 0,
+                          max: 100,
+                          grid: { color: '#30363d' },
+                          title: { display: false }
+                      },
+                      y: { grid: { color: '#30363d' } }
+                  }
+              }
+          });
+
+          // Per-player values already embedded in pctData via computePlayerRanges byPlayer
+          overviewKpiChart._playerRanges = pctData;
+          overviewKpiChart._horizontal = true;
+          overviewKpiChart._kpiKeys = keys;
+          ctx.canvas.addEventListener('mouseleave', () => {
+              document.getElementById('y-axis-tooltip').style.display = 'none';
+          });
       }
 
       function filterByKpi(kpiKey) {
@@ -1732,49 +1783,6 @@
           container.querySelector('h4').style.color = 'var(--accent-red)';
 
           list.innerHTML = diagnostics.map((d, i) => `<li onclick="showDiagnosticModal(${i})" title="Click to see affected episodes">${d}</li>`).join('');
-      }
-
-      // Phase 2: Render benchmarks table
-      function renderBenchmarks() {
-          const benchmarks = DATA.derived?.benchmarks || {};
-          const section = document.getElementById('benchmarks-section');
-          const tbody = document.getElementById('benchmarks-tbody');
-
-          if (Object.keys(benchmarks).length === 0) {
-              section.style.display = 'none';
-              return;
-          }
-
-          section.style.display = 'block';
-          const tierColors = {
-              'bottom': 'var(--accent-red)',
-              'average': 'var(--accent-yellow)',
-              'top10': 'var(--accent-green)',
-              'elite': '#fbbf24'
-          };
-          const tierLabels = {
-              'bottom': 'Bottom 50%',
-              'average': 'Average',
-              'top10': 'Top 10%',
-              'elite': 'Elite'
-          };
-
-          tbody.innerHTML = Object.entries(benchmarks).map(([key, b]) => {
-              const isPercent = key.includes('rate') || key.includes('pct');
-              const fmtVal = isPercent ? (b.value * 100).toFixed(1) + '%' : b.value.toFixed(2);
-              const fmtThresh = (v) => isPercent ? (v * 100).toFixed(0) + '%' : v.toFixed(0);
-              const color = tierColors[b.tier] || 'inherit';
-              return `
-                  <tr>
-                      <td>${b.label}</td>
-                      <td style="font-weight: 600;">${fmtVal}</td>
-                      <td style="color: var(--text-secondary);">&lt;${fmtThresh(b.thresholds.bottom)}</td>
-                      <td style="color: var(--text-secondary);">${fmtThresh(b.thresholds.top10)}+</td>
-                      <td style="color: var(--text-secondary);">${fmtThresh(b.thresholds.elite)}+</td>
-                      <td><span class="status-badge" style="background: ${color}22; color: ${color};">${tierLabels[b.tier]}</span></td>
-                  </tr>
-              `;
-          }).join('');
       }
 
       // Phase 4: Render team composition cards
@@ -2583,6 +2591,7 @@
       let gearChart = null;
       let profileChart = null;
       let efficiencyChart = null;
+      let overviewKpiChart = null;
 
       function renderZeroCountBanner() {
           const banner = document.getElementById('zero-count-banner');
@@ -2598,57 +2607,243 @@
           }
       }
 
-      // Shared helper: compute P20/P80 for a list of metric keys across episodes
-      function computePercentiles(episodes, metricExtractors) {
-          function pct(arr, p) {
-              if (!arr.length) return 0;
-              const sorted = [...arr].sort((a, b) => a - b);
-              const idx = (p / 100) * (sorted.length - 1);
-              const lo = Math.floor(idx), hi = Math.ceil(idx);
-              return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
-          }
-          const completed = episodes.filter(e => e.status === 'completed');
-          return metricExtractors.map(fn => ({
-              p20: pct(completed.map(fn), 20),
-              p80: pct(completed.map(fn), 80)
-          }));
+      // Analysis Pipeline (see analysis-guide.md):
+      // 1. Data filters → filteredEpisodes (already applied)
+      // 2. For each player, compute per-player result via analysisFn
+      // 3. Range = min/max across ALL player results
+      // 4. View filters (checkboxes) only affect display, not range
+
+      // Convert per-episode extractors to per-player aggregate fns (mean)
+      function meanAggregators(extractors) {
+          return extractors.map(fn => eps =>
+              eps.length ? eps.reduce((s, e) => s + fn(e), 0) / eps.length : 0
+          );
       }
 
-      // Create P20/P80 scatter datasets for a vertical bar chart (category x-axis)
-      function percentileDatasets(pctData) {
+      // Compute per-player min/max ranges from filtered episodes.
+      // analysisFns: array of (completedEpisodes => scalar) aggregate functions.
+      // Groups episodes by opponent (each opponent = a player) plus primary policy (all episodes).
+      // Returns array of {min, max, byPlayer: {name: value}} for lollipopRange plugin
+      // and opponent dot rendering.
+      function computePlayerRanges(episodes, analysisFns) {
+          const completed = episodes.filter(e => e.status === 'completed');
+          const byPlayer = {};
+          completed.forEach(e => {
+              (byPlayer[e.opponent_name] ||= []).push(e);
+          });
+          byPlayer['__primary__'] = completed;
+          return analysisFns.map(fn => {
+              const playerResults = {};
+              for (const [name, eps] of Object.entries(byPlayer)) {
+                  playerResults[name] = fn(eps);
+              }
+              const results = Object.values(playerResults);
+              return {
+                  min: results.length ? Math.min(...results) : 0,
+                  max: results.length ? Math.max(...results) : 0,
+                  byPlayer: playerResults
+              };
+          });
+      }
+
+      // Plugin: draw min-max range boxes centered on the lollipop stems
+      Chart.register({
+          id: 'lollipopRange',
+          _drawRanges(chart, onlyTicks) {
+              const cfg = chart.options.plugins?.lollipopRange;
+              if (!cfg?.data) return;
+              const {data: rangeData, horizontal} = cfg;
+              const ctx = chart.ctx;
+              const catScale = horizontal ? chart.scales.y : chart.scales.x;
+              const valScale = horizontal ? chart.scales.x : chart.scales.y;
+              ctx.save();
+              rangeData.forEach((r, i) => {
+                  const center = catScale.getPixelForValue(i);
+                  const v1 = valScale.getPixelForValue(r.min);
+                  const v2 = valScale.getPixelForValue(r.max);
+                  const span = Math.abs(v2 - v1);
+                  if (span < 1) {
+                      if (!onlyTicks) return;
+                      // Point metric (min ≈ max): draw a narrow range box centered on the value
+                      ctx.fillStyle = 'rgba(148, 163, 184, 0.18)';
+                      ctx.strokeStyle = 'rgba(148, 163, 184, 0.45)';
+                      ctx.lineWidth = 1;
+                      if (horizontal) {
+                          const h = 18, w = 10;
+                          ctx.beginPath(); ctx.roundRect(v1 - w / 2, center - h / 2, w, h, 3);
+                      } else {
+                          const w = 22, h = 10;
+                          ctx.beginPath(); ctx.roundRect(center - w / 2, v1 - h / 2, w, h, 3);
+                      }
+                      ctx.fill(); ctx.stroke();
+                  } else {
+                      if (onlyTicks) return;
+                      ctx.fillStyle = 'rgba(148, 163, 184, 0.12)';
+                      ctx.strokeStyle = 'rgba(148, 163, 184, 0.30)';
+                      ctx.lineWidth = 1;
+                      if (horizontal) {
+                          const h = 18;
+                          const x = Math.min(v1, v2);
+                          ctx.beginPath(); ctx.roundRect(x, center - h / 2, span, h, 3);
+                      } else {
+                          const w = 22;
+                          const y = Math.min(v1, v2);
+                          ctx.beginPath(); ctx.roundRect(center - w / 2, y, w, span, 3);
+                      }
+                      ctx.fill(); ctx.stroke();
+                  }
+              });
+              ctx.restore();
+          },
+          beforeDatasetsDraw(chart) { this._drawRanges(chart, false); },
+          afterDatasetsDraw(chart) { this._drawRanges(chart, true); }
+      });
+
+      // Plugin: show formula tooltip on y-axis label hover
+      Chart.register({
+          id: 'yAxisTooltip',
+          afterEvent(chart, args) {
+              const keys = chart._kpiKeys;
+              if (!keys) return;
+              const tooltip = document.getElementById('y-axis-tooltip');
+              if (!tooltip) return;
+              const evt = args.event;
+              if (evt.type !== 'mousemove') { tooltip.style.display = 'none'; return; }
+              const yScale = chart.scales.y;
+              if (!yScale) { tooltip.style.display = 'none'; return; }
+              // Only trigger in the y-axis label area (left of chart area)
+              if (evt.x > chart.chartArea.left) { tooltip.style.display = 'none'; return; }
+              // Find which label row the mouse is over
+              let hitIdx = -1;
+              for (let i = 0; i < keys.length; i++) {
+                  const py = yScale.getPixelForValue(i);
+                  if (Math.abs(evt.y - py) < 14) { hitIdx = i; break; }
+              }
+              if (hitIdx < 0) { tooltip.style.display = 'none'; return; }
+              const def = KPI_DEFINITIONS[keys[hitIdx]];
+              if (!def?.subtitle) { tooltip.style.display = 'none'; return; }
+              const canvasRect = chart.canvas.getBoundingClientRect();
+              tooltip.textContent = def.subtitle;
+              tooltip.style.display = 'block';
+              tooltip.style.left = (canvasRect.left + evt.x + 12) + 'px';
+              tooltip.style.top = (canvasRect.top + evt.y - 14) + 'px';
+          },
+          beforeDestroy(chart) {
+              const tooltip = document.getElementById('y-axis-tooltip');
+              if (tooltip) tooltip.style.display = 'none';
+          }
+      });
+
+      // Shared opponent color palette
+      const oppColorPalette = [
+          {bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.8)'},
+          {bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.8)'},
+          {bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.8)'},
+          {bg: 'rgba(249, 115, 22, 0.15)', border: 'rgba(249, 115, 22, 0.8)'},
+          {bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.8)'},
+          {bg: 'rgba(236, 72, 153, 0.15)', border: 'rgba(236, 72, 153, 0.8)'},
+          {bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.8)'},
+          {bg: 'rgba(20, 184, 166, 0.15)', border: 'rgba(20, 184, 166, 0.8)'},
+      ];
+
+      const lollipopTooltipFilter = (item) => item.dataset.label !== 'Range';
+      function lollipopLegend() {
+          return {
+              display: true,
+              labels: {
+                  color: '#8b949e',
+                  usePointStyle: true,
+                  generateLabels: function(chart) {
+                      const items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                      items.forEach(item => {
+                          if (item.text === 'Range') {
+                              item.fillStyle = 'rgba(148, 163, 184, 0.25)';
+                              item.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+                          }
+                      });
+                      return items;
+                  }
+              }
+          };
+      }
+
+      // Dot-only datasets for target policy (range drawn by lollipopRange plugin)
+      function lollipopDatasets(values, pctData, opts = {}) {
+          const {label: dsLabel = (DATA.policy?.name || 'Policy'), horizontal = false} = opts;
           return [
               {
-                  label: 'P20',
-                  type: 'scatter',
-                  data: pctData.map((p, i) => ({ x: i, y: p.p20 })),
-                  pointStyle: 'triangle',
-                  rotation: 180,
-                  pointRadius: 7,
-                  pointBorderWidth: 2,
-                  pointBorderColor: 'rgba(234, 179, 8, 0.8)',
-                  backgroundColor: 'rgba(234, 179, 8, 0.8)',
-                  order: -1
+                  label: 'Range',
+                  data: values,
+                  backgroundColor: 'rgba(0,0,0,0)',
+                  borderColor: 'rgba(0,0,0,0)',
+                  borderWidth: 0,
+                  barThickness: 1
               },
               {
-                  label: 'P80',
+                  label: dsLabel,
                   type: 'scatter',
-                  data: pctData.map((p, i) => ({ x: i, y: p.p80 })),
-                  pointStyle: 'triangle',
-                  pointRadius: 7,
+                  data: horizontal
+                      ? values.map((v, i) => ({ x: v, y: i }))
+                      : values.map((v, i) => ({ x: i, y: v })),
+                  pointRadius: 8,
+                  pointHoverRadius: 10,
+                  pointBackgroundColor: 'rgba(34, 197, 94, 1)',
+                  pointBorderColor: '#0d1117',
                   pointBorderWidth: 2,
-                  pointBorderColor: 'rgba(96, 165, 250, 0.8)',
-                  backgroundColor: 'rgba(96, 165, 250, 0.8)',
-                  order: -1
+                  order: 0
               }
           ];
       }
 
-      function percentileTooltipCallback(pctData) {
+      function getCheckedOpponents() {
+          const result = [];
+          document.querySelectorAll('.overlay-player-toggle:checked').forEach(cb => {
+              result.push({ name: cb.dataset.opp, idx: parseInt(cb.dataset.idx) });
+          });
+          return result;
+      }
+
+      // Build scatter datasets for checked opponents using per-player results
+      // from computePlayerRanges (consistent with range computation).
+      function playerScatterDatasets(playerRanges, horizontal = false, scaleFn) {
+          return getCheckedOpponents().map(({name, idx}) => {
+              const values = playerRanges.map(r => {
+                  const raw = r.byPlayer?.[name];
+                  return raw !== undefined ? (scaleFn ? scaleFn(raw) : raw) : NaN;
+              });
+              const c = oppColorPalette[idx % oppColorPalette.length];
+              return {
+                  label: `#${idx + 1} ${name}`,
+                  type: 'scatter',
+                  data: horizontal
+                      ? values.map((v, i) => ({x: v, y: i}))
+                      : values.map((v, i) => ({x: i, y: v})),
+                  pointRadius: 6,
+                  pointHoverRadius: 8,
+                  pointBackgroundColor: c.border,
+                  pointBorderColor: '#0d1117',
+                  pointBorderWidth: 1.5,
+                  order: 0
+              };
+          });
+      }
+
+      // Update opponent overlays on all behavior charts (called on toggle change)
+      function updateBehaviorOverlays() {
+          [actionsChart, resourcesChart, junctionsChart, gearChart, efficiencyChart, overviewKpiChart].forEach(chart => {
+              if (!chart?._playerRanges) return;
+              chart.data.datasets = chart.data.datasets.slice(0, 2);
+              chart.data.datasets.push(...playerScatterDatasets(chart._playerRanges, chart._horizontal, chart._scaleFn));
+              chart.update();
+          });
+      }
+
+      function lollipopTooltipCallback(pctData, horizontal = false) {
           return function(ctx) {
-              const dsLabel = ctx.dataset.label;
-              if (dsLabel === 'P20') return `P20: ${ctx.parsed.y.toFixed(1)}`;
-              if (dsLabel === 'P80') return `P80: ${ctx.parsed.y.toFixed(1)}`;
-              return `${dsLabel}: ${ctx.parsed.y.toFixed(1)}`;
+              if (ctx.dataset.label === 'Range') return null;
+              const i = ctx.dataIndex;
+              const v = horizontal ? ctx.parsed.x : ctx.parsed.y;
+              return `${ctx.dataset.label}: ${v.toFixed(1)}`;
           };
       }
 
@@ -2683,78 +2878,65 @@
           if (junctionsChart) junctionsChart.destroy();
           if (gearChart) gearChart.destroy();
 
-          // --- Actions chart ---
+          // --- Actions chart (lollipop) ---
           const actionKeys = ['action.move.success', 'action.move.failed', 'action.noop.success', 'action.change_vibe.success', 'actions.swap'];
-          const actionPct = computePercentiles(filteredEpisodes, actionKeys.map(k => e => e.metrics[k] || 0));
+          const actionValues = actionKeys.map(k => aggregated[k] || 0);
+          const actionPct = computePlayerRanges(filteredEpisodes, meanAggregators(actionKeys.map(k => e => e.metrics[k] || 0)));
 
           const actionsCtx = document.getElementById('actions-chart').getContext('2d');
           actionsChart = new Chart(actionsCtx, {
               type: 'bar',
               data: {
                   labels: ['Move Success', 'Move Failed', 'Noop', 'Change Vibe', 'Swap'],
-                  datasets: [{
-                      label: 'Avg per Episode',
-                      data: actionKeys.map(k => aggregated[k] || 0),
-                      backgroundColor: ['rgba(34, 197, 94, 0.7)', 'rgba(239, 68, 68, 0.7)', 'rgba(139, 92, 246, 0.7)', 'rgba(251, 191, 36, 0.7)', 'rgba(59, 130, 246, 0.7)']
-                  }, ...percentileDatasets(actionPct)]
+                  datasets: lollipopDatasets(actionValues, actionPct)
               },
               options: {
                   responsive: true,
                   plugins: {
-                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
-                      tooltip: { callbacks: { label: percentileTooltipCallback(actionPct) } }
+                      lollipopRange: { data: actionPct },
+                      legend: lollipopLegend(),
+                      tooltip: { callbacks: { label: lollipopTooltipCallback(actionPct) }, filter: lollipopTooltipFilter }
                   },
-                  scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
+                  scales: { y: { beginAtZero: true, grid: { color: '#30363d' } }, x: { grid: { color: '#30363d' } } }
               }
           });
+          actionsChart._playerRanges = actionPct;
+          actionsChart._horizontal = false;
 
-          // --- Resources chart - grouped bar (gained vs lost) with net amount line ---
+          // --- Resources chart (lollipop) - net amount per resource ---
           const resourceLabels = ['Carbon', 'Oxygen', 'Silicon', 'Germanium', 'Heart'];
           const resourceKeys = ['carbon', 'oxygen', 'silicon', 'germanium', 'heart'];
           const resGained = resourceKeys.map(r => aggregated[`${r}.gained`] || 0);
           const resLost = resourceKeys.map(r => aggregated[`${r}.lost`] || 0);
           const resNet = resourceKeys.map(r => aggregated[`${r}.amount`] || 0);
-          const resNetPct = computePercentiles(filteredEpisodes, resourceKeys.map(r => e => (e.metrics[`${r}.amount`] || 0)));
+          const resNetPct = computePlayerRanges(filteredEpisodes, meanAggregators(resourceKeys.map(r => e => (e.metrics[`${r}.amount`] || 0))));
 
           const resourcesCtx = document.getElementById('resources-chart').getContext('2d');
           resourcesChart = new Chart(resourcesCtx, {
               type: 'bar',
               data: {
                   labels: resourceLabels,
-                  datasets: [
-                      {
-                          label: 'Gained',
-                          data: resGained,
-                          backgroundColor: 'rgba(34, 197, 94, 0.7)',
-                          borderColor: 'rgba(34, 197, 94, 1)',
-                          borderWidth: 1
-                      },
-                      {
-                          label: 'Lost',
-                          data: resLost,
-                          backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                          borderColor: 'rgba(239, 68, 68, 1)',
-                          borderWidth: 1
-                      },
-                      {
-                          label: 'Net Amount',
-                          data: resNet,
-                          type: 'line',
-                          borderColor: 'rgba(59, 130, 246, 1)',
-                          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                          borderWidth: 2,
-                          pointRadius: 4,
-                          pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-                          fill: false
-                      },
-                      ...percentileDatasets(resNetPct)
-                  ]
+                  datasets: lollipopDatasets(resNet, resNetPct)
               },
               options: {
                   responsive: true,
                   plugins: {
-                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
-                      tooltip: { callbacks: { label: percentileTooltipCallback(resNetPct) } }
+                      lollipopRange: { data: resNetPct },
+                      legend: lollipopLegend(),
+                      tooltip: {
+                          filter: lollipopTooltipFilter,
+                          callbacks: {
+                              label: function(ctx) {
+                                  if (ctx.dataset.label === 'Range') return null;
+                                  const i = ctx.dataIndex;
+                                  const v = ctx.parsed.y;
+                                  return [
+                                      `Net: ${v.toFixed(1)}`,
+                                      `  Gained: ${resGained[i].toFixed(1)}  Lost: ${resLost[i].toFixed(1)}`
+                                  ];
+                              }
+                          }
+                      }
                   },
                   scales: {
                       y: { beginAtZero: true, grid: { color: '#30363d' } },
@@ -2762,83 +2944,78 @@
                   }
               }
           });
+          resourcesChart._playerRanges = resNetPct;
+          resourcesChart._horizontal = false;
 
-          // --- Junctions chart ---
+          // --- Junctions chart (lollipop) ---
           const junctionExtractors = [
               e => e.metrics['junction.aligned_by_agent'] || 0,
               e => e.metrics['junction.scrambled_by_agent'] || 0,
               e => e.metrics['heart.gained'] || 0,
               e => (e.metrics['aligned.junction.held'] || 0) / 100
           ];
-          const junctionPct = computePercentiles(filteredEpisodes, junctionExtractors);
+          const junctionValues = [
+              aggregated['junction.aligned_by_agent'] || 0,
+              aggregated['junction.scrambled_by_agent'] || 0,
+              aggregated['heart.gained'] || 0,
+              (aggregated['aligned.junction.held'] || 0) / 100
+          ];
+          const junctionPct = computePlayerRanges(filteredEpisodes, meanAggregators(junctionExtractors));
 
           const junctionsCtx = document.getElementById('junctions-chart').getContext('2d');
           junctionsChart = new Chart(junctionsCtx, {
               type: 'bar',
               data: {
                   labels: ['Aligned', 'Scrambled', 'Hearts Gained', 'Held (÷100)'],
-                  datasets: [{
-                      label: 'Avg per Episode',
-                      data: [
-                          aggregated['junction.aligned_by_agent'] || 0,
-                          aggregated['junction.scrambled_by_agent'] || 0,
-                          aggregated['heart.gained'] || 0,
-                          (aggregated['aligned.junction.held'] || 0) / 100
-                      ],
-                      backgroundColor: 'rgba(59, 130, 246, 0.7)'
-                  }, ...percentileDatasets(junctionPct)]
+                  datasets: lollipopDatasets(junctionValues, junctionPct)
               },
               options: {
                   responsive: true,
                   plugins: {
-                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
-                      tooltip: { callbacks: { label: percentileTooltipCallback(junctionPct) } }
+                      lollipopRange: { data: junctionPct },
+                      legend: lollipopLegend(),
+                      tooltip: { callbacks: { label: lollipopTooltipCallback(junctionPct) }, filter: lollipopTooltipFilter }
                   },
-                  scales: { y: { beginAtZero: true, grid: { color: '#30363d' } } }
+                  scales: { y: { beginAtZero: true, grid: { color: '#30363d' } }, x: { grid: { color: '#30363d' } } }
               }
           });
+          junctionsChart._playerRanges = junctionPct;
+          junctionsChart._horizontal = false;
 
-          // --- Gear chart - aligner/scrambler gained vs lost ---
+          // --- Gear chart (lollipop) - aligner/scrambler gained vs lost ---
           const gearExtractors = [
               e => e.metrics['aligner.gained'] || 0,
               e => e.metrics['scrambler.gained'] || 0
           ];
-          const gearPct = computePercentiles(filteredEpisodes, gearExtractors);
+          const gearGained = [aggregated['aligner.gained'] || 0, aggregated['scrambler.gained'] || 0];
+          const gearLost = [aggregated['aligner.lost'] || 0, aggregated['scrambler.lost'] || 0];
+          const gearPct = computePlayerRanges(filteredEpisodes, meanAggregators(gearExtractors));
 
           const gearCtx = document.getElementById('gear-chart').getContext('2d');
           gearChart = new Chart(gearCtx, {
               type: 'bar',
               data: {
                   labels: ['Aligner', 'Scrambler'],
-                  datasets: [
-                      {
-                          label: 'Gained',
-                          data: [
-                              aggregated['aligner.gained'] || 0,
-                              aggregated['scrambler.gained'] || 0
-                          ],
-                          backgroundColor: 'rgba(34, 197, 94, 0.7)',
-                          borderColor: 'rgba(34, 197, 94, 1)',
-                          borderWidth: 1
-                      },
-                      {
-                          label: 'Lost',
-                          data: [
-                              aggregated['aligner.lost'] || 0,
-                              aggregated['scrambler.lost'] || 0
-                          ],
-                          backgroundColor: 'rgba(239, 68, 68, 0.7)',
-                          borderColor: 'rgba(239, 68, 68, 1)',
-                          borderWidth: 1
-                      },
-                      ...percentileDatasets(gearPct)
-                  ]
+                  datasets: lollipopDatasets(gearGained, gearPct)
               },
               options: {
                   responsive: true,
                   plugins: {
-                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
-                      tooltip: { callbacks: { label: percentileTooltipCallback(gearPct) } }
+                      lollipopRange: { data: gearPct },
+                      legend: lollipopLegend(),
+                      tooltip: {
+                          filter: lollipopTooltipFilter,
+                          callbacks: {
+                              label: function(ctx) {
+                                  if (ctx.dataset.label === 'Range') return null;
+                                  const i = ctx.dataIndex;
+                                  return [
+                                      `Gained: ${ctx.parsed.y.toFixed(1)}`,
+                                      `  Lost: ${gearLost[i].toFixed(1)}`
+                                  ];
+                              }
+                          }
+                      }
                   },
                   scales: {
                       y: { beginAtZero: true, grid: { color: '#30363d' } },
@@ -2846,10 +3023,73 @@
                   }
               }
           });
+          gearChart._playerRanges = gearPct;
+          gearChart._horizontal = false;
+      }
+
+      // Populate the overlay player toggles in the sidebar (called once on init)
+      function renderOverlayToggles() {
+          const oppMetrics = DATA.derived?.opponent_metrics || {};
+          const opponents = Object.entries(oppMetrics)
+              .filter(([_, v]) => v.strategy_profile)
+              .sort((a, b) => (b[1].avg_reward || 0) - (a[1].avg_reward || 0))
+              .slice(0, 10);
+
+          const togglesDiv = document.getElementById('overlay-toggles');
+          togglesDiv.innerHTML = opponents.map(([name], i) => {
+              const color = oppColorPalette[i % oppColorPalette.length].border;
+              return `<label style="display:inline-flex;align-items:center;gap:0.25rem;cursor:pointer;color:var(--text-secondary)">
+                  <input type="checkbox" class="overlay-player-toggle" data-opp="${name}" data-idx="${i}" style="accent-color:${color}">
+                  <span style="color:${color}">#${i + 1} ${name}</span>
+              </label>`;
+          }).join('');
+
+          togglesDiv.querySelectorAll('.overlay-player-toggle').forEach(cb => {
+              cb.addEventListener('change', () => {
+                  updateStrategyProfileOverlays();
+                  updateBehaviorOverlays();
+              });
+          });
+      }
+
+      // Update strategy profile radar with current overlay selections
+      function updateStrategyProfileOverlays() {
+          if (!profileChart) return;
+          const oppMetrics = DATA.derived?.opponent_metrics || {};
+          const profileKeys = ['aggressive', 'defensive', 'resource_hoarder', 'junction_hunter', 'mobile_scout'];
+          const profile = DATA.derived?.strategy_profile || {};
+          const datasets = [{
+              label: DATA.policy?.name || 'Policy Profile',
+              data: profileKeys.map(k => profile[k] || 0),
+              backgroundColor: 'rgba(34, 197, 94, 0.2)',
+              borderColor: 'rgba(34, 197, 94, 1)',
+              borderWidth: 2,
+              pointBackgroundColor: 'rgba(34, 197, 94, 1)',
+              pointRadius: 4
+          }];
+          getCheckedOpponents().forEach(({name, idx}) => {
+              const sp = oppMetrics[name]?.strategy_profile;
+              if (!sp) return;
+              const c = oppColorPalette[idx % oppColorPalette.length];
+              datasets.push({
+                  label: `#${idx + 1} ${name}`,
+                  data: profileKeys.map(k => sp[k] || 0),
+                  backgroundColor: c.bg,
+                  borderColor: c.border,
+                  borderWidth: 1.5,
+                  pointBackgroundColor: c.border,
+                  pointRadius: 3
+              });
+          });
+          profileChart.data.datasets = datasets;
+          profileChart.options.plugins.legend.display = datasets.length > 1;
+          profileChart.update();
       }
 
       function renderStrategyProfile() {
           const profile = DATA.derived?.strategy_profile || {};
+          const profileKeys = ['aggressive', 'defensive', 'resource_hoarder', 'junction_hunter', 'mobile_scout'];
+          const profileLabels = ['Aggressive', 'Defensive', 'Resource Hoarder', 'Junction Hunter', 'Mobile Scout'];
 
           if (profileChart) profileChart.destroy();
           const ctx = document.getElementById('profile-chart').getContext('2d');
@@ -2857,16 +3097,10 @@
           profileChart = new Chart(ctx, {
               type: 'radar',
               data: {
-                  labels: ['Aggressive', 'Defensive', 'Resource Hoarder', 'Junction Hunter', 'Mobile Scout'],
+                  labels: profileLabels,
                   datasets: [{
-                      label: 'Policy Profile',
-                      data: [
-                          profile.aggressive || 0,
-                          profile.defensive || 0,
-                          profile.resource_hoarder || 0,
-                          profile.junction_hunter || 0,
-                          profile.mobile_scout || 0
-                      ],
+                      label: DATA.policy?.name || 'Policy Profile',
+                      data: profileKeys.map(k => profile[k] || 0),
                       backgroundColor: 'rgba(34, 197, 94, 0.2)',
                       borderColor: 'rgba(34, 197, 94, 1)',
                       borderWidth: 2,
@@ -2878,7 +3112,7 @@
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: {
-                      legend: { display: false }
+                      legend: { display: false, labels: { color: '#8b949e', usePointStyle: true, font: { size: 10 } } }
                   },
                   scales: {
                       r: {
@@ -2898,11 +3132,12 @@
                   }
               }
           });
+
+          // Apply current overlay selections
+          updateStrategyProfileOverlays();
       }
 
       function renderEfficiencyChart() {
-          const kpis = DATA.derived?.kpis || {};
-
           if (efficiencyChart) efficiencyChart.destroy();
           const ctx = document.getElementById('efficiency-chart').getContext('2d');
 
@@ -2941,79 +3176,43 @@
               return safeDiv(a, a + sc);
           }
 
-          // Compute percentiles from per-episode values
-          function percentile(arr, p) {
-              if (!arr.length) return 0;
-              const sorted = [...arr].sort((a, b) => a - b);
-              const idx = (p / 100) * (sorted.length - 1);
-              const lo = Math.floor(idx), hi = Math.ceil(idx);
-              return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
-          }
-
-          const completed = filteredEpisodes.filter(e => e.status === 'completed');
+          // Per-player min/max ranges (Analysis Pipeline Step 2-3)
           const epCalcs = [epMoveEff, epActionSuccess, epVibeRate, epResourceRetention, epJunctionControl];
-          const p20 = epCalcs.map(fn => percentile(completed.map(fn), 20));
-          const p80 = epCalcs.map(fn => percentile(completed.map(fn), 80));
+          const effRanges = computePlayerRanges(filteredEpisodes, meanAggregators(epCalcs));
 
+          // Dot values from filtered data (not pre-computed Python values)
+          const completed = filteredEpisodes.filter(e => e.status === 'completed');
+          const aggFns = meanAggregators(epCalcs);
           const metrics = [
-              { label: 'Move Efficiency', value: kpis.move_efficiency || 0 },
-              { label: 'Action Success', value: kpis.action_success_rate || 0 },
-              { label: 'Vibe Change Rate', value: kpis.vibe_change_rate || 0 },
-              { label: 'Resource Retention', value: kpis.resource_retention || 0 },
-              { label: 'Junction Control', value: kpis.junction_control_rate || 0 }
+              { label: 'Move Efficiency', value: aggFns[0](completed) },
+              { label: 'Action Success', value: aggFns[1](completed) },
+              { label: 'Vibe Change Rate', value: aggFns[2](completed) },
+              { label: 'Resource Retention', value: aggFns[3](completed) },
+              { label: 'Junction Control', value: aggFns[4](completed) }
           ];
 
-          function rangeColor(value, lo, hi, alpha) {
-              if (value > hi) return `rgba(34, 197, 94, ${alpha})`;
-              if (value >= lo) return `rgba(234, 179, 8, ${alpha})`;
-              return `rgba(239, 68, 68, ${alpha})`;
-          }
+          const effValues = metrics.map(m => m.value * 100);
+          const effPctScaled = effRanges.map(r => ({ min: r.min * 100, max: r.max * 100 }));
 
           efficiencyChart = new Chart(ctx, {
               type: 'bar',
               data: {
                   labels: metrics.map(m => m.label),
-                  datasets: [{
-                      label: 'Actual',
-                      data: metrics.map(m => m.value * 100),
-                      backgroundColor: metrics.map((m, i) => rangeColor(m.value, p20[i], p80[i], 0.7)),
-                      borderColor: metrics.map((m, i) => rangeColor(m.value, p20[i], p80[i], 1)),
-                      borderWidth: 1
-                  }, {
-                      label: 'P20',
-                      type: 'scatter',
-                      data: p20.map((v, i) => ({ x: v * 100, y: i })),
-                      pointStyle: 'triangle',
-                      rotation: 270,
-                      pointRadius: 7,
-                      pointBorderWidth: 2,
-                      pointBorderColor: 'rgba(234, 179, 8, 0.8)',
-                      backgroundColor: 'rgba(234, 179, 8, 0.8)'
-                  }, {
-                      label: 'P80',
-                      type: 'scatter',
-                      data: p80.map((v, i) => ({ x: v * 100, y: i })),
-                      pointStyle: 'triangle',
-                      rotation: 90,
-                      pointRadius: 7,
-                      pointBorderWidth: 2,
-                      pointBorderColor: 'rgba(96, 165, 250, 0.8)',
-                      backgroundColor: 'rgba(96, 165, 250, 0.8)'
-                  }]
+                  datasets: lollipopDatasets(effValues, effPctScaled, {horizontal: true})
               },
               options: {
                   indexAxis: 'y',
                   responsive: true,
                   maintainAspectRatio: false,
                   plugins: {
-                      legend: { display: true, labels: { color: '#8b949e', usePointStyle: true } },
+                      lollipopRange: { data: effPctScaled, horizontal: true },
+                      legend: lollipopLegend(),
                       tooltip: {
+                          filter: lollipopTooltipFilter,
                           callbacks: {
                               label: function(ctx) {
-                                  if (ctx.datasetIndex === 1) return `P20: ${ctx.parsed.x.toFixed(1)}%`;
-                                  if (ctx.datasetIndex === 2) return `P80: ${ctx.parsed.x.toFixed(1)}%`;
-                                  const i = ctx.dataIndex;
-                                  return `Actual: ${ctx.parsed.x.toFixed(1)}% (P20: ${(p20[i]*100).toFixed(1)}%, P80: ${(p80[i]*100).toFixed(1)}%)`;
+                                  if (ctx.dataset.label === 'Range') return null;
+                                  return `${ctx.dataset.label}: ${ctx.parsed.x.toFixed(1)}%`;
                               }
                           }
                       }
@@ -3029,6 +3228,9 @@
                   }
               }
           });
+          efficiencyChart._playerRanges = effRanges;
+          efficiencyChart._horizontal = true;
+          efficiencyChart._scaleFn = v => v * 100;
       }
 
       // ============ Failures Tab ============

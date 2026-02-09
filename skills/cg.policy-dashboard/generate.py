@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import random
 import statistics
 import sys
 import webbrowser
@@ -84,6 +83,9 @@ class DerivedMetrics:
     junction_control_rate: float = 0.0  # aligned.junction / total_junctions
     alignment_stability: float = 0.0  # held / gained (how long held)
     net_alignment_rate: float = 0.0  # (gained - lost) / gained
+
+    # Reward KPIs
+    avg_reward: float = 0.0  # mean episode reward
 
     # New KPIs
     noop_rate: float = 0.0  # action.noop.success / total_actions
@@ -418,6 +420,9 @@ def compute_derived_metrics(episodes: list[EpisodeData]) -> DerivedMetrics:
     else:
         reward_consistency = 0.0
 
+    # Avg reward
+    avg_reward = safe_div(sum(rewards), len(rewards))
+
     # Reward nonzero pct: % episodes with reward > 0.1
     nonzero_count = sum(1 for r in rewards if r > 0.1)
     reward_nonzero_pct = safe_div(nonzero_count, len(rewards))
@@ -544,6 +549,7 @@ def compute_derived_metrics(episodes: list[EpisodeData]) -> DerivedMetrics:
         junction_control_rate=junction_control_rate,
         alignment_stability=alignment_stability,
         net_alignment_rate=net_alignment_rate,
+        avg_reward=avg_reward,
         noop_rate=noop_rate,
         resource_efficiency_per_step=resource_efficiency_per_step,
         hearts_to_junction_rate=hearts_to_junction_rate,
@@ -556,64 +562,6 @@ def compute_derived_metrics(episodes: list[EpisodeData]) -> DerivedMetrics:
         profile_mobile_scout=profile_mobile_scout,
         diagnostics=diagnostics,
     )
-
-
-# === Phase 2: Benchmarks ===
-
-BENCHMARKS = {
-    "avg_reward": {"bottom": 1.0, "top10": 2.0, "elite": 4.0, "label": "Avg Reward"},
-    "aligned_junction_gained": {"bottom": 2, "top10": 4, "elite": 8, "label": "Junction Aligned"},
-    "move_success_rate": {"bottom": 0.75, "top10": 0.80, "elite": 0.85, "label": "Move Success Rate"},
-    "resource_total_gained": {"bottom": 150, "top10": 200, "elite": 300, "label": "Resource Total"},
-    "nonzero_episode_pct": {"bottom": 0.40, "top10": 0.60, "elite": 0.90, "label": "Non-Zero Episode %"},
-}
-
-
-def compute_benchmark_tiers(episodes: list[EpisodeData], derived: DerivedMetrics) -> dict[str, dict[str, Any]]:
-    """Compute benchmark tiers for each metric."""
-    completed = [e for e in episodes if e.status == "completed"]
-    if not completed:
-        return {}
-
-    n = len(completed)
-    rewards = [e.reward for e in completed]
-    avg_reward = sum(rewards) / n if n else 0
-
-    total_junction = sum(e.metrics.get("junction.aligned_by_agent", 0) for e in completed)
-    avg_junction = total_junction / n
-
-    resources = ["carbon", "heart", "oxygen", "silicon", "germanium"]
-    total_resource = sum(sum(e.metrics.get(f"{r}.gained", 0) for r in resources) for e in completed) / n
-
-    nonzero_pct = sum(1 for r in rewards if r > 0.1) / n if n else 0
-
-    values = {
-        "avg_reward": avg_reward,
-        "aligned_junction_gained": avg_junction,
-        "move_success_rate": derived.move_efficiency,
-        "resource_total_gained": total_resource,
-        "nonzero_episode_pct": nonzero_pct,
-    }
-
-    result = {}
-    for key, bench in BENCHMARKS.items():
-        value = values.get(key, 0)
-        if value >= bench["elite"]:
-            tier = "elite"
-        elif value >= bench["top10"]:
-            tier = "top10"
-        elif value >= bench["bottom"]:
-            tier = "average"
-        else:
-            tier = "bottom"
-        result[key] = {
-            "value": round(value, 4),
-            "tier": tier,
-            "label": bench["label"],
-            "thresholds": {"bottom": bench["bottom"], "top10": bench["top10"], "elite": bench["elite"]},
-        }
-
-    return result
 
 
 # === Phase 4: Team Composition Analysis ===
@@ -929,233 +877,14 @@ def load_local_results(results_dir: Path, policy_name: str, limit: int) -> Dashb
     )
 
 
-def generate_demo_data() -> DashboardData:
-    """Generate comprehensive demo data to showcase all dashboard features.
+def load_demo_data() -> dict:
+    """Load static demo data from demo_dashboard.json.
 
-    Creates varied episodes that demonstrate:
-    - Different KPI values (good and bad to show color coding)
-    - Multiple opponents with different performance levels
-    - Various team compositions (6v2, 4v4, 2v6)
-    - Some failed episodes with different error types
-    - Extreme values for worst/best examples
-    - Enough diagnostic triggers to show alerts
+    Returns the pre-computed data dict directly (no DashboardData round-trip needed).
     """
-    random.seed(42)  # Reproducible demo data
-
-    # Define opponents with different difficulty profiles
-    opponents = [
-        ("npc-basic", 1, 1.4),  # (name, version, skill_multiplier) - easy
-        ("npc-scout", 2, 1.2),  # slightly easy
-        ("team-alpha", 3, 1.0),  # balanced
-        ("rushbot", 5, 0.7),  # hard - we do worse
-        ("defender-v2", 2, 0.85),  # moderately hard
-        ("junction-hunter", 4, 0.6),  # very hard
-        ("random-walker", 1, 1.3),  # easy
-        ("resource-hoarder", 3, 0.9),  # moderate
-    ]
-
-    # Team compositions: [our_count, opponent_count, assignments]
-    team_comps = [
-        (6, 2, [0, 0, 0, 0, 0, 0, 1, 1]),  # majority
-        (4, 4, [0, 0, 0, 0, 1, 1, 1, 1]),  # even
-        (2, 6, [0, 0, 1, 1, 1, 1, 1, 1]),  # minority
-    ]
-
-    episodes: list[EpisodeData] = []
-
-    # Generate 80 episodes with varied characteristics
-    for i in range(80):
-        opponent_name, opponent_version, opponent_difficulty = random.choice(opponents)
-        our_count, opp_count, assignments = random.choice(team_comps)
-        team_comp = f"{our_count}v{opp_count}"
-
-        # Base performance varies by opponent and some randomness
-        base_perf = opponent_difficulty * random.uniform(0.7, 1.3)
-
-        # Adjust for team composition
-        if our_count > opp_count:
-            base_perf *= 1.15  # Advantage
-        elif our_count < opp_count:
-            base_perf *= 0.75  # Disadvantage
-
-        # Episode length
-        # Determine if this episode has specific issues (for diagnostics)
-        # Aggressive settings to ensure diagnostic thresholds are hit
-        has_movement_issues = i % 4 == 0  # ~20 episodes with bad movement
-        has_freeze_issues = i % 3 == 0  # ~27 episodes frozen a lot (need >10% aggregate)
-        has_timeout_issues = i % 4 == 1  # ~20 episodes with timeouts (need >400 total)
-        has_low_junction = i % 3 == 0  # ~27 episodes with low junction
-        has_no_vibe_changes = i % 6 == 0  # ~13 episodes with no vibe changes
-        is_failed = i % 20 == 0  # ~4 failed episodes
-        is_exceptional = i < 5 or (35 <= i <= 39)  # First few + mid-range are extreme
-        is_short_episode = i % 4 == 2  # ~20 early termination episodes (need >20%)
-
-        # Episode length - some episodes terminate early
-        if is_short_episode:
-            steps = random.randint(300, 600)  # Short episodes for early termination diagnostic
-        else:
-            steps = random.randint(800, 2000)
-
-        # Generate metrics
-        if has_movement_issues:
-            move_success = int(random.uniform(150, 350) * base_perf)
-            move_failed = int(random.uniform(120, 250))  # High failures
-        else:
-            move_success = int(random.uniform(400, 900) * base_perf)
-            move_failed = int(random.uniform(10, 60) / base_perf)
-
-        if is_exceptional and i < 5:
-            # Worst episodes - extreme poor performance
-            move_failed = int(move_failed * 4)
-            base_perf *= 0.3
-
-        # Vibe change action (CogsGuard-specific)
-        if has_no_vibe_changes:
-            vibe_change_success = 0
-            vibe_change_failed = 0
-        else:
-            vibe_change_success = int(random.uniform(20, 80) * base_perf)
-            vibe_change_failed = int(random.uniform(2, 15) / base_perf)
-
-        # Noop count - elevated for ~30% of episodes to trigger high noop diagnostic
-        if i % 3 == 2:
-            noop_count = int(random.uniform(200, 500))  # High noop episodes
-        else:
-            noop_count = int(random.uniform(30, 150))
-
-        # Frozen time - more severe for freeze issues (need >10% aggregate)
-        if has_freeze_issues:
-            frozen_ticks = int(steps * random.uniform(0.20, 0.40))  # 20-40% frozen
-        else:
-            frozen_ticks = int(random.uniform(5, 50) / base_perf)
-
-        # Action timeouts - need >400 total across 80 episodes
-        action_timeout = int(random.uniform(20, 40)) if has_timeout_issues else random.randint(0, 3)
-
-        # Resources (real CogsGuard resources - no energy)
-        carbon_gained = int(random.uniform(50, 180) * base_perf)
-        carbon_lost = int(random.uniform(10, 70) / base_perf)
-        heart_gained = int(random.uniform(3, 20) * base_perf)
-        silicon_gained = int(random.uniform(20, 80) * base_perf)
-        oxygen_gained = int(random.uniform(10, 50) * base_perf)
-        germanium_gained = int(random.uniform(5, 30) * base_perf)
-        # Aligner/scrambler pickups
-        aligner_gained = int(random.uniform(1, 8) * base_perf)
-        scrambler_gained = int(random.uniform(1, 6) * base_perf)
-
-        # Junction activity
-        if has_low_junction:
-            junction_aligned = random.randint(0, 2)
-            junction_scrambled = random.randint(0, 3)
-        else:
-            junction_aligned = int(random.uniform(2, 15) * base_perf)
-            junction_scrambled = int(random.uniform(1, 8) / base_perf)
-
-        aligned_held = junction_aligned * int(random.uniform(40, 200))
-        aligned_gained = junction_aligned
-        aligned_lost = int(junction_aligned * random.uniform(0, 0.4))
-
-        # Build metrics dict (real CogsGuard metrics only)
-        metrics = {
-            "action.move.success": move_success,
-            "action.move.failed": move_failed,
-            "action.change_vibe.success": vibe_change_success,
-            "action.change_vibe.failed": vibe_change_failed,
-            "action.noop.success": noop_count,
-            "action.failed": move_failed + vibe_change_failed,
-            "action.timeout": action_timeout,
-            "status.frozen.ticks": frozen_ticks,
-            "carbon.gained": carbon_gained,
-            "carbon.lost": carbon_lost,
-            "carbon.amount": max(0, carbon_gained - carbon_lost),
-            "heart.gained": heart_gained,
-            "heart.lost": max(0, int(heart_gained * random.uniform(0.3, 0.8))),
-            "heart.amount": heart_gained,
-            "silicon.gained": silicon_gained,
-            "silicon.lost": int(silicon_gained * random.uniform(0.2, 0.6)),
-            "silicon.amount": silicon_gained,
-            "oxygen.gained": oxygen_gained,
-            "oxygen.lost": int(oxygen_gained * random.uniform(0.1, 0.5)),
-            "oxygen.amount": oxygen_gained,
-            "germanium.gained": germanium_gained,
-            "germanium.lost": int(germanium_gained * random.uniform(0.1, 0.4)),
-            "germanium.amount": germanium_gained,
-            "aligner.gained": aligner_gained,
-            "aligner.lost": int(aligner_gained * random.uniform(0, 0.3)),
-            "scrambler.gained": scrambler_gained,
-            "scrambler.lost": int(scrambler_gained * random.uniform(0, 0.3)),
-            "actions.swap": int(random.uniform(0, 10) * base_perf),
-            "status.max_steps_without_motion": int(random.uniform(0, 30) / base_perf),
-            "junction.aligned_by_agent": junction_aligned,
-            "junction.scrambled_by_agent": junction_scrambled,
-            "aligned.junction.held": aligned_held,
-            "aligned.junction.gained": aligned_gained,
-            "aligned.junction.lost": aligned_lost,
-            # Collective/game stats (namespaced)
-            "collective.carbon.deposited": int(carbon_gained * random.uniform(0.3, 0.7)),
-            "collective.oxygen.deposited": int(oxygen_gained * random.uniform(0.3, 0.7)),
-            "collective.aligned.junction.held": aligned_held,
-            "game.total_junctions": random.randint(8, 16),
-            "game.episode_length": steps,
-        }
-
-        # Calculate reward based on performance (using real CogsGuard metrics)
-        reward = (
-            junction_aligned * 0.5
-            + heart_gained * 0.15
-            + carbon_gained * 0.005
-            + vibe_change_success * 0.08
-            + move_success * 0.001
-            - frozen_ticks * 0.002
-            - move_failed * 0.01
-            + random.uniform(-0.5, 0.5)
-        ) * base_perf
-
-        if is_exceptional and 35 <= i <= 39:
-            reward *= 2.5  # Best episodes have high rewards
-
-        # Add reward decline in last 20 episodes to trigger declining rewards diagnostic
-        if i >= 60:
-            decline_factor = 1.0 - (i - 60) * 0.03  # 3% decline per episode
-            reward *= max(0.3, decline_factor)
-
-        reward = max(0, reward)
-
-        # Status
-        status = "failed" if is_failed else "completed"
-        error_type = random.choice(["timeout", "oom", "crash"]) if is_failed else None
-
-        episode = EpisodeData(
-            episode_id=f"demo-ep-{i:04d}-{random.randint(1000, 9999)}",
-            job_id=f"demo-job-{i:03d}",
-            opponent_name=opponent_name,
-            opponent_version=opponent_version,
-            team_composition=team_comp,
-            reward=round(reward, 4),
-            status=status,
-            error_type=error_type,
-            steps=steps,
-            metrics=metrics,
-        )
-        episodes.append(episode)
-
-    # Compute derived metrics
-    derived = compute_derived_metrics(episodes)
-
-    return DashboardData(
-        policy=PolicyVersion(
-            id="demo-policy-001",
-            name="demo-policy",
-            version=42,
-            rank=7,
-            score=1.234,
-            matches=80,
-        ),
-        episodes=episodes,
-        season="demo",
-        generated_at=datetime.now().isoformat(),
-        derived=derived,
-    )
+    demo_path = Path(__file__).parent / "demo_dashboard.json"
+    with open(demo_path) as f:
+        return json.load(f)
 
 
 def main():
@@ -1176,18 +905,12 @@ def main():
     console.print("[bold blue]CoGames Policy Dashboard Generator[/bold blue]\n")
 
     if args.demo:
-        # Demo mode - generate sample data
-        console.print("[bold magenta]Demo mode:[/bold magenta] Generating sample data...\n")
-        data = generate_demo_data()
-        console.print(f"[green]Generated {len(data.episodes)} demo episodes[/green]")
-        console.print(f"  Policy: {data.policy.name}:v{data.policy.version}")
-        console.print(f"  Rank: #{data.policy.rank}, Score: {data.policy.score:.3f}")
-
-        # Show diagnostic summary
-        if data.derived.diagnostics:
-            console.print(f"\n[yellow]Diagnostics triggered: {len(data.derived.diagnostics)}[/yellow]")
-            for diag in data.derived.diagnostics[:3]:
-                console.print(f"  - {diag[:60]}...")
+        # Demo mode - load static demo data
+        console.print("[bold magenta]Demo mode:[/bold magenta] Loading demo data...\n")
+        demo_dict = load_demo_data()
+        policy = demo_dict["policy"]
+        console.print(f"[green]Loaded {len(demo_dict['episodes'])} demo episodes[/green]")
+        console.print(f"  Policy: {policy['name']}:v{policy['version']}")
 
         # Generate dashboard
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1195,7 +918,7 @@ def main():
         output_path = Path(output_path)
 
         console.print("\n[bold]Generating dashboard...[/bold]")
-        generate_dashboard(data, output_path)
+        generate_dashboard_from_dict(demo_dict, output_path)
 
         console.print(f"\n[bold green]Dashboard saved to:[/bold green] {output_path}")
         console.print("[dim]Opening in browser...[/dim]")
@@ -1265,17 +988,19 @@ def main():
 
 
 def generate_dashboard(data: DashboardData, output_path: Path) -> None:
-    """Generate HTML dashboard from data."""
-    # Load template and inject data
+    """Generate HTML dashboard from DashboardData."""
+    generate_dashboard_from_dict(data_to_dict(data), output_path)
+
+
+def generate_dashboard_from_dict(data_dict: dict, output_path: Path) -> None:
+    """Generate HTML dashboard from a pre-built data dict."""
     template_path = Path(__file__).parent / "template.html"
     if not template_path.exists():
-        console.print("[red]Template not found. Creating minimal dashboard.[/red]")
-        html = create_minimal_dashboard(data)
-    else:
-        with open(template_path) as f:
-            template = f.read()
-        html = template.replace("{{DASHBOARD_DATA}}", json.dumps(data_to_dict(data), indent=2))
-
+        console.print("[red]Template not found.[/red]")
+        sys.exit(1)
+    with open(template_path) as f:
+        template = f.read()
+    html = template.replace("{{DASHBOARD_DATA}}", json.dumps(data_dict, indent=2))
     with open(output_path, "w") as f:
         f.write(html)
 
@@ -1309,21 +1034,6 @@ def data_to_dict(data: DashboardData) -> dict:
         "season": data.season,
         "generated_at": data.generated_at,
         "derived": {
-            "kpis": {
-                "move_efficiency": data.derived.move_efficiency,
-                "action_success_rate": data.derived.action_success_rate,
-                "vibe_change_rate": data.derived.vibe_change_rate,
-                "resource_retention": data.derived.resource_retention,
-                "freeze_vulnerability": data.derived.freeze_vulnerability,
-                "junction_control_rate": data.derived.junction_control_rate,
-                "alignment_stability": data.derived.alignment_stability,
-                "net_alignment_rate": data.derived.net_alignment_rate,
-                "noop_rate": data.derived.noop_rate,
-                "resource_efficiency_per_step": data.derived.resource_efficiency_per_step,
-                "hearts_to_junction_rate": data.derived.hearts_to_junction_rate,
-                "reward_consistency": data.derived.reward_consistency,
-                "reward_nonzero_pct": data.derived.reward_nonzero_pct,
-            },
             "strategy_profile": {
                 "aggressive": data.derived.profile_aggressive,
                 "defensive": data.derived.profile_defensive,
@@ -1332,7 +1042,6 @@ def data_to_dict(data: DashboardData) -> dict:
                 "mobile_scout": data.derived.profile_mobile_scout,
             },
             "diagnostics": data.derived.diagnostics,
-            "benchmarks": compute_benchmark_tiers(data.episodes, data.derived),
             "team_comp": [
                 {
                     "composition": tc.composition,
@@ -1368,26 +1077,40 @@ def _compute_opponent_metrics(episodes: list[EpisodeData]) -> dict[str, Any]:
                     summed_metrics[k] = summed_metrics.get(k, 0) + v
 
         avg_metrics = {k: v / n for k, v in summed_metrics.items()}
+
+        # Compute strategy profile scores (same formulas as target policy)
+        m = avg_metrics
+        move_s = m.get("action.move.success", 0)
+        move_f = m.get("action.move.failed", 0)
+        noop = m.get("action.noop.success", 0)
+        vibe = m.get("action.change_vibe.success", 0)
+        j_aligned = m.get("junction.aligned_by_agent", 0)
+        j_scrambled = m.get("junction.scrambled_by_agent", 0)
+        j_total = j_aligned + j_scrambled
+        resources = ["carbon", "heart", "oxygen", "silicon", "germanium"]
+        total_amount = sum(m.get(f"{r}.amount", 0) for r in resources)
+        total_gained = sum(m.get(f"{r}.gained", 0) for r in resources)
+        resource_retention = total_amount / total_gained if total_gained > 0 else 0
+        move_eff = move_s / (move_s + move_f) if (move_s + move_f) > 0 else 0
+        j_control = j_aligned / j_total if j_total > 0 else 0
+        move_rate = move_s / (move_s + noop) if (move_s + noop) > 0 else 0
+        noop_rate_p = noop / (move_s + noop) if (move_s + noop) > 0 else 0
+
         result[opp] = {
             "count": n,
             "total_reward": round(total_reward, 4),
             "avg_reward": round(avg_reward, 4),
             "avg_metrics": {k: round(v, 4) for k, v in avg_metrics.items()},
+            "strategy_profile": {
+                "aggressive": round(min(100, j_scrambled * 10 + vibe * 5), 2),
+                "defensive": round(min(100, noop / 10 + (1 - move_rate) * 50), 2),
+                "resource_hoarder": round(min(100, resource_retention * 50 + total_amount / 10), 2),
+                "junction_hunter": round(min(100, j_aligned * 3 + j_control * 50), 2),
+                "mobile_scout": round(min(100, move_eff * 50 + (1 - noop_rate_p) * 50), 2),
+            },
         }
 
     return result
-
-
-def create_minimal_dashboard(data: DashboardData) -> str:
-    """Create minimal dashboard if template missing."""
-    return f"""<!DOCTYPE html>
-<html><head><title>Dashboard - {data.policy.name}:v{data.policy.version}</title></head>
-<body>
-<h1>{data.policy.name}:v{data.policy.version}</h1>
-<p>Episodes: {len(data.episodes)}</p>
-<pre>{json.dumps(data_to_dict(data), indent=2)}</pre>
-</body></html>
-"""
 
 
 if __name__ == "__main__":

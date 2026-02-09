@@ -2,6 +2,71 @@
 
 Reference guide for analyzing CoGames tournament policy performance. Used by analysis tools and dashboards.
 
+## Filter Types
+
+There are exactly two kinds of filters. Getting them wrong changes what the dashboard computes.
+
+### Data Filters
+
+Data filters restrict which episodes are included in analysis. Changing a data filter changes every computed result.
+
+Examples: opponent, map/mission, team size, episode date range.
+
+### View Filters
+
+View filters control which players' results are displayed. They do **not** change what is computed. The player
+checkboxes in the sidebar are view filters — unchecking a player hides their data points, but the range (min/max) is
+still computed across all players.
+
+## Analysis Pipeline
+
+Every analysis on the dashboard follows this pipeline. There are no exceptions.
+
+### Step 1: Apply data filters to get the working episode set
+
+```
+filtered_episodes = [e for e in all_episodes if passes_all_data_filters(e)]
+```
+
+### Step 2: For each player, compute a per-player result
+
+A "player" is any co-player or the primary policy being analyzed. For each player, collect their episodes from the
+filtered set, then apply the analysis function.
+
+```
+player_results = {}
+for player in all_players:
+    player_episodes = [e for e in filtered_episodes if e.involves(player)]
+    player_results[player] = analysis_fn(player_episodes)
+```
+
+The `analysis_fn` is whatever metric or aggregation the chart/card is computing (e.g., mean reward, junction count,
+action success rate). It takes a list of episodes and returns a scalar.
+
+### Step 3: Compute the range from all player results
+
+The range is always min/max across **all** player results, regardless of view filters.
+
+```
+range_min = min(player_results.values())
+range_max = max(player_results.values())
+```
+
+### Step 4: Apply view filters for display
+
+View filters (player checkboxes) control which players' data points are rendered. The range does not change.
+
+```
+visible_players = [p for p in all_players if view_filter_checked(p)]
+# render only visible_players' data points
+# render range bar using range_min, range_max (always all players)
+```
+
+### Why this matters
+
+If you compute the range from only the visible players, toggling a checkbox changes the scale of every chart. The range
+must reflect the full filtered dataset so that hiding/showing players lets you compare against a stable baseline.
+
 ## Metrics Reference
 
 ### Episode-Level Metrics
