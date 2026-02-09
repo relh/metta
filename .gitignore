@@ -173,3 +173,6 @@ docs/plans/
 # Gas Town (added by gt)
 .claude/
 .logs/
+
+# Can be created by sandboxed agents
+.pnpm-store/
