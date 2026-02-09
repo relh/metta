@@ -9,29 +9,13 @@ import importlib
 import importlib.util
 import logging
 from types import ModuleType
-from typing import Any, Callable, Optional
+from typing import Callable, Optional, cast
 
-from typing_extensions import TypeIs, get_type_hints
+from typing_extensions import get_type_hints
 
 from metta.common.tool import Tool
 
 ToolMaker = Callable[..., Tool]
-
-
-def is_tool_maker(obj: Any) -> TypeIs[ToolMaker]:
-    """Type guard to check if an object is a tool maker function.
-
-    A tool maker is a callable that returns a Tool instance.
-    """
-    if not callable(obj) or isinstance(obj, type):
-        return False
-
-    try:
-        hints = get_type_hints(obj)
-        return_type = hints.get("return")
-        return return_type is not None and isinstance(return_type, type) and issubclass(return_type, Tool)
-    except Exception:
-        return False
 
 
 logger = logging.getLogger(__name__)
@@ -60,25 +44,27 @@ class Recipe:
 
     def _build_tool_maps(self) -> None:
         """Build maker_name->tool_maker and tool_class_name->makers maps."""
-        # Get explicit tool makers
-        explicit_makers = self.get_explicit_tool_makers()
+        for name in dir(self.module):
+            if name.startswith("_"):
+                continue
 
-        # Build both maps from explicit tool makers
-        for maker_name, maker_func in explicit_makers.items():
-            # Add to maker_name->tool_maker map
-            self._maker_name_to_tool_maker[maker_name] = maker_func
+            attr = getattr(self.module, name)
+            if not callable(attr) or isinstance(attr, type):
+                continue
 
-            # Determine which tool type this maker returns
             try:
-                hints = get_type_hints(maker_func)
-                return_type = hints.get("return")
-                if return_type and isinstance(return_type, type) and issubclass(return_type, Tool):
-                    tool_type = return_type.tool_type_name()
-                    if tool_type not in self._tool_type_to_makers:
-                        self._tool_type_to_makers[tool_type] = []
-                    self._tool_type_to_makers[tool_type].append((maker_name, maker_func))
-            except Exception:
-                pass
+                return_type = get_type_hints(attr).get("return")
+            except (AttributeError, ImportError, NameError, TypeError, ValueError):
+                continue
+
+            if return_type is None or not isinstance(return_type, type) or not issubclass(return_type, Tool):
+                continue
+
+            maker = cast(ToolMaker, attr)
+            self._maker_name_to_tool_maker[name] = maker
+
+            tool_type = return_type.tool_type_name()
+            self._tool_type_to_makers.setdefault(tool_type, []).append((name, maker))
 
     @classmethod
     def load(cls, module_path: str) -> Optional["Recipe"]:
@@ -96,17 +82,7 @@ class Recipe:
 
     def get_explicit_tool_makers(self) -> dict[str, ToolMaker]:
         """Returns only tool makers explicitly defined in this recipe."""
-        makers: dict[str, ToolMaker] = {}
-
-        for name in dir(self.module):
-            if name.startswith("_"):
-                continue
-
-            attr = getattr(self.module, name)
-            if is_tool_maker(attr):
-                makers[name] = attr
-
-        return makers
+        return dict(self._maker_name_to_tool_maker)
 
     def get_all_tool_maker_names(self) -> set[str]:
         """Get all tool maker names available from this recipe."""
