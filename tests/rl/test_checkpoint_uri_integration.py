@@ -1,5 +1,10 @@
 """URI scheme tests for checkpoint loading."""
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
@@ -25,3 +30,22 @@ class TestMettaURIs:
         resolver = MettaSchemeResolver()
         with pytest.raises(ValueError, match="Unsupported metta:// URI format"):
             resolver.get_path_to_policy_spec("metta://invalid")
+
+    def test_policy_spec_from_uri_resolves_builtins_without_stats_server(self, tmp_path: Path) -> None:
+        env = os.environ.copy()
+        env.update(
+            {
+                "HOME": str(tmp_path),
+                "XDG_CONFIG_HOME": str(tmp_path),
+                "STATS_SERVER_URI": "https://example.invalid",
+            }
+        )
+        code = "\n".join(
+            [
+                "from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri",
+                "spec = policy_spec_from_uri('metta://policy/planky?miner=4')",
+                "assert spec.class_path.endswith('PlankyPolicy')",
+                "assert spec.init_kwargs['miner'] == 4",
+            ]
+        )
+        subprocess.run([sys.executable, "-c", code], check=True, env=env)
