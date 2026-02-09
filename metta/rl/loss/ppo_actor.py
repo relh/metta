@@ -15,9 +15,9 @@ from metta.rl.training import ComponentContext, TrainingEnvironment
 
 class PPOActorConfig(LossConfig):
     # Clip coefficient (0.1-0.3 typical; Schulman et al. 2017)
-    clip_coef: float = Field(default=0.3644, gt=0, le=1.0)
+    clip_coef: float = Field(default=0.22017136216163635, gt=0, le=1.0)
     # Entropy term weight from sweep
-    ent_coef: float = Field(default=0.0717, ge=0)
+    ent_coef: float = Field(default=0.01, ge=0)
 
     # Normalization and clipping
     # Advantage normalization toggle
