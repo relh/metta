@@ -6,9 +6,12 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
+    "typegen": "next typegen",
     "type-check": "tsc --noEmit",
     "lint:eslint": "eslint .",
-    "lint:prettier": "prettier --check ."
+    "lint:prettier": "prettier --log-level warn --check .",
+    "format": "prettier --write .",
+    "postinstall": "pnpm run typegen"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",

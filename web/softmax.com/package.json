@@ -6,8 +6,9 @@
     "dev": "next dev -p 3002",
     "start": "next start",
     "build": "next build",
+    "typegen": "next typegen",
     "type-check": "tsc --noEmit --pretty",
-    "lint:prettier": "prettier --check .",
+    "lint:prettier": "prettier --log-level warn --check .",
     "format": "prettier --write .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
@@ -15,7 +16,8 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
-    "update-softmax-team": "tsx src/scripts/update-softmax-team.ts"
+    "update-softmax-team": "tsx src/scripts/update-softmax-team.ts",
+    "postinstall": "pnpm run db:generate && pnpm run typegen"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",

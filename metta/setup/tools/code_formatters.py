@@ -22,17 +22,20 @@ class FormatterResult:
     processed_files: int = 0
 
 
+FormatterRunner = Callable[[bool, set[str] | None, bool], FormatterResult]
+
+
 class FormatterConfig(BaseModel):
     name: str
     format_cmds: tuple[tuple[str, ...], ...] = ()
     check_cmds: tuple[tuple[str, ...], ...] = ()
     extensions: tuple[str, ...] = ()
-    runner: Callable[[bool, set[str] | None], FormatterResult] | None = None
+    runner: FormatterRunner | None = None
     accepts_file_args: bool = True
 
-    def run(self, fix: bool = False, files: set[str] | None = None) -> FormatterResult:
+    def run(self, fix: bool = False, files: set[str] | None = None, is_full_run: bool = False) -> FormatterResult:
         if self.runner is not None:
-            return self.runner(fix, files)
+            return self.runner(fix, files, is_full_run)
         if files is not None and not self.accepts_file_args:
             return FormatterResult(success=True, processed_files=0)
         commands = self.check_cmds if not fix else self.format_cmds
@@ -131,8 +134,8 @@ def _format_progress_message(formatter_name: str, action: str, file_count: int, 
     return f"[{color}]{formatter_name} • {action} {file_count} file(s)[/]"
 
 
-def _make_cpp_runner() -> Callable[[bool, set[str] | None], FormatterResult]:
-    def _runner(fix: bool, _files: set[str] | None) -> FormatterResult:
+def _make_cpp_runner() -> FormatterRunner:
+    def _runner(fix: bool, _files: set[str] | None, _is_full_run: bool = False) -> FormatterResult:
         repo_root = get_repo_root()
         mettagrid_dir = repo_root / "packages" / "mettagrid"
 
@@ -180,8 +183,8 @@ def _make_prettier_runner(
     *,
     extensions: Sequence[str],
     exclude_patterns: Sequence[str] = (),
-) -> Callable[[bool, set[str] | None], FormatterResult]:
-    def _runner(fix: bool, files: set[str] | None) -> FormatterResult:
+) -> FormatterRunner:
+    def _runner(fix: bool, files: set[str] | None, _is_full_run: bool = False) -> FormatterResult:
         targets = _collect_prettier_targets(extensions, files, exclude_patterns)
 
         if not targets:
@@ -194,7 +197,7 @@ def _make_prettier_runner(
         mode_arg = "--write" if fix else "--check"
         processed = len(targets)
         for chunk in _chunked(targets, 100):  # Prettier's default batch size is 100
-            cmd = ["pnpm", "exec", "prettier", mode_arg, *chunk]
+            cmd = ["pnpm", "exec", "prettier", "--log-level", "warn", mode_arg, *chunk]
             result = subprocess.run(
                 cmd,
                 cwd=get_repo_root(),
@@ -216,23 +219,25 @@ def _make_prettier_runner(
 
 def _make_turbo_js_runner(
     extensions: Sequence[str],
-) -> Callable[[bool, set[str] | None], FormatterResult]:
-    def _runner(fix: bool, files: set[str] | None) -> FormatterResult:
+) -> FormatterRunner:
+    def _runner(fix: bool, files: set[str] | None, is_full_run: bool = False) -> FormatterResult:
         repo_root = get_repo_root()
         normalized_exts = _normalize_extensions(extensions)
 
-        if files:
-            # For file-specific operations, run prettier directly (turbo runs all packages
+        if is_full_run:
+            # Full runs use turbo to get caching and run all package lint/format scripts
+            task = "format" if fix else "lint"
+            cmd = ["pnpm", "exec", "turbo", task]
+        elif files:
+            # File-specific operations use prettier directly (turbo runs all packages
             # which causes issues when packages like gridworks can't handle external paths)
             targets = [f for f in files if Path(f).suffix.lower() in normalized_exts]
             if not targets:
                 return FormatterResult(success=True, processed_files=0)
             mode_arg = "--write" if fix else "--check"
-            cmd = ["pnpm", "exec", "prettier", mode_arg, *targets]
+            cmd = ["pnpm", "exec", "prettier", "--log-level", "warn", mode_arg, *targets]
         else:
-            # For full runs, use turbo to get caching and run all package lint/format scripts
-            task = "format" if fix else "lint"
-            cmd = ["pnpm", "exec", "turbo", task, "--", "."]
+            return FormatterResult(success=True, processed_files=0)
 
         result = subprocess.run(
             cmd,
@@ -328,9 +333,9 @@ def get_formatters() -> dict[str, FormatterConfig]:
             ),
             FormatterConfig(
                 name="Markdown",
-                extensions=(".md",),
+                extensions=(".md", "*.mdx"),
                 runner=_make_prettier_runner(
-                    extensions=(".md",),
+                    extensions=(".md", "*.mdx"),
                 ),
             ),
             FormatterConfig(
@@ -370,12 +375,22 @@ def get_formatters() -> dict[str, FormatterConfig]:
             # - Full runs use turbo to run lint/format scripts in each package
             # - File-specific runs use prettier directly (turbo can't handle cross-package paths)
             # Each package.json should define:
-            #   - "lint": type checking + eslint + prettier --check
+            #   - "lint:eslint" / "lint:prettier": linting sub-tasks
+            #   - "type-check": tsc --noEmit (run separately, not as lint dependency)
             #   - "format": prettier --write (without trailing "." - args passed via turbo)
             FormatterConfig(
                 name="Javascript",
                 extensions=(".ts", ".tsx", ".js", ".jsx"),
                 runner=_make_turbo_js_runner(extensions=(".ts", ".tsx", ".js", ".jsx")),
+            ),
+            # Runs turbo type-check across all packages (tsc --noEmit etc.)
+            # Runs only on full-repo lints; skipped for file-specific runs since tsc
+            # doesn't accept individual file paths the way lint/format tools do.
+            FormatterConfig(
+                name="TypeScript Type Check",
+                check_cmds=(("pnpm", "exec", "turbo", "type-check"),),
+                extensions=(".ts", ".tsx"),
+                accepts_file_args=False,
             ),
         ]
     }
@@ -448,7 +463,7 @@ def cmd_lint(
                 file_count = len(fs)
                 in_progress_desc = _format_progress_message(formatter.name, action_word, file_count, "blue")
                 task_id = progress.add_task(in_progress_desc, total=None, start=True)
-                future = executor.submit(formatter.run, fix=fix, files=run_files)
+                future = executor.submit(formatter.run, fix=fix, files=run_files, is_full_run=is_full_run)
                 futures[future] = (formatter, task_id, file_count)
 
             for future in as_completed(futures):

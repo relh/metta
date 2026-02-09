@@ -7,10 +7,11 @@
     "dev": "next dev -p 5173",
     "build": "next build",
     "start": "next start",
+    "typegen": "next typegen",
     "type-check": "tsc",
     "lint:eslint": "eslint .",
-    "lint:prettier": "prettier --check .",
-    "format": "prettier --write"
+    "lint:prettier": "prettier --log-level warn --check .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.16",

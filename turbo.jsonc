@@ -12,9 +12,14 @@
     // turbo orchestrates lint as composition of sub-tasks
     // packages that don't have a sub-task script simply skip it
     "lint": {
-      "dependsOn": ["type-check", "lint:eslint", "lint:prettier"]
+      "dependsOn": ["lint:eslint", "lint:prettier"]
     },
-    "type-check": {},
+    "typegen": {
+      "outputs": [".next/types/**"]
+    },
+    "type-check": {
+      "dependsOn": ["typegen"]
+    },
     "lint:eslint": {},
     "lint:prettier": {},
     "format": {

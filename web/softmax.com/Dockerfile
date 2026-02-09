@@ -37,7 +37,7 @@ FROM base AS builder
 WORKDIR /metta
 
 COPY --from=pruned-source /metta/out/json/ .
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY --from=pruned-source /metta/out/full/ .
 # turbo's pruned sources don't include .env files

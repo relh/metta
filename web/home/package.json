@@ -8,8 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "lint:prettier": "prettier --check .",
-    "format": "prettier --write"
+    "lint:prettier": "prettier --log-level warn --check .",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
