@@ -4,11 +4,7 @@
   "tasks": {
     "build": {
       "inputs": ["src/**", "scorecard_widget/**/*.py", "package.json", "vite.config.js", "!scorecard_widget/static/**"],
-      "outputs": ["scorecard_widget/static/**"],
-      "persistent": true
-    },
-    // common linting and formatting tasks
-    "lint": {},
-    "lint:eslint": {}
+      "outputs": ["scorecard_widget/static/**"]
+    }
   }
 }

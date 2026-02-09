@@ -8,10 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "lint": "pnpm run type-check && prettier --check .",
+    "lint:prettier": "prettier --check .",
     "format": "prettier --write"
   },
-  "packageManager": "pnpm@10.11.0",
   "dependencies": {
     "js-yaml": "^4.1.0",
     "react": "^18.3.1",

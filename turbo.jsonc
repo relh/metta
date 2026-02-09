@@ -1,11 +1,24 @@
 {
   "$schema": "https://turborepo.org/schema.json",
   "tasks": {
-    "build": {},
-    // common linting and formatting tasks
-    "lint": {},
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "dev": {
+      "persistent": true,
+      "cache": false
+    },
+    // turbo orchestrates lint as composition of sub-tasks
+    // packages that don't have a sub-task script simply skip it
+    "lint": {
+      "dependsOn": ["type-check", "lint:eslint", "lint:prettier"]
+    },
+    "type-check": {},
     "lint:eslint": {},
     "lint:prettier": {},
-    "format": {}
+    "format": {
+      "cache": false
+    }
   }
 }

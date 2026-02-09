@@ -15,24 +15,26 @@ export const YamlKeyValue: FC<{
   const { unsetFields, showDefaultValues } = use(YamlContext);
   const value = node.value[yamlKey];
 
+  const path = useMemo(() => [...node.path, yamlKey], [node.path, yamlKey]);
+
   const valueNode: ConfigNode = {
     value,
-    path: [...node.path, yamlKey],
+    path,
     depth: node.depth + 1,
   };
 
-  const fullKey = valueNode.path.join(".");
+  const fullKey = path.join(".");
 
   const disabled = useMemo(() => {
-    let path = "";
-    for (const part of valueNode.path) {
-      path = path ? `${path}.${part}` : part;
-      if (unsetFields.has(path)) {
+    let p = "";
+    for (const part of path) {
+      p = p ? `${p}.${part}` : part;
+      if (unsetFields.has(p)) {
         return true;
       }
     }
     return false;
-  }, [unsetFields, valueNode.path]);
+  }, [unsetFields, path]);
 
   const [isExpanded, setIsExpanded] = useState(true);
 

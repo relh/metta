@@ -17,7 +17,7 @@ export const AsciiEditor: FC<{
 
   useEffect(() => {
     setAscii(grid.toAscii(encoding));
-  }, [grid]);
+  }, [encoding, grid]);
 
   return (
     <div>

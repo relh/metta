@@ -39,9 +39,8 @@ const ChildrenViewer: FC<{
   childrenScenes: SceneTree[];
   isExpanded: boolean;
   onToggle: () => void;
-  depth: number;
   time: number;
-}> = ({ childrenScenes, isExpanded, onToggle, depth, time }) => {
+}> = ({ childrenScenes, isExpanded, onToggle, time }) => {
   if (childrenScenes.length === 0) return null;
 
   return (
@@ -155,7 +154,6 @@ const InnerSceneTreeViewer: FC<TreeProps> = ({ sceneTree, depth = 0 }) => {
               childrenScenes={sceneTree.children}
               isExpanded={isExpanded}
               onToggle={() => setIsExpanded(!isExpanded)}
-              depth={depth}
               time={
                 sceneTree.render_with_children_end_time -
                 sceneTree.render_end_time
