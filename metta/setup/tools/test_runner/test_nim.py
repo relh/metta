@@ -1,4 +1,6 @@
+import shutil
 import subprocess
+from pathlib import Path
 
 import typer
 
@@ -19,11 +21,24 @@ def command() -> None:
 
     # Install Nim dependencies before running tests
     info("Installing Nim dependencies...")
+    sync_cmd = ["nimby", "sync", "-g", str(lock_file)]
     exit_code = subprocess.run(
-        ["nimby", "sync", "-g", str(lock_file)],
+        sync_cmd,
         check=False,
         cwd=repo_root.parent,  # nimby sync expects to run from parent of repo
     ).returncode
+    if exit_code != 0:
+        # `nimby sync` can fail if the cached global packages directory is corrupted.
+        # Clearing the cache and retrying is cheaper than failing the entire CI job.
+        pkgs_dir = Path.home() / ".nimby" / "pkgs"
+        if pkgs_dir.exists():
+            info(f"nimby sync failed; removing cached packages at {pkgs_dir} and retrying...")
+            shutil.rmtree(pkgs_dir)
+        exit_code = subprocess.run(
+            sync_cmd,
+            check=False,
+            cwd=repo_root.parent,
+        ).returncode
     if exit_code != 0:
         error("Failed to install Nim dependencies!")
         raise typer.Exit(exit_code)

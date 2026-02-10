@@ -30,6 +30,9 @@ type
     tags*: Tags
     vibes*: Vibes
     vibeNames*: seq[string]
+    ## Map from vibe name suffix (from `change_vibe_<suffix>`) to action id.
+    ## Used by vibe-driven scripted agents (e.g., Planky).
+    vibeActionByName*: Table[string, int]
     hubProtocols*: seq[HubProtocol]
     inventoryTokenBase*: int
     inventoryPowerFeatures*: Table[int, array[2, int]]
@@ -115,6 +118,12 @@ type
     cooldownRemaining*: int
     clipped*: int
     remainingUses*: int
+    collective*: int
+    lpEast*: int
+    lpWest*: int
+    lpNorth*: int
+    lpSouth*: int
+    agentId*: int
     invEnergy*: int
     invCarbon*: int
     invOxygen*: int
@@ -130,6 +139,13 @@ type
     invAligner*: int
     invInfluence*: int
     invHp*: int
+    invSolar*: int
+    invCollectiveCarbon*: int
+    invCollectiveOxygen*: int
+    invCollectiveGermanium*: int
+    invCollectiveSilicon*: int
+    invCollectiveHeart*: int
+    invCollectiveInfluence*: int
 
     protocolInputEnergy*: int
     protocolInputCarbon*: int
@@ -146,6 +162,7 @@ type
     protocolInputScout*: int
     protocolInputAligner*: int
     protocolInputInfluence*: int
+    protocolInputSolar*: int
 
     protocolOutputEnergy*: int
     protocolOutputCarbon*: int
@@ -162,6 +179,7 @@ type
     protocolOutputScout*: int
     protocolOutputAligner*: int
     protocolOutputInfluence*: int
+    protocolOutputSolar*: int
 
   RecipeInfo* = object
     pattern*: seq[int] # In vibe indices
@@ -188,6 +206,42 @@ type
     resonatorOutput*: int
     scramblerOutput*: int
     cooldown*: int
+
+proc obsHalfWidth*(cfg: Config): int =
+  # Observation packing uses a fixed 4-bit coordinate scheme; the offset should
+  # be derived from the configured egocentric window, not hard-coded.
+  cfg.config.obsWidth div 2
+
+proc obsHalfHeight*(cfg: Config): int =
+  cfg.config.obsHeight div 2
+
+proc parseVisible*(
+  cfg: Config,
+  numTokens: int,
+  sizeToken: int,
+  rawObservation: pointer
+): Table[Location, seq[FeatureValue]] =
+  ## Parse raw tokens into an egocentric sparse map.
+  ##
+  ## - Regular egocentric tokens are decoded using (obsWidth/obsHeight)//2 offsets.
+  ## - Global tokens (0xFE location) are stored at (0,0) so feature accessors can
+  ##   read them via the same location key.
+  let observations = cast[ptr UncheckedArray[uint8]](rawObservation)
+  let halfW = cfg.obsHalfWidth()
+  let halfH = cfg.obsHalfHeight()
+  for token in 0 ..< numTokens:
+    let locationPacked = observations[token * sizeToken]
+    let featureId = observations[token * sizeToken + 1]
+    let value = observations[token * sizeToken + 2]
+    if locationPacked == 255 and featureId == 255 and value == 255:
+      break
+    var location: Location
+    if locationPacked == 0xFE:
+      location = Location(x: 0, y: 0)
+    elif locationPacked != 0xFF:
+      location.y = (locationPacked shr 4).int - halfH
+      location.x = (locationPacked and 0x0F).int - halfW
+    result.mgetOrPut(location, @[]).add(FeatureValue(featureId: featureId.int, value: value.int))
 
 proc `+`*(location1: Location, location2: Location): Location =
   ## Add two locations.
@@ -544,6 +598,18 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.clipped = feature.id
       of "remaining_uses":
         result.features.remainingUses = feature.id
+      of "collective":
+        result.features.collective = feature.id
+      of "lp:east":
+        result.features.lpEast = feature.id
+      of "lp:west":
+        result.features.lpWest = feature.id
+      of "lp:north":
+        result.features.lpNorth = feature.id
+      of "lp:south":
+        result.features.lpSouth = feature.id
+      of "agent_id":
+        result.features.agentId = feature.id
       of "inv:energy":
         result.features.invEnergy = feature.id
       of "inv:carbon":
@@ -574,6 +640,20 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.invInfluence = feature.id
       of "inv:hp":
         result.features.invHp = feature.id
+      of "inv:solar":
+        result.features.invSolar = feature.id
+      of "inv:collective:carbon":
+        result.features.invCollectiveCarbon = feature.id
+      of "inv:collective:oxygen":
+        result.features.invCollectiveOxygen = feature.id
+      of "inv:collective:germanium":
+        result.features.invCollectiveGermanium = feature.id
+      of "inv:collective:silicon":
+        result.features.invCollectiveSilicon = feature.id
+      of "inv:collective:heart":
+        result.features.invCollectiveHeart = feature.id
+      of "inv:collective:influence":
+        result.features.invCollectiveInfluence = feature.id
       of "protocol_input:energy":
         result.features.protocolInputEnergy = feature.id
       of "protocol_input:carbon":
@@ -604,6 +684,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolInputAligner = feature.id
       of "protocol_input:influence":
         result.features.protocolInputInfluence = feature.id
+      of "protocol_input:solar":
+        result.features.protocolInputSolar = feature.id
       of "protocol_output:energy":
         result.features.protocolOutputEnergy = feature.id
       of "protocol_output:carbon":
@@ -634,6 +716,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolOutputAligner = feature.id
       of "protocol_output:influence":
         result.features.protocolOutputInfluence = feature.id
+      of "protocol_output:solar":
+        result.features.protocolOutputSolar = feature.id
       else:
         echo "Unknown feature: ", feature.name
 
@@ -641,9 +725,12 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
       if resource in inventoryBaseIds:
         result.inventoryPowerFeatures[inventoryBaseIds[resource]] = powers
 
+    result.vibeActionByName = initTable[string, int]()
     for id, name in config.actions:
       if name.startsWith("change_vibe_"):
-        result.vibeNames.add(name[12 .. ^1])
+        let suffix = name[12 .. ^1]
+        result.vibeNames.add(suffix)
+        result.vibeActionByName[suffix] = id
       case name:
       of "noop":
         result.actions.noop = id
@@ -702,23 +789,23 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
 
     for id, name in config.tags:
       case name:
-      of "agent":
+      of "agent", "type:agent":
         result.tags.agent = id
-      of "hub":
+      of "hub", "type:c:hub":
         result.tags.hub = id
-      of "carbon_extractor":
+      of "carbon_extractor", "type:carbon_extractor":
         result.tags.carbonExtractor = id
-      of "junction":
+      of "junction", "type:junction":
         result.tags.junction = id
-      of "chest":
+      of "chest", "type:chest":
         result.tags.chest = id
-      of "germanium_extractor":
+      of "germanium_extractor", "type:germanium_extractor":
         result.tags.germaniumExtractor = id
-      of "oxygen_extractor":
+      of "oxygen_extractor", "type:oxygen_extractor":
         result.tags.oxygenExtractor = id
-      of "silicon_extractor":
+      of "silicon_extractor", "type:silicon_extractor":
         result.tags.siliconExtractor = id
-      of "wall":
+      of "wall", "type:wall":
         result.tags.wall = id
       else:
         discard
@@ -741,6 +828,10 @@ proc computeMapBounds*(map: Table[Location, seq[FeatureValue]]): MapBounds =
       result.minY = location.y
     if location.y > result.maxY:
       result.maxY = location.y
+
+proc vibeActionId*(cfg: Config, vibeName: string): int =
+  ## Return the action id for `change_vibe_<vibeName>`, or noop if missing.
+  cfg.vibeActionByName.getOrDefault(vibeName, cfg.actions.noop)
 
 proc drawMap*(cfg: Config, map: Table[Location, seq[FeatureValue]], seen: HashSet[Location]) =
   ## Draw the map to the console.
@@ -795,6 +886,12 @@ proc drawMap*(cfg: Config, map: Table[Location, seq[FeatureValue]], seen: HashSe
 proc getTag*(cfg: Config, map: Table[Location, seq[FeatureValue]], location: Location): int =
   ## Get the type id of the location in the map.
   if location in map:
+    # Prefer a "type:*" tag when multiple tags are present (e.g. collective + type).
+    for featureValue in map[location]:
+      if featureValue.featureId == cfg.features.tag:
+        if featureValue.value >= 0 and featureValue.value < cfg.config.tags.len:
+          if cfg.config.tags[featureValue.value].startsWith("type:"):
+            return featureValue.value
     for featureValue in map[location]:
       if featureValue.featureId == cfg.features.tag:
         return featureValue.value
@@ -807,10 +904,9 @@ proc getFeature*(
   location: Location = Location(x: 0, y: 0)
 ): int =
   ## Get the feature of the visible map.
-  if location in visible:
-    for featureValue in visible[location]:
-      if featureValue.featureId == featureId:
-        return featureValue.value
+  for featureValue in visible.getOrDefault(location, @[]):
+    if featureValue.featureId == featureId:
+      return featureValue.value
   return -1
 
 proc getLastAction*(cfg: Config, visible: Table[Location, seq[FeatureValue]]): int =
@@ -834,8 +930,8 @@ proc getInventory*(
   # Missing inventory is 0.
   if result == -1:
     result = 0
-  if cfg.inventoryTokenBase > 1 and inventoryId in cfg.inventoryPowerFeatures:
-    let powers = cfg.inventoryPowerFeatures[inventoryId]
+  if cfg.inventoryTokenBase > 1:
+    let powers = cfg.inventoryPowerFeatures.getOrDefault(inventoryId, [-1, -1])
     if powers[0] > -1:
       let powerValue = cfg.getFeature(visible, powers[0], location)
       if powerValue > -1:
@@ -927,12 +1023,17 @@ proc simpleGoTo*(cfg: Config, currentLocation: Location, targetLocation: Locatio
     return cfg.actions.noop
 
 proc isWalkable*(cfg: Config, map: Table[Location, seq[FeatureValue]], loc: Location): bool =
-  # Default: tiles not present are walkable; present tiles are walkable unless you decide otherwise.
+  # Default: unknown tiles are walkable.
+  #
+  # Only a small subset of tags should block movement (e.g. walls). Many tagged tiles
+  # (stations, extractors, hubs, junctions, chests) are intended to be traversable so
+  # an agent can stand on them to interact.
   if loc in map:
     for featureValue in map[loc]:
       if featureValue.featureId == cfg.features.tag:
-        # Its something that blocks movement.
-        return false
+        # Block only walls; allow other tagged tiles.
+        if featureValue.value == cfg.tags.wall:
+          return false
       if featureValue.featureId == cfg.features.group:
         # If the group there, then its an agent.
         return false

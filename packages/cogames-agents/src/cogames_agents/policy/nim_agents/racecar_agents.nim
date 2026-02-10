@@ -134,64 +134,55 @@ proc newRaceCarAgent*(agentId: int, environmentConfig: string): RaceCarAgent =
 proc updateMap(agent: RaceCarAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
   ## Update the big map with the small visible map.
 
+  # Prefer lp:* (local position) observations when available.
+  var hasLp = false
+  var colOffset = 0
+  var rowOffset = 0
+  let east = agent.cfg.getFeature(visible, agent.cfg.features.lpEast)
+  if east != -1:
+    colOffset = east
+    hasLp = true
+  let west = agent.cfg.getFeature(visible, agent.cfg.features.lpWest)
+  if west != -1:
+    colOffset = -west
+    hasLp = true
+  let south = agent.cfg.getFeature(visible, agent.cfg.features.lpSouth)
+  if south != -1:
+    rowOffset = south
+    hasLp = true
+  let north = agent.cfg.getFeature(visible, agent.cfg.features.lpNorth)
+  if north != -1:
+    rowOffset = -north
+    hasLp = true
+
   if agent.map.len == 0:
-    # First time we're called, just copy the visible map to the big map.
-    agent.map = visible
     agent.location = Location(x: 0, y: 0)
-    for x in -5 .. 5:
-      for y in -5 .. 5:
-        let visibleLocation = Location(x: x, y: y)
-        agent.seen.incl(visibleLocation)
-    return
+  if hasLp:
+    agent.location = Location(x: colOffset, y: rowOffset)
+  else:
+    var newLocation = agent.location
+    let lastAction = agent.cfg.getLastAction(visible)
+    if lastAction == agent.cfg.actions.moveNorth:
+      newLocation.y -= 1
+    elif lastAction == agent.cfg.actions.moveSouth:
+      newLocation.y += 1
+    elif lastAction == agent.cfg.actions.moveWest:
+      newLocation.x -= 1
+    elif lastAction == agent.cfg.actions.moveEast:
+      newLocation.x += 1
+    agent.location = newLocation
 
-  var newLocation = agent.location
-  let lastAction = agent.cfg.getLastAction(visible)
-  if lastAction == agent.cfg.actions.moveNorth:
-    newLocation.y -= 1
-  elif lastAction == agent.cfg.actions.moveSouth:
-    newLocation.y += 1
-  elif lastAction == agent.cfg.actions.moveWest:
-    newLocation.x -= 1
-  elif lastAction == agent.cfg.actions.moveEast:
-    newLocation.x += 1
-
-  # Does the new location have force any tags to no be there?
-  # If so we did a bump instead of a move.
-  block bumpCheck:
-    agent.bump = false
-    for x in -5 .. 5:
-      for y in -5 .. 5:
-        let visibleLocation = Location(x: x, y: y)
-        let mapLocation = Location(x: x + newLocation.x, y: y + newLocation.y)
-        if mapLocation notin agent.seen:
-          continue
-        var visibleTag = agent.cfg.getTag(visible, visibleLocation)
-        if visibleTag == agent.cfg.tags.agent:
-          # Ignore agents.
-          visibleTag = -1
-        var mapTag = agent.cfg.getTag(agent.map, mapLocation)
-        if mapTag == agent.cfg.tags.agent:
-          # Ignore agents.
-          mapTag = -1
-        if visibleTag != mapTag:
-          newLocation = agent.location
-          agent.bump = true
-          break bumpCheck
-
-  # Update the seen set.
-  agent.location = newLocation
-  for x in -5 .. 5:
-    for y in -5 .. 5:
+  let halfW = agent.cfg.obsHalfWidth()
+  let halfH = agent.cfg.obsHalfHeight()
+  for x in -halfW .. halfW:
+    for y in -halfH .. halfH:
       let visibleLocation = Location(x: x, y: y)
       let mapLocation = Location(x: x + agent.location.x, y: y + agent.location.y)
-      if visibleLocation in visible:
-        agent.map[mapLocation] = visible[visibleLocation]
-        # Mark depleted sites to avoid revisits.
-        for f in visible[visibleLocation]:
-          if f.featureId == agent.cfg.features.remainingUses and f.value == 0:
-            agent.depleted.incl(mapLocation)
-      else:
-        agent.map[mapLocation] = @[]
+      agent.map[mapLocation] = visible.getOrDefault(visibleLocation, @[])
+      # Mark depleted sites to avoid revisits.
+      for f in agent.map[mapLocation]:
+        if f.featureId == agent.cfg.features.remainingUses and f.value == 0:
+          agent.depleted.incl(mapLocation)
       agent.seen.incl(mapLocation)
 
   # agent.cfg.drawMap(agent.map, agent.seen)
@@ -257,23 +248,7 @@ proc step*(
 ) {.measure.} =
   try:
 
-    let observations = cast[ptr UncheckedArray[uint8]](rawObservation)
-
-    # Parse the tokens into a vision map.
-    var visible: Table[Location, seq[FeatureValue]]
-    for token in 0 ..< numTokens:
-      let locationPacked = observations[token * sizeToken]
-      let featureId = observations[token * sizeToken + 1]
-      let value = observations[token * sizeToken + 2]
-      if locationPacked == 255 and featureId == 255 and value == 255:
-        break
-      var location: Location
-      if locationPacked != 0xFF:
-        location.y = (locationPacked shr 4).int - 5
-        location.x = (locationPacked and 0x0F).int - 5
-      if location notin visible:
-        visible[location] = @[]
-      visible[location].add(FeatureValue(featureId: featureId.int, value: value.int))
+    let visible = parseVisible(agent.cfg, numTokens, sizeToken, rawObservation)
 
     proc doAction(action: int) {.measure.} =
 

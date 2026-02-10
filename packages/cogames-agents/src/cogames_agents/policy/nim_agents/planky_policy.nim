@@ -1,0 +1,449 @@
+import std/[json, options, strutils, tables]
+
+import fidget2/measure
+import jsony
+
+import common
+import planky_types
+import planky_entity_map
+import planky_obs_parser
+import planky_nav
+import planky_goals
+
+type
+  PlankyConfig = object
+    miner: Option[int]
+    scout: Option[int]
+    aligner: Option[int]
+    scrambler: Option[int]
+    stem: Option[int]
+    trace: Option[int]
+    traceLevel: Option[int]
+    traceAgent: Option[int]
+    disableRoleSwitching: Option[bool]
+
+  PlankyInitConfig = object
+    env: PolicyConfig
+    planky: PlankyConfig
+
+  PlankyAgent = ref object
+    agentId: int
+    assignedRole: string
+    role: string
+    cfg: Config
+    map: EntityMap
+    nav: Navigator
+    bb: Blackboard
+    goals: seq[Goal]
+    lastEpisodePct: int
+    stepInEpisode: int
+    myCollectiveId: Option[int]
+    convertToScramblerAtStep: int
+    infosJson: string
+
+  PlankyPolicy* = ref object
+    agents*: seq[PlankyAgent]
+    obsParser: ObsParser
+    disableRoleSwitching: bool
+    traceEnabled: bool
+    traceLevel: int
+    traceAgent: int
+
+proc updateInfosNoState(agent: PlankyAgent, roleOverride: Option[string] = none(string)) {.raises: [].} =
+  ## Mirror Python Planky's per-step `policy.infos` metadata shape.
+  let role = (if roleOverride.isSome: roleOverride.get() else: agent.role)
+  let goal = agent.bb.strs.getOrDefault("_active_goal", "")
+
+  var info = newJObject()
+  info["role"] = %role
+  info["goal"] = %goal
+  info["cargo"] = %"0"
+  agent.infosJson = $info
+
+proc updateInfos(agent: PlankyAgent, state: StateSnapshot, roleOverride: Option[string] = none(string)) {.raises: [].} =
+  ## Mirror Python Planky's per-step `policy.infos` metadata shape.
+  let role = (if roleOverride.isSome: roleOverride.get() else: agent.role)
+  let goal = agent.bb.strs.getOrDefault("_active_goal", "")
+  let tgtOpt = agent.nav.cachedTarget()
+
+  var info = newJObject()
+  info["role"] = %role
+  info["goal"] = %goal
+  if tgtOpt.isSome:
+    let tgt = tgtOpt.get()
+    let relRow = tgt.y - state.position.y
+    let relCol = tgt.x - state.position.x
+    info["target"] = %($relRow & "," & $relCol)
+  let targetResource = agent.bb.strs.getOrDefault("target_resource", "")
+  if targetResource.len > 0:
+    info["mining"] = %targetResource
+  # Always show cargo so we can diagnose deposit-with-0-cargo issues.
+  var parts: seq[string] = @[]
+  if state.carbon > 0: parts.add("C" & $state.carbon)
+  if state.oxygen > 0: parts.add("O" & $state.oxygen)
+  if state.germanium > 0: parts.add("G" & $state.germanium)
+  if state.silicon > 0: parts.add("S" & $state.silicon)
+  info["cargo"] = %(if parts.len > 0: parts.join(" ") else: "0")
+  agent.infosJson = $info
+
+proc actionName(cfg: Config, actionId: int32): string =
+  let idx = actionId.int
+  if idx >= 0 and idx < cfg.config.actions.len:
+    return cfg.config.actions[idx]
+  $actionId
+
+proc shouldTrace(policy: PlankyPolicy, agentId: int): bool =
+  policy.traceEnabled and (policy.traceAgent < 0 or agentId == policy.traceAgent)
+
+proc formatTraceLine(policy: PlankyPolicy, agent: PlankyAgent, state: StateSnapshot, actionId: int32): string =
+  let goal = agent.bb.strs.getOrDefault("_active_goal", "")
+  let role = agent.role
+  let pos = state.position
+  let hp = state.hp
+  let act = actionName(agent.cfg, actionId)
+  var targetStr = ""
+  let tgtOpt = agent.nav.cachedTarget()
+  if tgtOpt.isSome:
+    let tgt = tgtOpt.get()
+    let relRow = tgt.y - pos.y
+    let relCol = tgt.x - pos.x
+    targetStr = " target=" & $relRow & "," & $relCol
+
+  if policy.traceLevel <= 1:
+    return "[t=" & $agent.stepInEpisode & " a=" & $agent.agentId & " " & role &
+      " (" & $pos.y & "," & $pos.x & ") hp=" & $hp & "] " & goal & " -> " & act & targetStr
+
+  let cargo = $state.cargoTotal() & "/" & $state.cargoCapacity()
+  "[t=" & $agent.stepInEpisode & " a=" & $agent.agentId & " " & role &
+    " (" & $pos.y & "," & $pos.x & ") hp=" & $hp & " cargo=" & cargo & "] " & goal & " -> " & act & targetStr
+
+proc updateEpisodeState(agent: PlankyAgent, episodePct: int) =
+  if episodePct == -1:
+    agent.stepInEpisode += 1
+    return
+
+  var newEpisode = false
+  if agent.lastEpisodePct == -1:
+    newEpisode = true
+  elif episodePct < agent.lastEpisodePct:
+    newEpisode = true
+  elif agent.lastEpisodePct > 0 and episodePct == 0:
+    newEpisode = true
+
+  if newEpisode:
+    agent.stepInEpisode = 0
+  else:
+    agent.stepInEpisode += 1
+  agent.lastEpisodePct = episodePct
+
+proc actionId(cfg: Config, act: NavAction): int =
+  case act:
+  of naNoop:
+    cfg.actions.noop
+  of naMoveNorth:
+    cfg.actions.moveNorth
+  of naMoveSouth:
+    cfg.actions.moveSouth
+  of naMoveWest:
+    cfg.actions.moveWest
+  of naMoveEast:
+    cfg.actions.moveEast
+
+proc newPlankyAgent(agentId: int, envJson: string, role: string): PlankyAgent =
+  let cfg = parseConfig(envJson)
+  PlankyAgent(
+    agentId: agentId,
+    assignedRole: role,
+    role: role,
+    cfg: cfg,
+    map: newEntityMap(),
+    nav: newNavigator(agentId),
+    bb: newBlackboard(),
+    goals: makeGoalList(role),
+    lastEpisodePct: -1,
+    stepInEpisode: 0,
+    myCollectiveId: none(int),
+    convertToScramblerAtStep: -1,
+    infosJson: "",
+  )
+
+proc newPlankyPolicy*(environmentConfig: string): PlankyPolicy {.raises: [].} =
+  # Expected input: { "env": <PolicyConfig>, "planky": <PlankyConfig> }.
+  # We must not let exceptions escape across the generated C bindings; if parsing
+  # fails, crash loudly instead of silently nooping.
+  var initCfg: PlankyInitConfig
+  try:
+    initCfg = environmentConfig.fromJson(PlankyInitConfig)
+  except jsony.JsonError, ValueError:
+    echo "Error parsing Planky init config: ", getCurrentExceptionMsg()
+    quit(QuitFailure)
+  let envJson = initCfg.env.toJson()
+  var agents: seq[PlankyAgent] = @[]
+
+  # Match Python Planky defaults:
+  # - miner/aligner/scrambler are "unset" when omitted (-1 in Python).
+  # - if stem > 0 OR any explicit role is provided, treat remaining unset roles as 0
+  # - else defaults: 4 miners, 4 aligners, 0 scramblers.
+  var miner = (if initCfg.planky.miner.isSome: initCfg.planky.miner.get() else: -1)
+  var scout = (if initCfg.planky.scout.isSome: initCfg.planky.scout.get() else: 0)
+  var aligner = (if initCfg.planky.aligner.isSome: initCfg.planky.aligner.get() else: -1)
+  var scrambler = (if initCfg.planky.scrambler.isSome: initCfg.planky.scrambler.get() else: -1)
+  var stem = (if initCfg.planky.stem.isSome: initCfg.planky.stem.get() else: 0)
+  let disableRoleSwitching =
+    (if initCfg.planky.disableRoleSwitching.isSome: initCfg.planky.disableRoleSwitching.get() else: false)
+
+  let anyExplicit = (miner >= 0) or (aligner >= 0) or (scrambler >= 0) or (scout > 0)
+  if stem > 0 or anyExplicit:
+    if miner == -1: miner = 0
+    if aligner == -1: aligner = 0
+    if scrambler == -1: scrambler = 0
+  else:
+    miner = 4
+    aligner = 4
+    scrambler = 0
+
+  var teamRoles: seq[string] = @[]
+  for _ in 0 ..< miner: teamRoles.add("miner")
+  for _ in 0 ..< scout: teamRoles.add("scout")
+  for _ in 0 ..< aligner: teamRoles.add("aligner")
+  for _ in 0 ..< scrambler: teamRoles.add("scrambler")
+  for _ in 0 ..< stem: teamRoles.add("stem")
+  if teamRoles.len == 0:
+    teamRoles.add("default")
+
+  let numAgents = initCfg.env.numAgents
+  var roles: seq[string] = @[]
+  while roles.len < numAgents:
+    for r in teamRoles:
+      if roles.len >= numAgents:
+        break
+      roles.add(r)
+
+  # First aligner converts to scrambler at step 1000 (unless role switching disabled).
+  var firstAlignerId = -1
+  if not disableRoleSwitching:
+    for i, r in roles:
+      if r == "aligner":
+        firstAlignerId = i
+        break
+
+  for id in 0 ..< initCfg.env.numAgents:
+    let a = newPlankyAgent(id, envJson, roles[id])
+    if id == firstAlignerId and roles[id] == "aligner" and not disableRoleSwitching:
+      a.convertToScramblerAtStep = 1000
+    a.updateInfosNoState()
+    agents.add(a)
+  # Parser needs cfg-derived mappings; all agents share the same env config.
+  let parser =
+    if agents.len > 0:
+      newObsParser(agents[0].cfg)
+    else:
+      newObsParser(parseConfig(envJson))
+  let traceEnabled = (if initCfg.planky.trace.isSome: initCfg.planky.trace.get() else: 0) != 0
+  let traceLevel = (if initCfg.planky.traceLevel.isSome: initCfg.planky.traceLevel.get() else: 1)
+  let traceAgent = (if initCfg.planky.traceAgent.isSome: initCfg.planky.traceAgent.get() else: -1)
+
+  PlankyPolicy(
+    agents: agents,
+    obsParser: parser,
+    disableRoleSwitching: disableRoleSwitching,
+    traceEnabled: traceEnabled,
+    traceLevel: traceLevel,
+    traceAgent: traceAgent,
+  )
+
+proc getInfosJson*(policy: PlankyPolicy, agentId: int): cstring {.raises: [].} =
+  ## Exposed over FFI for Python to populate AgentPolicy.infos.
+  if policy == nil:
+    return cstring""
+  if agentId < 0 or agentId >= policy.agents.len:
+    return cstring""
+  policy.agents[agentId].infosJson.cstring
+
+proc stepOneImpl(
+  policy: PlankyPolicy,
+  agent: PlankyAgent,
+  numTokens: int,
+  sizeToken: int,
+  rawObservation: pointer,
+  agentAction: ptr int32
+) {.measure.} =
+  let visible = parseVisible(agent.cfg, numTokens, sizeToken, rawObservation)
+  let episodePct = agent.cfg.getEpisodeCompletionPct(visible)
+  agent.updateEpisodeState(episodePct)
+
+  var lastPos = none(Location)
+  if agent.bb.locs.hasKey("_last_pos"):
+    lastPos = some(agent.bb.locs.getOrDefault("_last_pos", Location(x: 0, y: 0)))
+
+  let parsed = policy.obsParser.parse(agent.cfg, visible, agent.stepInEpisode, lastPos=lastPos)
+  let state = parsed.state
+  agent.map.updateFromObservation(
+    agentPos=state.position,
+    obsHalfHeight=policy.obsParser.obsHalfHeight,
+    obsHalfWidth=policy.obsParser.obsHalfWidth,
+    visibleEntities=parsed.visibleEntities,
+    step=agent.stepInEpisode
+  )
+
+  # Detect own collectiveId once (from nearest hub).
+  if agent.myCollectiveId.isNone:
+    let hub = agent.map.findNearest(state.position, kindContains="hub")
+    if hub.isSome:
+      let (_, ent) = hub.get()
+      if ent.collectiveId != -1:
+        agent.myCollectiveId = some(ent.collectiveId)
+
+  # Failed-move detection (mirrors Python Planky).
+  let lastWasMove = agent.bb.bools.getOrDefault("_last_was_move", false)
+  var moveFailCount = agent.bb.ints.getOrDefault("_move_fail_count", 0)
+  if lastPos.isSome and lastWasMove and state.position == lastPos.get():
+    moveFailCount += 1
+    agent.bb.ints["_move_fail_count"] = moveFailCount
+    if moveFailCount >= 3:
+      agent.nav.clearCache()
+    if moveFailCount >= 6:
+      if agent.bb.strs.hasKey("target_resource"):
+        agent.bb.strs.del("target_resource")
+      agent.bb.ints["_move_fail_count"] = 0
+  else:
+    agent.bb.ints["_move_fail_count"] = 0
+
+  agent.bb.locs["_last_pos"] = state.position
+
+  # Role switching (vibe-driven roles) and time-based conversions.
+  if not policy.disableRoleSwitching:
+    if agent.convertToScramblerAtStep != -1 and agent.stepInEpisode == agent.convertToScramblerAtStep:
+      # Persistently reassign the role distribution and request an immediate vibe change.
+      agent.assignedRole = "scrambler"
+      agent.bb.strs["change_role"] = "scrambler"
+
+    # Miner -> aligner when collective is well-stocked and miner is idle.
+    if state.vibe == "miner" and state.cargoTotal() == 0:
+      if state.collectiveCarbon > 100 and state.collectiveOxygen > 100 and state.collectiveGermanium > 100 and state.collectiveSilicon > 100:
+        agent.bb.strs["change_role"] = "aligner"
+
+    # Aligner -> miner when can't afford gear or hearts (and aligner is idle).
+    if state.vibe == "aligner" and (not state.alignerGear) and state.heart == 0:
+      let canAffordGear =
+        # Aligner gear costs C3 O1 G1 S1 with reserve=1.
+        state.collectiveCarbon >= 4 and state.collectiveOxygen >= 2 and state.collectiveGermanium >= 2 and state.collectiveSilicon >= 2
+      let canAffordHearts =
+        state.collectiveCarbon >= 2 and state.collectiveOxygen >= 2 and state.collectiveGermanium >= 2 and state.collectiveSilicon >= 2
+      if not canAffordGear and not canAffordHearts:
+        agent.bb.strs["change_role"] = "miner"
+
+  # Apply role change request from previous tick.
+  if agent.bb.strs.hasKey("change_role"):
+    let newRole = agent.bb.strs.getOrDefault("change_role", "")
+    agent.bb.strs.del("change_role")
+    if newRole in ["miner", "scout", "aligner", "scrambler"]:
+      agentAction[] = agent.cfg.vibeActionId(newRole).int32
+      agent.bb.bools["_last_was_move"] = false
+      agent.updateInfos(state, roleOverride=some(newRole))
+      if policy.shouldTrace(agent.agentId):
+        echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+      return
+
+  # Map vibe -> effective role.
+  let vibe = state.vibe
+  var effectiveRole = agent.role
+  if vibe == "default":
+    if agent.assignedRole in ["miner", "scout", "aligner", "scrambler"]:
+      agentAction[] = agent.cfg.vibeActionId(agent.assignedRole).int32
+      agent.bb.bools["_last_was_move"] = false
+      agent.updateInfos(state, roleOverride=some(agent.assignedRole))
+      if policy.shouldTrace(agent.agentId):
+        echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+      return
+    effectiveRole = "stem"
+  elif vibe == "gear":
+    effectiveRole = "stem"
+  elif vibe in ["miner", "scout", "aligner", "scrambler"]:
+    effectiveRole = vibe
+  else:
+    if agent.assignedRole in ["miner", "scout", "aligner", "scrambler"]:
+      agentAction[] = agent.cfg.vibeActionId(agent.assignedRole).int32
+      agent.bb.bools["_last_was_move"] = false
+      agent.updateInfos(state, roleOverride=some(agent.assignedRole))
+      if policy.shouldTrace(agent.agentId):
+        echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+      return
+    effectiveRole = "stem"
+
+  if effectiveRole != agent.role:
+    agent.role = effectiveRole
+    agent.goals = makeGoalList(effectiveRole)
+
+  var ctx = PlankyContext(
+    state: state,
+    map: agent.map,
+    bb: addr agent.bb,
+    nav: agent.nav,
+    agentId: agent.agentId,
+    step: agent.stepInEpisode,
+    myCollectiveId: agent.myCollectiveId,
+  )
+
+  # If we're stuck, force exploration to refresh the map / break loops.
+  let failCount = agent.bb.ints.getOrDefault("_move_fail_count", 0)
+  var navAct: NavAction
+  if failCount >= 6:
+    let dirs = ["north", "east", "south", "west"]
+    navAct = agent.nav.explore(state.position, agent.map, directionBias=dirs[agent.agentId mod 4])
+    agent.bb.strs["_active_goal"] = "ForceExplore"
+  else:
+    navAct = evaluateGoals(agent.goals, ctx)
+
+  agentAction[] = actionId(agent.cfg, navAct).int32
+  agent.bb.bools["_last_was_move"] = navAct in [naMoveNorth, naMoveSouth, naMoveWest, naMoveEast]
+  agent.updateInfos(state)
+  if policy.shouldTrace(agent.agentId):
+    echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+
+proc stepOne(
+  policy: PlankyPolicy,
+  agent: PlankyAgent,
+  numTokens: int,
+  sizeToken: int,
+  rawObservation: pointer,
+  agentAction: ptr int32
+) {.raises: [].} =
+  try:
+    stepOneImpl(policy, agent, numTokens, sizeToken, rawObservation, agentAction)
+  except Exception:
+    echo "Planky step error: agentId=", agent.agentId, " msg=", getCurrentExceptionMsg()
+    quit(QuitFailure)
+
+proc stepBatch*(
+  policy: PlankyPolicy,
+  agentIds: pointer,
+  numAgentIds: int,
+  numAgents: int,
+  numTokens: int,
+  sizeToken: int,
+  rawObservations: pointer,
+  numActions: int,
+  rawActions: pointer
+) {.raises: [].} =
+  discard numActions
+  let ids = cast[ptr UncheckedArray[int32]](agentIds)
+  let obsArray = cast[ptr UncheckedArray[uint8]](rawObservations)
+  let actionArray = cast[ptr UncheckedArray[int32]](rawActions)
+  let obsStride = numTokens * sizeToken
+  if policy == nil or policy.agents.len == 0:
+    # When policy initialization fails, keep the process alive and produce
+    # a safe default action for any requested agent ids.
+    for i in 0 ..< numAgentIds:
+      let idx = int(ids[i])
+      if idx >= 0 and idx < numAgents:
+        actionArray[idx] = 0'i32
+    return
+
+  for i in 0 ..< numAgentIds:
+    let idx = int(ids[i])
+    if idx < 0 or idx >= policy.agents.len:
+      continue
+    let obsPtr = cast[pointer](obsArray[idx * obsStride].addr)
+    let actPtr = cast[ptr int32](actionArray[idx].addr)
+    stepOne(policy, policy.agents[idx], numTokens, sizeToken, obsPtr, actPtr)

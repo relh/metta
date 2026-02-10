@@ -4,9 +4,11 @@ import
   common
 
 const
-  DepotTags = ["junction", "junction", "supply_depot"]
-  HubTags = ["hub", "hub", "main_nexus"]
-  StationTags = ["aligner_station", "scrambler_station", "miner_station", "scout_station"]
+  # Tag names come from the environment's tag list; new CogsGuard maps use the
+  # `type:*` / `type:c:*` naming scheme.
+  DepotTags = ["type:junction", "junction", "supply_depot"]
+  HubTags = ["type:c:hub", "hub", "main_nexus"]
+  StationTags = ["type:c:aligner", "type:c:scrambler", "type:c:miner", "type:c:scout"]
   ResourceNames = ["carbon", "oxygen", "germanium", "silicon"]
   ExploreSteps = 8
   DebugEnabled = false
@@ -69,6 +71,10 @@ proc actionForVibe(agent: CogsguardAlignAllAgent, vibe: string): int =
   let actionName = "change_vibe_" & vibe
   return agent.getActionId(actionName)
 
+proc stationTagForRole(roleName: string): string =
+  # Standardized tag used by current CogsGuard maps.
+  "type:c:" & roleName
+
 proc featureValue(
   features: seq[FeatureValue],
   featureId: int
@@ -121,7 +127,7 @@ proc updateDiscoveries(agent: CogsguardAlignAllAgent, visible: Table[Location, s
       if tagName in DepotTags:
         agent.depots[absoluteLoc] = alignment
 
-      if tagName == "chest" and not tagName.isResourceExtractor():
+      if (tagName == "chest" or tagName == "type:chest") and not tagName.isResourceExtractor():
         agent.chest = some(absoluteLoc)
 
       if tagName.isResourceExtractor():
@@ -137,47 +143,50 @@ proc updateDiscoveries(agent: CogsguardAlignAllAgent, visible: Table[Location, s
               agent.extractorRemaining[absoluteLoc] = remaining
 
 proc updateMap(agent: CogsguardAlignAllAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
+  # Prefer lp:* (local position) observations when available.
+  var hasLp = false
+  var colOffset = 0
+  var rowOffset = 0
+  let east = agent.cfg.getFeature(visible, agent.cfg.features.lpEast)
+  if east != -1:
+    colOffset = east
+    hasLp = true
+  let west = agent.cfg.getFeature(visible, agent.cfg.features.lpWest)
+  if west != -1:
+    colOffset = -west
+    hasLp = true
+  let south = agent.cfg.getFeature(visible, agent.cfg.features.lpSouth)
+  if south != -1:
+    rowOffset = south
+    hasLp = true
+  let north = agent.cfg.getFeature(visible, agent.cfg.features.lpNorth)
+  if north != -1:
+    rowOffset = -north
+    hasLp = true
+
   if agent.map.len == 0:
-    agent.map = visible
+    agent.map = initTable[Location, seq[FeatureValue]]()
     agent.location = Location(x: 0, y: 0)
-    for x in -5 .. 5:
-      for y in -5 .. 5:
-        agent.seen.incl(Location(x: x, y: y))
-    return
 
-  var newLocation = agent.location
-  let lastAction = agent.cfg.getLastAction(visible)
-  if lastAction == agent.cfg.actions.moveNorth:
-    newLocation.y -= 1
-  elif lastAction == agent.cfg.actions.moveSouth:
-    newLocation.y += 1
-  elif lastAction == agent.cfg.actions.moveWest:
-    newLocation.x -= 1
-  elif lastAction == agent.cfg.actions.moveEast:
-    newLocation.x += 1
+  if hasLp:
+    agent.location = Location(x: colOffset, y: rowOffset)
+  else:
+    var newLocation = agent.location
+    let lastAction = agent.cfg.getLastAction(visible)
+    if lastAction == agent.cfg.actions.moveNorth:
+      newLocation.y -= 1
+    elif lastAction == agent.cfg.actions.moveSouth:
+      newLocation.y += 1
+    elif lastAction == agent.cfg.actions.moveWest:
+      newLocation.x -= 1
+    elif lastAction == agent.cfg.actions.moveEast:
+      newLocation.x += 1
+    agent.location = newLocation
 
-  block bumpCheck:
-    agent.bump = false
-    for x in -5 .. 5:
-      for y in -5 .. 5:
-        let visibleLocation = Location(x: x, y: y)
-        let mapLocation = Location(x: x + newLocation.x, y: y + newLocation.y)
-        if mapLocation notin agent.seen:
-          continue
-        var visibleTag = agent.cfg.getTag(visible, visibleLocation)
-        if visibleTag == agent.cfg.tags.agent:
-          visibleTag = -1
-        var mapTag = agent.cfg.getTag(agent.map, mapLocation)
-        if mapTag == agent.cfg.tags.agent:
-          mapTag = -1
-        if visibleTag != mapTag:
-          newLocation = agent.location
-          agent.bump = true
-          break bumpCheck
-
-  agent.location = newLocation
-  for x in -5 .. 5:
-    for y in -5 .. 5:
+  let halfW = agent.cfg.obsHalfWidth()
+  let halfH = agent.cfg.obsHalfHeight()
+  for x in -halfW .. halfW:
+    for y in -halfH .. halfH:
       let visibleLocation = Location(x: x, y: y)
       let mapLocation = Location(x: x + agent.location.x, y: y + agent.location.y)
       agent.map[mapLocation] = visible.getOrDefault(visibleLocation, @[])
@@ -297,8 +306,9 @@ proc actMiner(
   invMiner: int
 ): int =
   if invMiner == 0:
-    if "miner_station" in agent.stations:
-      return agent.moveToOrExplore(some(agent.stations["miner_station"]))
+    let stationTag = stationTagForRole("miner")
+    if stationTag in agent.stations:
+      return agent.moveToOrExplore(some(agent.stations[stationTag]))
     return agent.returnToHubSearch()
 
   let capacity = max(4, 40 * invMiner)
@@ -353,26 +363,6 @@ proc attemptScramble(
   agent.maybeMarkPending(target, PendingScramble, invHeart, action)
   return action
 
-proc parseVisible(
-  numTokens: int,
-  sizeToken: int,
-  rawObservation: pointer
-): Table[Location, seq[FeatureValue]] =
-  let observations = cast[ptr UncheckedArray[uint8]](rawObservation)
-  for token in 0 ..< numTokens:
-    let locationPacked = observations[token * sizeToken]
-    let featureId = observations[token * sizeToken + 1]
-    let value = observations[token * sizeToken + 2]
-    if locationPacked == 255 and featureId == 255 and value == 255:
-      break
-    var location: Location
-    if locationPacked != 0xFF:
-      location.y = (locationPacked shr 4).int - 5
-      location.x = (locationPacked and 0x0F).int - 5
-    if location notin result:
-      result[location] = @[]
-    result[location].add(FeatureValue(featureId: featureId.int, value: value.int))
-
 proc step*(
   agent: CogsguardAlignAllAgent,
   numAgents: int,
@@ -387,7 +377,7 @@ proc step*(
     discard numActions
 
     agent.stepCount += 1
-    let visible = parseVisible(numTokens, sizeToken, rawObservation)
+    let visible = parseVisible(agent.cfg, numTokens, sizeToken, rawObservation)
     agent.updateMap(visible)
     agent.updateDiscoveries(visible)
 
@@ -434,9 +424,9 @@ proc step*(
           neutralDepots += 1
         elif alignment == 1:
           cogsDepots += 1
-      let hasScramblerStation = "scrambler_station" in agent.stations
-      let hasAlignerStation = "aligner_station" in agent.stations
-      let hasMinerStation = "miner_station" in agent.stations
+      let hasScramblerStation = stationTagForRole("scrambler") in agent.stations
+      let hasAlignerStation = stationTagForRole("aligner") in agent.stations
+      let hasMinerStation = stationTagForRole("miner") in agent.stations
       let chestDist = if agent.chest.isSome(): manhattan(agent.location, agent.chest.get()) else: -1
       let hubDist = if agent.hub.isSome(): manhattan(agent.location, agent.hub.get()) else: -1
       let minerCapacity = max(4, 40 * invMiner)
@@ -463,8 +453,9 @@ proc step*(
       if vibeName != "scrambler":
         action = agent.actionForVibe("scrambler")
       elif invScrambler == 0:
-        if "scrambler_station" in agent.stations:
-          action = agent.moveToOrExplore(some(agent.stations["scrambler_station"]))
+        let stationTag = stationTagForRole("scrambler")
+        if stationTag in agent.stations:
+          action = agent.moveToOrExplore(some(agent.stations[stationTag]))
         else:
           action = agent.returnToHubSearch()
       elif invHeart == 0:
@@ -480,8 +471,9 @@ proc step*(
       if vibeName != "aligner":
         action = agent.actionForVibe("aligner")
       elif invAligner == 0:
-        if "aligner_station" in agent.stations:
-          action = agent.moveToOrExplore(some(agent.stations["aligner_station"]))
+        let stationTag = stationTagForRole("aligner")
+        if stationTag in agent.stations:
+          action = agent.moveToOrExplore(some(agent.stations[stationTag]))
         else:
           action = agent.returnToHubSearch()
       elif invHeart == 0:

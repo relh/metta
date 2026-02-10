@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 NIM_AGENTS_DIR = Path(__file__).resolve().parent
@@ -81,15 +82,83 @@ def _install_nim() -> None:
     os.environ["PATH"] = f"{nim_bin_dir}{os.pathsep}" + os.environ.get("PATH", "")
 
 
+def _manual_sync_nimby_lock(lock_path: Path) -> None:
+    """Fetch Nim deps without `git` (episode-runner images may not include it)."""
+    pkgs_dir = Path.home() / ".nimby" / "pkgs"
+    pkgs_dir.mkdir(parents=True, exist_ok=True)
+
+    for raw in lock_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        # Format: <name> <version> <repo_url> <commit>
+        parts = line.split()
+        if len(parts) < 4:
+            raise RuntimeError(f"Unexpected nimby.lock line: {raw!r}")
+        name, url, commit = parts[0], parts[2], parts[3]
+
+        if not url.startswith("https://github.com/"):
+            raise RuntimeError(f"Unsupported nimby.lock URL without git: {url}")
+        owner_repo = url.removeprefix("https://github.com/").strip("/")
+        if owner_repo.count("/") != 1:
+            raise RuntimeError(f"Unsupported GitHub URL: {url}")
+        owner, repo = owner_repo.split("/", 1)
+
+        dest = pkgs_dir / name
+        marker = dest / ".nimby_commit"
+        if marker.is_file() and marker.read_text().strip() == commit:
+            continue
+        if dest.exists():
+            shutil.rmtree(dest)
+
+        zip_url = f"https://codeload.github.com/{owner}/{repo}/zip/{commit}"
+        with tempfile.TemporaryDirectory() as tmp:
+            zip_path = Path(tmp) / f"{name}.zip"
+            urllib.request.urlretrieve(zip_url, zip_path)  # noqa: S310
+            with zipfile.ZipFile(zip_path) as zf:
+                zf.extractall(tmp)
+            extracted_dirs = [p for p in Path(tmp).iterdir() if p.is_dir()]
+            if len(extracted_dirs) != 1:
+                raise RuntimeError(f"Unexpected zip layout for {zip_url} (dirs={extracted_dirs})")
+            shutil.move(str(extracted_dirs[0]), dest)
+        marker.write_text(commit)
+
+
+def _nim_paths_from_lock(lock_path: Path) -> list[str]:
+    pkgs_dir = Path.home() / ".nimby" / "pkgs"
+    args: list[str] = []
+    for raw in lock_path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 1:
+            continue
+        name = parts[0]
+        # nimby-managed packages generally expose Nim sources under `src/`.
+        candidate = pkgs_dir / name / "src"
+        if not candidate.exists():
+            candidate = pkgs_dir / name
+        args.append(f"--path:{candidate}")
+    return args
+
+
 def build_nim() -> None:
     _install_nim()
 
     if shutil.which("nimby") is not None:
-        subprocess.check_call(["nimby", "sync", "-g", str(NIMBY_LOCK)], cwd=NIM_AGENTS_DIR)
+        if shutil.which("git") is None:
+            _manual_sync_nimby_lock(NIMBY_LOCK)
+        else:
+            subprocess.check_call(["nimby", "sync", "-g", str(NIMBY_LOCK)], cwd=NIM_AGENTS_DIR)
 
     BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
-    result = subprocess.run(["nim", "c", "nim_agents.nim"], cwd=NIM_AGENTS_DIR, capture_output=True, text=True)
+    # Pass explicit `--path:` args so we don't rely on `nimby` generating a
+    # machine-specific `nim.cfg`.
+    cmd = ["nim", "c", *_nim_paths_from_lock(NIMBY_LOCK), "nim_agents.nim"]
+    result = subprocess.run(cmd, cwd=NIM_AGENTS_DIR, capture_output=True, text=True)
     if result.returncode != 0:
         print(result.stderr, file=sys.stderr)
         print(result.stdout, file=sys.stderr)

@@ -493,15 +493,20 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
 
             # Reverse conversion: aligner → miner when collective can't support aligners
             # Only convert if the aligner is idle (no gear AND no hearts) and collective
-            # can't afford either aligner gear (C1 O1 G3 S1 + reserve) or hearts (C1 O1 G1 S1 + reserve).
+            # can't afford either aligner gear (cost + reserve) or hearts (C1 O1 G1 S1 + reserve).
             # Uses state.vibe (not agent_state.role) so the check stops firing once the
             # vibe changes to "miner", allowing the vibe-to-role mapping to run.
             if state.vibe == "aligner" and not state.aligner_gear and state.heart == 0:
+                from .goals.aligner import GetAlignerGearGoal  # noqa: PLC0415
+                from .goals.gear import GetGearGoal  # noqa: PLC0415
+
+                gear_cost = GetAlignerGearGoal()._gear_cost
+                reserve = GetGearGoal.RESOURCE_RESERVE
                 can_afford_gear = (
-                    state.collective_carbon >= 2
-                    and state.collective_oxygen >= 2
-                    and state.collective_germanium >= 4  # aligner gear costs G3 + reserve 1
-                    and state.collective_silicon >= 2
+                    state.collective_carbon >= gear_cost.get("carbon", 0) + reserve
+                    and state.collective_oxygen >= gear_cost.get("oxygen", 0) + reserve
+                    and state.collective_germanium >= gear_cost.get("germanium", 0) + reserve
+                    and state.collective_silicon >= gear_cost.get("silicon", 0) + reserve
                 )
                 can_afford_hearts = (
                     state.collective_carbon >= 2

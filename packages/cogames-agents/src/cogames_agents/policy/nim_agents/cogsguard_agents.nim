@@ -8,10 +8,16 @@ const
   CargoPerMiner = 40
   ExploreSteps = 8
   RoleNames = ["miner", "scout", "aligner", "scrambler"]
-  DepotTags = ["junction", "junction", "supply_depot"]
-  HubTags = ["hub", "hub", "main_nexus"]
-  StationTags = ["miner_station", "scout_station", "aligner_station", "scrambler_station"]
+  # Tag names come from the environment's tag list; new CogsGuard maps use the
+  # `type:*` / `type:c:*` naming scheme.
+  DepotTags = ["type:junction", "junction", "supply_depot"]
+  HubTags = ["type:c:hub", "hub", "main_nexus"]
+  StationTags = ["type:c:miner", "type:c:scout", "type:c:aligner", "type:c:scrambler"]
   ResourceNames = ["carbon", "oxygen", "germanium", "silicon"]
+
+proc stationTagForRole(roleName: string): string =
+  # Standardized tag used by Planky eval maps.
+  "type:c:" & roleName
 
 const Offsets4 = [
   Location(x: 1, y: 0),
@@ -74,7 +80,7 @@ proc roleIndex(roleName: string): int =
       return idx
   return -1
 
-proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy, agentId: int): int =
+proc chooseSmartRoleAgents(coordinator: SmartRoleCoordinator, agents: seq[CogsguardAgent], agentId: int): int =
   discard coordinator
   discard agentId
   var hasHub = false
@@ -85,7 +91,7 @@ proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy,
   var influenceTotal = 0
   var maxStructuresSeen = 0
 
-  for agent in policy.agents:
+  for agent in agents:
     if agent.hub.isSome:
       hasHub = true
     if agent.chest.isSome:
@@ -132,6 +138,9 @@ proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy,
   if maxStructuresSeen < 10:
     return roleIndex("scout")
   return minerIdx
+
+proc chooseSmartRole(coordinator: SmartRoleCoordinator, policy: CogsguardPolicy, agentId: int): int =
+  return coordinator.chooseSmartRoleAgents(policy.agents, agentId)
 
 proc updateEpisodeState(agent: CogsguardAgent, episodePct: int) =
   if episodePct == -1:
@@ -202,7 +211,7 @@ proc updateDiscoveries(agent: CogsguardAgent, visible: Table[Location, seq[Featu
       if tagName in DepotTags:
         agent.depots[absoluteLoc] = alignment
 
-      if tagName == "chest" and not tagName.isResourceExtractor():
+      if (tagName == "chest" or tagName == "type:chest") and not tagName.isResourceExtractor():
         agent.chest = some(absoluteLoc)
 
       if tagName.isResourceExtractor():
@@ -218,47 +227,58 @@ proc updateDiscoveries(agent: CogsguardAgent, visible: Table[Location, seq[Featu
               agent.extractorRemaining[absoluteLoc] = remaining
 
 proc updateMap(agent: CogsguardAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
+  # Prefer lp:* (local position) observations when available. These give an
+  # absolute offset from a stable spawn position, which is more robust than
+  # inferring position from last_action + bump checks.
+  var hasLp = false
+  var colOffset = 0
+  var rowOffset = 0
+  let east = agent.cfg.getFeature(visible, agent.cfg.features.lpEast)
+  if east != -1:
+    colOffset = east
+    hasLp = true
+  let west = agent.cfg.getFeature(visible, agent.cfg.features.lpWest)
+  if west != -1:
+    colOffset = -west
+    hasLp = true
+  let south = agent.cfg.getFeature(visible, agent.cfg.features.lpSouth)
+  if south != -1:
+    rowOffset = south
+    hasLp = true
+  let north = agent.cfg.getFeature(visible, agent.cfg.features.lpNorth)
+  if north != -1:
+    rowOffset = -north
+    hasLp = true
+
   if agent.map.len == 0:
-    agent.map = visible
-    agent.location = Location(x: 0, y: 0)
-    for x in -5 .. 5:
-      for y in -5 .. 5:
-        agent.seen.incl(Location(x: x, y: y))
-    return
+    agent.map = initTable[Location, seq[FeatureValue]]()
+    if hasLp:
+      # Mirror Python Planky: treat spawn as an arbitrary stable origin so world
+      # coords are positive and consistent across episodes.
+      agent.location = Location(x: 100 + colOffset, y: 100 + rowOffset)
+    else:
+      agent.location = Location(x: 0, y: 0)
+  elif hasLp:
+    agent.location = Location(x: 100 + colOffset, y: 100 + rowOffset)
+  else:
+    # Fallback: infer from last action when lp:* isn't available.
+    var newLocation = agent.location
+    let lastAction = agent.cfg.getLastAction(visible)
+    if lastAction == agent.cfg.actions.moveNorth:
+      newLocation.y -= 1
+    elif lastAction == agent.cfg.actions.moveSouth:
+      newLocation.y += 1
+    elif lastAction == agent.cfg.actions.moveWest:
+      newLocation.x -= 1
+    elif lastAction == agent.cfg.actions.moveEast:
+      newLocation.x += 1
+    agent.location = newLocation
 
-  var newLocation = agent.location
-  let lastAction = agent.cfg.getLastAction(visible)
-  if lastAction == agent.cfg.actions.moveNorth:
-    newLocation.y -= 1
-  elif lastAction == agent.cfg.actions.moveSouth:
-    newLocation.y += 1
-  elif lastAction == agent.cfg.actions.moveWest:
-    newLocation.x -= 1
-  elif lastAction == agent.cfg.actions.moveEast:
-    newLocation.x += 1
-
-  block bumpCheck:
-    agent.bump = false
-    for x in -5 .. 5:
-      for y in -5 .. 5:
-        let visibleLocation = Location(x: x, y: y)
-        let mapLocation = Location(x: x + newLocation.x, y: y + newLocation.y)
-        if mapLocation notin agent.seen:
-          continue
-        var visibleTag = agent.cfg.getTag(visible, visibleLocation)
-        if visibleTag == agent.cfg.tags.agent:
-          visibleTag = -1
-        var mapTag = agent.cfg.getTag(agent.map, mapLocation)
-        if mapTag == agent.cfg.tags.agent:
-          mapTag = -1
-        if visibleTag != mapTag:
-          newLocation = agent.location
-          agent.bump = true
-          break bumpCheck
-
-  agent.location = newLocation
-  for x in -5 .. 5:
-    for y in -5 .. 5:
+  # Update global map and seen set from the egocentric window.
+  let halfW = agent.cfg.obsHalfWidth()
+  let halfH = agent.cfg.obsHalfHeight()
+  for x in -halfW .. halfW:
+    for y in -halfH .. halfH:
       let visibleLocation = Location(x: x, y: y)
       let mapLocation = Location(x: x + agent.location.x, y: y + agent.location.y)
       agent.map[mapLocation] = visible.getOrDefault(visibleLocation, @[])
@@ -271,6 +291,19 @@ proc moveTo(agent: CogsguardAgent, target: Location): int =
   if action.isSome():
     return action.get()
   return agent.cfg.actions.noop
+
+proc bestAdjacentWalkable(agent: CogsguardAgent, target: Location): Option[Location] =
+  ## Pick a walkable cell adjacent to target, preferring the one closest to the agent.
+  var bestDist = high(int)
+  var best: Option[Location] = none(Location)
+  for offset in Offsets4:
+    let loc = target + offset
+    if agent.cfg.isWalkable(agent.map, loc):
+      let dist = manhattan(agent.location, loc)
+      if dist < bestDist:
+        bestDist = dist
+        best = some(loc)
+  return best
 
 proc stepAction(agent: CogsguardAgent, fromLoc, toLoc: Location): int =
   if toLoc.x == fromLoc.x + 1 and toLoc.y == fromLoc.y:
@@ -333,6 +366,9 @@ proc nearestDepot(agent: CogsguardAgent, alignmentFilter: int): Option[Location]
 
 proc getGear(agent: CogsguardAgent, stationName: string): int =
   if stationName notin agent.stations:
+    let unseen = agent.cfg.getNearbyUnseen(agent.location, agent.map, agent.seen, agent.unreachables)
+    if unseen.isSome():
+      return agent.moveTo(unseen.get())
     return agent.explore()
   let stationLoc = agent.stations.getOrDefault(stationName, agent.location)
   return agent.moveTo(stationLoc)
@@ -349,16 +385,28 @@ proc doGather(agent: CogsguardAgent): int =
   var candidates: seq[Location] = @[]
   for resource in ResourceNames:
     for loc in agent.extractors.getOrDefault(resource, @[]):
-      let remaining = agent.extractorRemaining.getOrDefault(loc, 1)
-      if remaining != 0:
-        candidates.add(loc)
+      # Remaining-uses semantics differ across environments; treat discovered extractors
+      # as viable targets regardless of remaining_uses.
+      candidates.add(loc)
 
   if candidates.len == 0:
+    let unseen = agent.cfg.getNearbyUnseen(agent.location, agent.map, agent.seen, agent.unreachables)
+    if unseen.isSome():
+      return agent.moveTo(unseen.get())
     return agent.explore()
 
   let target = agent.nearestLocation(candidates)
   if target.isSome():
-    return agent.moveTo(target.get())
+    let extractor = target.get()
+    # Planky mines by "bumping" an extractor (attempting to move into it) while adjacent.
+    # Navigate to an adjacent tile first, then bump.
+    if manhattan(agent.location, extractor) == 1:
+      return agent.stepAction(agent.location, extractor)
+
+    let adj = agent.bestAdjacentWalkable(extractor)
+    if adj.isSome():
+      return agent.moveTo(adj.get())
+    return agent.moveTo(extractor)
   return agent.explore()
 
 proc actMiner(
@@ -367,7 +415,7 @@ proc actMiner(
   invMiner: int
 ): int =
   if invMiner == 0:
-    return agent.getGear("miner_station")
+    return agent.getGear(stationTagForRole("miner"))
 
   let capacity = max(CargoBase, CargoPerMiner * invMiner)
   if cargo >= capacity - 2:
@@ -377,7 +425,7 @@ proc actMiner(
 
 proc actScout(agent: CogsguardAgent, invScout: int): int =
   if invScout == 0:
-    return agent.getGear("scout_station")
+    return agent.getGear(stationTagForRole("scout"))
 
   let unseen = agent.cfg.getNearbyUnseen(agent.location, agent.map, agent.seen, agent.unreachables)
   if unseen.isSome():
@@ -386,7 +434,7 @@ proc actScout(agent: CogsguardAgent, invScout: int): int =
 
 proc actAligner(agent: CogsguardAgent, invAligner: int, hearts: int, cargo: int): int =
   if invAligner == 0:
-    return agent.getGear("aligner_station")
+    return agent.getGear(stationTagForRole("aligner"))
   if hearts == 0:
     if cargo > 0:
       if agent.hub.isSome():
@@ -402,7 +450,7 @@ proc actAligner(agent: CogsguardAgent, invAligner: int, hearts: int, cargo: int)
 
 proc actScrambler(agent: CogsguardAgent, invScrambler: int, hearts: int, cargo: int): int =
   if invScrambler == 0:
-    return agent.getGear("scrambler_station")
+    return agent.getGear(stationTagForRole("scrambler"))
   if hearts == 0:
     if cargo > 0:
       if agent.hub.isSome():
@@ -415,26 +463,6 @@ proc actScrambler(agent: CogsguardAgent, invScrambler: int, hearts: int, cargo: 
   if target.isSome():
     return agent.moveTo(target.get())
   return agent.explore()
-
-proc parseVisible(
-  numTokens: int,
-  sizeToken: int,
-  rawObservation: pointer
-): Table[Location, seq[FeatureValue]] =
-  let observations = cast[ptr UncheckedArray[uint8]](rawObservation)
-  for token in 0 ..< numTokens:
-    let locationPacked = observations[token * sizeToken]
-    let featureId = observations[token * sizeToken + 1]
-    let value = observations[token * sizeToken + 2]
-    if locationPacked == 255 and featureId == 255 and value == 255:
-      break
-    var location: Location
-    if locationPacked != 0xFF:
-      location.y = (locationPacked shr 4).int - 5
-      location.x = (locationPacked and 0x0F).int - 5
-    if location notin result:
-      result[location] = @[]
-    result[location].add(FeatureValue(featureId: featureId.int, value: value.int))
 
 proc step*(
   policy: CogsguardPolicy,
@@ -450,7 +478,7 @@ proc step*(
     discard numAgents
     discard numActions
 
-    let visible = parseVisible(numTokens, sizeToken, rawObservation)
+    let visible = parseVisible(agent.cfg, numTokens, sizeToken, rawObservation)
     agent.updateMap(visible)
     agent.updateDiscoveries(visible)
 
@@ -481,7 +509,9 @@ proc step*(
 
     var action = agent.cfg.actions.noop
 
-    if vibeName == "gear":
+    # In Planky, agents can start on the "default" vibe; immediately pick a role so
+    # role logic can drive movement (e.g., toward a gear station) rather than idling.
+    if vibeName == "gear" or vibeName == "default":
       if agent.assignedRoleIdx < 0:
         var selectedIdx = policy.smartRoleCoordinator.chooseSmartRole(policy, agent.agentId)
         if selectedIdx < 0 or selectedIdx >= RoleNames.len:
@@ -500,10 +530,11 @@ proc step*(
       action = agent.cfg.actions.noop
 
     agentAction[] = action.int32
-  except:
+  except CatchableError:
     echo getCurrentException().getStackTrace()
     echo getCurrentExceptionMsg()
-    quit()
+    # Degrade gracefully: a bad observation shouldn't terminate the whole process.
+    agentAction[] = agent.cfg.actions.noop.int32
 
 proc newCogsguardAgent*(agentId: int, environmentConfig: string): CogsguardAgent =
   var config = parseConfig(environmentConfig)

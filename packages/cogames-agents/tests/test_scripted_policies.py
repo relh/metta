@@ -5,8 +5,6 @@ training environment and 2) run through a short `cogames.play` rollout. This
 prevents regressions like missing bindings or policy registration mistakes.
 """
 
-from __future__ import annotations
-
 import io
 from dataclasses import dataclass
 from functools import cache
@@ -22,15 +20,19 @@ from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
 from mettagrid.simulator import Simulator
 
-discover_and_register_policies("cogames.policy")
-discover_and_register_policies("cogames_agents.policy")
-
 
 @dataclass(frozen=True)
 class PolicyUnderTest:
     reference: str
     requires_nim: bool = False
     supports_supervisor: bool = False
+
+
+# Policy discovery imports a large surface area and may mutate module state.
+# Keep it below the module-level dataclass definitions to avoid subtle
+# interpreter/pytest import-mode interactions during collection.
+discover_and_register_policies("cogames.policy")
+discover_and_register_policies("cogames_agents.policy")
 
 
 @cache
@@ -47,6 +49,9 @@ POLICIES_UNDER_TEST: tuple[PolicyUnderTest, ...] = (
     PolicyUnderTest("nim_random", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("race_car", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("role", requires_nim=True, supports_supervisor=True),
+    PolicyUnderTest("alignall", requires_nim=True, supports_supervisor=True),
+    PolicyUnderTest("planky_nim", requires_nim=True, supports_supervisor=True),
+    PolicyUnderTest("nlanky", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("teacher", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("starter"),
     PolicyUnderTest(
@@ -66,6 +71,11 @@ POLICIES_UNDER_TEST: tuple[PolicyUnderTest, ...] = (
     ),
     PolicyUnderTest(
         "cogames_agents.policy.nim_agents.agents.CogsguardAgentsMultiPolicy",
+        requires_nim=True,
+        supports_supervisor=True,
+    ),
+    PolicyUnderTest(
+        "cogames_agents.policy.nim_agents.agents.PlankyAgentsMultiPolicy",
         requires_nim=True,
         supports_supervisor=True,
     ),

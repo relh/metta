@@ -7,11 +7,13 @@ __all__ = [
     "ThinkyAgentsMultiPolicy",
     "RaceCarAgentsMultiPolicy",
     "CogsguardAlignAllAgentsMultiPolicy",
+    "PlankyAgentsMultiPolicy",
 ]
 
 # Re-export the policy classes for convenience
 from cogames_agents.policy.nim_agents.agents import (  # noqa: F401
     CogsguardAlignAllAgentsMultiPolicy,
+    PlankyAgentsMultiPolicy,
     RaceCarAgentsMultiPolicy,
     RandomAgentsMultiPolicy,
     ThinkyAgentsMultiPolicy,
