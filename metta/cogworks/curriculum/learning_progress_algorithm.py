@@ -9,6 +9,10 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from metta.cogworks.curriculum.progress_tracking import (
+    BidirectionalEmaTracker,
+    sigmoid_normalized_distribution,
+)
 from metta.cogworks.curriculum.task_tracker import TaskTracker
 from metta.cogworks.curriculum.types import (
     CurriculumAlgorithm,
@@ -141,6 +145,12 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         # Per-task EMA dictionaries
         self._per_task_fast: Dict[int, float] = {}
         self._per_task_slow: Dict[int, float] = {}
+        self._ema_tracker = BidirectionalEmaTracker(
+            fast=self._per_task_fast,
+            slow=self._per_task_slow,
+            ema_timescale=self.hypers.ema_timescale,
+            slow_timescale_factor=self.hypers.slow_timescale_factor,
+        )
 
     def _init_basic_scoring(self):
         """Initialize basic EMA tracking (fallback method)."""
@@ -309,8 +319,11 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         if self.hypers.use_bidirectional:
             self._outcomes.pop(task_id, None)
             self._counter.pop(task_id, None)
-            self._per_task_fast.pop(task_id, None)
-            self._per_task_slow.pop(task_id, None)
+            if hasattr(self, "_ema_tracker"):
+                self._ema_tracker.remove(task_id)
+            else:
+                self._per_task_fast.pop(task_id, None)
+                self._per_task_slow.pop(task_id, None)
             self._score_cache.pop(task_id, None)
             self._cache_valid_tasks.discard(task_id)
         else:
@@ -370,18 +383,7 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         denominator = max(1.0 - baseline, 0.01)
         normalized = (success_rate - baseline) / denominator
 
-        # Initialize per-task EMAs if needed
-        if task_id not in self._per_task_fast:
-            self._per_task_fast[task_id] = normalized
-            self._per_task_slow[task_id] = normalized
-        else:
-            # Fast EMA
-            self._per_task_fast[task_id] = normalized * self.hypers.ema_timescale + self._per_task_fast[task_id] * (
-                1.0 - self.hypers.ema_timescale
-            )
-            # Slow EMA (controlled by slow_timescale_factor)
-            slow_ts = self.hypers.ema_timescale * self.hypers.slow_timescale_factor
-            self._per_task_slow[task_id] = normalized * slow_ts + self._per_task_slow[task_id] * (1.0 - slow_ts)
+        self._ema_tracker.update(task_id, normalized)
 
         self._cache_valid_tasks.discard(task_id)
 
@@ -533,37 +535,7 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         return 1 / (1 + np.exp(-np.clip(x, -500, 500)))
 
     def _normalize_bidirectional_scores(self, raw_scores: np.ndarray) -> np.ndarray:
-        """Apply smoothing, drop zero-progress, standardize, sigmoid, normalize."""
-        if raw_scores.size == 0:
-            return raw_scores
-
-        # Remove non-progress tasks from the mass
-        positive_mask = raw_scores > 0
-        if not np.any(positive_mask):
-            return np.zeros_like(raw_scores)
-
-        sub = raw_scores[positive_mask]
-
-        # Optional smoothing already applied in _get_bidirectional_learning_progress_score
-        if sub.size > 2:
-            std = np.std(sub)
-            if std > 0:
-                sub = (sub - np.mean(sub)) / std
-            else:
-                sub = sub - np.mean(sub)
-
-        # Keep sigmoid normalization even when we skip standardization for small batches
-        sub = self._sigmoid(sub)
-
-        total = float(np.sum(sub))
-        if total > 0:
-            sub = sub / total
-        else:
-            sub = np.ones_like(sub) / len(sub)
-
-        scores = np.zeros_like(raw_scores)
-        scores[positive_mask] = sub
-        return scores
+        return sigmoid_normalized_distribution(raw_scores)
 
     def get_state(self) -> Dict[str, Any]:
         """Get learning progress algorithm state for checkpointing."""
@@ -600,6 +572,12 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
             self._counter = state.get("counter", {})
             self._per_task_fast = state.get("per_task_fast", {})
             self._per_task_slow = state.get("per_task_slow", {})
+            self._ema_tracker = BidirectionalEmaTracker(
+                fast=self._per_task_fast,
+                slow=self._per_task_slow,
+                ema_timescale=self.hypers.ema_timescale,
+                slow_timescale_factor=self.hypers.slow_timescale_factor,
+            )
 
             # If essential pieces are missing (legacy checkpoint), rebuild LP state from scratch
             if not self._per_task_fast or not self._per_task_slow or not self._outcomes:
