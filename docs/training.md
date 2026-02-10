@@ -35,7 +35,7 @@ Notes:
 
 - `devops/run.sh` automatically sets up `torchrun` using `NUM_GPUS`, `NUM_NODES`, `MASTER_ADDR`, `MASTER_PORT`, and
   `NODE_INDEX`.
-- Any arguments after the module path are passed through to `tools/run.py` (Hydra overrides).
+- Any arguments after the module path are passed through to `tools/run.py` as tool args (`key=value` overrides).
 
 ### Launch a job with SkyPilot (no interactive SSH)
 
@@ -50,7 +50,24 @@ Notes:
 - By default, `launch.py` checks that your working tree is clean and the current commit is pushed (so the cloud job
   matches your code).
 - You can use `--git-ref <branch-or-commit>` to launch a specific ref, or `--skip-git-check` to bypass validation.
-- Use `--` to separate launch flags (e.g. `--gpus`, `--nodes`, `--max-runtime-hours`) from tool args (Hydra overrides).
+- Use `--` to separate launch flags (e.g. `--gpus`, `--nodes`, `--max-runtime-hours`) from tool args (`key=value`
+  overrides).
+
+## Discovering And Explaining Training Knobs
+
+The training entrypoint is `TrainTool` (`metta/tools/train.py`). Recipes (e.g. `recipes/experiment/cogsguard.py`) return
+a configured `TrainTool` instance which you then override via `key=value` args.
+
+```bash
+# List all available config fields for a recipe's train tool.
+./tools/run.py train arena -h
+
+# Validate args (construct + override + pydantic validate), without running.
+./tools/run.py train arena --dry-run run=my_run
+
+# Print the effective config (after tool-specific defaulting/mutations), without running.
+./tools/run.py train arena --print-effective-config run=my_run
+```
 
 ## Kickstarting with a teacher
 
@@ -80,11 +97,11 @@ To disable the default teacher, override the policy URI:
 You can also specify a custom teacher by providing a `teacher.policy_uri` and choosing a mode. Two modes that work well
 currently are `scripted.eer_cloner.sliced` and `scripted.supervisor.mixed`.
 
-**Dict-style (single quoted override):**
+**JSON-style (single quoted override):**
 
 ```bash
 ./devops/skypilot/launch.py recipes.experiment.cogsguard.train --gpus 8 --max-runtime-hours 120 -- \
-  'teacher={mode: scripted.eer_cloner.sliced, policy_uri: "metta://policy/cogsguard?gear=10", teacher_led_proportion: 0.5, student_led_proportion: 0.5, steps: 1_000_000_000, anneal_start_step: 0, ppo_begin_step: 0}' \
+  'teacher={"mode":"scripted.eer_cloner.sliced","policy_uri":"metta://policy/cogsguard?gear=10","teacher_led_proportion":0.5,"student_led_proportion":0.5,"steps":1000000000,"anneal_start_step":0,"ppo_begin_step":0}' \
   run=your_run_name
 ```
 

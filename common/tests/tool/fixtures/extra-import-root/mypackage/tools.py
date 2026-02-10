@@ -45,3 +45,17 @@ class RequiredFieldTool(Tool):
         # Print the value so tests can assert behavior via subprocess output
         print(self.x)
         return 0
+
+
+class EffectiveConfigTool(Tool):
+    """Tool used to validate --print-effective-config behavior."""
+
+    x: int = 1
+
+    def apply_defaults_and_mutations(self, args: dict[str, str]) -> None:
+        _ = args
+        self.x = 2
+
+    def invoke(self, args: dict[str, str]) -> int | None:
+        print(f"x={self.x}")
+        return 0

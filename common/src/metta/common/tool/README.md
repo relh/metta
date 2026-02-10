@@ -157,6 +157,16 @@ The output shows all available tool makers (e.g., `train`, `evaluate`, `train_sh
 ./tools/run.py evaluate arena --dry-run
 ```
 
+## Effective Config
+
+Some tools apply additional defaults/mutations during tool preparation (for example, aligning checkpoint/eval intervals,
+enabling fast local settings on macOS, or applying sandbox presets). Use this to see the effective config without
+running:
+
+```bash
+./tools/run.py train arena --print-effective-config run=test
+```
+
 ## Game Version Worktrees
 
 Use `--game-version <commit-or-alias>` to run tools against a historical game version. The runner will create a detached

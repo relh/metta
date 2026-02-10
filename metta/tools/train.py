@@ -48,6 +48,7 @@ from metta.rl.training import (
     WandbAborter,
     WandbAborterConfig,
 )
+from metta.rl.training.distributed_helper import distributed_world_size_and_rank_from_env
 from metta.rl.training.scheduler import LossScheduler, SchedulerConfig
 from metta.rl.training.trajectory_isolation import (
     TrajectoryIsolationConfig,
@@ -109,43 +110,13 @@ class TrainTool(Tool):
             policy_uri = f"file://{self.system.data_dir / job_name / 'checkpoints'}"
         return {"policy_uri": policy_uri}
 
-    def _sanitize_checkpoint_namespace(self, value: str) -> str:
-        sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
-        return sanitized or "policy"
+    def apply_defaults_and_mutations(self, args: dict[str, str]) -> None:
+        """Apply TrainTool config defaulting/mutations before running.
 
-    def _checkpoint_namespace_for_asset(self, asset: PolicyAssetConfig) -> str:
-        if asset.run:
-            return asset.run
-        if asset.uri:
-            try:
-                parsed = resolve_uri(asset.uri)
-            except ValueError:
-                return self._sanitize_checkpoint_namespace(asset.uri)
-            if parsed.checkpoint_info:
-                return parsed.checkpoint_info[0]
-            return self._sanitize_checkpoint_namespace(parsed.canonical)
-        raise ValueError("Policy asset must define run or uri to determine checkpoint namespace")
-
-    def _checkpoint_manager_for_asset(
-        self,
-        base_manager: CheckpointManager,
-        asset: PolicyAssetConfig,
-    ) -> CheckpointManager:
-        try:
-            namespace = self._checkpoint_namespace_for_asset(asset)
-        except ValueError:
-            if not asset.trainable:
-                return base_manager
-            raise
-        if namespace == base_manager.run_name:
-            return base_manager
-        return CheckpointManager(
-            run=namespace,
-            system_cfg=self.system,
-            require_remote_enabled=self.evaluator.evaluate_remote,
-        )
-
-    def invoke(self, args: dict[str, str]) -> int | None:
+        This is intentionally called by `tools/run.py` before `--dry-run`,
+        `--print-effective-config`, and `invoke()` so those modes reflect what
+        will actually happen at runtime.
+        """
         run_from_cli = "run" in args
         if "run" in args:
             assert self.run is None, "run cannot be set via args if already provided in TrainTool config"
@@ -196,10 +167,59 @@ class TrainTool(Tool):
             logger.warning("Local policy evaluation can be inefficient - consider switching to remote evaluation!")
             self.system.nccl_timeout = timedelta(hours=4)
 
-        distributed_helper = DistributedHelper(self.system)
-        distributed_helper.scale_batch_config(self.trainer, self.training_env)
+        world_size, rank = distributed_world_size_and_rank_from_env(self.system)
+        if world_size > 1:
+            if self.trainer.scale_batches_by_world_size:
+                self.trainer.batch_size = self.trainer.batch_size // world_size
+                self.training_env.forward_pass_minibatch_target_size = max(
+                    1, self.training_env.forward_pass_minibatch_target_size // world_size
+                )
+                logger.info(
+                    "Scaled batch config for %s processes: batch_size=%s, forward_pass_minibatch_target_size=%s",
+                    world_size,
+                    self.trainer.batch_size,
+                    self.training_env.forward_pass_minibatch_target_size,
+                )
+            self.training_env.seed += rank
 
-        self.training_env.seed += distributed_helper.get_rank()
+    def _sanitize_checkpoint_namespace(self, value: str) -> str:
+        sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
+        return sanitized or "policy"
+
+    def _checkpoint_namespace_for_asset(self, asset: PolicyAssetConfig) -> str:
+        if asset.run:
+            return asset.run
+        if asset.uri:
+            try:
+                parsed = resolve_uri(asset.uri)
+            except ValueError:
+                return self._sanitize_checkpoint_namespace(asset.uri)
+            if parsed.checkpoint_info:
+                return parsed.checkpoint_info[0]
+            return self._sanitize_checkpoint_namespace(parsed.canonical)
+        raise ValueError("Policy asset must define run or uri to determine checkpoint namespace")
+
+    def _checkpoint_manager_for_asset(
+        self,
+        base_manager: CheckpointManager,
+        asset: PolicyAssetConfig,
+    ) -> CheckpointManager:
+        try:
+            namespace = self._checkpoint_namespace_for_asset(asset)
+        except ValueError:
+            if not asset.trainable:
+                return base_manager
+            raise
+        if namespace == base_manager.run_name:
+            return base_manager
+        return CheckpointManager(
+            run=namespace,
+            system_cfg=self.system,
+            require_remote_enabled=self.evaluator.evaluate_remote,
+        )
+
+    def invoke(self, args: dict[str, str]) -> int | None:
+        distributed_helper = DistributedHelper(self.system)
 
         sup_uri = self.training_env.supervisor_policy_uri
         supervisor_policy_spec: PolicySpec | None = None

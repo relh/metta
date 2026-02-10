@@ -85,6 +85,22 @@ The runner supports flexible invocation syntax:
 ./tools/run.py train arena run=test --verbose
 ```
 
+Notes:
+
+- Overrides are plain `key=value` (not Hydra). Use dotted paths for nested fields.
+- Use `null`/`none` to clear optional fields: `training_env.supervisor_policy_uri=null`.
+- For list/dict overrides, pass JSON (quote it): `variants='["milestones","credit"]'`.
+
+### Validate / Effective Config
+
+```bash
+# Validate args (construct + override + pydantic validate), without running.
+./tools/run.py train arena --dry-run run=test
+
+# Print the effective config (after tool-specific defaults/mutations), without running.
+./tools/run.py train arena --print-effective-config run=test
+```
+
 ## Core Workflows
 
 ### Training and Evaluation Pipeline

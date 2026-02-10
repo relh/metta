@@ -129,6 +129,21 @@ def test_two_token_form_resolves_correctly(invoke_run_tool):
     assert result.returncode == 0
 
 
+def test_print_effective_config_prints_prepared_config(invoke_run_tool):
+    result = invoke_run_tool("mypackage.tools.EffectiveConfigTool", "--print-effective-config")
+    assert result.returncode == 0
+    output = result.stdout + result.stderr
+    assert '"x": 2' in output
+    assert "x=1" not in output
+
+
+def test_tool_preparation_runs_before_invoke(invoke_run_tool):
+    result = invoke_run_tool("mypackage.tools.EffectiveConfigTool")
+    assert result.returncode == 0
+    output = result.stdout + result.stderr
+    assert "x=2" in output
+
+
 def test_two_token_not_treated_as_bare_tool(invoke_run_tool):
     """Verify two-token form 'tool recipe' is not treated as bare tool.
 

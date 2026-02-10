@@ -451,6 +451,11 @@ constructor/function vs configuration overrides based on introspection.
     parser.add_argument("-v", "--verbose", action="store_true", help="Show detailed argument classification")
     parser.add_argument("--dry-run", action="store_true", help="Validate the args and exit")
     parser.add_argument(
+        "--print-effective-config",
+        action="store_true",
+        help="Print the effective tool config (after tool-specific defaults/mutations) and exit",
+    )
+    parser.add_argument(
         "--game-version",
         "--game_version",
         dest="game_version",
@@ -725,6 +730,17 @@ constructor/function vs configuration overrides based on introspection.
             except Exception as e:
                 output_exception(f"{red('Error applying override')} {key}={value}: {e}")
                 return 1
+
+    # Apply tool-specific defaults/mutations once, before any "explain/validate/run" flow.
+    try:
+        tool_cfg.apply_defaults_and_mutations(func_args_for_invoke)
+    except Exception:
+        output_exception(red("Tool config preparation failed"))
+        return 1
+
+    if known_args.print_effective_config:
+        print(tool_cfg.model_dump_json(indent=2))
+        return 0
 
     # ----------------------------------------------------------------------------------
     # Dry run check - exit here if --dry-run flag is set

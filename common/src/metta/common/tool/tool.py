@@ -49,6 +49,18 @@ class Tool(Config):
     @abstractmethod
     def invoke(self, args: dict[str, str]) -> int | None: ...
 
+    def apply_defaults_and_mutations(self, args: dict[str, str]) -> None:
+        """Mutate this tool config in-place to match what will actually run.
+
+        The runner (`tools/run.py`) calls this before:
+        - `--dry-run`
+        - `--print-effective-config`
+        - `invoke()`
+
+        Keep this limited to config updates (no network calls, no training/eval side effects).
+        """
+        _ = args
+
     def output_references(self, job_name: str) -> dict:
         """
         To be consumed by stable release runner. Reflects information additional Tools can use on

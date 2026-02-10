@@ -16,6 +16,25 @@ from mettagrid.base_config import Config
 logger = getRankAwareLogger(__name__)
 
 
+def distributed_world_size_and_rank_from_env(system_cfg: SystemConfig) -> tuple[int, int]:
+    """Parse distributed world size/rank from env without initializing torch.distributed.
+
+    Mirrors the logic in `DistributedHelper._setup_distributed_training` so callers can
+    compute derived config (e.g. batch scaling, rank-aware seeds) before initializing
+    the process group.
+    """
+    if "LOCAL_RANK" not in os.environ or torch.device(system_cfg.device).type != "cuda":
+        return (1, 0)
+
+    world_size_str = os.environ.get("WORLD_SIZE") or os.environ.get("NUM_NODES") or "1"
+    world_size = int(world_size_str) if world_size_str.strip() else 1
+    if world_size <= 1:
+        return (1, 0)
+
+    rank = int(os.environ.get("RANK", os.environ.get("NODE_INDEX", "0")))
+    return (world_size, rank)
+
+
 class TorchDistributedConfig(Config):
     device: str
     is_master: bool
@@ -59,16 +78,10 @@ class DistributedHelper:
 
     def _setup_distributed_training(self, system_cfg: SystemConfig) -> Optional[dict[str, Any]]:
         """Return distributed config values or None if world_size = 1"""
-        if "LOCAL_RANK" not in os.environ or torch.device(system_cfg.device).type != "cuda":
-            return None
-
-        world_size_str = os.environ.get("WORLD_SIZE") or os.environ.get("NUM_NODES") or "1"
-        world_size = int(world_size_str) if world_size_str.strip() else 1
-
+        world_size, rank = distributed_world_size_and_rank_from_env(system_cfg)
         if world_size <= 1:
             return None
 
-        rank = int(os.environ.get("RANK", os.environ.get("NODE_INDEX", "0")))
         logger.info(f"world_size: {world_size} rank: {rank}")
 
         torch.distributed.init_process_group(
