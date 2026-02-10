@@ -11,9 +11,12 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
+  const url = process.env.DATABASE_URL;
+  const isLocal =
+    !url || url.includes("localhost") || url.includes("127.0.0.1");
   const adapter = new PrismaPg({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false },
+    connectionString: url,
+    ...(isLocal ? {} : { ssl: { rejectUnauthorized: false } }),
   });
   return new PrismaClient({ adapter });
 }
