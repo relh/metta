@@ -33,8 +33,8 @@ def _with_cmpo(base_tool: tools.TrainTool) -> tools.TrainTool:
     )
 
 
-def train(enable_detailed_slice_logging: bool = False) -> tools.TrainTool:
-    curriculum = make_curriculum(enable_detailed_slice_logging=enable_detailed_slice_logging)
+def train() -> tools.TrainTool:
+    curriculum = make_curriculum()
     trainer_config = _cmpo_trainer_config()
 
     return tools.TrainTool(

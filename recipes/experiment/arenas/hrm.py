@@ -16,13 +16,11 @@ evaluate = base.evaluate
 def train(
     *,
     curriculum=None,
-    enable_detailed_slice_logging: bool = False,
     policy_architecture: PolicyArchitecture | None = None,
 ):
     """Train with HRM policy architecture (defaults to HRMTinyConfig for memory efficiency)."""
     tool = base.train(
         curriculum=curriculum,
-        enable_detailed_slice_logging=enable_detailed_slice_logging,
     )
     # Update policy architecture
     resolved_arch = policy_architecture or HRMTinyConfig()

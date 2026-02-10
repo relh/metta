@@ -160,8 +160,8 @@ class CurriculumAlgorithm(StatsLogger, ABC):
         StatsLogger.__init__(self, enable_detailed_logging=enable_detailed)
 
         # All algorithms get slice analysis capability
-        max_slice_axes = getattr(hypers, "max_slice_axes", 3)
-        self.slice_analyzer = SliceAnalyzer(max_slice_axes=max_slice_axes, enable_detailed_logging=enable_detailed)
+        # max_slice_axes is intentionally no longer configurable (reduced surface area).
+        self.slice_analyzer = SliceAnalyzer(max_slice_axes=3, enable_detailed_logging=enable_detailed)
 
     def get_base_stats(self) -> Dict[str, float]:
         """Get basic statistics that all algorithms must provide."""

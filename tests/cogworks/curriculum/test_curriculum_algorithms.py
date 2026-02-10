@@ -6,8 +6,7 @@ import pytest
 
 from metta.cogworks.curriculum.curriculum import CurriculumTask
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressAlgorithm, LearningProgressConfig
-
-from .test_helpers import CurriculumTestHelper
+from tests.cogworks.curriculum.test_helpers import CurriculumTestHelper
 
 
 @pytest.fixture(params=[False, True], ids=["standard", "bidirectional"])
@@ -16,7 +15,6 @@ def learning_progress_config(request):
     use_bidirectional = request.param
     return LearningProgressConfig(
         ema_timescale=0.001,
-        max_memory_tasks=10,
         use_bidirectional=use_bidirectional,
     )
 
@@ -120,6 +118,22 @@ class TestLearningProgressCoreBehavior:
                 f"Changing performance should have higher LP score. Changing: {lp_score_2}, Consistent: {lp_score_1}"
             )
 
+    def test_learning_progress_clamps_rand_task_rate_to_valid_range(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        config = LearningProgressConfig(
+            ema_timescale=0.001,
+            use_bidirectional=True,
+            rand_task_rate=2.0,
+        )
+        algorithm = LearningProgressAlgorithm(num_tasks=2, hypers=config)
+
+        task_ids = [_register_task(algorithm, 1), _register_task(algorithm, 2)]
+        monkeypatch.setattr(algorithm, "_score_tasks_bidirectional", lambda ids: {ids[0]: 0.2, ids[1]: 0.8})
+
+        scores = algorithm.score_tasks(task_ids)
+        assert scores[task_ids[0]] == pytest.approx(0.5)
+        assert scores[task_ids[1]] == pytest.approx(0.5)
+        assert sum(scores.values()) == pytest.approx(1.0)
+
     def test_learning_progress_sampling_favors_high_lp_tasks(self, random_seed, learning_progress_config):
         """Test that sampling favors tasks with higher learning progress scores."""
         # Set up algorithm with tasks (works for both standard and bidirectional)
@@ -182,7 +196,6 @@ class TestLearningProgressCoreBehavior:
         """Test that the learning progress algorithm properly manages its task pool."""
         config = LearningProgressConfig(
             ema_timescale=0.001,
-            max_memory_tasks=5,
         )
         algorithm = LearningProgressAlgorithm(num_tasks=10, hypers=config)
 
@@ -202,7 +215,6 @@ class TestLearningProgressCoreBehavior:
         """Test that EMA smoothing works correctly for learning progress calculation."""
         config = LearningProgressConfig(
             ema_timescale=0.1,  # Higher timescale for faster convergence in test
-            max_memory_tasks=10,
         )
         algorithm = LearningProgressAlgorithm(num_tasks=1, hypers=config)
 
@@ -223,7 +235,6 @@ class TestLearningProgressCoreBehavior:
         """Test that eviction policy prefers tasks with low learning progress."""
         config = LearningProgressConfig(
             ema_timescale=0.001,
-            max_memory_tasks=10,
         )
         algorithm = LearningProgressAlgorithm(num_tasks=3, hypers=config)
 
@@ -258,8 +269,6 @@ class TestLearningProgressProductionPatterns:
         """Test learning progress algorithm with production-like task counts."""
         config = LearningProgressConfig(
             ema_timescale=0.001,
-            max_memory_tasks=50,  # REDUCED from 100 for faster testing
-            enable_detailed_slice_logging=True,  # Enable detailed stats for testing
         )
         algorithm = LearningProgressAlgorithm(num_tasks=20, hypers=config)  # REDUCED from 50
 
@@ -283,26 +292,30 @@ class TestLearningProgressProductionPatterns:
         """Test that memory management works under production load."""
         config = LearningProgressConfig(
             ema_timescale=0.001,
-            max_memory_tasks=10,  # Small limit to trigger cleanup
         )
         algorithm = LearningProgressAlgorithm(num_tasks=20, hypers=config)
 
         rng = random.Random(random_seed)
-        task_ids = _create_tasks(algorithm, 15, rng)
+        # Create more tasks than the tracker cap to ensure we exercise eviction.
+        cap = algorithm.num_tasks
+        task_ids = _create_tasks(algorithm, cap + 5, rng)
 
-        # Add some performance data
-        for task_id in task_ids:
+        tracked_tasks = set(algorithm.task_tracker.get_all_tracked_tasks())
+        assert len(tracked_tasks) == cap
+        assert not set(task_ids[:5]) & tracked_tasks  # Oldest tasks should have been evicted.
+
+        # Add some performance data to the surviving tasks.
+        for task_id in task_ids[5:]:
             algorithm.update_task_performance(task_id, rng.uniform(0.0, 1.0))
 
         # Check that memory limit is respected
         tracked_tasks = algorithm.task_tracker.get_all_tracked_tasks()
-        assert len(tracked_tasks) <= config.max_memory_tasks + 100  # Allow cleanup buffer
+        assert len(tracked_tasks) == cap
 
     def test_learning_progress_task_sampling_distribution(self, random_seed):
         """Test that task sampling follows expected distribution patterns."""
         config = LearningProgressConfig(
             ema_timescale=0.01,  # Higher for faster convergence
-            max_memory_tasks=20,
         )
         algorithm = LearningProgressAlgorithm(num_tasks=5, hypers=config)
 
@@ -349,7 +362,6 @@ class TestBidirectionalLearningProgressBehavior:
         # Bidirectional algorithm needs more data points to calculate meaningful progress
         config = LearningProgressConfig(
             ema_timescale=0.001,
-            max_memory_tasks=10,
             use_bidirectional=True,
         )
         algorithm = LearningProgressAlgorithm(num_tasks=2, hypers=config)
@@ -372,7 +384,6 @@ class TestBidirectionalLearningProgressBehavior:
         """Test that bidirectional learning progress works with sufficient task data."""
         config = LearningProgressConfig(
             ema_timescale=0.01,  # Higher timescale for faster response
-            max_memory_tasks=10,
             use_bidirectional=True,
             sample_threshold=5,  # Lower threshold for testing
         )
@@ -414,7 +425,6 @@ class TestBidirectionalLearningProgressBehavior:
         """Test that bidirectional learning progress provides expected statistics."""
         config = LearningProgressConfig(
             ema_timescale=0.01,
-            max_memory_tasks=10,
             use_bidirectional=True,
         )
         algorithm = LearningProgressAlgorithm(num_tasks=2, hypers=config)

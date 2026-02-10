@@ -5,6 +5,7 @@ Provides intelligent task selection based on bidirectional learning progress ana
 using fast and slow exponential moving averages to detect learning opportunities.
 """
 
+import zlib
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -39,22 +40,52 @@ class LearningProgressConfig(CurriculumAlgorithmConfig):
     progress_smoothing: float = 0.05  # Prioritization rescaling factor for bidirectional reweighting
     lp_gain: float = 0.1  # Gain factor for performance bonus (z-score gain)
 
+    # Dual-pool sampling (exploration vs exploitation).
+    # Implementation note: pool membership is deterministic from task_id to avoid extra state/checkpointing.
+    use_dual_pool: bool = False
+    exploration_pool_fraction: float = 0.5
+    exploration_sampling_fraction: float = 0.25
+
     # Task distribution and sampling
-    num_active_tasks: int = 1000
     rand_task_rate: float = 0.25
     sample_threshold: int = 10
     memory: int = 25
 
-    # Performance and memory management
-    max_memory_tasks: int = 1000
-    max_slice_axes: int = 3  # Updated terminology
-    enable_detailed_slice_logging: bool = False  # Updated terminology
+    # Normalization knobs (default values preserve current behavior)
+    lp_score_temperature: float = 1.0
+    z_score_amplification: float = 1.0
+    early_progress_amplification: float = 1.0
 
     def algorithm_type(self) -> str:
         return "learning_progress"
 
+    @classmethod
+    def default(cls) -> "LearningProgressConfig":
+        """Default learning progress preset (single-pool, bidirectional)."""
+        return cls(
+            use_bidirectional=True,
+            ema_timescale=0.001,
+            slow_timescale_factor=0.2,
+            exploration_bonus=0.1,
+            progress_smoothing=0.05,
+            lp_gain=0.1,
+        )
+
     def create(self, num_tasks: int) -> "LearningProgressAlgorithm":
         return LearningProgressAlgorithm(num_tasks, self)
+
+    @classmethod
+    def default_dual_pool(
+        cls,
+        *,
+        exploration_pool_fraction: float = 0.5,
+        exploration_sampling_fraction: float = 0.25,
+    ) -> "LearningProgressConfig":
+        cfg = cls.default()
+        cfg.use_dual_pool = True
+        cfg.exploration_pool_fraction = exploration_pool_fraction
+        cfg.exploration_sampling_fraction = exploration_sampling_fraction
+        return cfg
 
 
 class LearningProgressAlgorithm(CurriculumAlgorithm):
@@ -72,8 +103,8 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         self.num_tasks = num_tasks
         self.hypers: LearningProgressConfig = hypers
 
-        # Initialize task tracker (moved from modules to curriculum folder)
-        self.task_tracker = TaskTracker(max_memory_tasks=hypers.max_memory_tasks)
+        # Initialize task tracker; cap memory to the active task pool size.
+        self.task_tracker = TaskTracker(max_memory_tasks=num_tasks)
 
         # Note: slice_analyzer is already initialized in parent class via StatsLogger
 
@@ -99,6 +130,10 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         tracker_stats = self.task_tracker.get_global_stats()
         for key, value in tracker_stats.items():
             base_stats[f"tracker/{key}"] = value
+
+        if self.hypers.use_dual_pool:
+            base_stats["pool/exploration_pool_fraction"] = float(self.hypers.exploration_pool_fraction)
+            base_stats["pool/exploration_sampling_fraction"] = float(self.hypers.exploration_sampling_fraction)
 
         return base_stats
 
@@ -160,9 +195,71 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
     def score_tasks(self, task_ids: List[int]) -> Dict[int, float]:
         """Score tasks using the configured method (bidirectional by default)."""
         if self.hypers.use_bidirectional:
-            return self._score_tasks_bidirectional(task_ids)
+            scores = self._score_tasks_bidirectional(task_ids)
         else:
-            return self._score_tasks_basic(task_ids)
+            scores = self._score_tasks_basic(task_ids)
+
+        # Mix in uniform random sampling mass without introducing nondeterminism.
+        r = float(getattr(self.hypers, "rand_task_rate", 0.0))
+        r = max(0.0, min(1.0, r))
+        if r > 0.0 and scores:
+            n = len(scores)
+            clipped = {tid: max(0.0, float(s)) for tid, s in scores.items()}
+            total = float(sum(clipped.values()))
+            if total <= 0.0:
+                # Fall back to uniform weights; Curriculum will normalize.
+                scores = {tid: 1.0 for tid in clipped.keys()}
+            else:
+                uniform = 1.0 / n
+                scores = {tid: (1.0 - r) * (clipped[tid] / total) + r * uniform for tid in clipped.keys()}
+
+        if self.hypers.use_dual_pool:
+            scores = self._apply_dual_pool_reweighting(scores)
+
+        return scores
+
+    def _is_exploration_task(self, task_id: int) -> bool:
+        # Deterministic pool assignment based on a stable hash of task_id.
+        frac = float(self.hypers.exploration_pool_fraction)
+        frac = max(0.0, min(1.0, frac))
+        threshold = int(frac * 10_000)
+        bucket = zlib.crc32(str(task_id).encode("utf-8")) % 10_000
+        return bucket < threshold
+
+    def _apply_dual_pool_reweighting(self, scores: Dict[int, float]) -> Dict[int, float]:
+        p = float(self.hypers.exploration_sampling_fraction)
+        p = max(0.0, min(1.0, p))
+        if p <= 0.0 or p >= 1.0 or not scores:
+            return scores
+
+        explore_sum = 0.0
+        exploit_sum = 0.0
+        for task_id, score in scores.items():
+            if self._is_exploration_task(task_id):
+                explore_sum += max(0.0, float(score))
+            else:
+                exploit_sum += max(0.0, float(score))
+
+        if explore_sum <= 0.0 or exploit_sum <= 0.0:
+            return scores
+
+        # Choose a scale for exploration scores so normalized probability mass matches p.
+        # Let exploit_scale = 1.0, explore_scale = s:
+        #   p = (s*E) / (s*E + X) => s = p*X / ((1-p)*E)
+        explore_scale = (p * exploit_sum) / max((1.0 - p) * explore_sum, 1e-12)
+
+        out: Dict[int, float] = {}
+        for task_id, score in scores.items():
+            s = float(score)
+            if self._is_exploration_task(task_id):
+                out[task_id] = s * explore_scale
+            else:
+                out[task_id] = s
+        total = float(sum(max(0.0, v) for v in out.values()))
+        if total <= 0.0:
+            return scores
+
+        return {task_id: max(0.0, v) / total for task_id, v in out.items()}
 
     def _score_tasks_bidirectional(self, task_ids: List[int]) -> Dict[int, float]:
         """Score tasks using bidirectional learning progress with per-call normalization.
@@ -210,6 +307,9 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
             # Small bonus for above-baseline performance (controlled by lp_gain)
             perf_bonus = max(fast, 0) * self.hypers.lp_gain
             score = max(lp + perf_bonus, self.hypers.exploration_bonus)
+
+        if task_id in self._outcomes and len(self._outcomes[task_id]) < self.hypers.sample_threshold:
+            score *= self.hypers.early_progress_amplification
 
         # Cache the computed score
         self._score_cache[task_id] = score
@@ -433,7 +533,6 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
                 "num_tracked_tasks": 0.0,
                 "mean_task_success_rate": 0.0,
                 "mean_learning_progress": 0.0,
-                "num_active_tasks": 0.0,
             }
 
         learning_progress_array = self._learning_progress()

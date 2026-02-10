@@ -123,7 +123,6 @@ def simulations() -> list[SimulationConfig]:
 
 def make_curriculum(
     nav_env: Optional[MettaGridConfig] = None,
-    enable_detailed_slice_logging: bool = False,
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
 ) -> CurriculumConfig:
     nav_env = nav_env or mettagrid()
@@ -153,14 +152,7 @@ def make_curriculum(
     nav_tasks = cc.merge([dense_tasks, sparse_tasks])
 
     if algorithm_config is None:
-        algorithm_config = LearningProgressConfig(
-            use_bidirectional=True,  # Default: bidirectional learning progress
-            ema_timescale=0.006,  # Tuned via sweep prashant.lp_sweep.12_10_2 (was 0.001)
-            exploration_bonus=0.1,
-            max_memory_tasks=1000,
-            max_slice_axes=3,
-            enable_detailed_slice_logging=enable_detailed_slice_logging,
-        )
+        algorithm_config = LearningProgressConfig.default().model_copy(update={"ema_timescale": 0.006})
 
     return nav_tasks.to_curriculum(
         num_active_tasks=1000,  # Smaller pool for navigation tasks
@@ -170,10 +162,9 @@ def make_curriculum(
 
 def train(
     curriculum: Optional[CurriculumConfig] = None,
-    enable_detailed_slice_logging: bool = False,
     arch_type: str = "vit",
 ) -> tools.TrainTool:
-    resolved_curriculum = curriculum or make_curriculum(enable_detailed_slice_logging=enable_detailed_slice_logging)
+    resolved_curriculum = curriculum or make_curriculum()
 
     evaluator_cfg = EvaluatorConfig(
         simulations=make_navigation_eval_suite(),

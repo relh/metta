@@ -23,9 +23,7 @@ from recipes.prod.arena_basic_easy_shaped import (
 )
 
 
-def train(
-    enable_detailed_slice_logging: bool = False,
-) -> tools.TrainTool:
+def train() -> tools.TrainTool:
     """Train with GRPO loss (critic-free, group-based advantages).
 
     GRPO eliminates the value network and computes advantages by comparing
@@ -33,7 +31,7 @@ def train(
     trajectories. This can be more sample efficient and stable than PPO
     in certain environments.
     """
-    curriculum = make_curriculum(enable_detailed_slice_logging=enable_detailed_slice_logging)
+    curriculum = make_curriculum()
 
     # Configure GRPO loss
     grpo_config = GRPOConfig(

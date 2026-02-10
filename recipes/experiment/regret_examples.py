@@ -136,26 +136,20 @@ def make_evals(env: Optional[MettaGridConfig] = None) -> List[SimulationConfig]:
 
 def train_prioritized_regret(
     curriculum: Optional[CurriculumConfig] = None,
-    enable_detailed_slice_logging: bool = False,
     policy_architecture: Optional[PolicyArchitecture] = None,
 ) -> TrainTool:
     """Train with PrioritizedRegret."""
-    curriculum = curriculum or make_prioritized_regret_curriculum(
-        enable_detailed_slice_logging=enable_detailed_slice_logging
-    )
+    curriculum = curriculum or make_prioritized_regret_curriculum()
 
     return _build_train_tool(curriculum, policy_architecture)
 
 
 def train_regret_learning_progress(
     curriculum: Optional[CurriculumConfig] = None,
-    enable_detailed_slice_logging: bool = False,
     policy_architecture: Optional[PolicyArchitecture] = None,
 ) -> TrainTool:
     """Train with RegretLearningProgress."""
-    curriculum = curriculum or make_regret_learning_progress_curriculum(
-        enable_detailed_slice_logging=enable_detailed_slice_logging
-    )
+    curriculum = curriculum or make_regret_learning_progress_curriculum()
 
     return _build_train_tool(curriculum, policy_architecture)
 
@@ -168,7 +162,7 @@ def evaluate(run: str = "local.regret_test.1") -> EvaluateTool:
     )
 
 
-def compare_curricula(enable_detailed_slice_logging: bool = False) -> dict[str, TrainTool]:
+def compare_curricula() -> dict[str, TrainTool]:
     """Create training configs to compare three curricula."""
     from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig  # noqa: PLC0415
 
@@ -179,9 +173,6 @@ def compare_curricula(enable_detailed_slice_logging: bool = False) -> dict[str, 
             use_bidirectional=True,
             ema_timescale=0.001,
             exploration_bonus=0.1,
-            max_memory_tasks=1000,
-            max_slice_axes=5,
-            enable_detailed_slice_logging=enable_detailed_slice_logging,
         ),
         "prioritized_regret": PrioritizedRegretConfig(
             optimal_value=1.0,
@@ -190,7 +181,7 @@ def compare_curricula(enable_detailed_slice_logging: bool = False) -> dict[str, 
             temperature=1.0,
             max_memory_tasks=1000,
             max_slice_axes=5,
-            enable_detailed_slice_logging=enable_detailed_slice_logging,
+            enable_detailed_slice_logging=False,
         ),
         "regret_learning_progress": RegretLearningProgressConfig(
             optimal_value=1.0,
@@ -200,7 +191,7 @@ def compare_curricula(enable_detailed_slice_logging: bool = False) -> dict[str, 
             invert_regret_progress=True,
             max_memory_tasks=1000,
             max_slice_axes=5,
-            enable_detailed_slice_logging=enable_detailed_slice_logging,
+            enable_detailed_slice_logging=False,
         ),
     }
     return {

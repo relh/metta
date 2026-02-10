@@ -25,7 +25,6 @@ def mettagrid(num_agents: int = 24) -> MettaGridConfig:
 
 def make_curriculum(
     arena_env: Optional[MettaGridConfig] = None,
-    enable_detailed_slice_logging: bool = False,
     algorithm_config: Optional[CurriculumAlgorithmConfig] = None,
 ) -> CurriculumConfig:
     arena_env = arena_env or mettagrid()
@@ -48,14 +47,7 @@ def make_curriculum(
     arena_tasks.add_bucket("game.agent.inventory.initial.battery_red", [0, 3])
 
     if algorithm_config is None:
-        algorithm_config = LearningProgressConfig(
-            use_bidirectional=True,  # Default: bidirectional learning progress
-            ema_timescale=0.001,
-            exploration_bonus=0.1,
-            max_memory_tasks=1000,
-            max_slice_axes=5,  # More slices for arena complexity
-            enable_detailed_slice_logging=enable_detailed_slice_logging,
-        )
+        algorithm_config = LearningProgressConfig.default()
 
     return arena_tasks.to_curriculum(algorithm_config=algorithm_config)
 
@@ -75,9 +67,8 @@ def simulations(env: Optional[MettaGridConfig] = None) -> list[SimulationConfig]
 
 def train(
     curriculum: Optional[CurriculumConfig] = None,
-    enable_detailed_slice_logging: bool = False,
 ) -> tools.TrainTool:
-    curriculum = curriculum or make_curriculum(enable_detailed_slice_logging=enable_detailed_slice_logging)
+    curriculum = curriculum or make_curriculum()
 
     return tools.TrainTool(
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),

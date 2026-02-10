@@ -32,7 +32,7 @@ class TestCurriculumStateSerialization:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=10,
-            algorithm_config=LearningProgressConfig(num_active_tasks=10, max_memory_tasks=100, use_bidirectional=True),
+            algorithm_config=LearningProgressConfig(use_bidirectional=True),
         )
 
         # Create curriculum with fixed seed for reproducibility
@@ -84,7 +84,7 @@ class TestCurriculumStateSerialization:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=10,
-            algorithm_config=LearningProgressConfig(num_active_tasks=10),
+            algorithm_config=LearningProgressConfig(),
         )
 
         curriculum1 = Curriculum(curriculum_config, seed=42)
@@ -138,7 +138,7 @@ class TestCurriculumStateSerialization:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=8,
-            algorithm_config=LearningProgressConfig(num_active_tasks=8, use_bidirectional=True, max_memory_tasks=50),
+            algorithm_config=LearningProgressConfig(use_bidirectional=True),
         )
 
         curriculum = Curriculum(curriculum_config, seed=123)
@@ -217,7 +217,7 @@ class TestCurriculumStateSerialization:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=1000,
-            algorithm_config=LearningProgressConfig(num_active_tasks=1000, max_memory_tasks=5000),
+            algorithm_config=LearningProgressConfig(),
         )
 
         curriculum = Curriculum(curriculum_config, seed=456)
@@ -337,7 +337,7 @@ class TestCheckpointManagerIntegration:
             curriculum_config = CurriculumConfig(
                 task_generator=task_generator_config,
                 num_active_tasks=10,
-                algorithm_config=LearningProgressConfig(num_active_tasks=10),
+                algorithm_config=LearningProgressConfig(),
             )
 
             curriculum = Curriculum(curriculum_config, seed=42)
@@ -532,9 +532,7 @@ class TestCurriculumRoundtripBehavior:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=15,
-            algorithm_config=LearningProgressConfig(
-                num_active_tasks=15, use_bidirectional=True, max_memory_tasks=100, ema_timescale=0.01
-            ),
+            algorithm_config=LearningProgressConfig(use_bidirectional=True, ema_timescale=0.01),
         )
 
         # Create and train original curriculum
@@ -610,7 +608,7 @@ class TestCurriculumRoundtripBehavior:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=10,
-            algorithm_config=LearningProgressConfig(num_active_tasks=10),
+            algorithm_config=LearningProgressConfig(),
         )
 
         # Create two identical curricula
@@ -658,7 +656,7 @@ class TestCurriculumRoundtripBehavior:
         curriculum_config = CurriculumConfig(
             task_generator=task_generator_config,
             num_active_tasks=8,
-            algorithm_config=LearningProgressConfig(num_active_tasks=8, use_bidirectional=True),
+            algorithm_config=LearningProgressConfig(use_bidirectional=True),
         )
 
         curriculum = Curriculum(curriculum_config, seed=333)

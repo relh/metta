@@ -8,8 +8,7 @@ import pytest
 from metta.cogworks.curriculum import Curriculum, CurriculumConfig, CurriculumTask, SingleTaskGenerator
 from metta.cogworks.curriculum.curriculum_env import CurriculumEnv
 from mettagrid.config.mettagrid_config import MettaGridConfig
-
-from .test_helpers import CurriculumTestHelper
+from tests.cogworks.curriculum.test_helpers import CurriculumTestHelper
 
 
 class TestCurriculumEnv:

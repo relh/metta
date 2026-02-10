@@ -91,7 +91,6 @@ def _ensure_cuda_extras_installed() -> None:
 def train(
     *,
     curriculum: Optional[CurriculumConfig] = None,
-    enable_detailed_slice_logging: bool = False,
     policy_architecture: PolicyArchitecture | None = None,
     learning_rate: float = DEFAULT_LEARNING_RATE,
     batch_size: int = DEFAULT_BATCH_SIZE,
@@ -129,7 +128,6 @@ def train(
 
     tool = base_train(
         curriculum=curriculum,
-        enable_detailed_slice_logging=enable_detailed_slice_logging,
         policy_architecture=policy,
     )
 
