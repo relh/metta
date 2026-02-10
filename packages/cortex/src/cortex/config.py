@@ -157,6 +157,20 @@ class PreUpBlockConfig(BlockConfig):
         return int(self.proj_factor * d_hidden)
 
 
+class PreUpGatedBlockConfig(BlockConfig):
+    """Configuration for GRU‑gated pre-upsampling blocks (projects before cell)."""
+
+    block_type: str = "preup_gated"
+    proj_factor: float = Field(default=2.0, gt=0.0)
+    gru_bias: float = Field(default=2.0)
+    activate_cell_input: bool = Field(default=True)
+    dropout: float = Field(default=0.0, ge=0.0, le=1.0, description="Consistent dropout probability")
+
+    def get_cell_hidden_size(self, d_hidden: int) -> int:
+        """Cell operates on expanded inner dimension."""
+        return int(self.proj_factor * d_hidden)
+
+
 class PostUpBlockConfig(BlockConfig):
     """Configuration for post-processing blocks (cell then FFN)."""
 
@@ -330,6 +344,7 @@ __all__ = [
     "BlockConfig",
     "PassThroughBlockConfig",
     "PreUpBlockConfig",
+    "PreUpGatedBlockConfig",
     "PostUpBlockConfig",
     "PostUpGatedBlockConfig",
     "AdapterBlockConfig",

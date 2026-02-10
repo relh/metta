@@ -9,9 +9,8 @@ from cortex.config import (
     CausalConv1dConfig,
     LSTMCellConfig,
     PassThroughBlockConfig,
-    PostUpBlockConfig,
     PostUpGatedBlockConfig,
-    PreUpBlockConfig,
+    PreUpGatedBlockConfig,
     XLCellConfig,
     mLSTMCellConfig,
     sLSTMCellConfig,
@@ -22,7 +21,7 @@ from cortex.registry import register_token
 @register_token("A")
 def _build_A() -> BlockConfig:
     # Axon (post-up) expert; caret is irrelevant here.
-    return PostUpBlockConfig(cell=AxonConfig())
+    return PostUpGatedBlockConfig(cell=AxonConfig())
 
 
 @register_token("X")
@@ -41,7 +40,7 @@ def _build_X_axon() -> BlockConfig:
 @register_token("M")
 def _build_M() -> BlockConfig:
     cell = mLSTMCellConfig()
-    return PreUpBlockConfig(cell=cell)
+    return PreUpGatedBlockConfig(cell=cell)
 
 
 @register_token("M^")
@@ -49,20 +48,20 @@ def _build_M_axon() -> BlockConfig:
     dumped = mLSTMCellConfig().model_dump()
     dumped["use_axon_layer"] = True
     dumped["use_axon_qkv"] = True
-    return PreUpBlockConfig(cell=mLSTMCellConfig(**dumped))
+    return PreUpGatedBlockConfig(cell=mLSTMCellConfig(**dumped))
 
 
 @register_token("S")
 def _build_S() -> BlockConfig:
     cell = sLSTMCellConfig()
-    return PostUpBlockConfig(cell=cell)
+    return PostUpGatedBlockConfig(cell=cell)
 
 
 @register_token("S^")
 def _build_S_axon() -> BlockConfig:
     dumped = sLSTMCellConfig().model_dump()
     dumped["use_axon_layer"] = True
-    return PostUpBlockConfig(cell=sLSTMCellConfig(**dumped))
+    return PostUpGatedBlockConfig(cell=sLSTMCellConfig(**dumped))
 
 
 @register_token("L")

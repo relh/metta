@@ -16,6 +16,7 @@ from cortex import (
     mLSTMCellConfig,
     sLSTMCellConfig,
 )
+from cortex.config import PostUpGatedBlockConfig, PreUpGatedBlockConfig
 
 
 def _stack_with_column(d_hidden: int = 64, k: int = 3):
@@ -96,8 +97,8 @@ def test_auto_config_builtin_patterns():
 
     cfg3 = build_column_auto_config(d_hidden=64, pattern="M^X^S^")
     assert len(cfg3.experts) == 3
-    assert isinstance(cfg3.experts[0], PreUpBlockConfig)
-    assert isinstance(cfg3.experts[2], PostUpBlockConfig)
+    assert isinstance(cfg3.experts[0], PreUpGatedBlockConfig)
+    assert isinstance(cfg3.experts[2], PostUpGatedBlockConfig)
 
 
 def test_auto_config_all_builtin_cells():
@@ -133,8 +134,8 @@ def test_auto_config_axonify_flags():
     m_cfg = cfg.experts[0]
     x_cfg = cfg.experts[1]
     s_cfg = cfg.experts[2]
-    assert isinstance(m_cfg, PreUpBlockConfig)
-    assert isinstance(s_cfg, PostUpBlockConfig)
+    assert isinstance(m_cfg, PreUpGatedBlockConfig)
+    assert isinstance(s_cfg, PostUpGatedBlockConfig)
     assert isinstance(m_cfg.cell, mLSTMCellConfig) and m_cfg.cell.use_axon_layer and m_cfg.cell.use_axon_qkv
     assert isinstance(x_cfg.cell, XLCellConfig) and x_cfg.cell.use_axon_qkv
     assert isinstance(s_cfg.cell, sLSTMCellConfig) and s_cfg.cell.use_axon_layer

@@ -4,40 +4,16 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
 from cortex.blocks.base import BaseBlock
+from cortex.blocks.gru_gating import GRUGatingUnit
 from cortex.blocks.registry import register_block
 from cortex.cells.base import MemoryCell
 from cortex.config import PostUpGatedBlockConfig
 from cortex.consistent_dropout import ConsistentDropout
 from cortex.types import MaybeState, ResetMask, Tensor
-
-
-class _GRUGatingUnit(nn.Module):
-    """GRU-style gating unit mixing residual and sublayer outputs (GTrXL-style)."""
-
-    def __init__(self, hidden_size: int, bg: float = 2.0) -> None:
-        super().__init__()
-        H = hidden_size
-        self.Wr = nn.Linear(H, H, bias=False)
-        self.Ur = nn.Linear(H, H, bias=False)
-        self.Wz = nn.Linear(H, H, bias=False)
-        self.Uz = nn.Linear(H, H, bias=False)
-        self.Wg = nn.Linear(H, H, bias=False)
-        self.Ug = nn.Linear(H, H, bias=False)
-        self.bg = nn.Parameter(torch.full((H,), bg))
-        self.sigmoid = nn.Sigmoid()
-        self.tanh = nn.Tanh()
-
-    def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        r = self.sigmoid(self.Wr(y) + self.Ur(x))
-        z = self.sigmoid(self.Wz(y) + self.Uz(x) - self.bg)
-        h = self.tanh(self.Wg(y) + self.Ug(r * x))
-        g = (1 - z) * x + z * h
-        return g
 
 
 @register_block(PostUpGatedBlockConfig)
@@ -60,8 +36,8 @@ class PostUpGatedBlock(BaseBlock):
         self.ffn_out = nn.Linear(self.d_inner, d_hidden)
 
         # GRU-style gates (GTrXL-inspired)
-        self.gate1 = _GRUGatingUnit(d_hidden, bg=float(config.gru_bias))
-        self.gate2 = _GRUGatingUnit(d_hidden, bg=float(config.gru_bias))
+        self.gate1 = GRUGatingUnit(d_hidden, bg=float(config.gru_bias))
+        self.gate2 = GRUGatingUnit(d_hidden, bg=float(config.gru_bias))
 
     def forward(
         self,
