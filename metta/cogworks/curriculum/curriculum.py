@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from pydantic import ConfigDict, Field
 
+from metta.cogworks.curriculum.sampling import sample_task_id_from_scores
 from metta.cogworks.curriculum.stats import StatsLogger
 from metta.cogworks.curriculum.task_generator import AnyTaskGeneratorConfig, SingleTaskGenerator
 from metta.cogworks.curriculum.types import (
@@ -98,9 +99,10 @@ class CurriculumConfig(Config):
         """Validate configuration after initialization."""
         super().model_post_init(__context)
 
-        if self.num_active_tasks > self.max_task_id:
+        # max_task_id is inclusive (task ids are sampled from [0, max_task_id]).
+        if self.num_active_tasks > self.max_task_id + 1:
             raise ValueError(
-                f"num_active_tasks ({self.num_active_tasks}) cannot exceed max_task_id ({self.max_task_id})"
+                f"num_active_tasks ({self.num_active_tasks}) cannot exceed max_task_id+1 ({self.max_task_id + 1})"
             )
 
     def make(self) -> "Curriculum":
@@ -192,15 +194,12 @@ class Curriculum(StatsLogger):
         if self._algorithm is not None:
             # Get algorithm's task selection preferences
             task_scores = self._algorithm.score_tasks(list(self._tasks.keys()))
-            if task_scores:
-                # Convert scores to probabilities for sampling
-                task_ids = list(task_scores.keys())
-                scores = list(task_scores.values())
-                total_score = sum(scores)
-                if total_score > 0:
-                    probabilities = [score / total_score for score in scores]
-                    selected_id = self._rng.choices(task_ids, weights=probabilities)[0]
-                    return self._tasks[selected_id]
+            selected_id = sample_task_id_from_scores(
+                task_ids=list(self._tasks.keys()),
+                scores=task_scores,
+                rng=self._rng,
+            )
+            return self._tasks[selected_id]
 
         # Fallback to random selection
         return self._tasks[self._rng.choice(list(self._tasks.keys()))]

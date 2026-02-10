@@ -227,6 +227,52 @@ class TaskGeneratorSet(TaskGenerator):
 
 
 ################################################################################
+# CyclicTaskGeneratorSet
+################################################################################
+class CyclicTaskGeneratorSet(TaskGenerator):
+    """TaskGenerator that deterministically maps task_id -> sub-generator by cycling.
+
+    Unlike TaskGeneratorSet (which samples a sub-generator stochastically based on RNG seeded
+    by task_id), this generator guarantees that distinct consecutive task_ids map to distinct
+    generators when the number of generators is >= 2.
+    """
+
+    class Config(TaskGeneratorConfig["CyclicTaskGeneratorSet"]):
+        task_generators: list[AnyTaskGeneratorConfig] = Field(
+            default_factory=list, description="Task generator configurations to cycle through"
+        )
+
+        @field_validator("task_generators")
+        @classmethod
+        def validate_task_generators(cls, v):
+            if not v:
+                raise ValueError("CyclicTaskGeneratorSet must have at least one task generator")
+            return v
+
+        def add(self, task_generator: AnyTaskGeneratorConfig) -> "CyclicTaskGeneratorSet.Config":
+            self.task_generators.append(task_generator)
+            return self
+
+    def __init__(self, config: "CyclicTaskGeneratorSet.Config"):
+        super().__init__(config)
+        self._config = config
+        self._sub_task_generators = [gen_config.create() for gen_config in self._config.task_generators]
+
+    def _generate_task(self, task_id: int, rng: random.Random) -> MettaGridConfig:
+        if not self._sub_task_generators:
+            raise ValueError("CyclicTaskGeneratorSet has no task generators")
+        chosen_generator = self._sub_task_generators[task_id % len(self._sub_task_generators)]
+        result = chosen_generator.get_task(task_id)
+
+        if hasattr(chosen_generator, "_last_bucket_values"):
+            self._last_bucket_values = chosen_generator._last_bucket_values.copy()
+        else:
+            self._last_bucket_values = {}
+
+        return result
+
+
+################################################################################
 # BucketedTaskGenerator
 ################################################################################
 class Span(Config):
@@ -346,6 +392,9 @@ def _validate_open_task_generator(v: Any, handler):
             elif target is TaskGeneratorSet:
                 data = {k: v for k, v in v.items() if k != "type"}
                 return TaskGeneratorSet.Config.model_validate(data)
+            elif target is CyclicTaskGeneratorSet:
+                data = {k: v for k, v in v.items() if k != "type"}
+                return CyclicTaskGeneratorSet.Config.model_validate(data)
             elif target is BucketedTaskGenerator:
                 data = {k: v for k, v in v.items() if k != "type"}
                 return BucketedTaskGenerator.Config.model_validate(data)

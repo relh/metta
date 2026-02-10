@@ -13,6 +13,7 @@ from .stats import SliceAnalyzer, StatsLogger
 from .task_generator import (
     AnyTaskGeneratorConfig,
     BucketedTaskGenerator,
+    CyclicTaskGeneratorSet,
     SingleTaskGenerator,
     Span,
     TaskGenerator,
@@ -43,6 +44,7 @@ __all__ = [
     "AnyTaskGeneratorConfig",
     "SingleTaskGenerator",
     "TaskGeneratorSet",
+    "CyclicTaskGeneratorSet",
     "BucketedTaskGenerator",
     "Span",
     "bucketed",
