@@ -22,7 +22,7 @@ class PPOCriticConfig(LossConfig):
     critic_update: Literal["mse", "gtd_lambda"] = "gtd_lambda"
     aux_coef: float = Field(default=1.0, ge=0)
     beta: float = Field(default=1.0, ge=0)
-    teacher_offpolicy_rho_clip: float = Field(default=1.0, gt=0)
+    rho_clip: float = Field(default=1.0, gt=0)
 
     def create(
         self,
@@ -85,7 +85,7 @@ class PPOCritic(Loss):
         mask_next = 1.0 - terminal_next
 
         delta = rewards[:, 1:] + gamma * mask_next * values[:, 1:] - values[:, :-1]  # [B, TT-1]
-        rho = rho[:, :-1].clamp(max=float(self.cfg.teacher_offpolicy_rho_clip))
+        rho = rho[:, :-1].clamp(max=float(self.cfg.rho_clip))
 
         x = rho * delta
         discounts = rho * mask_next
@@ -174,34 +174,40 @@ class PPOCritic(Loss):
                 h_values = h_values.squeeze(-1)
             h_values = h_values.reshape(old_values.shape)
 
-            delta_lambda: Tensor = shared_loss_data["advantages_pg"]
+            if "act_log_prob" not in policy_td.keys():
+                raise RuntimeError("TD(λ) off-policy correction requires policy_td['act_log_prob']")
+
+            act_log_prob: Tensor = policy_td["act_log_prob"]
+            mb_actions: Tensor = minibatch["actions"]
+            old_log_prob: Tensor = minibatch["act_log_prob"]
+            logratio = torch.clamp(
+                act_log_prob.reshape(mb_actions.shape) - old_log_prob.reshape(mb_actions.shape),
+                -10,
+                10,
+            )
+            rho_bt = logratio.exp().detach()
+
+            rho_clip = float(self.cfg.rho_clip)
             if "teacher_mask" in minibatch.keys():
                 teacher_mask: Tensor = minibatch["teacher_mask"]
                 teacher_mask = teacher_mask[:, 0]
                 if bool(teacher_mask.any()):
-                    if "act_log_prob" not in policy_td.keys():
-                        raise RuntimeError("Teacher-slice TD(λ) correction requires policy_td['act_log_prob']")
-                    act_log_prob: Tensor = policy_td["act_log_prob"]
-                    mb_actions: Tensor = minibatch["actions"]
-                    old_log_prob: Tensor = minibatch["act_log_prob"]
-                    rho = (act_log_prob.reshape(mb_actions.shape) - old_log_prob.reshape(mb_actions.shape)).exp()
-                    rho_trim = rho.detach()[teacher_mask][:, :-1]
-                    rho_clip = float(self.cfg.teacher_offpolicy_rho_clip)
+                    rho_trim = rho_bt[teacher_mask][:, :-1]
                     self.loss_tracker["teacher_td_lambda_rho_clipfrac"].append(
                         float((rho_trim > rho_clip).float().mean().item())
                     )
-                    centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
-                    advantage_cfg = context.current_slice_cfg.advantage
-                    corrected = self._importance_sampled_delta_lambda(
-                        values=new_values[teacher_mask],
-                        rewards=centered_rewards[teacher_mask],
-                        dones=minibatch["dones"][teacher_mask],
-                        rho=rho.detach()[teacher_mask],
-                        gamma=float(advantage_cfg.gamma),
-                        gae_lambda=float(advantage_cfg.gae_lambda),
-                    )
-                    delta_lambda = delta_lambda.clone()
-                    delta_lambda[teacher_mask] = corrected
+
+            centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
+            advantage_cfg = context.current_slice_cfg.advantage
+            delta_lambda = self._importance_sampled_delta_lambda(
+                values=new_values,
+                rewards=centered_rewards,
+                dones=minibatch["dones"],
+                rho=rho_bt,
+                gamma=float(advantage_cfg.gamma),
+                gae_lambda=float(advantage_cfg.gae_lambda),
+            )
+            shared_loss_data["advantages_pg"] = delta_lambda
 
             # Use only valid transitions (t=0..TT-2). The last step is padding.
             dl = delta_lambda[:, :-1]

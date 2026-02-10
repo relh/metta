@@ -146,7 +146,7 @@ def test_ppo_critic_teacher_rho_uses_behavior_logprob() -> None:
     policy = _ToyPolicy()
     registry = _PolicyRegistry(policy)
     env = SimpleNamespace(single_action_space=gym_spaces.Discrete(4))
-    cfg = PPOCriticConfig(critic_update="gtd_lambda", teacher_offpolicy_rho_clip=1.0)
+    cfg = PPOCriticConfig(critic_update="gtd_lambda", rho_clip=1.0)
     loss = cfg.create(registry, SimpleNamespace(), env, torch.device("cpu"), "ppo_critic")
 
     class _Replay:
@@ -201,6 +201,75 @@ def test_ppo_critic_teacher_rho_uses_behavior_logprob() -> None:
 
     # If we used exp(new_logprob) we'd get rho ~ 0.9 and clipfrac=0. Using exp(new-old) yields rho~6.7 and clipfrac=1.
     assert loss.loss_tracker["teacher_td_lambda_rho_clipfrac"][-1] == 1.0
+
+
+def test_ppo_critic_td_lambda_offpolicy_applies_to_student_slices() -> None:
+    policy = _ToyPolicy()
+    registry = _PolicyRegistry(policy)
+    env = SimpleNamespace(single_action_space=gym_spaces.Discrete(4))
+    cfg = PPOCriticConfig(critic_update="gtd_lambda", rho_clip=1.0)
+    loss = cfg.create(registry, SimpleNamespace(), env, torch.device("cpu"), "ppo_critic")
+
+    class _Replay:
+        def update(self, *_args, **_kwargs) -> None:
+            return None
+
+    loss.attach_replay_buffer(_Replay())  # type: ignore[arg-type]
+
+    b, t = 1, 4
+    minibatch = TensorDict(
+        {
+            "values": torch.zeros((b, t), dtype=torch.float32),
+            "rewards": torch.ones((b, t), dtype=torch.float32),
+            "reward_baseline": torch.zeros((b, t), dtype=torch.float32),
+            "dones": torch.zeros((b, t), dtype=torch.float32),
+            "truncateds": torch.zeros((b, t), dtype=torch.float32),
+            "actions": torch.zeros((b, t), dtype=torch.int32),
+            "act_log_prob": torch.zeros((b, t), dtype=torch.float32),
+            "teacher_mask": torch.zeros((b, t), dtype=torch.bool),
+        },
+        batch_size=[b, t],
+    )
+    policy_td = TensorDict(
+        {
+            "values": torch.zeros((b, t), dtype=torch.float32, requires_grad=True),
+            "h_values": torch.zeros((b, t), dtype=torch.float32, requires_grad=True),
+            "act_log_prob": torch.full((b, t), -0.69314718056, dtype=torch.float32),
+        },
+        batch_size=[b, t],
+    )
+
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(
+            name="student",
+            env_ratio=1.0,
+            policies=["learner0"],
+            primary_policy="learner0",
+        ),
+        policy_assets=registry,
+    )
+    shared = TensorDict(
+        {
+            "sampled_mb": minibatch,
+            "policy_td": policy_td,
+            "advantages_pg": torch.zeros((b, t), dtype=torch.float32),
+            "indices": torch.zeros((b, 2), dtype=torch.long),
+        },
+        batch_size=[],
+    )
+
+    expected = loss._importance_sampled_delta_lambda(
+        values=policy_td["values"].reshape((b, t)),
+        rewards=minibatch["rewards"],
+        dones=minibatch["dones"],
+        rho=(policy_td["act_log_prob"] - minibatch["act_log_prob"]).exp(),
+        gamma=float(context.current_slice_cfg.advantage.gamma),
+        gae_lambda=float(context.current_slice_cfg.advantage.gae_lambda),
+    )
+
+    loss.train(shared, context, mb_idx=0)
+
+    torch.testing.assert_close(shared["advantages_pg"], expected)
 
 
 def test_pad_tensor_like_casts_dtype_to_rollout() -> None:
