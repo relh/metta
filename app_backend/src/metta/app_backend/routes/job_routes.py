@@ -407,7 +407,16 @@ def create_job_router() -> APIRouter:
 
     def _extract_trace(body: bytes) -> bytes:
         with zipfile.ZipFile(io.BytesIO(body)) as zf:
-            return zf.open("trace.json").read()
+            names = zf.namelist()
+            if "trace.json" in names:
+                return zf.open("trace.json").read()
+            if "setup_trace.json" in names:
+                return zf.open("setup_trace.json").read()
+            raise KeyError("No trace files found in debug.zip")
+
+    def _extract_setup_trace(body: bytes) -> bytes:
+        with zipfile.ZipFile(io.BytesIO(body)) as zf:
+            return zf.open("setup_trace.json").read()
 
     ARTIFACT_TYPES: dict[str, tuple[Callable[[UUID], str], str, Callable[[bytes], bytes]]] = {
         "logs": (job_logs_key, "text/plain", lambda b: b),
@@ -417,6 +426,7 @@ def create_job_router() -> APIRouter:
         "replay": (job_replay_key, "application/octet-stream", lambda b: b),
         "debug": (job_debug_key, "application/zip", lambda b: b),
         "trace": (job_debug_key, "application/json", _extract_trace),
+        "setup_trace": (job_debug_key, "application/json", _extract_setup_trace),
     }
 
     @router.get("/{job_id}/artifacts/{artifact_type}")

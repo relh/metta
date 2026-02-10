@@ -13,7 +13,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const isTraceRequest = pathname.startsWith('/api/jobs/') && pathname.endsWith('/trace')
+  const isTraceRequest =
+    pathname.startsWith('/api/jobs/') && (pathname.endsWith('/trace') || pathname.endsWith('/setup-trace'))
   const cookieToken = request.cookies.get(AUTH_COOKIE_NAME)?.value
   const queryToken = isTraceRequest ? request.nextUrl.searchParams.get('auth_token') : null
   // TODO: Replace auth_token query fallback with short-lived signed trace tokens.

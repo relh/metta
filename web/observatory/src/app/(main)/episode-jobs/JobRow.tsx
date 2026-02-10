@@ -232,6 +232,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const [showGameStats, setShowGameStats] = useState(false)
   const [showAgentStats, setShowAgentStats] = useState(false)
   const [traceLoading, setTraceLoading] = useState(false)
+  const [setupTraceLoading, setSetupTraceLoading] = useState(false)
 
   const policyStatsMap = new Map((job.episode?.policy_stats ?? []).map((s) => [s.policy_version_id, s]))
   const attrs = job.episode?.attributes
@@ -296,6 +297,68 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
         const a = document.createElement('a')
         a.href = url
         a.download = `job-${job.id}-trace.json`
+        a.click()
+        URL.revokeObjectURL(url)
+      })
+  }, [job.id])
+
+  const openSetupTraceViewer = useCallback(async () => {
+    setSetupTraceLoading(true)
+    const handle = window.open('https://ui.perfetto.dev')
+    if (!handle) {
+      setSetupTraceLoading(false)
+      return
+    }
+
+    const response = await fetch(`/api/jobs/${job.id}/setup-trace`)
+    if (!response.ok) {
+      handle.close()
+      setSetupTraceLoading(false)
+      return
+    }
+    const buffer = await response.arrayBuffer()
+
+    await new Promise<void>((resolve) => {
+      const interval = setInterval(() => handle.postMessage('PING', '*'), 100)
+      const cleanup = () => {
+        clearInterval(interval)
+        clearTimeout(timeout)
+        window.removeEventListener('message', onMessage)
+        resolve()
+      }
+      const onMessage = (e: MessageEvent) => {
+        if (e.data === 'PONG') cleanup()
+      }
+      const timeout = setTimeout(cleanup, 10000)
+      window.addEventListener('message', onMessage)
+    })
+
+    handle.postMessage(
+      {
+        perfetto: {
+          buffer,
+          title: `Job ${job.id} (setup)`,
+          fileName: `job-${job.id}-setup-trace.pftrace`,
+        },
+      },
+      '*'
+    )
+    setSetupTraceLoading(false)
+  }, [job.id])
+
+  const downloadSetupTrace = useCallback(() => {
+    fetch(`/api/jobs/${job.id}/setup-trace`)
+      .then((response) => {
+        if (!response.ok) return null
+        return response.text()
+      })
+      .then((trace) => {
+        if (!trace) return
+        const blob = new Blob([trace], { type: 'application/json' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `job-${job.id}-setup-trace.json`
         a.click()
         URL.revokeObjectURL(url)
       })
@@ -545,6 +608,32 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                         </button>
                         <button
                           onClick={downloadTrace}
+                          className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
+                        >
+                          Download
+                        </button>
+                      </span>
+                    </LabelRow>
+                  )}
+                  {(job.status === 'completed' || job.status === 'failed') && (
+                    <LabelRow label="Setup Trace">
+                      <span className="flex gap-1.5 justify-end">
+                        <button
+                          onClick={openSetupTraceViewer}
+                          disabled={setupTraceLoading}
+                          className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 disabled:opacity-50 disabled:cursor-default"
+                        >
+                          {setupTraceLoading ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="inline-block w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                              Loading
+                            </span>
+                          ) : (
+                            'View'
+                          )}
+                        </button>
+                        <button
+                          onClick={downloadSetupTrace}
                           className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0"
                         >
                           Download
