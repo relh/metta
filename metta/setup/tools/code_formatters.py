@@ -1,3 +1,4 @@
+import shutil
 import subprocess
 import time
 from collections import defaultdict
@@ -12,7 +13,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import gitta as git
 from metta.common.util.fs import get_repo_root
-from metta.setup.utils import error, info, success
+from metta.setup.utils import error, info, success, warning
 
 
 @dataclass
@@ -32,6 +33,7 @@ class FormatterConfig(BaseModel):
     extensions: tuple[str, ...] = ()
     runner: FormatterRunner | None = None
     accepts_file_args: bool = True
+    required_binaries: tuple[str, ...] = ()
 
     def run(self, fix: bool = False, files: set[str] | None = None, is_full_run: bool = False) -> FormatterResult:
         if self.runner is not None:
@@ -321,6 +323,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="JSON",
                 extensions=(".json", ".jsonc", ".code-workspace"),
+                required_binaries=("pnpm",),
                 runner=_make_prettier_runner(
                     extensions=(".json", ".jsonc", ".code-workspace"),
                     exclude_patterns=(
@@ -334,6 +337,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="Markdown",
                 extensions=(".md", "*.mdx"),
+                required_binaries=("pnpm",),
                 runner=_make_prettier_runner(
                     extensions=(".md", "*.mdx"),
                 ),
@@ -341,6 +345,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="Shell",
                 extensions=(".sh", ".bash"),
+                required_binaries=("pnpm",),
                 runner=_make_prettier_runner(
                     extensions=(".sh", ".bash"),
                 ),
@@ -348,6 +353,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="TOML",
                 extensions=(".toml",),
+                required_binaries=("pnpm",),
                 runner=_make_prettier_runner(
                     extensions=(".toml",),
                 ),
@@ -355,6 +361,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="YAML",
                 extensions=(".yaml", ".yml"),
+                required_binaries=("pnpm",),
                 runner=_make_prettier_runner(
                     extensions=(".yaml", ".yml"),
                     exclude_patterns=(
@@ -368,6 +375,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="C++",
                 extensions=(".cpp", ".hpp", ".h", ".c"),
+                required_binaries=("clang-format",),
                 runner=_make_cpp_runner(),
                 accepts_file_args=False,
             ),
@@ -381,15 +389,14 @@ def get_formatters() -> dict[str, FormatterConfig]:
             FormatterConfig(
                 name="Javascript",
                 extensions=(".ts", ".tsx", ".js", ".jsx"),
+                required_binaries=("pnpm",),
                 runner=_make_turbo_js_runner(extensions=(".ts", ".tsx", ".js", ".jsx")),
             ),
-            # Runs turbo type-check across all packages (tsc --noEmit etc.)
-            # Runs only on full-repo lints; skipped for file-specific runs since tsc
-            # doesn't accept individual file paths the way lint/format tools do.
             FormatterConfig(
                 name="TypeScript Type Check",
                 check_cmds=(("pnpm", "exec", "turbo", "type-check"),),
                 extensions=(".ts", ".tsx"),
+                required_binaries=("pnpm",),
                 accepts_file_args=False,
             ),
         ]
@@ -447,6 +454,15 @@ def cmd_lint(
     )
 
     is_full_run = not files and not staged
+
+    for name, f in formatters.items():
+        if name not in files_by_formatter or not f.required_binaries:
+            continue
+        missing = [b for b in f.required_binaries if shutil.which(b) is None]
+        if missing:
+            warning(f"Skipping {name}: {', '.join(missing)} not found. Run: metta install")
+            del files_by_formatter[name]
+
     formatter_order = [name for name in formatters if name in files_by_formatter]
     with Progress(*columns, transient=True) as progress:
         with ThreadPoolExecutor(max_workers=len(formatter_order) or 1) as executor:
