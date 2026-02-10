@@ -1,9 +1,9 @@
-"""Test that lifecycle error types are correctly set in watcher."""
+"""Test that lifecycle error types are correctly set in event processor."""
 
 from unittest.mock import MagicMock
 from uuid import uuid4
 
-from metta.app_backend.job_runner.watcher import _update_job_status
+from metta.app_backend.job_runner.event_processor import _update_job_status
 from metta.app_backend.models.job_request import JobStatus
 
 

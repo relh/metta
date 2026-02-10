@@ -44,7 +44,6 @@ watcher:
   dbSecret: "observatory-backend-env"
   evalClusterRoleArn: "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
   evalClusterName: "tournament"
-  evalS3Bucket: "observatory-private"
   resources:
     requests:
       cpu: 10m
@@ -63,3 +62,17 @@ tournament:
     limits:
       cpu: 1000m
       memory: 4Gi
+
+eventProcessor:
+  enabled: true
+  dbSecret: "observatory-backend-env"
+  evalClusterRoleArn: "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
+  evalClusterName: "tournament"
+  evalS3Bucket: "observatory-private"
+  resources:
+    requests:
+      cpu: 10m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 1Gi

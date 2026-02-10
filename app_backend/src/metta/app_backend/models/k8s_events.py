@@ -19,3 +19,4 @@ class K8sEvent(SQLModel, table=True):
     )
     event_time: datetime
     event: dict[str, Any] = Field(sa_column=Column(JSONB))
+    processed_at: datetime | None = Field(default=None)
