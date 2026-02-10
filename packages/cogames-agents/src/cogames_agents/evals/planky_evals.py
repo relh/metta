@@ -84,8 +84,9 @@ class _PlankyDiagnosticBase(Mission):
     # Per-mission inventory seed (applied to agent starting inventory)
     inventory_seed: Dict[str, int] = Field(default_factory=dict)
 
-    # Generous collective resources (10x default)
-    wealth: int = Field(default=10)
+    # Generous collective resources — must stay at or below planky's
+    # COLLECTIVE_SUFFICIENT_THRESHOLD (100) to avoid miners auto-converting to aligners.
+    wealth: int = Field(default=4)
 
     # Generous agent config
     cog: CogConfig = Field(
