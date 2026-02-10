@@ -2328,6 +2328,7 @@ name = "metta"
 version = "0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "alembic" },
     { name = "altair" },
     { name = "anywidget" },
     { name = "asana" },
@@ -2462,6 +2463,7 @@ testing = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", specifier = ">=1.17.0" },
     { name = "altair", specifier = ">=5.5.0" },
     { name = "anywidget", specifier = ">=0.9.18" },
     { name = "asana", specifier = ">=5.2.2" },
@@ -2635,6 +2637,7 @@ version = "0.1.0"
 source = { editable = "app_backend" }
 dependencies = [
     { name = "aioboto3" },
+    { name = "alembic" },
     { name = "boto3" },
     { name = "cachetools" },
     { name = "ddtrace" },
@@ -2670,6 +2673,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aioboto3", specifier = ">=13.2.0" },
+    { name = "alembic", specifier = ">=1.17.0" },
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "cachetools", specifier = ">=5.3.0" },
     { name = "ddtrace", specifier = ">=2.6.0" },

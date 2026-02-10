@@ -5,18 +5,20 @@ from metta.common.util.log_config import suppress_noisy_logs
 suppress_noisy_logs()
 import uuid
 from collections.abc import Iterator
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import psycopg
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from psycopg import Connection, sql
+from psycopg import sql
 from testcontainers.postgres import PostgresContainer
 
+from metta.app_backend import config as app_config
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.migrations import MIGRATIONS
-from metta.app_backend.schema_manager import run_migrations
 from metta.app_backend.server import create_app
 from metta.app_backend.test_support.client_adapter import (
     create_test_stats_client,
@@ -31,8 +33,6 @@ docker_client = docker_client_fixture()
 
 def pytest_configure(config: pytest.Config):
     """Configure test settings before any tests run (works with xdist workers)."""
-    from metta.app_backend import config as app_config  # noqa: PLC0415
-
     app_config.settings.RUN_MIGRATIONS = True
     app_config.settings.OBSERVATORY_AUTH_SECRET = "test_secret"
 
@@ -60,7 +60,7 @@ TEMPLATE_DB_NAME = "test_template"
 
 @pytest.fixture(scope="session")
 def template_db_uri(postgres_container: PostgresContainer) -> str:
-    """Create a template database with migrations pre-applied.
+    """Create a template database with Alembic migrations pre-applied.
 
     This runs once per session. Individual tests clone from this template,
     which is much faster than running migrations for each test.
@@ -70,14 +70,14 @@ def template_db_uri(postgres_container: PostgresContainer) -> str:
     # Create the template database
     with psycopg.connect(db_uri, autocommit=True) as conn:
         with conn.cursor() as cur:
-            # Drop if exists from previous run (shouldn't happen with containers, but safe)
             cur.execute(sql.SQL("DROP DATABASE IF EXISTS {}").format(sql.Identifier(TEMPLATE_DB_NAME)))
             cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(TEMPLATE_DB_NAME)))
 
-    # Connect to template and run migrations
+    # Run Alembic migrations on template
     template_uri = db_uri.replace("/test_db", f"/{TEMPLATE_DB_NAME}")
-    with Connection.connect(template_uri) as con:
-        run_migrations(con, MIGRATIONS)
+    app_config.settings.STATS_DB_URI = template_uri
+    alembic_cfg = Config(str(Path(__file__).parent.parent / "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
 
     return db_uri  # Return base URI for cloning operations
 
@@ -180,7 +180,6 @@ def db_context(template_db_uri: str) -> Iterator[str]:
 @pytest.fixture
 def stats_repo(db_context: str) -> str:
     """Function-scoped stats repo with isolated database."""
-    from metta.app_backend import config as app_config  # noqa: PLC0415
     from metta.app_backend import database  # noqa: PLC0415
 
     database._engine = None

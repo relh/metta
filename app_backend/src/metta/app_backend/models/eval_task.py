@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from sqlalchemy import Column, text
+from sqlalchemy import Column, ForeignKey, Integer, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -18,10 +18,12 @@ class EvalTask(SQLModel, table=True):
     git_hash: str | None = None
     attributes: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     user_id: str
-    is_finished: bool = Field(default=False)
-    latest_attempt_id: int | None = Field(default=None, foreign_key="task_attempts.id")
+    is_finished: bool = Field(default=False, sa_column_kwargs={"server_default": text("false")})
+    latest_attempt_id: int | None = Field(
+        default=None, sa_column=Column(Integer, ForeignKey("task_attempts.id", ondelete="CASCADE"), nullable=True)
+    )
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("now()")}
+        default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
 
     attempts: list["TaskAttempt"] = Relationship(
@@ -34,9 +36,9 @@ class TaskAttempt(SQLModel, table=True):
     __tablename__ = "task_attempts"  # type: ignore[assignment]
 
     id: int | None = Field(default=None, primary_key=True)
-    task_id: int = Field(foreign_key="eval_tasks.id")
-    attempt_number: int = Field(default=0)
-    status: str = Field(default="unprocessed")
+    task_id: int = Field(sa_column=Column(Integer, ForeignKey("eval_tasks.id", ondelete="CASCADE"), nullable=False))
+    attempt_number: int = Field(default=0, sa_column_kwargs={"server_default": text("0")})
+    status: str = Field(default="unprocessed", sa_column_kwargs={"server_default": text("'unprocessed'::text")})
     status_details: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     assignee: str | None = None
     assigned_at: datetime | None = None

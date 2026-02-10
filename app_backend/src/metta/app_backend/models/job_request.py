@@ -3,7 +3,8 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, text
+from sqlalchemy import Column, ForeignKey, Index, Uuid, text
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlmodel import Field, Relationship, SQLModel
@@ -56,13 +57,27 @@ class JobRequestUpdate(SQLModel):
 
 class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
     __tablename__ = "job_requests"  # type: ignore[assignment]
+    __table_args__ = (
+        Index("idx_job_requests_status", "status"),
+        Index("idx_job_requests_user_id", "user_id"),
+        Index("idx_job_requests_type_status_created", "job_type", "status", text("created_at DESC")),
+        Index("idx_job_requests_type_created", "job_type", text("created_at DESC")),
+        Index("idx_job_requests_created", text("created_at DESC")),
+    )
     model_config = {"ignored_types": (hybrid_property,)}  # type: ignore[misc]
 
-    id: UUID = Field(default_factory=uuid4, primary_key=True)
-    status: JobStatus = Field(default=JobStatus.pending, nullable=False)
+    id: UUID = Field(
+        default_factory=uuid4, primary_key=True, sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
+    )
+    status: JobStatus = Field(
+        default=JobStatus.pending,
+        nullable=False,
+        sa_type=SQLEnum(JobStatus, name="job_status"),
+        sa_column_kwargs={"server_default": text("'pending'::job_status")},
+    )
     user_id: str
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("now()")}
+        default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
     dispatched_at: datetime | None = None
     running_at: datetime | None = None
@@ -91,9 +106,13 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
 
 class JobPolicyVersion(SQLModel, table=True):
     __tablename__ = "job_policy_versions"  # type: ignore[assignment]
-    job_id: UUID = Field(foreign_key="job_requests.id", primary_key=True)
+    __table_args__ = (Index("idx_job_policy_versions_policy_version_id", "policy_version_id"),)
+
+    job_id: UUID = Field(sa_column=Column(Uuid, ForeignKey("job_requests.id", ondelete="CASCADE"), primary_key=True))
     position: int = Field(primary_key=True)
-    policy_version_id: UUID = Field(foreign_key="policy_versions.id")
+    policy_version_id: UUID = Field(
+        sa_column=Column(Uuid, ForeignKey("policy_versions.id", ondelete="CASCADE"), nullable=False)
+    )
 
     job: JobRequest = Relationship(back_populates="policy_versions")
     policy_version: "PolicyVersion" = Relationship()
