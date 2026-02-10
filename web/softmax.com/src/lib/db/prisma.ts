@@ -1,8 +1,9 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import * as dotenv from "dotenv";
-dotenv.config({ path: ".env.local", quiet: true }); // ← load variables first
 
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+
+dotenv.config({ path: ".env.local", quiet: true }); // ← load variables first
 
 // Create a singleton Prisma client instance
 const globalForPrisma = globalThis as unknown as {
@@ -12,6 +13,7 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
   });
   return new PrismaClient({ adapter });
 }
