@@ -224,7 +224,7 @@ class CMPO(Loss):
         actions = student_td["actions"]
         actions_enc = self._encode_action(actions)
 
-        agent_ids = student_td["training_env_ids"].squeeze(-1).to(dtype=torch.long)
+        agent_ids = student_td["agent_slot_ids"].squeeze(-1).to(dtype=torch.long)
 
         if self._has_prev[agent_ids].any():
             mask = self._has_prev[agent_ids]

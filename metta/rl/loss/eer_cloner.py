@@ -69,7 +69,7 @@ class EERCloner(Loss):
         # If A_{t-1} == TeacherAction_{t-1}: log(prob) then loss is log(1) = 0
         # If A_{t-1} != TeacherAction_{t-1}: log(prob) then loss is log(epsilon)
 
-        agent_ids = student_td["training_env_ids"].squeeze(-1).to(dtype=torch.long)
+        agent_ids = student_td["agent_slot_ids"].squeeze(-1).to(dtype=torch.long)
         valid_mask = self.has_last_actions[agent_ids]
 
         if valid_mask.any():

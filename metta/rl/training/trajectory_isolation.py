@@ -665,18 +665,18 @@ class TrajectoryIsolator(TrainerComponent):
     def _slice_row_indices(
         self, experience: "Experience", runtime_slice: TrajectoryIsolationSliceRuntime
     ) -> torch.Tensor:
-        env_ids = experience.buffer["training_env_ids"][:, 0, 0].to(
+        agent_slot_ids = experience.buffer["agent_slot_ids"][:, 0, 0].to(
             dtype=torch.long,
             device=experience.device,
         )
 
-        slice_env_ids = torch.nonzero(runtime_slice.env_mask, as_tuple=False).flatten()
-        if slice_env_ids.numel() == 0:
+        slice_agent_slot_ids = torch.nonzero(runtime_slice.env_mask, as_tuple=False).flatten()
+        if slice_agent_slot_ids.numel() == 0:
             return torch.empty((0,), device=experience.device, dtype=torch.long)
-        if slice_env_ids.device != experience.device:
-            slice_env_ids = slice_env_ids.to(device=experience.device)
+        if slice_agent_slot_ids.device != experience.device:
+            slice_agent_slot_ids = slice_agent_slot_ids.to(device=experience.device)
 
-        mask = torch.isin(env_ids, slice_env_ids)
+        mask = torch.isin(agent_slot_ids, slice_agent_slot_ids)
         return torch.nonzero(mask, as_tuple=False).flatten().to(dtype=torch.long)
 
     def _sorted_slice_row_indices(

@@ -14,7 +14,7 @@ from metta.rl.training.batch import calculate_prioritized_sampling_params
 class Experience:
     """Segmented tensor storage for RL experience with BPTT support."""
 
-    _REQUIRED_STORE_KEYS = ("reward_baseline", "training_env_ids")
+    _REQUIRED_STORE_KEYS = ("reward_baseline", "agent_slot_ids")
 
     def __init__(
         self,
@@ -306,7 +306,7 @@ class Experience:
             UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32),
         )
         merged_spec_dict.setdefault(
-            "training_env_ids",
+            "agent_slot_ids",
             UnboundedDiscrete(shape=torch.Size([1]), dtype=torch.int64),
         )
 

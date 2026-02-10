@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional, Sequence
 
+from cortex import RoutedAdapterConfig
+
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_curriculum import (
@@ -383,9 +385,17 @@ def train(
     event_profiles: Sequence[EventProfile] | None = None,
     sweep_mode: bool = False,
     use_clips_curriculum: bool = False,
+    routed_adapter: RoutedAdapterConfig | None = None,
 ) -> tools.TrainTool:
     if isinstance(teacher, dict):
         teacher = TeacherConfig.model_validate(teacher)
+
+    if isinstance(routed_adapter, dict):
+        routed_adapter_overrides = dict(routed_adapter)
+        routed_adapter_overrides.setdefault("num_slots", num_agents)
+        routed_adapter = RoutedAdapterConfig.model_validate(routed_adapter_overrides)
+    if routed_adapter is not None and not routed_adapter.enabled:
+        routed_adapter = None
 
     if use_clips_curriculum:
         default_clips = ClipsCurriculumConfig(layout=layout)
@@ -426,7 +436,10 @@ def train(
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
-    default_architecture = ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
+    default_architecture = ViTDefaultConfig(
+        obs_shim_ignore_inventory_power_tokens=False,
+        core_routed_adapter=routed_adapter,
+    )
     if sweep_mode:
         default_architecture = ViTDefaultConfig(
             obs_shim_ignore_inventory_power_tokens=False,
@@ -436,9 +449,26 @@ def train(
             core_resnet_layers=1,
             core_num_heads=4,
             core_num_latents=16,
+            core_routed_adapter=routed_adapter,
         )
 
-    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)}
+    resolved_architecture = policy_architecture
+    if resolved_architecture is None:
+        resolved_architecture = default_architecture
+    elif routed_adapter is not None and isinstance(resolved_architecture, ViTDefaultConfig):
+        if resolved_architecture.core_routed_adapter is not None:
+            raise ValueError(
+                "routed_adapter was provided, but policy_architecture already sets core_routed_adapter. "
+                "Remove one of them."
+            )
+        resolved_architecture = resolved_architecture.model_copy(update={"core_routed_adapter": routed_adapter})
+    elif routed_adapter is not None:
+        raise ValueError(
+            "routed_adapter only supports the default ViT policy architecture. "
+            "Pass a ViTDefaultConfig(core_routed_adapter=...) explicitly to use a custom architecture."
+        )
+
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=resolved_architecture)}
 
     tt = tools.TrainTool(
         trainer=trainer_cfg,

@@ -230,8 +230,8 @@ class Test05CortexActivationExtractionInterface:
         assert hasattr(found_cortex, "_rollout_current_state"), (
             "Found CortexTD component, but it doesn't have the required attribute _rollout_current_state."
         )
-        assert hasattr(found_cortex, "_rollout_current_env_ids"), (
-            "Found CortexTD component, but it doesn't have the required attribute _rollout_current_env_ids"
+        assert hasattr(found_cortex, "_rollout_current_agent_slot_ids"), (
+            "Found CortexTD component, but it doesn't have the required attribute _rollout_current_agent_slot_ids"
         )
 
     def test_cortex_state_structure_for_extraction(self):

@@ -563,7 +563,7 @@ See also the reference wiring in:
 
 - `bptt`: int Tensor (shape [1]); 1 for rollout (step mode), >1 for training (sequence mode)
 - `batch`: int Tensor (shape [1]); batch size B
-- `training_env_ids`: Long Tensor identifying environments (B or [B, T])
+- `agent_slot_ids`: Long Tensor with global agent-slot IDs (e.g. `[B, 1]` in step mode)
 - Optional resets via `dones`/`truncateds` booleans (B or [B, T])
 
 `CortexTD` maintains separate caches for rollout and training, supports checkpointing via `get_memory()`/`set_memory()`,

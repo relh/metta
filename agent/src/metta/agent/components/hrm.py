@@ -159,18 +159,18 @@ class HRMReasoning(nn.Module):
             x = x.unsqueeze(1)
 
         # Get environment ID (single ID per batch, like LSTM)
-        training_env_ids = td.get("training_env_ids", None)
-        if training_env_ids is not None:
-            flat_env_ids = training_env_ids.reshape(-1)
+        agent_slot_ids = td.get("agent_slot_ids", None)
+        if agent_slot_ids is not None:
+            flat_agent_slot_ids = agent_slot_ids.reshape(-1)
         else:
-            flat_env_ids = torch.arange(batch_size, device=device)
+            flat_agent_slot_ids = torch.arange(batch_size, device=device)
 
-        training_env_id_start = int(flat_env_ids[0].item()) if flat_env_ids.numel() else 0
+        agent_slot_id_start = int(flat_agent_slot_ids[0].item()) if flat_agent_slot_ids.numel() else 0
 
         # Retrieve or initialize hidden states for this environment
-        if training_env_id_start in self.carry:
-            z_l_stored = self.carry[training_env_id_start]["z_l"]
-            z_h_stored = self.carry[training_env_id_start]["z_h"]
+        if agent_slot_id_start in self.carry:
+            z_l_stored = self.carry[agent_slot_id_start]["z_l"]
+            z_h_stored = self.carry[agent_slot_id_start]["z_h"]
 
             # Check if batch size matches - if not, reinitialize
             if z_l_stored.shape[0] == batch_size:
@@ -213,7 +213,7 @@ class HRMReasoning(nn.Module):
                 z_l = self.L_level(z_l, z_h + x)
             z_h = self.H_level(z_h, z_l)
 
-        self.carry[training_env_id_start] = {
+        self.carry[agent_slot_id_start] = {
             "z_l": z_l.squeeze(1).detach(),
             "z_h": z_h.squeeze(1).detach(),
         }

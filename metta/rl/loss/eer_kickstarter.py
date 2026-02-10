@@ -97,7 +97,7 @@ class EERKickstarter(Loss):
             # --- Reward Shaping ---
             # td["rewards"] contains R_{t-1}. We want to add r_lambda * log(pi_teacher(A_{t-1}|S_{t-1})).
             # We use cached teacher probs from the previous step.
-            agent_ids = student_td["training_env_ids"].squeeze(-1).to(dtype=torch.long)
+            agent_ids = student_td["agent_slot_ids"].squeeze(-1).to(dtype=torch.long)
             valid_mask = self.has_last_probs[agent_ids]
             if valid_mask.any():
                 last_probs = self.last_teacher_log_probs[agent_ids]

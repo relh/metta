@@ -1,5 +1,6 @@
-from typing import List
+from typing import List, Optional
 
+from cortex.config import RoutedAdapterConfig
 from cortex.stacks import build_cortex_auto_config
 from pydantic import ConfigDict, Field
 
@@ -49,6 +50,8 @@ class ViTDefaultConfig(PolicyArchitecture):
     # Whether to torch.compile the trunk (Cortex stack)
     core_compile: bool = False
 
+    core_routed_adapter: Optional[RoutedAdapterConfig] = None
+
     components: List[ComponentConfig] = []
 
     action_probs_config: ActionProbsConfig = ActionProbsConfig(in_key="logits")
@@ -94,6 +97,7 @@ class ViTDefaultConfig(PolicyArchitecture):
                     pattern=self.core_resnet_pattern,
                     post_norm=self.core_use_layer_norm,
                     compile_blocks=self.core_compile,
+                    routed_adapter=self.core_routed_adapter,
                 ),
                 pass_state_during_training=self.pass_state_during_training,
             ),

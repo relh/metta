@@ -210,7 +210,7 @@ class RoutedAdapterConfig(BaseModel):
 
     enabled: bool = Field(default=True)
     num_slots: int = Field(ge=1)
-    rank: int = Field(ge=1)
+    rank: int = Field(default=4, ge=1)
     alpha: float | None = Field(default=None, gt=0.0)
     dropout: float = Field(default=0.0, ge=0.0, le=1.0)
     freeze_base: bool = Field(default=False)

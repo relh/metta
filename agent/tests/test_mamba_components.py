@@ -25,7 +25,7 @@ def test_mamba_backbone_forward_rollout():
             "encoded": torch.randn(4, 16),
             "dones": torch.zeros(4),
             "truncateds": torch.zeros(4),
-            "training_env_ids": torch.tensor([[0], [1], [2], [3]]),
+            "agent_slot_ids": torch.tensor([[0], [1], [2], [3]]),
         },
         batch_size=[4],
     )

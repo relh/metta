@@ -144,7 +144,7 @@ class CoreTrainingLoop:
                 rewards = r.to(device=target_device, non_blocking=True)
                 td["rewards"] = rewards
                 agent_ids = self._env_index_cache[training_env_id]
-                td["training_env_ids"] = agent_ids.unsqueeze(1)
+                td["agent_slot_ids"] = agent_ids.unsqueeze(1)
 
                 avg_reward = context.state.avg_reward
                 baseline = avg_reward[agent_ids]
@@ -427,10 +427,10 @@ class CoreTrainingLoop:
             loss.on_epoch_start(context)
 
     def add_last_action_to_td(self, td: TensorDict) -> None:
-        env_ids: Tensor = td["training_env_ids"]
-        env_ids = env_ids.squeeze(-1)
+        agent_slot_ids: Tensor = td["agent_slot_ids"]
+        agent_slot_ids = agent_slot_ids.squeeze(-1)
 
         if self.last_action.device != td.device:
             self.last_action = self.last_action.to(device=td.device)
 
-        td["last_actions"] = self.last_action[env_ids].detach()
+        td["last_actions"] = self.last_action[agent_slot_ids].detach()

@@ -154,7 +154,7 @@ class Policy(MultiAgentPolicy, nn.Module):
             env_obs=UnboundedDiscrete(shape=torch.Size([200, 3]), dtype=torch.uint8),
             dones=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.float32),
             truncateds=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.float32),
-            training_env_ids=UnboundedDiscrete(shape=torch.Size([1]), dtype=torch.int64),
+            agent_slot_ids=UnboundedDiscrete(shape=torch.Size([1]), dtype=torch.int64),
         )
 
     def initialize_to_environment(self, policy_env_info: PolicyEnvInterface, device: torch.device):
@@ -233,7 +233,7 @@ class Policy(MultiAgentPolicy, nn.Module):
     def _set_single_step_metadata(self, td: TensorDict, *, agent_slot: int) -> None:
         ensure_sequence_metadata(td, batch_size=1, time_steps=1)
         device = td.device
-        td.set("training_env_ids", torch.tensor([[agent_slot]], dtype=torch.long, device=device))
+        td.set("agent_slot_ids", torch.tensor([[agent_slot]], dtype=torch.long, device=device))
         td.set("row_id", torch.tensor([agent_slot], dtype=torch.long, device=device))
         td.set("t_in_row", torch.zeros(1, dtype=torch.long, device=device))
 

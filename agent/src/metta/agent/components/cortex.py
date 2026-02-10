@@ -172,9 +172,21 @@ class CortexTD(nn.Module):
         self._rollout_next_slot: int = 0
 
         self._rollout_current_state: Optional[TensorDict] = None
-        self._rollout_current_env_ids: Optional[torch.Tensor] = None
+        self._rollout_current_agent_slot_ids: Optional[torch.Tensor] = None
+        self._num_agents_per_env: Optional[int] = None
 
-    def initialize_to_environment(self, _policy_env_info: Any, _device: torch.device) -> Optional[str]:
+    def initialize_to_environment(self, policy_env_info: Any, _device: torch.device) -> Optional[str]:
+        num_agents_per_env = getattr(policy_env_info, "num_agents", None)
+        if num_agents_per_env is None:
+            raise ValueError("CortexTD.initialize_to_environment requires policy_env_info.num_agents")
+        self._num_agents_per_env = int(num_agents_per_env)
+
+        num_slots = self._routed_adapter_num_slots()
+        if num_slots is not None and num_slots > self._num_agents_per_env:
+            raise ValueError(
+                "Routed adapter slot count must be <= num_agents_per_env, "
+                f"got num_slots={num_slots}, num_agents_per_env={self._num_agents_per_env}"
+            )
         return None
 
     def _init_template_if_needed(self, *, B: int, device: torch.device, dtype: torch.dtype) -> None:
@@ -185,8 +197,9 @@ class CortexTD(nn.Module):
     def _zero_step_init_state(self, *, batch: int, device: torch.device, dtype: torch.dtype) -> TensorDict:
         """Create initial state with zero-input forward pass to materialize all leaves."""
         x0 = torch.zeros(batch, int(self.d_hidden), device=device, dtype=dtype)
+        route_ids = self._zero_step_route_ids(batch=batch, device=device)
         with torch.no_grad():
-            _y, s1 = self.stack.step(x0, None)
+            _y, s1 = self.stack.step(x0, None, route_ids=route_ids)
         if s1 is None:
             raise ValueError("Stack step returned None state during initialization")
         return cast(TensorDict, s1)
@@ -220,6 +233,57 @@ class CortexTD(nn.Module):
             casted.append(leaf.to(dtype) if isinstance(leaf, torch.Tensor) else leaf)
         return cast(TensorDict, optree.tree_unflatten(treedef, casted))
 
+    def _routed_adapter_num_slots(self) -> Optional[int]:
+        routed_adapter = getattr(self.stack.cfg, "routed_adapter", None)
+        if routed_adapter is None or not routed_adapter.enabled:
+            return None
+        return int(routed_adapter.num_slots)
+
+    def _zero_step_route_ids(self, *, batch: int, device: torch.device) -> Optional[torch.Tensor]:
+        num_slots = self._routed_adapter_num_slots()
+        if num_slots is None:
+            return None
+        return torch.zeros(batch, device=device, dtype=torch.long)
+
+    def _resolve_agent_slot_ids_and_route_ids(
+        self,
+        *,
+        td: TensorDict,
+        B: int,
+        TT: int,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if "agent_slot_ids" not in td.keys():
+            raise KeyError("CortexTD requires 'agent_slot_ids' with shape [B*TT, 1]")
+
+        agent_slot_ids_2d = cast(torch.Tensor, td["agent_slot_ids"]).to(device=device, dtype=torch.long)
+        if agent_slot_ids_2d.dim() != 2 or agent_slot_ids_2d.shape[1] != 1:
+            raise ValueError(f"agent_slot_ids must have shape [B*TT,1], got {tuple(agent_slot_ids_2d.shape)}")
+
+        flat_slot_ids = agent_slot_ids_2d.reshape(-1)
+        if flat_slot_ids.numel() != B * TT:
+            raise ValueError(f"agent_slot_ids length {flat_slot_ids.numel()} must equal batch*bptt ({B}*{TT}={B * TT})")
+
+        slot_ids_bt = flat_slot_ids.view(B, TT)
+        agent_slot_ids = slot_ids_bt[:, 0].contiguous()
+        if TT > 1 and not bool((slot_ids_bt == agent_slot_ids.unsqueeze(1)).all()):
+            raise ValueError("agent_slot_ids must stay constant across timesteps within each sequence")
+
+        num_slots = self._routed_adapter_num_slots()
+        if num_slots is None:
+            return agent_slot_ids, None
+        if self._num_agents_per_env is None:
+            raise ValueError("CortexTD routed adapters require initialize_to_environment() before forward().")
+        if num_slots > self._num_agents_per_env:
+            raise ValueError(
+                "Routed adapter slot count must be <= num_agents_per_env, "
+                f"got num_slots={num_slots}, num_agents_per_env={self._num_agents_per_env}"
+            )
+
+        within_env_index = torch.remainder(agent_slot_ids, self._num_agents_per_env)
+        route_ids = torch.remainder(within_env_index, num_slots)
+        return agent_slot_ids, route_ids
+
     @torch._dynamo.disable
     def forward(self, td: TensorDict) -> TensorDict:  # type: ignore[override]
         x = td[self.in_key]
@@ -242,19 +306,10 @@ class CortexTD(nn.Module):
             raise ValueError(f"input length {x.shape[0]} must equal batch*bptt ({B}*{TT})")
 
         resets = _as_reset_mask(td.get("dones", None), None, B=B, TT=TT, device=device)
+        agent_slot_ids, route_ids = self._resolve_agent_slot_ids_and_route_ids(td=td, B=B, TT=TT, device=device)
 
         if TT == 1:
-            if "training_env_ids" not in td.keys():
-                td.set("training_env_ids", torch.arange(B, device=device, dtype=torch.long).view(B, 1))
-                logger.debug(
-                    "[CortexTD] Missing 'training_env_ids'; defaulting to arange(B) with B=%d.",
-                    B,
-                )
-            env_ids_2d = cast(torch.Tensor, td["training_env_ids"]).to(device=device, dtype=torch.long)
-            assert env_ids_2d.dim() == 2 and env_ids_2d.shape[1] == 1, "training_env_ids must be [B,1]"
-            env_ids_long = env_ids_2d.view(-1)
-
-            state_prev = self._ensure_rollout_current_state(env_ids_long, B=B, device=device, dtype=storage_dtype)
+            state_prev = self._ensure_rollout_current_state(agent_slot_ids, B=B, device=device, dtype=storage_dtype)
             if isinstance(state_prev, TensorDict) and compute_dtype != storage_dtype:
                 state_prev = self._cast_state_dtype(state_prev, compute_dtype)
 
@@ -277,7 +332,7 @@ class CortexTD(nn.Module):
                     )
 
             x_step = x.view(B, -1) if x.dtype is compute_dtype else x.view(B, -1).to(compute_dtype)
-            y, state_next = self.stack.step(x_step, state_prev, resets=resets)
+            y, state_next = self.stack.step(x_step, state_prev, resets=resets, route_ids=route_ids)
             self._rollout_current_state = (
                 self._cast_state_dtype(state_next, storage_dtype) if isinstance(state_next, TensorDict) else state_next
             )
@@ -304,7 +359,7 @@ class CortexTD(nn.Module):
         if x_seq.dtype is not compute_dtype:
             x_seq = x_seq.to(compute_dtype)
 
-        y_seq, _ = self.stack(x_seq, state0)
+        y_seq, _ = self.stack(x_seq, state0, route_ids=route_ids)
         y_seq = self._out(y_seq)
         if y_seq.dtype is not x.dtype:
             y_seq = y_seq.to(x.dtype)
@@ -314,7 +369,7 @@ class CortexTD(nn.Module):
     def experience_keys(self) -> Dict[FlatKey, torch.Size]:
         """Replay keys required by the component."""
         return {
-            "training_env_ids": torch.Size([1]),
+            "agent_slot_ids": torch.Size([1]),
             "row_id": torch.Size([]),
             "t_in_row": torch.Size([]),
             "dones": torch.Size([]),
@@ -344,7 +399,7 @@ class CortexTD(nn.Module):
     def get_agent_experience_spec(self) -> Composite:
         spec_dict: Dict[str, UnboundedDiscrete] = {}
         for key, shape in self.experience_keys().items():
-            if key in ("training_env_ids", "row_id", "t_in_row"):
+            if key in ("agent_slot_ids", "row_id", "t_in_row"):
                 dtype = torch.long
             else:
                 dtype = torch.float32
@@ -441,13 +496,15 @@ class CortexTD(nn.Module):
         return optree.tree_unflatten(self._state_treedef, sel_leaves)
 
     def _flush_rollout_current_to_store(self) -> None:
-        if self._rollout_current_state is not None and self._rollout_current_env_ids is not None:
-            slots = self._map_ids_to_slots(self._rollout_current_env_ids, self._rollout_id2slot, create_missing=True)
+        if self._rollout_current_state is not None and self._rollout_current_agent_slot_ids is not None:
+            slots = self._map_ids_to_slots(
+                self._rollout_current_agent_slot_ids, self._rollout_id2slot, create_missing=True
+            )
             self._scatter_state_by_slots_list(self._rollout_current_state, slots, store=self._rollout_store_leaves)
 
     def _ensure_rollout_current_state(
         self,
-        env_ids_long: torch.Tensor,
+        agent_slot_ids_long: torch.Tensor,
         *,
         B: int,
         device: torch.device,
@@ -455,19 +512,19 @@ class CortexTD(nn.Module):
     ) -> TensorDict:
         if (
             self._rollout_current_state is not None
-            and self._rollout_current_env_ids is not None
-            and self._rollout_current_env_ids.numel() == env_ids_long.numel()
-            and torch.equal(self._rollout_current_env_ids, env_ids_long)
+            and self._rollout_current_agent_slot_ids is not None
+            and self._rollout_current_agent_slot_ids.numel() == agent_slot_ids_long.numel()
+            and torch.equal(self._rollout_current_agent_slot_ids, agent_slot_ids_long)
         ):
             return self._rollout_current_state
 
         self._flush_rollout_current_to_store()
-        slots = self._map_ids_to_slots(env_ids_long, self._rollout_id2slot, create_missing=False)
+        slots = self._map_ids_to_slots(agent_slot_ids_long, self._rollout_id2slot, create_missing=False)
         state_prev = self._gather_state_by_slots_list(
             slots, store=self._rollout_store_leaves, B=B, device=device, dtype=dtype
         )
         self._rollout_current_state = state_prev
-        self._rollout_current_env_ids = env_ids_long.detach().clone()
+        self._rollout_current_agent_slot_ids = agent_slot_ids_long.detach().clone()
         return state_prev
 
     def _map_ids_to_slots(

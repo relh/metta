@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 import torch.nn as nn
 from cortex import (
@@ -136,11 +137,8 @@ def test_cortex_stack_requires_route_ids_when_adapter_enabled() -> None:
     x = torch.randn(batch_size, seq_len, 16)
     state = stack.init_state(batch=batch_size, device=x.device, dtype=x.dtype)
 
-    try:
+    with pytest.raises(ValueError, match="route_ids"):
         stack(x, state)
-        raise AssertionError("Expected ValueError when route_ids is omitted with routed_adapter enabled.")
-    except ValueError as exc:
-        assert "route_ids" in str(exc)
 
 
 def test_cortex_stack_routed_adapter_sequence_and_step() -> None:

@@ -30,7 +30,7 @@ def test_rollout_updates_and_resets_cache():
             "encoded": torch.randn(2, 16),
             "dones": torch.zeros(2),
             "truncateds": torch.zeros(2),
-            "training_env_ids": torch.tensor([[0], [1]]),
+            "agent_slot_ids": torch.tensor([[0], [1]]),
         },
         batch_size=[2],
     )

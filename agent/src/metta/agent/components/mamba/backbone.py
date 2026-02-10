@@ -272,11 +272,11 @@ class MambaBackboneComponent(nn.Module):
         batch = tokens.size(0)
         tokens_per_step = tokens.size(2)
 
-        training_env_ids = td.get("training_env_ids", None)
-        if training_env_ids is None:
-            env_ids = torch.arange(batch, device=device, dtype=torch.long)
+        agent_slot_ids = td.get("agent_slot_ids", None)
+        if agent_slot_ids is None:
+            batch_agent_slot_ids = torch.arange(batch, device=device, dtype=torch.long)
         else:
-            env_ids = training_env_ids.reshape(-1).to(device=device, dtype=torch.long)
+            batch_agent_slot_ids = agent_slot_ids.reshape(-1).to(device=device, dtype=torch.long)
 
         use_streaming_path = not self.training and tt == 1
 
@@ -289,8 +289,8 @@ class MambaBackboneComponent(nn.Module):
             tokens = tokens.reshape(batch, tokens_per_step, -1)
             dummy_action = self._dummy_actions(1, 1, device)
             for idx in range(batch):
-                env_id = int(env_ids[idx].item())
-                state = self._ensure_state(env_id, tokens_per_step, device, dtype)
+                agent_slot_id = int(batch_agent_slot_ids[idx].item())
+                state = self._ensure_state(agent_slot_id, tokens_per_step, device, dtype)
 
                 cache = state.inference_params
                 cache.seqlen_offset = state.position
@@ -322,8 +322,8 @@ class MambaBackboneComponent(nn.Module):
             return td
 
         # Batched path (training or evaluation with longer sequences)
-        for env_id in env_ids.detach().cpu().tolist():
-            state = self._env_states.get(int(env_id))
+        for agent_slot_id in batch_agent_slot_ids.detach().cpu().tolist():
+            state = self._env_states.get(int(agent_slot_id))
             if state is not None:
                 state.reset()
 
