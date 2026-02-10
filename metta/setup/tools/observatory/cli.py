@@ -34,16 +34,21 @@ This CLI supports running inside a devcontainer on macOS. The key challenges:
 
 import functools
 import os
+import platform
 import subprocess
+import tempfile
+import uuid
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from metta.app_backend.clients.base_client import get_machine_token
+from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.util.constants import PROD_STATS_SERVER_URI
 from metta.common.util.fs import get_repo_root
 from metta.setup.tools.observatory.local_k8s import (
+    IMAGE,
     K3D_CLUSTER_NAME,
     detect_k8s_runtime,
     get_host_address,
@@ -52,6 +57,10 @@ from metta.setup.tools.observatory.local_k8s import (
 )
 from metta.setup.tools.observatory.utils import LOCAL_METTA_POLICY_EVAL_IMG_NAME
 from metta.setup.utils import error, info
+from metta.tools.utils.auto_config import auto_stats_server_uri
+from mettagrid.runner.episode_runner import run_episode_isolated
+from mettagrid.runner.types import SingleEpisodeJob
+from mettagrid.util.uri_resolvers.schemes import localize_uri
 
 repo_root = get_repo_root()
 
@@ -169,6 +178,12 @@ Observatory local development.
 [bold]Teardown:[/bold]
   metta observatory postgres down
   metta observatory local-k8s clean
+
+[bold]Run a single episode:[/bold]
+  metta observatory run-episode job.json                        # Local subprocess (default)
+  metta observatory run-episode job.json -m local-image         # In locally-built Docker image
+  metta observatory run-episode job.json -m prod-image          # In production Docker image
+  metta observatory run-episode <uuid> -m local-image           # Fetch from observatory, run in Docker
 
 [bold]Rebuild job runner image:[/bold]
   metta observatory local-k8s build-image
@@ -416,6 +431,143 @@ def frontend(
     info(f"API URL: {env.get('OBSERVATORY_API_URL')}")
 
     subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/observatory")
+
+
+PROD_IMAGE = "ghcr.io/metta-ai/episode-runner:latest"
+
+
+def _resolve_job_id(client: StatsClient, uuid_id: uuid.UUID) -> uuid.UUID:
+    """Resolve a UUID to a job ID, trying both job_id and episode_id lookups."""
+    try:
+        job_request = client.get_job(job_id=uuid_id)
+        return job_request.id
+    except Exception:
+        pass
+    result = client.sql_query(f"SELECT id FROM job_requests WHERE result->>'episode_id' = '{uuid_id}' LIMIT 1")
+    if result.rows:
+        return uuid.UUID(result.rows[0][0])
+    raise ValueError(f"No job found for job_id or episode_id: {uuid_id}")
+
+
+def _load_job(source: str) -> SingleEpisodeJob:
+    source_path = Path(source).expanduser()
+    if source_path.exists():
+        return SingleEpisodeJob.model_validate_json(source_path.read_text())
+    uuid_id = uuid.UUID(source)
+    stats_uri = auto_stats_server_uri()
+    if not stats_uri:
+        raise ValueError("No stats server URI configured")
+    client = StatsClient.create(stats_server_uri=stats_uri)
+    job_id = _resolve_job_id(client, uuid_id)
+    job_request = client.get_job(job_id)
+    job = SingleEpisodeJob.model_validate(job_request.job)
+    info(f"Fetched job {job_id}")
+    return job
+
+
+def _run_episode_local(job: SingleEpisodeJob, out: Path) -> None:
+    results_path = out / "results.json"
+    replay_path = out / "replay.json.z"
+    debug_dir = out / "debug"
+    debug_dir.mkdir(exist_ok=True)
+    run_episode_isolated(job.episode_spec(), results_path, replay_path=replay_path, debug_dir=debug_dir)
+    info(f"Results written to {results_path}")
+
+
+def _localize_policy_for_docker(uri: str, index: int, volume_mounts: list[str]) -> str:
+    """Resolve a policy URI on the host and return a file:// URI for the container."""
+    local_path = localize_uri(uri)
+    if local_path is None:
+        raise ValueError(f"Cannot localize policy URI: {uri}")
+    container_target = f"/workspace/policies/{index}"
+    if local_path.is_dir():
+        container_uri = f"file://{container_target}"
+    else:
+        container_uri = f"file://{container_target}/{local_path.name}"
+        container_target = f"{container_target}/{local_path.name}"
+    volume_mounts.extend(["-v", f"{local_path.resolve()}:{container_target}:ro"])
+    return container_uri
+
+
+def _run_episode_docker(job: SingleEpisodeJob, out: Path, image: str, docker_platform: str) -> None:
+    with tempfile.TemporaryDirectory(prefix="observatory_run_episode_") as workspace:
+        workspace_path = Path(workspace)
+        spec_path = workspace_path / "spec.json"
+
+        volume_mounts: list[str] = []
+        container_policy_uris = [
+            _localize_policy_for_docker(uri, i, volume_mounts) for i, uri in enumerate(job.policy_uris)
+        ]
+
+        docker_job = SingleEpisodeJob(
+            policy_uris=container_policy_uris,
+            assignments=job.assignments,
+            env=job.env,
+            seed=job.seed,
+            max_action_time_ms=job.max_action_time_ms,
+            results_uri="file:///workspace/io/results.json",
+            replay_uri="file:///workspace/io/replay.json.z",
+            debug_uri="file:///workspace/io/debug.zip",
+        )
+        spec_path.write_text(docker_job.model_dump_json())
+
+        cmd = [
+            "docker",
+            "run",
+            "--rm",
+            "--platform",
+            docker_platform,
+            "-e",
+            "JOB_SPEC_URI=file:///workspace/io/spec.json",
+            "-e",
+            "RESULTS_URI=file:///workspace/io/results.json",
+            "-e",
+            "DEBUG_URI=file:///workspace/io/debug.zip",
+            "-v",
+            f"{workspace}:/workspace/io:rw",
+            *volume_mounts,
+            image,
+        ]
+        info(f"Running episode in Docker ({image}) for {docker_platform}")
+        subprocess.run(cmd, check=True, timeout=600)
+
+        for name in ("results.json", "replay.json.z", "debug.zip"):
+            src = workspace_path / name
+            if src.exists():
+                (out / name).write_bytes(src.read_bytes())
+        info(f"Results written to {out}")
+
+
+@app.command(name="run-episode")
+@handle_errors
+def run_episode(
+    source: Annotated[str, typer.Argument(help="Path to job spec JSON, or observatory job/episode UUID")],
+    mode: Annotated[str, typer.Option("--mode", "-m", help="local, local-image, or prod-image")] = "local",
+    output_dir: Annotated[str, typer.Option("--output-dir", "-o", help="Directory for results")] = ".",
+):
+    """Run a single episode locally or in a Docker image.
+
+    Modes:
+      local       - subprocess isolation, no Docker (default)
+      local-image - uses episode-runner-local:latest (built from source)
+      prod-image  - uses ghcr.io/metta-ai/episode-runner:latest (linux/amd64)
+    """
+    job = _load_job(source)
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    if mode == "local":
+        _run_episode_local(job, out)
+    elif mode == "local-image":
+        docker_platform = "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
+        _run_episode_docker(job, out, IMAGE, docker_platform)
+    elif mode == "prod-image":
+        info(f"Pulling {PROD_IMAGE}...")
+        subprocess.run(["docker", "pull", "--platform", "linux/amd64", PROD_IMAGE], check=True, timeout=300)
+        _run_episode_docker(job, out, PROD_IMAGE, "linux/amd64")
+    else:
+        error(f"Unknown mode: {mode}. Use local, local-image, or prod-image")
+        raise typer.Exit(1)
 
 
 tournament_app = typer.Typer(help="Tournament management", rich_markup_mode="rich", no_args_is_help=True)

@@ -58,9 +58,9 @@ See _get_orbstack_kubeconfig_for_container() for the implementation.
 """
 
 import os
+import platform
 import subprocess
 import sys
-import tempfile
 from enum import Enum
 from pathlib import Path
 from typing import Annotated
@@ -398,32 +398,56 @@ def _import_image_to_k3d() -> None:
 def _build_image() -> None:
     old_id = subprocess.run(["docker", "images", "-q", IMAGE], capture_output=True, text=True).stdout.strip()
 
-    info(f"Building {IMAGE} (slim episode runner)...")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        subprocess.run(
-            ["uv", "build", "packages/mettagrid", "--wheel", "--out-dir", tmpdir],
-            check=True,
-            cwd=repo_root,
-        )
-        subprocess.run(
-            ["uv", "build", "packages/cogames", "--wheel", "--out-dir", tmpdir],
-            check=True,
-            cwd=repo_root,
-        )
-        subprocess.run(
-            [
-                "docker",
-                "build",
-                "-t",
-                IMAGE,
-                "-f",
-                str(repo_root / "packages" / "cogames" / "Dockerfile.episode_runner"),
-                "--platform",
-                "linux/amd64",
-                tmpdir,
-            ],
-            check=True,
-        )
+    docker_platform = "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
+    info(f"Building {IMAGE} for {docker_platform}...")
+
+    # Build context from working tree (includes uncommitted changes) using
+    # git ls-files to respect .gitignore. Piped straight to docker build.
+    dockerfile = Path(__file__).parent / "Dockerfile.episode_runner.local"
+    dockerfile_rel = str(dockerfile.relative_to(repo_root))
+
+    ls_files = subprocess.run(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "packages/mettagrid",
+            "packages/cogames",
+        ],
+        capture_output=True,
+        check=True,
+        cwd=repo_root,
+    )
+    # Append the Dockerfile to the file list (may not be git-tracked yet).
+    tar_input = ls_files.stdout + dockerfile_rel.encode() + b"\0"
+
+    tar = subprocess.Popen(
+        ["tar", "-cf", "-", "-C", str(repo_root), "--null", "-T", "-"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+    )
+    tar_data, _ = tar.communicate(tar_input)
+    if tar.returncode != 0:
+        raise subprocess.CalledProcessError(tar.returncode, tar.args)
+
+    subprocess.run(
+        [
+            "docker",
+            "build",
+            "-t",
+            IMAGE,
+            "-f",
+            dockerfile_rel,
+            "--platform",
+            docker_platform,
+            "-",
+        ],
+        input=tar_data,
+        check=True,
+    )
 
     if old_id:
         new_id = subprocess.run(["docker", "images", "-q", IMAGE], capture_output=True, text=True).stdout.strip()

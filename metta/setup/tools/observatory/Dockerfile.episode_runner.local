@@ -1,0 +1,68 @@
+# Local dev variant of the episode runner image.
+#
+# Builds mettagrid and cogames from source inside the container so the image
+# reflects local code changes. The production Dockerfile (in packages/cogames/)
+# installs pre-built wheels; this one carries Bazel and a C++ toolchain because
+# mettagrid has native pybind11 extensions that must be compiled for the
+# container's Linux platform (building on macOS produces a macOS-only wheel).
+
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ca-certificates \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /uvx /bin/
+
+# Install Nim via nimby — architecture-aware.
+ARG NIMBY_VERSION=0.1.19
+ARG NIM_VERSION=2.2.6
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then NIMBY_ARCH="Arm64"; else NIMBY_ARCH="X64"; fi && \
+    curl -fsSL "https://github.com/treeform/nimby/releases/download/${NIMBY_VERSION}/nimby-Linux-${NIMBY_ARCH}" \
+        -o /usr/local/bin/nimby && \
+    chmod +x /usr/local/bin/nimby && \
+    nimby use ${NIM_VERSION}
+ENV PATH="/root/.nimby/nim/bin:$PATH"
+
+# Install Bazelisk (auto-downloads the correct Bazel version on first run).
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ]; then BZ_ARCH="arm64"; else BZ_ARCH="amd64"; fi && \
+    curl -fsSL "https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${BZ_ARCH}" \
+        -o /usr/local/bin/bazel && \
+    chmod +x /usr/local/bin/bazel
+
+# --- Everything above here is cached across rebuilds. ---
+
+RUN uv python install 3.12 && uv venv /opt/executor
+
+# Build both packages from source for the container's native platform.
+# --override relaxes cogames' pinned mettagrid==X.Y.Z constraint so the
+# locally-built mettagrid (whatever version setuptools_scm produces) is accepted.
+# Cache mounts persist Bazel's build cache and uv's package cache across builds
+# so incremental rebuilds are fast (only recompiles changed C++ files, etc.).
+COPY packages/mettagrid/ /tmp/mettagrid/
+COPY packages/cogames/ /tmp/cogames/
+RUN --mount=type=cache,target=/root/.cache/bazel \
+    --mount=type=cache,target=/root/.cache/bazel_output \
+    --mount=type=cache,target=/root/.cache/uv \
+    METTAGRID_BAZEL_OUTPUT_ROOT=/root/.cache/bazel_output \
+    uv build /tmp/mettagrid --wheel --out-dir /tmp/wheels && \
+    uv build /tmp/cogames --wheel --out-dir /tmp/wheels && \
+    echo 'mettagrid' > /tmp/overrides.txt && \
+    uv pip install --python /opt/executor/bin/python \
+        --override /tmp/overrides.txt /tmp/wheels/*.whl && \
+    rm -rf /tmp/mettagrid /tmp/cogames /tmp/wheels /tmp/overrides.txt
+
+# Pre-warm uv cache with torch so per-policy venv creation is near-instant.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv /tmp/cache-warm && \
+    uv pip install --python /tmp/cache-warm/bin/python torch && \
+    rm -rf /tmp/cache-warm
+
+ENV PATH="/opt/executor/bin:$PATH"
+
+ENTRYPOINT ["python", "-m", "mettagrid.runner.executor"]

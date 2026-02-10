@@ -106,6 +106,51 @@ When debugging Observatory issues:
 - Verify watcher is running and processing job results
 - Check job completed successfully: `metta observatory local-k8s get-pods`
 
+## Local Episode Runner Image
+
+The local K8s setup builds a Docker image (`episode-runner-local:latest`) from source so local code changes are
+reflected in job pods. This uses `Dockerfile.episode_runner.local` (in this directory), which is separate from the
+production Dockerfile in `packages/cogames/`.
+
+**Why a separate Dockerfile?** mettagrid has C++ extensions (pybind11/Bazel). Building on macOS produces a macOS wheel
+that can't load in a Linux container. The local Dockerfile carries Bazel and a C++ toolchain so it can compile mettagrid
+natively inside the container for the correct Linux platform.
+
+**Platform:** On Apple Silicon, the image is built for `linux/arm64` (native, no QEMU emulation). On x86 hosts it builds
+`linux/amd64`.
+
+**Caching:** BuildKit cache mounts persist Bazel's build cache, uv's package cache, and Nim artifacts across rebuilds.
+First build is slow (full C++ compile + dependency downloads); subsequent rebuilds after source changes are incremental.
+
+**Rebuild after code changes:**
+
+```bash
+metta observatory local-k8s build-image   # Rebuild with local source
+metta observatory local-k8s get-pods      # Check running pods
+metta observatory local-k8s logs          # Follow pod logs
+```
+
+**Version pinning:** cogames pins `mettagrid==X.Y.Z` in its dependencies. The local Dockerfile uses
+`uv pip install --override` to relax this constraint so the locally-built mettagrid (whatever version setuptools_scm
+produces) is accepted alongside cogames.
+
+## Running Single Episodes
+
+`metta observatory run-episode` runs a single episode for debugging/testing. Three modes:
+
+- **local** (default): subprocess isolation, no Docker. Fastest for iteration.
+- **local-image**: uses `episode-runner-local:latest` built from source via `local-k8s build-image`.
+- **prod-image**: pulls `ghcr.io/metta-ai/episode-runner:latest` (linux/amd64).
+
+```bash
+metta observatory run-episode job.json                  # Local subprocess
+metta observatory run-episode job.json -m local-image   # Local Docker image
+metta observatory run-episode job.json -m prod-image    # Production image
+metta observatory run-episode <job-uuid> -m local-image # Fetch from observatory
+```
+
+Source can be a path to a job spec JSON file or an observatory job UUID.
+
 ## Architecture Notes
 
 **K8s Runtime Detection:**
