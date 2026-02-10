@@ -553,7 +553,7 @@ def run_episode(
       prod-image  - uses ghcr.io/metta-ai/episode-runner:latest (linux/amd64)
     """
     job = _load_job(source)
-    out = Path(output_dir)
+    out = Path(output_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
 
     if mode == "local":
