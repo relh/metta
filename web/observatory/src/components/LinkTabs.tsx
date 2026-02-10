@@ -27,8 +27,8 @@ export const LinkTabs: FC<LinkTabsProps> = ({ tabs }) => {
           className={clsx(
             'no-underline rounded-full px-4 py-2 text-sm font-medium border',
             pathname === tab.href
-              ? 'bg-blue-200 text-blue-800 border-blue-400'
-              : 'border border-gray-300 text-gray-700 hover:bg-gray-300 hover:text-gray-900'
+              ? 'bg-blue-200 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-400 dark:border-blue-700'
+              : 'border border-border-strong text-foreground-subtle hover:bg-surface-alt hover:text-foreground'
           )}
         >
           {tab.label}

@@ -22,12 +22,12 @@ export default async function PoliciesPage({ searchParams: rawSearchParams }: Pa
     <StandardPageLayout>
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold text-gray-900">Policies</h1>
-          <p className="text-sm text-gray-500">All policies ordered by creation date</p>
+          <h1 className="text-2xl font-semibold text-foreground">Policies</h1>
+          <p className="text-sm text-foreground-muted">All policies ordered by creation date</p>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+      <div className="bg-surface border border-border rounded-lg shadow-sm">
         <div className="p-5">
           <div className="w-full max-w-xs mb-6">
             <SearchParamInput paramName="q" placeholder="Search by name..." />

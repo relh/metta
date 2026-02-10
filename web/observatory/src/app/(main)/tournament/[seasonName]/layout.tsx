@@ -15,14 +15,14 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
   }
 
   return (
-    <div className="text-gray-500 text-sm">
+    <div className="text-foreground-muted text-sm">
       <ServerDebugDrain />
       {season.summary && <div>{season.summary}</div>}
       {season.pools.length > 0 && (
         <div className="mt-1 ml-4 space-y-0.5">
           {season.pools.map((pool) => (
             <div key={pool.name}>
-              <span className="font-medium text-gray-600">{pool.name}:</span> {pool.description}
+              <span className="font-medium text-foreground-muted">{pool.name}:</span> {pool.description}
               {pool.config_id && (
                 <>
                   {' '}

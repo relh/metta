@@ -30,7 +30,8 @@ export const Tooltip: FC<{
           ref={refs.setFloating}
           {...getFloatingProps({
             style: floatingStyles,
-            className: 'z-50 rounded-lg border border-zinc-400 bg-white px-3 py-1.5 text-sm shadow-xl',
+            className:
+              'z-50 rounded-lg border border-border-strong bg-surface px-3 py-1.5 text-sm shadow-xl text-foreground',
           })}
         >
           {render()}

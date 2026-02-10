@@ -38,7 +38,7 @@ const SortTH: FC<
   <TH onClick={() => onSort(sortKey)} className="cursor-pointer select-none whitespace-nowrap" {...props}>
     <span className="inline-flex items-center gap-0.5">
       {children}
-      <span className="text-[10px] text-gray-400">
+      <span className="text-[10px] text-foreground-muted">
         {active.key === sortKey ? (active.desc ? '\u25BC' : '\u25B2') : '\u25B4\u25BE'}
       </span>
     </span>
@@ -130,7 +130,7 @@ const SortablePolicyHeader: FC<{
         ) : (
           <span>{label}</span>
         )}
-        <span className="font-normal text-gray-400">{policy.num_agents} agents</span>
+        <span className="font-normal text-foreground-muted">{policy.num_agents} agents</span>
       </div>
     </SortTH>
   )
@@ -144,10 +144,13 @@ const Section: FC<React.PropsWithChildren<{ label: string; count: string; open: 
   children,
 }) => (
   <div>
-    <button onClick={onToggle} className="flex items-center gap-1 text-xs text-gray-700 hover:text-gray-900 py-1">
+    <button
+      onClick={onToggle}
+      className="flex items-center gap-1 text-xs text-foreground-subtle hover:text-foreground py-1"
+    >
       <span className="text-[10px]">{open ? '\u25BC' : '\u25B6'}</span>
       <span className="font-medium">{label}</span>
-      <span className="text-gray-400">({count})</span>
+      <span className="text-foreground-muted">({count})</span>
     </button>
     {open && <div className="mt-1">{children}</div>}
   </div>
@@ -251,7 +254,7 @@ export const PoliciesAndAgents: FC<{ jobId?: string }> = ({ jobId }) => {
   if (policies.length === 0) {
     return (
       <Card title="Policies & Agents" padding="sm">
-        <div className="text-gray-500 text-xs">No policy data available.</div>
+        <div className="text-foreground-muted text-xs">No policy data available.</div>
       </Card>
     )
   }
@@ -267,7 +270,7 @@ export const PoliciesAndAgents: FC<{ jobId?: string }> = ({ jobId }) => {
           value={metricFilter}
           onChange={(e) => setMetricFilter(e.target.value)}
           placeholder="Filter metrics..."
-          className="border border-gray-200 rounded px-2 py-0.5 text-xs w-48 focus:outline-none focus:border-blue-400"
+          className="border border-border rounded px-2 py-0.5 text-xs w-48 bg-surface text-foreground focus:outline-none focus:border-blue-400"
         />
         <button
           onClick={() => downloadBlob(generateCsv(policies, labels), 'episode-stats.csv')}
@@ -345,7 +348,7 @@ export const PoliciesAndAgents: FC<{ jobId?: string }> = ({ jobId }) => {
                 {sortedAgents.map((agent) => (
                   <TR key={agent.agent_id}>
                     <TD className="font-medium">Agent {agent.agent_id}</TD>
-                    <TD className="text-gray-500">{labels[agent.pIdx]}</TD>
+                    <TD className="text-foreground-muted">{labels[agent.pIdx]}</TD>
                     <TD>
                       <span className="font-mono">{fmt(agent.reward)}</span>
                     </TD>

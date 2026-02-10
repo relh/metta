@@ -14,8 +14,8 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   }, [error])
 
   return (
-    <div className="rounded-md bg-red-100 p-4">
-      <h2 className="text-xl font-bold mb-4 text-red-700">Something went wrong!</h2>
+    <div className="rounded-md bg-red-100 dark:bg-red-900/30 p-4">
+      <h2 className="text-xl font-bold mb-4 text-red-700 dark:text-red-400">Something went wrong!</h2>
       <pre>{error.message}</pre>
       <Button
         onClick={

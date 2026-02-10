@@ -22,21 +22,21 @@ export const TaskAttemptTimeline: FC<{ task: EvalTask; attempt: TaskAttempt }> =
   return (
     <div className="inline-grid grid-cols-[auto_auto_auto] gap-x-2 gap-y-1 text-xs">
       <div className="contents">
-        <div className="text-gray-600">Assigned:</div>
+        <div className="text-foreground-muted">Assigned:</div>
         <div>{formatDate(attempt.assigned_at)}</div>
         <div className={clsx('text-right', getTimeDiffColor(task.created_at, attempt.assigned_at))}>
           {assignedDiff ? `(+ ${assignedDiff})` : ''}
         </div>
       </div>
       <div className="contents">
-        <div className="text-gray-600">Started:</div>
+        <div className="text-foreground-muted">Started:</div>
         <div>{formatDate(attempt.started_at)}</div>
         <div className={clsx('text-right', getTimeDiffColor(attempt.assigned_at, attempt.started_at))}>
           {startedDiff ? `(+ ${startedDiff})` : ''}
         </div>
       </div>
       <div className="contents">
-        <div className="text-gray-600">Finished:</div>
+        <div className="text-foreground-muted">Finished:</div>
         <div>{formatDate(attempt.finished_at)}</div>
         <div className={clsx('text-right', getTimeDiffColor(attempt.started_at, attempt.finished_at))}>
           {finishedDiff ? `(+ ${finishedDiff})` : ''}

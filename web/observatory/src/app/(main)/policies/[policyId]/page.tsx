@@ -24,22 +24,22 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
       <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Policy</p>
-          <h1 className="text-2xl font-semibold text-gray-900">{policyName}</h1>
-          <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+          <p className="text-xs font-semibold uppercase text-foreground-muted tracking-wide">Policy</p>
+          <h1 className="text-2xl font-semibold text-foreground">{policyName}</h1>
+          <div className="flex flex-wrap gap-3 text-sm text-foreground-muted">
             {firstVersion?.user_id && (
-              <span className="text-gray-500">
+              <span className="text-foreground-muted">
                 User: <UserDisplay user={firstVersion.user} userId={firstVersion.user_id} />
               </span>
             )}
             {policyCreatedAt && (
-              <span className="text-gray-500" title={formatDate(policyCreatedAt)}>
+              <span className="text-foreground-muted" title={formatDate(policyCreatedAt)}>
                 Created: {formatRelativeTime(policyCreatedAt)}
               </span>
             )}
-            <span className="flex items-center gap-1 text-gray-500">
+            <span className="flex items-center gap-1 text-foreground-muted">
               Policy ID:
-              <span className="font-mono text-xs text-gray-700">{policyId}</span>
+              <span className="font-mono text-xs text-foreground-subtle">{policyId}</span>
             </span>
           </div>
         </div>
@@ -52,7 +52,7 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
 
       <Card title="Versions">
         {policyVersions.length === 0 ? (
-          <div className="text-gray-500 text-sm">No versions found for this policy.</div>
+          <div className="text-foreground-muted text-sm">No versions found for this policy.</div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -70,7 +70,7 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
                       </StyledLink>
                     </TD>
                     <TD>
-                      <span className="font-mono text-xs text-gray-600">{pv.id}</span>
+                      <span className="font-mono text-xs text-foreground-muted">{pv.id}</span>
                     </TD>
                     <TD title={formatDate(pv.created_at)}>{formatRelativeTime(pv.created_at)}</TD>
                   </TR>

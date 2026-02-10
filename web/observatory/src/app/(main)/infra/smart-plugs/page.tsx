@@ -47,7 +47,7 @@ export default function SmartPlugsPage() {
 
   if (loading && plugs.length === 0) {
     return (
-      <div className="p-6 text-gray-600">
+      <div className="p-6 text-foreground-muted">
         <h2 className="text-xl font-semibold mb-2">Smart Plugs</h2>
         <Spinner size="lg" />
       </div>
@@ -71,17 +71,17 @@ export default function SmartPlugsPage() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-semibold">Smart Plugs</h2>
-          <p className="text-sm text-gray-500">Actions require Softmax access and are logged.</p>
-          {refreshedAt && <p className="text-xs text-gray-400">Last refresh: {refreshedAt}</p>}
+          <p className="text-sm text-foreground-muted">Actions require Softmax access and are logged.</p>
+          {refreshedAt && <p className="text-xs text-foreground-muted">Last refresh: {refreshedAt}</p>}
         </div>
-        <button className="px-3 py-2 rounded bg-gray-900 text-white" onClick={refresh} disabled={loading}>
+        <button className="px-3 py-2 rounded bg-foreground text-surface" onClick={refresh} disabled={loading}>
           Refresh
         </button>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+      <div className="bg-surface border border-border rounded-lg overflow-hidden">
         <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+          <thead className="bg-surface-alt text-foreground-muted uppercase text-xs">
             <tr>
               <th className="px-4 py-3 text-left">Location</th>
               <th className="px-4 py-3 text-left">Alias</th>
@@ -93,31 +93,32 @@ export default function SmartPlugsPage() {
           <tbody>
             {plugs.map((plug) => {
               const onlineLabel = plug.online == null ? 'Unknown' : plug.online ? 'Online' : 'Offline'
-              const onlineDot = plug.online == null ? 'bg-gray-400' : plug.online ? 'bg-green-500' : 'bg-red-500'
+              const onlineDot =
+                plug.online == null ? 'bg-foreground-muted' : plug.online ? 'bg-green-500' : 'bg-red-500'
               const powerLabel = plug.is_on == null ? 'Unknown' : plug.is_on ? 'On' : 'Off'
               const apowerLabel = plug.apower == null ? '—' : `${plug.apower.toFixed(1)} W`
               const isBusy = busyKey === plug.key
 
               return (
-                <tr key={plug.key} className="border-t border-gray-100">
+                <tr key={plug.key} className="border-t border-border-subtle">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{plug.label}</div>
+                    <div className="font-medium text-foreground">{plug.label}</div>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">{plug.alias || '—'}</td>
+                  <td className="px-4 py-3 text-foreground-subtle">{plug.alias || '—'}</td>
                   <td className="px-4 py-3">
                     <span className="inline-flex items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${onlineDot}`} />
                       {onlineLabel}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-foreground-subtle">
                     {powerLabel}
-                    <div className="text-xs text-gray-400">{apowerLabel}</div>
+                    <div className="text-xs text-foreground-muted">{apowerLabel}</div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button
-                        className="px-3 py-1 rounded border border-gray-300 text-gray-700 disabled:opacity-50"
+                        className="px-3 py-1 rounded border border-border-strong text-foreground-subtle disabled:opacity-50"
                         onClick={() => handleToggle(plug, true)}
                         disabled={isBusy || loading}
                       >

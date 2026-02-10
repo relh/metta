@@ -56,14 +56,14 @@ export default function AuthCallback() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <div className="w-full max-w-lg bg-white/95 rounded-3xl border border-slate-200 shadow-2xl p-8 md:p-12 text-center">
+      <div className="w-full max-w-lg bg-surface/95 rounded-3xl border border-border shadow-2xl p-8 md:p-12 text-center">
         {status.type === 'processing' && (
           <>
-            <div className="size-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5 border border-slate-200 bg-slate-100">
+            <div className="size-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5 border border-border bg-surface-alt">
               ⏳
             </div>
-            <h1 className="text-3xl font-semibold mb-3 text-slate-900">Processing...</h1>
-            <p className="text-slate-500">Validating your authentication token</p>
+            <h1 className="text-3xl font-semibold mb-3 text-foreground">Processing...</h1>
+            <p className="text-foreground-muted">Validating your authentication token</p>
           </>
         )}
 
@@ -72,8 +72,8 @@ export default function AuthCallback() {
             <div className="size-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5 border border-green-200 bg-green-100 text-green-700">
               ✓
             </div>
-            <h1 className="text-3xl font-semibold mb-3 text-slate-900">You're all set!</h1>
-            <p className="text-slate-500">Authentication complete. Redirecting you now...</p>
+            <h1 className="text-3xl font-semibold mb-3 text-foreground">You're all set!</h1>
+            <p className="text-foreground-muted">Authentication complete. Redirecting you now...</p>
           </>
         )}
 
@@ -82,11 +82,11 @@ export default function AuthCallback() {
             <div className="size-20 rounded-full flex items-center justify-center text-4xl mx-auto mb-5 border border-red-200 bg-red-100 text-red-700">
               ⚠
             </div>
-            <h1 className="text-3xl font-semibold mb-3 text-slate-900">Something went wrong</h1>
+            <h1 className="text-3xl font-semibold mb-3 text-foreground">Something went wrong</h1>
             <p className="text-red-500 mb-2 text-lg">{status.message}</p>
             <button
               onClick={() => router.push('/')}
-              className="mt-8 px-6 py-3 rounded-full bg-slate-900 text-white font-semibold uppercase tracking-wider text-sm hover:bg-slate-800 transition-colors"
+              className="mt-8 px-6 py-3 rounded-full bg-foreground text-surface font-semibold uppercase tracking-wider text-sm hover:bg-foreground-subtle transition-colors"
             >
               Retry Login
             </button>

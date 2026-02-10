@@ -4,13 +4,15 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FC, PropsWithChildren } from 'react'
 
+import { ThemeToggle } from '@/components/ThemeToggle'
+
 const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ href, children, isActive = false }) => {
   return (
     <Link
       href={href}
       className={clsx(
-        'py-4 px-5 no-underline border-b-2 transition-all duration-200 hover:bg-gray-100',
-        isActive ? 'border-blue-500 text-blue-500' : 'text-gray-500 hover:text-gray-900 border-transparent'
+        'py-4 px-5 no-underline border-b-2 transition-all duration-200 hover:bg-surface-alt',
+        isActive ? 'border-blue-500 text-blue-500' : 'text-foreground-muted hover:text-foreground border-transparent'
       )}
     >
       {children}
@@ -24,7 +26,7 @@ export const TopMenu: FC<{ currentUser: string }> = ({ currentUser }) => {
   const isPoliciesActive = pathname === '/' || pathname.startsWith('/policies')
 
   return (
-    <nav className="border-b border-gray-300 px-5 flex justify-between items-center">
+    <nav className="border-b border-border-strong bg-surface px-5 flex justify-between items-center">
       <div className="max-w-7xl mx-auto flex items-center">
         <div className="flex">
           <MenuLink href="/" isActive={isPoliciesActive}>
@@ -47,8 +49,9 @@ export const TopMenu: FC<{ currentUser: string }> = ({ currentUser }) => {
           </MenuLink>
         </div>
       </div>
-      <div className="flex items-center">
-        <span className="text-sm text-gray-500">{currentUser}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-foreground-muted">{currentUser}</span>
+        <ThemeToggle />
       </div>
     </nav>
   )

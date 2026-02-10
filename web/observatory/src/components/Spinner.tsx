@@ -6,7 +6,7 @@ export const Spinner: FC<{ size?: 'sm' | 'md' | 'lg' }> = ({ size = 'md' }) => {
 
   return (
     <svg
-      className={clsx('animate-spin-delayed text-gray-400', sizeClass)}
+      className={clsx('animate-spin-delayed text-foreground-muted', sizeClass)}
       xmlns="http://www.w3.org/2000/svg"
       fill="none"
       viewBox="0 0 24 24"

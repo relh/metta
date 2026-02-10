@@ -28,7 +28,7 @@ export const Table: FC<PropsWithChildren<{ theme?: TableTheme }>> & {
 
 export const TableHeader: FC<PropsWithChildren> = ({ children }) => {
   return (
-    <thead className="bg-gray-50">
+    <thead className="bg-surface-alt">
       <tr>{children}</tr>
     </thead>
   )
@@ -44,9 +44,9 @@ export const TH: FC<React.ThHTMLAttributes<HTMLTableCellElement>> = ({ className
   return (
     <th
       className={clsx(
-        'text-left text-xs font-bold tracking-[0.04em] uppercase text-gray-600 align-top',
-        theme === 'large' && 'px-3 py-2 border-b border-gray-200',
-        theme === 'inner' && 'p-1.5 border border-gray-200 text-gray-500 bg-gray-100',
+        'text-left text-xs font-bold tracking-[0.04em] uppercase text-foreground-muted align-top',
+        theme === 'large' && 'px-3 py-2 border-b border-border',
+        theme === 'inner' && 'p-1.5 border border-border text-foreground-muted bg-surface-alt',
         theme === 'light' && 'p-2',
         className
       )}
@@ -70,8 +70,8 @@ export const TD: FC<PropsWithChildren<React.TdHTMLAttributes<HTMLTableCellElemen
       className={clsx(
         // TODO - use tailwind-merge or tailwind-variants?
         'align-top',
-        theme === 'large' && 'px-3 py-2 border-b border-gray-100',
-        theme === 'inner' && 'p-1.5 border border-gray-200',
+        theme === 'large' && 'px-3 py-2 border-b border-border-subtle',
+        theme === 'inner' && 'p-1.5 border border-border',
         theme === 'light' && 'p-2',
         className
       )}

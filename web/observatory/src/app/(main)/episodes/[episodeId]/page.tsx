@@ -28,9 +28,9 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
       <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Episode</p>
-          <h1 className="text-2xl font-semibold text-gray-900 break-all">{episodeId}</h1>
-          <div className="flex flex-wrap gap-3 text-sm text-gray-600">
+          <p className="text-xs font-semibold uppercase text-foreground-muted tracking-wide">Episode</p>
+          <h1 className="text-2xl font-semibold text-foreground break-all">{episodeId}</h1>
+          <div className="flex flex-wrap gap-3 text-sm text-foreground-muted">
             <span title={formatDate(episode.created_at)}>Created: {formatRelativeTime(episode.created_at)}</span>
             {episode.eval_task_id && <span>Eval Task: {episode.eval_task_id}</span>}
             {episode.job_id && (
@@ -38,9 +38,9 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
                 Job: {episode.job_id.slice(0, 8)}
               </a>
             )}
-            <span className="flex items-center gap-1 text-gray-500">
+            <span className="flex items-center gap-1 text-foreground-muted">
               Episode ID:
-              <span className="font-mono text-xs text-gray-700">{episodeId}</span>
+              <span className="font-mono text-xs text-foreground-subtle">{episodeId}</span>
             </span>
           </div>
         </div>
@@ -59,12 +59,12 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
         <ReplayViewer replayUrl={episode.replay_url} label="Episode replay" />
       </Card>
 
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+      <div className="bg-surface border border-border rounded-lg shadow-sm">
         <div className="p-5 space-y-6">
           <div>
             <SmallHeader>Tags</SmallHeader>
             {Object.keys(episode.tags).length === 0 ? (
-              <div className="text-gray-500 text-sm">No tags found.</div>
+              <div className="text-foreground-muted text-sm">No tags found.</div>
             ) : (
               <TagList tags={episode.tags} />
             )}
@@ -73,9 +73,9 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
           <div>
             <SmallHeader>Attributes</SmallHeader>
             {Object.keys(episode.attributes || {}).length === 0 ? (
-              <div className="text-gray-500 text-sm">No attributes recorded.</div>
+              <div className="text-foreground-muted text-sm">No attributes recorded.</div>
             ) : (
-              <pre className="bg-gray-50 border border-gray-200 rounded p-3 text-xs overflow-auto">
+              <pre className="bg-surface-alt border border-border rounded p-3 text-xs overflow-auto text-foreground">
                 {JSON.stringify(episode.attributes, null, 2)}
               </pre>
             )}

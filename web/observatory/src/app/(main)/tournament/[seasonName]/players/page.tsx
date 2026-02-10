@@ -23,7 +23,7 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
       <ServerDebugDrain />
       <SubmitForm seasonName={seasonName} existingPolicyVersionIds={existingPolicyVersionIds} />
       {policies.length === 0 ? (
-        <div className="text-gray-500 py-4">No players submitted yet</div>
+        <div className="text-foreground-muted py-4">No players submitted yet</div>
       ) : (
         <Table>
           <TableHeader>
@@ -45,12 +45,12 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
                       {formatPolicyDisplay(policy)}
                     </StyledLink>
                   </TD>
-                  <TD className="text-gray-500 text-sm">{formatRelativeTime(policy.entered_at)}</TD>
+                  <TD className="text-foreground-muted text-sm">{formatRelativeTime(policy.entered_at)}</TD>
                   {poolNames.map((poolName) => {
                     const pool = poolStatusMap[poolName]
                     if (!pool) {
                       return (
-                        <TD key={poolName} className="text-gray-400">
+                        <TD key={poolName} className="text-foreground-muted">
                           -
                         </TD>
                       )
@@ -61,7 +61,9 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
                           <span
                             className={clsx(
                               'inline-block px-2 py-1 rounded text-xs font-medium',
-                              pool.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                              pool.active
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                : 'bg-surface-alt text-foreground-muted'
                             )}
                           >
                             {pool.active ? 'active' : 'retired'}
@@ -71,7 +73,7 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
                               pool_names: [poolName],
                               policy_version_ids: [policy.policy.id],
                             })}
-                            className="no-underline text-sm text-gray-400 hover:text-blue-600 cursor-pointer transition-colors"
+                            className="no-underline text-sm text-foreground-muted hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors"
                           >
                             ({pool.completed} matches
                             {pool.failed > 0 && `, ${pool.failed} failed`}

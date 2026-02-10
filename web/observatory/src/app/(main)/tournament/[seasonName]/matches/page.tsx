@@ -39,7 +39,7 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
       <ServerDebugDrain />
       <MatchFilters season={season} policies={policies} />
       {filteredMatches.length === 0 ? (
-        <div className="text-gray-500 py-4">No matches</div>
+        <div className="text-foreground-muted py-4">No matches</div>
       ) : (
         <Table>
           <TableHeader>
@@ -55,13 +55,13 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
               const agentCounts = match.players.map((p) => match.assignments.filter((a) => a === p.policy_index).length)
               return (
                 <TR key={match.id}>
-                  <TD className="text-gray-500 text-sm">{formatRelativeTime(match.created_at)}</TD>
+                  <TD className="text-foreground-muted text-sm">{formatRelativeTime(match.created_at)}</TD>
                   <TD>
                     <div className="flex justify-between gap-1">
                       {match.status === 'completed' && match.episode_id ? (
                         <Link
                           href={`/episodes/${match.episode_id}`}
-                          className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 hover:bg-green-200 transition-colors"
+                          className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
                         >
                           Results
                         </Link>
@@ -71,7 +71,7 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
                       {match.job_id && (
                         <Link
                           href={`/episode-jobs?jobId=${match.job_id}`}
-                          className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                          className="px-2 py-1 rounded text-xs font-medium bg-surface-alt text-foreground-subtle hover:bg-border-strong transition-colors"
                         >
                           Job
                         </Link>

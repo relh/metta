@@ -56,9 +56,9 @@ export const MatchFilters: FC<{ season: SeasonDetail; policies: PolicySummary[] 
   }))
 
   return (
-    <div className="flex gap-4 mb-4 pb-4 border-b border-gray-100">
+    <div className="flex gap-4 mb-4 pb-4 border-b border-border-subtle">
       <div className="flex-1">
-        <div className="text-xs text-gray-500 mb-1">Pool</div>
+        <div className="text-xs text-foreground-muted mb-1">Pool</div>
         <Select
           isMulti
           options={poolOptions}
@@ -71,7 +71,7 @@ export const MatchFilters: FC<{ season: SeasonDetail; policies: PolicySummary[] 
         />
       </div>
       <div className="flex-1">
-        <div className="text-xs text-gray-500 mb-1">Players</div>
+        <div className="text-xs text-foreground-muted mb-1">Players</div>
         <Select
           isMulti
           options={playerOptions}

@@ -26,7 +26,7 @@ export const TablesSidebar: FC<{
   return (
     <div className="w-80 min-w-80 overflow-y-auto">
       <Card padding="sm">
-        <h3 className="mb-3 mt-0 text-sm font-semibold uppercase tracking-none text-gray-700">Tables</h3>
+        <h3 className="mb-3 mt-0 text-sm font-semibold uppercase tracking-none text-foreground-subtle">Tables</h3>
 
         {tablesLoading ? (
           <Spinner />
@@ -37,13 +37,16 @@ export const TablesSidebar: FC<{
                 key={table.table_name}
                 className={clsx(
                   'mb-0.5 cursor-pointer rounded px-2.5 py-1.5 transition-colors',
-                  selectedTable === table.table_name ? 'bg-blue-500 text-white' : 'hover:bg-gray-100'
+                  selectedTable === table.table_name ? 'bg-blue-500 text-white' : 'hover:bg-surface-alt'
                 )}
                 onClick={() => onTableClick(table.table_name)}
               >
                 <div className="text-sm font-medium">{table.table_name}</div>
                 <div
-                  className={clsx('text-xs', selectedTable === table.table_name ? 'text-blue-100' : 'text-gray-500')}
+                  className={clsx(
+                    'text-xs',
+                    selectedTable === table.table_name ? 'text-blue-100' : 'text-foreground-muted'
+                  )}
                 >
                   {table.column_count} columns &bull; {table.row_count.toLocaleString()} rows
                 </div>
@@ -53,11 +56,11 @@ export const TablesSidebar: FC<{
         )}
 
         {queryHistory.length > 0 && (
-          <div className="mt-6 border-t border-gray-200 pt-4">
+          <div className="mt-6 border-t border-border pt-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-700">Query History</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Query History</h3>
               <button
-                className="rounded border border-gray-300 bg-transparent px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
+                className="rounded border border-border-strong bg-transparent px-2 py-0.5 text-xs text-foreground-muted hover:bg-surface-alt"
                 onClick={onClearHistory}
               >
                 Clear
@@ -73,12 +76,12 @@ export const TablesSidebar: FC<{
                 return (
                   <li
                     key={index}
-                    className="mb-0.5 cursor-pointer rounded px-2.5 py-2 text-xs transition-colors hover:bg-gray-100"
+                    className="mb-0.5 cursor-pointer rounded px-2.5 py-2 text-xs transition-colors hover:bg-surface-alt"
                     onClick={() => onHistoryItemClick(item.query)}
                     title={item.query}
                   >
-                    <div className="mb-1 truncate font-mono text-xs text-gray-700">{item.query}</div>
-                    <div className="flex items-center justify-between text-[10px] text-gray-500">
+                    <div className="mb-1 truncate font-mono text-xs text-foreground-subtle">{item.query}</div>
+                    <div className="flex items-center justify-between text-[10px] text-foreground-muted">
                       <span>{isToday ? timeStr : dateStr}</span>
                       <span className={item.error ? 'text-red-500' : 'text-green-600'}>
                         {item.error ? 'Error' : item.rowCount !== undefined ? `${item.rowCount} rows` : ''}

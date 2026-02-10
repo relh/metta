@@ -172,7 +172,7 @@ const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
           onChange={(opt) => setSeasonId(opt?.value ?? null)}
           formatOptionLabel={(opt) => (
             <span>
-              {opt.label} <span className="text-gray-400">(v{opt.version})</span>
+              {opt.label} <span className="text-foreground-muted">(v{opt.version})</span>
             </span>
           )}
           placeholder="All seasons"
@@ -243,19 +243,19 @@ export const JobFilters: FC<{ seasons: SeasonDetail[]; defaultPolicyVersionId?: 
   return (
     <>
       <div>
-        <div className="text-xs text-gray-500 mb-1">Policy</div>
+        <div className="text-xs text-foreground-muted mb-1">Policy</div>
         <PolicySelect defaultPolicyVersionId={defaultPolicyVersionId} />
       </div>
       <div>
-        <div className="text-xs text-gray-500 mb-1">Status</div>
+        <div className="text-xs text-foreground-muted mb-1">Status</div>
         <StatusSelect />
       </div>
       <div>
-        <div className="text-xs text-gray-500 mb-1">Season</div>
+        <div className="text-xs text-foreground-muted mb-1">Season</div>
         <SeasonSelect seasons={seasons} />
       </div>
       <div>
-        <div className="text-xs text-gray-500 mb-1">Pool</div>
+        <div className="text-xs text-foreground-muted mb-1">Pool</div>
         <PoolSelect seasons={seasons} />
       </div>
     </>

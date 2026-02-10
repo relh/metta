@@ -44,7 +44,7 @@ export const ReplayViewer: FC<ReplayViewerProps> = ({ replayUrl, label, height =
   const normalized = scope === 'vibescope' ? vsUrl : msUrl
 
   if (!normalized) {
-    return <div className="text-gray-500 text-sm">No replay available.</div>
+    return <div className="text-foreground-muted text-sm">No replay available.</div>
   }
 
   const handleCopyUrl = () => {
@@ -78,7 +78,7 @@ export const ReplayViewer: FC<ReplayViewerProps> = ({ replayUrl, label, height =
         </div>
       )}
       <div
-        className="w-full border border-gray-200 rounded overflow-hidden bg-black"
+        className="w-full border border-border rounded overflow-hidden bg-black"
         style={{ minHeight: '360px', height }}
       >
         <iframe src={normalized} title={label ?? 'Episode replay'} className="w-full h-full" allowFullScreen />

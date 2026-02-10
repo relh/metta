@@ -28,16 +28,16 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
       <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Policy Version</p>
-          <h1 className="text-2xl font-semibold text-gray-900">{policyDisplay}</h1>
-          <div className="flex flex-wrap gap-3 text-sm text-gray-600">
-            {policyCreatedAt && <span className="text-gray-500">Created: {formatDate(policyCreatedAt)}</span>}
-            <span className="text-gray-500">
+          <p className="text-xs font-semibold uppercase text-foreground-muted tracking-wide">Policy Version</p>
+          <h1 className="text-2xl font-semibold text-foreground">{policyDisplay}</h1>
+          <div className="flex flex-wrap gap-3 text-sm text-foreground-muted">
+            {policyCreatedAt && <span className="text-foreground-muted">Created: {formatDate(policyCreatedAt)}</span>}
+            <span className="text-foreground-muted">
               User: <UserDisplay user={pvInfo.user} userId={pvInfo.user_id} />
             </span>
-            <span className="flex items-center gap-1 text-gray-500">
+            <span className="flex items-center gap-1 text-foreground-muted">
               Policy Version ID:
-              <span className="font-mono text-xs text-gray-700">{pvInfo.id}</span>
+              <span className="font-mono text-xs text-foreground-subtle">{pvInfo.id}</span>
             </span>
           </div>
         </div>

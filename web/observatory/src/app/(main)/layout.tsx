@@ -7,6 +7,7 @@ import { PropsWithChildren } from 'react'
 import { AppProvider } from '@/app/(main)/AppContext'
 import { TopMenu } from '@/app/(main)/TopMenu'
 import { getAuthToken } from '@/auth/server'
+import { ThemeProvider } from '@/components/ThemeProvider'
 import { config } from '@/config'
 import { RequestDebugPanel } from '@/lib/debug/RequestDebugPanel'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
@@ -22,37 +23,39 @@ export default async function RootLayout({ children }: PropsWithChildren) {
     currentUser = userInfo.user_email
   } catch (err: any) {
     return (
-      <div className="min-h-screen bg-gray-100 p-5 flex items-center justify-center">
-        <div className="max-w-xl mx-auto bg-white p-10 rounded-lg shadow text-center">
-          <h1 className="text-gray-800 mb-5 text-2xl font-semibold">Policy Evaluation Dashboard</h1>
-          <p className="mb-5 text-gray-500">Unable to connect to the evaluation server.</p>
-          <p className="text-red-600 my-5">
+      <div className="min-h-screen bg-surface-alt p-5 flex items-center justify-center">
+        <div className="max-w-xl mx-auto bg-surface p-10 rounded-lg shadow text-center">
+          <h1 className="text-foreground mb-5 text-2xl font-semibold">Policy Evaluation Dashboard</h1>
+          <p className="mb-5 text-foreground-muted">Unable to connect to the evaluation server.</p>
+          <p className="text-red-600 dark:text-red-400 my-5">
             Failed to connect to server: {err.message}.<br />
             Make sure the server is running at{' '}
             <a href={repo.baseUrl} target="_blank" rel="noopener noreferrer">
               {repo.baseUrl}
             </a>
           </p>
-          <p className="text-gray-500 text-sm">Please ensure the server is running and accessible.</p>
+          <p className="text-foreground-muted text-sm">Please ensure the server is running and accessible.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="overflow-y-scroll">
-        <NuqsAdapter>
-          <AppProvider token={token} apiBaseUrl={config.apiBaseUrl}>
-            <div className="min-h-screen font-sans flex flex-col">
-              <TopMenu currentUser={currentUser} />
+        <ThemeProvider>
+          <NuqsAdapter>
+            <AppProvider token={token} apiBaseUrl={config.apiBaseUrl}>
+              <div className="min-h-screen font-sans flex flex-col">
+                <TopMenu currentUser={currentUser} />
 
-              <div className="bg-gray-50 flex-1">{children}</div>
-            </div>
-            <ServerDebugDrain />
-            <RequestDebugPanel />
-          </AppProvider>
-        </NuqsAdapter>
+                <div className="bg-background flex-1">{children}</div>
+              </div>
+              <ServerDebugDrain />
+              <RequestDebugPanel />
+            </AppProvider>
+          </NuqsAdapter>
+        </ThemeProvider>
       </body>
     </html>
   )

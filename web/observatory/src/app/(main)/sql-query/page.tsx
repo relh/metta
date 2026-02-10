@@ -153,18 +153,20 @@ export default function SQLQueryPage() {
       {/* Query Area */}
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         {/* Query Input Section */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="mb-3 mt-0 text-sm font-semibold uppercase tracking-wide text-gray-700">SQL Query</h3>
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <h3 className="mb-3 mt-0 text-sm font-semibold uppercase tracking-wide text-foreground-subtle">SQL Query</h3>
 
           {/* Schema Info */}
           {tableSchema && !schemaLoading && (
-            <div className="mb-3 rounded border border-blue-200 bg-blue-50 p-3">
-              <h4 className="mb-2 mt-0 text-xs font-semibold text-blue-800">Schema for {tableSchema.table_name}</h4>
+            <div className="mb-3 rounded border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 p-3">
+              <h4 className="mb-2 mt-0 text-xs font-semibold text-blue-800 dark:text-blue-300">
+                Schema for {tableSchema.table_name}
+              </h4>
               <div className="text-xs leading-relaxed">
                 {tableSchema.columns.map((col) => (
                   <div key={col.name} className="mb-0.5 font-mono">
                     <strong>{col.name}</strong>
-                    <span className="text-gray-500">
+                    <span className="text-foreground-muted">
                       {' '}
                       ({col.type}
                       {col.nullable ? ', nullable' : ''})
@@ -180,7 +182,7 @@ export default function SQLQueryPage() {
           {/* Query Input */}
           <div className="relative">
             <textarea
-              className="box-border min-h-[120px] w-full resize-y rounded border border-gray-200 bg-gray-50 p-2.5 pb-12 pr-36 font-mono text-sm focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/10"
+              className="box-border min-h-[120px] w-full resize-y rounded border border-border bg-surface-alt p-2.5 pb-12 pr-36 font-mono text-sm text-foreground focus:border-blue-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-blue-500/10"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -207,16 +209,16 @@ export default function SQLQueryPage() {
         </div>
 
         {/* Results Section */}
-        <div className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white p-4">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-surface p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="my-0 text-sm font-semibold uppercase tracking-wide text-gray-700">Results</h3>
+            <h3 className="my-0 text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Results</h3>
             {queryState.type === 'success' && (
-              <span className="text-xs text-gray-500">{queryState.data.row_count} rows returned</span>
+              <span className="text-xs text-foreground-muted">{queryState.data.row_count} rows returned</span>
             )}
           </div>
 
           {queryState.type === 'error' && (
-            <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-700">
+            <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
               <strong>Error:</strong> {queryState.error}
             </div>
           )}
@@ -224,7 +226,7 @@ export default function SQLQueryPage() {
           {queryState.type === 'loading' && <Spinner />}
 
           {queryState.type === 'success' && queryState.data.row_count === 0 && (
-            <div className="py-10 text-center text-gray-400">No results returned</div>
+            <div className="py-10 text-center text-foreground-muted">No results returned</div>
           )}
 
           {queryState.type === 'success' && queryState.data.row_count > 0 && (
@@ -232,7 +234,9 @@ export default function SQLQueryPage() {
           )}
 
           {queryState.type === 'idle' && (
-            <div className="py-10 text-center text-gray-400">Select a table or enter a query to see results</div>
+            <div className="py-10 text-center text-foreground-muted">
+              Select a table or enter a query to see results
+            </div>
           )}
         </div>
       </div>

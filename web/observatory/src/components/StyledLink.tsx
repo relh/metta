@@ -12,8 +12,8 @@ export const StyledLink: FC<LinkProps & ComponentProps<'a'> & { theme?: 'normal'
     className={clsx(
       className,
       theme === 'normal'
-        ? 'text-blue-600 no-underline hover:underline'
-        : 'text-black no-underline hover:text-blue-600 transition-colors'
+        ? 'text-blue-600 dark:text-blue-400 no-underline hover:underline'
+        : 'text-foreground no-underline hover:text-blue-600 dark:hover:text-blue-400 transition-colors'
     )}
   />
 )

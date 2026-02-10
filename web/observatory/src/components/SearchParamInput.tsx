@@ -56,7 +56,7 @@ export const SearchParamInput: FC<{ paramName: string; placeholder: string }> = 
             <button
               type="button"
               onClick={() => setLocalValue('')}
-              className="p-1 border-none bg-transparent text-gray-500 hover:text-gray-700 cursor-pointer leading-none"
+              className="p-1 border-none bg-transparent text-foreground-muted hover:text-foreground-subtle cursor-pointer leading-none"
               aria-label="Clear"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">

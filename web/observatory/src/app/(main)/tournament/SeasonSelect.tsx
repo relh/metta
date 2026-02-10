@@ -148,7 +148,7 @@ export const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-gray-600 font-medium">Season:</span>
+      <span className="text-foreground-muted font-medium">Season:</span>
       <Select
         options={seasonOptions}
         value={seasonOptions.find((o) => o.value === selectedSeasonName) || null}
@@ -158,7 +158,7 @@ export const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
         placeholder="Select season..."
         instanceId="season-select"
       />
-      <span className="text-gray-600 font-medium">Version:</span>
+      <span className="text-foreground-muted font-medium">Version:</span>
       <Select
         options={versionOptions}
         value={selectedVersion}

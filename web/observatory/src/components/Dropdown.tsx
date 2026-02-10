@@ -34,7 +34,7 @@ export const Dropdown: FC<
         <FloatingPortal>
           <div
             ref={refs.setFloating}
-            className="z-50 rounded-md border border-gray-300 bg-white shadow-xl"
+            className="z-50 rounded-md border border-border-strong bg-surface shadow-xl"
             style={floatingStyles}
             {...getFloatingProps()}
           >
@@ -54,7 +54,7 @@ export const DropdownMenuItem: FC<{ title: string; onClick: () => void }> = ({ t
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900 transition-colors"
+      className="cursor-pointer px-3 py-1.5 text-sm text-foreground-subtle hover:bg-blue-50 dark:hover:bg-blue-950 hover:text-foreground transition-colors"
     >
       {title}
     </div>

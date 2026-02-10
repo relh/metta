@@ -3,11 +3,15 @@ import '@/style.css'
 import { Metadata } from 'next'
 import { PropsWithChildren } from 'react'
 
+import { ThemeProvider } from '@/components/ThemeProvider'
+
 export default function PublicLayout({ children }: PropsWithChildren) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="overflow-y-scroll">
-        <div className="min-h-screen font-sans flex flex-col bg-gray-50">{children}</div>
+        <ThemeProvider>
+          <div className="min-h-screen font-sans flex flex-col bg-background">{children}</div>
+        </ThemeProvider>
       </body>
     </html>
   )

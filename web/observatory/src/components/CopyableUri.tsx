@@ -28,13 +28,20 @@ export const CopyableUri: FC<CopyableUriProps> = ({ uri, label = 'Copy' }) => {
       type="button"
       onClick={handleCopy}
       className={clsx(
-        'flex items-center gap-3 px-3 py-2 rounded border text-left font-mono text-sm bg-white',
+        'flex items-center gap-3 px-3 py-2 rounded border text-left font-mono text-sm bg-surface',
         'transition-colors cursor-pointer w-full max-w-xl',
-        copied ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+        copied
+          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950'
+          : 'border-border-strong bg-surface-alt hover:border-foreground-muted'
       )}
     >
-      <code className="flex-1 text-xs text-gray-900 break-all">{uri}</code>
-      <span className={clsx('text-xs font-semibold whitespace-nowrap', copied ? 'text-blue-600' : 'text-gray-500')}>
+      <code className="flex-1 text-xs text-foreground break-all">{uri}</code>
+      <span
+        className={clsx(
+          'text-xs font-semibold whitespace-nowrap',
+          copied ? 'text-blue-600 dark:text-blue-400' : 'text-foreground-muted'
+        )}
+      >
         {copied ? 'Copied!' : label}
       </span>
     </button>

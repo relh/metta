@@ -21,7 +21,7 @@ export const StatusDropdown: FC = () => {
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as JobStatus | '')}
-        className="rounded border h-8 border-gray-300 bg-white text-gray-800 text-sm py-1 px-2"
+        className="rounded border h-8 border-border-strong bg-surface text-foreground text-sm py-1 px-2"
       >
         <option value="">All Statuses</option>
         {ALL_JOB_STATUSES.map((status) => (

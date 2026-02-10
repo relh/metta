@@ -59,7 +59,7 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
         <div className="mb-4 flex flex-wrap gap-3 items-end">
           <JobFilters seasons={seasons} />
           <div>
-            <div className="text-xs text-gray-500 mb-1">Job ID</div>
+            <div className="text-xs text-foreground-muted mb-1">Job ID</div>
             <div className="w-64">
               <SearchParamInput paramName="jobId" placeholder="Filter by Job ID..." />
             </div>
@@ -70,7 +70,7 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
         </div>
         <div className="overflow-x-auto">
           <JobsTable jobs={jobs} />
-          {jobs.length === 0 && <div className="p-5 text-center text-gray-500">No jobs found</div>}
+          {jobs.length === 0 && <div className="p-5 text-center text-foreground-muted">No jobs found</div>}
           <PaginatedControls isLastPage={jobs.length < pageSize} />
         </div>
       </Card>

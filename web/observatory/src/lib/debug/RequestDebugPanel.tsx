@@ -65,7 +65,7 @@ const EndpointCell: FC<{ entry: RequestLogEntry }> = ({ entry }) => {
         </DropdownMenu>
       )}
     >
-      <span className="font-mono text-gray-800 max-w-md truncate cursor-pointer hover:text-blue-600">
+      <span className="font-mono text-foreground max-w-md truncate cursor-pointer hover:text-blue-600">
         {entry.endpoint}
       </span>
     </Dropdown>
@@ -75,18 +75,18 @@ const EndpointCell: FC<{ entry: RequestLogEntry }> = ({ entry }) => {
 const RequestRow: FC<{ entry: RequestLogEntry }> = ({ entry }) => {
   return (
     <TR key={entry.id}>
-      <TD className="text-gray-500 font-mono">{formatTime(entry.timestamp)}</TD>
+      <TD className="text-foreground-muted font-mono">{formatTime(entry.timestamp)}</TD>
       <TD>
         <SourceBadge source={entry.source} />
       </TD>
-      <TD className="font-mono text-gray-600">{entry.method}</TD>
+      <TD className="font-mono text-foreground-muted">{entry.method}</TD>
       <TD>
         <EndpointCell entry={entry} />
       </TD>
       <TD>
         <StatusBadge status={entry.status} />
       </TD>
-      <TD className="text-right font-mono text-gray-500">{entry.durationMs}ms</TD>
+      <TD className="text-right font-mono text-foreground-muted">{entry.durationMs}ms</TD>
       {entry.error && (
         <TD className="text-red-600 truncate max-w-xs" title={entry.error}>
           {entry.error}
@@ -105,19 +105,19 @@ export const RequestDebugPanel: FC = () => {
   if (entries.length === 0 && !expanded) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-300 shadow-lg">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border-strong shadow-lg">
       {/* Header bar */}
       <div
-        className="flex items-center justify-between px-3 py-1.5 bg-gray-100 cursor-pointer select-none"
+        className="flex items-center justify-between px-3 py-1.5 bg-surface-alt cursor-pointer select-none"
         onClick={toggle}
       >
-        <div className="flex items-center gap-2 text-xs text-gray-600">
+        <div className="flex items-center gap-2 text-xs text-foreground-muted">
           <span className="font-semibold">API Requests</span>
-          <span className="bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded-full text-xs font-mono">
+          <span className="bg-border-strong text-foreground-subtle px-1.5 py-0.5 rounded-full text-xs font-mono">
             {entries.length}
           </span>
           {!expanded && entries.length > 0 && (
-            <span className="text-gray-400 ml-1">
+            <span className="text-foreground-muted ml-1">
               last: {entries[entries.length - 1].method} {entries[entries.length - 1].endpoint}
             </span>
           )}
@@ -125,7 +125,7 @@ export const RequestDebugPanel: FC = () => {
         <div className="flex items-center gap-2">
           {entries.length > 0 && (
             <button
-              className="text-xs text-gray-500 hover:text-gray-700 px-1"
+              className="text-xs text-foreground-muted hover:text-foreground-subtle px-1"
               onClick={(e) => {
                 e.stopPropagation()
                 clearEntries()
@@ -134,7 +134,7 @@ export const RequestDebugPanel: FC = () => {
               Clear
             </button>
           )}
-          <span className="text-gray-400 text-xs">{expanded ? '▼' : '▲'}</span>
+          <span className="text-foreground-muted text-xs">{expanded ? '▼' : '▲'}</span>
         </div>
       </div>
 
@@ -142,7 +142,7 @@ export const RequestDebugPanel: FC = () => {
       {expanded && (
         <div className="max-h-64 overflow-y-auto">
           {entries.length === 0 ? (
-            <div className="text-xs text-gray-400 px-3 py-4 text-center">No requests captured yet</div>
+            <div className="text-xs text-foreground-muted px-3 py-4 text-center">No requests captured yet</div>
           ) : (
             <Table theme="inner">
               <TableHeader>

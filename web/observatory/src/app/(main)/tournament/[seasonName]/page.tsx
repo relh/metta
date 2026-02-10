@@ -15,7 +15,7 @@ const LeaderboardContent: FC<{ seasonName: string }> = async ({ seasonName }) =>
   if (leaderboard.length === 0) {
     return (
       <TR>
-        <TD colSpan={3} className="text-gray-500 py-4 text-center">
+        <TD colSpan={3} className="text-foreground-muted py-4 text-center">
           No entries yet
         </TD>
       </TR>
@@ -40,7 +40,7 @@ const LeaderboardContent: FC<{ seasonName: string }> = async ({ seasonName }) =>
                 policy_version_ids: [entry.policy.id],
               })}
               theme="muted"
-              className="text-gray-400"
+              className="text-foreground-muted"
             >
               ({entry.matches} matches)
             </StyledLink>

@@ -17,7 +17,7 @@ const MAX_VISIBLE_TAGS = 2
 
 const TagPill: FC<{ k: string; v: string; truncate?: boolean }> = ({ k, v, truncate }) => (
   <span
-    className={`px-1 py-0.5 bg-gray-100 text-gray-600 text-[10px] rounded-full whitespace-nowrap ${truncate ? 'inline-block max-w-[180px] truncate' : ''}`}
+    className={`px-1 py-0.5 bg-surface-alt text-foreground-muted text-[10px] rounded-full whitespace-nowrap ${truncate ? 'inline-block max-w-[180px] truncate' : ''}`}
     title={`${k}: ${v}`}
   >
     {k}={v}
@@ -40,14 +40,14 @@ const Tags: FC<{ tags: Record<string, string> }> = ({ tags }) => {
         {overflow.length > 0 && (
           <button
             onClick={() => setOpen(!open)}
-            className="px-1 py-0.5 bg-gray-200 text-gray-500 text-[10px] rounded-full whitespace-nowrap bg-transparent border-none cursor-pointer p-0 hover:text-gray-800"
+            className="px-1 py-0.5 text-foreground-muted text-[10px] rounded-full whitespace-nowrap bg-transparent border-none cursor-pointer p-0 hover:text-foreground"
           >
             +{overflow.length}
           </button>
         )}
       </div>
       {open && (
-        <div className="absolute z-10 top-full left-0 mt-1 p-1.5 bg-white border border-gray-200 rounded shadow-lg flex flex-col gap-0.5">
+        <div className="absolute z-10 top-full left-0 mt-1 p-1.5 bg-surface border border-border rounded shadow-lg flex flex-col gap-0.5">
           {entries.map(([k, v]) => (
             <TagPill key={k} k={k} v={v} truncate />
           ))}
@@ -154,8 +154,8 @@ const ExpansionPanel: FC<{ label: string; content: string; copyContent?: string;
   const [copied, setCopied] = useState(false)
   return (
     <div className="max-w-0 min-w-full overflow-hidden">
-      <div className="flex items-center justify-between bg-gray-100 border border-gray-200 border-b-0 rounded-t px-3 py-1.5">
-        <span className="text-xs font-semibold text-gray-600">{label}</span>
+      <div className="flex items-center justify-between bg-surface-alt border border-border border-b-0 rounded-t px-3 py-1.5">
+        <span className="text-xs font-semibold text-foreground-muted">{label}</span>
         <span className="flex gap-2">
           <button
             onClick={() => {
@@ -169,13 +169,13 @@ const ExpansionPanel: FC<{ label: string; content: string; copyContent?: string;
           </button>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-800 bg-transparent border-none cursor-pointer p-0 text-xs"
+            className="text-foreground-muted hover:text-foreground bg-transparent border-none cursor-pointer p-0 text-xs"
           >
             Close
           </button>
         </span>
       </div>
-      <pre className="bg-gray-50 border border-gray-200 rounded-b p-3 text-[11px] overflow-auto max-h-[500px] m-0 whitespace-pre-wrap break-all">
+      <pre className="bg-surface-alt border border-border rounded-b p-3 text-[11px] overflow-auto max-h-[500px] m-0 whitespace-pre-wrap break-all text-foreground">
         {content}
       </pre>
     </div>
@@ -306,7 +306,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
       {/* Compact row */}
       <TR>
         <TD className="!px-1 !py-2 text-center cursor-pointer select-none" onClick={() => setExpanded(!expanded)}>
-          <span className="text-gray-400 text-xs">{expanded ? '\u25BC' : '\u25B6'}</span>
+          <span className="text-foreground-muted text-xs">{expanded ? '\u25BC' : '\u25B6'}</span>
         </TD>
         <TD>
           <StatusBadge status={job.status} />
@@ -337,7 +337,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
               ))}
             </div>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-foreground-muted">-</span>
           )}
         </TD>
         <TD>
@@ -355,7 +355,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
               })}
             </div>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-foreground-muted">-</span>
           )}
         </TD>
         <TD>
@@ -371,7 +371,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
               })}
             </div>
           ) : (
-            <span className="text-gray-400">-</span>
+            <span className="text-foreground-muted">-</span>
           )}
         </TD>
         <TD>
@@ -381,20 +381,20 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                 {job.match.season_name}
               </StyledLink>
             )}
-            {job.match?.pool_name && <span className="text-gray-500 text-[10px]">{job.match.pool_name}</span>}
+            {job.match?.pool_name && <span className="text-foreground-muted text-[10px]">{job.match.pool_name}</span>}
             {episodeTags && Object.keys(episodeTags).length > 0 && <Tags tags={episodeTags} />}
           </div>
         </TD>
         <TD>
           <div className="text-xs">{timeDisplay.primary}</div>
-          {timeDisplay.secondary && <div className="text-gray-400 text-[10px]">{timeDisplay.secondary}</div>}
+          {timeDisplay.secondary && <div className="text-foreground-muted text-[10px]">{timeDisplay.secondary}</div>}
         </TD>
         <TD>
           <div className="flex items-center gap-0 text-xs flex-wrap">
             {episodeId && <StyledLink href={`/episodes/${episodeId}`}>Episode</StyledLink>}
             {job.episode?.replay_url && normalizeVibescopeUrl(job.episode.replay_url) && (
               <>
-                {episodeId && <span className="text-gray-300 mx-1">&middot;</span>}
+                {episodeId && <span className="text-foreground-muted mx-1">&middot;</span>}
                 <a
                   href={normalizeVibescopeUrl(job.episode.replay_url)!}
                   target="_blank"
@@ -407,7 +407,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
             )}
             {job.episode?.replay_url && normalizeReplayUrl(job.episode.replay_url) && (
               <>
-                <span className="text-gray-300 mx-1">&middot;</span>
+                <span className="text-foreground-muted mx-1">&middot;</span>
                 <a
                   href={normalizeReplayUrl(job.episode.replay_url)!}
                   target="_blank"
@@ -426,13 +426,13 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
       {expanded && (
         <TR>
           <TD colSpan={8} className="!p-0">
-            <div className="bg-gray-50 border-t border-gray-200 px-4 py-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-0">
+            <div className="bg-surface-alt border-t border-border px-4 py-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] gap-0">
               {/* Job */}
               <div className="px-3">
-                <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1.5">Job</div>
+                <div className="text-xs text-foreground-muted font-semibold uppercase tracking-wide mb-1.5">Job</div>
                 <LabelValueTable>
                   <LabelRow label="Job ID">
-                    <CopyButton text={job.id} className="font-mono text-xs hover:text-gray-900">
+                    <CopyButton text={job.id} className="font-mono text-xs hover:text-foreground">
                       <span>{job.id}</span>
                     </CopyButton>
                   </LabelRow>
@@ -455,7 +455,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                   )}
                   {!gitCommit && runnerImageShort && (
                     <LabelRow label="Runner Image">
-                      <CopyButton text={runnerImageFull ?? ''} className="font-mono text-xs hover:text-gray-900">
+                      <CopyButton text={runnerImageFull ?? ''} className="font-mono text-xs hover:text-foreground">
                         <span>{runnerImageShort}</span>
                       </CopyButton>
                     </LabelRow>
@@ -497,16 +497,18 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                   </LabelRow>
                 </LabelValueTable>
               </div>
-              <div className="w-px bg-gray-200" />
+              <div className="w-px bg-border" />
               {/* Timing */}
               <div className="px-3">
-                <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1.5">Timing</div>
+                <div className="text-xs text-foreground-muted font-semibold uppercase tracking-wide mb-1.5">Timing</div>
                 <Timeline job={job} />
               </div>
-              <div className="w-px bg-gray-200" />
+              <div className="w-px bg-border" />
               {/* Results */}
               <div className="px-3">
-                <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1.5">Results</div>
+                <div className="text-xs text-foreground-muted font-semibold uppercase tracking-wide mb-1.5">
+                  Results
+                </div>
                 <LabelValueTable>
                   {gameStats && (
                     <ExpandDownloadRow

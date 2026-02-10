@@ -33,12 +33,14 @@ export const CommandItem: FC<CommandItemProps> = ({ label, command, buttonLabel 
         className={clsx(
           'flex items-center gap-3 px-3 py-2 rounded-md border text-left font-mono',
           'transition-colors cursor-pointer',
-          copied ? 'border-blue-700 bg-indigo-50' : 'border-blue-200 bg-slate-50 hover:border-slate-400'
+          copied
+            ? 'border-blue-700 bg-indigo-50 dark:bg-indigo-950'
+            : 'border-blue-200 dark:border-blue-800 bg-surface-alt hover:border-border-strong'
         )}
         onClick={handleCopy}
       >
-        <code className="flex-1 text-xs text-slate-900 wrap-break-word">{command}</code>
-        <span className="text-xs font-semibold text-blue-700 whitespace-nowrap">
+        <code className="flex-1 text-xs text-foreground wrap-break-word">{command}</code>
+        <span className="text-xs font-semibold text-blue-700 dark:text-blue-400 whitespace-nowrap">
           {copied ? 'Copied!' : buttonLabel}
         </span>
       </button>

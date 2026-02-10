@@ -116,7 +116,7 @@ export const SubmitForm: FC<{
 
   return (
     <div>
-      <div className="text-xs text-gray-600 mb-2">Submit new player</div>
+      <div className="text-xs text-foreground-muted mb-2">Submit new player</div>
       <div className="flex gap-3 items-end">
         <div className="flex-1">
           <AsyncSelect<PolicyOption>

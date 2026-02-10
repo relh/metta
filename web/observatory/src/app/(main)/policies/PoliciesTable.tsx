@@ -41,7 +41,7 @@ export const PoliciesTable: FC<{ nameFilter?: string; page?: number }> = async (
                 <UserDisplay user={policy.user} userId={policy.user_id} />
               </TD>
               <TD>
-                <span className="inline-flex items-center px-2 py-1 text-xs rounded bg-gray-100 border border-gray-200 text-nowrap">
+                <span className="inline-flex items-center px-2 py-1 text-xs rounded bg-surface-alt border border-border text-nowrap">
                   {policy.version_count} version{policy.version_count !== 1 ? 's' : ''}
                 </span>
               </TD>
@@ -50,7 +50,7 @@ export const PoliciesTable: FC<{ nameFilter?: string; page?: number }> = async (
           ))}
         </TableBody>
       </Table>
-      {policies.length === 0 && <div className="p-5 text-center text-gray-500">No policies found</div>}
+      {policies.length === 0 && <div className="p-5 text-center text-foreground-muted">No policies found</div>}
       <PaginatedControls isLastPage={policies.length < pageSize} />
     </div>
   )

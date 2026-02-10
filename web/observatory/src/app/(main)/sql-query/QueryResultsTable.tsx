@@ -6,7 +6,7 @@ import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { SQLQueryResponse } from '@/lib/repo'
 
 function formatCell(cell: unknown) {
-  if (cell === null) return <em className="text-gray-400">NULL</em>
+  if (cell === null) return <em className="text-foreground-muted">NULL</em>
   if (typeof cell === 'object') return JSON.stringify(cell)
   return String(cell)
 }
@@ -64,7 +64,7 @@ export const QueryResultsTable: FC<{
               key={col}
               onClick={() => handleSort(col)}
               className={clsx(
-                'cursor-pointer select-none transition-colors hover:bg-gray-100',
+                'cursor-pointer select-none transition-colors hover:bg-surface-alt',
                 sortConfig?.column === col && 'text-blue-600'
               )}
             >
@@ -77,7 +77,7 @@ export const QueryResultsTable: FC<{
         </TableHeader>
         <TableBody>
           {getSortedRows().map((row, idx) => (
-            <TR key={idx} className="hover:bg-gray-50">
+            <TR key={idx} className="hover:bg-surface-alt">
               {row.map((cell, cellIdx) => (
                 <TD key={cellIdx} className="text-xs">
                   {formatCell(cell)}

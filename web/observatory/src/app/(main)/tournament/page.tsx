@@ -11,7 +11,7 @@ export default async function TournamentPage() {
     return (
       <div className="p-6 max-w-5xl mx-auto flex justify-center py-16">
         <ServerDebugDrain />
-        <div className="text-gray-600">No seasons found</div>
+        <div className="text-foreground-muted">No seasons found</div>
       </div>
     )
   }

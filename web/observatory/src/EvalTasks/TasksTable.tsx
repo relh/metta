@@ -35,7 +35,7 @@ const StatusDropdown: FC<{ value: string; onChange: (value: string) => void }> =
       value={value || ''}
       onChange={(e) => onChange(e.target.value)}
       onClick={(e) => e.stopPropagation()}
-      className="w-full rounded border h-6 border-gray-300 bg-white text-gray-800 text-xs py-1 pl-1"
+      className="w-full rounded border h-6 border-border-strong bg-surface text-foreground text-xs py-1 pl-1"
     >
       <option value="">All</option>
       <option value="unprocessed">Unprocessed</option>
@@ -178,7 +178,9 @@ export const TasksTable: FC<{
             ))}
           </Table.Body>
         </Table>
-        {tasksResponse.tasks.length === 0 && <div className="p-5 text-center text-gray-500">No tasks found</div>}
+        {tasksResponse.tasks.length === 0 && (
+          <div className="p-5 text-center text-foreground-muted">No tasks found</div>
+        )}
       </div>
 
       {/* Pagination */}

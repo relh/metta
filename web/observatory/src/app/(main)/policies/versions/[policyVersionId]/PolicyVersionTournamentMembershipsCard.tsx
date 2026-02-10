@@ -14,7 +14,7 @@ export const PolicyVersionTournamentMembershipsCard: FC<{ policyVersionId: strin
     <Card title="Tournament Memberships">
       <ServerDebugDrain />
       {memberships.length === 0 ? (
-        <div className="text-gray-500 text-sm">No tournament memberships found for this policy version.</div>
+        <div className="text-foreground-muted text-sm">No tournament memberships found for this policy version.</div>
       ) : (
         <MembershipHistoryTable memberships={memberships} />
       )}

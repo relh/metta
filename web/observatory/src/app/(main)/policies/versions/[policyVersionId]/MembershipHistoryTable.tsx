@@ -11,19 +11,19 @@ import { formatRelativeTime } from '@/utils/datetime'
 
 const ActionBadge: FC<{ action: string }> = ({ action }) => {
   const colors: Record<string, string> = {
-    add: 'bg-green-100 text-green-800',
-    remove: 'bg-gray-100 text-gray-600',
+    add: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+    remove: 'bg-surface-alt text-foreground-muted',
   }
   return (
-    <span className={clsx('px-2 py-1 rounded text-xs font-medium', colors[action] || 'bg-gray-100')}>{action}</span>
+    <span className={clsx('px-2 py-1 rounded text-xs font-medium', colors[action] || 'bg-surface-alt')}>{action}</span>
   )
 }
 
 const VersionBadge: FC<{ version: number | null }> = ({ version }) => {
   if (version === null) {
-    return <span className="text-xs text-gray-400">-</span>
+    return <span className="text-xs text-foreground-muted">-</span>
   }
-  return <span className="px-2 py-1 rounded text-xs font-medium bg-slate-100 text-slate-700">v{version}</span>
+  return <span className="px-2 py-1 rounded text-xs font-medium bg-surface-alt text-foreground-subtle">v{version}</span>
 }
 
 type SeasonOption = { value: string; label: string }
@@ -100,7 +100,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
-        <span className="text-gray-600 text-sm font-medium">Season:</span>
+        <span className="text-foreground-muted text-sm font-medium">Season:</span>
         <Select
           options={seasonOptions}
           value={selectedSeason}
@@ -109,7 +109,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
           isSearchable={false}
           instanceId="membership-season-filter"
         />
-        <span className="text-gray-600 text-sm font-medium">Version:</span>
+        <span className="text-foreground-muted text-sm font-medium">Version:</span>
         <Select
           options={versionOptions}
           value={selectedVersion}
@@ -121,7 +121,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
         />
       </div>
       {filtered.length === 0 ? (
-        <div className="text-gray-500 text-sm">No membership changes for this filter.</div>
+        <div className="text-foreground-muted text-sm">No membership changes for this filter.</div>
       ) : (
         <Table>
           <TableHeader>
@@ -134,7 +134,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
           <TableBody>
             {filtered.map((entry, i) => (
               <TR key={i}>
-                <TD className="text-gray-500 text-sm">{formatRelativeTime(entry.created_at)}</TD>
+                <TD className="text-foreground-muted text-sm">{formatRelativeTime(entry.created_at)}</TD>
                 <TD>
                   <div className="flex items-center gap-2">
                     <StyledLink href={`/tournament/${entry.season_name}`}>{entry.season_name}</StyledLink>
@@ -145,7 +145,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
                 <TD>
                   <ActionBadge action={entry.action} />
                 </TD>
-                <TD className="text-sm text-gray-600">{entry.notes || '-'}</TD>
+                <TD className="text-sm text-foreground-muted">{entry.notes || '-'}</TD>
               </TR>
             ))}
           </TableBody>

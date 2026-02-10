@@ -99,9 +99,9 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
 
   return (
     <Fragment>
-      <TR className={clsx('cursor-pointer', 'hover:bg-gray-50')} onClick={() => toggleTaskExpansion()}>
+      <TR className={clsx('cursor-pointer', 'hover:bg-surface-alt')} onClick={() => toggleTaskExpansion()}>
         <TD>
-          <span className="mr-2 text-base text-gray-300 group-hover:text-gray-400">
+          <span className="mr-2 text-base text-foreground-muted group-hover:text-foreground-muted">
             {isExpanded ? '▾' : isLoadingAttempts ? <Spinner size="sm" /> : '▸'}
           </span>
           {policyInfo ? (
@@ -109,7 +109,7 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
               {policyInfo.name}:v{policyInfo.version}
             </StyledLink>
           ) : policyVersionId && !hasAttemptedPolicy ? (
-            <span className="text-gray-400 text-xs">Loading...</span>
+            <span className="text-foreground-muted text-xs">Loading...</span>
           ) : (
             '-'
           )}
@@ -132,7 +132,7 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
                 Datadog
               </A>
             ) : null}
-            {taskDatadogUrl && task.output_log_path ? <span className="text-gray-400">|</span> : null}
+            {taskDatadogUrl && task.output_log_path ? <span className="text-foreground-muted">|</span> : null}
             {task.output_log_path ? (
               <A href={repo.getTaskLogUrl(task.id, 'output')} target="_blank" rel="noopener noreferrer">
                 Output
@@ -144,9 +144,9 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
       </TR>
       {isExpanded && (
         <TR>
-          <TD colSpan={7} className="p-4 bg-gray-100">
-            <div className="mb-2 text-xs text-gray-500">Task ID: {task.id}</div>
-            <div className="mb-3 text-xs text-gray-700 font-mono break-all">{task.command}</div>
+          <TD colSpan={7} className="p-4 bg-surface-alt">
+            <div className="mb-2 text-xs text-foreground-muted">Task ID: {task.id}</div>
+            <div className="mb-3 text-xs text-foreground-subtle font-mono break-all">{task.command}</div>
             {isLoadingAttempts ? (
               <div>Loading attempts...</div>
             ) : (
@@ -178,7 +178,7 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
                                 Datadog
                               </A>
                             ) : null}
-                            {ddUrl && attempt.output_log_path ? <span className="text-gray-400">|</span> : null}
+                            {ddUrl && attempt.output_log_path ? <span className="text-foreground-muted">|</span> : null}
                             {attempt.output_log_path ? (
                               <A href={repo.getTaskLogUrl(task.id, 'output')} target="_blank" rel="noopener noreferrer">
                                 Output
