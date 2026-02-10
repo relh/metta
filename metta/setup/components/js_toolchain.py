@@ -12,6 +12,8 @@ NVM_INSTALL_URL = f"https://raw.githubusercontent.com/nvm-sh/nvm/{NVM_VERSION}/i
 
 @register_module
 class JsToolchainSetup(SetupModule):
+    install_once = True
+
     @property
     def name(self) -> str:
         return "js-toolchain"
@@ -40,8 +42,15 @@ class JsToolchainSetup(SetupModule):
         if not all(shutil.which(cmd) for cmd in ("node", "corepack", "pnpm", "turbo", "prettier")):
             return False
 
-        if not (self.repo_root / "node_modules").exists():
+        node_modules = self.repo_root / "node_modules"
+        if not node_modules.exists():
             return False
+
+        node_modules_mtime = node_modules.stat().st_mtime
+        for lockfile in ("pnpm-lock.yaml", "package.json"):
+            path = self.repo_root / lockfile
+            if path.exists() and path.stat().st_mtime > node_modules_mtime:
+                return False
 
         return True
 
@@ -91,6 +100,9 @@ class JsToolchainSetup(SetupModule):
         if not shutil.which("pnpm"):
             info("Enabling corepack...")
             self.run_command(["corepack", "enable"], capture_output=False)
+
+        info("Pre-fetching pnpm via corepack...")
+        self.run_command(["corepack", "install"], capture_output=False, cwd=self.repo_root)
 
         info("Running pnpm setup...")
         self.run_command(["pnpm", "setup"], capture_output=False, check=False)
