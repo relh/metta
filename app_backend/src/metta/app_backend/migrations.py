@@ -321,6 +321,7 @@ MIGRATIONS = [
         description="Add processed_at column to k8s_events for event processor",
         sql_statements=[
             """ALTER TABLE k8s_events ADD COLUMN processed_at TIMESTAMPTZ""",
+            """UPDATE k8s_events SET processed_at = NOW() WHERE processed_at IS NULL""",
             """CREATE INDEX idx_k8s_events_unprocessed ON k8s_events (event_time) WHERE processed_at IS NULL""",
         ],
     ),

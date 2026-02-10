@@ -49,6 +49,7 @@ logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = 5
 BATCH_SIZE = 100
 RECONCILE_INTERVAL_SECONDS = 60
+RECONCILE_GRACE_PERIOD_SECONDS = 300
 
 _db_engine = None
 
@@ -697,8 +698,10 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
         logger.error(f"Failed to list running jobs for reconciliation: {e}")
         return
 
+    now = datetime.now(UTC)
     stale_count = 0
     completed_count = 0
+    skipped_count = 0
     for job in running_jobs:
         if job.id not in active_job_ids:
             if job.completed_at or job.result:
@@ -706,6 +709,10 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
                 _update_job_status(stats_client, job.id, JobStatus.completed)
                 completed_count += 1
             else:
+                ref_time = job.dispatched_at or job.created_at
+                if ref_time and (now - ref_time).total_seconds() < RECONCILE_GRACE_PERIOD_SECONDS:
+                    skipped_count += 1
+                    continue
                 logger.warning(f"Reconciliation: job {job.id} marked {job.status} but no pod found, marking failed")
                 _update_job_status(
                     stats_client,
@@ -716,8 +723,10 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
                 )
                 stale_count += 1
 
-    if stale_count > 0 or completed_count > 0:
-        logger.info(f"Reconciliation complete: {completed_count} completed, {stale_count} failed")
+    if stale_count > 0 or completed_count > 0 or skipped_count > 0:
+        logger.info(
+            f"Reconciliation: {completed_count} completed, {stale_count} failed, {skipped_count} skipped (grace)"
+        )
 
 
 def run_event_processor():
