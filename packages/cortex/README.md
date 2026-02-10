@@ -225,6 +225,18 @@ Notes:
 - Works with `build_cortex_auto_stack(...)` pattern DSLs such as `"AXMS"`, `"X^M^S^"`, and custom maps.
 - Standalone DSL blocks support this directly: `build_column_auto_block(..., routed_adapter=RoutedAdapterConfig(...))`.
 - `compile_blocks` is disabled automatically when `routed_adapter` is enabled.
+- To train the shared trunk slower than adapters without optimizer param groups, set
+  `RoutedAdapterConfig(trunk_lr_mult=0.1)` (scales gradients for all non-adapter params; does not affect adapter A/B
+  params). You can also update it at runtime via `set_trunk_lr_mult_(stack, 0.1)` (call before backward). Note: for
+  AdamW, decoupled weight decay is not scaled by this.
+- Caveat: routed adapter injection only wraps `nn.Linear` (and the legacy `_HeadwiseLinearExpand` used by `sLSTMCell`
+  when AxonLayer is disabled). Cells that don’t use those modules (or that flatten batch/time) may be unaffected or only
+  partially adapted:
+  - `LSTMCell`: uses `nn.LSTM` parameter weights (no `nn.Linear` submodules), so routed adapters currently don’t take
+    effect.
+  - `AxonCell` (and any `AxonLayer`-backed paths in `mLSTMCell`, `sLSTMCell`, `XLCell`): the sequence path flattens to
+    `[B*T, ...]` for `out_proj`, so routed adapters can’t match `route_ids: [B]` and that projection won’t be adapted.
+  - `CausalConv1d`: no linear projections to adapt.
 
 ## Supported Components
 

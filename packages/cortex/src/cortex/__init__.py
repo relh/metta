@@ -52,6 +52,7 @@ from cortex.routed_adapter import (
     RoutedAdapterLinear,
     apply_routed_adapter_,
     get_route_ids,
+    set_trunk_lr_mult_,
     use_route_ids,
 )
 from cortex.stacks import CortexStack
@@ -104,6 +105,7 @@ __all__ = [
     "RoutedAdapterHeadwiseLinearExpand",
     "apply_routed_adapter_",
     "get_route_ids",
+    "set_trunk_lr_mult_",
     "use_route_ids",
     # Types
     "MaybeState",

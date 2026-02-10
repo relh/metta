@@ -214,6 +214,14 @@ class RoutedAdapterConfig(BaseModel):
     alpha: float | None = Field(default=None, gt=0.0)
     dropout: float = Field(default=0.0, ge=0.0, le=1.0)
     freeze_base: bool = Field(default=False)
+    trunk_lr_mult: float = Field(
+        default=1.0,
+        ge=0.0,
+        description=(
+            "Initial gradient multiplier applied to all non-adapter parameters in the adapted module tree "
+            "(can be updated via cortex.routed_adapter.set_trunk_lr_mult_)."
+        ),
+    )
     require_route_ids: bool = Field(default=True)
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import contextvars
 import math
-from typing import cast
+from typing import Callable, Iterator, cast
 
 import torch
 import torch.nn as nn
@@ -73,6 +73,59 @@ def _repeat_factor_for_batch_dim(x: torch.Tensor, batch_dim: int) -> int:
     if not other_dims:
         return 1
     return int(math.prod(other_dims))
+
+
+_ADAPTER_PARAM_NAMES = ("adapter_A", "adapter_B")
+
+
+def _iter_trunk_params(module: nn.Module) -> Iterator[nn.Parameter]:
+    seen: set[int] = set()
+    for sub in module.modules():
+        for name, param in sub.named_parameters(recurse=False):
+            if id(param) in seen:
+                continue
+            seen.add(id(param))
+
+            if not param.requires_grad:
+                continue
+            is_adapter_param = (
+                isinstance(sub, (RoutedAdapterLinear, RoutedAdapterHeadwiseLinearExpand))
+                and name in _ADAPTER_PARAM_NAMES
+            )
+            if is_adapter_param:
+                continue
+
+            yield param
+
+
+def _make_trunk_lr_mult_hook(param: nn.Parameter) -> Callable[[torch.Tensor], torch.Tensor]:
+    def _hook(grad: torch.Tensor) -> torch.Tensor:
+        mult = float(getattr(param, "_cortex_trunk_lr_mult", 1.0))
+        if mult == 1.0:
+            return grad
+        return grad * mult
+
+    return _hook
+
+
+def set_trunk_lr_mult_(module: nn.Module, trunk_lr_mult: float) -> int:
+    """Update the trunk gradient multiplier in-place.
+
+    This affects all non-adapter parameters in ``module`` (i.e., excludes adapter A/B params).
+    Call this before the backward pass for it to affect the current step.
+    """
+    mult = float(trunk_lr_mult)
+    if mult < 0.0:
+        raise ValueError(f"trunk_lr_mult must be >= 0, got {mult}")
+
+    updated = 0
+    for param in _iter_trunk_params(module):
+        if not bool(getattr(param, "_cortex_trunk_lr_hooked", False)):
+            param.register_hook(_make_trunk_lr_mult_hook(param))
+            param._cortex_trunk_lr_hooked = True
+        param._cortex_trunk_lr_mult = mult
+        updated += 1
+    return updated
 
 
 class RoutedAdapterLinear(nn.Module):
@@ -346,10 +399,7 @@ def _is_headwise_linear_expand(module: nn.Module) -> bool:
     )
 
 
-def apply_routed_adapter_(module: nn.Module, cfg: RoutedAdapterConfig) -> int:
-    if not cfg.enabled:
-        return 0
-
+def _apply_routed_adapter_replace_(module: nn.Module, cfg: RoutedAdapterConfig) -> int:
     replaced = 0
     for child_name, child in list(module.named_children()):
         if isinstance(child, RoutedAdapterLinear) or isinstance(child, RoutedAdapterHeadwiseLinearExpand):
@@ -362,7 +412,17 @@ def apply_routed_adapter_(module: nn.Module, cfg: RoutedAdapterConfig) -> int:
             setattr(module, child_name, RoutedAdapterHeadwiseLinearExpand.from_headwise_linear(child, cfg))
             replaced += 1
             continue
-        replaced += apply_routed_adapter_(child, cfg)
+        replaced += _apply_routed_adapter_replace_(child, cfg)
+    return replaced
+
+
+def apply_routed_adapter_(module: nn.Module, cfg: RoutedAdapterConfig) -> int:
+    if not cfg.enabled:
+        return 0
+
+    replaced = _apply_routed_adapter_replace_(module, cfg)
+    if cfg.trunk_lr_mult != 1.0:
+        set_trunk_lr_mult_(module, cfg.trunk_lr_mult)
     return replaced
 
 
@@ -371,5 +431,6 @@ __all__ = [
     "RoutedAdapterHeadwiseLinearExpand",
     "apply_routed_adapter_",
     "get_route_ids",
+    "set_trunk_lr_mult_",
     "use_route_ids",
 ]

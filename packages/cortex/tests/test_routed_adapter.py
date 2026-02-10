@@ -16,6 +16,8 @@ from cortex.config import AGaLiTeCellConfig, XLCellConfig
 from cortex.routed_adapter import (
     RoutedAdapterHeadwiseLinearExpand,
     RoutedAdapterLinear,
+    apply_routed_adapter_,
+    set_trunk_lr_mult_,
     use_route_ids,
 )
 from cortex.stacks import build_cortex_auto_stack
@@ -97,6 +99,55 @@ def test_routed_adapter_linear_missing_route_ids_uses_slot_zero() -> None:
     with use_route_ids(torch.zeros(x.shape[0], dtype=torch.long)):
         y_zero = adapter(x)
     assert torch.allclose(y_none, y_zero, atol=1e-6)
+
+
+def test_routed_adapter_trunk_lr_mult_can_be_updated_on_the_fly() -> None:
+    torch.manual_seed(0)
+
+    class Toy(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.ln = nn.LayerNorm(6)
+            self.linear = nn.Linear(6, 5, bias=False)
+
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.linear(self.ln(x))
+
+    model = Toy()
+    trunk_lr_mult = 0.1
+    apply_routed_adapter_(
+        model,
+        RoutedAdapterConfig(num_slots=3, rank=2, dropout=0.0, freeze_base=False, trunk_lr_mult=1.0),
+    )
+
+    adapters = [m for m in model.modules() if isinstance(m, RoutedAdapterLinear)]
+    assert adapters
+    with torch.no_grad():
+        for adapter in adapters:
+            adapter.adapter_B.normal_(mean=0.0, std=0.05)
+
+    B = 4
+    x = torch.randn(B, 6)
+    route_ids = torch.tensor([0, 1, 2, 0], dtype=torch.long)
+
+    def _grads() -> dict[str, torch.Tensor]:
+        model.zero_grad(set_to_none=True)
+        with use_route_ids(route_ids):
+            y = model(x)
+        loss = y.square().mean()
+        loss.backward()
+        return {name: p.grad.clone() for name, p in model.named_parameters()}
+
+    grads_base = _grads()
+    set_trunk_lr_mult_(model, trunk_lr_mult)
+    grads_scaled = _grads()
+
+    for name, base_grad in grads_base.items():
+        scaled_grad = grads_scaled[name]
+        if name.endswith(("adapter_A", "adapter_B")):
+            assert torch.allclose(scaled_grad, base_grad, atol=1e-6, rtol=1e-6)
+        else:
+            assert torch.allclose(scaled_grad, base_grad * trunk_lr_mult, atol=1e-6, rtol=1e-6)
 
 
 def test_column_router_logits_not_coupled_across_route_id_batch_mix() -> None:
