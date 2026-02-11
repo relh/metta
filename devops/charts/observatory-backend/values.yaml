@@ -25,7 +25,6 @@ episodeRunnerImage:
   tag: latest
 
 env:
-  RUN_MIGRATIONS: "true"
   OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "http://$(HOST_IP):4318/v1/metrics"
   OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "http/protobuf"
   EVAL_CLUSTER_ROLE_ARN: "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
