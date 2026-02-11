@@ -26,7 +26,6 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 # Suppress noisy logs before other imports
@@ -35,8 +34,6 @@ from metta.common.util.log_config import suppress_noisy_logs
 suppress_noisy_logs()
 
 import typer
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
 from testcontainers.postgres import PostgresContainer
 
@@ -436,8 +433,7 @@ def setup_database(db_uri: str):
     app_config.settings.RUN_MIGRATIONS = True
     app_config.settings.OBSERVATORY_AUTH_SECRET = "benchmark_secret"
 
-    alembic_cfg = Config(str(Path(__file__).parent.parent / "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
+    database.run_alembic_upgrade()
 
 
 @app.command()

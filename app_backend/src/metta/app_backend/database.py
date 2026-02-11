@@ -2,12 +2,17 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from functools import wraps
+from pathlib import Path
 from typing import Annotated, ParamSpec, TypeVar
 
+from alembic import command
+from alembic.config import Config
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from metta.app_backend.config import settings
+
+_ALEMBIC_DIR = str(Path(__file__).parent.parent.parent.parent / "alembic")
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -18,11 +23,16 @@ _current_session: ContextVar[AsyncSession | None] = ContextVar("current_session"
 
 
 def get_sync_db_url() -> str:
-    """Return STATS_DB_URI normalized to the ``postgresql://`` scheme."""
     url = settings.STATS_DB_URI
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
     return url
+
+
+def run_alembic_upgrade() -> None:
+    cfg = Config()
+    cfg.set_main_option("script_location", _ALEMBIC_DIR)
+    command.upgrade(cfg, "head")
 
 
 def _get_async_url(db_uri: str) -> str:

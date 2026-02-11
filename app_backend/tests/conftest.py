@@ -5,13 +5,10 @@ from metta.common.util.log_config import suppress_noisy_logs
 suppress_noisy_logs()
 import uuid
 from collections.abc import Iterator
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from psycopg import sql
@@ -19,6 +16,7 @@ from testcontainers.postgres import PostgresContainer
 
 from metta.app_backend import config as app_config
 from metta.app_backend.clients.stats_client import StatsClient
+from metta.app_backend.database import run_alembic_upgrade
 from metta.app_backend.server import create_app
 from metta.app_backend.test_support.client_adapter import (
     create_test_stats_client,
@@ -76,8 +74,7 @@ def template_db_uri(postgres_container: PostgresContainer) -> str:
     # Run Alembic migrations on template
     template_uri = db_uri.replace("/test_db", f"/{TEMPLATE_DB_NAME}")
     app_config.settings.STATS_DB_URI = template_uri
-    alembic_cfg = Config(str(Path(__file__).parent.parent / "alembic.ini"))
-    command.upgrade(alembic_cfg, "head")
+    run_alembic_upgrade()
 
     return db_uri  # Return base URI for cloning operations
 

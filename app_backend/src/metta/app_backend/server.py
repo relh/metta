@@ -10,17 +10,15 @@ import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import fastapi
 import uvicorn
-from alembic import command
-from alembic.config import Config
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic.main import BaseModel
 
 from metta.app_backend.auth import get_user
 from metta.app_backend.config import settings
+from metta.app_backend.database import run_alembic_upgrade
 from metta.app_backend.routes import (
     eval_task_routes,
     job_routes,
@@ -106,9 +104,7 @@ def create_app() -> fastapi.FastAPI:
     @asynccontextmanager
     async def lifespan(_: fastapi.FastAPI):
         if settings.RUN_MIGRATIONS:
-            alembic_cfg = Config(str(Path(__file__).parent.parent.parent.parent / "alembic.ini"))
-            alembic_cfg.config_file_name = None  # prevent fileConfig from resetting app loggers
-            command.upgrade(alembic_cfg, "head")
+            run_alembic_upgrade()
         yield
 
     app = fastapi.FastAPI(lifespan=lifespan)
