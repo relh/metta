@@ -82,6 +82,38 @@ def _resolve_hosts(host: Optional[str], all_hosts: bool) -> list[str]:
     raise typer.BadParameter("Host is required unless --all is set.")
 
 
+def _tmux_run_cmd(run_cmd: str, session_name: str, *, attach: bool) -> str:
+    session_label = shlex.quote(session_name)
+    attach_cmd_session = f"tmux attach -t {session_label}"
+    create_session_cmd = f"tmux new-session -d -s {session_label} {shlex.quote(run_cmd)}"
+    window_name = shlex.quote(session_name)
+    has_any_sessions = "tmux list-sessions 2>/dev/null | head -n 1 | grep -q ."
+    # Prefer the currently attached tmux session if one exists; otherwise pick the first session.
+    pick_base_session = (
+        'base=$(tmux list-sessions -F "#{?session_attached,#{session_name},}" 2>/dev/null '
+        "| grep -v '^$' | head -n 1 || true); "
+        'if [ -z "$base" ]; then base=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | head -n 1); fi'
+    )
+    window_exists = 'tmux list-windows -t "$base:" -F "#{window_name}" 2>/dev/null | grep -Fxq "$win"'
+    window_exists_base = 'tmux list-windows -t "$base:" -F "#{window_name}" 2>/dev/null | grep -Fxq "$win_base"'
+    create_window_cmd = f'tmux new-window -t "$base:" -n "$win" {shlex.quote(run_cmd)}'
+    select_window_cmd = 'tmux select-window -t "$base:$win"'
+    attach_base_cmd = 'tmux attach -t "$base"'
+
+    window_script = (
+        f"{pick_base_session}; "
+        f"win_base={window_name}; "
+        'win="$win_base"; '
+        f"if {window_exists_base}; then "
+        "i=2; "
+        f'while win="$win_base-$i"; {window_exists}; do i=$((i+1)); done; '
+        "fi; "
+        f"{create_window_cmd}; " + (f"{select_window_cmd} && {attach_base_cmd}" if attach else "true")
+    )
+    create_script = f"{create_session_cmd} && {attach_cmd_session}" if attach else create_session_cmd
+    return f"if {has_any_sessions}; then {window_script}; else {create_script}; fi"
+
+
 @app.command()
 def list_boxes() -> None:
     """List known mettabox hosts."""
@@ -154,33 +186,7 @@ def run(
     session_name = session or _extract_run_id(tool_args) or "metta-run"
     tty = attach
     if tmux:
-        session_label = shlex.quote(session_name)
-        attach_cmd_session = f"tmux attach -t {session_label}"
-        create_session_cmd = f"tmux new-session -d -s {session_label} {shlex.quote(run_cmd)}"
-        window_name = shlex.quote(session_name)
-        has_any_sessions = "tmux list-sessions 2>/dev/null | head -n 1 | grep -q ."
-        # Prefer the currently attached tmux session if one exists; otherwise pick the first session.
-        pick_base_session = (
-            'base=$(tmux list-sessions -F "#{?session_attached,#{session_name},}" 2>/dev/null '
-            "| grep -v '^$' | head -n 1 || true); "
-            'if [ -z "$base" ]; then base=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | head -n 1); fi'
-        )
-        window_exists = 'tmux list-windows -t "$base:" -F "#{window_name}" 2>/dev/null | grep -Fxq "$win"'
-        create_window_cmd = f'tmux new-window -t "$base:" -n "$win" {shlex.quote(run_cmd)}'
-        select_window_cmd = 'tmux select-window -t "$base:$win"'
-        attach_base_cmd = 'tmux attach -t "$base"'
-
-        window_script = (
-            f"{pick_base_session}; "
-            f"win={window_name}; "
-            f"if ! {window_exists}; then {create_window_cmd}; fi; "
-            + (f"{select_window_cmd} && {attach_base_cmd}" if attach else "true")
-        )
-
-        if attach:
-            cmd = f"if {has_any_sessions}; then {window_script}; else {create_session_cmd} && {attach_cmd_session}; fi"
-        else:
-            cmd = f"if {has_any_sessions}; then {window_script}; else {create_session_cmd}; fi"
+        cmd = _tmux_run_cmd(run_cmd, session_name, attach=attach)
     else:
         if attach:
             raise typer.BadParameter("--attach requires --tmux.")
