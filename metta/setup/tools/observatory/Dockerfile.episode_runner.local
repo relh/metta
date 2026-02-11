@@ -52,10 +52,18 @@ RUN --mount=type=cache,target=/root/.cache/bazel \
     METTAGRID_BAZEL_OUTPUT_ROOT=/root/.cache/bazel_output \
     uv build /tmp/mettagrid --wheel --out-dir /tmp/wheels && \
     uv build /tmp/cogames --wheel --out-dir /tmp/wheels && \
+    uv pip install --reinstall --python /opt/executor/bin/python /tmp/wheels/mettagrid-*.whl && \
     echo 'mettagrid' > /tmp/overrides.txt && \
     uv pip install --python /opt/executor/bin/python \
-        --override /tmp/overrides.txt /tmp/wheels/*.whl && \
-    rm -rf /tmp/mettagrid /tmp/cogames /tmp/wheels /tmp/overrides.txt
+        --override /tmp/overrides.txt /tmp/wheels/cogames-*.whl && \
+    mv /tmp/wheels /opt/wheels && \
+    rm -rf /tmp/mettagrid /tmp/cogames /tmp/overrides.txt
+
+# Freeze executor packages so policy venvs get the same set (cogames, mettagrid, etc).
+# Also save the override file so policy venvs can relax the mettagrid version constraint
+# (local builds produce version 0.0.0 since there's no git repo in the container).
+RUN uv pip list --python /opt/executor/bin/python --format=freeze > /opt/policy-requirements.txt && \
+    echo 'mettagrid' > /opt/policy-overrides.txt
 
 # Pre-warm uv cache with torch so per-policy venv creation is near-instant.
 RUN --mount=type=cache,target=/root/.cache/uv \
