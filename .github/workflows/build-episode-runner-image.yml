@@ -75,6 +75,26 @@ jobs:
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
+      - name: Wait for cogames on PyPI
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.cogames_version }}
+        run: |
+          MAX_WAIT=2400
+          CHECK_INTERVAL=30
+          ELAPSED=0
+          echo "Waiting for cogames==${VERSION} on PyPI..."
+          while [ $ELAPSED -le $MAX_WAIT ]; do
+            if curl -sf "https://pypi.org/pypi/cogames/${VERSION}/json" > /dev/null 2>&1; then
+              echo "cogames ${VERSION} is available on PyPI!"
+              exit 0
+            fi
+            echo "Waiting... ($ELAPSED/$MAX_WAIT seconds elapsed)"
+            sleep $CHECK_INTERVAL
+            ELAPSED=$((ELAPSED + CHECK_INTERVAL))
+          done
+          echo "ERROR: cogames ${VERSION} not found on PyPI after ${MAX_WAIT} seconds"
+          exit 1
+
       - name: Build and push
         uses: useblacksmith/build-push-action@v2
         with:
