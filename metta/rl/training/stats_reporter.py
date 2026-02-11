@@ -109,6 +109,10 @@ class StatsReporterConfig(Config):
         default="reward",
         description="Metric key to show in CLI progress output.",
     )
+    progress_metric_label: str | None = Field(
+        default=None,
+        description="Short display label for the progress metric. Falls back to the metric key.",
+    )
 
 
 class StatsReporterState(Config):

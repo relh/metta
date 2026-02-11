@@ -17,14 +17,26 @@ from cogames.cogs_vs_clips.cogsguard_curriculum import (
     COGSGUARD_FIXED_MAPS,
     EventProfile,
     filter_compatible_variants,
+    normalize_variant_names,
     resolve_event_profiles,
     split_variants,
 )
-from cogames.cogs_vs_clips.evals.cogsguard_evals import COGSGUARD_EVAL_COGS, COGSGUARD_EVAL_MISSIONS
+from cogames.cogs_vs_clips.evals.cogsguard_evals import (
+    COGSGUARD_EVAL_COGS,
+    COGSGUARD_EVAL_MISSIONS,
+)
 from cogames.cogs_vs_clips.mission import CvCMission
-from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.sites import MAPS_DIR, make_cogsguard_arena_site, make_cogsguard_machina1_site
+from cogames.cogs_vs_clips.reward_variants import (
+    AVAILABLE_REWARD_VARIANTS,
+    apply_reward_variants,
+)
+from cogames.cogs_vs_clips.sites import (
+    MAPS_DIR,
+    make_cogsguard_arena_site,
+    make_cogsguard_machina1_site,
+)
 from cogames.core import CoGameMissionVariant, CoGameSite
+from metta.agent.policies.cnn import CnnConfig
 from metta.agent.policies.vit import ViTDefaultConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -362,8 +374,9 @@ def simulations(
     env: Optional[MettaGridConfig] = None,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    num_agents: int = DEFAULT_NUM_AGENTS,
 ) -> list[SimulationConfig]:
-    env = env or make_env(variants=variants, layout=layout)
+    env = env or make_env(variants=variants, layout=layout, num_agents=num_agents)
 
     return [
         SimulationConfig(suite="cogsguard", name=f"basic_{layout}", env=env),
@@ -506,6 +519,213 @@ def train(
     return tt
 
 
+def _role_progress_metric(
+    variants: str | Sequence[str] | None,
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+) -> tuple[str, str]:
+    """Build a per-label-reward progress metric key and short display label.
+
+    Mirrors the label construction in apply_reward_variants: canonical order,
+    "objective" excluded.  The mission prefix and event-profile suffix are the
+    defaults used by cogsguard_role.train.
+
+    Returns (metric_key, display_label).
+    """
+    names = set(normalize_variant_names(variants))
+    suffix = ".".join(v for v in AVAILABLE_REWARD_VARIANTS if v != "objective" and v in names)
+    label = f"cogsguard_{layout}.basic"
+    if suffix:
+        label = f"{label}.{suffix}"
+    display = suffix or "reward"
+    return f"env_per_label_rewards/{label}", display
+
+
+def miner(
+    num_agents: int = 4,
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    max_steps: int = 1000,
+    variants: str | Sequence[str] | None = ("no_objective", "miner"),
+    teacher: Optional[TeacherConfig] = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
+) -> tools.TrainTool:
+    """Train miner role with optional teacher supervision."""
+    if teacher is None:
+        teacher = TeacherConfig(policy_uri=None)
+    elif isinstance(teacher, dict):
+        teacher = TeacherConfig.model_validate(teacher)
+
+    resolved_variants, resolved_rewards = split_variants(variants)
+    mission = _make_cogsguard_mission(
+        layout=layout,
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=resolved_variants,
+        clips_overrides={"disabled": True},
+    )
+    env = mission.make_env()
+    if resolved_rewards:
+        apply_reward_variants(env, variants=list(resolved_rewards))
+
+    curriculum = cc.bucketed(env)
+    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
+
+    default_architecture = CnnConfig()
+    trainer_cfg = TrainerConfig()
+    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
+
+    tt = tools.TrainTool(
+        trainer=trainer_cfg,
+        training_env=training_env_cfg,
+        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    )
+
+    if teacher and teacher.enabled:
+        scheduler_run_gates: list[LossRunGate] = []
+        scheduler_rules: list[ScheduleRule] = []
+        apply_teacher_phase(
+            trainer_cfg=trainer_cfg,
+            losses=trainer_cfg.losses,
+            training_env_cfg=training_env_cfg,
+            policy_assets=tt.policy_assets,
+            scheduler_rules=scheduler_rules,
+            scheduler_run_gates=scheduler_run_gates,
+            teacher_cfg=teacher,
+            trajectory_isolation=tt.trajectory_isolation,
+        )
+        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    key, label = _role_progress_metric(variants, layout)
+    tt.stats_reporter.progress_metric = key
+    tt.stats_reporter.progress_metric_label = label
+    return tt
+
+
+def aligner(
+    num_agents: int = 4,
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    max_steps: int = 1000,
+    variants: str | Sequence[str] | None = ("no_objective", "aligner"),
+    teacher: Optional[TeacherConfig] = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
+) -> tools.TrainTool:
+    """Train aligner role with optional teacher supervision."""
+    if teacher is None:
+        teacher = TeacherConfig(policy_uri=None)
+    elif isinstance(teacher, dict):
+        teacher = TeacherConfig.model_validate(teacher)
+
+    resolved_variants, resolved_rewards = split_variants(variants)
+    mission = _make_cogsguard_mission(
+        layout=layout,
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=resolved_variants,
+        clips_overrides={"disabled": True},
+    )
+    mission.cog.heart_limit = 3
+    for team in mission.teams.values():
+        team.initial_hearts = 120
+    env = mission.make_env()
+    if resolved_rewards:
+        apply_reward_variants(env, variants=list(resolved_rewards))
+
+    curriculum = cc.bucketed(env)
+    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
+
+    default_architecture = CnnConfig()
+    trainer_cfg = TrainerConfig()
+    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
+
+    tt = tools.TrainTool(
+        trainer=trainer_cfg,
+        training_env=training_env_cfg,
+        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    )
+
+    if teacher and teacher.enabled:
+        scheduler_run_gates: list[LossRunGate] = []
+        scheduler_rules: list[ScheduleRule] = []
+        apply_teacher_phase(
+            trainer_cfg=trainer_cfg,
+            losses=trainer_cfg.losses,
+            training_env_cfg=training_env_cfg,
+            policy_assets=tt.policy_assets,
+            scheduler_rules=scheduler_rules,
+            scheduler_run_gates=scheduler_run_gates,
+            teacher_cfg=teacher,
+            trajectory_isolation=tt.trajectory_isolation,
+        )
+        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    key, label = _role_progress_metric(variants, layout)
+    tt.stats_reporter.progress_metric = key
+    tt.stats_reporter.progress_metric_label = label
+    return tt
+
+
+def scout(
+    num_agents: int = 4,
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    max_steps: int = 1000,
+    variants: str | Sequence[str] | None = ("no_objective", "scout"),
+    teacher: Optional[TeacherConfig] = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
+) -> tools.TrainTool:
+    """Train scout role with optional teacher supervision."""
+    if teacher is None:
+        teacher = TeacherConfig(policy_uri=None)
+    elif isinstance(teacher, dict):
+        teacher = TeacherConfig.model_validate(teacher)
+
+    resolved_variants, resolved_rewards = split_variants(variants)
+    mission = _make_cogsguard_mission(
+        layout=layout,
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=resolved_variants,
+        clips_overrides={"disabled": True},
+    )
+    env = mission.make_env()
+    if resolved_rewards:
+        apply_reward_variants(env, variants=list(resolved_rewards))
+
+    curriculum = cc.bucketed(env)
+    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
+
+    default_architecture = CnnConfig()
+    trainer_cfg = TrainerConfig()
+    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
+
+    tt = tools.TrainTool(
+        trainer=trainer_cfg,
+        training_env=training_env_cfg,
+        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    )
+
+    if teacher and teacher.enabled:
+        scheduler_run_gates: list[LossRunGate] = []
+        scheduler_rules: list[ScheduleRule] = []
+        apply_teacher_phase(
+            trainer_cfg=trainer_cfg,
+            losses=trainer_cfg.losses,
+            training_env_cfg=training_env_cfg,
+            policy_assets=tt.policy_assets,
+            scheduler_rules=scheduler_rules,
+            scheduler_run_gates=scheduler_run_gates,
+            teacher_cfg=teacher,
+            trajectory_isolation=tt.trajectory_isolation,
+        )
+        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    key, label = _role_progress_metric(variants, layout)
+    tt.stats_reporter.progress_metric = key
+    tt.stats_reporter.progress_metric_label = label
+    return tt
+
+
 def evaluate(
     policy_uris: str | Sequence[str] | None = None,
     variants: str | Sequence[str] | None = None,
@@ -528,9 +748,13 @@ def play(
     policy_uri: Optional[str] = None,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    num_agents: int = DEFAULT_NUM_AGENTS,
 ) -> tools.PlayTool:
     """Interactive play with a policy."""
-    return tools.PlayTool(sim=simulations(variants=variants, layout=layout)[0], policy_uri=policy_uri)
+    return tools.PlayTool(
+        sim=simulations(variants=variants, layout=layout, num_agents=num_agents)[0],
+        policy_uri=policy_uri,
+    )
 
 
 def replay(

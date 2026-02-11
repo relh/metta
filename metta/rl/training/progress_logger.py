@@ -99,6 +99,7 @@ def log_training_progress(
     run_name: str | None,
     metrics: Dict[str, float],
     metric_key: str = "reward",
+    metric_label: str | None = None,
 ) -> None:
     """Log training progress with timing breakdown and optional metrics."""
 
@@ -113,7 +114,7 @@ def log_training_progress(
 
     metric_value = metrics.get(f"{metric_key}.avg", metrics.get(metric_key, 0.0))
     metric_rate = metrics.get(f"{metric_key}.rate")
-    metric_label_rich = metric_label_plain = metric_key.split("/")[-1]
+    metric_label_rich = metric_label_plain = metric_label or metric_key.split("/")[-1]
 
     if should_use_rich_console():
         log_rich_progress(
@@ -178,11 +179,9 @@ class ProgressLogger(TrainerComponent):
         ctx = self.context
         metrics = self._latest_metrics()
         stats_reporter = getattr(ctx, "stats_reporter", None)
-        metric_key = getattr(
-            getattr(stats_reporter, "config", None),
-            "progress_metric",
-            "reward",
-        )
+        sr_config = getattr(stats_reporter, "config", None)
+        metric_key = getattr(sr_config, "progress_metric", "reward")
+        metric_label = getattr(sr_config, "progress_metric_label", None)
         log_training_progress(
             epoch=ctx.epoch,
             agent_step=ctx.agent_step,
@@ -194,6 +193,7 @@ class ProgressLogger(TrainerComponent):
             run_name=ctx.run_name,
             metrics=metrics,
             metric_key=metric_key,
+            metric_label=metric_label,
         )
         self._previous_agent_step = ctx.agent_step
 
