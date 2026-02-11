@@ -1,5 +1,5 @@
 'use client'
-import { useContext, useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 
 import { AppContext } from '@/app/(main)/AppContext'
 import { Button } from '@/components/Button'
@@ -7,7 +7,7 @@ import { Spinner } from '@/components/Spinner'
 import { SmartPlugStatus } from '@/lib/repo'
 
 export default function SmartPlugsPage() {
-  const { repo } = useContext(AppContext)
+  const { repo } = use(AppContext)
   const [plugs, setPlugs] = useState<SmartPlugStatus[]>([])
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)

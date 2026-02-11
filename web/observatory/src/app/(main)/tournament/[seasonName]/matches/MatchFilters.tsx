@@ -1,50 +1,10 @@
 'use client'
 import { FC } from 'react'
-import Select from 'react-select'
-
+import { Select } from '@/components/Select'
 import { PolicySummary, SeasonDetail } from '@/lib/repo'
 
 import { formatPolicyDisplay } from '../utils'
 import { useMatchFilter } from './hooks'
-
-const selectStyles = {
-  control: (base: any) => ({
-    ...base,
-    minHeight: '32px',
-    fontSize: '0.75rem',
-  }),
-  valueContainer: (base: any) => ({
-    ...base,
-    padding: '0 6px',
-  }),
-  multiValue: (base: any) => ({
-    ...base,
-    backgroundColor: '#dbeafe',
-  }),
-  multiValueLabel: (base: any) => ({
-    ...base,
-    color: '#1e40af',
-    fontSize: '0.75rem',
-    padding: '1px 4px',
-  }),
-  multiValueRemove: (base: any) => ({
-    ...base,
-    color: '#1e40af',
-    ':hover': {
-      backgroundColor: '#bfdbfe',
-      color: '#1e3a8a',
-    },
-  }),
-  option: (base: any) => ({
-    ...base,
-    fontSize: '0.75rem',
-    padding: '6px 10px',
-  }),
-  placeholder: (base: any) => ({
-    ...base,
-    fontSize: '0.75rem',
-  }),
-}
 
 export const MatchFilters: FC<{ season: SeasonDetail; policies: PolicySummary[] }> = ({ season, policies }) => {
   const [matchFilter, setMatchFilter] = useMatchFilter()
@@ -65,7 +25,6 @@ export const MatchFilters: FC<{ season: SeasonDetail; policies: PolicySummary[] 
           value={poolOptions.filter((o) => matchFilter.pool_names.includes(o.value))}
           onChange={(selected) => setMatchFilter((f) => ({ ...f, pool_names: selected.map((s) => s.value) }))}
           placeholder="All pools"
-          styles={selectStyles}
           isClearable
           instanceId="pool-select"
         />
@@ -78,7 +37,6 @@ export const MatchFilters: FC<{ season: SeasonDetail; policies: PolicySummary[] 
           value={playerOptions.filter((o) => matchFilter.policy_version_ids.includes(o.value))}
           onChange={(selected) => setMatchFilter((f) => ({ ...f, policy_version_ids: selected.map((s) => s.value) }))}
           placeholder="All players"
-          styles={selectStyles}
           isClearable
           instanceId="player-select"
         />

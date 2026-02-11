@@ -1,9 +1,8 @@
 'use client'
 import { FC, useEffect, useMemo, useState } from 'react'
-import Select from 'react-select'
-
 import clsx from 'clsx'
 
+import { Select } from '@/components/Select'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { MembershipHistoryEntry } from '@/lib/repo'
@@ -31,20 +30,6 @@ type VersionOption = { value: number | '__all__'; label: string }
 
 const ALL_SEASONS: SeasonOption = { value: '__all__', label: 'All seasons' }
 const ALL_VERSIONS: VersionOption = { value: '__all__', label: 'All versions' }
-
-const selectStyles = {
-  control: (base: any) => ({
-    ...base,
-    minHeight: '36px',
-    fontSize: '0.875rem',
-    minWidth: '180px',
-  }),
-  option: (base: any) => ({
-    ...base,
-    fontSize: '0.875rem',
-    padding: '6px 12px',
-  }),
-}
 
 export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] }> = ({ memberships }) => {
   const [selectedSeason, setSelectedSeason] = useState<SeasonOption>(ALL_SEASONS)
@@ -105,7 +90,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
           options={seasonOptions}
           value={selectedSeason}
           onChange={(option) => setSelectedSeason(option ?? ALL_SEASONS)}
-          styles={selectStyles}
+          size="md"
           isSearchable={false}
           instanceId="membership-season-filter"
         />
@@ -114,7 +99,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
           options={versionOptions}
           value={selectedVersion}
           onChange={(option) => setSelectedVersion(option ?? ALL_VERSIONS)}
-          styles={selectStyles}
+          size="md"
           isSearchable={false}
           instanceId="membership-season-version-filter"
           isDisabled={selectedSeason.value === '__all__'}

@@ -1,29 +1,9 @@
 'use client'
 import { useRouter, useSelectedLayoutSegment } from 'next/navigation'
-import { FC, useContext, useEffect, useMemo, useState } from 'react'
-import Select from 'react-select'
-
+import { FC, use, useEffect, useMemo, useState } from 'react'
 import { AppContext } from '@/app/(main)/AppContext'
+import { Select } from '@/components/Select'
 import { SeasonDetail, SeasonVersionInfo } from '@/lib/repo'
-
-const seasonSelectStyles = {
-  control: (base: any) => ({
-    ...base,
-    minHeight: '40px',
-    fontSize: '1rem',
-    fontWeight: 600,
-    minWidth: '200px',
-  }),
-  singleValue: (base: any) => ({
-    ...base,
-    fontWeight: 600,
-  }),
-  option: (base: any) => ({
-    ...base,
-    fontSize: '1rem',
-    padding: '8px 12px',
-  }),
-}
 
 type SeasonOption = { value: string; label: string }
 type VersionOption = { value: number; label: string; canonical: boolean }
@@ -56,7 +36,7 @@ const formatSeasonRef = (name: string, version: number | null, canonical: boolea
 
 export const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
   const seasonRef = useSelectedLayoutSegment()
-  const { repo } = useContext(AppContext)
+  const { repo } = use(AppContext)
   const decodedSeasonRef = useMemo(() => {
     if (!seasonRef) {
       return null
@@ -153,7 +133,7 @@ export const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
         options={seasonOptions}
         value={seasonOptions.find((o) => o.value === selectedSeasonName) || null}
         onChange={handleSeasonChange}
-        styles={seasonSelectStyles}
+        size="lg"
         isSearchable={false}
         placeholder="Select season..."
         instanceId="season-select"
@@ -163,7 +143,7 @@ export const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
         options={versionOptions}
         value={selectedVersion}
         onChange={handleVersionChange}
-        styles={seasonSelectStyles}
+        size="lg"
         isSearchable={false}
         placeholder={selectedSeasonName ? 'Select version...' : 'Select season first'}
         instanceId="season-version-select"

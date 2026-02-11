@@ -1,6 +1,6 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { createContext, FC, PropsWithChildren, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, FC, PropsWithChildren, use, useCallback, useEffect, useRef, useState } from 'react'
 
 interface AutoRefreshContextValue {
   /** Currently active interval in ms, or null if no auto-refresh is registered */
@@ -14,9 +14,9 @@ const AutoRefreshContext = createContext<AutoRefreshContextValue>({
   register: () => () => {},
 })
 
-export const useAutoRefreshInterval = () => useContext(AutoRefreshContext).intervalMs
+export const useAutoRefreshInterval = () => use(AutoRefreshContext).intervalMs
 
-export const useAutoRefreshRegister = () => useContext(AutoRefreshContext).register
+export const useAutoRefreshRegister = () => use(AutoRefreshContext).register
 
 export const AutoRefreshProvider: FC<PropsWithChildren> = ({ children }) => {
   const router = useRouter()

@@ -1,36 +1,11 @@
 'use client'
 import { parseAsString, useQueryState } from 'nuqs'
 import { FC, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
-import Select from 'react-select'
-import AsyncSelect from 'react-select/async'
 
+import { AsyncSelect } from '@/components/AsyncSelect'
+import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
 import { ALL_JOB_STATUSES, JobStatus, PublicPolicyVersionRow, SeasonDetail } from '@/lib/repo'
-
-const selectStyles = {
-  control: (base: any) => ({
-    ...base,
-    minHeight: '32px',
-    fontSize: '0.75rem',
-  }),
-  valueContainer: (base: any) => ({
-    ...base,
-    padding: '0 6px',
-  }),
-  singleValue: (base: any) => ({
-    ...base,
-    fontSize: '0.75rem',
-  }),
-  option: (base: any) => ({
-    ...base,
-    fontSize: '0.75rem',
-    padding: '6px 10px',
-  }),
-  placeholder: (base: any) => ({
-    ...base,
-    fontSize: '0.75rem',
-  }),
-}
 
 type Option = { value: string; label: string }
 
@@ -98,7 +73,6 @@ const PolicySelect: FC<{ defaultPolicyVersionId?: string }> = ({ defaultPolicyVe
           loadOptions={loadOptions}
           defaultOptions
           placeholder="Search policies..."
-          styles={selectStyles}
           isClearable
           instanceId="policy-select"
           cacheOptions
@@ -133,7 +107,6 @@ const StatusSelect: FC = () => {
           value={selected}
           onChange={(opt) => setStatus((opt?.value as JobStatus) ?? null)}
           placeholder="All statuses"
-          styles={selectStyles}
           isClearable
           instanceId="status-select"
         />
@@ -176,7 +149,6 @@ const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
             </span>
           )}
           placeholder="All seasons"
-          styles={selectStyles}
           isClearable
           instanceId="season-select"
         />
@@ -224,7 +196,6 @@ const PoolSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
           onChange={(opt) => setPoolId(opt?.value ?? null)}
           placeholder={seasonId ? 'All pools' : 'Select a season first'}
           isDisabled={!seasonId}
-          styles={selectStyles}
           isClearable
           instanceId="pool-select"
         />

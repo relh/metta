@@ -1,11 +1,10 @@
 'use client'
 import { useRouter } from 'next/navigation'
 import { FC, use, useEffect, useState } from 'react'
-import Select, { StylesConfig } from 'react-select'
-import AsyncSelect from 'react-select/async'
-
 import { AppContext } from '@/app/(main)/AppContext'
+import { AsyncSelect } from '@/components/AsyncSelect'
 import { Button } from '@/components/Button'
+import { Select } from '@/components/Select'
 import { PolicyRow, PublicPolicyVersionRow } from '@/lib/repo'
 
 type PolicyOption = {
@@ -18,14 +17,6 @@ type VersionOption = {
   value: string
   label: string
   version: PublicPolicyVersionRow
-}
-
-const selectStyles: StylesConfig<any, false, any> = {
-  control: (base) => ({ ...base, minHeight: '30px', fontSize: '14px' }),
-  valueContainer: (base) => ({ ...base, padding: '0 8px' }),
-  indicatorsContainer: (base) => ({ ...base, height: '30px' }),
-  option: (base) => ({ ...base, fontSize: '14px' }),
-  menu: (base) => ({ ...base, zIndex: 50 }),
 }
 
 export const SubmitForm: FC<{
@@ -128,7 +119,6 @@ export const SubmitForm: FC<{
             isClearable
             cacheOptions
             defaultOptions={false}
-            styles={selectStyles}
             noOptionsMessage={({ inputValue }) => (inputValue ? 'No policies found' : 'Type to search...')}
           />
         </div>
@@ -140,7 +130,6 @@ export const SubmitForm: FC<{
               value={selectedVersion}
               onChange={setSelectedVersion}
               options={versions}
-              styles={selectStyles}
               isSearchable={false}
             />
           </div>
