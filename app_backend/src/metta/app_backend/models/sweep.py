@@ -16,7 +16,7 @@ class Sweep(SQLModel, table=True):
     project: str
     entity: str
     wandb_sweep_id: str
-    state: str = Field(default="active", sa_column_kwargs={"server_default": text("'running'::text")})
+    state: str = Field(default="running", sa_column_kwargs={"server_default": text("'running'::text")})
     run_counter: int = Field(default=0, sa_column_kwargs={"server_default": text("0")})
     user_id: str
     created_at: datetime = Field(
