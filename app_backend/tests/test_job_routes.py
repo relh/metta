@@ -9,8 +9,7 @@ class TestEpisodeJobRoutes:
             job={
                 "assignments": [0, 1, 0, 1],
                 "env": {"game": {"num_agents": 4}},
-                "results_uri": None,
-                "replay_uri": None,
+                "skip_replay": True,
                 "seed": 42,
                 "max_action_time_ms": 5000,
             },

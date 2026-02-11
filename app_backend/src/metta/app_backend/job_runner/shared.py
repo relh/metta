@@ -13,6 +13,7 @@ from kubernetes import client
 
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_replay_key
+from metta.common.util.constants import SOFTMAX_S3_BUCKET
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +30,10 @@ def get_s3_client() -> BaseClient:
     return _s3_client
 
 
-def copy_replay_to_public(job_id: UUID, replay_uri: str | None) -> bool:
-    if not replay_uri or not replay_uri.startswith("s3://"):
-        return True
-
+def copy_replay_to_public(job_id: UUID) -> str | None:
     cfg = get_dispatch_config()
     if not cfg.EVAL_S3_BUCKET:
-        return False
+        return None
 
     source_key = job_replay_key(job_id)
     s3 = get_s3_client()
@@ -53,26 +51,23 @@ def copy_replay_to_public(job_id: UUID, replay_uri: str | None) -> bool:
 
     if not replay_exists:
         logger.warning(f"Replay not found in EVAL bucket for job {job_id}, skipping copy")
-        return True
+        return None
 
-    parts = replay_uri.removeprefix("s3://").split("/", 1)
-    if len(parts) != 2:
-        logger.warning(f"Invalid replay_uri format: {replay_uri}")
-        return False
-    dest_bucket, dest_key = parts
+    dest_key = f"replays/{job_id}.json.z"
+    dest_uri = f"s3://{SOFTMAX_S3_BUCKET}/{dest_key}"
 
     try:
         s3.copy_object(
-            Bucket=dest_bucket,
+            Bucket=SOFTMAX_S3_BUCKET,
             Key=dest_key,
             CopySource={"Bucket": cfg.EVAL_S3_BUCKET, "Key": source_key},
             MetadataDirective="COPY",
         )
-        logger.info(f"Copied replay to s3://{dest_bucket}/{dest_key} for job {job_id}")
-        return True
+        logger.info(f"Copied replay to {dest_uri} for job {job_id}")
+        return dest_uri
     except Exception as e:
         logger.error(f"Failed to copy replay for job {job_id}: {e}")
-        return False
+        return None
 
 
 def capture_pod_logs(core_v1: client.CoreV1Api, pod_name: str, job_id: UUID):

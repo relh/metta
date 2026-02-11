@@ -62,7 +62,7 @@ def mock_stats_client():
                 id=job_id,
                 job={
                     "type": "single_episode",
-                    "replay_uri": None,
+                    "skip_replay": True,
                     "policy_uris": ["s3://bucket/policy"],
                     "assignments": [0],
                     "env": {"name": "test"},

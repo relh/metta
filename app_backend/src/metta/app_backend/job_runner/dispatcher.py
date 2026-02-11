@@ -65,7 +65,6 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     job_spec["policy_uris"] = [
         presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
     ]
-
     s3_client = boto3.client("s3")
     spec_key = job_spec_key(job.id)
     s3_client.put_object(
@@ -82,7 +81,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         client.V1EnvVar(name="RESULTS_URI", value=results_uri),
         client.V1EnvVar(name="RUNTIME_INFO_URI", value=runtime_info_uri),
     ]
-    if job.job.get("replay_uri") is not None:
+    if not job.job.get("skip_replay"):
         replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_replay_key(job.id), exp, endpoint)
         env_vars.append(client.V1EnvVar(name="REPLAY_URI", value=replay_uri))
 

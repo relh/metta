@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 import argparse
-import uuid
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.models.job_request import JobRequestCreate, JobType
 from metta.app_backend.tournament.referees.envs import make_cogsguard_env
-from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI, SOFTMAX_S3_REPLAYS_PREFIX
+from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI
 from mettagrid.runner.types import SingleEpisodeJob
-from mettagrid.util.file import http_url
 
 SERVERS = {
     "dev": DEV_STATS_SERVER_URI,
@@ -34,13 +32,11 @@ def main():
     jobs = []
     for seed in range(args.num_jobs):
         env = make_cogsguard_env(seed=seed, num_agents=args.num_agents)
-        replay_uri = None if args.no_replay else http_url(f"{SOFTMAX_S3_REPLAYS_PREFIX}/{uuid.uuid4()}.json.z")
         job = SingleEpisodeJob(
             policy_uris=policy_uris,
             assignments=[i % len(policy_uris) for i in range(args.num_agents)],
             env=env,
-            results_uri=None,
-            replay_uri=replay_uri,
+            skip_replay=args.no_replay,
             seed=seed,
             episode_tags={"source": "submit_test_jobs"},
         )

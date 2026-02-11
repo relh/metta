@@ -13,7 +13,7 @@ import json
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from kubernetes import client
@@ -491,6 +491,19 @@ def _get_runner_image_from_event(event_data: dict) -> str | None:
     return container_statuses[0].get("imageID")
 
 
+def _get_instance_type_from_event(event_data: dict, core_v1: client.CoreV1Api) -> str | None:
+    pod_data = event_data.get("object", {})
+    node_name = pod_data.get("spec", {}).get("nodeName")
+    if not node_name:
+        return None
+    try:
+        node = cast(client.V1Node, core_v1.read_node(node_name))
+    except ApiException:
+        return None
+    labels = node.metadata.labels if node.metadata else None
+    return (labels or {}).get("node.kubernetes.io/instance-type")
+
+
 def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
     """Read runtime info from S3."""
     cfg = get_dispatch_config()
@@ -534,7 +547,9 @@ def _is_container_running_from_event(event_data: dict) -> bool:
 
 
 @trace("tournament.event_processor.handle_succeeded")
-def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str, event_data: dict):
+def _handle_pod_succeeded(
+    stats_client: StatsClient, core_v1: client.CoreV1Api, job_id: UUID, pod_name: str, event_data: dict
+):
     # Deduplication: check if job is already in terminal state
     job_request = stats_client.get_job(job_id)
     if job_request.status in (JobStatus.completed, JobStatus.failed):
@@ -557,17 +572,20 @@ def _handle_pod_succeeded(stats_client: StatsClient, job_id: UUID, pod_name: str
         return
 
     try:
-        # Capture runner_image and runtime_info for episode recording
+        # Capture runner_image, instance_type, and runtime_info for episode recording
         result_data: dict[str, Any] = {}
         runner_image = _get_runner_image_from_event(event_data)
         if runner_image:
             result_data["runner_image"] = runner_image
+        instance_type = _get_instance_type_from_event(event_data, core_v1)
+        if instance_type:
+            result_data["instance_type"] = instance_type
         runtime_info = _read_runtime_info(job_id)
         result_data.update(runtime_info.model_dump(exclude_none=True))
 
         job = SingleEpisodeJob.model_validate(job_request.job)
-        copy_replay_to_public(job_id, job.replay_uri)
-        record_job_episode(job_id, job, results, stats_client, result_data=result_data)  # pyright: ignore[reportArgumentType]
+        replay_uri = copy_replay_to_public(job_id) if not job.skip_replay else None
+        record_job_episode(job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)  # pyright: ignore[reportArgumentType]
         _update_job_status(stats_client, job_id, JobStatus.completed)
         logger.info(f"Job {job_id} completed (pod {pod_name})")
     except Exception as e:
@@ -596,7 +614,7 @@ def _process_event(
 
     if event_type in ("ADDED", "MODIFIED"):
         if phase == "Succeeded":
-            _handle_pod_succeeded(stats_client, job_id, pod_name, event_data)
+            _handle_pod_succeeded(stats_client, core_v1, job_id, pod_name, event_data)
             capture_pod_logs(core_v1, pod_name, job_id)
             job_name = _get_job_name_from_event(event_data)
             if job_name:

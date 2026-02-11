@@ -505,9 +505,6 @@ def _run_episode_docker(job: SingleEpisodeJob, out: Path, image: str, docker_pla
             env=job.env,
             seed=job.seed,
             max_action_time_ms=job.max_action_time_ms,
-            results_uri="file:///workspace/io/results.json",
-            replay_uri="file:///workspace/io/replay.json.z",
-            debug_uri="file:///workspace/io/debug.zip",
         )
         spec_path.write_text(docker_job.model_dump_json())
 

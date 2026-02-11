@@ -270,29 +270,23 @@ def create_job_router() -> APIRouter:
                 if not result:
                     logger.error(f"Job {job_request.id} not found in dispatch results")
                     continue
+                from_status = job_request.status
                 if result.k8s_job_name:
                     job_request.status = JobStatus.dispatched
                     job_request.worker = result.k8s_job_name
                     job_request.dispatched_at = result.time
-                    metrics.record_transition(
-                        JobStatus.pending,
-                        JobStatus.dispatched,
-                        job_request,
-                        result.time,
-                        None,
-                    )
                 else:
                     job_request.status = JobStatus.failed
                     job_request.error = result.error
                     job_request.error_type = "unknown"  # Dispatch failures are generic
-                    metrics.record_transition(
-                        JobStatus.pending,
-                        JobStatus.failed,
-                        job_request,
-                        result.time,
-                        "unknown",
-                    )
             await session.commit()
+            metrics.record_transition(
+                from_status=from_status,
+                to_status=job_request.status,
+                job=job_request,
+                transition_time=result.time,
+                error_type=job_request.error_type,
+            )
             await metrics.update_running_counts(session, {job.job_type for job in job_requests})
             return [job_request.id for job_request in job_requests]
 

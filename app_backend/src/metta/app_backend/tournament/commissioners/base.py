@@ -66,9 +66,6 @@ def _rss_mb() -> str:
     return "?"
 
 
-SOFTMAX_S3_REPLAYS_PREFIX = "s3://softmax-public/replays/tournament"
-
-
 class MembershipChangeRequest(BaseModel):
     pool_name: str
     policy_version_id: UUID
@@ -657,12 +654,11 @@ class CommissionerBase(ABC):
             match_id = match.id
             span.set_attribute("match.id", str(match_id))
 
-            replay_uri = None if request.skip_replay else f"{SOFTMAX_S3_REPLAYS_PREFIX}/{match_id}.json.z"
             job_spec = SingleEpisodeJob(
                 policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
                 assignments=request.assignments,
                 env=request.env,
-                replay_uri=replay_uri,
+                skip_replay=request.skip_replay,
                 seed=request.seed,
                 episode_tags={**request.episode_tags, "scheduler_git_ref": gitta.get_current_commit()},
             ).model_dump()

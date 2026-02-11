@@ -101,6 +101,7 @@ def record_job_episode(
     results: PureSingleEpisodeResult,
     stats_client: StatsClient,
     result_data: dict[str, str] | None = None,
+    replay_uri: str | None = None,
 ) -> uuid.UUID:
     policy_version_ids = resolve_policy_version_ids(job.policy_uris, stats_client)
     episode_tags = {"job_id": str(job_id), **job.episode_tags}
@@ -108,7 +109,7 @@ def record_job_episode(
     episode_id = write_single_episode_to_observatory(
         episode_tags=episode_tags,
         policy_version_ids=policy_version_ids,
-        replay_uri=job.replay_uri,
+        replay_uri=replay_uri,
         assignments=job.assignments,
         results=results,
         stats_client=stats_client,
