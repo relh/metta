@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { FC, PropsWithChildren } from 'react'
 
+import { AutoRefreshBadge } from '@/components/AutoRefreshBadge'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
 import { UserDropdown } from './UserDropdown'
@@ -52,6 +53,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <AutoRefreshBadge />
         <UserDropdown currentUser={currentUser} devMode={devMode} />
         <ThemeToggle />
       </div>

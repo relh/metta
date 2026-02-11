@@ -1,17 +1,16 @@
 'use client'
-import { useRouter } from 'next/navigation'
 import { FC, useEffect } from 'react'
 
-// component instead of hook for convenience in React Server Components
+import { useAutoRefreshRegister } from './AutoRefreshProvider'
+
+// Kept as a component (rather than a hook) for convenience in React Server Components.
+// Registers the desired interval with the global AutoRefreshProvider.
 export const AutoRefresh: FC<{ interval?: number }> = ({ interval = 5000 }) => {
-  const router = useRouter()
+  const register = useAutoRefreshRegister()
 
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      router.refresh()
-    }, interval)
-    return () => clearInterval(intervalId)
-  }, [interval])
+    return register(interval)
+  }, [register, interval])
 
   return null
 }

@@ -7,6 +7,7 @@ import { PropsWithChildren } from 'react'
 import { AppProvider } from '@/app/(main)/AppContext'
 import { TopMenu } from '@/app/(main)/TopMenu'
 import { getAuthToken } from '@/auth/server'
+import { AutoRefreshProvider } from '@/components/AutoRefreshProvider'
 import { ResetErrorProvider } from '@/components/ResetErrorContext'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { config } from '@/config'
@@ -51,14 +52,16 @@ export default async function RootLayout({ children }: PropsWithChildren) {
         <ThemeProvider>
           <NuqsAdapter>
             <AppProvider token={token} apiBaseUrl={config.apiBaseUrl}>
-              <ResetErrorProvider>
-                <div className="min-h-screen font-sans flex flex-col">
-                  <TopMenu currentUser={currentUser} devMode={!!config.authToken} />
-                  <div className="bg-background flex-1">{children}</div>
-                </div>
-                <ServerDebugDrain />
-                <RequestDebugPanel />
-              </ResetErrorProvider>
+              <AutoRefreshProvider>
+                <ResetErrorProvider>
+                  <div className="min-h-screen font-sans flex flex-col">
+                    <TopMenu currentUser={currentUser} devMode={!!config.authToken} />
+                    <div className="bg-background flex-1">{children}</div>
+                  </div>
+                  <ServerDebugDrain />
+                  <RequestDebugPanel />
+                </ResetErrorProvider>
+              </AutoRefreshProvider>
             </AppProvider>
           </NuqsAdapter>
         </ThemeProvider>
