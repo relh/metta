@@ -7,7 +7,7 @@ from typing import Annotated, Any, Optional
 import aioboto3
 import duckdb
 from fastapi import APIRouter, Body, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from metta.app_backend.auth import CheckMaybeUser, CheckSoftmaxUser, CheckUser
 from metta.app_backend.models.policies import Policy, PolicyVersion
@@ -18,6 +18,20 @@ from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
+
+
+POLICY_NAME_MAX_LENGTH = 64
+
+
+def _validate_policy_name(name: str) -> str:
+    if ":" in name:
+        raise ValueError("Policy name must not contain ':'")
+    if len(name) > POLICY_NAME_MAX_LENGTH:
+        raise ValueError(f"Policy name must be at most {POLICY_NAME_MAX_LENGTH} characters")
+    return name
+
+
+PolicyName = Annotated[str, AfterValidator(_validate_policy_name)]
 
 
 class PolicyRow(Ownable):
@@ -106,7 +120,7 @@ class PolicyVersionResponse(BaseModel):
 
 
 class PolicyCreate(BaseModel):
-    name: str
+    name: PolicyName
     attributes: dict[str, Any] = Field(default_factory=dict)
     is_system_policy: bool = False
 
@@ -159,7 +173,7 @@ class CompletePolicySubmitRequest(BaseModel):
     """Request to complete a policy submission after uploading to S3."""
 
     upload_id: uuid.UUID
-    name: str
+    name: PolicyName
     season: str | None = None
 
 
