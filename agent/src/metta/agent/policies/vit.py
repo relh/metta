@@ -83,7 +83,7 @@ class ViTDefaultConfig(PolicyArchitecture):
                 latent_dim=self.latent_dim,
                 num_latents=self.core_num_latents,
                 num_heads=self.core_num_heads,
-                num_layers=2,
+                num_layers=1,
             ),
             CortexTDConfig(
                 in_key="obs_latent_attn",
