@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { AUTH_COOKIE_NAME } from './auth/constants'
 import { config as appConfig } from './config'
 
-const PUBLIC_PATHS = ['/auth/callback']
+const PUBLIC_PATHS = ['/auth/callback', '/auth/login']
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -22,11 +22,9 @@ export function proxy(request: NextRequest) {
   const token = appConfig.authToken ?? cookieToken ?? queryToken
 
   if (!token) {
-    const authUrl = new URL(`${appConfig.authServerUrl}/tokens/cli`)
-    const queryParams = new URLSearchParams()
-    queryParams.set('observatory_url', pathname + request.nextUrl.search)
-    authUrl.searchParams.set('callback', `${appConfig.siteUrl}/auth/callback?${queryParams.toString()}`)
-    return NextResponse.redirect(authUrl)
+    const loginUrl = new URL('/auth/login', request.nextUrl.origin)
+    loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search)
+    return NextResponse.redirect(loginUrl)
   }
 
   return NextResponse.next()

@@ -53,8 +53,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
             <AppProvider token={token} apiBaseUrl={config.apiBaseUrl}>
               <ResetErrorProvider>
                 <div className="min-h-screen font-sans flex flex-col">
-                  <TopMenu currentUser={currentUser} />
-
+                  <TopMenu currentUser={currentUser} devMode={!!config.authToken} />
                   <div className="bg-background flex-1">{children}</div>
                 </div>
                 <ServerDebugDrain />

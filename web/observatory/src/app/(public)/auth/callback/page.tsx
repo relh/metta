@@ -2,6 +2,8 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import { sanitizeRedirectPath } from '@/utils/redirect'
+
 import { validateToken } from './actions'
 
 export default function AuthCallback() {
@@ -47,7 +49,7 @@ export default function AuthCallback() {
       setStatus({ type: 'success' })
 
       setTimeout(() => {
-        router.push(searchParams.get('observatory_url') ?? '/')
+        router.push(sanitizeRedirectPath(searchParams.get('observatory_url')))
       }, 2000)
     }
 
