@@ -13,7 +13,6 @@ class PairingRefereeBase(RefereeBase):
     match_configurations: list[list[int]]
     matches_per_config: int = 5
     game_tag: str | None = None
-    skip_replay: bool = False
 
     def get_matches_to_schedule(
         self,
@@ -56,7 +55,6 @@ class PairingRefereeBase(RefereeBase):
                 env=self.make_env(seed + map_seed_offset),
                 episode_tags={**episode_tags_base, "assignments": str(config)},
                 seed=seed,
-                skip_replay=self.skip_replay,
             )
             for _, pp1, pp2, config, map_seed_offset in pending
         ]

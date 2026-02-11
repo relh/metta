@@ -10,7 +10,6 @@ class SelfPlayRefereeBase(RefereeBase):
     num_agents: int
     matches_per_player: int = 2
     game_tag: str | None = None
-    skip_replay: bool = False
 
     def get_matches_to_schedule(
         self,
@@ -43,7 +42,6 @@ class SelfPlayRefereeBase(RefereeBase):
                         env=self.make_env(seed + completed + match_i),
                         seed=seed,
                         episode_tags=episode_tags,
-                        skip_replay=self.skip_replay,
                     )
                 )
                 if limit > 0 and len(requests) >= limit:

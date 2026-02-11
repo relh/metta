@@ -22,8 +22,6 @@ class MatchRequest(BaseModel):
     env: MettaGridConfig
     episode_tags: dict[str, str] = {}
     seed: int
-    # Temporarily disable replays for games where mettascope doesn't support the new config format
-    skip_replay: bool = False
 
 
 class ScoredMatchData(BaseModel):

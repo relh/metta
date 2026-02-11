@@ -19,7 +19,6 @@ def main():
     parser.add_argument("--num-agents", type=int, default=2, help="Number of agents")
     parser.add_argument("--num-jobs", type=int, default=1, help="Number of jobs to submit")
     parser.add_argument("--policy-uri", help="Policy URI")
-    parser.add_argument("--no-replay", action="store_true", help="Skip replay generation")
     args = parser.parse_args()
 
     if not args.policy_uri:
@@ -36,7 +35,6 @@ def main():
             policy_uris=policy_uris,
             assignments=[i % len(policy_uris) for i in range(args.num_agents)],
             env=env,
-            skip_replay=args.no_replay,
             seed=seed,
             episode_tags={"source": "submit_test_jobs"},
         )

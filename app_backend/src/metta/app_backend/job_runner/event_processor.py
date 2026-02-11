@@ -584,7 +584,7 @@ def _handle_pod_succeeded(
         result_data.update(runtime_info.model_dump(exclude_none=True))
 
         job = SingleEpisodeJob.model_validate(job_request.job)
-        replay_uri = copy_replay_to_public(job_id) if not job.skip_replay else None
+        replay_uri = copy_replay_to_public(job_id)
         record_job_episode(job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)  # pyright: ignore[reportArgumentType]
         _update_job_status(stats_client, job_id, JobStatus.completed)
         logger.info(f"Job {job_id} completed (pod {pod_name})")

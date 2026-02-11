@@ -658,7 +658,6 @@ class CommissionerBase(ABC):
                 policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
                 assignments=request.assignments,
                 env=request.env,
-                skip_replay=request.skip_replay,
                 seed=request.seed,
                 episode_tags={**request.episode_tags, "scheduler_git_ref": gitta.get_current_commit()},
             ).model_dump()

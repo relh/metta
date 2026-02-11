@@ -73,20 +73,20 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         Body=json.dumps(job_spec).encode("utf-8"),
         ContentType="application/json",
     )
-    spec_uri = presign_operation("get", cfg.EVAL_S3_BUCKET, spec_key, exp, endpoint)
-    results_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_results_key(job.id), exp, endpoint)
-    runtime_info_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_runtime_info_key(job.id), exp, endpoint)
+    presigned_env_vars: dict[str, tuple[Literal["get", "put"], str]] = {
+        "JOB_SPEC_URI": ("get", spec_key),
+        "RESULTS_URI": ("put", job_results_key(job.id)),
+        "RUNTIME_INFO_URI": ("put", job_runtime_info_key(job.id)),
+        "REPLAY_URI": ("put", job_replay_key(job.id)),
+        "DEBUG_URI": ("put", job_debug_key(job.id)),
+    }
     env_vars: list[client.V1EnvVar] = [
-        client.V1EnvVar(name="JOB_SPEC_URI", value=spec_uri),
-        client.V1EnvVar(name="RESULTS_URI", value=results_uri),
-        client.V1EnvVar(name="RUNTIME_INFO_URI", value=runtime_info_uri),
+        client.V1EnvVar(
+            name=name,
+            value=presign_operation(op, cfg.EVAL_S3_BUCKET, key, exp, endpoint),
+        )
+        for name, (op, key) in presigned_env_vars.items()
     ]
-    if not job.job.get("skip_replay"):
-        replay_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_replay_key(job.id), exp, endpoint)
-        env_vars.append(client.V1EnvVar(name="REPLAY_URI", value=replay_uri))
-
-    debug_uri = presign_operation("put", cfg.EVAL_S3_BUCKET, job_debug_key(job.id), exp, endpoint)
-    env_vars.append(client.V1EnvVar(name="DEBUG_URI", value=debug_uri))
 
     if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE:
         env_vars.append(client.V1EnvVar(name="AWS_PROFILE", value=cfg.LOCAL_DEV_AWS_PROFILE))
@@ -136,36 +136,6 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         else None
     )
 
-    affinity = (
-        client.V1Affinity(
-            node_affinity=client.V1NodeAffinity(
-                preferred_during_scheduling_ignored_during_execution=[
-                    client.V1PreferredSchedulingTerm(
-                        weight=100,
-                        preference=client.V1NodeSelectorTerm(
-                            match_expressions=[
-                                client.V1NodeSelectorRequirement(
-                                    key="node.kubernetes.io/instance-type",
-                                    operator="In",
-                                    values=[
-                                        "c5.xlarge",
-                                        "c5.2xlarge",
-                                        "c6i.xlarge",
-                                        "c6i.2xlarge",
-                                        "c7i.xlarge",
-                                        "c7i.2xlarge",
-                                    ],
-                                )
-                            ]
-                        ),
-                    )
-                ]
-            )
-        )
-        if not cfg.LOCAL_DEV
-        else None
-    )
-
     k8s_job = client.V1Job(
         metadata=client.V1ObjectMeta(
             name=job_name,
@@ -189,7 +159,6 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
                     volumes=volumes,
                     tolerations=tolerations,
                     node_selector=node_selector,
-                    affinity=affinity,
                     containers=[
                         client.V1Container(
                             name="worker",
@@ -217,7 +186,11 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
 
 
 def presign_operation(
-    operation: Literal["get", "put"], bucket: str, key: str, expiration: int, endpoint: str | None
+    operation: Literal["get", "put"],
+    bucket: str,
+    key: str,
+    expiration: int,
+    endpoint: str | None,
 ) -> str:
     s3_client = boto3.client(
         "s3",

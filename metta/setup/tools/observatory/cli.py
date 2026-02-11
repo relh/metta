@@ -35,6 +35,7 @@ This CLI supports running inside a devcontainer on macOS. The key challenges:
 import functools
 import os
 import platform
+import shutil
 import subprocess
 import tempfile
 import uuid
@@ -519,6 +520,8 @@ def _run_episode_docker(job: SingleEpisodeJob, out: Path, image: str, docker_pla
             "-e",
             "RESULTS_URI=file:///workspace/io/results.json",
             "-e",
+            "REPLAY_URI=file:///workspace/io/replay.json.z",
+            "-e",
             "DEBUG_URI=file:///workspace/io/debug.zip",
             "-v",
             f"{workspace}:/workspace/io:rw",
@@ -535,12 +538,30 @@ def _run_episode_docker(job: SingleEpisodeJob, out: Path, image: str, docker_pla
         info(f"Results written to {out}")
 
 
+def _check_docker_prerequisites(image: str) -> None:
+    if not shutil.which("docker"):
+        error("Docker not found. Install OrbStack: https://orbstack.dev")
+        error("  Or use --mode local to skip Docker.")
+        raise typer.Exit(1)
+    if subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
+        error("Docker daemon not running. Start OrbStack first:")
+        error("  orb start")
+        error("  Or use --mode local to skip Docker.")
+        raise typer.Exit(1)
+    result = subprocess.run(["docker", "images", image, "--format", "{{.Repository}}"], capture_output=True, text=True)
+    if not result.stdout.strip():
+        error(f"Image {image} not found. Build it first:")
+        error("  metta observatory local-k8s build-image")
+        error("  Or use --mode local to skip Docker.")
+        raise typer.Exit(1)
+
+
 @app.command(name="run-episode")
 @handle_errors
 def run_episode(
     source: Annotated[str, typer.Argument(help="Path to job spec JSON, or observatory job/episode UUID")],
     mode: Annotated[str, typer.Option("--mode", "-m", help="local, local-image, or prod-image")] = "local",
-    output_dir: Annotated[str, typer.Option("--output-dir", "-o", help="Directory for results")] = ".",
+    output_dir: Annotated[str, typer.Option("--output-dir", "-o", help="Directory for results")] = "./episode-results",
 ):
     """Run a single episode locally or in a Docker image.
 
@@ -556,9 +577,11 @@ def run_episode(
     if mode == "local":
         _run_episode_local(job, out)
     elif mode == "local-image":
+        _check_docker_prerequisites(IMAGE)
         docker_platform = "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
         _run_episode_docker(job, out, IMAGE, docker_platform)
     elif mode == "prod-image":
+        _check_docker_prerequisites(PROD_IMAGE)
         info(f"Pulling {PROD_IMAGE}...")
         subprocess.run(["docker", "pull", "--platform", "linux/amd64", PROD_IMAGE], check=True, timeout=300)
         _run_episode_docker(job, out, PROD_IMAGE, "linux/amd64")
