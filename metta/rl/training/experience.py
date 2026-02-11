@@ -39,23 +39,22 @@ class Experience:
 
         # Calculate segments
         self.segments = batch_size // bptt_horizon
-        if total_agents > self.segments:
-            mini_batch_size = total_agents * bptt_horizon
+        if total_agents != self.segments:
+            expected_batch_size = total_agents * bptt_horizon
             raise ValueError(
-                f"batch_size ({batch_size}) is too small for {total_agents} agents.\n"
-                f"Segments = batch_size // bptt_horizon = {batch_size} // {bptt_horizon} = {self.segments}\n"
-                f"But we need segments >= total_agents ({total_agents}).\n"
-                f"Please set trainer.batch_size >= {mini_batch_size} in your configuration."
+                "This trainer requires a 1:1 mapping between agent slots and replay rows.\n"
+                f"Got segments={self.segments} (batch_size // bptt_horizon = {batch_size} // {bptt_horizon}) "
+                f"but total_agents={total_agents}.\n"
+                f"Please set trainer.batch_size = total_agents * bptt_horizon = {expected_batch_size}."
             )
 
         spec = experience_spec.expand(self.segments, self.bptt_horizon).to(self.device)
         self.buffer = spec.zero()
 
-        # Row-aligned tracking (per-agent row slot id and position within row)
+        # Row-aligned tracking (per-agent position within its row). With segments == total_agents,
+        # each agent owns exactly one row for the entire rollout.
         self.t_in_row = torch.zeros(total_agents, device=self.device, dtype=torch.int64)
-        self.t_in_row_cpu = torch.zeros(total_agents, device="cpu", dtype=torch.int64)
-        self.row_slot_ids = torch.arange(total_agents, device=self.device, dtype=torch.int64) % self.segments
-        self.free_idx = total_agents % self.segments
+        self._done = torch.zeros(total_agents, device=self.device, dtype=torch.bool)
 
         # Minibatch configuration
         self.minibatch_size: int = min(minibatch_size, max_minibatch_size)
@@ -83,17 +82,12 @@ class Experience:
             )
 
         self._range_tensor = torch.arange(total_agents, device=self.device, dtype=torch.int64)
+        self.row_slot_ids = self._range_tensor
 
         # TODO: restore precomputation of sequential indices
 
         # Keys to use when writing into the buffer; defaults to all spec keys. Scheduler updates per loss gate activity.
         self._store_keys: List[Any] = list(self.buffer.keys(include_nested=True, leaves_only=True))
-
-    def _check_for_duplicate_keys(self, experience_spec: Composite) -> None:
-        """Check for duplicate keys in the experience spec."""
-        all_keys = list(experience_spec.keys(include_nested=True, leaves_only=True))
-        if duplicate_keys := duplicates(all_keys):
-            raise ValueError(f"Duplicate keys found in experience_spec: {[str(d) for d in duplicate_keys]}")
 
     @property
     def ready_for_training(self) -> bool:
@@ -105,37 +99,40 @@ class Experience:
         assert isinstance(env_id, slice), (
             f"TypeError: env_id expected to be a slice for segmented storage. Got {type(env_id).__name__} instead."
         )
-        t_in_row_val = int(self.t_in_row_cpu[env_id.start].item())
-        row_ids = self.row_slot_ids[env_id]
+        env_ids = self._range_tensor[env_id]
+        done_mask = self._done[env_id]
+        if bool(done_mask.all()):
+            return
+        if bool(done_mask.any()):
+            active_mask = ~done_mask
+            data_td = data_td[active_mask]
+            env_ids = env_ids[active_mask]
 
         # Scheduler updates these keys based on the active losses for the epoch.
         if self._store_keys:
-            self.buffer.update_at_(data_td.select(*self._store_keys), (row_ids, t_in_row_val))
+            row_ids = self.row_slot_ids[env_ids]
+            t_in_row = self.t_in_row[env_ids]
+            self.buffer.update_at_(data_td.select(*self._store_keys), (row_ids, t_in_row))
         else:
             raise ValueError("No store keys set. set_store_keys() was likely used incorrectly.")
 
-        self.t_in_row[env_id] += 1
-        self.t_in_row_cpu[env_id] += 1
+        self.t_in_row[env_ids] += 1
 
-        if t_in_row_val + 1 >= self.bptt_horizon:
-            self._reset_completed_episodes(env_id)
+        completed = (t_in_row + 1) >= self.bptt_horizon
+        if not bool(completed.any()):
+            return
 
-    def _reset_completed_episodes(self, env_id) -> None:
-        """Reset episode tracking for completed episodes."""
-        num_full = env_id.stop - env_id.start
-        self.row_slot_ids[env_id] = (self.free_idx + self._range_tensor[:num_full]) % self.segments
-        self.t_in_row[env_id] = 0
-        self.t_in_row_cpu[env_id] = 0
-        self.free_idx = (self.free_idx + num_full) % self.segments
-        self.full_rows += num_full
+        completed_env_ids = env_ids[completed]
+        self.full_rows += int(completed_env_ids.numel())
+
+        self.t_in_row[completed_env_ids] = 0
+        self._done[completed_env_ids] = True
 
     def reset_for_rollout(self) -> None:
         """Reset tracking variables for a new rollout."""
         self.full_rows = 0
-        self.free_idx = self.total_agents % self.segments
-        self.row_slot_ids = self._range_tensor % self.segments
         self.t_in_row.zero_()
-        self.t_in_row_cpu.zero_()
+        self._done.zero_()
 
     def update(self, indices: Tensor, data_td: TensorDict) -> None:
         """Update buffer with new data for given indices."""

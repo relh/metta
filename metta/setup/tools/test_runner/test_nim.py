@@ -12,6 +12,17 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
+# Nimby uses a global lock directory at ~/.nimby/nimbylock (created atomically via mkdir).
+# When nimby crashes, the lock can be left behind and subsequent nimby invocations fail.
+_NIMBY_LOCK = Path.home() / ".nimby" / "nimbylock"
+
+
+def _cleanup_nimby_lock() -> None:
+    if not _NIMBY_LOCK.exists():
+        return
+    info(f"Removing nimby lock left behind by crashed process: {_NIMBY_LOCK}")
+    shutil.rmtree(_NIMBY_LOCK, ignore_errors=True)
+
 
 @app.callback()
 def command() -> None:
@@ -22,6 +33,7 @@ def command() -> None:
     # Install Nim dependencies before running tests
     info("Installing Nim dependencies...")
     sync_cmd = ["nimby", "sync", "-g", str(lock_file)]
+    _cleanup_nimby_lock()
     exit_code = subprocess.run(
         sync_cmd,
         check=False,
@@ -34,6 +46,7 @@ def command() -> None:
         if pkgs_dir.exists():
             info(f"nimby sync failed; removing cached packages at {pkgs_dir} and retrying...")
             shutil.rmtree(pkgs_dir)
+        _cleanup_nimby_lock()
         exit_code = subprocess.run(
             sync_cmd,
             check=False,

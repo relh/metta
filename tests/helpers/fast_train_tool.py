@@ -122,7 +122,7 @@ def create_minimal_training_setup(
 
     trainer_cfg = TrainerConfig(
         total_timesteps=16,
-        batch_size=32,
+        batch_size=16,
         minibatch_size=16,
         bptt_horizon=4,
         update_epochs=1,

@@ -110,6 +110,8 @@ class TrainerConfig(Config):
     def validate_fields(self) -> "TrainerConfig":
         if self.minibatch_size > self.batch_size:
             raise ValueError("minibatch_size must be <= batch_size")
+        if self.batch_size % self.bptt_horizon != 0:
+            raise ValueError("batch_size must be divisible by bptt_horizon")
         if self.batch_size % self.minibatch_size != 0:
             raise ValueError("batch_size must be divisible by minibatch_size")
         auto_cfg = self.update_epochs_autotune

@@ -27,6 +27,14 @@ from mettagrid.simulator.replay_log_writer import ReplayLogWriter
 logger = logging.getLogger(__name__)
 
 
+def _largest_divisor_at_most(target: int, limit: int) -> int:
+    limit = min(target, limit)
+    for divisor in range(limit, 0, -1):
+        if target % divisor == 0:
+            return divisor
+    return 1
+
+
 def guess_vectorization() -> Literal["serial", "multiprocessing"]:
     if platform.system() == "Darwin":
         return "serial"
@@ -164,7 +172,9 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
                 num_gpus = torch.cuda.device_count() or 1
                 cpu_count = os.cpu_count() or 1
                 ideal_workers = (cpu_count // 2) // max(num_gpus, 1)
-                num_workers = max(1, ideal_workers)
+                base_target_batch_size = max(2, cfg.forward_pass_minibatch_target_size // self._num_agents)
+                max_workers = max(1, min(base_target_batch_size, ideal_workers))
+                num_workers = _largest_divisor_at_most(base_target_batch_size, max_workers)
 
         # Calculate batch sizes
         self._target_batch_size, self._batch_size, self._num_envs = calculate_batch_sizes(
