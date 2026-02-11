@@ -5,9 +5,11 @@ import { FC, use, useCallback, useState, useSyncExternalStore } from 'react'
 
 import { AppContext } from '@/app/(main)/AppContext'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
+import { Button } from '@/components/Button'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import type { RequestLogEntry } from '@/lib/debug/request-log'
 import { clearEntries, getServerSnapshot, getSnapshot, subscribe } from '@/lib/debug/request-log'
+import { useDebugPanelVisible } from '@/lib/debug/useDebugPanelVisible'
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString('en-US', {
@@ -21,18 +23,21 @@ function formatTime(timestamp: number): string {
 const StatusBadge: FC<{ status: number }> = ({ status }) => {
   const color =
     status === 0
-      ? 'bg-red-200 text-red-800'
+      ? 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200'
       : status < 300
-        ? 'bg-green-200 text-green-800'
+        ? 'bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200'
         : status < 400
-          ? 'bg-yellow-200 text-yellow-800'
-          : 'bg-red-200 text-red-800'
+          ? 'bg-yellow-200 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200'
+          : 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200'
 
   return <span className={clsx('px-1.5 py-0.5 rounded text-xs font-mono', color)}>{status || 'ERR'}</span>
 }
 
 const SourceBadge: FC<{ source: 'server' | 'client' }> = ({ source }) => {
-  const color = source === 'server' ? 'bg-blue-200 text-blue-800' : 'bg-purple-200 text-purple-800'
+  const color =
+    source === 'server'
+      ? 'bg-blue-200 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+      : 'bg-purple-200 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
   return <span className={clsx('px-1.5 py-0.5 rounded text-xs', color)}>{source}</span>
 }
 
@@ -99,10 +104,11 @@ const RequestRow: FC<{ entry: RequestLogEntry }> = ({ entry }) => {
 export const RequestDebugPanel: FC = () => {
   const entries = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
   const [expanded, setExpanded] = useState(false)
+  const { isVisible } = useDebugPanelVisible()
 
   const toggle = useCallback(() => setExpanded((e) => !e), [])
 
-  if (entries.length === 0 && !expanded) return null
+  if (!isVisible) return null
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border-strong shadow-lg">
@@ -124,15 +130,11 @@ export const RequestDebugPanel: FC = () => {
         </div>
         <div className="flex items-center gap-2">
           {entries.length > 0 && (
-            <button
-              className="text-xs text-foreground-muted hover:text-foreground-subtle px-1"
-              onClick={(e) => {
-                e.stopPropagation()
-                clearEntries()
-              }}
-            >
-              Clear
-            </button>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Button size="sm" theme="tertiary" onClick={clearEntries}>
+                Clear
+              </Button>
+            </div>
           )}
           <span className="text-foreground-muted text-xs">{expanded ? '▼' : '▲'}</span>
         </div>

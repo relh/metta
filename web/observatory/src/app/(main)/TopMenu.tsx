@@ -1,12 +1,12 @@
 'use client'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
-import { FC, PropsWithChildren, useCallback } from 'react'
+import { usePathname } from 'next/navigation'
+import { FC, PropsWithChildren } from 'react'
 
-import { AUTH_COOKIE_NAME } from '@/auth/constants'
-import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { ThemeToggle } from '@/components/ThemeToggle'
+
+import { UserDropdown } from './UserDropdown'
 
 const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ href, children, isActive = false }) => {
   return (
@@ -24,14 +24,8 @@ const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ 
 
 export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ currentUser, devMode }) => {
   const pathname = usePathname()
-  const router = useRouter()
 
   const isPoliciesActive = pathname === '/' || pathname.startsWith('/policies')
-
-  const signOut = useCallback(() => {
-    document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0`
-    router.replace('/auth/login')
-  }, [router])
 
   return (
     <nav className="border-b border-border-strong bg-surface px-5 flex justify-between items-center">
@@ -58,29 +52,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Dropdown
-          render={({ close }) => (
-            <DropdownMenu>
-              {devMode ? (
-                <div className="px-3 py-2 text-xs text-gray-400 max-w-48">
-                  Auth is set via DEV_AUTH_TOKEN. Sign out is not available in dev mode.
-                </div>
-              ) : (
-                <DropdownMenuItem
-                  title="Sign out"
-                  onClick={() => {
-                    close()
-                    signOut()
-                  }}
-                />
-              )}
-            </DropdownMenu>
-          )}
-        >
-          <span className="text-sm text-gray-500 cursor-pointer hover:text-gray-900 transition-colors">
-            {currentUser}
-          </span>
-        </Dropdown>
+        <UserDropdown currentUser={currentUser} devMode={devMode} />
         <ThemeToggle />
       </div>
     </nav>

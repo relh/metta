@@ -20,7 +20,7 @@ export function getButtonClassName(
     ],
     theme === 'tertiary' && [
       'border-border-strong text-foreground-muted bg-transparent',
-      !disabled && 'hover:bg-surface-alt',
+      !disabled && 'hover:bg-surface-alt hover:text-foreground',
     ],
     disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
   )
@@ -29,7 +29,7 @@ export function getButtonClassName(
 export const Button: FC<{
   onClick?: () => void
   children: React.ReactNode
-  theme?: 'primary' | 'secondary'
+  theme?: 'primary' | 'secondary' | 'tertiary'
   type?: 'button' | 'submit'
   size?: 'sm' | 'md' | 'lg'
   disabled?: boolean
