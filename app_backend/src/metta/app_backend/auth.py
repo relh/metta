@@ -95,7 +95,12 @@ CheckMaybeUser = Annotated[Optional[User], Depends(get_user)]
 
 
 async def validate_token_via_login_service(token: str) -> Optional[User]:
-    """Validate a machine token via the login service and return the user if valid."""
+    """Validate a machine token via the login service and return the user if valid.
+
+    Returns None if the token is definitively invalid.
+    Raises HTTPException(503) if the login service is unreachable or erroring,
+    so callers don't confuse infrastructure failures with bad tokens.
+    """
     if settings.DEBUG_USER_EMAIL and token == settings.DEBUG_USER_EMAIL:
         return User(id=settings.DEBUG_USER_EMAIL, email=settings.DEBUG_USER_EMAIL, is_softmax_team_member=True)
 
@@ -116,6 +121,19 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
                         email=user_info.get("email"),
                         is_softmax_team_member=user_info.get("isSoftmaxTeamMember", False),
                     )
-            return None
-    except Exception:
-        return None
+                return None
+
+            if response.status_code >= 500:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Login service unavailable",
+                )
+
+            return None  # 4xx from login service → token is bad
+    except HTTPException:
+        raise
+    except httpx.TransportError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Login service unreachable: {type(e).__name__}",
+        ) from e

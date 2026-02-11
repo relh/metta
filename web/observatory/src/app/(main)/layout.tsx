@@ -23,20 +23,24 @@ export default async function RootLayout({ children }: PropsWithChildren) {
     currentUser = userInfo.user_email
   } catch (err: any) {
     return (
-      <div className="min-h-screen bg-surface-alt p-5 flex items-center justify-center">
-        <div className="max-w-xl mx-auto bg-surface p-10 rounded-lg shadow text-center">
-          <h1 className="text-foreground mb-5 text-2xl font-semibold">Policy Evaluation Dashboard</h1>
-          <p className="mb-5 text-foreground-muted">Unable to connect to the evaluation server.</p>
-          <p className="text-red-600 dark:text-red-400 my-5">
-            Failed to connect to server: {err.message}.<br />
-            Make sure the server is running at{' '}
-            <a href={repo.baseUrl} target="_blank" rel="noopener noreferrer">
-              {repo.baseUrl}
-            </a>
-          </p>
-          <p className="text-foreground-muted text-sm">Please ensure the server is running and accessible.</p>
-        </div>
-      </div>
+      <html lang="en">
+        <body className="overflow-y-scroll">
+          <div className="min-h-screen bg-surface-alt p-5 flex items-center justify-center">
+            <div className="max-w-xl mx-auto bg-surface p-10 rounded-lg shadow text-center">
+              <h1 className="text-foreground mb-5 text-2xl font-semibold">Policy Evaluation Dashboard</h1>
+              <p className="mb-5 text-foreground-muted">Unable to connect to the evaluation server.</p>
+              <p className="text-red-600 dark:text-red-400 my-5">
+                Failed to connect to server: {err.message}.<br />
+                Make sure the server is running at{' '}
+                <a href={repo.baseUrl} target="_blank" rel="noopener noreferrer">
+                  {repo.baseUrl}
+                </a>
+              </p>
+              <p className="text-foreground-muted text-sm">Please ensure the server is running and accessible.</p>
+            </div>
+          </div>
+        </body>
+      </html>
     )
   }
 

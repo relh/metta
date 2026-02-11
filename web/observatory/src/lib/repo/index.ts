@@ -412,6 +412,9 @@ export class Repo {
       }
       throw new Error('Not found')
     }
+    if (response.status === 503) {
+      throw new Error('Service temporarily unavailable — please try again')
+    }
     let detail: string | undefined
     try {
       const body = await response.json()
