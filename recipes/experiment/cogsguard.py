@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal, Optional, Sequence
 
+import torch
 from cortex import RoutedAdapterConfig
 
 import metta.cogworks.curriculum as cc
@@ -44,6 +45,8 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
     DiscreteRandomConfig,
 )
+from metta.rl.diff_horde.cumulants import DiffHordeCumulantsConfig
+from metta.rl.loss.diff_horde import DiffHordeLossConfig
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
@@ -57,6 +60,7 @@ from metta.sweep.core import make_sweep
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
+from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 _CogsGuardLayout = Literal["machina_1", "arena"]
 DEFAULT_LAYOUT: _CogsGuardLayout = "machina_1"
@@ -64,6 +68,30 @@ DEFAULT_NUM_AGENTS = 8
 DEFAULT_MAX_STEPS = 10000
 DEFAULT_INCLUDE_EVAL_MISSIONS = False
 DEFAULT_INCLUDE_FIXED_MAPS = False
+
+
+def _with_horde_num_cumulants(policy_architecture: PolicyArchitecture, num_cumulants: int) -> PolicyArchitecture:
+    if not hasattr(policy_architecture, "horde_num_cumulants"):
+        raise ValueError(
+            "diff_horde_cumulants requires a policy architecture with 'horde_num_cumulants' "
+            f"(got {type(policy_architecture).__name__})"
+        )
+    return policy_architecture.model_copy(update={"horde_num_cumulants": num_cumulants})
+
+
+def _infer_td_key_cumulant_sizes_from_policy(
+    *,
+    cumulants: DiffHordeCumulantsConfig,
+    policy_architecture: PolicyArchitecture,
+    curriculum: CurriculumConfig,
+) -> None:
+    if not any(spec.kind == "td_key" and spec.size is None for spec in cumulants.specs):
+        return
+    env_cfg = cc.Curriculum(curriculum).get_task().get_env_cfg()
+    policy_env_info = PolicyEnvInterface.from_mg_cfg(env_cfg)
+    policy = policy_architecture.model_copy(deep=True).make_policy(policy_env_info)
+    policy.initialize_to_environment(policy_env_info, torch.device("cpu"))
+    cumulants.infer_td_key_sizes_from_policy(policy)
 
 
 def _make_cogsguard_mission(
@@ -387,6 +415,7 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: Optional[TeacherConfig] = None,
+    diff_horde_cumulants: DiffHordeCumulantsConfig | dict[str, object] | list[dict[str, object]] | None = None,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
@@ -487,6 +516,22 @@ def train(
             "Pass a ViTDefaultConfig(core_routed_adapter=...) explicitly to use a custom architecture."
         )
 
+    resolved_diff_horde_cumulants: DiffHordeCumulantsConfig | None = None
+    if diff_horde_cumulants is not None:
+        if isinstance(diff_horde_cumulants, DiffHordeCumulantsConfig):
+            resolved_diff_horde_cumulants = diff_horde_cumulants
+        else:
+            resolved_diff_horde_cumulants = DiffHordeCumulantsConfig.model_validate(diff_horde_cumulants)
+        _infer_td_key_cumulant_sizes_from_policy(
+            cumulants=resolved_diff_horde_cumulants,
+            policy_architecture=resolved_architecture,
+            curriculum=resolved_curriculum,
+        )
+        resolved_architecture = _with_horde_num_cumulants(
+            policy_architecture=resolved_architecture,
+            num_cumulants=resolved_diff_horde_cumulants.num_cumulants,
+        )
+
     policy_assets = {"learner0": PolicyAssetConfig(architecture=resolved_architecture)}
 
     tt = tools.TrainTool(
@@ -511,6 +556,24 @@ def train(
             trajectory_isolation=tt.trajectory_isolation,
         )
         tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    if resolved_diff_horde_cumulants is not None:
+        trainer_cfg.losses.add_loss("diff_horde", DiffHordeLossConfig(cumulants=resolved_diff_horde_cumulants))
+        if teacher and teacher.enabled and teacher.mode.endswith(".sliced"):
+            target_slice_names = {"ppo", "teacher_led", "student_led"}
+        else:
+            target_slice_names = {"default"}
+        matching_slices = [
+            slice_cfg for slice_cfg in tt.trajectory_isolation.slices if slice_cfg.name in target_slice_names
+        ]
+        if not matching_slices:
+            raise ValueError(
+                f"Cannot attach diff_horde to expected slices {sorted(target_slice_names)}. "
+                f"Available slices: {[slice_cfg.name for slice_cfg in tt.trajectory_isolation.slices]}"
+            )
+        for target_slice in matching_slices:
+            if "diff_horde" not in target_slice.losses:
+                target_slice.losses.append("diff_horde")
 
     tt.stats_reporter.progress_metric = "env_collective/cogs/aligned.junction.held"
     tt.stats_reporter.default_zero_metrics = tt.stats_reporter.default_zero_metrics + (

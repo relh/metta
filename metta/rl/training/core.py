@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 
+import numpy as np
 import torch
 from cortex.consistent_dropout import reset_consistent_dropout
 from pydantic import ConfigDict
@@ -13,8 +14,218 @@ from metta.rl.training import ComponentContext, Experience, TrainingEnvironment
 from metta.rl.training.trajectory_isolation import TrajectoryIsolator
 from metta.rl.utils import add_dummy_loss_for_unused_params, ensure_sequence_metadata, forward_policy_for_training
 from mettagrid.base_config import Config
+from mettagrid.util.dict_utils import unroll_nested_dict
 
 logger = logging.getLogger(__name__)
+_PER_AGENT_INFO_ROWS_KEY = "_per_agent_infos"
+_MISSING = object()
+
+
+def _collect_requested_env_info_keys(*, losses: dict[str, Loss], context: ComponentContext) -> set[str]:
+    requested_keys: set[str] = set()
+    for loss in losses.values():
+        if not loss._loss_gate_allows("rollout", context):
+            continue
+        required_fn = getattr(loss, "required_env_info_keys", None)
+        if required_fn is None:
+            continue
+        required = required_fn()
+        if required:
+            requested_keys.update(str(key) for key in required)
+    return requested_keys
+
+
+def _partition_requested_env_info_keys(
+    requested_keys: set[str],
+) -> tuple[tuple[str, ...], tuple[str, ...], str]:
+    requested_sorted = tuple(sorted(str(key) for key in requested_keys))
+    requested_agent_keys = tuple(key for key in requested_sorted if key.startswith("agent/"))
+    requested_env_keys = tuple(key for key in requested_sorted if not key.startswith("agent/"))
+    requested_keys_desc = str(list(requested_sorted))
+    return requested_env_keys, requested_agent_keys, requested_keys_desc
+
+
+def _normalize_info_rows(info: Any) -> list[dict[str, Any]]:
+    if info is None:
+        return []
+    if isinstance(info, dict):
+        return [info]
+    if isinstance(info, list):
+        return list(info)
+    raise RuntimeError(f"Unexpected vecenv info payload type: {type(info).__name__}")
+
+
+def _flatten_env_info_row(info_row: dict[str, Any]) -> dict[str, Any]:
+    flattened: dict[str, Any] = {}
+    for key, value in unroll_nested_dict(info_row):
+        if key == _PER_AGENT_INFO_ROWS_KEY:
+            continue
+        flattened[key] = value
+    return flattened
+
+
+def _lookup_env_info_value(row: dict[str, Any], key: str) -> Any:
+    if key in row:
+        return row[key]
+    if key.startswith("env_"):
+        raw_key = key[len("env_") :]
+        if raw_key in row:
+            return row[raw_key]
+    elif "/" in key:
+        root, remainder = key.split("/", 1)
+        env_key = f"env_{root}/{remainder}"
+        if env_key in row:
+            return row[env_key]
+    return _MISSING
+
+
+def _coerce_env_info_scalar(*, value: Any, key: str, row_index: int) -> float:
+    if torch.is_tensor(value):
+        tensor_value = value.detach()
+        if tensor_value.numel() != 1:
+            raise RuntimeError(
+                f"env_info[{row_index}]['{key}'] must be scalar-like, got tensor shape {tuple(tensor_value.shape)}"
+            )
+        return float(tensor_value.item())
+    if isinstance(value, np.ndarray):
+        if value.size != 1:
+            raise RuntimeError(f"env_info[{row_index}]['{key}'] must be scalar-like, got array shape {value.shape}")
+        return float(value.item())
+    if isinstance(value, np.generic):
+        return float(value.item())
+    if isinstance(value, (int, float, bool)):
+        return float(value)
+    raise RuntimeError(f"env_info[{row_index}]['{key}'] must be numeric scalar, got {type(value).__name__}: {value!r}")
+
+
+def _tensorize_requested_env_info(
+    *,
+    info_rows: list[dict[str, Any]],
+    requested_keys: set[str] | None = None,
+    requested_env_keys: tuple[str, ...] | None = None,
+    requested_agent_keys: tuple[str, ...] | None = None,
+    requested_keys_desc: str | None = None,
+    batch_size: int,
+    num_env_rows: int,
+    agents_per_env: int,
+    device: torch.device,
+) -> TensorDict:
+    if requested_env_keys is None or requested_agent_keys is None or requested_keys_desc is None:
+        if requested_keys is None:
+            raise RuntimeError("Expected requested_keys or pre-partitioned env/agent key tuples")
+        requested_env_keys, requested_agent_keys, requested_keys_desc = _partition_requested_env_info_keys(
+            requested_keys
+        )
+
+    row_count = len(info_rows)
+    if row_count <= 0:
+        raise RuntimeError(f"Requested env_info keys {requested_keys_desc} require non-empty info rows")
+
+    per_agent_aligned = row_count == batch_size
+    per_env_aligned = row_count == num_env_rows
+
+    if per_env_aligned:
+        expected_batch = num_env_rows * agents_per_env
+        if batch_size != expected_batch:
+            raise RuntimeError(
+                f"Requested env_info keys {requested_keys_desc} expected rollout batch to match "
+                f"num_env_rows*agents_per_env ({num_env_rows}*{agents_per_env}={expected_batch}), "
+                f"got batch_size={batch_size}"
+            )
+    elif row_count == 1 and num_env_rows > 1:
+        raise RuntimeError(
+            f"Requested env_info keys {requested_keys_desc} received a single aggregated info row "
+            f"for a multi-env batch (num_env_rows={num_env_rows}). Per-env alignment is required."
+        )
+    elif not per_agent_aligned:
+        raise RuntimeError(
+            f"Requested env_info keys {requested_keys_desc} expected per-agent ({batch_size}) "
+            f"or per-environment ({num_env_rows}) info rows, got {row_count}"
+        )
+
+    flattened_env_rows: list[dict[str, Any]] = []
+    for row_index, info_row in enumerate(info_rows):
+        if not isinstance(info_row, dict):
+            raise RuntimeError(f"env_info row {row_index} must be dict, got {type(info_row).__name__}")
+        flattened_env_rows.append(_flatten_env_info_row(info_row))
+
+    flattened_agent_rows: list[dict[str, Any]] = []
+    if requested_agent_keys:
+        has_embedded_per_agent_infos = per_agent_aligned and all(
+            isinstance(info_row, dict) and _PER_AGENT_INFO_ROWS_KEY in info_row for info_row in info_rows
+        )
+        if per_agent_aligned and not has_embedded_per_agent_infos:
+            flattened_agent_rows = flattened_env_rows
+        else:
+            for row_index, info_row in enumerate(info_rows):
+                per_agent_infos = info_row.get(_PER_AGENT_INFO_ROWS_KEY)
+                if per_agent_infos is None:
+                    raise RuntimeError(
+                        f"Requested agent info keys {list(requested_agent_keys)} require key "
+                        f"'{_PER_AGENT_INFO_ROWS_KEY}' in env info row {row_index}"
+                    )
+                if isinstance(per_agent_infos, list):
+                    ordered_agent_rows = per_agent_infos
+                elif isinstance(per_agent_infos, dict):
+                    ordered_agent_rows = [
+                        per_agent_infos.get(agent_index, per_agent_infos.get(str(agent_index), _MISSING))
+                        for agent_index in range(agents_per_env)
+                    ]
+                    missing_idx = next(
+                        (idx for idx, value in enumerate(ordered_agent_rows) if value is _MISSING),
+                        None,
+                    )
+                    if missing_idx is not None:
+                        raise RuntimeError(
+                            f"env_info row {row_index} '{_PER_AGENT_INFO_ROWS_KEY}' missing agent index {missing_idx}"
+                        )
+                else:
+                    raise RuntimeError(
+                        f"env_info row {row_index} '{_PER_AGENT_INFO_ROWS_KEY}' must be list or dict, "
+                        f"got {type(per_agent_infos).__name__}"
+                    )
+                if len(ordered_agent_rows) != agents_per_env:
+                    raise RuntimeError(
+                        f"env_info row {row_index} '{_PER_AGENT_INFO_ROWS_KEY}' must contain {agents_per_env} "
+                        f"entries, got {len(ordered_agent_rows)}"
+                    )
+                for agent_offset, agent_row in enumerate(ordered_agent_rows):
+                    if not isinstance(agent_row, dict):
+                        raise RuntimeError(
+                            f"agent info row {row_index}:{agent_offset} must be dict, got {type(agent_row).__name__}"
+                        )
+                    flattened_agent_rows.append(_flatten_env_info_row(agent_row))
+
+        if len(flattened_agent_rows) != batch_size:
+            raise RuntimeError(
+                f"Requested agent info keys {list(requested_agent_keys)} expected {batch_size} flattened "
+                f"agent rows, got {len(flattened_agent_rows)}"
+            )
+
+    env_info_td = TensorDict({}, batch_size=[batch_size], device=device)
+    for key in requested_env_keys:
+        values: list[float] = []
+        for row_index, row in enumerate(flattened_env_rows):
+            value = _lookup_env_info_value(row, key)
+            if value is _MISSING:
+                raise RuntimeError(f"Missing requested env info key '{key}' in info row {row_index}")
+            values.append(_coerce_env_info_scalar(value=value, key=key, row_index=row_index))
+        value_tensor = torch.tensor(values, dtype=torch.float32, device=device)
+        if per_env_aligned and not per_agent_aligned:
+            value_tensor = value_tensor.repeat_interleave(agents_per_env)
+        env_info_td[key] = value_tensor
+
+    for key in requested_agent_keys:
+        agent_key = key[len("agent/") :]
+        if not agent_key:
+            raise RuntimeError("Requested agent info key 'agent/' is invalid; include a key suffix")
+        values = []
+        for row_index, row in enumerate(flattened_agent_rows):
+            if agent_key not in row:
+                raise RuntimeError(f"Missing requested agent info key '{key}' in agent row {row_index}")
+            values.append(_coerce_env_info_scalar(value=row[agent_key], key=key, row_index=row_index))
+        env_info_td[key] = torch.tensor(values, dtype=torch.float32, device=device)
+    return env_info_td
 
 
 class RolloutResult(Config):
@@ -58,6 +269,7 @@ class CoreTrainingLoop:
         )
         # Cache environment indices to avoid reallocating per rollout batch
         self._env_index_cache = experience._range_tensor.to(device=device)
+        self._reward_centering_beta_by_agent = torch.empty((0,), device=device, dtype=torch.float32)
         self.trajectory_isolator = trajectory_isolator
 
     def _validate_trajectory_slices_for_epoch(self) -> None:
@@ -76,20 +288,21 @@ class CoreTrainingLoop:
                     f"Trajectory isolation slice '{runtime_slice.name}' has no assigned rows for this epoch."
                 )
 
-    def _reward_centering_betas(self, *, agent_ids: torch.Tensor) -> torch.Tensor:
+    def _prepare_reward_centering_betas(self) -> None:
         runtime_slices = self.trajectory_isolator.slice_plan
-        betas = torch.empty(agent_ids.shape, device=agent_ids.device, dtype=torch.float32)
-        assigned = torch.zeros(agent_ids.shape, device=agent_ids.device, dtype=torch.bool)
+        betas = torch.empty((self.experience.total_agents,), device=self.device, dtype=torch.float32)
+        assigned = torch.zeros((self.experience.total_agents,), device=self.device, dtype=torch.bool)
         for runtime_slice in runtime_slices:
-            slice_mask = runtime_slice.env_mask[agent_ids]
+            slice_mask = runtime_slice.env_mask
+            if slice_mask.device != self.device:
+                slice_mask = slice_mask.to(device=self.device, dtype=torch.bool)
             if not bool(slice_mask.any()):
                 continue
             betas[slice_mask] = float(runtime_slice.cfg.advantage.reward_centering.beta)
             assigned |= slice_mask
 
         assert bool(assigned.all()), "Reward-centering beta not assigned for all agents."
-
-        return betas
+        self._reward_centering_beta_by_agent = betas
 
     def rollout_phase(
         self,
@@ -119,6 +332,20 @@ class CoreTrainingLoop:
         for loss in self.losses.values():
             loss.on_rollout_start(context)
         self.trajectory_isolator.on_rollout_start()
+        self._prepare_reward_centering_betas()
+        requested_env_info_keys = _collect_requested_env_info_keys(losses=self.losses, context=context)
+        requested_env_keys: tuple[str, ...] = ()
+        requested_agent_keys: tuple[str, ...] = ()
+        requested_keys_desc = "[]"
+        if requested_env_info_keys:
+            requested_env_keys, requested_agent_keys, requested_keys_desc = _partition_requested_env_info_keys(
+                requested_env_info_keys
+            )
+            agents_per_env = int(env.policy_env_info.num_agents)
+            if agents_per_env <= 0:
+                raise RuntimeError(f"Invalid agents_per_env={agents_per_env}; must be positive")
+        else:
+            agents_per_env = 0
 
         # Get buffer for storing experience
         buffer_step = self.experience.buffer[self.experience.row_slot_ids, self.experience.t_in_row - 1]
@@ -134,6 +361,7 @@ class CoreTrainingLoop:
             with context.stopwatch("_rollout.env_wait"):
                 o, r, d, t, ta, info, training_env_id, _, num_steps = env.get_observations()
             last_env_id = training_env_id
+            info_rows = _normalize_info_rows(info)
             # Prepare data for policy
             with context.stopwatch("_rollout.td_prep"):
                 td = buffer_step[training_env_id].clone()
@@ -170,6 +398,25 @@ class CoreTrainingLoop:
                 td["t_in_row"] = t_in_row
                 self.add_last_action_to_td(td)
 
+                if requested_env_info_keys:
+                    batch_size = int(td.batch_size[0])
+                    if batch_size % agents_per_env != 0:
+                        raise RuntimeError(
+                            f"Rollout batch_size={batch_size} must be divisible by agents_per_env={agents_per_env} "
+                            "to align per-environment info rows"
+                        )
+                    num_env_rows = batch_size // agents_per_env
+                    td["env_info"] = _tensorize_requested_env_info(
+                        info_rows=info_rows,
+                        requested_env_keys=requested_env_keys,
+                        requested_agent_keys=requested_agent_keys,
+                        requested_keys_desc=requested_keys_desc,
+                        batch_size=batch_size,
+                        num_env_rows=num_env_rows,
+                        agents_per_env=agents_per_env,
+                        device=target_device,
+                    )
+
                 ensure_sequence_metadata(td, batch_size=td.batch_size.numel(), time_steps=1)
 
             # Allow losses to mutate td (policy inference, bookkeeping, etc.)
@@ -187,7 +434,7 @@ class CoreTrainingLoop:
                 self.experience.store(data_td=td, env_id=training_env_id)
 
             avg_reward = context.state.avg_reward
-            betas = self._reward_centering_betas(agent_ids=agent_ids)
+            betas = self._reward_centering_beta_by_agent[agent_ids]
             with torch.no_grad():
                 rewards_f32 = td["rewards"].to(dtype=torch.float32)
                 avg_reward[agent_ids] = baseline + betas * (rewards_f32 - baseline)
@@ -228,9 +475,17 @@ class CoreTrainingLoop:
                 td_actions3: Tensor = td["actions"]
                 env.send_actions(td_actions3.cpu().numpy())
 
-            infos_list: list[dict[str, Any]] = list(info) if info else []
-            if infos_list:
-                raw_infos.extend(infos_list)
+            # Rollout env-info used for tensorized cumulants can be per-step; that is too
+            # expensive to aggregate into raw_infos. Keep stats reporting focused on
+            # episode-end payloads (which always include 'attributes').
+            if requested_env_info_keys:
+                for row in info_rows:
+                    if "attributes" in row:
+                        raw_infos.append(row)
+            else:
+                for row in info_rows:
+                    if row:
+                        raw_infos.append(row)
 
             total_steps += num_steps
 

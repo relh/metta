@@ -165,3 +165,58 @@ class ResNetMLP(nn.Module):
 
 
 # ------------- End Deep Residual MLP ----------------------------------
+
+
+class ReshapeActionsFeaturesConfig(ComponentConfig):
+    in_key: str
+    out_key: str
+    num_actions: int
+    num_features: int
+    name: str = "reshape_actions_features"
+
+    def make_component(self, env=None):
+        return ReshapeActionsFeatures(config=self)
+
+
+class ReshapeActionsFeatures(nn.Module):
+    def __init__(self, config: ReshapeActionsFeaturesConfig):
+        super().__init__()
+        self.config = config
+
+    def forward(self, td: TensorDict) -> TensorDict:
+        x = td[self.config.in_key]
+        td[self.config.out_key] = x.reshape(*x.shape[:-1], self.config.num_actions, self.config.num_features)
+        return td
+
+
+class SplitFirstFeaturesConfig(ComponentConfig):
+    in_key: str
+    out_key_first: str
+    out_key_rest: Optional[str] = None
+    first_features: int = 1
+    drop_in_key: bool = True
+    name: str = "split_first_features"
+
+    def make_component(self, env=None):
+        return SplitFirstFeatures(config=self)
+
+
+class SplitFirstFeatures(nn.Module):
+    def __init__(self, config: SplitFirstFeaturesConfig):
+        super().__init__()
+        self.config = config
+
+    def forward(self, td: TensorDict) -> TensorDict:
+        x = td[self.config.in_key]
+        if x.shape[-1] < self.config.first_features:
+            raise ValueError(
+                f"SplitFirstFeatures expected last dim >= {self.config.first_features}, got shape {tuple(x.shape)}"
+            )
+
+        td[self.config.out_key_first] = x[..., : self.config.first_features]
+        if self.config.out_key_rest is not None:
+            td[self.config.out_key_rest] = x[..., self.config.first_features :]
+
+        if self.config.drop_in_key:
+            td.del_(self.config.in_key)
+        return td

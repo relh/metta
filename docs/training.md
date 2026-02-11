@@ -118,6 +118,82 @@ currently are `scripted.eer_cloner.sliced` and `scripted.supervisor.mixed`.
 
 See `metta/rl/training/teacher.py` for available teacher modes and knobs (e.g. `teacher.kwargs.*` for per-mode config).
 
+## Horde prediction framework
+
+Horde (`diff_horde`) is an auxiliary loss that trains the policy to predict a vector of user-defined _cumulants_
+(GVF-style signals) from the rollout stream.
+
+Recipes that accept `diff_horde_cumulants` (currently `recipes/experiment/cogsguard.py`) automatically set
+`policy_architecture.horde_num_cumulants` to match the total cumulant size and attach the `diff_horde` loss to the
+appropriate training slice(s).
+
+### Spec format
+
+`diff_horde_cumulants` is passed as JSON and can be either:
+
+- a mapping of `name -> spec`, or
+- a list of specs (each spec can include `name`; otherwise a default `cumulant_<i>` is assigned).
+
+All spec kinds support:
+
+- `scale` (float, default `1.0`)
+- `clip` (`[min,max]`, optional)
+
+### Supported cumulant kinds
+
+- `info_scalar`: reads a scalar from `env_info[<key>]` (tensorized from the env `info` payload at rollout time for the
+  requested keys). Keys are slash-separated (nested env dicts are flattened) and support an `env_` prefix alias, so
+  `env_collective/...` matches raw payload keys like `collective/...`. Use env-level keys like
+  `env_collective/cogs/aligned.junction.held` (broadcast to all agents in an env) or per-agent keys prefixed with
+  `agent/` (sourced from the env `_per_agent_infos` payload, e.g. `agent/reward_step`). Values must be numeric scalars
+  (missing keys or non-scalar values are hard errors).
+- `env_obs_feature`: extracts a single feature from token observations `env_obs` and reduces across matching tokens
+  (`"mean"|"sum"|"max"`). `env_obs` is shaped like `[B,M,3]` bytes `{location, feature_id, value}`; empty token slots
+  are padded with `location=255`. Set `feature` to a name (e.g. `"inv:hp"`) or numeric feature id; set `normalize=true`
+  to divide `value` by the feature's configured normalization. `"mean"` divides by the number of matching tokens (if
+  there are none, the cumulant is `0.0`).
+- `td_key`: slices and/or reduces a TensorDict key from the rollout stream (e.g. `"core"` or `"actor_hidden"`). If
+  `reduce` is set (`"mean"|"sum"|"max"`), the cumulant is a scalar. If you omit both `slice` and `reduce`, it uses the
+  whole flattened vector and infers size from the policy/output tensor for that `key`. Provide `size` only when a key
+  cannot be inferred from policy outputs.
+
+### Examples (CLI overrides)
+
+```bash
+# kind=info_scalar
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'diff_horde_cumulants={"junction_held":{"kind":"info_scalar","key":"env_collective/cogs/aligned.junction.held"}}'
+```
+
+```bash
+# kind=info_scalar (agent key)
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'diff_horde_cumulants={"reward_step":{"kind":"info_scalar","key":"agent/reward_step"}}'
+```
+
+```bash
+# kind=env_obs_feature
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'diff_horde_cumulants={"hp":{"kind":"env_obs_feature","feature":"inv:hp","reduce":"mean","normalize":true}}'
+```
+
+```bash
+# kind=td_key (whole flattened vector; no explicit size needed)
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'diff_horde_cumulants={"hidden_all":{"kind":"td_key","key":"actor_hidden"}}'
+```
+
+```bash
+# kind=td_key
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'diff_horde_cumulants={"core2":{"kind":"td_key","key":"core","slice":"0:2"}}'
+```
+
 ## Useful recipes and games
 
 ### CogsGuard

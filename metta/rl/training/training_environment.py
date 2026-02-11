@@ -7,7 +7,7 @@ import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Literal, Optional, Tuple
+from typing import Any, Literal, Optional, Tuple
 
 import numpy as np
 import torch
@@ -25,6 +25,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator.replay_log_writer import ReplayLogWriter
 
 logger = logging.getLogger(__name__)
+ObservationInfo = dict[str, Any] | list[dict[str, Any]] | None
 
 
 def _largest_divisor_at_most(target: int, limit: int) -> int:
@@ -82,6 +83,15 @@ class TrainingEnvironmentConfig(Config):
     maps_cache_size: Optional[int] = Field(default=None, ge=1)
     """Number of maps to cache in shared memory. None disables caching."""
 
+    step_info_keys: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description=(
+            "Optional per-step env info keys to include in vecenv `info` payloads. "
+            "Used by rollout-time cumulants (e.g., diff_horde info_scalar). "
+            "Leave empty to avoid per-step stats IPC overhead."
+        ),
+    )
+
 
 @dataclass
 class BatchInfo:
@@ -98,7 +108,9 @@ class TrainingEnvironment(ABC):
         """Close the environment."""
 
     @abstractmethod
-    def get_observations(self) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, List[dict], slice, Tensor, int]:
+    def get_observations(
+        self,
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, ObservationInfo, slice, Tensor, int]:
         """Get the observations."""
 
     @abstractmethod
@@ -200,6 +212,7 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
             num_workers=num_workers,
             zero_copy=cfg.zero_copy,
             maps_cache_size=cfg.maps_cache_size,
+            step_info_keys=cfg.step_info_keys,
             replay_writer=replay_writer,
         )
 
@@ -269,7 +282,9 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
         assert self._vecenv is not None
         return self._vecenv.driver_env
 
-    def get_observations(self) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, List[dict], slice, Tensor, int]:
+    def get_observations(
+        self,
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, ObservationInfo, slice, Tensor, int]:
         assert self._vecenv is not None
         o, r, d, t, ta, info, env_id, mask = self._vecenv.recv()
 
@@ -287,6 +302,7 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
         d = torch.as_tensor(d)
         t = torch.as_tensor(t)
         ta = torch.as_tensor(ta)
+
         return o, r, d, t, ta, info, training_env_id, mask, num_steps
 
     def send_actions(self, actions: np.ndarray) -> None:

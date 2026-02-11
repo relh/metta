@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import torch
 from tensordict import TensorDict
 
+from metta.rl.advantage import td_lambda_reverse_scan
 from metta.rl.loss.kickstarter import Kickstarter, KickstarterConfig
 from metta.rl.loss.ppo_critic import PPOCriticConfig
 from metta.rl.training.teacher import (
@@ -35,6 +36,28 @@ class _ToyPolicy(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.gtd_aux = torch.nn.Linear(3, 3)
+
+
+def _importance_sampled_delta_lambda(
+    *,
+    values: torch.Tensor,
+    rewards: torch.Tensor,
+    dones: torch.Tensor,
+    rho: torch.Tensor,
+    gamma: float,
+    gae_lambda: float,
+    rho_clip: float,
+) -> torch.Tensor:
+    _, tt = values.shape
+    delta_lambda = torch.zeros_like(values)
+    if tt <= 1:
+        return delta_lambda
+    terminal_next = dones[:, 1:]
+    mask_next = 1.0 - terminal_next
+    delta = rewards[:, 1:] + gamma * mask_next * values[:, 1:] - values[:, :-1]
+    rho = rho[:, :-1].clamp(max=rho_clip)
+    delta_lambda[:, :-1] = td_lambda_reverse_scan(rho * delta, rho * mask_next, float(gamma * gae_lambda))
+    return delta_lambda
 
 
 def test_sliced_supervisor_runs_ppo_losses_on_teacher_slices() -> None:
@@ -258,13 +281,14 @@ def test_ppo_critic_td_lambda_offpolicy_applies_to_student_slices() -> None:
         batch_size=[],
     )
 
-    expected = loss._importance_sampled_delta_lambda(
+    expected = _importance_sampled_delta_lambda(
         values=policy_td["values"].reshape((b, t)),
         rewards=minibatch["rewards"],
         dones=minibatch["dones"],
         rho=(policy_td["act_log_prob"] - minibatch["act_log_prob"]).exp(),
         gamma=float(context.current_slice_cfg.advantage.gamma),
         gae_lambda=float(context.current_slice_cfg.advantage.gae_lambda),
+        rho_clip=float(cfg.rho_clip),
     )
 
     loss.train(shared, context, mb_idx=0)

@@ -2,13 +2,14 @@ from typing import Any, Optional, cast
 
 import numpy as np
 import torch
+from cortex.rl.diff_horde import diff_horde_delta_lambda, diff_horde_update_phi_bar_agents_
 from pydantic import Field
 from tensordict import TensorDict
 from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 from typing_extensions import Literal
 
-from metta.rl.advantage import compute_advantage, compute_delta_lambda, td_lambda_reverse_scan
+from metta.rl.advantage import compute_advantage, compute_delta_lambda
 from metta.rl.loss.loss import Loss, LossConfig
 from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext, TrainingEnvironment
@@ -38,6 +39,8 @@ class PPOCriticConfig(LossConfig):
 class PPOCritic(Loss):
     """PPO value loss."""
 
+    __slots__ = ("reward_phi_bar_agentF",)
+
     def __init__(
         self,
         policy_assets: PolicyAssetRegistry,
@@ -48,6 +51,8 @@ class PPOCritic(Loss):
         cfg: "PPOCriticConfig",
     ):
         super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
+        self.reward_phi_bar_agentF = torch.empty((0, 1), dtype=torch.float32, device=self.device)
+        self.register_state_attr("reward_phi_bar_agentF")
 
     def get_experience_spec(self) -> Composite:
         act_space = self.env.single_action_space
@@ -67,31 +72,58 @@ class PPOCritic(Loss):
             return {"values", "h_values"}
         return {"values"}
 
-    def _importance_sampled_delta_lambda(
-        self,
-        *,
-        values: Tensor,
-        rewards: Tensor,
-        dones: Tensor,
-        rho: Tensor,
-        gamma: float,
-        gae_lambda: float,
-    ) -> Tensor:
-        _, tt = values.shape
-        delta_lambda = torch.zeros_like(values)
-        if tt <= 1:
-            return delta_lambda
-        terminal_next = dones[:, 1:]
-        mask_next = 1.0 - terminal_next
+    def on_rollout_start(self, context: ComponentContext | None = None) -> None:
+        ctx = self._ensure_context(context)
+        self._ensure_reward_phi_bar_agentF(total_agents=int(ctx.experience.total_agents), context=ctx)
 
-        delta = rewards[:, 1:] + gamma * mask_next * values[:, 1:] - values[:, :-1]  # [B, TT-1]
-        rho = rho[:, :-1].clamp(max=float(self.cfg.rho_clip))
+    def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
+        student_td = td.get(self._primary_policy_name(), None)
+        if student_td is None:
+            return
 
-        x = rho * delta
-        discounts = rho * mask_next
-        delta_lambda[:, :-1] = td_lambda_reverse_scan(x, discounts, float(gamma * gae_lambda))
+        self._ensure_reward_phi_bar_agentF(total_agents=int(context.experience.total_agents), context=context)
 
-        return delta_lambda
+        agent_ids = student_td["agent_slot_ids"].squeeze(-1).to(dtype=torch.long)
+        rewards = student_td["rewards"].to(device=self.reward_phi_bar_agentF.device, dtype=torch.float32).reshape(-1, 1)
+        avg_reward = context.state.avg_reward
+        if isinstance(avg_reward, Tensor) and avg_reward.numel() == int(context.experience.total_agents):
+            baseline_b1 = (
+                avg_reward[agent_ids].to(device=self.reward_phi_bar_agentF.device, dtype=torch.float32).reshape(-1, 1)
+            )
+            with torch.no_grad():
+                self.reward_phi_bar_agentF[agent_ids] = baseline_b1
+        else:
+            baseline_b1 = self.reward_phi_bar_agentF[agent_ids]
+        student_td["reward_baseline"] = baseline_b1.squeeze(-1).detach()
+
+        eta = float(context.current_slice_cfg.advantage.reward_centering.beta)
+        with torch.no_grad():
+            diff_horde_update_phi_bar_agents_(
+                phi_bar_agentF=self.reward_phi_bar_agentF,
+                agent_ids_b=agent_ids,
+                phi_bF=rewards,
+                eta=eta,
+            )
+
+    def _ensure_reward_phi_bar_agentF(self, *, total_agents: int, context: ComponentContext) -> None:
+        expected = (total_agents, 1)
+        if self.reward_phi_bar_agentF.shape == expected and self.reward_phi_bar_agentF.device == self.device:
+            return
+        if self.reward_phi_bar_agentF.numel() == 0:
+            avg_reward = context.state.avg_reward
+            if isinstance(avg_reward, Tensor) and avg_reward.numel() == total_agents:
+                self.reward_phi_bar_agentF = (
+                    avg_reward.to(device=self.device, dtype=torch.float32).reshape(-1, 1).clone()
+                )
+            else:
+                self.reward_phi_bar_agentF = torch.zeros(expected, device=self.device, dtype=torch.float32)
+            return
+        if self.reward_phi_bar_agentF.shape != expected:
+            raise RuntimeError(
+                "PPOCritic reward baseline shape mismatch: "
+                f"expected {expected}, got {tuple(self.reward_phi_bar_agentF.shape)}"
+            )
+        self.reward_phi_bar_agentF = self.reward_phi_bar_agentF.to(device=self.device, dtype=torch.float32)
 
     def _ensure_advantages_pg(self, shared_loss_data: TensorDict, context: ComponentContext) -> None:
         if "advantages_pg" in shared_loss_data:
@@ -174,6 +206,12 @@ class PPOCritic(Loss):
                 h_values = h_values.squeeze(-1)
             h_values = h_values.reshape(old_values.shape)
 
+            rewards_bt = minibatch["rewards"].reshape(old_values.shape)
+            reward_baseline_bt = minibatch["reward_baseline"].reshape(old_values.shape)
+            dones_bt = minibatch["dones"].reshape(old_values.shape)
+            truncateds_bt = minibatch["truncateds"].reshape(old_values.shape)
+            resets_bt = torch.logical_or(dones_bt > 0.5, truncateds_bt > 0.5).to(dtype=new_values.dtype)
+
             if "act_log_prob" not in policy_td.keys():
                 raise RuntimeError("TD(λ) off-policy correction requires policy_td['act_log_prob']")
 
@@ -189,27 +227,29 @@ class PPOCritic(Loss):
 
             rho_clip = float(self.cfg.rho_clip)
             if "teacher_mask" in minibatch.keys():
-                teacher_mask: Tensor = minibatch["teacher_mask"]
-                teacher_mask = teacher_mask[:, 0]
+                teacher_mask = minibatch["teacher_mask"][:, 0].to(dtype=torch.bool)
                 if bool(teacher_mask.any()):
                     rho_trim = rho_bt[teacher_mask][:, :-1]
                     self.loss_tracker["teacher_td_lambda_rho_clipfrac"].append(
                         float((rho_trim > rho_clip).float().mean().item())
                     )
 
-            centered_rewards = minibatch["rewards"] - minibatch["reward_baseline"]
             advantage_cfg = context.current_slice_cfg.advantage
-            delta_lambda = self._importance_sampled_delta_lambda(
-                values=new_values,
-                rewards=centered_rewards,
-                dones=minibatch["dones"],
-                rho=rho_bt,
+            delta_lambda_bt1F, _metrics = diff_horde_delta_lambda(
+                psi_btF=new_values.unsqueeze(-1),
+                phi_btF=rewards_bt.unsqueeze(-1),
+                phi_bar_btF=reward_baseline_bt.unsqueeze(-1),
+                resets_bt=resets_bt,
                 gamma=float(advantage_cfg.gamma),
-                gae_lambda=float(advantage_cfg.gae_lambda),
+                lambda_=float(advantage_cfg.gae_lambda),
+                rho_bt=rho_bt,
+                rho_clip=rho_clip,
             )
+
+            delta_lambda = torch.zeros_like(new_values)
+            delta_lambda[:, :-1] = delta_lambda_bt1F.squeeze(-1)
             shared_loss_data["advantages_pg"] = delta_lambda
 
-            # Use only valid transitions (t=0..TT-2). The last step is padding.
             dl = delta_lambda[:, :-1]
             v_t = new_values[:, :-1]
             h_t = h_values[:, :-1]

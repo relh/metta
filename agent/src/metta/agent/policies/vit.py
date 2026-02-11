@@ -7,7 +7,7 @@ from pydantic import ConfigDict, Field
 from metta.agent.components.actor import ActionProbsConfig, ActorHeadConfig
 from metta.agent.components.component_config import ComponentConfig
 from metta.agent.components.cortex import CortexTDConfig
-from metta.agent.components.misc import MLPConfig
+from metta.agent.components.misc import MLPConfig, ReshapeActionsFeaturesConfig, SplitFirstFeaturesConfig
 from metta.agent.components.obs_enc import ObsPerceiverLatentConfig
 from metta.agent.components.obs_shim import ObsShimTokensConfig
 from metta.agent.components.obs_tokenizers import ObsAttrEmbedFourierConfig
@@ -39,6 +39,9 @@ class ViTDefaultConfig(PolicyArchitecture):
     # Whether training passes cached pre-state to the Cortex core
     pass_state_during_training: bool = False
     critic_hidden: int = Field(default=512)
+    horde_num_cumulants: int = Field(default=0, ge=0)
+    horde_hidden: int = Field(default=256, ge=1)
+    horde_action_conditioned: bool = False
 
     # Trunk configuration
     # Number of Axon layers in the trunk
@@ -109,23 +112,82 @@ class ViTDefaultConfig(PolicyArchitecture):
                 hidden_features=[self.actor_hidden],
                 out_features=self.actor_hidden,
             ),
-            MLPConfig(
-                in_key="core",
-                out_key="values",
-                name="critic",
-                in_features=self.latent_dim,
-                out_features=1,
-                hidden_features=[self.critic_hidden],
-            ),
-            MLPConfig(
-                in_key="core",
-                out_key="h_values",
-                name="gtd_aux",
-                in_features=self.latent_dim,
-                out_features=1,
-                hidden_features=[self.critic_hidden],
-            ),
-            ActorHeadConfig(in_key="actor_hidden", out_key="logits", input_dim=self.actor_hidden),
         ]
 
+        horde_enabled = self.horde_num_cumulants > 0
+        use_state_horde_bank = horde_enabled and not self.horde_action_conditioned
+        critic_out_features = 1 + self.horde_num_cumulants if use_state_horde_bank else 1
+
+        psi_key = "gtd_psi_all" if use_state_horde_bank else "values"
+        self.components.append(
+            MLPConfig(
+                in_key="core",
+                out_key=psi_key,
+                name="critic",
+                in_features=self.latent_dim,
+                out_features=critic_out_features,
+                hidden_features=[self.critic_hidden],
+            )
+        )
+        if use_state_horde_bank:
+            self.components.append(
+                SplitFirstFeaturesConfig(
+                    in_key=psi_key,
+                    out_key_first="values",
+                    out_key_rest="horde_psi",
+                    first_features=1,
+                    drop_in_key=True,
+                    name="split_values_horde",
+                )
+            )
+
+        h_key = "gtd_h_all" if use_state_horde_bank else "h_values"
+        self.components.append(
+            MLPConfig(
+                in_key="core",
+                out_key=h_key,
+                name="gtd_aux",
+                in_features=self.latent_dim,
+                out_features=critic_out_features,
+                hidden_features=[self.critic_hidden],
+            )
+        )
+        if use_state_horde_bank:
+            self.components.append(
+                SplitFirstFeaturesConfig(
+                    in_key=h_key,
+                    out_key_first="h_values",
+                    out_key_rest="horde_h",
+                    first_features=1,
+                    drop_in_key=True,
+                    name="split_h_values_horde",
+                )
+            )
+
+        if horde_enabled and self.horde_action_conditioned:
+            num_actions = int(policy_env_info.action_space.n)
+            for kind in ("psi", "h"):
+                flat_key = f"horde_{kind}_flat"
+                all_actions_key = f"horde_{kind}_all_actions"
+                self.components.append(
+                    MLPConfig(
+                        in_key="core",
+                        out_key=flat_key,
+                        name=f"horde_{kind}_head",
+                        in_features=self.latent_dim,
+                        out_features=num_actions * self.horde_num_cumulants,
+                        hidden_features=[self.horde_hidden],
+                    )
+                )
+                self.components.append(
+                    ReshapeActionsFeaturesConfig(
+                        in_key=flat_key,
+                        out_key=all_actions_key,
+                        num_actions=num_actions,
+                        num_features=self.horde_num_cumulants,
+                        name=f"reshape_horde_{kind}",
+                    )
+                )
+
+        self.components.append(ActorHeadConfig(in_key="actor_hidden", out_key="logits", input_dim=self.actor_hidden))
         return super().make_policy(policy_env_info)

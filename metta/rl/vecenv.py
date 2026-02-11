@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from pydantic import validate_call
 
@@ -26,6 +26,7 @@ def make_env_func(
     stats_writer: Optional[StatsWriter] = None,
     replay_writer: Optional[ReplayLogWriter] = None,
     run_dir: str | None = None,
+    step_info_keys: Optional[Sequence[str]] = None,
     buf: Optional[Any] = None,
     maps_cache_size: Optional[int] = None,
     **kwargs,
@@ -42,7 +43,11 @@ def make_env_func(
     sim.add_event_handler(EarlyResetHandler())
 
     env = MettaGridPufferEnv(
-        sim, curriculum.get_task().get_env_cfg(), supervisor_policy_spec=supervisor_policy_spec, buf=buf
+        sim,
+        curriculum.get_task().get_env_cfg(),
+        supervisor_policy_spec=supervisor_policy_spec,
+        step_info_keys=step_info_keys,
+        buf=buf,
     )
     env = CurriculumEnv(env, curriculum)
 
@@ -57,6 +62,7 @@ def make_vecenv(
     batch_size: int | None = None,
     num_workers: int = 1,
     maps_cache_size: int | None = None,
+    step_info_keys: Optional[Sequence[str]] = None,
     stats_writer: StatsWriter | None = None,
     replay_writer: ReplayLogWriter | None = None,
     run_dir: str | None = None,
@@ -84,6 +90,7 @@ def make_vecenv(
         "run_dir": run_dir,
         "supervisor_policy_spec": supervisor_policy_spec,
         "maps_cache_size": maps_cache_size,
+        "step_info_keys": step_info_keys,
     }
 
     # Note: PufferLib's vector.make accepts Serial, Multiprocessing, and Ray as valid backends,

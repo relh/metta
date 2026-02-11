@@ -22,6 +22,7 @@ from metta.common.util.heartbeat import record_heartbeat
 from metta.common.util.log_config import getRankAwareLogger, init_logging
 from metta.common.wandb.context import WandbConfig, WandbContext, WandbRun
 from metta.rl.checkpoint_manager import CheckpointManager
+from metta.rl.loss.diff_horde import DiffHordeLossConfig
 from metta.rl.loss.losses import LossesConfig
 from metta.rl.policy_assets import PolicyAssetConfig, PolicyAssetRegistry
 from metta.rl.trainer import Trainer
@@ -220,6 +221,17 @@ class TrainTool(Tool):
 
     def invoke(self, args: dict[str, str]) -> int | None:
         distributed_helper = DistributedHelper(self.system)
+
+        losses_cfg = self.losses or self.trainer.losses
+        # Only request per-step env info when a configured loss explicitly needs it. This keeps
+        # default training fast (no per-step stats IPC) while preserving diff_horde info_scalar.
+        step_info_keys: set[str] = set(self.training_env.step_info_keys)
+
+        for loss_cfg in losses_cfg.losses.values():
+            if isinstance(loss_cfg, DiffHordeLossConfig):
+                step_info_keys.update(loss_cfg.cumulants.required_info_keys())
+        if step_info_keys:
+            self.training_env.step_info_keys = tuple(sorted(step_info_keys))
 
         sup_uri = self.training_env.supervisor_policy_uri
         supervisor_policy_spec: PolicySpec | None = None
