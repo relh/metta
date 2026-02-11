@@ -4,6 +4,7 @@ import { createContext, FC, PropsWithChildren, use, useCallback, useEffect, useR
 
 type ResetErrorContextValue = {
   resetError: () => void
+  clearError: () => void
   isPending: boolean
   registerErrorReset: (reset: () => void) => void
   unregisterErrorReset: () => void
@@ -14,6 +15,8 @@ const ResetErrorContext = createContext<ResetErrorContextValue | null>(null)
 export const ResetErrorProvider: FC<PropsWithChildren> = ({ children }) => {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
+  // Single ref is fine: only one error boundary is visible at a time in a linear route tree.
+  // If we add parallel routes (@folder slots), upgrade to a Set<() => void>.
   const errorResetRef = useRef<(() => void) | null>(null)
 
   const registerErrorReset = useCallback((reset: () => void) => {
@@ -24,11 +27,15 @@ export const ResetErrorProvider: FC<PropsWithChildren> = ({ children }) => {
     errorResetRef.current = null
   }, [])
 
+  const clearError = useCallback(() => {
+    startTransition(() => {
+      errorResetRef.current?.()
+    })
+  }, [])
+
   const resetError = useCallback(() => {
     startTransition(() => {
-      if (errorResetRef.current) {
-        errorResetRef.current()
-      }
+      errorResetRef.current?.()
       router.refresh()
     })
   }, [router])
@@ -37,6 +44,7 @@ export const ResetErrorProvider: FC<PropsWithChildren> = ({ children }) => {
     <ResetErrorContext
       value={{
         resetError,
+        clearError,
         isPending,
         registerErrorReset,
         unregisterErrorReset,
@@ -50,6 +58,11 @@ export const ResetErrorProvider: FC<PropsWithChildren> = ({ children }) => {
 export function useResetError() {
   const context = use(ResetErrorContext)
   return context?.resetError
+}
+
+export function useClearError() {
+  const context = use(ResetErrorContext)
+  return context?.clearError
 }
 
 export function useRegisterErrorReset(reset: () => void) {

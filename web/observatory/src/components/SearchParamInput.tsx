@@ -7,7 +7,7 @@ import { Input } from '@/components/Input'
 import { Spinner } from '@/components/Spinner'
 import { useDebouncedValue } from '@/hooks/useDebouncedValue'
 
-import { useResetError } from './ResetErrorContext'
+import { useClearError } from './ResetErrorContext'
 
 const DEBOUNCE_MS = 300
 
@@ -26,13 +26,13 @@ export const SearchParamInput: FC<{ paramName: string; placeholder: string }> = 
   // Local state for immediate input feedback
   const [localValue, setLocalValue] = useState(q)
   const debouncedValue = useDebouncedValue(localValue, DEBOUNCE_MS)
-  const resetError = useResetError()
+  const clearError = useClearError()
 
   // Sync debounced value to URL
   useEffect(() => {
     if (debouncedValue !== q) {
       setQ(debouncedValue || null)
-      resetError?.()
+      clearError?.()
     }
   }, [debouncedValue, q, setQ])
 
