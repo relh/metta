@@ -1,5 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 
+import { isOutageSimulated } from '@/lib/debug/simulate-outage'
+
 const decodePathSegment = (value: string) => {
   try {
     return decodeURIComponent(value)
@@ -397,6 +399,13 @@ export class Repo {
     })
   }
 
+  private throwIfOutage(endpoint: string, method: string): void {
+    if (!isOutageSimulated()) return
+    const startTime = performance.now()
+    this.logRequest(endpoint, method, startTime, 0, 'Simulated API outage')
+    throw new Error('Simulated API outage')
+  }
+
   private async handleErrorResponse(response: Response): Promise<never> {
     if (response.status === 401) {
       if (typeof window === 'undefined') {
@@ -428,6 +437,7 @@ export class Repo {
   }
 
   private async apiCall<T>(endpoint: string): Promise<T> {
+    this.throwIfOutage(endpoint, 'GET')
     const startTime = performance.now()
     let response: Response
     try {
@@ -446,6 +456,7 @@ export class Repo {
   }
 
   private async apiCallWithBody<T>(endpoint: string, body: any): Promise<T> {
+    this.throwIfOutage(endpoint, 'POST')
     const startTime = performance.now()
     let response: Response
     try {
@@ -466,6 +477,7 @@ export class Repo {
   }
 
   private async apiCallWithBodyPut<T>(endpoint: string, body: any): Promise<T> {
+    this.throwIfOutage(endpoint, 'PUT')
     const startTime = performance.now()
     let response: Response
     try {
@@ -486,6 +498,7 @@ export class Repo {
   }
 
   private async apiCallDelete(endpoint: string): Promise<void> {
+    this.throwIfOutage(endpoint, 'DELETE')
     const startTime = performance.now()
     let response: Response
     try {
@@ -667,6 +680,7 @@ export class Repo {
 
   async getJobArtifact(jobId: string, artifactType: string): Promise<string> {
     const endpoint = `/jobs/${jobId}/artifacts/${artifactType}`
+    this.throwIfOutage(endpoint, 'GET')
     const startTime = performance.now()
     let response: Response
     try {

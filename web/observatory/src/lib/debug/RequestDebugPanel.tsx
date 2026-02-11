@@ -9,6 +9,12 @@ import { Button } from '@/components/Button'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import type { RequestLogEntry } from '@/lib/debug/request-log'
 import { clearEntries, getServerSnapshot, getSnapshot, subscribe } from '@/lib/debug/request-log'
+import {
+  getServerSnapshot as getOutageServerSnapshot,
+  getSnapshot as getOutageSnapshot,
+  setOutageSimulated,
+  subscribe as subscribeOutage,
+} from '@/lib/debug/simulate-outage'
 import { useDebugPanelVisible } from '@/lib/debug/useDebugPanelVisible'
 
 function formatTime(timestamp: number): string {
@@ -103,6 +109,7 @@ const RequestRow: FC<{ entry: RequestLogEntry }> = ({ entry }) => {
 
 export const RequestDebugPanel: FC = () => {
   const entries = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
+  const outageActive = useSyncExternalStore(subscribeOutage, getOutageSnapshot, getOutageServerSnapshot)
   const [expanded, setExpanded] = useState(false)
   const { isVisible } = useDebugPanelVisible()
 
@@ -129,6 +136,15 @@ export const RequestDebugPanel: FC = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <div onClick={(e) => e.stopPropagation()}>
+            <Button size="sm" theme="tertiary" onClick={() => setOutageSimulated(!outageActive)}>
+              {outageActive ? (
+                <span className="text-red-600 dark:text-red-400 font-semibold">API Outage: ON</span>
+              ) : (
+                'API Outage: OFF'
+              )}
+            </Button>
+          </div>
           {entries.length > 0 && (
             <div onClick={(e) => e.stopPropagation()}>
               <Button size="sm" theme="tertiary" onClick={clearEntries}>

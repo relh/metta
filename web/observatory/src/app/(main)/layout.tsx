@@ -11,8 +11,10 @@ import { AutoRefreshProvider } from '@/components/AutoRefreshProvider'
 import { ResetErrorProvider } from '@/components/ResetErrorContext'
 import { ThemeProvider } from '@/components/ThemeProvider'
 import { config } from '@/config'
+import { DisableOutageButton } from '@/lib/debug/DisableOutageButton'
 import { RequestDebugPanel } from '@/lib/debug/RequestDebugPanel'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
+import { isOutageSimulated } from '@/lib/debug/simulate-outage'
 import { getRepo } from '@/lib/repo/server'
 
 export default async function RootLayout({ children }: PropsWithChildren) {
@@ -39,6 +41,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
                 </a>
               </p>
               <p className="text-foreground-muted text-sm">Please ensure the server is running and accessible.</p>
+              {isOutageSimulated() && <DisableOutageButton />}
             </div>
           </div>
         </body>
