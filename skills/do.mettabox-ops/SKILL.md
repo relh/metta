@@ -21,8 +21,10 @@ description:
 ./devops/mettabox/cli.py run metta1 -- train arena run=my_run trainer.total_timesteps=100000
 ```
 
-Use `--attach` to jump into the tmux session or `--session` to override the session name. If the tmux session already
-exists, `run` will attach to it by default.
+If tmux already has sessions in the container, `run` will create a new tmux window in the existing session (so runs show
+up in the tmux UI you already have open). If no tmux sessions exist yet, it falls back to creating a new tmux session.
+
+Use `--attach` to jump into tmux after launch and `--session` to override the session/window name.
 
 ### List active runs
 
@@ -81,7 +83,7 @@ Use `--tty` for interactive commands and `--no-cd` if the command should not run
 
 ```bash
 ./devops/mettabox/cli.py tmux metta1
-./devops/mettabox/cli.py tmux metta1 my_run
+./devops/mettabox/cli.py tmux metta1 0
 ```
 
 ### NVML / NVIDIA driver failure (inside tmux)

@@ -114,8 +114,15 @@ def run(
         ),
     ],
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
-    tmux: Annotated[bool, typer.Option("--tmux/--no-tmux", help="Run inside a new tmux session")] = True,
-    session: Annotated[Optional[str], typer.Option("--session", "-s", help="tmux session name override")] = None,
+    tmux: Annotated[bool, typer.Option("--tmux/--no-tmux", help="Run inside tmux")] = True,
+    session: Annotated[
+        Optional[str],
+        typer.Option(
+            "--session",
+            "-s",
+            help="tmux session name override (and window name when tmux is already running).",
+        ),
+    ] = None,
     attach: Annotated[bool, typer.Option("--attach", help="Attach to tmux after launch")] = False,
 ) -> None:
     """Launch a tools/run.py job in tmux.
@@ -148,24 +155,39 @@ def run(
     tty = attach
     if tmux:
         session_label = shlex.quote(session_name)
-        session_exists = f"tmux has-session -t {session_label} 2>/dev/null"
-        create_cmd = f"tmux new-session -d -s {session_label} {shlex.quote(run_cmd)}"
-        attach_cmd = f"tmux attach -t {session_label}"
+        attach_cmd_session = f"tmux attach -t {session_label}"
+        create_session_cmd = f"tmux new-session -d -s {session_label} {shlex.quote(run_cmd)}"
+        window_name = shlex.quote(session_name)
+        has_any_sessions = "tmux list-sessions 2>/dev/null | head -n 1 | grep -q ."
+        # Prefer the currently attached tmux session if one exists; otherwise pick the first session.
+        pick_base_session = (
+            'base=$(tmux list-sessions -F "#{?session_attached,#{session_name},}" 2>/dev/null '
+            "| grep -v '^$' | head -n 1 || true); "
+            'if [ -z "$base" ]; then base=$(tmux list-sessions -F "#{session_name}" 2>/dev/null | head -n 1); fi'
+        )
+        window_exists = 'tmux list-windows -t "$base:" -F "#{window_name}" 2>/dev/null | grep -Fxq "$win"'
+        create_window_cmd = f'tmux new-window -t "$base:" -n "$win" {shlex.quote(run_cmd)}'
+        select_window_cmd = 'tmux select-window -t "$base:$win"'
+        attach_base_cmd = 'tmux attach -t "$base"'
+
+        window_script = (
+            f"{pick_base_session}; "
+            f"win={window_name}; "
+            f"if ! {window_exists}; then {create_window_cmd}; fi; "
+            + (f"{select_window_cmd} && {attach_base_cmd}" if attach else "true")
+        )
+
         if attach:
-            cmd = f"{session_exists} && {attach_cmd} || ({create_cmd} && {attach_cmd})"
+            cmd = f"if {has_any_sessions}; then {window_script}; else {create_session_cmd} && {attach_cmd_session}; fi"
         else:
-            cmd = (
-                f"{session_exists} && "
-                f"echo 'Session {session_name} already exists; attaching.' && {attach_cmd} "
-                f"|| {create_cmd}"
-            )
-        tty = True
+            cmd = f"if {has_any_sessions}; then {window_script}; else {create_session_cmd}; fi"
     else:
         if attach:
             raise typer.BadParameter("--attach requires --tmux.")
         cmd = run_cmd
-    remote_cmd = _docker_exec(container, cmd, tty=tty, use_repo=True)
-    raise typer.Exit(_ssh(host, remote_cmd, tty=tty))
+
+    docker_cmd = _docker_exec(container, cmd, tty=tty, use_repo=True)
+    raise typer.Exit(_ssh(host, docker_cmd, tty=tty))
 
 
 app.command("launch")(run)
@@ -195,7 +217,8 @@ def tmux(
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
 ) -> None:
     if session:
-        cmd = f"tmux attach -t {shlex.quote(session)}"
+        session_q = shlex.quote(session)
+        cmd = f"tmux attach -t {session_q}"
         tty = True
     else:
         cmd = "tmux list-sessions || true"

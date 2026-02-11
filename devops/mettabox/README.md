@@ -18,8 +18,12 @@ Assumptions (from recent usage):
 # Launch a run in tmux
 ./devops/mettabox/cli.py run metta1 -- train arena run=my_run trainer.total_timesteps=100000
 
-# Attach to a tmux session
-./devops/mettabox/cli.py tmux metta1 my_run
+# If the container already has tmux running (for example started via devops/mettabox/docker.sh),
+# `run` will create a new tmux window in the existing session and (optionally) attach.
+./devops/mettabox/cli.py run metta1 --attach -- train arena run=my_run trainer.total_timesteps=100000
+
+# Attach to tmux later
+./devops/mettabox/cli.py tmux metta1 0
 
 # List active run processes
 ./devops/mettabox/cli.py runs metta1
