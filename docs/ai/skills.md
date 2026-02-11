@@ -77,6 +77,7 @@ Shared skills live in `skills/`:
 - `tr.checkpoint-find`
 - `tr.cogames-command`
 - `tr.cogames-variant-debug`
+- `tr.perf-eval`
 - `tr.policy-save-load-audit`
 - `tr.recipe-curriculum-audit`
 - `tr.wandb-inspect`
