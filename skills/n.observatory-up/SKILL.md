@@ -73,8 +73,8 @@ The server runs migrations on startup (`RUN_MIGRATIONS=true` in local dev env).
 **Symptom:** Server crashes at startup with `DuplicateColumn`, `DuplicateTable`, or similar.
 
 **Cause:** Database was created with a different branch's migration ordering. The migration system tracks the last
-applied version number, but if branch A had migrations [0..9, 10=X] and branch B has [0..9, 10=Y, 11=X], switching
-branches leaves the DB with X's schema but thinking it's at version 10 when the code expects X at version 11.
+Alembic revision hash, but if branch A and B have divergent migration histories, switching branches can leave the DB at
+a revision the new code doesn't recognize.
 
 **Fix (nuclear - reset DB):**
 
@@ -84,22 +84,22 @@ docker volume rm app_backend_postgres_data
 metta observatory up  # Fresh DB, all migrations re-applied
 ```
 
-**Fix (surgical - skip already-applied migration):**
+**Fix (surgical - stamp to a known revision):**
 
 ```bash
 docker exec app_backend-postgres-1 psql -U postgres -d metta \
-  -c "INSERT INTO migrations (version, description, applied_at) VALUES (11, 'description', NOW())"
+  -c "UPDATE alembic_version SET version_num = '<target_revision>'"
 ```
 
 **Check current migration state:**
 
 ```bash
 docker exec app_backend-postgres-1 psql -U postgres -d metta \
-  -c "SELECT * FROM migrations ORDER BY version"
+  -c "SELECT * FROM alembic_version"
 ```
 
-Migration code: `app_backend/src/metta/app_backend/migrations.py` Schema manager:
-`app_backend/src/metta/app_backend/schema_manager.py`
+**Migrations:** Managed via Alembic (`app_backend/alembic/versions/`). To create a new migration:
+`cd app_backend && alembic revision --autogenerate -m "description"`
 
 ## Tournament CLI
 
@@ -126,7 +126,7 @@ STATS_DB_URI="postgres://postgres:password@127.0.0.1:5432/metta" \
 | Process orchestration     | `metta/setup/tools/observatory/process-compose.yaml`                  |
 | Server startup/lifespan   | `app_backend/src/metta/app_backend/server.py`                         |
 | Auth middleware           | `app_backend/src/metta/app_backend/auth.py`                           |
-| Migrations                | `app_backend/src/metta/app_backend/migrations.py`                     |
+| Migrations (Alembic)      | `app_backend/alembic/versions/`                                       |
 | Database config           | `app_backend/src/metta/app_backend/database.py`                       |
 | Tournament routes         | `app_backend/src/metta/app_backend/routes/tournament_routes.py`       |
 | Season resolver           | `app_backend/src/metta/app_backend/tournament/season_resolver.py`     |
@@ -172,5 +172,6 @@ docker exec app_backend-postgres-1 psql -U postgres -d metta -c "SELECT ..."
 3. **Wrong `metta` binary:** If `which metta` points to a different worktree, commands may be missing or behave
    differently. Always verify `which metta` or use the repo-local binary.
 
-4. **Migration state between branches:** Always check `SELECT * FROM migrations ORDER BY version` before debugging
-   startup failures. If ordering is wrong, nuke the volume.
+4. **Migration state between branches:** Alembic supports downgrades, so switching branches rarely requires a DB reset.
+   If startup fails, check `SELECT * FROM alembic_version` and run `alembic downgrade <target>` to reach the expected
+   revision.

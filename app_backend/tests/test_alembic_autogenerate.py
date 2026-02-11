@@ -13,6 +13,7 @@ from metta.app_backend.models import (  # noqa: F401
     policies,
     sweep,
     tournament,
+    user_settings,
 )
 
 

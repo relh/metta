@@ -12,6 +12,7 @@ from metta.app_backend.models import (  # noqa: F401
     policies,
     sweep,
     tournament,
+    user_settings,
 )
 
 # this is the Alembic Config object, which provides
@@ -33,6 +34,12 @@ target_metadata = SQLModel.metadata
 # ... etc.
 
 
+def _get_db_url() -> str:
+    from metta.app_backend.database import get_sync_db_url  # noqa: PLC0415
+
+    return get_sync_db_url()
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -45,11 +52,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    from metta.app_backend.config import settings  # noqa: PLC0415
-
-    url = settings.STATS_DB_URI
     context.configure(
-        url=url,
+        url=_get_db_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -66,11 +70,9 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    from metta.app_backend.config import settings  # noqa: PLC0415
-
     # Override the sqlalchemy.url in the config with the app's database URI
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.STATS_DB_URI
+    configuration["sqlalchemy.url"] = _get_db_url()
 
     connectable = engine_from_config(
         configuration,

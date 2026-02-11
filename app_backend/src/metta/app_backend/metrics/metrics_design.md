@@ -692,7 +692,7 @@ Changes:
 - Audit script: Sample S3 DuckDB files and report distinct metric names, value distributions, anomalies.
 - `metrics/validation.py`: Write-time validation (name pattern, finite value checks).
 - `metrics/registry.py`: Initial metric name registry built from audit results.
-- `migrations.py`: Add CHECK constraints (`chk_metric_name_nonempty`, `chk_value_finite`) in migration v11.
+- Alembic migration: Add CHECK constraints (`chk_metric_name_nonempty`, `chk_value_finite`).
 - Tests for validation logic (invalid names, NaN, infinity, empty strings).
 
 Result: Validation infrastructure is in place before we start persisting new metrics. Known metric vocabulary is
@@ -706,8 +706,7 @@ PostgreSQL. Validation from Phase 0 ensures only clean data enters.
 Changes:
 
 - `stats_routes.py`: Remove `if metric_name != "reward": continue` filter, add call to `validate_and_filter_metrics()`.
-- `migrations.py`: Add new indexes (`idx_epm_pv_metric`, `idx_epm_episode`) in migration v11 (same migration as CHECK
-  constraints).
+- Alembic migration: Add new indexes (`idx_epm_pv_metric`, `idx_epm_episode`) (same migration as CHECK constraints).
 - Backfill job: Script to re-process historical S3 DuckDB files, applying validation and normalization.
 
 Result: All future episodes store full agent stats (validated). Historical data backfilled. No API changes yet.

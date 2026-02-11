@@ -26,6 +26,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 # Suppress noisy logs before other imports
@@ -34,18 +35,17 @@ from metta.common.util.log_config import suppress_noisy_logs
 suppress_noisy_logs()
 
 import typer
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
-from psycopg import Connection
 from testcontainers.postgres import PostgresContainer
 
 from metta.app_backend import config as app_config
 from metta.app_backend import database
 from metta.app_backend.auth import User
 from metta.app_backend.database import db_session
-from metta.app_backend.migrations import MIGRATIONS
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
 from metta.app_backend.queries import episode_queries, policy_queries
-from metta.app_backend.schema_manager import run_migrations
 from metta.app_backend.server import create_app
 from metta.app_backend.test_support.client_adapter import get_user_headers
 
@@ -436,8 +436,8 @@ def setup_database(db_uri: str):
     app_config.settings.RUN_MIGRATIONS = True
     app_config.settings.OBSERVATORY_AUTH_SECRET = "benchmark_secret"
 
-    with Connection.connect(db_uri) as con:
-        run_migrations(con, MIGRATIONS)
+    alembic_cfg = Config(str(Path(__file__).parent.parent / "alembic.ini"))
+    command.upgrade(alembic_cfg, "head")
 
 
 @app.command()

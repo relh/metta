@@ -45,8 +45,9 @@ from metta.app_backend.clients.stats_client import StatsClient
 client = StatsClient.create("http://127.0.0.1:8000")
 ```
 
-**Migrations:** Handled automatically in production when code merges. Local dev uses existing DB schema. Migration list
-in `app_backend/src/metta/app_backend/migrations.py`.
+**Migrations:** Managed via Alembic. To create a new migration after changing ORM models:
+`cd app_backend && alembic revision --autogenerate -m "description"`. Review the generated file in
+`app_backend/alembic/versions/`, then commit. CI runs `test_autogenerate_is_empty` to catch ORM/migration drift.
 
 ## Useful Commands
 

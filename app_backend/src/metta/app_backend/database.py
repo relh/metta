@@ -17,6 +17,14 @@ _session_factory = None
 _current_session: ContextVar[AsyncSession | None] = ContextVar("current_session", default=None)
 
 
+def get_sync_db_url() -> str:
+    """Return STATS_DB_URI normalized to the ``postgresql://`` scheme."""
+    url = settings.STATS_DB_URI
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
 def _get_async_url(db_uri: str) -> str:
     if db_uri.startswith("postgresql://") or db_uri.startswith("postgres://"):
         return "postgresql+psycopg_async://" + db_uri.split("://", 1)[1]

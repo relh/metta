@@ -66,8 +66,8 @@ expect ~416 rows. Typical file size: 5-20KB.
 
 ## Part 2: PostgreSQL Schema (Observatory)
 
-Defined across `migrations.py` (v0-v10) and SQLModel classes in `app_backend/src/metta/app_backend/models/`. 20 tables,
-1 view, 3 enum types.
+Defined via Alembic migrations (`app_backend/alembic/versions/`) and SQLModel classes in
+`app_backend/src/metta/app_backend/models/`. 20 tables, 1 view, 3 enum types.
 
 ### Enum Types
 
