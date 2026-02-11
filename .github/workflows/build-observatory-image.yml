@@ -9,6 +9,7 @@ on:
 
 jobs:
   build-and-deploy:
+    if: github.event_name != 'pull_request' || github.actor != 'graphite-app[bot]'
     permissions:
       id-token: write
       contents: read
