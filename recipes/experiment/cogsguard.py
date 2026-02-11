@@ -438,6 +438,12 @@ def train(
 
     default_architecture = ViTDefaultConfig(
         obs_shim_ignore_inventory_power_tokens=False,
+        latent_dim=64,
+        actor_hidden=128,
+        critic_hidden=256,
+        core_num_heads=2,
+        core_num_latents=8,
+        max_tokens=96,
         core_routed_adapter=routed_adapter,
     )
     if sweep_mode:
@@ -476,6 +482,7 @@ def train(
         evaluator=evaluator_cfg,
         policy_assets=policy_assets,
     )
+    tt.system.torch_deterministic = False
 
     if teacher and teacher.enabled:
         scheduler_run_gates: list[LossRunGate] = []
