@@ -228,6 +228,46 @@ def _tensorize_requested_env_info(
     return env_info_td
 
 
+class _PinnedCudaToCpuStager:
+    """Copy CUDA tensors into a small pool of pinned CPU buffers.
+
+    This avoids `tensor.cpu()` allocating pageable CPU storage, and can reduce
+    GPU->CPU handoff time when the consumer requires a NumPy array.
+    """
+
+    def __init__(self, *, num_slots: int = 2):
+        if num_slots < 1:
+            raise ValueError(f"num_slots must be >= 1, got {num_slots}")
+        self._slot = 0
+        self._bufs: list[Tensor | None] = [None] * num_slots
+        self._events: list[torch.cuda.Event | None] = [None] * num_slots
+
+    def to_numpy_ready_cpu(self, x: Tensor) -> tuple[Tensor, torch.cuda.Event]:
+        if x.device.type != "cuda":
+            raise ValueError(f"Expected CUDA tensor, got device={x.device!r}")
+
+        slot = self._slot
+        self._slot = (self._slot + 1) % len(self._bufs)
+
+        ev = self._events[slot]
+        if ev is None:
+            ev = torch.cuda.Event()
+            self._events[slot] = ev
+        else:
+            # Ensure previous in-flight D2H copy into this buffer is done.
+            if not ev.query():
+                ev.synchronize()
+
+        buf = self._bufs[slot]
+        if buf is None or buf.shape != x.shape or buf.dtype != x.dtype:
+            buf = torch.empty(x.shape, dtype=x.dtype, device="cpu", pin_memory=True)
+            self._bufs[slot] = buf
+
+        buf.copy_(x, non_blocking=True)
+        ev.record()
+        return buf, ev
+
+
 class RolloutResult(Config):
     """Results from a rollout phase."""
 
@@ -271,6 +311,9 @@ class CoreTrainingLoop:
         self._env_index_cache = experience._range_tensor.to(device=device)
         self._reward_centering_beta_by_agent = torch.empty((0,), device=device, dtype=torch.float32)
         self.trajectory_isolator = trajectory_isolator
+        self._action_send_stager: _PinnedCudaToCpuStager | None = (
+            _PinnedCudaToCpuStager() if device.type == "cuda" else None
+        )
 
     def _validate_trajectory_slices_for_epoch(self) -> None:
         runtime_slices = self.trajectory_isolator.slice_plan
@@ -473,6 +516,11 @@ class CoreTrainingLoop:
             # Ship actions to the environment
             with context.stopwatch("_rollout.send"):
                 td_actions3: Tensor = td["actions"]
+                if td_actions3.device.type == "cuda":
+                    assert self._action_send_stager is not None
+                    cpu_actions, ev = self._action_send_stager.to_numpy_ready_cpu(td_actions3)
+                    ev.synchronize()
+                    td_actions3 = cpu_actions
                 env.send_actions(td_actions3.cpu().numpy())
 
             # Rollout env-info used for tensorized cumulants can be per-step; that is too
