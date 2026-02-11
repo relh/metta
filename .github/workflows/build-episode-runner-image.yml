@@ -23,9 +23,21 @@ jobs:
     steps:
       - name: Resolve cogames version
         id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [[ -n "${{ inputs.cogames_version }}" ]]; then
             VERSION="${{ inputs.cogames_version }}"
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # Resolve the tag from the triggering workflow run's commit.
+            # Querying PyPI here is racy — the new version may not be indexed yet.
+            TRIGGER_SHA="${{ github.event.workflow_run.head_sha }}"
+            VERSION=$(gh api "repos/${{ github.repository }}/tags" --paginate --jq \
+              ".[] | select(.commit.sha == \"$TRIGGER_SHA\") | .name" | grep '^cogames-v' | head -1)
+            if [[ -z "$VERSION" ]]; then
+              echo "::warning::No cogames-v* tag found on trigger commit $TRIGGER_SHA, falling back to PyPI"
+              VERSION=$(curl -s https://pypi.org/pypi/cogames/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
+            fi
           else
             VERSION=$(curl -s https://pypi.org/pypi/cogames/json | python3 -c "import sys,json; print(json.load(sys.stdin)['info']['version'])")
           fi

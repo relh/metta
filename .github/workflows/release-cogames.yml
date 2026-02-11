@@ -99,7 +99,16 @@ jobs:
         env:
           SETUPTOOLS_SCM_PRETEND_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          pip install ".[test]"
+          # The JSON API may confirm mettagrid availability before the Simple
+          # API (used by pip for resolution) has propagated. Retry to ride out
+          # CDN lag.
+          for ATTEMPT in $(seq 1 10); do
+            echo "Attempt $ATTEMPT/10: pip install .[test]"
+            if pip install ".[test]"; then break; fi
+            if [ "$ATTEMPT" -eq 10 ]; then echo "Failed after 10 attempts"; exit 1; fi
+            echo "Retrying in 30s..."
+            sleep 30
+          done
       - name: Run tests
         run: |
           pytest tests/ -v --ignore=tests/docsync
