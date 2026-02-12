@@ -119,10 +119,16 @@ class TrainTool(Tool):
         `--print-effective-config`, and `invoke()` so those modes reflect what
         will actually happen at runtime.
         """
-        run_from_cli = "run" in args
         if "run" in args:
-            assert self.run is None, "run cannot be set via args if already provided in TrainTool config"
-            self.run = args["run"]
+            if self.run is not None:
+                # Recipe function already consumed run= and configured policy assets;
+                # skip the CLI override to avoid double-processing.
+                run_from_cli = False
+            else:
+                self.run = args["run"]
+                run_from_cli = True
+        else:
+            run_from_cli = False
 
         self._apply_resume_hints()
 

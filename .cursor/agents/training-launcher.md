@@ -31,26 +31,44 @@ Use proactively when the user:
    - Number of runs to launch (default: 1)
    - Index range (optional, e.g., "05-10" or "5-10" means start from 05, end at 10)
    - Launch arguments (e.g., `--no-spot --gpus 4`)
+   - Any per-run keyword overrides to pass to the recipe (e.g., `max_steps=300`, `variants='[forced_role_vibes]'`)
    - If `--gpus` is not provided, default to `--gpus 4`
    - If `--no-spot` is not provided, default to `--no-spot`
 
-2. **Get prefix**:
-   - If user specifies a prefix (e.g., "av", "test", "experiment"), use it
+2. **Normalize the module path** (CRITICAL):
+   - The user may provide a **filesystem path** like `recipes/experiment/cogsguard_marlbro.py` or a reference like
+     `@recipes/experiment/cogsguard_marlbro.py`. You MUST convert this to Python **dot-notation module path**.
+   - **Conversion rules**:
+     - Strip any leading `@` or `./`
+     - Strip the `.py` extension
+     - Replace all `/` with `.`
+   - **Examples**:
+     - `recipes/experiment/cogsguard_marlbro.py` → `recipes.experiment.cogsguard_marlbro`
+     - `@recipes/prod/arena_basic_easy_shaped.py` → `recipes.prod.arena_basic_easy_shaped`
+     - `recipes.prod.arena_basic_easy_shaped` → unchanged (already dot-notation)
+   - The tool function name (e.g., `train`) is appended: `recipes.experiment.cogsguard_marlbro.train`
+   - If the user says "using train in <path>", the tool name is `train`. If they say "evaluate", the tool name is
+     `evaluate`, etc. Default to `train` if not specified.
+
+3. **Get prefix**:
+   - If user specifies a prefix (e.g., "av", "test", "experiment") or a run name pattern (e.g., "av.marlbro"), use it
    - If user provides a full template, extract the prefix from it (first part before the first dot)
    - If no prefix is provided, prompt the user: "What prefix should the run names start with? (e.g., 'av', 'test',
      'experiment')"
    - Wait for user input and use their response as the prefix
 
-3. **Build run name template**:
+4. **Build run name template**:
    - Get today's date in MM.DD format using Python:
      `python -c "from datetime import datetime; print(datetime.now().strftime('%m.%d'))"` (e.g., `01.26` for January
      26th)
    - Get identifier: If user specifies one, use it. Otherwise, get branch name: `git branch --show-current`
    - Construct run template: `run=<prefix>.<identifier>.<MM>.<DD>.0x`
    - Example: If prefix is "av", identifier is "abes" and today is Jan 26, template is `run=av.abes.01.26.0x`
+   - If user provides a multi-part prefix like "av.marlbro", use it as-is for the prefix portion:
+     `run=av.marlbro.<MM>.<DD>.0x` (skip adding a separate identifier)
    - If user provides a full template, validate it contains `0x`, then use it as-is (extract prefix from it if needed)
 
-4. **Determine index range**:
+5. **Determine index range**:
    - If user specifies a range (e.g., "05-10" or "5-10"):
      - Parse start index (05) and end index (10)
      - Calculate number of runs: end - start + 1 (e.g., 10 - 5 + 1 = 6 runs)
@@ -59,17 +77,18 @@ Use proactively when the user:
      - Start from 01
      - Use `--num-runs <count>` flag (default: 1 if user does not specify)
 
-5. **Lock git state** (CRITICAL):
+6. **Lock git state** (CRITICAL):
    - BEFORE launching, capture the current commit hash: run `git rev-parse HEAD` and store the result
    - Add `--git-ref <commit_hash>` to the launch arguments so ALL runs use the same commit
    - This ensures consistency even if the user switches branches while you're running
    - Example: If commit hash is `abc123`, add `--git-ref abc123` to the command arguments
 
-6. **Validate inputs**:
+7. **Validate inputs**:
    - Ensure run template contains `0x` placeholder
+   - Ensure module path is in dot-notation (no `/` or `.py`)
    - Verify the launch script exists at `devops/skypilot/launch.py`
 
-7. **Execute launches sequentially**:
+8. **Execute launches sequentially**:
    - Replace `0x` with zero-padded numbers based on the index range
    - Run `uv run devops/skypilot/launch.py` with `--git-ref <commit_hash>` and other arguments
    - Monitor output in real-time
@@ -77,7 +96,7 @@ Use proactively when the user:
    - Apply 5-minute timeout per submission (terminate if exceeded)
    - Add small delay (10 seconds) between successful submissions
 
-8. **Report results**:
+9. **Report results**:
    - Show progress for each run
    - Display job IDs when available
    - Report elapsed time per submission
@@ -138,6 +157,20 @@ Use proactively when the user:
 - Execute:
   `python scripts/launch_multiple_runs.py recipes.prod.arena_basic_easy_shaped.train run=av.<identifier>.01.26.0x --no-spot --gpus 4 --git-ref $COMMIT_HASH --start-from 5 --num-runs 6`
 - This creates runs: 05, 06, 07, 08, 09, 10
+
+**Example 4**: User says "Fire off 3 training runs using train in recipes/experiment/cogsguard_marlbro.py, run names
+start with av.marlbro"
+
+- **Convert filesystem path to module path**: `recipes/experiment/cogsguard_marlbro.py` →
+  `recipes.experiment.cogsguard_marlbro`
+- Tool function is `train`, so full module path: `recipes.experiment.cogsguard_marlbro.train`
+- Use prefix "av.marlbro" (user specified, multi-part)
+- Get today's date: `python -c "from datetime import datetime; print(datetime.now().strftime('%m.%d'))"` → "02.09"
+- Build template: `run=av.marlbro.02.09.0x` (multi-part prefix, no separate identifier needed)
+- Capture commit hash: `git rev-parse HEAD` → `COMMIT_HASH`
+- Execute:
+  `python scripts/launch_multiple_runs.py recipes.experiment.cogsguard_marlbro.train run=av.marlbro.02.09.0x --no-spot --gpus 4 --git-ref $COMMIT_HASH --num-runs 3`
+- This creates runs: 01, 02, 03
 
 **Note**: The script will pass `--git-ref` to each individual launch, ensuring all runs use the same commit even if the
 user switches branches.
