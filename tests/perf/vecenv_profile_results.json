@@ -1,0 +1,130 @@
+{
+  "serial": {
+    "configuration": {
+      "vectorization": "serial",
+      "num_envs": 8,
+      "num_workers": 1,
+      "num_agents_per_env": 8,
+      "batch_size": 64,
+      "duration_s": 15.0
+    },
+    "performance": {
+      "total_steps": 18849,
+      "total_agent_steps": 1206336,
+      "sps": 1256.6,
+      "agent_sps": 80422.28
+    },
+    "timing": {
+      "recv": {
+        "name": "recv",
+        "count": 18849,
+        "total_ms": 10.7787,
+        "mean_ms": 0.0006,
+        "std_ms": 0.0013,
+        "min_ms": 0.0002,
+        "max_ms": 0.0228,
+        "p50_ms": 0.0003,
+        "p95_ms": 0.0013,
+        "p99_ms": 0.0032
+      },
+      "send": {
+        "name": "send",
+        "count": 18849,
+        "total_ms": 14875.6752,
+        "mean_ms": 0.7892,
+        "std_ms": 4.3969,
+        "min_ms": 0.3218,
+        "max_ms": 400.8681,
+        "p50_ms": 0.3759,
+        "p95_ms": 0.9164,
+        "p99_ms": 4.3111
+      },
+      "step": {
+        "name": "step",
+        "count": 18849,
+        "total_ms": 14975.9918,
+        "mean_ms": 0.7945,
+        "std_ms": 4.399,
+        "min_ms": 0.3246,
+        "max_ms": 400.8902,
+        "p50_ms": 0.3795,
+        "p95_ms": 0.9339,
+        "p99_ms": 4.3165
+      }
+    },
+    "memory": {
+      "shared_memory_bytes": 0,
+      "observation_size_bytes": 600,
+      "action_size_bytes": 4
+    },
+    "system": {
+      "cpu_cores": 12,
+      "initial_memory_mb": 905.06,
+      "peak_memory_mb": 1008.35
+    }
+  },
+  "multiprocessing": {
+    "configuration": {
+      "vectorization": "multiprocessing",
+      "num_envs": 8,
+      "num_workers": 4,
+      "num_agents_per_env": 8,
+      "batch_size": 64,
+      "duration_s": 15.03
+    },
+    "performance": {
+      "total_steps": 22264,
+      "total_agent_steps": 1424896,
+      "sps": 1480.98,
+      "agent_sps": 94782.48
+    },
+    "timing": {
+      "recv": {
+        "name": "recv",
+        "count": 22264,
+        "total_ms": 14741.3011,
+        "mean_ms": 0.6621,
+        "std_ms": 4.0222,
+        "min_ms": 0.123,
+        "max_ms": 73.0743,
+        "p50_ms": 0.226,
+        "p95_ms": 0.6512,
+        "p99_ms": 5.5163
+      },
+      "send": {
+        "name": "send",
+        "count": 22264,
+        "total_ms": 61.88,
+        "mean_ms": 0.0028,
+        "std_ms": 0.0109,
+        "min_ms": 0.0007,
+        "max_ms": 1.5887,
+        "p50_ms": 0.0018,
+        "p95_ms": 0.0087,
+        "p99_ms": 0.0133
+      },
+      "step": {
+        "name": "step",
+        "count": 22264,
+        "total_ms": 14997.3854,
+        "mean_ms": 0.6736,
+        "std_ms": 4.0255,
+        "min_ms": 0.1307,
+        "max_ms": 73.1287,
+        "p50_ms": 0.2381,
+        "p95_ms": 0.6976,
+        "p99_ms": 5.5303
+      }
+    },
+    "memory": {
+      "shared_memory_bytes": 38792,
+      "observation_size_bytes": 600,
+      "action_size_bytes": 4
+    },
+    "system": {
+      "cpu_cores": 12,
+      "initial_memory_mb": 1008.35,
+      "peak_memory_mb": 1013.62
+    }
+  }
+}
