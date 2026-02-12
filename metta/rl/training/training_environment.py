@@ -63,6 +63,9 @@ class TrainingEnvironmentConfig(Config):
     zero_copy: bool = Field(default=True)
     """Whether to use zero-copy optimization to avoid memory copies (default assumes multiprocessing)"""
 
+    sync_traj: bool = Field(default=True)
+    """Whether to enforce deterministic trajectory sync in the vecenv recv loop."""
+
     vectorization: Literal["serial", "multiprocessing"] = Field(default_factory=guess_vectorization)
     """Vectorization mode: 'serial' or 'parallel'"""
 
@@ -211,6 +214,7 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
             batch_size=self._batch_size,
             num_workers=num_workers,
             zero_copy=cfg.zero_copy,
+            sync_traj=cfg.sync_traj,
             maps_cache_size=cfg.maps_cache_size,
             step_info_keys=cfg.step_info_keys,
             replay_writer=replay_writer,

@@ -275,16 +275,15 @@ class TrajectoryIsolationSliceRuntime:
         context: Any,
     ) -> tuple[TensorDict | None, torch.Tensor | None]:
         """Prepare the per-slice TensorDict view and mask for a rollout step."""
-        if self.env_mask.numel() == 0 or not bool(self.env_mask.any()):
-            # This slice no longer has any envs assigned to it.
+        if self.env_mask.numel() == 0:
             return None, None
 
         env_indices = torch.arange(training_env_id.start, training_env_id.stop, device=td.device)
         slice_mask = self.env_mask[env_indices]
-        if not bool(slice_mask.any()):
-            return None, None
 
         base_td = td[slice_mask]
+        if base_td.batch_size.numel() == 0:
+            return None, None
         _set_sequence_metadata(base_td, batch_size=base_td.batch_size.numel(), time_steps=1)
         slice_td = TensorDict({}, batch_size=base_td.batch_size, device=base_td.device)
         for policy_name in self.cfg.policies:
@@ -408,7 +407,7 @@ class TrajectoryIsolator(TrainerComponent):
 
         for runtime_slice in runtime_slices:
             slice_mask = runtime_slice.env_mask
-            if slice_mask.numel() == 0 or not bool(slice_mask.any()):
+            if slice_mask.numel() == 0:
                 continue
             means[slice_mask] = float(runtime_slice.cfg.advantage.reward_centering.initial_reward_mean)
             assigned |= slice_mask
@@ -536,7 +535,9 @@ class TrajectoryIsolator(TrainerComponent):
             upper = lower + float(slice_cfg.env_ratio) * ratio_scale
             env_mask = (self._rand_assignments >= lower) & (self._rand_assignments < upper)
             env_mask = env_mask.to(device=self.context.device)
-            if bool(env_mask.any()):
+            # Avoid carrying empty slices through the epoch (they create overhead and can
+            # trigger downstream validation failures). This syncs once per slice per epoch.
+            if env_mask.any().item():
                 plan.append(
                     TrajectoryIsolationSliceRuntime(
                         cfg=slice_cfg,
@@ -577,7 +578,7 @@ class TrajectoryIsolator(TrainerComponent):
         for slice_cfg in self.config.slices:
             count = slice_cfg.agent_count
             env_mask = (within_env_index >= offset) & (within_env_index < offset + count)
-            if bool(env_mask.any()):
+            if env_mask.any().item():
                 plan.append(
                     TrajectoryIsolationSliceRuntime(
                         cfg=slice_cfg,

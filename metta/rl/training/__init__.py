@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from metta.rl.training.experience import Experience
     from metta.rl.training.gradient_reporter import GradientReporter, GradientReporterConfig
     from metta.rl.training.heartbeat import Heartbeat, HeartbeatConfig
+    from metta.rl.training.microbench_reporter import MicrobenchReporter, MicrobenchReporterConfig
     from metta.rl.training.monitor import Monitor
     from metta.rl.training.progress_logger import ProgressLogger
     from metta.rl.training.stats_reporter import (
@@ -55,6 +56,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "Heartbeat": ("metta.rl.training.heartbeat", "Heartbeat"),
     "HeartbeatConfig": ("metta.rl.training.heartbeat", "HeartbeatConfig"),
     "Monitor": ("metta.rl.training.monitor", "Monitor"),
+    "MicrobenchReporter": ("metta.rl.training.microbench_reporter", "MicrobenchReporter"),
+    "MicrobenchReporterConfig": ("metta.rl.training.microbench_reporter", "MicrobenchReporterConfig"),
     "NoOpEvaluator": ("metta.rl.training.evaluator", "NoOpEvaluator"),
     "NoOpStatsReporter": ("metta.rl.training.stats_reporter", "NoOpStatsReporter"),
     "ProgressLogger": ("metta.rl.training.progress_logger", "ProgressLogger"),
@@ -92,6 +95,8 @@ __all__ = [
     "Heartbeat",
     "HeartbeatConfig",
     "Monitor",
+    "MicrobenchReporter",
+    "MicrobenchReporterConfig",
     "NoOpEvaluator",
     "NoOpStatsReporter",
     "ProgressLogger",

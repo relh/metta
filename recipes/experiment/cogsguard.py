@@ -538,6 +538,8 @@ def train(
         evaluator=evaluator_cfg,
         policy_assets=policy_assets,
     )
+    # Determinism is useful for debugging, but it can significantly reduce CUDA throughput.
+    # Users can re-enable it via `system.torch_deterministic=true` when needed.
     tt.system.torch_deterministic = False
 
     if teacher and teacher.enabled:

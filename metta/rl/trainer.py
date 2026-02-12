@@ -270,6 +270,9 @@ class Trainer:
                 update_epochs=self._cfg.update_epochs,
                 max_grad_norm=0.5,
             )
+            if self._device.type == "cuda":
+                # Ensure train-time measurements include queued CUDA work.
+                torch.cuda.synchronize()
             self._context.advance_epoch(epochs_trained)
         # Synchronize before proceeding
         self._distributed_helper.synchronize()
