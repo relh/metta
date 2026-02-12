@@ -38,7 +38,7 @@ def _make_context(registry: _PolicyRegistry) -> SimpleNamespace:
             primary_policy="learner0",
         ),
         experience=SimpleNamespace(total_agents=8),
-        state=SimpleNamespace(avg_reward=torch.zeros(8, dtype=torch.float32)),
+        state=SimpleNamespace(avg_reward=torch.full((8,), torch.nan, dtype=torch.float32)),
         policy_assets=registry,
     )
 
@@ -73,6 +73,7 @@ def test_diff_horde_loss_rollout_and_train() -> None:
     learner_td = rollout_td["learner0"]
     assert learner_td["cumulants"].shape == (2, 3)
     assert learner_td["cumulants_phi_bar"].shape == (2, 3)
+    torch.testing.assert_close(learner_td["cumulants_phi_bar"], learner_td["cumulants"])
     assert loss.phi_bar_agentF.shape == (8, 3)
 
     b, t, f = 2, 4, 3
@@ -162,10 +163,10 @@ def test_ppo_critic_rollout_updates_internal_reward_baseline() -> None:
     loss.rollout_postprocess(rollout_td, context)
 
     baseline = rollout_td["learner0"]["reward_baseline"]
-    assert torch.allclose(baseline, torch.tensor([0.0, 0.0], dtype=torch.float32))
+    assert torch.allclose(baseline, torch.tensor([2.0, -1.0], dtype=torch.float32))
     assert loss.reward_phi_bar_agentF.shape == (8, 1)
     assert float(loss.reward_phi_bar_agentF[0, 0].item()) > 0.0
-    assert torch.allclose(context.state.avg_reward, torch.zeros(8, dtype=torch.float32))
+    assert bool(torch.isnan(context.state.avg_reward).all())
 
 
 def test_ppo_critic_rollout_resyncs_baseline_from_context_state() -> None:

@@ -90,10 +90,14 @@ class PPOCritic(Loss):
             baseline_b1 = (
                 avg_reward[agent_ids].to(device=self.reward_phi_bar_agentF.device, dtype=torch.float32).reshape(-1, 1)
             )
-            with torch.no_grad():
-                self.reward_phi_bar_agentF[agent_ids] = baseline_b1
         else:
             baseline_b1 = self.reward_phi_bar_agentF[agent_ids]
+        uninitialized = torch.isnan(baseline_b1)
+        if bool(uninitialized.any()):
+            # Initialize each agent baseline from the first observed reward.
+            baseline_b1 = torch.where(uninitialized, rewards, baseline_b1)
+        with torch.no_grad():
+            self.reward_phi_bar_agentF[agent_ids] = baseline_b1
         student_td["reward_baseline"] = baseline_b1.squeeze(-1).detach()
 
         eta = float(context.current_slice_cfg.advantage.reward_centering.beta)
@@ -116,7 +120,7 @@ class PPOCritic(Loss):
                     avg_reward.to(device=self.device, dtype=torch.float32).reshape(-1, 1).clone()
                 )
             else:
-                self.reward_phi_bar_agentF = torch.zeros(expected, device=self.device, dtype=torch.float32)
+                self.reward_phi_bar_agentF = torch.full(expected, torch.nan, device=self.device, dtype=torch.float32)
             return
         if self.reward_phi_bar_agentF.shape != expected:
             raise RuntimeError(

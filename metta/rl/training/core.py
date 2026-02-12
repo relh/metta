@@ -434,7 +434,6 @@ class CoreTrainingLoop:
 
                 avg_reward = context.state.avg_reward
                 baseline = avg_reward[agent_ids]
-                td["reward_baseline"] = baseline
 
                 # CRITICAL FIX for MPS: Convert dtype BEFORE moving to device, and use blocking transfer
                 # MPS has two bugs:
@@ -462,6 +461,12 @@ class CoreTrainingLoop:
 
                 td["env_obs"] = env_obs
                 td["rewards"] = rewards
+                rewards_f32 = td["rewards"].to(dtype=torch.float32)
+                # Default behavior: initialize each agent's baseline from its first observed reward.
+                uninitialized = torch.isnan(baseline)
+                if bool(uninitialized.any()):
+                    baseline = torch.where(uninitialized, rewards_f32, baseline)
+                td["reward_baseline"] = baseline
                 td["dones"] = dones
                 td["truncateds"] = truncateds
                 td["teacher_actions"] = teacher_actions
@@ -505,12 +510,17 @@ class CoreTrainingLoop:
                     self.trajectory_isolator.apply_rollout_policy_batch(batch)
                 self.trajectory_isolator.finalize_rollout_slices()
                 self.trajectory_isolator.writeback_rollout_tds(rollout_td=td)
+                # Some rollout postprocessors mutate rewards in-place (e.g. intrinsic shaping).
+                # Keep baseline init and EMA updates aligned to the finalized rewards.
+                rewards_f32 = td["rewards"].to(dtype=torch.float32)
+                if bool(uninitialized.any()):
+                    baseline = torch.where(uninitialized, rewards_f32, baseline)
+                    td["reward_baseline"] = baseline
                 self.experience.store(data_td=td, env_id=training_env_id)
 
             avg_reward = context.state.avg_reward
             betas = self._reward_centering_beta_by_agent[agent_ids]
             with torch.no_grad():
-                rewards_f32 = td["rewards"].to(dtype=torch.float32)
                 avg_reward[agent_ids] = baseline + betas * (rewards_f32 - baseline)
             context.state.avg_reward = avg_reward
 

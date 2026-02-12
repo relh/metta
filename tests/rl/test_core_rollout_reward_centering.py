@@ -34,7 +34,7 @@ class _FakeExperience:
 
 
 class _FakeTrajectoryIsolator:
-    def __init__(self) -> None:
+    def __init__(self, *, reward_delta: float = 0.0) -> None:
         runtime_slice = SimpleNamespace(
             name="default",
             env_mask=torch.tensor([True, True], dtype=torch.bool),
@@ -46,12 +46,14 @@ class _FakeTrajectoryIsolator:
         )
         self.slice_plan = [runtime_slice]
         self.training_phase_primary_policy_slices = {"learner0": [runtime_slice]}
+        self._reward_delta = float(reward_delta)
+        self._rollout_td: TensorDict | None = None
 
     def on_rollout_start(self) -> None:
         return
 
     def prepare_rollout_slices(self, rollout_td: TensorDict) -> None:
-        _ = rollout_td
+        self._rollout_td = rollout_td
 
     def build_rollout_policy_batches(self) -> list[Any]:
         return []
@@ -60,7 +62,8 @@ class _FakeTrajectoryIsolator:
         _ = batch
 
     def finalize_rollout_slices(self) -> None:
-        return
+        if self._reward_delta != 0.0 and self._rollout_td is not None:
+            self._rollout_td["rewards"] = self._rollout_td["rewards"] + self._reward_delta
 
     def writeback_rollout_tds(self, rollout_td: TensorDict) -> None:
         rollout_td["actions"] = torch.zeros((rollout_td.batch_size[0],), dtype=torch.int64, device=rollout_td.device)
@@ -115,4 +118,67 @@ def test_rollout_phase_updates_avg_reward_without_ppo_critic_loss() -> None:
     assert torch.allclose(
         context.state.avg_reward,
         torch.tensor([5.5, 11.5], dtype=torch.float32),
+    )
+
+
+def test_rollout_phase_initializes_reward_baseline_from_first_observation() -> None:
+    experience = _FakeExperience()
+    trajectory_isolator = _FakeTrajectoryIsolator()
+    env = _FakeEnv()
+    context = SimpleNamespace(
+        state=SimpleNamespace(avg_reward=torch.full((2,), torch.nan, dtype=torch.float32)),
+        stopwatch=lambda _name: nullcontext(),
+        training_env_id=None,
+        policy_assets=SimpleNamespace(policies={}, get=lambda _name: None),
+    )
+
+    loop = CoreTrainingLoop(
+        experience=experience,
+        losses={},
+        device=torch.device("cpu"),
+        context=context,
+        trajectory_isolator=trajectory_isolator,
+    )
+    loop.rollout_phase(env, context)
+
+    assert experience.stored_td is not None
+    torch.testing.assert_close(
+        experience.stored_td["reward_baseline"],
+        torch.tensor([1.0, 3.0], dtype=torch.float32),
+    )
+    torch.testing.assert_close(
+        context.state.avg_reward,
+        torch.tensor([1.0, 3.0], dtype=torch.float32),
+    )
+
+
+def test_rollout_phase_uses_finalized_rewards_for_baseline_and_ema() -> None:
+    experience = _FakeExperience()
+    trajectory_isolator = _FakeTrajectoryIsolator(reward_delta=10.0)
+    env = _FakeEnv()
+    context = SimpleNamespace(
+        state=SimpleNamespace(avg_reward=torch.full((2,), torch.nan, dtype=torch.float32)),
+        stopwatch=lambda _name: nullcontext(),
+        training_env_id=None,
+        policy_assets=SimpleNamespace(policies={}, get=lambda _name: None),
+    )
+
+    loop = CoreTrainingLoop(
+        experience=experience,
+        losses={},
+        device=torch.device("cpu"),
+        context=context,
+        trajectory_isolator=trajectory_isolator,
+    )
+    loop.rollout_phase(env, context)
+
+    assert experience.stored_td is not None
+    # Baseline init should match finalized (post-processed) rewards, not raw env rewards.
+    torch.testing.assert_close(
+        experience.stored_td["reward_baseline"],
+        torch.tensor([11.0, 13.0], dtype=torch.float32),
+    )
+    torch.testing.assert_close(
+        context.state.avg_reward,
+        torch.tensor([11.0, 13.0], dtype=torch.float32),
     )

@@ -69,7 +69,8 @@ def _pad_slice_td_like(slice_td: TensorDict, rollout_td: TensorDict | None) -> T
 class RewardCenteringConfig(Config):
     enabled: bool = True
     beta: float = Field(default=1e-3, gt=0, le=1.0)
-    initial_reward_mean: float = 0.0
+    # None means: initialize baseline from the first observed reward.
+    initial_reward_mean: float | None = None
 
 
 class AdvantageConfig(Config):
@@ -409,7 +410,11 @@ class TrajectoryIsolator(TrainerComponent):
             slice_mask = runtime_slice.env_mask
             if slice_mask.numel() == 0:
                 continue
-            means[slice_mask] = float(runtime_slice.cfg.advantage.reward_centering.initial_reward_mean)
+            initial_mean = runtime_slice.cfg.advantage.reward_centering.initial_reward_mean
+            if initial_mean is None:
+                means[slice_mask] = torch.nan
+            else:
+                means[slice_mask] = float(initial_mean)
             assigned |= slice_mask
 
         if not bool(assigned.all()):

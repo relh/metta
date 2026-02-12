@@ -36,7 +36,8 @@ class SamplingConfig(Config):
 class RewardCenteringConfig(Config):
     enabled: bool = True
     beta: float = Field(default=1e-3, gt=0, le=1.0)
-    initial_reward_mean: float = 0.0
+    # None means: initialize baseline from the first observed reward.
+    initial_reward_mean: float | None = None
 
 
 class AdvantageConfig(Config):

@@ -132,11 +132,17 @@ class DiffHordeLoss(Loss):
 
         agent_ids = student_td["agent_slot_ids"].squeeze(-1).to(device=phi_bF.device, dtype=torch.long)
         baseline_bF = self.phi_bar_agentF[agent_ids]
+        uninitialized = torch.isnan(baseline_bF).any(dim=-1, keepdim=True)
+        if bool(uninitialized.any()):
+            # Initialize each agent baseline from the first observed cumulant vector.
+            baseline_bF = torch.where(uninitialized, phi_bF, baseline_bF)
 
         student_td[self.cfg.cumulants_key] = phi_bF.detach()
         student_td[self.cfg.cumulants_phi_bar_key] = baseline_bF.detach()
 
         with torch.no_grad():
+            if bool(uninitialized.any()):
+                self.phi_bar_agentF[agent_ids] = baseline_bF
             diff_horde_update_phi_bar_agents_(
                 phi_bar_agentF=self.phi_bar_agentF,
                 agent_ids_b=agent_ids,
@@ -256,7 +262,7 @@ class DiffHordeLoss(Loss):
         if self.phi_bar_agentF.shape == expected_shape and self.phi_bar_agentF.device == device:
             return
         if self.phi_bar_agentF.numel() == 0:
-            self.phi_bar_agentF = torch.zeros(expected_shape, dtype=torch.float32, device=device)
+            self.phi_bar_agentF = torch.full(expected_shape, torch.nan, dtype=torch.float32, device=device)
             return
         if self.phi_bar_agentF.shape != expected_shape:
             raise RuntimeError(
