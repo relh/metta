@@ -98,8 +98,8 @@ docker exec app_backend-postgres-1 psql -U postgres -d metta \
   -c "SELECT * FROM alembic_version"
 ```
 
-**Migrations:** Managed via Alembic (`app_backend/alembic/versions/`). To create a new migration:
-`cd app_backend && alembic revision --autogenerate -m "description"`
+**Migrations:** Managed via Alembic (`app_backend/alembic/versions/`). Observatory must be running so postgres is
+available. To create a new migration: `cd app_backend && alembic revision --autogenerate -m "description"`
 
 ## Tournament CLI
 

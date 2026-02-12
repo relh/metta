@@ -45,9 +45,10 @@ from metta.app_backend.clients.stats_client import StatsClient
 client = StatsClient.create("http://127.0.0.1:8000")
 ```
 
-**Migrations:** Managed via Alembic. To create a new migration after changing ORM models:
-`cd app_backend && alembic revision --autogenerate -m "description"`. Review the generated file in
-`app_backend/alembic/versions/`, then commit. CI runs `test_autogenerate_is_empty` to catch ORM/migration drift.
+**Migrations:** Managed via Alembic. Observatory must be running (`metta observatory up`) so postgres is available. To
+create a new migration after changing ORM models: `cd app_backend && alembic revision --autogenerate -m "description"`.
+Review the generated file in `app_backend/alembic/versions/`, then commit. CI runs `test_autogenerate_is_empty` to catch
+ORM/migration drift.
 
 ## Useful Commands
 
