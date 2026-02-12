@@ -358,9 +358,13 @@ class EvolutionaryRoleCoordinator:
             new_role = sample_role(self.catalog, self.config, self.rng)
             self.catalog.register_role(new_role)
 
-        # Select role weighted by fitness
-        role_ids = list(range(len(self.catalog.roles)))
-        selected_id = pick_role_id_weighted(self.catalog, role_ids, self.rng)
+        # If we have no fitness signal yet, avoid flakiness by assigning the seeded base
+        # roles in a round-robin pattern across agent ids.
+        if all(role.games <= 0 for role in self.catalog.roles):
+            selected_id = agent_id % len(self.catalog.roles)
+        else:
+            role_ids = list(range(len(self.catalog.roles)))
+            selected_id = pick_role_id_weighted(self.catalog, role_ids, self.rng)
 
         if selected_id < 0:
             selected_id = 0
