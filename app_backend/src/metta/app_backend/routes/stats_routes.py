@@ -54,56 +54,32 @@ class PolicyRow(Ownable):
         )
 
 
-class PublicPolicyVersionRow(Ownable):
+class PolicyVersionRow(Ownable):
     id: uuid.UUID
     policy_id: uuid.UUID
-    created_at: datetime
-    policy_created_at: datetime
     name: str
     version: int
+    created_at: datetime
+    policy_created_at: datetime
     tags: dict[str, str] = Field(default_factory=dict)
-    version_count: int | None = None
+    attributes: dict[str, Any] = Field(default_factory=dict)
+    internal_id: int | None = None
+    s3_path: str | None = None
 
     @classmethod
-    def from_model(cls, pv: PolicyVersion) -> "PublicPolicyVersionRow":
+    def from_model(cls, pv: PolicyVersion, include_internal: bool = False) -> "PolicyVersionRow":
         return cls(
             id=pv.id,
             policy_id=pv.policy_id,
+            name=pv.policy.name,
+            version=pv.version,
             created_at=pv.created_at,
             policy_created_at=pv.policy.created_at,
             user_id=pv.policy.user_id,
-            name=pv.policy.name,
-            version=pv.version,
             tags={tag.key: tag.value for tag in pv.tags} if pv.tags else {},
-        )
-
-
-class PolicyVersionWithName(Ownable):
-    id: uuid.UUID
-    internal_id: int | None
-    policy_id: uuid.UUID
-    version: int
-    s3_path: str | None
-    git_hash: str | None
-    policy_spec: dict[str, Any]
-    attributes: dict[str, Any]
-    created_at: datetime
-    name: str
-
-    @classmethod
-    def from_model(cls, pv: PolicyVersion) -> "PolicyVersionWithName":
-        return cls(
-            id=pv.id,
-            internal_id=pv.internal_id,
-            policy_id=pv.policy_id,
-            version=pv.version,
-            s3_path=pv.s3_path,
-            git_hash=pv.git_hash,
-            policy_spec=pv.policy_spec or {},
             attributes=pv.attributes or {},
-            created_at=pv.created_at,
-            name=pv.policy.name,
-            user_id=pv.policy.user_id,
+            internal_id=pv.internal_id if include_internal else None,
+            s3_path=pv.s3_path if include_internal else None,
         )
 
 
@@ -178,10 +154,6 @@ class CompletePolicySubmitRequest(BaseModel):
     season: str | None = None
 
 
-class MyPolicyVersionsResponse(BaseModel):
-    entries: list[PublicPolicyVersionRow]
-
-
 class EpisodeQueryRequest(BaseModel):
     primary_policy_version_ids: Optional[list[uuid.UUID]] = None
     episode_ids: Optional[list[uuid.UUID]] = None
@@ -200,7 +172,7 @@ class PoliciesResponse(BaseModel):
 
 
 class PolicyVersionsResponse(BaseModel):
-    entries: list[PublicPolicyVersionRow]
+    entries: list[PolicyVersionRow]
     total_count: int
 
 
@@ -269,52 +241,12 @@ def create_stats_router() -> APIRouter:
         )
         return UUIDResponse(id=policy_version_id)
 
-    @router.get("/policies/versions/{policy_version_id_str}")
-    @timed_http_handler
-    async def get_policy_version(policy_version_id_str: str, user: CheckSoftmaxUser) -> PolicyVersionWithName:
-        policy_version_id = uuid.UUID(policy_version_id_str)
-        pv = await policy_queries.get_policy_version_with_name(policy_version_id)
-        if pv is None:
-            raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
-        result = PolicyVersionWithName.from_model(pv)
-        await fill_user_data([result], current_user=user)
-        return result
-
-    @router.get("/policies/my-versions")
-    @timed_http_handler
-    async def get_my_policy_versions(user: CheckUser) -> MyPolicyVersionsResponse:
-        versions = await policy_queries.get_user_policy_versions(user.id)
-        entries = [PublicPolicyVersionRow.from_model(pv) for pv in versions]
-        await fill_user_data(entries, current_user=user)
-        return MyPolicyVersionsResponse(entries=entries)
-
-    @router.get("/policies/{policy_version_id}")
-    @timed_http_handler
-    async def get_policy_by_id(policy_version_id: uuid.UUID, user: CheckMaybeUser) -> PublicPolicyVersionRow:
-        """Get a policy version by ID. Visibility filtered based on user."""
-        filter_visibility = not (user and user.is_softmax_team_member)
-        pv = await policy_queries.get_policy_version_by_id(
-            policy_version_id,
-            visible_to_user_id=user.id if user else None,
-            filter_visibility=filter_visibility,
-        )
-
-        if pv is None:
-            raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
-
-        row = PublicPolicyVersionRow.from_model(pv)
-        await fill_user_data([row], current_user=user)
-        return row
-
-    @router.put("/policies/versions/{policy_version_id_str}/tags")
+    @router.put("/policy-versions/{policy_version_id_str}/tags", include_in_schema=False)
     @timed_http_handler
     async def update_policy_version_tags_route(
         policy_version_id_str: str, tags: Annotated[dict[str, str], Body(...)], user: CheckSoftmaxUser
     ) -> UUIDResponse:
         policy_version_id = uuid.UUID(policy_version_id_str)
-        # We could check policy version ownership here, but this route is softmax-only, and doing this for other users
-        # can sometimes be convenient for debugging.
-        # Related: https://app.asana.com/1/1209016784099267/task/1212896601632585/comment/1213074742971731?focus=true
         await policy_queries.upsert_policy_version_tags(policy_version_id, tags)
         return UUIDResponse(id=policy_version_id)
 
@@ -513,6 +445,22 @@ def create_stats_router() -> APIRouter:
         await fill_user_data(entries, current_user=user)
         return PoliciesResponse(entries=entries, total_count=total_count)
 
+    @router.get("/policy-versions/{policy_version_id}")
+    @timed_http_handler
+    async def get_policy_version_detail(policy_version_id: uuid.UUID, user: CheckMaybeUser) -> PolicyVersionRow:
+        filter_visibility = not (user and user.is_softmax_team_member)
+        include_internal = bool(user and user.is_softmax_team_member)
+        pv = await policy_queries.get_policy_version_with_name(
+            policy_version_id,
+            visible_to_user_id=user.id if user else None,
+            filter_visibility=filter_visibility,
+        )
+        if pv is None:
+            raise HTTPException(status_code=404, detail=f"Policy version {policy_version_id} not found")
+        row = PolicyVersionRow.from_model(pv, include_internal=include_internal)
+        await fill_user_data([row], current_user=user)
+        return row
+
     @router.get("/policy-versions")
     @timed_http_handler
     async def get_policy_versions(
@@ -521,7 +469,8 @@ def create_stats_router() -> APIRouter:
         name_fuzzy: Optional[str] = None,
         version: Optional[int] = None,
         policy_version_ids: Optional[list[str]] = Query(default=None),
-        mine: bool = Query(default=False, description="Filter to only policies owned by the authenticated user"),
+        policy_id: Optional[uuid.UUID] = None,
+        mine: bool = Query(default=False),
         limit: int = 50,
         offset: int = 0,
     ) -> PolicyVersionsResponse:
@@ -529,38 +478,20 @@ def create_stats_router() -> APIRouter:
             raise HTTPException(status_code=401, detail="Authentication required for mine=true")
         pv_uuids = [uuid.UUID(pv_id) for pv_id in policy_version_ids] if policy_version_ids else None
         filter_visibility = not (user and user.is_softmax_team_member)
+        include_internal = bool(user and user.is_softmax_team_member)
         versions, total_count = await policy_queries.get_policy_versions(
             name_exact=name_exact,
             name_fuzzy=name_fuzzy,
             version=version,
             policy_version_ids=pv_uuids,
+            policy_id=policy_id,
             user_id=user.id if mine and user else None,
             limit=limit,
             offset=offset,
             visible_to_user_id=user.id if user else None,
             filter_visibility=filter_visibility,
         )
-        entries = [PublicPolicyVersionRow.from_model(pv) for pv in versions]
-        await fill_user_data(entries, current_user=user)
-        return PolicyVersionsResponse(entries=entries, total_count=total_count)
-
-    @router.get("/policies/{policy_id}/versions")
-    @timed_http_handler
-    async def get_versions_for_policy(
-        policy_id: str,
-        user: CheckMaybeUser,
-        limit: int = 500,
-        offset: int = 0,
-    ) -> PolicyVersionsResponse:
-        filter_visibility = not (user and user.is_softmax_team_member)
-        versions, total_count = await policy_queries.get_versions_for_policy(
-            policy_id=uuid.UUID(policy_id),
-            limit=limit,
-            offset=offset,
-            visible_to_user_id=user.id if user else None,
-            filter_visibility=filter_visibility,
-        )
-        entries = [PublicPolicyVersionRow.from_model(pv) for pv in versions]
+        entries = [PolicyVersionRow.from_model(pv, include_internal=include_internal) for pv in versions]
         await fill_user_data(entries, current_user=user)
         return PolicyVersionsResponse(entries=entries, total_count=total_count)
 

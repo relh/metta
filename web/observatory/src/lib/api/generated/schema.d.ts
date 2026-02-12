@@ -44,314 +44,6 @@ export interface paths {
     patch?: never
     trace?: never
   }
-  '/tasks': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Create Task */
-    post: operations['create_task_tasks_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/latest': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Latest Assigned Task For Worker */
-    get: operations['get_latest_assigned_task_for_worker_tasks_latest_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/available': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Available Tasks */
-    get: operations['get_available_tasks_tasks_available_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/claim': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Claim Tasks */
-    post: operations['claim_tasks_tasks_claim_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/claimed': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Claimed Tasks */
-    get: operations['get_claimed_tasks_tasks_claimed_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/git-hashes': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Get Git Hashes For Workers */
-    post: operations['get_git_hashes_for_workers_tasks_git_hashes_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/all': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get All Tasks */
-    get: operations['get_all_tasks_tasks_all_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/paginated': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Tasks Paginated */
-    get: operations['get_tasks_paginated_tasks_paginated_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/{task_id}/start': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Start Task */
-    post: operations['start_task_tasks__task_id__start_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/{task_id}/finish': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Finish Task */
-    post: operations['finish_task_tasks__task_id__finish_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/{task_id}': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /**
-     * Get Task
-     * @description Get a single task by ID with full details including attributes.
-     */
-    get: operations['get_task_tasks__task_id__get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/{task_id}/attempts': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /**
-     * Get Task Attempts
-     * @description Get all attempts for a specific task.
-     */
-    get: operations['get_task_attempts_tasks__task_id__attempts_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/tasks/{task_id}/logs/{log_type}': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /**
-     * Get Task Logs
-     * @description Stream log files from S3 for a specific task.
-     *
-     *     Args:
-     *         task_id: The ID of the task
-     *         log_type: Either "stdout" or "stderr" or "output"
-     *
-     *     Returns:
-     *         StreamingResponse with the log file content as text/plain
-     */
-    get: operations['get_task_logs_tasks__task_id__logs__log_type__get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sql/tables': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** List Tables */
-    get: operations['list_tables_sql_tables_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sql/tables/{table_name}/schema': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Table Schema */
-    get: operations['get_table_schema_sql_tables__table_name__schema_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sql/query': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Execute Query */
-    post: operations['execute_query_sql_query_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sql/generate-query': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /**
-     * Generate Ai Query
-     * @description Generate a SQL query from natural language description using Claude.
-     */
-    post: operations['generate_ai_query_sql_generate_query_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
   '/stats/policies': {
     parameters: {
       query?: never
@@ -387,77 +79,6 @@ export interface paths {
      * @description Internal endpoint. Cogames uploads use submit/presigned-url and submit/complete.
      */
     post: operations['create_policy_version_stats_policies__policy_id_str__versions_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/stats/policies/versions/{policy_version_id_str}': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Policy Version */
-    get: operations['get_policy_version_stats_policies_versions__policy_version_id_str__get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/stats/policies/my-versions': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get My Policy Versions */
-    get: operations['get_my_policy_versions_stats_policies_my_versions_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/stats/policies/{policy_version_id}': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /**
-     * Get Policy By Id
-     * @description Get a policy version by ID. Visibility filtered based on user.
-     */
-    get: operations['get_policy_by_id_stats_policies__policy_version_id__get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/stats/policies/versions/{policy_version_id_str}/tags': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    /** Update Policy Version Tags Route */
-    put: operations['update_policy_version_tags_route_stats_policies_versions__policy_version_id_str__tags_put']
-    post?: never
     delete?: never
     options?: never
     head?: never
@@ -532,6 +153,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/stats/policy-versions/{policy_version_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Policy Version Detail */
+    get: operations['get_policy_version_detail_stats_policy_versions__policy_version_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/stats/policy-versions': {
     parameters: {
       query?: never
@@ -541,23 +179,6 @@ export interface paths {
     }
     /** Get Policy Versions */
     get: operations['get_policy_versions_stats_policy_versions_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/stats/policies/{policy_id}/versions': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Versions For Policy */
-    get: operations['get_versions_for_policy_stats_policies__policy_id__versions_get']
     put?: never
     post?: never
     delete?: never
@@ -577,74 +198,6 @@ export interface paths {
     put?: never
     /** Query Episodes */
     post: operations['query_episodes_stats_episodes_query_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sweeps/{sweep_name}/create_sweep': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Create Sweep */
-    post: operations['create_sweep_sweeps__sweep_name__create_sweep_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sweeps/{sweep_name}': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Sweep */
-    get: operations['get_sweep_sweeps__sweep_name__get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/sweeps/{sweep_name}/runs/next': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Get Next Run Id */
-    post: operations['get_next_run_id_sweeps__sweep_name__runs_next_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/batch': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Create Jobs Batch */
-    post: operations['create_jobs_batch_jobs_batch_post']
     delete?: never
     options?: never
     head?: never
@@ -712,8 +265,7 @@ export interface paths {
     /** Get Job */
     get: operations['get_job_jobs__job_id__get']
     put?: never
-    /** Update Job */
-    post: operations['update_job_jobs__job_id__post']
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -912,40 +464,6 @@ export interface paths {
     patch?: never
     trace?: never
   }
-  '/infra/smart-plugs/status': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** Get Status */
-    get: operations['get_status_infra_smart_plugs_status_get']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/infra/smart-plugs/power': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** Set Power State */
-    post: operations['set_power_state_infra_smart_plugs_power_post']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
   '/whoami': {
     parameters: {
       query?: never
@@ -1001,16 +519,6 @@ export interface paths {
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
-    /** AIQueryRequest */
-    AIQueryRequest: {
-      /** Description */
-      description: string
-    }
-    /** AIQueryResponse */
-    AIQueryResponse: {
-      /** Query */
-      query: string
-    }
     /** AgentStatsDetail */
     AgentStatsDetail: {
       /** Agent Id */
@@ -1316,70 +824,6 @@ export interface components {
       /** Job Id */
       job_id?: string | null
     }
-    /** EvalTaskRow */
-    EvalTaskRow: {
-      /** User Id */
-      user_id: string
-      user?: components['schemas']['UserRow'] | null
-      /** Id */
-      id: number
-      /** Command */
-      command: string
-      /** Data Uri */
-      data_uri: string | null
-      /** Git Hash */
-      git_hash: string | null
-      /** Attributes */
-      attributes: {
-        [key: string]: unknown
-      }
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string
-      /** Is Finished */
-      is_finished: boolean
-      /** Latest Attempt Id */
-      latest_attempt_id: number | null
-      /**
-       * Attempt Number
-       * @default 0
-       */
-      attempt_number: number | null
-      /**
-       * Status
-       * @default unprocessed
-       * @enum {string}
-       */
-      status: 'unprocessed' | 'running' | 'canceled' | 'done' | 'error' | 'system_error'
-      /** Status Details */
-      status_details?: {
-        [key: string]: unknown
-      } | null
-      /** Assigned At */
-      assigned_at?: string | null
-      /** Assignee */
-      assignee?: string | null
-      /** Started At */
-      started_at?: string | null
-      /** Finished At */
-      finished_at?: string | null
-      /** Output Log Path */
-      output_log_path?: string | null
-    }
-    /** GitHashesRequest */
-    GitHashesRequest: {
-      /** Assignees */
-      assignees: string[]
-    }
-    /** GitHashesResponse */
-    GitHashesResponse: {
-      /** Git Hashes */
-      git_hashes: {
-        [key: string]: string[]
-      }
-    }
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
@@ -1411,64 +855,6 @@ export interface components {
       /** Position */
       position: number
       policy: components['schemas']['PolicyVersionSummary']
-    }
-    /** JobRequest */
-    JobRequest: {
-      /** @default pending */
-      status: components['schemas']['JobStatus']
-      /**
-       * Worker
-       * @description Name of the worker that started the job
-       */
-      worker?: string | null
-      /**
-       * Result
-       * @description Contains job-specific results, including possibly errors
-       */
-      result?: {
-        [key: string]: unknown
-      } | null
-      /**
-       * Error
-       * @description Tracks k8s-lifecycle errors, not semantic job errors
-       */
-      error?: string | null
-      /**
-       * Error Type
-       * @description Classified error type: timeout, oom, policy_error, unknown
-       */
-      error_type?: string | null
-      job_type: components['schemas']['JobType']
-      /** Job */
-      job: {
-        [key: string]: unknown
-      }
-      /**
-       * Id
-       * Format: uuid
-       */
-      id?: string
-      /** User Id */
-      user_id: string
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at?: string
-      /** Dispatched At */
-      dispatched_at?: string | null
-      /** Running At */
-      running_at?: string | null
-      /** Completed At */
-      completed_at?: string | null
-    }
-    /** JobRequestCreate */
-    JobRequestCreate: {
-      job_type: components['schemas']['JobType']
-      /** Job */
-      job: {
-        [key: string]: unknown
-      }
     }
     /** JobRequestResponse */
     JobRequestResponse: {
@@ -1514,33 +900,6 @@ export interface components {
       policy_versions: components['schemas']['JobPolicyVersionSummary'][]
       episode?: components['schemas']['JobEpisodeInfo'] | null
       match?: components['schemas']['JobMatchInfo'] | null
-    }
-    /** JobRequestUpdate */
-    JobRequestUpdate: {
-      /** @description Tracks k8s-lifecycle status, not semantic job status */
-      status?: components['schemas']['JobStatus'] | null
-      /**
-       * Worker
-       * @description Name of the worker that started the job
-       */
-      worker?: string | null
-      /**
-       * Result
-       * @description Contains job-specific results, including possibly errors
-       */
-      result?: {
-        [key: string]: unknown
-      } | null
-      /**
-       * Error
-       * @description Tracks k8s-lifecycle errors, not semantic job errors
-       */
-      error?: string | null
-      /**
-       * Error Type
-       * @description Classified error type: timeout, oom, policy_error, unknown
-       */
-      error_type?: string | null
     }
     /**
      * JobStatus
@@ -1629,11 +988,6 @@ export interface components {
       /** Created At */
       created_at: string
     }
-    /** MyPolicyVersionsResponse */
-    MyPolicyVersionsResponse: {
-      /** Entries */
-      entries: components['schemas']['PublicPolicyVersionRow'][]
-    }
     /**
      * OpponentStats
      * @description Per-opponent metric aggregation.
@@ -1653,19 +1007,6 @@ export interface components {
       strategy_profile: {
         [key: string]: number
       }
-    }
-    /** PaginatedTasksResponse */
-    PaginatedTasksResponse: {
-      /** Tasks */
-      tasks: components['schemas']['EvalTaskRow'][]
-      /** Total Count */
-      total_count: number
-      /** Page */
-      page: number
-      /** Page Size */
-      page_size: number
-      /** Total Pages */
-      total_pages: number
     }
     /** PoliciesResponse */
     PoliciesResponse: {
@@ -1793,6 +1134,48 @@ export interface components {
       /** Submit Error */
       submit_error?: string | null
     }
+    /** PolicyVersionRow */
+    PolicyVersionRow: {
+      /** User Id */
+      user_id: string
+      user?: components['schemas']['UserRow'] | null
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string
+      /**
+       * Policy Id
+       * Format: uuid
+       */
+      policy_id: string
+      /** Name */
+      name: string
+      /** Version */
+      version: number
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /**
+       * Policy Created At
+       * Format: date-time
+       */
+      policy_created_at: string
+      /** Tags */
+      tags?: {
+        [key: string]: string
+      }
+      /** Attributes */
+      attributes?: {
+        [key: string]: unknown
+      }
+      /** Internal Id */
+      internal_id?: number | null
+      /** S3 Path */
+      s3_path?: string | null
+    }
     /** PolicyVersionSummary */
     PolicyVersionSummary: {
       /**
@@ -1805,49 +1188,10 @@ export interface components {
       /** Version */
       version: number | null
     }
-    /** PolicyVersionWithName */
-    PolicyVersionWithName: {
-      /** User Id */
-      user_id: string
-      user?: components['schemas']['UserRow'] | null
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string
-      /** Internal Id */
-      internal_id: number | null
-      /**
-       * Policy Id
-       * Format: uuid
-       */
-      policy_id: string
-      /** Version */
-      version: number
-      /** S3 Path */
-      s3_path: string | null
-      /** Git Hash */
-      git_hash: string | null
-      /** Policy Spec */
-      policy_spec: {
-        [key: string]: unknown
-      }
-      /** Attributes */
-      attributes: {
-        [key: string]: unknown
-      }
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string
-      /** Name */
-      name: string
-    }
     /** PolicyVersionsResponse */
     PolicyVersionsResponse: {
       /** Entries */
-      entries: components['schemas']['PublicPolicyVersionRow'][]
+      entries: components['schemas']['PolicyVersionRow'][]
       /** Total Count */
       total_count: number
     }
@@ -1890,61 +1234,6 @@ export interface components {
        */
       upload_id: string
     }
-    /** PublicPolicyVersionRow */
-    PublicPolicyVersionRow: {
-      /** User Id */
-      user_id: string
-      user?: components['schemas']['UserRow'] | null
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string
-      /**
-       * Policy Id
-       * Format: uuid
-       */
-      policy_id: string
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string
-      /**
-       * Policy Created At
-       * Format: date-time
-       */
-      policy_created_at: string
-      /** Name */
-      name: string
-      /** Version */
-      version: number
-      /** Tags */
-      tags?: {
-        [key: string]: string
-      }
-      /** Version Count */
-      version_count?: number | null
-    }
-    /** RunIdResponse */
-    RunIdResponse: {
-      /** Run Id */
-      run_id: string
-    }
-    /** SQLQueryRequest */
-    SQLQueryRequest: {
-      /** Query */
-      query: string
-    }
-    /** SQLQueryResponse */
-    SQLQueryResponse: {
-      /** Columns */
-      columns: string[]
-      /** Rows */
-      rows: unknown[][]
-      /** Row Count */
-      row_count: number
-    }
     /** SeasonResponse */
     SeasonResponse: {
       /**
@@ -1980,45 +1269,6 @@ export interface components {
       /** Created At */
       created_at: string
     }
-    /** SmartPlugSetRequest */
-    SmartPlugSetRequest: {
-      /** Key */
-      key: string
-      /** On */
-      on: boolean
-      /** Toggle After */
-      toggle_after?: number | null
-    }
-    /** SmartPlugSetResponse */
-    SmartPlugSetResponse: {
-      /** Ok */
-      ok: boolean
-    }
-    /** SmartPlugStatus */
-    SmartPlugStatus: {
-      /** Key */
-      key: string
-      /** Label */
-      label: string
-      /** Alias */
-      alias?: string | null
-      /** Online */
-      online?: boolean | null
-      /** Is On */
-      is_on?: boolean | null
-      /** Apower */
-      apower?: number | null
-    }
-    /** SmartPlugStatusResponse */
-    SmartPlugStatusResponse: {
-      /**
-       * Refreshed At
-       * Format: date-time
-       */
-      refreshed_at: string
-      /** Items */
-      items: components['schemas']['SmartPlugStatus'][]
-    }
     /** SubmitRequest */
     SubmitRequest: {
       /**
@@ -2031,136 +1281,6 @@ export interface components {
     SubmitResponse: {
       /** Pools */
       pools: string[]
-    }
-    /** SweepCreateRequest */
-    SweepCreateRequest: {
-      /** Project */
-      project: string
-      /** Entity */
-      entity: string
-      /** Wandb Sweep Id */
-      wandb_sweep_id: string
-    }
-    /** SweepCreateResponse */
-    SweepCreateResponse: {
-      /** Created */
-      created: boolean
-      /**
-       * Sweep Id
-       * Format: uuid
-       */
-      sweep_id: string
-    }
-    /** SweepInfo */
-    SweepInfo: {
-      /** Exists */
-      exists: boolean
-      /** Wandb Sweep Id */
-      wandb_sweep_id: string
-    }
-    /** TableInfo */
-    TableInfo: {
-      /** Table Name */
-      table_name: string
-      /** Column Count */
-      column_count: number
-      /** Row Count */
-      row_count: number
-    }
-    /** TableSchema */
-    TableSchema: {
-      /** Table Name */
-      table_name: string
-      /** Columns */
-      columns: {
-        [key: string]: unknown
-      }[]
-    }
-    /** TaskAttemptRow */
-    TaskAttemptRow: {
-      /** Id */
-      id: number
-      /** Task Id */
-      task_id: number
-      /** Attempt Number */
-      attempt_number: number
-      /** Assigned At */
-      assigned_at: string | null
-      /** Assignee */
-      assignee: string | null
-      /** Started At */
-      started_at: string | null
-      /** Finished At */
-      finished_at: string | null
-      /** Output Log Path */
-      output_log_path: string | null
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: 'unprocessed' | 'running' | 'canceled' | 'done' | 'error' | 'system_error'
-      /** Status Details */
-      status_details: {
-        [key: string]: unknown
-      } | null
-    }
-    /** TaskAttemptsResponse */
-    TaskAttemptsResponse: {
-      /** Attempts */
-      attempts: components['schemas']['TaskAttemptRow'][]
-    }
-    /** TaskClaimRequest */
-    TaskClaimRequest: {
-      /** Tasks */
-      tasks: number[]
-      /** Assignee */
-      assignee: string
-    }
-    /** TaskClaimResponse */
-    TaskClaimResponse: {
-      /** Claimed */
-      claimed: number[]
-    }
-    /** TaskCreateRequest */
-    TaskCreateRequest: {
-      /** Command */
-      command: string
-      /** Git Hash */
-      git_hash?: string | null
-      /** Data File */
-      data_file?: {
-        [key: string]: unknown
-      } | null
-      /** Attributes */
-      attributes?: {
-        [key: string]: unknown
-      }
-    }
-    /** TaskFinishRequest */
-    TaskFinishRequest: {
-      /** Task Id */
-      task_id: number
-      /**
-       * Status
-       * @enum {string}
-       */
-      status: 'done' | 'error' | 'canceled' | 'system_error'
-      /** Log Path */
-      log_path?: string | null
-      /** Status Details */
-      status_details?: {
-        [key: string]: unknown
-      }
-    }
-    /** TaskIdResponse */
-    TaskIdResponse: {
-      /** Task Id */
-      task_id: number
-    }
-    /** TasksResponse */
-    TasksResponse: {
-      /** Tasks */
-      tasks: components['schemas']['EvalTaskRow'][]
     }
     /**
      * TeamCompStats
@@ -2288,546 +1408,6 @@ export interface operations {
       }
     }
   }
-  create_task_tasks_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['TaskCreateRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['EvalTaskRow']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_latest_assigned_task_for_worker_tasks_latest_get: {
-    parameters: {
-      query: {
-        assignee: string
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['EvalTaskRow']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_available_tasks_tasks_available_get: {
-    parameters: {
-      query?: {
-        limit?: number
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TasksResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  claim_tasks_tasks_claim_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['TaskClaimRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TaskClaimResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_claimed_tasks_tasks_claimed_get: {
-    parameters: {
-      query?: {
-        assignee?: string | null
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TasksResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_git_hashes_for_workers_tasks_git_hashes_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['GitHashesRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['GitHashesResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_all_tasks_tasks_all_get: {
-    parameters: {
-      query?: {
-        limit?: number
-        statuses?: ('unprocessed' | 'running' | 'canceled' | 'done' | 'error' | 'system_error')[] | null
-        git_hash?: string | null
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TasksResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_tasks_paginated_tasks_paginated_get: {
-    parameters: {
-      query?: {
-        page?: number
-        page_size?: number
-        status?: string | null
-        assignee?: string | null
-        user_id?: string | null
-        command?: string | null
-        created_at?: string | null
-        assigned_at?: string | null
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['PaginatedTasksResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  start_task_tasks__task_id__start_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        task_id: number
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TaskIdResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  finish_task_tasks__task_id__finish_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        task_id: number
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['TaskFinishRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TaskIdResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_task_tasks__task_id__get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        task_id: number
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['EvalTaskRow']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_task_attempts_tasks__task_id__attempts_get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        task_id: number
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TaskAttemptsResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_task_logs_tasks__task_id__logs__log_type__get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        task_id: number
-        log_type: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': unknown
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  list_tables_sql_tables_get: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TableInfo'][]
-        }
-      }
-    }
-  }
-  get_table_schema_sql_tables__table_name__schema_get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        table_name: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TableSchema']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  execute_query_sql_query_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SQLQueryRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SQLQueryResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  generate_ai_query_sql_generate_query_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['AIQueryRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['AIQueryResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
   get_policies_stats_policies_get: {
     parameters: {
       query?: {
@@ -2907,125 +1487,6 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['PolicyVersionCreate']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['UUIDResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_policy_version_stats_policies_versions__policy_version_id_str__get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        policy_version_id_str: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['PolicyVersionWithName']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_my_policy_versions_stats_policies_my_versions_get: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['MyPolicyVersionsResponse']
-        }
-      }
-    }
-  }
-  get_policy_by_id_stats_policies__policy_version_id__get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        policy_version_id: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['PublicPolicyVersionRow']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  update_policy_version_tags_route_stats_policies_versions__policy_version_id_str__tags_put: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        policy_version_id_str: string
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': {
-          [key: string]: string
-        }
       }
     }
     responses: {
@@ -3155,20 +1616,13 @@ export interface operations {
       }
     }
   }
-  get_policy_versions_stats_policy_versions_get: {
+  get_policy_version_detail_stats_policy_versions__policy_version_id__get: {
     parameters: {
-      query?: {
-        name_exact?: string | null
-        name_fuzzy?: string | null
-        version?: number | null
-        policy_version_ids?: string[] | null
-        /** @description Filter to only policies owned by the authenticated user */
-        mine?: boolean
-        limit?: number
-        offset?: number
-      }
+      query?: never
       header?: never
-      path?: never
+      path: {
+        policy_version_id: string
+      }
       cookie?: never
     }
     requestBody?: never
@@ -3179,7 +1633,7 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['PolicyVersionsResponse']
+          'application/json': components['schemas']['PolicyVersionRow']
         }
       }
       /** @description Validation Error */
@@ -3193,16 +1647,20 @@ export interface operations {
       }
     }
   }
-  get_versions_for_policy_stats_policies__policy_id__versions_get: {
+  get_policy_versions_stats_policy_versions_get: {
     parameters: {
       query?: {
+        name_exact?: string | null
+        name_fuzzy?: string | null
+        version?: number | null
+        policy_version_ids?: string[] | null
+        policy_id?: string | null
+        mine?: boolean
         limit?: number
         offset?: number
       }
       header?: never
-      path: {
-        policy_id: string
-      }
+      path?: never
       cookie?: never
     }
     requestBody?: never
@@ -3247,136 +1705,6 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['EpisodeQueryResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  create_sweep_sweeps__sweep_name__create_sweep_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        sweep_name: string
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SweepCreateRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SweepCreateResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_sweep_sweeps__sweep_name__get: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        sweep_name: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SweepInfo']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  get_next_run_id_sweeps__sweep_name__runs_next_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        sweep_name: string
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['RunIdResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  create_jobs_batch_jobs_batch_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['JobRequestCreate'][]
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': string[]
         }
       }
       /** @description Validation Error */
@@ -3509,41 +1837,6 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['JobRequestResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
-        }
-      }
-    }
-  }
-  update_job_jobs__job_id__post: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        job_id: string
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['JobRequestUpdate']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['JobRequest']
         }
       }
       /** @description Validation Error */
@@ -3892,59 +2185,6 @@ export interface operations {
           'application/json': {
             [key: string]: string[]
           }
-        }
-      }
-    }
-  }
-  get_status_infra_smart_plugs_status_get: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SmartPlugStatusResponse']
-        }
-      }
-    }
-  }
-  set_power_state_infra_smart_plugs_power_post: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SmartPlugSetRequest']
-      }
-    }
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SmartPlugSetResponse']
-        }
-      }
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

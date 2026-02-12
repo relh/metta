@@ -5,7 +5,7 @@ import { AppContext } from '@/app/(main)/AppContext'
 import { AsyncSelect } from '@/components/AsyncSelect'
 import { Button } from '@/components/Button'
 import { Select } from '@/components/Select'
-import { PolicyRow, PublicPolicyVersionRow } from '@/lib/repo'
+import { PolicyRow, PolicyVersionRow } from '@/lib/repo'
 
 type PolicyOption = {
   value: string
@@ -16,7 +16,7 @@ type PolicyOption = {
 type VersionOption = {
   value: string
   label: string
-  version: PublicPolicyVersionRow
+  version: PolicyVersionRow
 }
 
 export const SubmitForm: FC<{

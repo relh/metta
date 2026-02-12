@@ -87,7 +87,7 @@ class TaskAttemptsResponse(BaseModel):
 
 
 def create_eval_task_router() -> APIRouter:
-    router = APIRouter(prefix="/tasks", tags=["eval_tasks"])
+    router = APIRouter(prefix="/tasks", tags=["eval_tasks"], include_in_schema=False)
 
     # Cache for latest commit
     _latest_commit_cache: Optional[tuple[str, datetime]] = None

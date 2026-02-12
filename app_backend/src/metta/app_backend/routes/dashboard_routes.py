@@ -52,7 +52,7 @@ def create_dashboard_router() -> APIRouter:
         pv_id = UUID(policy_version_id)
 
         # Fetch policy version info
-        pv = await policy_queries.get_policy_version_by_id(pv_id)
+        pv = await policy_queries.get_policy_version_with_name(pv_id)
         if not pv:
             raise HTTPException(status_code=404, detail="Policy version not found")
 
@@ -108,7 +108,7 @@ def create_dashboard_router() -> APIRouter:
             if opponent_id:
                 opp_key = str(opponent_id)
                 if opp_key not in opponent_cache:
-                    opp_pv = await policy_queries.get_policy_version_by_id(opponent_id)
+                    opp_pv = await policy_queries.get_policy_version_with_name(opponent_id)
                     if opp_pv:
                         opponent_cache[opp_key] = {
                             "name": opp_pv.policy.name,

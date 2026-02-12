@@ -47,7 +47,7 @@ class PolicyVersion(SQLModel, table=True):
     version: int
     s3_path: str | None = None
     git_hash: str | None = None
-    policy_spec: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    policy_spec: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))  # deprecated
     attributes: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}

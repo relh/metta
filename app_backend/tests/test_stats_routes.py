@@ -87,8 +87,7 @@ async def test_get_versions_for_policy(test_client: TestClient, softmax_headers:
         policy_id=policy_id, s3_path=None, git_hash=None, policy_spec={}, attributes={}
     )
 
-    # Use softmax user to bypass visibility filtering (testing query functionality, not visibility)
-    response = test_client.get(f"/stats/policies/{policy_id}/versions", headers=softmax_headers)
+    response = test_client.get("/stats/policy-versions", params={"policy_id": str(policy_id)}, headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 3
@@ -112,7 +111,7 @@ async def test_get_my_policy_versions(test_client: TestClient, softmax_headers: 
         policy_id=other_policy_id, s3_path=None, git_hash=None, policy_spec={}, attributes={}
     )
 
-    response = test_client.get("/stats/policies/my-versions", headers=softmax_headers)
+    response = test_client.get("/stats/policy-versions", params={"mine": "true"}, headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert len(body["entries"]) == 1
@@ -187,7 +186,7 @@ async def test_update_policy_version_tags_requires_softmax(
 
     # Non-softmax user should get 403
     response = test_client.put(
-        f"/stats/policies/versions/{pv_id}/tags",
+        f"/stats/policy-versions/{pv_id}/tags",
         json={"env": "prod"},
         headers=regular_headers,
     )
@@ -195,7 +194,7 @@ async def test_update_policy_version_tags_requires_softmax(
 
     # Softmax user can update tags on any policy (even not their own)
     response = test_client.put(
-        f"/stats/policies/versions/{pv_id}/tags",
+        f"/stats/policy-versions/{pv_id}/tags",
         json={"env": "prod"},
         headers=softmax_headers,
     )
@@ -264,40 +263,49 @@ async def test_upsert_policy_requires_softmax(
 
 
 @pytest.mark.asyncio
-async def test_get_policy_version_with_details_requires_softmax(
+async def test_get_policy_version_detail_internal_fields(
     test_client: TestClient,
     regular_headers: dict[str, str],
     softmax_headers: dict[str, str],
 ) -> None:
-    """Test that getting policy version with internal details requires softmax."""
+    """Test that internal fields are only populated for softmax users."""
     user = "owner@example.com"
     policy_id = await policy_queries.upsert_policy(name="detail-policy", user_id=user, attributes={})
     pv_id = await policy_queries.create_policy_version(
         policy_id=policy_id, s3_path="s3://bucket/path", git_hash="abc123", policy_spec={"key": "value"}, attributes={}
     )
 
-    # Non-softmax user should get 403
-    response = test_client.get(
-        f"/stats/policies/versions/{pv_id}",
-        headers=regular_headers,
+    # Non-softmax user gets 200 but internal fields are null
+    # Must be owned by the regular user so visibility filter passes
+    regular_policy_id = await policy_queries.upsert_policy(
+        name="regular-detail-policy", user_id="regular@example.com", attributes={}
     )
-    assert response.status_code == 403
+    regular_pv_id = await policy_queries.create_policy_version(
+        policy_id=regular_policy_id,
+        s3_path="s3://bucket/regular",
+        git_hash="def456",
+        policy_spec={"key": "val"},
+        attributes={},
+    )
+    response = test_client.get(f"/stats/policy-versions/{regular_pv_id}", headers=regular_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["s3_path"] is None
+    assert body["attributes"] == {}
+    assert "git_hash" not in body
+    assert "policy_spec" not in body
 
-    # Softmax user can access
-    response = test_client.get(
-        f"/stats/policies/versions/{pv_id}",
-        headers=softmax_headers,
-    )
+    # Softmax user sees internal fields
+    response = test_client.get(f"/stats/policy-versions/{pv_id}", headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["s3_path"] == "s3://bucket/path"
-    assert body["git_hash"] == "abc123"
-    assert body["policy_spec"] == {"key": "value"}
+    assert body["attributes"] == {}
 
 
 @pytest.mark.asyncio
-async def test_get_policy_by_id_is_public(test_client: TestClient) -> None:
-    """Test that get_policy_by_id is accessible without auth for policies in public seasons."""
+async def test_get_policy_version_detail_is_public(test_client: TestClient) -> None:
+    """Test that policy version detail is accessible without auth for policies in public seasons."""
     user = "owner@example.com"
     policy_id = await policy_queries.upsert_policy(name="public-read-policy", user_id=user, attributes={})
     pv_id = await policy_queries.create_policy_version(
@@ -317,7 +325,7 @@ async def test_get_policy_by_id_is_public(test_client: TestClient) -> None:
         await session.flush()
 
     # Request without auth headers should succeed for policies in public seasons
-    response = test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policy-versions/{pv_id}")
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == str(pv_id)
@@ -426,7 +434,7 @@ async def test_visibility_policies_not_in_season_hidden_from_anonymous(test_clie
     assert str(pv_id) not in pv_ids
 
     # Anonymous request should get 404 for this specific policy version
-    response = test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policy-versions/{pv_id}")
     assert response.status_code == 404
 
 
@@ -447,7 +455,7 @@ async def test_visibility_policies_in_hidden_season_hidden_from_anonymous(test_c
     assert str(policy_id) not in policy_ids
 
     # Anonymous request should get 404 for this specific policy version
-    response = test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policy-versions/{pv_id}")
     assert response.status_code == 404
 
 
@@ -475,7 +483,7 @@ async def test_visibility_policies_in_public_season_visible_to_anonymous(test_cl
     assert str(pv_id) in pv_ids
 
     # Anonymous request should be able to get this specific policy version
-    response = test_client.get(f"/stats/policies/{pv_id}")
+    response = test_client.get(f"/stats/policy-versions/{pv_id}")
     assert response.status_code == 200
     assert response.json()["id"] == str(pv_id)
 
@@ -505,7 +513,7 @@ async def test_visibility_owner_sees_own_policies_regardless_of_season(test_clie
     assert str(pv_id) in pv_ids
 
     # Owner should be able to get this specific policy version
-    response = test_client.get(f"/stats/policies/{pv_id}", headers=owner_headers)
+    response = test_client.get(f"/stats/policy-versions/{pv_id}", headers=owner_headers)
     assert response.status_code == 200
     assert response.json()["id"] == str(pv_id)
 
@@ -537,7 +545,7 @@ async def test_visibility_softmax_sees_all_policies(
     assert str(pv_id) in pv_ids
 
     # Softmax user should be able to get this specific policy version
-    response = test_client.get(f"/stats/policies/{pv_id}", headers=softmax_headers)
+    response = test_client.get(f"/stats/policy-versions/{pv_id}", headers=softmax_headers)
     assert response.status_code == 200
     assert response.json()["id"] == str(pv_id)
 
@@ -581,7 +589,7 @@ async def test_visibility_versions_for_policy_filtered(
         pv2_id = pv2.id
 
     # Anonymous request should only see version 1
-    response = test_client.get(f"/stats/policies/{policy_id}/versions")
+    response = test_client.get("/stats/policy-versions", params={"policy_id": str(policy_id)})
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 1
@@ -589,7 +597,7 @@ async def test_visibility_versions_for_policy_filtered(
     assert body["entries"][0]["id"] == str(pv1_id)
 
     # Softmax user should see both versions
-    response = test_client.get(f"/stats/policies/{policy_id}/versions", headers=softmax_headers)
+    response = test_client.get("/stats/policy-versions", params={"policy_id": str(policy_id)}, headers=softmax_headers)
     assert response.status_code == 200
     body = response.json()
     assert body["total_count"] == 2

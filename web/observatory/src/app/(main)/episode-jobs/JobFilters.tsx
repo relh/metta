@@ -5,11 +5,11 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState, useTransition } 
 import { AsyncSelect } from '@/components/AsyncSelect'
 import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
-import { ALL_JOB_STATUSES, JobStatus, PublicPolicyVersionRow, SeasonDetail } from '@/lib/repo'
+import { ALL_JOB_STATUSES, JobStatus, PolicyVersionRow, SeasonDetail } from '@/lib/repo'
 
 type Option = { value: string; label: string }
 
-function formatPolicyOption(pv: PublicPolicyVersionRow): string {
+function formatPolicyOption(pv: PolicyVersionRow): string {
   if (pv.name && pv.version != null) return `${pv.name}:v${pv.version}`
   return pv.id.slice(0, 8)
 }
@@ -18,7 +18,7 @@ async function searchPolicies(query: string): Promise<Option[]> {
   const params = new URLSearchParams({ limit: '20' })
   if (query) params.set('name_fuzzy', query)
   const resp = await fetch(`/api/policy-versions?${params}`)
-  const entries: PublicPolicyVersionRow[] = await resp.json()
+  const entries: PolicyVersionRow[] = await resp.json()
   return entries.map((pv) => ({ value: pv.id, label: formatPolicyOption(pv) }))
 }
 

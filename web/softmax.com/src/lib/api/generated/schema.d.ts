@@ -45,77 +45,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/stats/policies/versions/{policy_version_id_str}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Policy Version */
-    get: operations["get_policy_version_stats_policies_versions__policy_version_id_str__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/policies/my-versions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get My Policy Versions */
-    get: operations["get_my_policy_versions_stats_policies_my_versions_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/policies/{policy_version_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get Policy By Id
-     * @description Get a policy version by ID. Visibility filtered based on user.
-     */
-    get: operations["get_policy_by_id_stats_policies__policy_version_id__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/policies/versions/{policy_version_id_str}/tags": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    /** Update Policy Version Tags Route */
-    put: operations["update_policy_version_tags_route_stats_policies_versions__policy_version_id_str__tags_put"];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/stats/policies/submit/presigned-url": {
     parameters: {
       query?: never;
@@ -184,6 +113,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/stats/policy-versions/{policy_version_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Policy Version Detail */
+    get: operations["get_policy_version_detail_stats_policy_versions__policy_version_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/stats/policy-versions": {
     parameters: {
       query?: never;
@@ -193,23 +139,6 @@ export interface paths {
     };
     /** Get Policy Versions */
     get: operations["get_policy_versions_stats_policy_versions_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/policies/{policy_id}/versions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Versions For Policy */
-    get: operations["get_versions_for_policy_stats_policies__policy_id__versions_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -229,23 +158,6 @@ export interface paths {
     put?: never;
     /** Query Episodes */
     post: operations["query_episodes_stats_episodes_query_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/jobs/batch": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** Create Jobs Batch */
-    post: operations["create_jobs_batch_jobs_batch_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -313,8 +225,7 @@ export interface paths {
     /** Get Job */
     get: operations["get_job_jobs__job_id__get"];
     put?: never;
-    /** Update Job */
-    post: operations["update_job_jobs__job_id__post"];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -675,64 +586,6 @@ export interface components {
       position: number;
       policy: components["schemas"]["PolicyVersionSummary"];
     };
-    /** JobRequest */
-    JobRequest: {
-      /** @default pending */
-      status: components["schemas"]["JobStatus"];
-      /**
-       * Worker
-       * @description Name of the worker that started the job
-       */
-      worker?: string | null;
-      /**
-       * Result
-       * @description Contains job-specific results, including possibly errors
-       */
-      result?: {
-        [key: string]: unknown;
-      } | null;
-      /**
-       * Error
-       * @description Tracks k8s-lifecycle errors, not semantic job errors
-       */
-      error?: string | null;
-      /**
-       * Error Type
-       * @description Classified error type: timeout, oom, policy_error, unknown
-       */
-      error_type?: string | null;
-      job_type: components["schemas"]["JobType"];
-      /** Job */
-      job: {
-        [key: string]: unknown;
-      };
-      /**
-       * Id
-       * Format: uuid
-       */
-      id?: string;
-      /** User Id */
-      user_id: string;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at?: string;
-      /** Dispatched At */
-      dispatched_at?: string | null;
-      /** Running At */
-      running_at?: string | null;
-      /** Completed At */
-      completed_at?: string | null;
-    };
-    /** JobRequestCreate */
-    JobRequestCreate: {
-      job_type: components["schemas"]["JobType"];
-      /** Job */
-      job: {
-        [key: string]: unknown;
-      };
-    };
     /** JobRequestResponse */
     JobRequestResponse: {
       /** User Id */
@@ -777,33 +630,6 @@ export interface components {
       policy_versions: components["schemas"]["JobPolicyVersionSummary"][];
       episode?: components["schemas"]["JobEpisodeInfo"] | null;
       match?: components["schemas"]["JobMatchInfo"] | null;
-    };
-    /** JobRequestUpdate */
-    JobRequestUpdate: {
-      /** @description Tracks k8s-lifecycle status, not semantic job status */
-      status?: components["schemas"]["JobStatus"] | null;
-      /**
-       * Worker
-       * @description Name of the worker that started the job
-       */
-      worker?: string | null;
-      /**
-       * Result
-       * @description Contains job-specific results, including possibly errors
-       */
-      result?: {
-        [key: string]: unknown;
-      } | null;
-      /**
-       * Error
-       * @description Tracks k8s-lifecycle errors, not semantic job errors
-       */
-      error?: string | null;
-      /**
-       * Error Type
-       * @description Classified error type: timeout, oom, policy_error, unknown
-       */
-      error_type?: string | null;
     };
     /**
      * JobStatus
@@ -869,11 +695,6 @@ export interface components {
       notes: string | null;
       /** Created At */
       created_at: string;
-    };
-    /** MyPolicyVersionsResponse */
-    MyPolicyVersionsResponse: {
-      /** Entries */
-      entries: components["schemas"]["PublicPolicyVersionRow"][];
     };
     /** PoliciesResponse */
     PoliciesResponse: {
@@ -980,6 +801,48 @@ export interface components {
       /** Submit Error */
       submit_error?: string | null;
     };
+    /** PolicyVersionRow */
+    PolicyVersionRow: {
+      /** User Id */
+      user_id: string;
+      user?: components["schemas"]["UserRow"] | null;
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /**
+       * Policy Id
+       * Format: uuid
+       */
+      policy_id: string;
+      /** Name */
+      name: string;
+      /** Version */
+      version: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Policy Created At
+       * Format: date-time
+       */
+      policy_created_at: string;
+      /** Tags */
+      tags?: {
+        [key: string]: string;
+      };
+      /** Attributes */
+      attributes?: {
+        [key: string]: unknown;
+      };
+      /** Internal Id */
+      internal_id?: number | null;
+      /** S3 Path */
+      s3_path?: string | null;
+    };
     /** PolicyVersionSummary */
     PolicyVersionSummary: {
       /**
@@ -992,49 +855,10 @@ export interface components {
       /** Version */
       version: number | null;
     };
-    /** PolicyVersionWithName */
-    PolicyVersionWithName: {
-      /** User Id */
-      user_id: string;
-      user?: components["schemas"]["UserRow"] | null;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /** Internal Id */
-      internal_id: number | null;
-      /**
-       * Policy Id
-       * Format: uuid
-       */
-      policy_id: string;
-      /** Version */
-      version: number;
-      /** S3 Path */
-      s3_path: string | null;
-      /** Git Hash */
-      git_hash: string | null;
-      /** Policy Spec */
-      policy_spec: {
-        [key: string]: unknown;
-      };
-      /** Attributes */
-      attributes: {
-        [key: string]: unknown;
-      };
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Name */
-      name: string;
-    };
     /** PolicyVersionsResponse */
     PolicyVersionsResponse: {
       /** Entries */
-      entries: components["schemas"]["PublicPolicyVersionRow"][];
+      entries: components["schemas"]["PolicyVersionRow"][];
       /** Total Count */
       total_count: number;
     };
@@ -1076,42 +900,6 @@ export interface components {
        * Format: uuid
        */
       upload_id: string;
-    };
-    /** PublicPolicyVersionRow */
-    PublicPolicyVersionRow: {
-      /** User Id */
-      user_id: string;
-      user?: components["schemas"]["UserRow"] | null;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      /**
-       * Policy Id
-       * Format: uuid
-       */
-      policy_id: string;
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /**
-       * Policy Created At
-       * Format: date-time
-       */
-      policy_created_at: string;
-      /** Name */
-      name: string;
-      /** Version */
-      version: number;
-      /** Tags */
-      tags?: {
-        [key: string]: string;
-      };
-      /** Version Count */
-      version_count?: number | null;
     };
     /** SeasonResponse */
     SeasonResponse: {
@@ -1300,125 +1088,6 @@ export interface operations {
       };
     };
   };
-  get_policy_version_stats_policies_versions__policy_version_id_str__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        policy_version_id_str: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PolicyVersionWithName"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_my_policy_versions_stats_policies_my_versions_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["MyPolicyVersionsResponse"];
-        };
-      };
-    };
-  };
-  get_policy_by_id_stats_policies__policy_version_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        policy_version_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["PublicPolicyVersionRow"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_policy_version_tags_route_stats_policies_versions__policy_version_id_str__tags_put: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        policy_version_id_str: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          [key: string]: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["UUIDResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
   get_submit_policy_presigned_url_stats_policies_submit_presigned_url_post: {
     parameters: {
       query?: never;
@@ -1525,20 +1194,13 @@ export interface operations {
       };
     };
   };
-  get_policy_versions_stats_policy_versions_get: {
+  get_policy_version_detail_stats_policy_versions__policy_version_id__get: {
     parameters: {
-      query?: {
-        name_exact?: string | null;
-        name_fuzzy?: string | null;
-        version?: number | null;
-        policy_version_ids?: string[] | null;
-        /** @description Filter to only policies owned by the authenticated user */
-        mine?: boolean;
-        limit?: number;
-        offset?: number;
-      };
+      query?: never;
       header?: never;
-      path?: never;
+      path: {
+        policy_version_id: string;
+      };
       cookie?: never;
     };
     requestBody?: never;
@@ -1549,7 +1211,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["PolicyVersionsResponse"];
+          "application/json": components["schemas"]["PolicyVersionRow"];
         };
       };
       /** @description Validation Error */
@@ -1563,16 +1225,20 @@ export interface operations {
       };
     };
   };
-  get_versions_for_policy_stats_policies__policy_id__versions_get: {
+  get_policy_versions_stats_policy_versions_get: {
     parameters: {
       query?: {
+        name_exact?: string | null;
+        name_fuzzy?: string | null;
+        version?: number | null;
+        policy_version_ids?: string[] | null;
+        policy_id?: string | null;
+        mine?: boolean;
         limit?: number;
         offset?: number;
       };
       header?: never;
-      path: {
-        policy_id: string;
-      };
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;
@@ -1617,39 +1283,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["EpisodeQueryResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  create_jobs_batch_jobs_batch_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["JobRequestCreate"][];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": string[];
         };
       };
       /** @description Validation Error */
@@ -1782,41 +1415,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["JobRequestResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  update_job_jobs__job_id__post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        job_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["JobRequestUpdate"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["JobRequest"];
         };
       };
       /** @description Validation Error */

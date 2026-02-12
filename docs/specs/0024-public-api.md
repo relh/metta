@@ -35,25 +35,7 @@ Account status, uploading policies, submitting to pools, checking policy status 
 
 ### Per-Episode Outputs
 
-- **Game and agent stats.** Docs describe what each field is intended to mean. We treat it as a breaking change if the
-  meaning of a field changes (best-effort).
-- **Replays.**
-- **Py logs.** We timestamp these and specify our log format so end users know how to parse them. We support a final
-  end-of-episode shutdown call so policies can emit a final log.
-
 ## Design Decisions
-
-### Frontend types: trust, don't validate
-
-Frontends generate TypeScript types from the OpenAPI spec but do not validate responses at runtime (no Zod). If the
-server changes shape, the frontend breaks either way -- Zod just changes the error from a runtime property access to a
-parse failure. Validation adds maintenance cost (keeping Zod schemas in sync with the OpenAPI spec) for marginal benefit
-when we control both sides. Prior art: Zod validation in gridworks was too fragile.
-
-### Python client: update existing clients
-
-We already have `TournamentClient` and `StatsClient`. Rather than full OpenAPI codegen (options evaluated, all ugly), we
-update these existing clients to match the consolidated API surface.
 
 ### Auth enforcement: route-level test
 
@@ -75,13 +57,14 @@ about what's available, and handlers don't need to reason about partial auth.
 
 ## Roadmap
 
-- [ x ] Go live with API docs
-- [ x ] Frontends (softmax.com, Observatory) consume types from the internal OpenAPI spec
-- [ ] Consolidate and clean endpoints (backwards-incompatible)
+- [x] Go live with API docs
+- [x] Frontends (softmax.com, Observatory) consume types from the internal OpenAPI spec
+- [x] CI drift detection: compare generated OpenAPI spec against checked-in copy in `app_backend/.../generated/`
+- [x] Consolidate and clean endpoints (backwards-incompatible, partial progress in nishad/api-cleanup)
+- [ ] Add docs for things we don't yet document: job logs, agent stats, game stats
 - [ ] Update existing TournamentClient and StatsClient
-- [ ] Gate non-public endpoints behind is-softmax auth, enforced by route-level auth test
-- [ ] CI drift detection: compare generated OpenAPI spec against checked-in copy in `app_backend/.../generated/`
 - [ ] Update cogames repo to reference the docs
-- [ ] Enrich API docs with field-level descriptions (agent stats, game stats)
+- [ ] Include field-level descriptions (agent stats, game stats)
+- [ ] Gate non-public endpoints behind is-softmax auth, enforced by route-level auth test
 - [ ] Remove `/stats/` prefix: deploy both old and new paths, migrate frontends/clients to new paths, then remove old
       paths

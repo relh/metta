@@ -26,39 +26,71 @@ type WithUser<T extends { user?: Schemas['UserRow'] | null }> = Omit<T, 'user'> 
 // ── User ────────────────────────────────────────────────────────────────
 export type UserRow = Schemas['UserRow']
 
-// Utility: Pydantic `dict[str, Any]` → OpenAPI `additionalProperties: {}`
-// → TS `{ [key: string]: unknown }`.  Override to `Record<string, any>` so
-// property access works without narrowing.  Removable after roadmap step 9.
-type AnyDict<T, K extends keyof T> = Omit<T, K> & { [P in K]: Record<string, any> }
+// ── Eval tasks (not in generated spec — routes have include_in_schema=False) ──
+export type TaskStatus = 'unprocessed' | 'running' | 'canceled' | 'done' | 'error' | 'system_error'
 
-// ── Eval tasks ──────────────────────────────────────────────────────────
-export type EvalTask = WithUser<
-  Omit<Required<Schemas['EvalTaskRow']>, 'attributes' | 'status_details'> & {
-    attributes: Record<string, any>
-    status_details: Record<string, any> | null
-  }
->
-export type TaskAttempt = Omit<Schemas['TaskAttemptRow'], 'status_details'> & {
+export type EvalTask = {
+  user_id: string
+  user: UserRow | null
+  id: number
+  command: string
+  data_uri: string | null
+  git_hash: string | null
+  attributes: Record<string, any>
+  created_at: string
+  is_finished: boolean
+  latest_attempt_id: number | null
+  attempt_number: number
+  status: TaskStatus
+  status_details: Record<string, any> | null
+  assigned_at: string | null
+  assignee: string | null
+  started_at: string | null
+  finished_at: string | null
+  output_log_path: string | null
+}
+
+export type TaskAttempt = {
+  id: number
+  task_id: number
+  attempt_number: number
+  assigned_at: string | null
+  assignee: string | null
+  started_at: string | null
+  finished_at: string | null
+  output_log_path: string | null
+  status: TaskStatus
   status_details: Record<string, any> | null
 }
-export type PaginatedEvalTasksResponse = Omit<Schemas['PaginatedTasksResponse'], 'tasks'> & {
+
+export type PaginatedEvalTasksResponse = {
   tasks: EvalTask[]
+  total_count: number
+  page: number
+  page_size: number
+  total_pages: number
 }
-export type TaskAttemptsResponse = Omit<Schemas['TaskAttemptsResponse'], 'attempts'> & {
+
+export type TaskAttemptsResponse = {
   attempts: TaskAttempt[]
 }
-export type EvalTaskCreateRequest = Schemas['TaskCreateRequest']
+
+export type EvalTaskCreateRequest = {
+  command: string
+  git_hash?: string | null
+  data_file?: Record<string, any> | null
+  attributes?: Record<string, any>
+}
 
 // ── Policies ────────────────────────────────────────────────────────────
 export type PolicyRow = WithUser<Schemas['PolicyRow']>
-export type PublicPolicyVersionRow = WithUser<Schemas['PublicPolicyVersionRow']>
-export type PolicyVersionWithName = WithUser<Schemas['PolicyVersionWithName']>
+export type PolicyVersionRow = WithUser<Schemas['PolicyVersionRow']>
 export type PoliciesResponse = {
   entries: PolicyRow[]
   total_count: number
 }
 export type PolicyVersionsResponse = {
-  entries: PublicPolicyVersionRow[]
+  entries: PolicyVersionRow[]
   total_count: number
 }
 
@@ -108,14 +140,17 @@ export type PoolMembership = Schemas['PoolMembership']
 export type PolicySummary = Schemas['PolicySummary']
 export type SeasonDetail = Schemas['SeasonResponse']
 export type SeasonVersionInfo = Schemas['SeasonVersionInfo']
-export type MatchStatus = Schemas['MatchSummary-Output']['status']
 export type SeasonMatchSummary = Schemas['MatchSummary-Output']
 export type SeasonMatchPlayerSummary = Schemas['MatchPlayerSummary']
 export type SubmissionResponse = Schemas['SubmitResponse']
 export type MembershipHistoryEntry = Schemas['MembershipHistoryEntry']
 
-// ── SQL ─────────────────────────────────────────────────────────────────
-export type TableInfo = Schemas['TableInfo']
+// ── SQL (not in generated spec — routes have include_in_schema=False) ──
+export type TableInfo = {
+  table_name: string
+  column_count: number
+  row_count: number
+}
 export type TableSchema = {
   table_name: string
   columns: Array<{
@@ -126,14 +161,27 @@ export type TableSchema = {
     max_length: number | null
   }>
 }
-export type SQLQueryRequest = Schemas['SQLQueryRequest']
+export type SQLQueryRequest = {
+  query: string
+}
 export type SQLQueryResponse = {
   columns: string[]
   rows: any[][]
   row_count: number
 }
-export type AIQueryRequest = Schemas['AIQueryRequest']
-export type AIQueryResponse = Schemas['AIQueryResponse']
+export type AIQueryRequest = {
+  description: string
+}
+export type AIQueryResponse = {
+  query: string
+}
 
-// ── Smart Plugs ─────────────────────────────────────────────────────────
-export type SmartPlugStatus = Schemas['SmartPlugStatus']
+// ── Smart Plugs (not in generated spec — routes have include_in_schema=False) ──
+export type SmartPlugStatus = {
+  key: string
+  label: string
+  alias?: string | null
+  online?: boolean | null
+  is_on?: boolean | null
+  apower?: number | null
+}

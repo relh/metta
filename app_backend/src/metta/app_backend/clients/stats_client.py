@@ -17,11 +17,10 @@ from metta.app_backend.routes.stats_routes import (
     CompleteBulkUploadRequest,
     EpisodeQueryRequest,
     EpisodeQueryResponse,
-    MyPolicyVersionsResponse,
     PolicyCreate,
     PolicyVersionCreate,
+    PolicyVersionRow,
     PolicyVersionsResponse,
-    PolicyVersionWithName,
     PresignedUploadUrlResponse,
     UUIDResponse,
 )
@@ -58,8 +57,8 @@ class StatsClient(BaseAppBackendClient):
             UUIDResponse, "POST", f"/stats/policies/{policy_id}/versions", json=data.model_dump(mode="json")
         )
 
-    def get_policy_version(self, policy_version_id: uuid.UUID) -> PolicyVersionWithName:
-        return self._make_request(PolicyVersionWithName, "GET", f"/stats/policies/versions/{policy_version_id}")
+    def get_policy_version(self, policy_version_id: uuid.UUID) -> PolicyVersionRow:
+        return self._make_request(PolicyVersionRow, "GET", f"/stats/policy-versions/{policy_version_id}")
 
     def create_eval_task(self, request: TaskCreateRequest) -> EvalTaskRow:
         return self._make_request(EvalTaskRow, "POST", "/tasks", json=request.model_dump(mode="json"))
@@ -110,21 +109,15 @@ class StatsClient(BaseAppBackendClient):
         return completion_response
 
     def update_policy_version_tags(self, policy_version_id: uuid.UUID, tags: dict[str, str]) -> UUIDResponse:
-        """Update tags for a specific policy version in Observatory."""
-        return self._make_request(UUIDResponse, "PUT", f"/stats/policies/versions/{policy_version_id}/tags", json=tags)
-
-    def get_my_policy_versions(self) -> MyPolicyVersionsResponse:
-        return self._make_request(
-            MyPolicyVersionsResponse,
-            "GET",
-            "/stats/policies/my-versions",
-        )
+        return self._make_request(UUIDResponse, "PUT", f"/stats/policy-versions/{policy_version_id}/tags", json=tags)
 
     def get_policy_versions(
         self,
         name_exact: str | None = None,
         name_fuzzy: str | None = None,
         version: int | None = None,
+        policy_id: str | None = None,
+        mine: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> PolicyVersionsResponse:
@@ -133,20 +126,13 @@ class StatsClient(BaseAppBackendClient):
                 "name_exact": name_exact,
                 "name_fuzzy": name_fuzzy,
                 "version": version,
+                "policy_id": policy_id,
+                "mine": "true" if mine else None,
                 "limit": limit,
                 "offset": offset,
             }
         )
         return self._make_request(PolicyVersionsResponse, "GET", "/stats/policy-versions", params=params)
-
-    def get_versions_for_policy(
-        self,
-        policy_id: str,
-        limit: int = 500,
-        offset: int = 0,
-    ) -> PolicyVersionsResponse:
-        params = remove_none_values({"limit": limit, "offset": offset})
-        return self._make_request(PolicyVersionsResponse, "GET", f"/stats/policies/{policy_id}/versions", params=params)
 
     def query_episodes(self, request: EpisodeQueryRequest) -> EpisodeQueryResponse:
         return self._make_request(

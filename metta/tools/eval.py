@@ -8,7 +8,7 @@ from pydantic import Field
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
-from metta.app_backend.routes.stats_routes import PolicyVersionWithName
+from metta.app_backend.routes.stats_routes import PolicyVersionRow
 from metta.common.tool import Tool
 from metta.common.tool.tool import ToolResult, ToolWithResult
 from metta.common.wandb.context import WandbRunAppendContext
@@ -56,7 +56,7 @@ class EvaluateTool(Tool):
         observatory_writer: ObservatoryWriter | None = None
         wandb_writer: WandbWriter | None = None
         wandb_context = contextlib.nullcontext(None)
-        primary_policy_version: PolicyVersionWithName | None = None
+        primary_policy_version: PolicyVersionRow | None = None
 
         stats_client: StatsClient | None = None
         if self.push_metrics_to_wandb or any(uri.startswith("metta://") for uri in policy_uris):
@@ -66,7 +66,7 @@ class EvaluateTool(Tool):
 
         if stats_client:
             resolver = MettaSchemeResolver(self.stats_server_uri)
-            policy_versions: list[PolicyVersionWithName | None] = []
+            policy_versions: list[PolicyVersionRow | None] = []
             for uri in policy_uris:
                 if uri.startswith("metta://"):
                     try:

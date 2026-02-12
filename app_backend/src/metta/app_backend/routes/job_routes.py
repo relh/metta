@@ -196,7 +196,7 @@ class EpisodeStatsResponse(BaseModel):
 def create_job_router() -> APIRouter:
     router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-    @router.post("/batch")
+    @router.post("/batch", include_in_schema=False)
     @timed_http_handler
     async def create_jobs_batch(jobs: list[JobRequestCreate], user: CheckSoftmaxUser) -> list[UUID]:
         if not jobs:
@@ -570,7 +570,7 @@ def create_job_router() -> APIRouter:
             await fill_user_data([response], current_user=user)
             return response
 
-    @router.post("/{job_id}")
+    @router.post("/{job_id}", include_in_schema=False)
     @timed_http_handler
     async def update_job(job_id: UUID, request: JobRequestUpdate, _user: CheckSoftmaxUser) -> JobRequest:
         async with db_session() as session:

@@ -7,7 +7,7 @@ import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { Spinner } from '../components/Spinner'
 import { Table, TH } from '../components/Table'
-import { PaginatedEvalTasksResponse, PublicPolicyVersionRow, TaskFilters } from '../lib/repo'
+import { PaginatedEvalTasksResponse, PolicyVersionRow, TaskFilters } from '../lib/repo'
 import { TaskRow } from './TaskRow'
 
 const pageSize = 50
@@ -59,7 +59,7 @@ export const TasksTable: FC<{
   const currentPage = tasksResponse?.page || 1
   const [filters, setFilters] = useState<TaskFilters>(initialFilters || {})
   const isInitialMount = useRef(true)
-  const [policyInfoMap, setPolicyInfoMap] = useState<Record<string, PublicPolicyVersionRow>>({})
+  const [policyInfoMap, setPolicyInfoMap] = useState<Record<string, PolicyVersionRow>>({})
   const attemptedPolicyIds = useRef<Set<string>>(new Set())
 
   // Load tasks
@@ -86,7 +86,7 @@ export const TasksTable: FC<{
             for (const pvId of policyVersionIds) {
               attemptedPolicyIds.current.add(pvId)
             }
-            const newPolicyInfo: Record<string, PublicPolicyVersionRow> = {}
+            const newPolicyInfo: Record<string, PolicyVersionRow> = {}
             for (const pv of policyVersions) {
               newPolicyInfo[pv.id] = pv
             }

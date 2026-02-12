@@ -323,24 +323,22 @@ class Benchmarker:
             lambda: self.client.get("/stats/policy-versions", params={"mine": "true"}, headers=self.user_headers),
         )
 
-        # GET /stats/policies/{pv_id} - single policy version lookup
+        # GET /stats/policy-versions/{pv_id} - single policy version lookup
         sample_pv_id = str(self.data.policy_versions[0])
         self._benchmark(
-            "GET /stats/policies/{pv_id}",
-            lambda: self.client.get(f"/stats/policies/{sample_pv_id}", headers=self.softmax_headers),
+            "GET /stats/policy-versions/{pv_id}",
+            lambda: self.client.get(f"/stats/policy-versions/{sample_pv_id}", headers=self.softmax_headers),
         )
 
-        # GET /stats/policies/{policy_id}/versions
+        # GET /stats/policy-versions?policy_id=...
         sample_policy_id = str(self.data.policies[0])
         self._benchmark(
-            "GET /stats/policies/{policy_id}/versions",
-            lambda: self.client.get(f"/stats/policies/{sample_policy_id}/versions", headers=self.softmax_headers),
-        )
-
-        # GET /stats/policies/my-versions
-        self._benchmark(
-            "GET /stats/policies/my-versions",
-            lambda: self.client.get("/stats/policies/my-versions", headers=self.user_headers),
+            "GET /stats/policy-versions?policy_id=...",
+            lambda: self.client.get(
+                "/stats/policy-versions",
+                params={"policy_id": sample_policy_id},
+                headers=self.softmax_headers,
+            ),
         )
 
         # POST /stats/episodes/query - various queries

@@ -15,10 +15,9 @@ import type {
   PaginatedEvalTasksResponse,
   PoliciesResponse,
   PolicySummary,
+  PolicyVersionRow,
   PolicyVersionSummary,
-  PolicyVersionWithName,
   PolicyVersionsResponse,
-  PublicPolicyVersionRow,
   SQLQueryRequest,
   SQLQueryResponse,
   SeasonDetail,
@@ -46,6 +45,7 @@ export type {
   EvalTask,
   EvalTaskCreateRequest,
   TaskAttempt,
+  TaskStatus,
   JobEpisodeInfo,
   JobMatchInfo,
   JobPolicyVersionSummary,
@@ -58,12 +58,11 @@ export type {
   PolicyRow,
   PolicyStatsDetail,
   PolicySummary,
+  PolicyVersionRow,
   PolicyVersionSummary,
-  PolicyVersionWithName,
   PolicyVersionsResponse,
   PoolInfo,
   PoolMembership,
-  PublicPolicyVersionRow,
   SQLQueryRequest,
   SQLQueryResponse,
   SeasonDetail,
@@ -89,8 +88,6 @@ const decodePathSegment = (value: string) => {
 }
 
 const encodePathSegment = (value: string) => encodeURIComponent(decodePathSegment(value))
-
-export type TaskStatus = 'unprocessed' | 'running' | 'canceled' | 'done' | 'error' | 'system_error'
 
 export type MatchStatus = 'pending' | 'scheduled' | 'running' | 'completed' | 'failed'
 
@@ -425,13 +422,13 @@ export class Repo {
   }
 
   // Policy methods
-  async getPolicyVersion(policyVersionId: string): Promise<PolicyVersionWithName> {
-    return this.apiCall<PolicyVersionWithName>(`/stats/policies/versions/${policyVersionId}`)
+  async getPolicyVersion(policyVersionId: string): Promise<PolicyVersionRow> {
+    return this.apiCall<PolicyVersionRow>(`/stats/policy-versions/${policyVersionId}`)
   }
 
-  async getPolicyVersionsBatch(policyVersionIds: string[]): Promise<PublicPolicyVersionRow[]> {
+  async getPolicyVersionsBatch(policyVersionIds: string[]): Promise<PolicyVersionRow[]> {
     const chunkSize = 10
-    const results: PublicPolicyVersionRow[] = []
+    const results: PolicyVersionRow[] = []
 
     for (let i = 0; i < policyVersionIds.length; i += chunkSize) {
       const chunk = policyVersionIds.slice(i, i + chunkSize)
@@ -484,10 +481,10 @@ export class Repo {
     params?: { limit?: number; offset?: number }
   ): Promise<PolicyVersionsResponse> {
     const searchParams = new URLSearchParams()
+    searchParams.append('policy_id', policyId)
     if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
     if (params?.offset !== undefined) searchParams.append('offset', params.offset.toString())
-    const query = searchParams.toString()
-    return this.apiCall<PolicyVersionsResponse>(`/stats/policies/${policyId}/versions${query ? `?${query}` : ''}`)
+    return this.apiCall<PolicyVersionsResponse>(`/stats/policy-versions?${searchParams}`)
   }
 
   async getJobs(params?: {

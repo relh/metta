@@ -6,7 +6,7 @@ import { AppContext } from '@/app/(main)/AppContext'
 import { Card } from '@/components/Card'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
-import { EpisodeStatsResponse, PolicyStatsDetail, PublicPolicyVersionRow } from '@/lib/repo'
+import { EpisodeStatsResponse, PolicyStatsDetail, PolicyVersionRow } from '@/lib/repo'
 import { formatPolicyVersion } from '@/utils/format'
 
 function fmt(v: number | null | undefined): string {
@@ -75,7 +75,7 @@ export const GameStats: FC<{ attributes: Record<string, any> }> = ({ attributes 
   )
 }
 
-function policyLabel(policy: PolicyStatsDetail, info?: PublicPolicyVersionRow): string {
+function policyLabel(policy: PolicyStatsDetail, info?: PolicyVersionRow): string {
   if (info) return formatPolicyVersion(info)
   if (policy.policy_name) return `${policy.policy_name} v${policy.policy_version}`
   return `Policy position ${policy.position}`
@@ -116,7 +116,7 @@ function downloadBlob(content: string, filename: string) {
 
 const SortablePolicyHeader: FC<{
   policy: PolicyStatsDetail
-  info?: PublicPolicyVersionRow
+  info?: PolicyVersionRow
   sortKey: string
   active: Sort
   onSort: (key: string) => void
@@ -159,7 +159,7 @@ const Section: FC<React.PropsWithChildren<{ label: string; count: string; open: 
 export const PoliciesAndAgents: FC<{ jobId?: string }> = ({ jobId }) => {
   const { repo } = use(AppContext)
   const [episodeStats, setEpisodeStats] = useState<EpisodeStatsResponse | null>(null)
-  const [policyInfo, setPolicyInfo] = useState<Record<string, PublicPolicyVersionRow>>({})
+  const [policyInfo, setPolicyInfo] = useState<Record<string, PolicyVersionRow>>({})
   const [showMetrics, setShowMetrics] = useState(false)
   const [showAgents, setShowAgents] = useState(false)
   const [metricFilter, setMetricFilter] = useState('')
@@ -180,7 +180,7 @@ export const PoliciesAndAgents: FC<{ jobId?: string }> = ({ jobId }) => {
             .getPolicyVersionsBatch(ids)
             .then((versions) => {
               if (ignore) return
-              const map: Record<string, PublicPolicyVersionRow> = {}
+              const map: Record<string, PolicyVersionRow> = {}
               for (const v of versions) map[v.id] = v
               setPolicyInfo(map)
             })

@@ -49,7 +49,7 @@ class AIQueryResponse(BaseModel):
 
 
 def create_sql_router() -> APIRouter:
-    router = APIRouter(prefix="/sql", tags=["sql"])
+    router = APIRouter(prefix="/sql", tags=["sql"], include_in_schema=False)
 
     @router.get("/tables")
     @timed_route("list_tables")

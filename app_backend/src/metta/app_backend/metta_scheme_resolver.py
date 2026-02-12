@@ -8,7 +8,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.app_backend.routes.stats_routes import PolicyVersionWithName
+from metta.app_backend.routes.stats_routes import PolicyVersionRow
 from metta.common.util.constants import PROD_STATS_SERVER_URI
 from mettagrid.util.uri_resolvers.base import MettaParsedScheme, SchemeResolver
 from mettagrid.util.uri_resolvers.schemes import resolve_uri
@@ -82,7 +82,7 @@ class MettaSchemeResolver(SchemeResolver):
             raise ValueError("metta:// URIs must include a path")
         return MettaParsedScheme(canonical=uri, path=path)
 
-    def get_policy_version(self, uri: str) -> PolicyVersionWithName:
+    def get_policy_version(self, uri: str) -> PolicyVersionRow:
         parsed = self.parse(uri)
         path = parsed.path
         if not path:

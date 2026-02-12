@@ -32,7 +32,7 @@ class RunIdResponse(BaseModel):
 
 
 def create_sweep_router() -> APIRouter:
-    router = APIRouter(prefix="/sweeps", tags=["sweeps"])
+    router = APIRouter(prefix="/sweeps", tags=["sweeps"], include_in_schema=False)
 
     @router.post("/{sweep_name}/create_sweep")
     @timed_http_handler

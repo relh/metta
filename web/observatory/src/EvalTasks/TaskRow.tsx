@@ -9,7 +9,7 @@ import { StyledLink } from '../components/StyledLink'
 import { Table, TD, TH, TR } from '../components/Table'
 import { TaskBadge } from '../components/TaskBadge'
 import { UserDisplay } from '../components/UserDisplay'
-import { EvalTask, PublicPolicyVersionRow, TaskAttempt } from '../lib/repo'
+import { EvalTask, PolicyVersionRow, TaskAttempt } from '../lib/repo'
 import { formatDate, formatDurationBetween } from '../utils/datetime'
 import { TaskAttemptTimeline } from './TaskAttemptTimeline'
 import { parsePolicyVersionId } from './TasksTable'
@@ -53,7 +53,7 @@ function getDatadogLogsUrl(params: DatadogLogsParams): string | null {
 
 type TaskRowProps = {
   task: EvalTask
-  policyInfoMap: Record<string, PublicPolicyVersionRow>
+  policyInfoMap: Record<string, PolicyVersionRow>
   attemptedPolicyIds: Set<string>
 }
 

@@ -30,7 +30,7 @@ class SmartPlugSetResponse(BaseModel):
 
 
 def create_smart_plug_router() -> APIRouter:
-    router = APIRouter(prefix="/infra/smart-plugs", tags=["infra"])
+    router = APIRouter(prefix="/infra/smart-plugs", tags=["infra"], include_in_schema=False)
 
     @router.get("/status", response_model=SmartPlugStatusResponse)
     async def get_status(user: CheckSoftmaxUser) -> SmartPlugStatusResponse:

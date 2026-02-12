@@ -197,7 +197,7 @@ class TournamentAPI:
     def get_policy_version(self, policy_version_id: str) -> dict | None:
         """Get policy version details by ID."""
         try:
-            resp = self.client.get(f"/stats/policies/versions/{policy_version_id}")
+            resp = self.client.get(f"/stats/policy-versions/{policy_version_id}")
             if resp.status_code == 200:
                 return resp.json()
         except Exception:
