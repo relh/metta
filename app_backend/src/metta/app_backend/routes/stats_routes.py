@@ -15,6 +15,7 @@ from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
 from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.routes.docs_routes import public_api
 from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
@@ -203,6 +204,7 @@ class PolicyVersionsResponse(BaseModel):
     total_count: int
 
 
+@public_api
 def create_stats_router() -> APIRouter:
     from metta.app_backend.job_runner.config import get_dispatch_config  # noqa: PLC0415
 

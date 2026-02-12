@@ -48,6 +48,7 @@ from metta.app_backend.models.tournament import Match, Pool
 from metta.app_backend.otel.metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.routes.docs_routes import public_api
 from metta.app_backend.routes.tournament_routes import PolicyVersionSummary
 from metta.app_backend.user_data import Ownable, fill_user_data
 
@@ -191,6 +192,7 @@ class EpisodeStatsResponse(BaseModel):
     steps: int | None
 
 
+@public_api
 def create_job_router() -> APIRouter:
     router = APIRouter(prefix="/jobs", tags=["jobs"])
 

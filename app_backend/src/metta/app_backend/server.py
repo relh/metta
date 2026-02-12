@@ -28,6 +28,7 @@ from metta.app_backend.routes import (
     sweep_routes,
     tournament_routes,
 )
+from metta.app_backend.routes.docs_routes import collect_public_tags, create_docs_router
 
 
 class WhoAmIResponse(BaseModel):
@@ -122,27 +123,25 @@ def create_app() -> fastapi.FastAPI:
         allow_headers=["*"],
     )
 
-    # Create routers with the provided StatsRepo
-    eval_task_router = eval_task_routes.create_eval_task_router()
-    sql_router = sql_routes.create_sql_router()
-    stats_router = stats_routes.create_stats_router()
-    sweep_router = sweep_routes.create_sweep_router()
-    jobs_router = job_routes.create_job_router()
-    tournament_router = tournament_routes.create_tournament_router()
-    smart_plug_router = smart_plug_routes.create_smart_plug_router()
-
-    app.include_router(eval_task_router)
-    app.include_router(sql_router)
-    app.include_router(stats_router)
-    app.include_router(sweep_router)
-    app.include_router(jobs_router)
-    app.include_router(tournament_router)
-    app.include_router(smart_plug_router)
+    routers = [
+        eval_task_routes.create_eval_task_router(),
+        sql_routes.create_sql_router(),
+        stats_routes.create_stats_router(),
+        sweep_routes.create_sweep_router(),
+        job_routes.create_job_router(),
+        tournament_routes.create_tournament_router(),
+        smart_plug_routes.create_smart_plug_router(),
+    ]
+    for router in routers:
+        app.include_router(router)
 
     @app.get("/whoami")
     async def whoami(request: fastapi.Request) -> WhoAmIResponse:
         user = await get_user(request)
         return WhoAmIResponse(user_email=user.email if user else "unknown")
+
+    public_tags = collect_public_tags(routers)
+    app.include_router(create_docs_router(app, public_tags))
 
     return app
 
