@@ -311,46 +311,12 @@ class CoreTrainingLoop:
         self._env_index_cache = experience._range_tensor.to(device=device)
         self._reward_centering_beta_by_agent = torch.empty((0,), device=device, dtype=torch.float32)
         self.trajectory_isolator = trajectory_isolator
-        self._rollout_h2d_stream: torch.cuda.Stream | None = None
-        # Rollout H2D staging uses a dedicated stream + reusable device buffers.
-        # We must ensure the H2D stream never overwrites buffers still in use by the
-        # default stream (inference / experience writeback).
-        self._rollout_staging_slots = 2
-        self._rollout_staging_slot = 0
-        self._rollout_staging_events: list[torch.cuda.Event | None] = [None] * self._rollout_staging_slots
-        self._rollout_env_obs_gpu: list[Tensor | None] = [None] * self._rollout_staging_slots
-        self._rollout_rewards_gpu: list[Tensor | None] = [None] * self._rollout_staging_slots
-        self._rollout_dones_gpu: list[Tensor | None] = [None] * self._rollout_staging_slots
-        self._rollout_truncations_gpu: list[Tensor | None] = [None] * self._rollout_staging_slots
-        self._rollout_teacher_actions_gpu: list[Tensor | None] = [None] * self._rollout_staging_slots
+        self._rollout_transfer_stream: torch.cuda.Stream | None = (
+            torch.cuda.Stream(device=device) if device.type == "cuda" else None
+        )
         self._action_send_stager: _PinnedCudaToCpuStager | None = (
             _PinnedCudaToCpuStager() if device.type == "cuda" else None
         )
-
-    def _ensure_rollout_gpu_buffer(
-        self,
-        buf: Tensor | None,
-        *,
-        like: Tensor,
-        dtype: torch.dtype | None = None,
-    ) -> Tensor:
-        target_dtype = dtype if dtype is not None else like.dtype
-        if buf is None or buf.device != self.device or buf.dtype != target_dtype or buf.shape != like.shape:
-            return torch.empty_like(like, device=self.device, dtype=target_dtype)
-        return buf
-
-    def _ensure_rollout_gpu_buffer_slot(
-        self,
-        bufs: list[Tensor | None],
-        *,
-        slot: int,
-        like: Tensor,
-        dtype: torch.dtype | None = None,
-    ) -> Tensor:
-        buf = bufs[slot]
-        buf = self._ensure_rollout_gpu_buffer(buf, like=like, dtype=dtype)
-        bufs[slot] = buf
-        return buf
 
     def _validate_trajectory_slices_for_epoch(self) -> None:
         runtime_slices = self.trajectory_isolator.slice_plan
@@ -358,19 +324,6 @@ class CoreTrainingLoop:
             raise RuntimeError("Trajectory isolation slice plan is empty for this epoch.")
         if not self.trajectory_isolator.training_phase_primary_policy_slices:
             raise RuntimeError("Trajectory isolation has no policies configured for this epoch.")
-
-        # Validate that every agent is covered by some slice so reward-centering betas
-        # are always assigned. This does synchronize once per epoch on CUDA, which is
-        # fine; the hot loop must remain free of implicit syncs.
-        total_agents = int(self.experience.total_agents)
-        assigned = torch.zeros((total_agents,), device=self.device, dtype=torch.bool)
-        for runtime_slice in runtime_slices:
-            if runtime_slice.env_mask.numel() == 0:
-                continue
-            assigned |= runtime_slice.env_mask
-        if assigned.numel() and not bool(assigned.all().item()):
-            raise RuntimeError("Trajectory isolation does not cover all agents (slice plan has gaps).")
-
         # Skip row-level validation until after first epoch, ie until the replay buffer has real env ids.
         if self.experience.full_rows == 0 and int(self.experience.t_in_row.max().item()) == 0:
             return
@@ -454,61 +407,28 @@ class CoreTrainingLoop:
             with context.stopwatch("_rollout.env_wait"):
                 o, r, d, t, ta, info, training_env_id, _, num_steps = env.get_observations()
             last_env_id = training_env_id
-            staging_slot: int | None = None
             info_rows = _normalize_info_rows(info)
             # Prepare data for policy
             with context.stopwatch("_rollout.td_prep"):
                 td = buffer_step[training_env_id].clone()
                 target_device = td.device
                 assert target_device is not None
-                if target_device.type == "cuda":
-                    if self._rollout_h2d_stream is None:
-                        self._rollout_h2d_stream = torch.cuda.Stream(device=target_device)
-
-                    staging_slot = self._rollout_staging_slot
-                    self._rollout_staging_slot = (self._rollout_staging_slot + 1) % self._rollout_staging_slots
-
-                    # Ensure we don't overwrite a staging slot still being read on the default stream.
-                    event = self._rollout_staging_events[staging_slot]
-                    if event is not None:
-                        self._rollout_h2d_stream.wait_event(event)
-
-                    env_obs_gpu = self._ensure_rollout_gpu_buffer_slot(
-                        self._rollout_env_obs_gpu, slot=staging_slot, like=o
-                    )
-                    rewards_gpu = self._ensure_rollout_gpu_buffer_slot(
-                        self._rollout_rewards_gpu, slot=staging_slot, like=r
-                    )
-                    dones_gpu = self._ensure_rollout_gpu_buffer_slot(
-                        self._rollout_dones_gpu, slot=staging_slot, like=d, dtype=torch.float32
-                    )
-                    trunc_gpu = self._ensure_rollout_gpu_buffer_slot(
-                        self._rollout_truncations_gpu, slot=staging_slot, like=t, dtype=torch.float32
-                    )
-                    teacher_actions_gpu = self._ensure_rollout_gpu_buffer_slot(
-                        self._rollout_teacher_actions_gpu, slot=staging_slot, like=ta
-                    )
-
-                    with torch.cuda.stream(self._rollout_h2d_stream):
-                        # Stable GPU buffers (reused across steps) to reduce allocator churn and
-                        # pave the way for overlap-friendly copies / CUDA graph capture work.
-                        env_obs_gpu.copy_(o, non_blocking=True)
-                        rewards_gpu.copy_(r, non_blocking=True)
-                        dones_gpu.copy_(d, non_blocking=True)
-                        trunc_gpu.copy_(t, non_blocking=True)
-                        teacher_actions_gpu.copy_(ta, non_blocking=True)
-
-                    td["env_obs"] = env_obs_gpu
-                    rewards = rewards_gpu
-                    td["rewards"] = rewards
-                    td["dones"] = dones_gpu
-                    td["truncateds"] = trunc_gpu
-                    td["teacher_actions"] = teacher_actions_gpu
+                all_inputs_pinned_cpu = all(x.device.type == "cpu" and x.is_pinned() for x in (o, r, d, t, ta))
+                transfer_stream = (
+                    self._rollout_transfer_stream if target_device.type == "cuda" and all_inputs_pinned_cpu else None
+                )
+                if transfer_stream is not None:
+                    # Launch transfers on a dedicated stream so they can overlap with
+                    # other GPU work enqueued on the default stream (clone/indexing/etc.).
+                    with torch.cuda.stream(transfer_stream):
+                        env_obs = o.to(device=target_device, non_blocking=True)
+                        rewards = r.to(device=target_device, non_blocking=True)
+                        dones = d.to(device=target_device, dtype=torch.float32, non_blocking=True)
+                        truncateds = t.to(device=target_device, dtype=torch.float32, non_blocking=True)
+                        teacher_actions = ta.to(device=target_device, dtype=torch.long, non_blocking=True)
                 else:
-                    td["env_obs"] = o.to(device=target_device, non_blocking=True)
+                    env_obs = o.to(device=target_device, non_blocking=True)
                     rewards = r.to(device=target_device, non_blocking=True)
-                    td["rewards"] = rewards
-
                 agent_ids = self._env_index_cache[training_env_id]
                 td["agent_slot_ids"] = agent_ids.unsqueeze(1)
 
@@ -522,14 +442,29 @@ class CoreTrainingLoop:
                 # 2. non_blocking=True causes race conditions with uninitialized data
                 # Solution: Convert dtype on CPU first, then use blocking transfer to MPS
                 if target_device.type == "mps":
-                    td["dones"] = d.to(dtype=torch.float32).to(device=target_device, non_blocking=False)
-                    td["truncateds"] = t.to(dtype=torch.float32).to(device=target_device, non_blocking=False)
-                else:
+                    dones = d.to(dtype=torch.float32).to(device=target_device, non_blocking=False)
+                    truncateds = t.to(dtype=torch.float32).to(device=target_device, non_blocking=False)
+                    teacher_actions = ta.to(device=target_device, dtype=torch.long, non_blocking=False)
+                elif transfer_stream is None:
                     # On CUDA/CPU, combined conversion is safe and faster
-                    if target_device.type != "cuda":
-                        td["dones"] = d.to(device=target_device, dtype=torch.float32, non_blocking=True)
-                        td["truncateds"] = t.to(device=target_device, dtype=torch.float32, non_blocking=True)
-                        td["teacher_actions"] = ta.to(device=target_device, non_blocking=True)
+                    dones = d.to(device=target_device, dtype=torch.float32, non_blocking=True)
+                    truncateds = t.to(device=target_device, dtype=torch.float32, non_blocking=True)
+                    teacher_actions = ta.to(device=target_device, dtype=torch.long, non_blocking=True)
+
+                if transfer_stream is not None:
+                    current_stream = torch.cuda.current_stream(device=target_device)
+                    current_stream.wait_stream(transfer_stream)
+                    env_obs.record_stream(current_stream)
+                    rewards.record_stream(current_stream)
+                    dones.record_stream(current_stream)
+                    truncateds.record_stream(current_stream)
+                    teacher_actions.record_stream(current_stream)
+
+                td["env_obs"] = env_obs
+                td["rewards"] = rewards
+                td["dones"] = dones
+                td["truncateds"] = truncateds
+                td["teacher_actions"] = teacher_actions
                 # Row-aligned state: provide row slot id and position within row
                 row_ids = self.experience.row_slot_ids[training_env_id]
                 t_in_row = self.experience.t_in_row[training_env_id]
@@ -560,8 +495,6 @@ class CoreTrainingLoop:
 
             # Allow losses to mutate td (policy inference, bookkeeping, etc.)
             with context.stopwatch("_rollout.inference"):
-                if self._rollout_h2d_stream is not None:
-                    torch.cuda.current_stream(device=target_device).wait_stream(self._rollout_h2d_stream)
                 context.training_env_id = training_env_id
                 self.trajectory_isolator.prepare_rollout_slices(rollout_td=td)
                 policy_batches = self.trajectory_isolator.build_rollout_policy_batches()
@@ -580,14 +513,6 @@ class CoreTrainingLoop:
                 rewards_f32 = td["rewards"].to(dtype=torch.float32)
                 avg_reward[agent_ids] = baseline + betas * (rewards_f32 - baseline)
             context.state.avg_reward = avg_reward
-
-            if staging_slot is not None:
-                # Mark this staging slot safe for reuse (waited on by the H2D stream).
-                event = self._rollout_staging_events[staging_slot]
-                if event is None:
-                    event = torch.cuda.Event()
-                    self._rollout_staging_events[staging_slot] = event
-                event.record(torch.cuda.current_stream(device=target_device))
 
             assert "actions" in td, "No loss performed inference - at least one loss must generate actions"
             td_actions: Tensor = td["actions"]
@@ -799,6 +724,9 @@ class CoreTrainingLoop:
 
                         torch.nn.utils.clip_grad_norm_(policy.parameters(), actual_max_grad_norm)
                         policy_optimizer.step()
+
+                        if self.device.type == "cuda":
+                            torch.cuda.synchronize()
 
                 # Notify losses of minibatch end
                 if stop_update_epoch:
