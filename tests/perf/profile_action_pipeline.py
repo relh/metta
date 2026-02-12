@@ -251,15 +251,14 @@ def profile_action_logprob_indexing(
     warmup_iters: int = 10,
     measure_iters: int = 100,
 ) -> dict[int, TimingResult]:
-    """Profile log-prob extraction via advanced indexing used in sample_actions()."""
+    """Profile log-prob extraction via gather used in sample_actions()."""
     results = {}
     for batch_size in batch_sizes:
         log_probs = F.log_softmax(torch.randn(batch_size, num_actions, device=device), dim=-1)
-        batch_indices = torch.arange(batch_size, device=device)
         actions = torch.randint(0, num_actions, (batch_size, 1), device=device)
 
-        def op(log_probs=log_probs, batch_indices=batch_indices, actions=actions):
-            return log_probs[batch_indices, actions.squeeze(-1)]
+        def op(log_probs=log_probs, actions=actions):
+            return log_probs.gather(dim=-1, index=actions).squeeze(-1)
 
         result = measure_operation(
             f"log_prob indexing (B={batch_size})",

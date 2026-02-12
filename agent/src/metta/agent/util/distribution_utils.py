@@ -26,16 +26,15 @@ def sample_actions(action_logits: Tensor) -> Tuple[Tensor, Tensor, Tensor, Tenso
                           shape [batch_size, num_actions]. Same as log-softmax of logits.
     """
     full_log_probs = F.log_softmax(action_logits, dim=-1)  # [batch_size, num_actions]
-    action_probs = torch.exp(full_log_probs)  # [batch_size, num_actions]
+    action_probs = full_log_probs.exp()  # [batch_size, num_actions]
 
     # Sample actions from categorical distribution (replacement=True is implicit when num_samples=1)
     actions = torch.multinomial(action_probs, num_samples=1).view(-1)  # [batch_size]
 
     # Extract log-probabilities for sampled actions using advanced indexing
-    batch_indices = torch.arange(actions.shape[0], device=actions.device)
-    act_log_prob = full_log_probs[batch_indices, actions]  # [batch_size]
+    act_log_prob = full_log_probs.gather(dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)  # [batch_size]
 
-    # Compute policy entropy: H(π) = -∑π(a|s)log π(a|s)
+    # Compute policy entropy: H(π) = -∑π(a|s) log π(a|s)
     entropy = -torch.sum(action_probs * full_log_probs, dim=-1)  # [batch_size]
 
     return actions, act_log_prob, entropy, full_log_probs
@@ -63,13 +62,12 @@ def evaluate_actions(action_logits: Tensor, actions: Tensor) -> Tuple[Tensor, Te
                           shape [batch_size, num_actions]. Same as log-softmax of logits.
     """
     action_log_probs = F.log_softmax(action_logits, dim=-1)  # [batch_size, num_actions]
-    action_probs = torch.exp(action_log_probs)  # [batch_size, num_actions]
+    action_probs = action_log_probs.exp()  # [batch_size, num_actions]
 
     # Extract log-probabilities for the provided actions using advanced indexing
-    batch_indices = torch.arange(actions.shape[0], device=actions.device)
-    log_probs = action_log_probs[batch_indices, actions]  # [batch_size]
+    log_probs = action_log_probs.gather(dim=-1, index=actions.unsqueeze(-1)).squeeze(-1)  # [batch_size]
 
-    # Compute policy entropy: H(π) = -∑π(a|s)log π(a|s)
+    # Compute policy entropy: H(π) = -∑π(a|s) log π(a|s)
     entropy = -torch.sum(action_probs * action_log_probs, dim=-1)  # [batch_size]
 
     return log_probs, entropy, action_log_probs

@@ -1,5 +1,6 @@
 import pytest
 import torch
+import torch.nn.functional as F
 
 from metta.agent.util.distribution_utils import evaluate_actions, sample_actions
 
@@ -163,3 +164,39 @@ class TestCompatibility:
         assert torch.allclose(lp, eval_lp), "Logprobs mismatch"
         assert torch.allclose(ent, eval_ent), "Entropy mismatch"
         assert torch.allclose(norm, eval_norm), "Normalized logits mismatch"
+
+
+@pytest.mark.parametrize(
+    "logits",
+    [
+        torch.tensor([[1000.0, -1000.0, 0.0]], dtype=torch.float32),
+        torch.tensor([[-1000.0, -1000.0, -1000.0]], dtype=torch.float32),
+        torch.tensor([[80.0, 79.0, 78.0, -90.0]], dtype=torch.float32),
+        torch.tensor([[0.0, 0.0, 0.0, 0.0]], dtype=torch.float32),
+    ],
+)
+def test_entropy_matches_exp_logsoftmax_reference(logits):
+    actions = torch.zeros(logits.shape[0], dtype=torch.long)
+    sampled_actions, sample_lp, sample_entropy, sample_norm = sample_actions(logits)
+    eval_lp, eval_entropy, eval_norm = evaluate_actions(logits, actions)
+
+    reference_norm = F.log_softmax(logits, dim=-1)
+    reference_probs = torch.exp(reference_norm)
+    reference_entropy = -torch.sum(reference_probs * reference_norm, dim=-1)
+
+    torch.testing.assert_close(sample_norm, reference_norm, atol=1e-6, rtol=1e-6)
+    torch.testing.assert_close(eval_norm, reference_norm, atol=1e-6, rtol=1e-6)
+    torch.testing.assert_close(sample_entropy, reference_entropy, atol=3e-5, rtol=3e-5)
+    torch.testing.assert_close(eval_entropy, reference_entropy, atol=3e-5, rtol=3e-5)
+    torch.testing.assert_close(
+        eval_lp,
+        reference_norm.gather(-1, actions.unsqueeze(-1)).squeeze(-1),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+    torch.testing.assert_close(
+        sample_lp,
+        sample_norm.gather(-1, sampled_actions.unsqueeze(-1)).squeeze(-1),
+        atol=1e-6,
+        rtol=1e-6,
+    )
