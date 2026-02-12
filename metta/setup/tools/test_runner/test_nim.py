@@ -24,20 +24,36 @@ def _cleanup_nimby_lock() -> None:
     shutil.rmtree(_NIMBY_LOCK, ignore_errors=True)
 
 
+def _sanitize_nim_cfg(cfg_path: Path) -> None:
+    if not cfg_path.exists():
+        return
+
+    lines = cfg_path.read_text().splitlines()
+    cleaned: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#") or stripped.startswith("--"):
+            cleaned.append(stripped)
+
+    if cleaned != lines:
+        cfg_path.write_text("\n".join(cleaned) + "\n")
+
+
 @app.callback()
 def command() -> None:
     repo_root = get_repo_root()
     mettascope_dir = repo_root / "packages" / "mettagrid" / "nim" / "mettascope"
-    lock_file = mettascope_dir / "nimby.lock"
 
     # Install Nim dependencies before running tests
     info("Installing Nim dependencies...")
-    sync_cmd = ["nimby", "sync", "-g", str(lock_file)]
+    sync_cmd = ["nimby", "sync", "-g", "nimby.lock"]
     _cleanup_nimby_lock()
     exit_code = subprocess.run(
         sync_cmd,
         check=False,
-        cwd=repo_root.parent,  # nimby sync expects to run from parent of repo
+        cwd=mettascope_dir,
     ).returncode
     if exit_code != 0:
         # `nimby sync` can fail if the cached global packages directory is corrupted.
@@ -50,11 +66,12 @@ def command() -> None:
         exit_code = subprocess.run(
             sync_cmd,
             check=False,
-            cwd=repo_root.parent,
+            cwd=mettascope_dir,
         ).returncode
     if exit_code != 0:
         error("Failed to install Nim dependencies!")
         raise typer.Exit(exit_code)
+    _sanitize_nim_cfg(mettascope_dir / "nim.cfg")
     success("Nim dependencies installed!")
 
     test_files = (mettascope_dir / "tests").glob("test_*.nim")
