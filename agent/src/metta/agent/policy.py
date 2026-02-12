@@ -319,6 +319,13 @@ class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=Pol
 
     module: "Policy"
 
+    @staticmethod
+    def _uses_routed_adapters(policy: "Policy") -> bool:
+        return any(
+            module.__class__.__name__ in {"RoutedAdapterLinear", "RoutedAdapterHeadwiseLinearExpand"}
+            for module in policy.modules()
+        )
+
     def __init__(self, policy: "Policy", device: torch.device):
         # `DistributedDataParallel` sets `self.module`, but only after its __init__ runs.
         # `MultiAgentPolicy.__init__` may access attributes during initialization, which
@@ -327,10 +334,13 @@ class DistributedPolicy(MultiAgentPolicy, DistributedDataParallel, metaclass=Pol
         MultiAgentPolicy.__init__(self, policy.policy_env_info)
 
         # Then initialize DistributedDataParallel
+        uses_routed_adapters = self._uses_routed_adapters(policy)
         kwargs: dict[str, Any] = {
             "module": policy,
             "broadcast_buffers": False,
-            "find_unused_parameters": False,
+            # Routed adapters activate module paths conditionally by route ID.
+            # DDP must track unused params to avoid reduction-sync errors.
+            "find_unused_parameters": uses_routed_adapters,
         }
         if device.type != "cpu" and device.index is not None:
             kwargs.update({"device_ids": [device.index], "output_device": device.index})
