@@ -361,6 +361,7 @@ def postgres(ctx: typer.Context):
 @handle_errors
 def server(
     login_server: Annotated[str, typer.Option("--login-server", "-l", help="Login server: local or prod")] = "local",
+    otel_console: Annotated[bool, typer.Option("--otel-console", help="Print OTel metrics to stdout")] = False,
 ):
     env = _local_dev_env()
     env["HOST"] = "0.0.0.0"
@@ -374,6 +375,8 @@ def server(
     env["S3_PRESIGNED_ENDPOINT"] = LOCALSTACK_ENDPOINT_K8S
     env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
     env["POLICY_S3_BUCKET"] = LOCAL_EVAL_BUCKET
+    if otel_console:
+        env["OTEL_METRICS_CONSOLE"] = "true"
 
     # Respect LOGIN_SERVICE_URL from environment (set by `up` command), otherwise use --login-server flag
     if "LOGIN_SERVICE_URL" not in env:

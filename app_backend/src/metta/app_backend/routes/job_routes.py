@@ -45,7 +45,7 @@ from metta.app_backend.models.job_request import (
 )
 from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.models.tournament import Match, Pool
-from metta.app_backend.otel.metrics import get_job_metrics
+from metta.app_backend.otel.job_metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.routes.docs_routes import public_api

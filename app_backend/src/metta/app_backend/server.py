@@ -19,6 +19,8 @@ from pydantic.main import BaseModel
 from metta.app_backend.auth import get_user
 from metta.app_backend.config import settings
 from metta.app_backend.database import run_alembic_upgrade
+from metta.app_backend.otel.http_metrics import HttpMetricsMiddleware
+from metta.app_backend.otel.metrics import init_meter_provider
 from metta.app_backend.routes import (
     eval_task_routes,
     job_routes,
@@ -101,6 +103,7 @@ def setup_logging():
 
 def create_app() -> fastapi.FastAPI:
     setup_logging()
+    init_meter_provider()
 
     @asynccontextmanager
     async def lifespan(_: fastapi.FastAPI):
@@ -122,6 +125,7 @@ def create_app() -> fastapi.FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(HttpMetricsMiddleware)
 
     routers = [
         eval_task_routes.create_eval_task_router(),
