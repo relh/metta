@@ -13,7 +13,7 @@ from pathlib import Path
 
 import torch
 
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.default import DefaultPolicyConfig
 from metta.cogworks.curriculum import env_curriculum
 from metta.rl.checkpoint_manager import CheckpointManager
 from metta.rl.policy_assets import PolicyAssetConfig, PolicyAssetRegistry
@@ -129,9 +129,7 @@ def profile_training_epoch(
     prev = snapshot("training_env_created", prev)
 
     # Create policy
-    architecture = ViTDefaultConfig(
-        obs_shim_ignore_inventory_power_tokens=False,
-    )
+    architecture = DefaultPolicyConfig()
 
     # Create and load policy using Checkpointer
     checkpoint_manager = CheckpointManager(run="perf_profile", system_cfg=system_cfg)
@@ -188,7 +186,8 @@ def profile_training_epoch(
     print(f"  Buffer shape: {exp_buffer.batch_size}")
 
     # Profile rollout phase
-    torch.cuda.reset_peak_memory_stats(torch_device)
+    if torch_device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(torch_device)
 
     print("\nRunning rollout phase...")
     # ScheduleFree optimizers must be in eval mode during rollout (normally handled in Trainer._run_epoch).
@@ -198,11 +197,16 @@ def profile_training_epoch(
     trainer.core_loop.rollout_phase(training_env, trainer._context)
 
     prev = snapshot("rollout_complete", prev)
-    rollout_peak = torch.cuda.max_memory_allocated(torch_device) / 1024**2
-    print(f"Rollout peak memory: {rollout_peak:.2f} MB")
+    rollout_peak = 0.0
+    if torch_device.type == "cuda":
+        rollout_peak = torch.cuda.max_memory_allocated(torch_device) / 1024**2
+        print(f"Rollout peak memory: {rollout_peak:.2f} MB")
+    else:
+        print("Rollout peak memory: N/A (CUDA-only metric)")
 
     # Profile training phase
-    torch.cuda.reset_peak_memory_stats(torch_device)
+    if torch_device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(torch_device)
 
     print("\nRunning training phase...")
     # ScheduleFree optimizers must be in train mode during training (normally handled in Trainer._run_epoch).
@@ -215,8 +219,12 @@ def profile_training_epoch(
     )
 
     prev = snapshot("training_complete", prev)
-    training_peak = torch.cuda.max_memory_allocated(torch_device) / 1024**2
-    print(f"Training peak memory: {training_peak:.2f} MB")
+    training_peak = 0.0
+    if torch_device.type == "cuda":
+        training_peak = torch.cuda.max_memory_allocated(torch_device) / 1024**2
+        print(f"Training peak memory: {training_peak:.2f} MB")
+    else:
+        print("Training peak memory: N/A (CUDA-only metric)")
 
     # Get final stats
     snapshot("final", prev)
@@ -244,12 +252,18 @@ def profile_training_epoch(
     if "rollout_complete" in phase_map and "trainer_created" in phase_map:
         rollout_delta = phase_map["rollout_complete"].allocated_mb - phase_map["trainer_created"].allocated_mb
         print(f"Rollout memory delta: {rollout_delta:+.2f} MB")
-        print(f"Rollout peak memory: {rollout_peak:.2f} MB")
+        if torch_device.type == "cuda":
+            print(f"Rollout peak memory: {rollout_peak:.2f} MB")
+        else:
+            print("Rollout peak memory: N/A (CUDA-only metric)")
 
     if "training_complete" in phase_map and "rollout_complete" in phase_map:
         training_delta = phase_map["training_complete"].allocated_mb - phase_map["rollout_complete"].allocated_mb
         print(f"Training memory delta: {training_delta:+.2f} MB")
-        print(f"Training peak memory: {training_peak:.2f} MB")
+        if torch_device.type == "cuda":
+            print(f"Training peak memory: {training_peak:.2f} MB")
+        else:
+            print("Training peak memory: N/A (CUDA-only metric)")
 
     # Calculate steady state
     steady_state = phase_map["final"].allocated_mb

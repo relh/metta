@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import time
 import tracemalloc
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -353,6 +354,9 @@ def profile_advantage_computation(device: str = "cuda") -> dict[str, Any]:
                 before_alloc = torch.cuda.memory_allocated(torch_device)
 
             # Run advantage computation
+            if torch_device.type == "cuda":
+                torch.cuda.synchronize(torch_device)
+            start_time = time.perf_counter()
             result = compute_advantage(
                 values,
                 rewards,
@@ -363,19 +367,30 @@ def profile_advantage_computation(device: str = "cuda") -> dict[str, Any]:
                 gae_lambda=0.95,
                 device=torch_device,
             )
+            if torch_device.type == "cuda":
+                torch.cuda.synchronize(torch_device)
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+
+            result_entry = {
+                "batch_size": bs,
+                "seq_len": seq_len,
+                "input_mb": (values.numel() + rewards.numel() + dones.numel()) * 4 / 1024**2,
+                "elapsed_ms": elapsed_ms,
+            }
 
             if torch_device.type == "cuda":
                 torch.cuda.synchronize()
                 after_alloc = torch.cuda.memory_allocated(torch_device)
                 peak_alloc = torch.cuda.max_memory_allocated(torch_device)
 
-                results[key] = {
-                    "batch_size": bs,
-                    "seq_len": seq_len,
-                    "allocated_mb": (after_alloc - before_alloc) / 1024**2,
-                    "peak_mb": peak_alloc / 1024**2,
-                    "input_mb": (values.numel() + rewards.numel() + dones.numel()) * 4 / 1024**2,
-                }
+                result_entry["allocated_mb"] = (after_alloc - before_alloc) / 1024**2
+                result_entry["peak_mb"] = peak_alloc / 1024**2
+            else:
+                result_entry["allocated_mb"] = 0.0
+                result_entry["peak_mb"] = 0.0
+                result_entry["note"] = "CUDA memory metrics unavailable on CPU."
+
+            results[key] = result_entry
 
             # Cleanup
             del values, rewards, dones, importance_ratio, advantages, result
@@ -479,6 +494,9 @@ def main():
                 print(f"    Input size: {data['input_mb']:.3f} MB")
                 print(f"    Allocated: {data['allocated_mb']:.3f} MB")
                 print(f"    Peak: {data['peak_mb']:.3f} MB")
+                print(f"    Runtime: {data['elapsed_ms']:.2f} ms")
+                if "note" in data:
+                    print(f"    Note: {data['note']}")
         return
 
     if args.minibatch_only:
