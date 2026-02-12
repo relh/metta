@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typegen": "next typegen",
+    "generate-api-types": "uv run ../../app_backend/scripts/export_openapi.py && openapi-typescript ../../app_backend/src/metta/app_backend/generated/internal-openapi.json -o src/lib/api/generated/schema.d.ts && prettier --write src/lib/api/generated/schema.d.ts",
     "type-check": "tsc",
     "lint:eslint": "eslint .",
     "lint:prettier": "prettier --log-level warn --check .",
@@ -33,6 +34,7 @@
     "@types/react": "^19.2.13",
     "@types/react-dom": "^19.1.0",
     "eslint": "^9.32.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.2.2",
     "typescript-eslint": "^8.55.0",
     "vite": "^7.3.1"

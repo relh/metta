@@ -5,7 +5,7 @@ import { UserRow } from '@/lib/repo'
 
 import { Tooltip } from './Tooltip'
 
-export const UserDisplay: FC<{ user: UserRow | null; userId: string }> = ({ user, userId }) => {
+export const UserDisplay: FC<{ user?: UserRow | null; userId: string }> = ({ user, userId }) => {
   const displayName = user?.name ?? userId
 
   return (

@@ -1,6 +1,84 @@
 import { notFound, redirect } from 'next/navigation'
 
+import type {
+  AIQueryRequest,
+  AIQueryResponse,
+  EpisodeQueryRequest,
+  EpisodeQueryResponse,
+  EpisodeStatsResponse,
+  EvalTask,
+  EvalTaskCreateRequest,
+  JobRequest,
+  JobStatus,
+  LeaderboardEntry,
+  MembershipHistoryEntry,
+  PaginatedEvalTasksResponse,
+  PoliciesResponse,
+  PolicySummary,
+  PolicyVersionSummary,
+  PolicyVersionWithName,
+  PolicyVersionsResponse,
+  PublicPolicyVersionRow,
+  SQLQueryRequest,
+  SQLQueryResponse,
+  SeasonDetail,
+  SeasonMatchSummary,
+  SeasonVersionInfo,
+  SmartPlugStatus,
+  SubmissionResponse,
+  TableInfo,
+  TableSchema,
+  TaskAttemptsResponse,
+} from '@/lib/api'
 import { isOutageSimulated } from '@/lib/debug/simulate-outage'
+
+// Re-export generated API types so existing `import { X } from '@/lib/repo'`
+// statements continue to work.
+export type {
+  AIQueryRequest,
+  AIQueryResponse,
+  AgentStatsDetail,
+  EpisodePolicyStat,
+  EpisodeQueryRequest,
+  EpisodeQueryResponse,
+  EpisodeStatsResponse,
+  EpisodeWithTags,
+  EvalTask,
+  EvalTaskCreateRequest,
+  TaskAttempt,
+  JobEpisodeInfo,
+  JobMatchInfo,
+  JobPolicyVersionSummary,
+  JobRequest,
+  JobStatus,
+  LeaderboardEntry,
+  MembershipHistoryEntry,
+  PaginatedEvalTasksResponse,
+  PoliciesResponse,
+  PolicyRow,
+  PolicyStatsDetail,
+  PolicySummary,
+  PolicyVersionSummary,
+  PolicyVersionWithName,
+  PolicyVersionsResponse,
+  PoolInfo,
+  PoolMembership,
+  PublicPolicyVersionRow,
+  SQLQueryRequest,
+  SQLQueryResponse,
+  SeasonDetail,
+  SeasonMatchPlayerSummary,
+  SeasonMatchSummary,
+  SeasonVersionInfo,
+  SmartPlugStatus,
+  SubmissionResponse,
+  TableInfo,
+  TableSchema,
+  TaskAttemptsResponse,
+  UserRow,
+} from '@/lib/api'
+
+// ── Frontend-only types (not from the API spec) ─────────────────────────
 
 const decodePathSegment = (value: string) => {
   try {
@@ -12,73 +90,9 @@ const decodePathSegment = (value: string) => {
 
 const encodePathSegment = (value: string) => encodeURIComponent(decodePathSegment(value))
 
-export type EvalTaskCreateRequest = {
-  command: string
-  git_hash: string | null
-  attributes: Record<string, any>
-}
-
 export type TaskStatus = 'unprocessed' | 'running' | 'canceled' | 'done' | 'error' | 'system_error'
 
-type TaskStatusMixin = {
-  status: TaskStatus
-  status_details: Record<string, any> | null
-}
-
-export type UserRow = {
-  id: string
-  name: string | null
-  email: string | null
-  is_softmax_team_member: boolean | null
-}
-
-type Ownable = {
-  user_id: string
-  user: UserRow | null
-}
-
-export type EvalTask = Ownable & {
-  // eval_tasks table columns
-  id: number
-  command: string
-  data_uri: string | null
-  git_hash: string | null
-  attributes: Record<string, any>
-  created_at: string
-  is_finished: boolean
-  latest_attempt_id: number | null
-
-  // Latest attempt columns (from JOIN)
-  attempt_number: number | null
-  assigned_at: string | null
-  assignee: string | null
-  started_at: string | null
-  finished_at: string | null
-  output_log_path: string | null
-} & TaskStatusMixin
-
-export type TaskAttempt = {
-  id: number
-  task_id: number
-  attempt_number: number
-  assigned_at: string | null
-  assignee: string | null
-  started_at: string | null
-  finished_at: string | null
-  output_log_path: string | null
-} & TaskStatusMixin
-
-export type PaginatedEvalTasksResponse = {
-  tasks: EvalTask[]
-  total_count: number
-  page: number
-  page_size: number
-  total_pages: number
-}
-
-export type TaskAttemptsResponse = {
-  attempts: TaskAttempt[]
-}
+export type MatchStatus = 'pending' | 'scheduled' | 'running' | 'completed' | 'failed'
 
 export type TaskFilters = {
   command?: string
@@ -90,293 +104,29 @@ export type TaskFilters = {
   assigned_at?: string
 }
 
-// Policy-based scorecard types
-export type PublicPolicyVersionRow = Ownable & {
-  id: string
-  policy_id: string
-  created_at: string
-  policy_created_at: string
-  name: string
-  version: number
-  tags: Record<string, string>
-  version_count?: number
-}
-
-export type EpisodeWithTags = {
-  id: string
-  replay_url: string | null
-  thumbnail_url: string | null
-  attributes: Record<string, any>
-  eval_task_id: string | null
-  created_at: string
-  tags: Record<string, string>
-  avg_rewards: Record<string, number>
-  job_id: string | null
-}
-
-export type PolicyVersionWithName = Ownable & {
-  id: string
-  policy_id: string
-  version: number
-  name: string
-  created_at: string
-}
-
-export type EpisodeQueryRequest = {
-  primary_policy_version_ids?: string[]
-  tag_filters?: Record<string, string[] | null>
-  limit?: number | null
-  offset?: number
-  episode_ids?: string[]
-}
-
-export type EpisodeQueryResponse = {
-  episodes: EpisodeWithTags[]
-}
-
-export type TableInfo = {
-  table_name: string
-  column_count: number
-  row_count: number
-}
-
-export type TableSchema = {
-  table_name: string
-  columns: Array<{
-    name: string
-    type: string
-    nullable: boolean
-    default: string | null
-    max_length: number | null
-  }>
-}
-
-export type SQLQueryRequest = {
-  query: string
-}
-
-export type SQLQueryResponse = {
-  columns: string[]
-  rows: any[][]
-  row_count: number
-}
-
-export type AIQueryRequest = {
-  description: string
-}
-
-export type AIQueryResponse = {
-  query: string
-}
-
 export const ALL_JOB_STATUSES = ['pending', 'dispatched', 'running', 'completed', 'failed'] as const
 
-export type JobStatus = (typeof ALL_JOB_STATUSES)[number]
-
-export type MatchStatus = 'pending' | 'scheduled' | 'running' | 'completed' | 'failed'
-
-export type PoolInfo = {
-  id: string | null
-  name: string
-  description: string
-  config_id: string | null
-}
-
-export type SeasonDetail = {
-  id: string
-  name: string
-  version: number
-  canonical: boolean
-  summary: string
-  entry_pool: string | null
-  leaderboard_pool: string | null
-  is_default: boolean
-  pools: PoolInfo[]
-}
-
-export type SeasonVersionInfo = {
-  version: number
-  canonical: boolean
-  disabled_at: string | null
-  created_at: string
-}
-
-export type PolicyVersionSummary = {
-  id: string
-  name: string | null
-  version: number | null
-}
-
-export type JobPolicyVersionSummary = {
-  position: number
-  policy: PolicyVersionSummary
-}
-
-export type LeaderboardEntry = {
-  rank: number
-  policy: PolicyVersionSummary
-  score: number
-  matches: number
-}
-
-export type SubmissionResponse = {
-  pools: string[]
-}
-
-export type PoolMembership = {
-  pool_name: string
-  active: boolean
-  completed: number
-  failed: number
-  pending: number
-}
-
-export type PolicySummary = {
-  policy: PolicyVersionSummary
-  pools: PoolMembership[]
-  entered_at: string
-}
-
-export type SeasonMatchPlayerSummary = {
-  policy: PolicyVersionSummary
-  policy_index: number
-  score: number | null
-}
-
-export type SeasonMatchSummary = {
-  id: string
-  pool_name: string
-  status: MatchStatus
-  assignments: number[]
-  players: SeasonMatchPlayerSummary[]
-  job_id: string | null
-  episode_id: string | null
-  created_at: string
-}
-
-export type MembershipHistoryEntry = {
-  season_name: string
-  season_version: number | null
-  pool_name: string
-  action: string
-  notes: string | null
-  created_at: string
-}
-
-export type EpisodePolicyStat = {
-  policy_version_id: string
-  num_agents: number
-  avg_reward: number | null
-}
-
-export type JobEpisodeInfo = {
-  replay_url: string | null
-  attributes: Record<string, any> | null
-  policy_stats: EpisodePolicyStat[]
-}
-
-export type JobMatchInfo = {
-  pool_name: string | null
-  season_name: string | null
-}
-
-export type JobRequest = Ownable & {
-  id: string
-  job_type: string
-  job: Record<string, any>
-  status: JobStatus
-  worker: string | null
-  result: Record<string, any> | null
-  error: string | null
-  error_type?: string | null
-  created_at: string
-  dispatched_at: string | null
-  running_at: string | null
-  completed_at: string | null
-  policy_versions: JobPolicyVersionSummary[]
-  episode: JobEpisodeInfo | null
-  match: JobMatchInfo | null
-}
-
-export type PolicyRow = Ownable & {
-  id: string
-  name: string
-  created_at: string
-  attributes: Record<string, any>
-  version_count: number
-}
-
-export type PoliciesResponse = {
-  entries: PolicyRow[]
-  total_count: number
-}
-
-export type PolicyVersionsResponse = {
-  entries: PublicPolicyVersionRow[]
-  total_count: number
-}
-
-export type SmartPlugStatus = {
-  key: string
-  label: string
-  alias?: string | null
-  online?: boolean | null
-  is_on?: boolean | null
-  apower?: number | null
-}
-
-export type AgentStatsDetail = {
-  agent_id: number
-  reward: number
-  metrics: Record<string, number>
-}
-
-export type PolicyStatsDetail = {
-  position: number
-  policy_version_id: string | null
-  policy_name: string | null
-  policy_version: number | null
-  num_agents: number
-  avg_metrics: Record<string, number>
-  avg_reward: number
-  agents: AgentStatsDetail[]
-}
-
-export type EpisodeStatsResponse = {
-  game_stats: Record<string, number>
-  policy_stats: PolicyStatsDetail[]
-  steps: number | null
-}
-
-// Dashboard types
+// Dashboard types (frontend-only, not from API spec)
 export type DashboardKpis = {
-  // Efficiency (0-1)
   move_efficiency: number
   action_success_rate: number
   vibe_change_rate: number
-  // Resource
   resource_retention: number
-  // Vulnerability
   freeze_vulnerability: number
-  // Junction
   junction_control_rate: number
   alignment_stability: number
   net_alignment_rate: number
-  // Reward
   avg_reward: number
-  // Additional
   noop_rate: number
   resource_efficiency_per_step: number
   hearts_to_junction_rate: number
   reward_consistency: number
   reward_nonzero_pct: number
-  // Strategy profile (0-100)
   profile_aggressive: number
   profile_defensive: number
   profile_resource_hoarder: number
   profile_junction_hunter: number
   profile_mobile_scout: number
-  // Diagnostics
   diagnostics: string[]
 }
 
