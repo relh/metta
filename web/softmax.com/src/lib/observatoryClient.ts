@@ -1,111 +1,28 @@
-import { z } from "zod";
+import type {
+  LeaderboardEntry,
+  MatchSummary,
+  MembershipHistoryEntry,
+  PolicySummary,
+  SeasonResponse,
+  SeasonVersionInfo,
+} from "@/lib/api";
 
 import { loadUserById } from "./user";
 
-const PolicyVersionSummarySchema = z.object({
-  id: z.uuid(),
-  name: z.string().nullable(),
-  version: z.number().nullable(),
-});
-
-export type PolicyVersionSummary = z.infer<typeof PolicyVersionSummarySchema>;
-
-const PoolInfoSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  config_id: z.string().nullable(),
-});
-
-export type PoolInfo = z.infer<typeof PoolInfoSchema>;
-
-const SeasonResponseSchema = z.object({
-  name: z.string(),
-  version: z.number(),
-  canonical: z.boolean(),
-  summary: z.string(),
-  entry_pool: z.string().nullable(),
-  leaderboard_pool: z.string().nullable(),
-  is_default: z.boolean(),
-  pools: z.array(PoolInfoSchema),
-});
-
-export type SeasonResponse = z.infer<typeof SeasonResponseSchema>;
-
-const LeaderboardEntrySchema = z.object({
-  rank: z.number(),
-  policy: PolicyVersionSummarySchema,
-  score: z.number(),
-  matches: z.number(),
-});
-
-export type LeaderboardEntry = z.infer<typeof LeaderboardEntrySchema>;
+export type {
+  LeaderboardEntry,
+  MatchSummary,
+  MembershipHistoryEntry,
+  PolicySummary,
+  SeasonResponse,
+  SeasonVersionInfo,
+} from "@/lib/api";
+export type { PoolMembership, PolicyVersionSummary } from "@/lib/api";
 
 export type LeaderboardResponse = LeaderboardEntry[];
-
-const PoolMembershipSchema = z.object({
-  pool_name: z.string(),
-  active: z.boolean(),
-  completed: z.number(),
-  failed: z.number(),
-  pending: z.number(),
-});
-
-export type PoolMembership = z.infer<typeof PoolMembershipSchema>;
-
-const PolicySummarySchema = z.object({
-  policy: PolicyVersionSummarySchema,
-  pools: z.array(PoolMembershipSchema),
-  entered_at: z.string(),
-});
-
-export type PolicySummary = z.infer<typeof PolicySummarySchema>;
-
 export type PoliciesResponse = PolicySummary[];
-
-const MatchPlayerSummarySchema = z.object({
-  policy: PolicyVersionSummarySchema,
-  policy_index: z.number(),
-  score: z.number().nullable(),
-});
-
-const MatchSummarySchema = z.object({
-  id: z.uuid(),
-  pool_name: z.string(),
-  status: z.string(),
-  assignments: z.array(z.number()),
-  players: z.array(MatchPlayerSummarySchema),
-  job_id: z.uuid().nullable(),
-  episode_id: z.string().nullable(),
-  created_at: z.string(),
-});
-
-export type MatchSummary = z.infer<typeof MatchSummarySchema>;
-
 export type MatchesResponse = MatchSummary[];
-
-const MembershipHistoryEntrySchema = z.object({
-  season_name: z.string(),
-  season_version: z.number().nullable(),
-  pool_name: z.string(),
-  action: z.string(),
-  notes: z.string().nullable(),
-  created_at: z.string(),
-});
-
-export type MembershipHistoryEntry = z.infer<
-  typeof MembershipHistoryEntrySchema
->;
-
 export type MembershipHistoryResponse = MembershipHistoryEntry[];
-
-const SeasonVersionInfoSchema = z.object({
-  version: z.number(),
-  canonical: z.boolean(),
-  disabled_at: z.string().nullable(),
-  created_at: z.string(),
-});
-
-export type SeasonVersionInfo = z.infer<typeof SeasonVersionInfoSchema>;
 
 const decodePathSegment = (value: string) => {
   try {
@@ -154,8 +71,7 @@ async function fetchApi(url: string, userId?: string): Promise<unknown> {
 }
 
 export async function getSeasons(): Promise<SeasonResponse[]> {
-  const data = await fetchApi("/tournament/seasons");
-  return z.array(SeasonResponseSchema).parse(data);
+  return (await fetchApi("/tournament/seasons")) as SeasonResponse[];
 }
 
 export function findDefaultSeason(
@@ -167,10 +83,9 @@ export function findDefaultSeason(
 export async function getLeaderboard(
   seasonName: string,
 ): Promise<LeaderboardResponse> {
-  const data = await fetchApi(
+  return (await fetchApi(
     `/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard`,
-  );
-  return z.array(LeaderboardEntrySchema).parse(data);
+  )) as LeaderboardResponse;
 }
 
 export async function getPolicies(
@@ -185,8 +100,7 @@ export async function getPolicies(
   if (args.mine) params.set("mine", "true");
   const query = params.toString();
   const url = `/tournament/seasons/${encodePathSegment(args.seasonName)}/policies${query ? `?${query}` : ""}`;
-  const data = await fetchApi(url, args.userId);
-  return z.array(PolicySummarySchema).parse(data);
+  return (await fetchApi(url, args.userId)) as PoliciesResponse;
 }
 
 export async function getMatches(
@@ -213,31 +127,30 @@ export async function getMatches(
   }
   const query = params.toString();
   const url = `/tournament/seasons/${encodePathSegment(seasonName)}/matches${query ? `?${query}` : ""}`;
-  const data = await fetchApi(url);
-  return z.array(MatchSummarySchema).parse(data);
+  return (await fetchApi(url)) as MatchesResponse;
 }
 
 export async function getSeasonVersions(
   seasonName: string,
 ): Promise<SeasonVersionInfo[]> {
-  const data = await fetchApi(
+  return (await fetchApi(
     `/tournament/seasons/${encodePathSegment(seasonName)}/versions`,
-  );
-  return z.array(SeasonVersionInfoSchema).parse(data);
+  )) as SeasonVersionInfo[];
 }
 
 export async function getMyMemberships(
   userId: string,
 ): Promise<MembershipHistoryResponse> {
-  const data = await fetchApi("/tournament/my-memberships", userId);
-  return z.array(MembershipHistoryEntrySchema).parse(data);
+  return (await fetchApi(
+    "/tournament/my-memberships",
+    userId,
+  )) as MembershipHistoryResponse;
 }
 
 export async function getPolicyMemberships(
   policyVersionId: string,
 ): Promise<MembershipHistoryResponse> {
-  const data = await fetchApi(
+  return (await fetchApi(
     `/tournament/policies/${policyVersionId}/memberships`,
-  );
-  return z.array(MembershipHistoryEntrySchema).parse(data);
+  )) as MembershipHistoryResponse;
 }

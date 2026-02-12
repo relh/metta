@@ -17,7 +17,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset",
     "update-softmax-team": "tsx src/scripts/update-softmax-team.ts",
-    "postinstall": "pnpm run db:generate && pnpm run typegen"
+    "postinstall": "pnpm run db:generate && pnpm run typegen",
+    "generate-api-types": "uv run ../../app_backend/scripts/export_openapi.py && openapi-typescript ../../app_backend/src/metta/app_backend/generated/openapi.json -o src/lib/api/generated/schema.d.ts && prettier --write src/lib/api/generated/schema.d.ts"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.1",
@@ -59,6 +60,7 @@
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.1.17",
     "@types/pg": "^8",
+    "openapi-typescript": "^7.13.0",
     "tsx": "^4.21.0",
     "typescript": "^5"
   }
