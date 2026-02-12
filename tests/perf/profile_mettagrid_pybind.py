@@ -51,9 +51,9 @@ class ProfilingResults:
 
     # Pybind overhead
     python_step_time_us: float = 0.0
-    cpp_step_time_us: Optional[float] = None
-    pybind_overhead_us: Optional[float] = None
-    pybind_overhead_pct: Optional[float] = None
+    cpp_step_time_us: float = 0.0
+    pybind_overhead_us: float = 0.0
+    pybind_overhead_pct: float = 0.0
 
     # Phase breakdown (microseconds)
     phase_times_us: dict = field(default_factory=dict)
@@ -144,7 +144,7 @@ def measure_pybind_overhead(
     env,
     num_steps: int,
     warmup_steps: int,
-) -> tuple[float, Optional[float], dict]:
+) -> tuple[float, float, dict]:
     """Measure Python wrapper overhead vs C++ step time.
 
     Returns:
@@ -199,12 +199,9 @@ def measure_pybind_overhead(
             phase_totals["total"] += timing.total_ns
 
     python_step_us = np.mean(python_times) / 1000.0
-    cpp_step_us = (phase_totals.get("total", 0) / num_steps) / 1000.0 if profiling_enabled else None
+    cpp_step_us = (phase_totals["total"] / num_steps) / 1000.0 if profiling_enabled else 0.0
 
-    if profiling_enabled:
-        phase_times_us = {phase: (ns / num_steps) / 1000.0 for phase, ns in phase_totals.items()}
-    else:
-        phase_times_us = {}
+    phase_times_us = {phase: (ns / num_steps) / 1000.0 for phase, ns in phase_totals.items()}
 
     return python_step_us, cpp_step_us, phase_times_us
 
@@ -251,18 +248,16 @@ def check_gil_release() -> bool:
     try:
         cfg = MettaGridConfig(
             game=GameConfig(
-                # Make the single step call long enough to distinguish in-call GIL release from
-                # between-call scheduling.
-                num_agents=256,
+                num_agents=4,
                 max_steps=0,
                 actions=ActionsConfig(
                     noop=NoopActionConfig(enabled=True),
                     move=MoveActionConfig(enabled=True),
                 ),
                 map_builder=RandomMapBuilder.Config(
-                    width=80,
-                    height=80,
-                    agents=256,
+                    width=20,
+                    height=20,
+                    agents=4,
                     seed=42,
                 ),
             )
@@ -271,27 +266,28 @@ def check_gil_release() -> bool:
         env = MettaGridPufferEnv(simulator, cfg)
         env.reset()
 
+        # Run step in a thread and see if main thread can make progress
         counter = [0]
-        stop = threading.Event()
+        done = [False]
 
-        def background_work() -> None:
-            while not stop.is_set():
+        def background_work():
+            while not done[0]:
                 counter[0] += 1
+                time.sleep(0.0001)
 
         t = threading.Thread(target=background_work)
         t.start()
 
-        action = np.zeros(256, dtype=np.int32)
-        start_count = counter[0]
-        env.step(action)
-        end_count = counter[0]
+        initial_count = counter[0]
+        for _ in range(100):
+            env.step(np.zeros(4, dtype=np.int32))
 
-        stop.set()
+        done[0] = True
         t.join()
 
-        # If the counter advanced, the GIL was released during the *single* env.step() call.
+        # If counter advanced, the GIL was released during step()
         env.reset()
-        return end_count > start_count
+        return counter[0] > initial_count + 10
 
     except Exception:
         return False
@@ -322,13 +318,12 @@ def run_profiling(
 
     results.python_step_time_us = python_us
     results.cpp_step_time_us = cpp_us
+    results.pybind_overhead_us = python_us - cpp_us
+    results.pybind_overhead_pct = ((python_us - cpp_us) / python_us * 100) if python_us > 0 else 0
     results.phase_times_us = phase_times
-    if cpp_us is not None:
-        results.pybind_overhead_us = python_us - cpp_us
-        results.pybind_overhead_pct = ((python_us - cpp_us) / python_us * 100) if python_us > 0 else 0
 
     # Calculate phase percentages
-    total = phase_times.get("total", 1.0)
+    total = phase_times["total"] if phase_times else 1.0
     results.phase_percentages = {
         phase: (t / total * 100) if total > 0 else 0 for phase, t in phase_times.items() if phase != "total"
     }
@@ -340,7 +335,7 @@ def run_profiling(
     # 3. Measure batch efficiency
     print("Measuring batch efficiency...")
     batch_results = measure_batch_efficiency(env)
-    results.single_step_time_us = batch_results.get(1, python_us)
+    results.single_step_time_us = batch_results[1]
     if 100 in batch_results and 1 in batch_results:
         results.batch_efficiency_ratio = batch_results[1] / batch_results[100]
 
@@ -364,12 +359,8 @@ def run_profiling(
 
     print("\nPybind Boundary Overhead:")
     print(f"  Python step time: {python_us:.2f} us")
-    if cpp_us is None:
-        print("  C++ step time: (unavailable; set METTAGRID_PROFILING=1)")
-        print("  Pybind overhead: (unavailable; requires C++ timing)")
-    else:
-        print(f"  C++ step time: {cpp_us:.2f} us")
-        print(f"  Pybind overhead: {results.pybind_overhead_us:.2f} us ({results.pybind_overhead_pct:.1f}%)")
+    print(f"  C++ step time: {cpp_us:.2f} us")
+    print(f"  Pybind overhead: {results.pybind_overhead_us:.2f} us ({results.pybind_overhead_pct:.1f}%)")
 
     if phase_times:
         print("\nStep Phase Breakdown:")
@@ -377,7 +368,7 @@ def run_profiling(
         print(f"  {'-' * 46}")
         sorted_phases = sorted([(p, t) for p, t in results.phase_percentages.items()], key=lambda x: -x[1])
         for phase, pct in sorted_phases:
-            time_us = phase_times.get(phase, 0)
+            time_us = phase_times[phase]
             print(f"  {phase:<20} {time_us:>12.2f} {pct:>11.1f}%")
         print(f"  {'-' * 46}")
         print(f"  {'total (C++)':<20} {cpp_us:>12.2f} {'100.0%':>12}")

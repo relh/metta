@@ -7,12 +7,6 @@ Performance investigation of MettagGrid simulation and pybind11 Python bindings.
 
 ## Executive Summary
 
-**Measurement (2026-02-10; see header for hardware)**:
-
-- Pybind boundary overhead is ~**10-13 us/step** across 8/16/32 agents, so it dominates small-agent configs and becomes
-  a smaller fraction as C++ work increases (measured: **52.8%** at 8 agents, **39.2%** at 16, **24.7%** at 32).
-- C++ step time is dominated by **observations** (measured: **83.3%** at 8 agents, **87.1%** at 16, **89.4%** at 32).
-
 The primary bottleneck in MettagGrid is the **observation computation phase**, consuming 84-89% of C++ step time across
 all agent counts. Pybind11 boundary overhead is significant (25-53%) but becomes proportionally smaller as step
 complexity increases with more agents.

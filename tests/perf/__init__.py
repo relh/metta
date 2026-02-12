@@ -1,1 +1,1 @@
-# Performance profiling tests and scripts.
+"""Performance profiling tests for the training pipeline."""
