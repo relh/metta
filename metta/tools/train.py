@@ -73,9 +73,9 @@ logger = getRankAwareLogger(__name__)
 
 
 def _default_policy_architecture() -> PolicyArchitecture:
-    from metta.agent.policies.core_policy import CorePolicyConfig  # noqa: PLC0415
+    from metta.agent.policies.default import DefaultPolicyConfig  # noqa: PLC0415
 
-    return CorePolicyConfig()
+    return DefaultPolicyConfig()
 
 
 class TrainTool(Tool):

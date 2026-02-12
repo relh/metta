@@ -13,7 +13,7 @@ from mettagrid.util.module import load_symbol
 # referenced by recipes.
 _ARCHITECTURE_SPECS: dict[str, str] = {
     # Default Cortex policy and variants
-    "core_policy": "metta.agent.policies.core_policy.CorePolicyConfig",
+    "default_policy": "metta.agent.policies.default.DefaultPolicyConfig",
     "vit_size2": "metta.agent.policies.vit_size_2.ViTSize2Config",
     "vit_grpo": "metta.agent.policies.vit_grpo.ViTGRPOConfig",
     "vit_quantile": "metta.agent.policies.vit_quantile.ViTQuantileConfig",

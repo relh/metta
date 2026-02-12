@@ -11,7 +11,7 @@ import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
 from devops.runners.acceptance_criterion import AcceptanceCriterion
 from devops.stable.registry import ci_job, stable_job
-from metta.agent.policies.core_policy import CorePolicyConfig
+from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -103,7 +103,7 @@ def train(
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum)
 
-    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture or CorePolicyConfig())}
+    policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_architecture or DefaultPolicyConfig())}
 
     trajectory_isolation = TrajectoryIsolationConfig(
         slices=[
@@ -281,7 +281,7 @@ def train_ci() -> TrainTool:
         ),
         evaluator=EvaluatorConfig(evaluate_local=False, evaluate_remote=False),
         checkpointer=CheckpointerConfig(epoch_interval=1),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=CorePolicyConfig())},
+        policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
         wandb=WandbConfig.Off(),
     )
 
@@ -320,7 +320,7 @@ def train_100m() -> TrainTool:
     return TrainTool(
         trainer=TrainerConfig(total_timesteps=100_000_000),
         training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=CorePolicyConfig())},
+        policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )
 
 
@@ -337,5 +337,5 @@ def train_2b() -> TrainTool:
     return TrainTool(
         trainer=TrainerConfig(total_timesteps=2_000_000_000),
         training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=CorePolicyConfig())},
+        policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )

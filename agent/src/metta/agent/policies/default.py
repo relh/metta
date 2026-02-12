@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from cortex.config import RoutedAdapterConfig
+from cortex.config import BlockConfig, CortexStackConfig, RoutedAdapterConfig
 from cortex.rl.feature_extractors import (
     FeatureExtractorConfig,
     TokenPerceiverFeatureExtractorConfig,
@@ -24,7 +24,7 @@ from metta.agent.policy import Policy, PolicyArchitecture
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 
-class CorePolicyConfig(PolicyArchitecture):
+class DefaultPolicyConfig(PolicyArchitecture):
     """Default Cortex policy with pluggable feature extractors."""
 
     class_path: str = "metta.agent.policy_auto_builder.PolicyAutoBuilder"
@@ -43,6 +43,8 @@ class CorePolicyConfig(PolicyArchitecture):
     # Cortex trunk configuration
     cortex_num_layers: int = 2
     cortex_pattern: str = "Ag,A,S"
+    cortex_custom_map: Optional[dict[str, BlockConfig]] = None
+    cortex_stack_cfg: Optional[CortexStackConfig] = None
     cortex_use_layer_norm: bool = False
     cortex_compile: bool = False
     cortex_routed_adapter: Optional[RoutedAdapterConfig] = None
@@ -82,6 +84,27 @@ class CorePolicyConfig(PolicyArchitecture):
             )
         )
 
+        if self.cortex_stack_cfg is not None and self.cortex_custom_map is not None:
+            raise ValueError("Specify only one of cortex_custom_map or cortex_stack_cfg")
+
+        stack_cfg = self.cortex_stack_cfg
+        if stack_cfg is None:
+            stack_cfg = build_cortex_auto_config(
+                d_hidden=extractor_out_dim,
+                num_layers=self.cortex_num_layers,
+                pattern=self.cortex_pattern,
+                custom_map=self.cortex_custom_map,
+                post_norm=self.cortex_use_layer_norm,
+                compile_blocks=self.cortex_compile,
+                routed_adapter=self.cortex_routed_adapter,
+            )
+
+        if int(stack_cfg.d_hidden) != extractor_out_dim:
+            raise ValueError(
+                "DefaultPolicyConfig requires cortex stack d_hidden to match feature extractor output dim, got "
+                f"stack d_hidden={stack_cfg.d_hidden}, feature_extractor output dim={extractor_out_dim}"
+            )
+
         components.append(
             CortexTDConfig(
                 in_key="obs_features",
@@ -89,14 +112,7 @@ class CorePolicyConfig(PolicyArchitecture):
                 d_hidden=extractor_out_dim,
                 out_features=extractor_out_dim,
                 key_prefix="cortex_policy_state",
-                stack_cfg=build_cortex_auto_config(
-                    d_hidden=extractor_out_dim,
-                    num_layers=self.cortex_num_layers,
-                    pattern=self.cortex_pattern,
-                    post_norm=self.cortex_use_layer_norm,
-                    compile_blocks=self.cortex_compile,
-                    routed_adapter=self.cortex_routed_adapter,
-                ),
+                stack_cfg=stack_cfg,
                 pass_state_during_training=self.pass_state_during_training,
             )
         )
@@ -192,4 +208,4 @@ class CorePolicyConfig(PolicyArchitecture):
         return super().make_policy(policy_env_info)
 
 
-__all__ = ["CorePolicyConfig"]
+__all__ = ["DefaultPolicyConfig"]

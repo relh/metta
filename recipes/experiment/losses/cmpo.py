@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import metta.tools as tools
-from metta.agent.policies.core_policy import CorePolicyConfig
+from metta.agent.policies.default import DefaultPolicyConfig
 from metta.rl.loss.cmpo import CMPOConfig
 from metta.rl.loss.losses import LossesConfig
 from metta.rl.policy_assets import PolicyAssetConfig
@@ -29,7 +29,7 @@ def _with_cmpo(base_tool: tools.TrainTool) -> tools.TrainTool:
         training_env=base_tool.training_env,
         trainer=_cmpo_trainer_config(),
         evaluator=base_tool.evaluator,
-        policy_assets={"learner0": PolicyAssetConfig(architecture=CorePolicyConfig())},
+        policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )
 
 
@@ -41,7 +41,7 @@ def train() -> tools.TrainTool:
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         trainer=trainer_config,
         evaluator=EvaluatorConfig(simulations=simulations()),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=CorePolicyConfig())},
+        policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )
 
 

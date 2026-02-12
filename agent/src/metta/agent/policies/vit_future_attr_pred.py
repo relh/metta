@@ -15,7 +15,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 
 class ViTFutureAttrPredConfig(PolicyArchitecture):
-    """CorePolicyConfig with an additional head for future attribute prediction."""
+    """DefaultPolicyConfig with an additional head for future attribute prediction."""
 
     class_path: str = "metta.agent.policy_auto_builder.PolicyAutoBuilder"
     model_config = ConfigDict(populate_by_name=True)

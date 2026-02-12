@@ -5,7 +5,7 @@ from typing import Optional, Sequence
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 import mettagrid.builder.envs as eb
-from metta.agent.policies.core_policy import CorePolicyConfig
+from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -114,7 +114,7 @@ def train(
     )
 
     if policy_architecture is None:
-        policy_architecture = CorePolicyConfig()
+        policy_architecture = DefaultPolicyConfig()
     policy_assets["learner0"].architecture = policy_architecture
 
     # Configure scheduler with run gates

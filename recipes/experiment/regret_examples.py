@@ -4,7 +4,7 @@ from typing import List, Optional
 
 import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
-from metta.agent.policies.core_policy import CorePolicyConfig
+from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
@@ -56,7 +56,7 @@ def _build_train_tool(
     curriculum: CurriculumConfig, policy_architecture: Optional[PolicyArchitecture] = None
 ) -> TrainTool:
     trainer_cfg = TrainerConfig(losses=LossesConfig())
-    policy_config = policy_architecture or CorePolicyConfig()
+    policy_config = policy_architecture or DefaultPolicyConfig()
     evaluator = EvaluatorConfig(simulations=make_evals())
     training_env = TrainingEnvironmentConfig(curriculum=curriculum)
     policy_assets = {"learner0": PolicyAssetConfig(architecture=policy_config)}

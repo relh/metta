@@ -39,7 +39,7 @@ from cogames.cogs_vs_clips.sites import (
 )
 from cogames.core import CoGameMissionVariant, CoGameSite
 from metta.agent.policies.cnn import CnnConfig
-from metta.agent.policies.core_policy import CorePolicyConfig
+from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -479,7 +479,7 @@ def train(
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
-    default_architecture = CorePolicyConfig(
+    default_architecture = DefaultPolicyConfig(
         actor_hidden=128,
         critic_hidden=256,
         feature_extractor=BoxCNNFeatureExtractorConfig(
@@ -488,7 +488,7 @@ def train(
         cortex_routed_adapter=routed_adapter,
     )
     if sweep_mode:
-        default_architecture = CorePolicyConfig(
+        default_architecture = DefaultPolicyConfig(
             actor_hidden=384,
             critic_hidden=768,
             cortex_num_layers=1,
@@ -501,7 +501,7 @@ def train(
     resolved_architecture = policy_architecture
     if resolved_architecture is None:
         resolved_architecture = default_architecture
-    elif routed_adapter is not None and isinstance(resolved_architecture, CorePolicyConfig):
+    elif routed_adapter is not None and isinstance(resolved_architecture, DefaultPolicyConfig):
         if resolved_architecture.cortex_routed_adapter is not None:
             raise ValueError(
                 "routed_adapter was provided, but policy_architecture already sets cortex_routed_adapter. "
@@ -511,7 +511,7 @@ def train(
     elif routed_adapter is not None:
         raise ValueError(
             "routed_adapter only supports the default Cortex policy architecture. "
-            "Pass a CorePolicyConfig(cortex_routed_adapter=...) explicitly to use a custom architecture."
+            "Pass a DefaultPolicyConfig(cortex_routed_adapter=...) explicitly to use a custom architecture."
         )
 
     resolved_diff_horde_cumulants: DiffHordeCumulantsConfig | None = None
