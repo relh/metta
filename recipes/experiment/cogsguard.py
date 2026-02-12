@@ -38,7 +38,6 @@ from cogames.cogs_vs_clips.sites import (
     make_cogsguard_machina1_site,
 )
 from cogames.core import CoGameMissionVariant, CoGameSite
-from metta.agent.policies.cnn import CnnConfig
 from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -632,7 +631,7 @@ def miner(
     curriculum = cc.bucketed(env)
     curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
 
-    default_architecture = CnnConfig()
+    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
 
@@ -696,7 +695,7 @@ def aligner(
     curriculum = cc.bucketed(env)
     curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
 
-    default_architecture = CnnConfig()
+    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
 
@@ -757,7 +756,7 @@ def scout(
     curriculum = cc.bucketed(env)
     curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
 
-    default_architecture = CnnConfig()
+    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
     trainer_cfg = TrainerConfig()
     training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
 
