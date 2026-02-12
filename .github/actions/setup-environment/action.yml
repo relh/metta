@@ -66,6 +66,16 @@ runs:
       run: |
         echo "$HOME/.nimby/nim/bin" >> "$GITHUB_PATH"
 
+    - name: Cache Bazel build artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/bazel-disk
+          ~/.cache/bazel-repo
+        key: bazel-v2-${{ runner.os }}-${{ hashFiles('packages/mettagrid/MODULE.bazel', 'packages/mettagrid/.bazelrc', '.bazelversion') }}
+        restore-keys: |
+          bazel-v2-${{ runner.os }}-
+
     - name: Cache Bazel binary
       if: inputs.install-mode != 'minimal'
       id: cache-bazel
