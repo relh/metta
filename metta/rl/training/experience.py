@@ -223,7 +223,7 @@ class Experience:
         if count <= 0 or indices.numel() == 0:
             empty_idx = torch.empty((0,), device=device, dtype=torch.long)
             shared_loss_mb_data = TensorDict({}, batch_size=(0, bptt_horizon), device=device)
-            shared_loss_mb_data["sampled_mb"] = self.buffer[empty_idx].clone()
+            shared_loss_mb_data["sampled_mb"] = self.buffer[empty_idx]
             shared_loss_mb_data["indices"] = empty_idx[:, None].expand(-1, bptt_horizon)
             shared_loss_mb_data["advantages"] = torch.empty((0, bptt_horizon), device=device, dtype=advantages.dtype)
             shared_loss_mb_data["prio_weights"] = torch.empty((0, bptt_horizon), device=device, dtype=torch.float32)
@@ -258,7 +258,7 @@ class Experience:
             sampled_idx = self._sample_sequential_indices(indices, count, mb_idx, ordered_indices)
             prio_weights = torch.ones((count, bptt_horizon), device=device, dtype=torch.float32)
 
-        minibatch = self.buffer[sampled_idx].clone()
+        minibatch = self.buffer[sampled_idx]
         shared_loss_mb_data = TensorDict({}, batch_size=minibatch.batch_size, device=device)
         shared_loss_mb_data["prio_weights"] = prio_weights
         shared_loss_mb_data["sampled_mb"] = minibatch
