@@ -146,6 +146,7 @@ jobs:
         if: env.BUILD_PREVIEW == 'true'
         run: |
           helm upgrade -i \
+            --atomic --timeout 10m \
             -n ${{ inputs.namespace }} \
             ${{ inputs.release }}-pr-${{ github.event.pull_request.number }} \
             ${{ inputs.chart }} \
