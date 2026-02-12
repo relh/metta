@@ -11,7 +11,7 @@ from typing import Literal, Mapping
 
 from pydantic import Field, model_validator
 
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.core_policy import CorePolicyConfig
 from metta.agent.policy import Policy, PolicyArchitecture
 from mettagrid.base_config import Config
 
@@ -41,7 +41,7 @@ class PolicyAssetConfig(Config):
 
     uri: str | None = None
     run: str | None = None
-    architecture: PolicyArchitecture | None = Field(default_factory=ViTDefaultConfig)
+    architecture: PolicyArchitecture | None = Field(default_factory=CorePolicyConfig)
 
     # Whether this policy should be checkpointed during training.
     checkpoint: bool = True

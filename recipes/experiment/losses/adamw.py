@@ -1,7 +1,7 @@
 """Arena recipe with regular Adam optimizer for comparison testing."""
 
 import metta.tools as tools
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.core_policy import CorePolicyConfig
 from metta.rl.policy_assets import OptimizerConfig, PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
@@ -39,7 +39,7 @@ def train() -> tools.TrainTool:
         training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         trainer=trainer_config,
         evaluator=EvaluatorConfig(simulations=simulations()),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=ViTDefaultConfig())},
+        policy_assets={"learner0": PolicyAssetConfig(architecture=CorePolicyConfig())},
     )
     tt.policy_assets["learner0"].optimizer = optimizer_config  # this recipe assumes a single trainable policy
     return tt

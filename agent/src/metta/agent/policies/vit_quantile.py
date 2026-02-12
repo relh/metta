@@ -45,7 +45,7 @@ class ViTQuantileConfig(PolicyArchitecture):
     # Whether training passes cached pre-state to the Cortex core
     pass_state_during_training: bool = False
     # Whether to torch.compile the trunk (Cortex stack)
-    core_compile: bool = False
+    cortex_compile: bool = False
     _critic_hidden = 512
 
     critic_quantiles: int = 25
@@ -90,7 +90,7 @@ class ViTQuantileConfig(PolicyArchitecture):
                         num_layers=1,
                         pattern="L",
                         post_norm=False,
-                        compile_blocks=self.core_compile,
+                        compile_blocks=self.cortex_compile,
                     ),
                     pass_state_during_training=self.pass_state_during_training,
                 ),

@@ -11,6 +11,7 @@ from typing import Literal, Optional, Sequence
 
 import torch
 from cortex import RoutedAdapterConfig
+from cortex.rl.feature_extractors import BoxCNNFeatureExtractorConfig
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
@@ -38,7 +39,7 @@ from cogames.cogs_vs_clips.sites import (
 )
 from cogames.core import CoGameMissionVariant, CoGameSite
 from metta.agent.policies.cnn import CnnConfig
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.core_policy import CorePolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
     CurriculumAlgorithmConfig,
@@ -478,42 +479,39 @@ def train(
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
-    default_architecture = ViTDefaultConfig(
-        obs_shim_ignore_inventory_power_tokens=False,
-        latent_dim=64,
+    default_architecture = CorePolicyConfig(
         actor_hidden=128,
         critic_hidden=256,
-        core_num_heads=2,
-        core_num_latents=8,
-        max_tokens=96,
-        core_routed_adapter=routed_adapter,
+        feature_extractor=BoxCNNFeatureExtractorConfig(
+            output_dim=64,
+        ),
+        cortex_routed_adapter=routed_adapter,
     )
     if sweep_mode:
-        default_architecture = ViTDefaultConfig(
-            obs_shim_ignore_inventory_power_tokens=False,
+        default_architecture = CorePolicyConfig(
             actor_hidden=384,
             critic_hidden=768,
-            latent_dim=96,
-            core_resnet_layers=1,
-            core_num_heads=4,
-            core_num_latents=16,
-            core_routed_adapter=routed_adapter,
+            cortex_num_layers=1,
+            feature_extractor=BoxCNNFeatureExtractorConfig(
+                output_dim=96,
+            ),
+            cortex_routed_adapter=routed_adapter,
         )
 
     resolved_architecture = policy_architecture
     if resolved_architecture is None:
         resolved_architecture = default_architecture
-    elif routed_adapter is not None and isinstance(resolved_architecture, ViTDefaultConfig):
-        if resolved_architecture.core_routed_adapter is not None:
+    elif routed_adapter is not None and isinstance(resolved_architecture, CorePolicyConfig):
+        if resolved_architecture.cortex_routed_adapter is not None:
             raise ValueError(
-                "routed_adapter was provided, but policy_architecture already sets core_routed_adapter. "
+                "routed_adapter was provided, but policy_architecture already sets cortex_routed_adapter. "
                 "Remove one of them."
             )
-        resolved_architecture = resolved_architecture.model_copy(update={"core_routed_adapter": routed_adapter})
+        resolved_architecture = resolved_architecture.model_copy(update={"cortex_routed_adapter": routed_adapter})
     elif routed_adapter is not None:
         raise ValueError(
-            "routed_adapter only supports the default ViT policy architecture. "
-            "Pass a ViTDefaultConfig(core_routed_adapter=...) explicitly to use a custom architecture."
+            "routed_adapter only supports the default Cortex policy architecture. "
+            "Pass a CorePolicyConfig(cortex_routed_adapter=...) explicitly to use a custom architecture."
         )
 
     resolved_diff_horde_cumulants: DiffHordeCumulantsConfig | None = None

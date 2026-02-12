@@ -12,8 +12,8 @@ from mettagrid.util.module import load_symbol
 # Short names -> class paths. Keep this list small and focused on architectures
 # referenced by recipes.
 _ARCHITECTURE_SPECS: dict[str, str] = {
-    # ViT variants
-    "vit": "metta.agent.policies.vit.ViTDefaultConfig",
+    # Default Cortex policy and variants
+    "core_policy": "metta.agent.policies.core_policy.CorePolicyConfig",
     "vit_size2": "metta.agent.policies.vit_size_2.ViTSize2Config",
     "vit_grpo": "metta.agent.policies.vit_grpo.ViTGRPOConfig",
     "vit_quantile": "metta.agent.policies.vit_quantile.ViTQuantileConfig",

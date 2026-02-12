@@ -1,4 +1,4 @@
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.core_policy import CorePolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from recipes.prod.arena_basic_easy_shaped import (
     evaluate,
@@ -22,7 +22,7 @@ def train(
 ):
     return base_train(
         curriculum=curriculum,
-        policy_architecture=policy_architecture or ViTDefaultConfig(),
+        policy_architecture=policy_architecture or CorePolicyConfig(),
     )
 
 

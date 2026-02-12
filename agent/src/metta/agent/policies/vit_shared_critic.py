@@ -37,13 +37,13 @@ class ViTSharedCriticConfig(PolicyArchitecture):
 
     # Trunk configuration
     # Number of Axon layers in the trunk
-    core_resnet_layers: int = 2
+    cortex_num_layers: int = 2
     # Pattern for trunk layers (e.g., "A" for Axon blocks, "L" for linear)
-    core_resnet_pattern: str = "Ag,A,S"
+    cortex_pattern: str = "Ag,A,S"
     # Enable layer normalization after each trunk layer
-    core_use_layer_norm: bool = False
+    cortex_use_layer_norm: bool = False
     # Whether to torch.compile the trunk (Cortex stack)
-    core_compile: bool = False
+    cortex_compile: bool = False
 
     components: List[ComponentConfig] = []
 
@@ -85,10 +85,10 @@ class ViTSharedCriticConfig(PolicyArchitecture):
                 key_prefix="vit_cortex_state",
                 stack_cfg=build_cortex_auto_config(
                     d_hidden=self.latent_dim,
-                    num_layers=self.core_resnet_layers,
-                    pattern=self.core_resnet_pattern,
-                    post_norm=self.core_use_layer_norm,
-                    compile_blocks=self.core_compile,
+                    num_layers=self.cortex_num_layers,
+                    pattern=self.cortex_pattern,
+                    post_norm=self.cortex_use_layer_norm,
+                    compile_blocks=self.cortex_compile,
                 ),
                 pass_state_during_training=self.pass_state_during_training,
             ),

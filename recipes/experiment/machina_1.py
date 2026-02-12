@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 import metta.tools as tools
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.core_policy import CorePolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.training.teacher import TeacherConfig
@@ -61,7 +61,7 @@ def train(
         teacher=teacher,
         maps_cache_size=None,
     )
-    resolved_arch = policy_architecture or ViTDefaultConfig()
+    resolved_arch = policy_architecture or CorePolicyConfig()
     learner_cfg = tt.policy_assets.get("learner0")
     if learner_cfg is None:
         tt.policy_assets["learner0"] = PolicyAssetConfig(architecture=resolved_arch)

@@ -15,7 +15,7 @@ from metta.agent.policy import PolicyArchitecture
 class ViTGRPOConfig(PolicyArchitecture):
     """ViT architecture optimized for GRPO - no critic network.
 
-    This architecture is identical to ViTDefaultConfig but without the value/critic
+    This architecture is identical to CorePolicyConfig but without the value/critic
     network, making it faster for GRPO training which doesn't need value predictions.
     """
 

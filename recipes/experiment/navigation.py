@@ -162,7 +162,7 @@ def make_curriculum(
 
 def train(
     curriculum: Optional[CurriculumConfig] = None,
-    arch_type: str = "vit",
+    arch_type: str = "core_policy",
 ) -> tools.TrainTool:
     resolved_curriculum = curriculum or make_curriculum()
 

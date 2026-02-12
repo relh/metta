@@ -49,6 +49,7 @@ from metta.rl.training import (
     WandbAborter,
     WandbAborterConfig,
 )
+from metta.rl.training.batch import calculate_batch_sizes
 from metta.rl.training.distributed_helper import distributed_world_size_and_rank_from_env
 from metta.rl.training.scheduler import LossScheduler, SchedulerConfig
 from metta.rl.training.trajectory_isolation import (
@@ -72,9 +73,9 @@ logger = getRankAwareLogger(__name__)
 
 
 def _default_policy_architecture() -> PolicyArchitecture:
-    from metta.agent.policies.vit import ViTDefaultConfig  # noqa: PLC0415
+    from metta.agent.policies.core_policy import CorePolicyConfig  # noqa: PLC0415
 
-    return ViTDefaultConfig()
+    return CorePolicyConfig()
 
 
 class TrainTool(Tool):
@@ -138,13 +139,13 @@ class TrainTool(Tool):
         if self.group:
             self.wandb.group = self.group
 
-        if platform.system() == "Darwin" and not self.disable_macbook_optimize:
-            self._minimize_config_for_debugging()  # this overrides many config settings for local testings
-
         if platform.system() == "Darwin" and str(self.system.device).startswith("mps"):
             if self.training_env.vectorization == "serial":
                 logger.warning("MPS requested on macOS; switching to multiprocessing vectorization.")
                 self.training_env.vectorization = "multiprocessing"
+
+        if platform.system() == "Darwin" and not self.disable_macbook_optimize:
+            self._minimize_config_for_debugging()  # this overrides many config settings for local testings
 
         if self.sandbox:
             self._apply_sandbox_config()
@@ -638,14 +639,30 @@ class TrainTool(Tool):
         return contextlib.nullcontext(None)
 
     def _minimize_config_for_debugging(self) -> None:
-        self.trainer.minibatch_size = min(self.trainer.minibatch_size, 1024)
-        self.trainer.batch_size = min(self.trainer.batch_size, 1024)
         self.trainer.bptt_horizon = min(self.trainer.bptt_horizon, 8)
 
         self.training_env.async_factor = 1
         self.training_env.forward_pass_minibatch_target_size = min(
             self.training_env.forward_pass_minibatch_target_size, 4
         )
+
+        env_cfg = Curriculum(self.training_env.curriculum).get_task().get_env_cfg()
+        num_agents = int(env_cfg.game.num_agents)
+        num_workers = self.training_env.num_workers
+        if self.training_env.vectorization == "serial":
+            num_workers = 1
+
+        _, _, num_envs = calculate_batch_sizes(
+            forward_pass_minibatch_target_size=self.training_env.forward_pass_minibatch_target_size,
+            num_agents=num_agents,
+            num_workers=num_workers,
+            async_factor=self.training_env.async_factor,
+        )
+        expected_batch_size = num_envs * num_agents * self.trainer.bptt_horizon
+
+        self.trainer.minibatch_size = expected_batch_size
+        self.trainer.batch_size = expected_batch_size
+
         self.checkpointer.epoch_interval = min(self.checkpointer.epoch_interval, 10)
         self.evaluator.epoch_interval = min(self.evaluator.epoch_interval, 10)
 

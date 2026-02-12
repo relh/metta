@@ -14,10 +14,12 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+from cortex.rl.feature_extractors import TokenPerceiverFeatureExtractorConfig
+
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_curriculum import EventProfile
-from metta.agent.policies.vit import ViTDefaultConfig
+from metta.agent.policies.core_policy import CorePolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.rl.loss.action_supervised import ActionSupervisedConfig
@@ -92,7 +94,9 @@ def train(
     )
 
     # Explicit single trainable policy, created from scratch.
-    default_architecture = ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
+    default_architecture = CorePolicyConfig(
+        feature_extractor=TokenPerceiverFeatureExtractorConfig(ignore_inventory_power_tokens=False)
+    )
     tt.policy_assets = {
         "learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture),
     }
