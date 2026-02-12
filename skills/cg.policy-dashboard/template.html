@@ -398,6 +398,67 @@
         color: var(--accent-green);
       }
 
+      /* Claude Analysis */
+      .claude-analysis {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+      }
+
+      .claude-analysis h4 {
+        color: var(--accent-purple);
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .claude-analysis .claude-badge {
+        font-size: 0.7rem;
+        background: rgba(139, 92, 246, 0.2);
+        color: var(--accent-purple);
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .claude-analysis-content h4 {
+        color: var(--accent-purple);
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+      }
+
+      .claude-analysis-content h4:first-child {
+        margin-top: 0;
+      }
+
+      .claude-analysis-content p {
+        color: var(--text-secondary);
+        margin-bottom: 0.5rem;
+        line-height: 1.6;
+      }
+
+      .claude-analysis-content strong {
+        color: var(--text-primary);
+      }
+
+      .claude-analysis-content ul,
+      .claude-analysis-content ol {
+        color: var(--text-secondary);
+        padding-left: 1.25rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .claude-analysis-content li {
+        margin-bottom: 0.35rem;
+      }
+
       /* Utility */
       .mono {
         font-family: 'SF Mono', 'Fira Code', monospace;
@@ -854,6 +915,12 @@
 
       <!-- Tab: Overview -->
       <div id="overview" class="tab-content active">
+        <!-- Claude AI Analysis -->
+        <div id="claude-analysis-section" class="claude-analysis" style="display: none">
+          <h4>AI Analysis <span class="claude-badge">Claude</span></h4>
+          <div id="claude-analysis-content" class="claude-analysis-content"></div>
+        </div>
+
         <!-- Diagnostic Insights -->
         <div class="insights" id="diagnostic-insights" style="display: none">
           <h4>Diagnostic Alerts</h4>
@@ -1317,6 +1384,9 @@
           // Team Composition (Phase 4)
           renderTeamComp();
 
+          // Claude AI Analysis (optional)
+          renderClaudeAnalysis();
+
           // Diagnostic Insights (from Python)
           renderDiagnostics();
 
@@ -1765,6 +1835,97 @@
               }
           }
           return null;
+      }
+
+      function renderClaudeAnalysis() {
+          const section = document.getElementById('claude-analysis-section');
+          const content = document.getElementById('claude-analysis-content');
+          const analysis = DATA.claude_analysis;
+
+          if (!analysis) {
+              section.style.display = 'none';
+              return;
+          }
+
+          section.style.display = 'block';
+          content.innerHTML = markdownToHtml(analysis);
+      }
+
+      function markdownToHtml(md) {
+          const lines = md.split('\n');
+          let html = '';
+          let inList = false;
+          let listType = 'ul';
+
+          for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+
+              // Headings (### and ##)
+              const h3Match = line.match(/^###\s+(.+)/);
+              if (h3Match) {
+                  if (inList) { html += `</${listType}>`; inList = false; }
+                  html += `<h4>${inlineFormat(h3Match[1])}</h4>`;
+                  continue;
+              }
+              const h2Match = line.match(/^##\s+(.+)/);
+              if (h2Match) {
+                  if (inList) { html += `</${listType}>`; inList = false; }
+                  html += `<h4>${inlineFormat(h2Match[1])}</h4>`;
+                  continue;
+              }
+
+              // Ordered list items
+              const olMatch = line.match(/^\d+\.\s+(.+)/);
+              if (olMatch) {
+                  if (!inList || listType !== 'ol') {
+                      if (inList) html += `</${listType}>`;
+                      html += '<ol>';
+                      inList = true;
+                      listType = 'ol';
+                  }
+                  html += `<li>${inlineFormat(olMatch[1])}</li>`;
+                  continue;
+              }
+
+              // Unordered list items
+              const ulMatch = line.match(/^[-*]\s+(.+)/);
+              if (ulMatch) {
+                  if (!inList || listType !== 'ul') {
+                      if (inList) html += `</${listType}>`;
+                      html += '<ul>';
+                      inList = true;
+                      listType = 'ul';
+                  }
+                  html += `<li>${inlineFormat(ulMatch[1])}</li>`;
+                  continue;
+              }
+
+              // Close list if we're no longer in one
+              if (inList && line.trim() === '') {
+                  html += `</${listType}>`;
+                  inList = false;
+                  continue;
+              }
+
+              // Paragraph
+              if (line.trim()) {
+                  if (inList) { html += `</${listType}>`; inList = false; }
+                  html += `<p>${inlineFormat(line)}</p>`;
+              }
+          }
+
+          if (inList) html += `</${listType}>`;
+          return html;
+      }
+
+      function inlineFormat(text) {
+          // Bold
+          text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+          // Inline code
+          text = text.replace(/`(.+?)`/g, '<code style="background:rgba(139,92,246,0.15);padding:0.1rem 0.3rem;border-radius:3px;font-size:0.85em">$1</code>');
+          // Italic
+          text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+          return text;
       }
 
       function renderDiagnostics() {

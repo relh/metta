@@ -24,6 +24,8 @@ description:
 - `--season`: Tournament season (default: `beta-cvc`). Tournament mode only.
 - `--local-results`: Directory of episode result JSON files. Enables local mode (no auth required).
 - `--policy-name`: Policy name for local mode (default: directory name).
+- `--claude`: Include Claude AI analysis (adds 10-30s). Off by default.
+- `--claude-model`: Model for Claude analysis (default: `sonnet`). Use `opus` for deeper analysis.
 
 ## What It Does
 

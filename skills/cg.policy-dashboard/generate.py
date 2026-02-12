@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import shutil
 import statistics
+import subprocess
 import sys
 import webbrowser
 from dataclasses import dataclass, field
@@ -900,6 +902,8 @@ def main():
         action="store_true",
         help="Generate dashboard with sample data to demonstrate features",
     )
+    parser.add_argument("--claude", action="store_true", help="Include Claude AI analysis (adds 10-30s)")
+    parser.add_argument("--claude-model", default="sonnet", help="Model for analysis (default: sonnet)")
     args = parser.parse_args()
 
     console.print("[bold blue]CoGames Policy Dashboard Generator[/bold blue]\n")
@@ -938,13 +942,17 @@ def main():
         data = load_local_results(results_dir, policy_name, args.limit)
         console.print(f"\n[green]Loaded {len(data.episodes)} episodes[/green]")
 
+        claude_analysis = None
+        if args.claude:
+            claude_analysis = run_claude_analysis(data, args.claude_model)
+
         # Generate dashboard
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = args.output or f"cg_dashboard_{policy_name}_local_{timestamp}.html"
         output_path = Path(output_path)
 
         console.print("\n[bold]Generating dashboard...[/bold]")
-        generate_dashboard(data, output_path)
+        generate_dashboard(data, output_path, claude_analysis=claude_analysis)
 
         console.print(f"\n[bold green]Dashboard saved to:[/bold green] {output_path}")
         console.print("[dim]Opening in browser...[/dim]")
@@ -971,13 +979,17 @@ def main():
 
             console.print(f"\n[green]Fetched {len(data.episodes)} episodes[/green]")
 
+            claude_analysis = None
+            if args.claude:
+                claude_analysis = run_claude_analysis(data, args.claude_model)
+
             # Generate dashboard
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             output_path = args.output or f"cg_dashboard_{policy.name}_v{policy.version}_{timestamp}.html"
             output_path = Path(output_path)
 
             console.print("\n[bold]Generating dashboard...[/bold]")
-            generate_dashboard(data, output_path)
+            generate_dashboard(data, output_path, claude_analysis=claude_analysis)
 
             console.print(f"\n[bold green]Dashboard saved to:[/bold green] {output_path}")
             console.print("[dim]Opening in browser...[/dim]")
@@ -987,9 +999,12 @@ def main():
             api.close()
 
 
-def generate_dashboard(data: DashboardData, output_path: Path) -> None:
+def generate_dashboard(data: DashboardData, output_path: Path, claude_analysis: str | None = None) -> None:
     """Generate HTML dashboard from DashboardData."""
-    generate_dashboard_from_dict(data_to_dict(data), output_path)
+    data_dict = data_to_dict(data)
+    if claude_analysis:
+        data_dict["claude_analysis"] = claude_analysis
+    generate_dashboard_from_dict(data_dict, output_path)
 
 
 def generate_dashboard_from_dict(data_dict: dict, output_path: Path) -> None:
@@ -1056,6 +1071,200 @@ def data_to_dict(data: DashboardData) -> dict:
             "opponent_metrics": _compute_opponent_metrics(data.episodes),
         },
     }
+
+
+def build_analysis_summary(data: DashboardData) -> dict:
+    """Build compact summary of derived metrics for Claude analysis.
+
+    Excludes raw episode data and per-episode metrics to stay under 20KB.
+    """
+    completed = [e for e in data.episodes if e.status == "completed"]
+    rewards = [e.reward for e in completed]
+
+    # Per-opponent summary
+    by_opponent: dict[str, list[EpisodeData]] = {}
+    for e in completed:
+        by_opponent.setdefault(e.opponent_name, []).append(e)
+
+    opponent_summary = {}
+    for opp, eps in by_opponent.items():
+        opp_rewards = [e.reward for e in eps]
+        # Compute opponent's strategy profile from avg metrics
+        avg_m: dict[str, float] = {}
+        for e in eps:
+            for k, v in e.metrics.items():
+                if isinstance(v, (int, float)):
+                    avg_m[k] = avg_m.get(k, 0) + v
+        n = len(eps)
+        avg_m = {k: v / n for k, v in avg_m.items()}
+
+        move_s = avg_m.get("action.move.success", 0)
+        move_f = avg_m.get("action.move.failed", 0)
+        noop = avg_m.get("action.noop.success", 0)
+        vibe = avg_m.get("action.change_vibe.success", 0)
+        j_aligned = avg_m.get("junction.aligned_by_agent", 0)
+        j_scrambled = avg_m.get("junction.scrambled_by_agent", 0)
+        j_total = j_aligned + j_scrambled
+        move_rate = move_s / (move_s + noop) if (move_s + noop) > 0 else 0
+        noop_rate_p = noop / (move_s + noop) if (move_s + noop) > 0 else 0
+        move_eff = move_s / (move_s + move_f) if (move_s + move_f) > 0 else 0
+        j_control = j_aligned / j_total if j_total > 0 else 0
+
+        opponent_summary[opp] = {
+            "count": n,
+            "avg_reward": round(sum(opp_rewards) / n, 4),
+            "strategy_profile": {
+                "aggressive": round(min(100, j_scrambled * 10 + vibe * 5), 2),
+                "defensive": round(min(100, noop / 10 + (1 - move_rate) * 50), 2),
+                "junction_hunter": round(min(100, j_aligned * 3 + j_control * 50), 2),
+                "mobile_scout": round(min(100, move_eff * 50 + (1 - noop_rate_p) * 50), 2),
+            },
+        }
+
+    # Team comp stats
+    team_comp_summary = {}
+    for e in completed:
+        team_comp_summary.setdefault(e.team_composition, []).append(e.reward)
+    team_comp = {
+        comp: {"count": len(rs), "avg_reward": round(sum(rs) / len(rs), 4)} for comp, rs in team_comp_summary.items()
+    }
+
+    # Reward distribution stats
+    reward_stats = {}
+    if rewards:
+        reward_stats = {
+            "mean": round(statistics.mean(rewards), 4),
+            "median": round(statistics.median(rewards), 4),
+            "min": round(min(rewards), 4),
+            "max": round(max(rewards), 4),
+            "p25": round(sorted(rewards)[len(rewards) // 4], 4),
+            "p75": round(sorted(rewards)[3 * len(rewards) // 4], 4),
+        }
+        if len(rewards) >= 2:
+            reward_stats["std"] = round(statistics.stdev(rewards), 4)
+
+    d = data.derived
+    return {
+        "policy": {
+            "name": data.policy.name,
+            "version": data.policy.version,
+            "rank": data.policy.rank,
+            "score": data.policy.score,
+            "matches": data.policy.matches,
+        },
+        "episode_count": len(data.episodes),
+        "completed_count": len(completed),
+        "season": data.season,
+        "kpis": {
+            "avg_reward": round(d.avg_reward, 4),
+            "move_efficiency": round(d.move_efficiency, 4),
+            "action_success_rate": round(d.action_success_rate, 4),
+            "vibe_change_rate": round(d.vibe_change_rate, 4),
+            "resource_retention": round(d.resource_retention, 4),
+            "freeze_vulnerability": round(d.freeze_vulnerability, 4),
+            "junction_control_rate": round(d.junction_control_rate, 4),
+            "alignment_stability": round(d.alignment_stability, 4),
+            "net_alignment_rate": round(d.net_alignment_rate, 4),
+            "noop_rate": round(d.noop_rate, 4),
+            "resource_efficiency_per_step": round(d.resource_efficiency_per_step, 4),
+            "hearts_to_junction_rate": round(d.hearts_to_junction_rate, 4),
+            "reward_consistency": round(d.reward_consistency, 4),
+            "reward_nonzero_pct": round(d.reward_nonzero_pct, 4),
+        },
+        "strategy_profile": {
+            "aggressive": round(d.profile_aggressive, 2),
+            "defensive": round(d.profile_defensive, 2),
+            "resource_hoarder": round(d.profile_resource_hoarder, 2),
+            "junction_hunter": round(d.profile_junction_hunter, 2),
+            "mobile_scout": round(d.profile_mobile_scout, 2),
+        },
+        "diagnostics": d.diagnostics,
+        "team_comp": team_comp,
+        "opponents": opponent_summary,
+        "reward_distribution": reward_stats,
+    }
+
+
+def _build_analysis_prompt(summary: dict) -> str:
+    """Build the Claude analysis prompt with embedded guide and summary data."""
+    guide_path = Path(__file__).parent / "analysis-guide.md"
+    guide_text = guide_path.read_text()
+
+    summary_json = json.dumps(summary, indent=2)
+
+    sections = [
+        "You are a CoGames tournament policy analyst.",
+        "Analyze the following policy performance data and provide strategic advice.",
+        "",
+        "## Reference Guide",
+        "",
+        guide_text,
+        "",
+        "## Policy Performance Summary",
+        "",
+        f"```json\n{summary_json}\n```",
+        "",
+        "## Instructions",
+        "",
+        "Produce a markdown analysis with exactly these"
+        " 4 sections. Do NOT repeat diagnostic messages"
+        " verbatim — synthesize them into root causes"
+        " and actionable advice.",
+        "",
+        "### Root Cause Analysis",
+        "Connect multiple diagnostics and metrics to"
+        " identify underlying causes. Look for patterns"
+        " across KPIs, matchups, and team compositions"
+        " that point to the same root issue.",
+        "",
+        "### Top 3 Training Priorities",
+        "Rank by expected ROI. For each priority, specify"
+        " concrete changes: reward shaping adjustments,"
+        " curriculum modifications, hyperparameter changes,"
+        " or architectural improvements.",
+        "",
+        "### Opponent Adaptation",
+        "For low-performing matchups, analyze the"
+        " opponent's strategy profile and suggest"
+        " counter-strategies. If no matchup data exists,"
+        " skip this section.",
+        "",
+        "### Policy Narrative",
+        "A plain-language description (2-3 sentences) of"
+        ' what this policy "feels like" — its personality,'
+        " strengths, and blind spots. Write this for"
+        " someone who hasn't seen the data.",
+    ]
+    return "\n".join(sections)
+
+
+def run_claude_analysis(data: DashboardData, model: str) -> str | None:
+    """Run Claude analysis on policy data. Returns markdown string or None."""
+    if not shutil.which("claude"):
+        console.print(
+            "[yellow]Claude CLI not found — skipping AI analysis. Install from https://claude.ai/code[/yellow]"
+        )
+        return None
+
+    summary = build_analysis_summary(data)
+    prompt = _build_analysis_prompt(summary)
+
+    console.print(f"[bold]Running Claude analysis ({model})...[/bold]")
+    result = subprocess.run(
+        ["claude", "-p", "--model", model, "--output-format", "json", prompt],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+    if result.returncode != 0:
+        console.print(f"[yellow]Claude analysis failed (exit {result.returncode}) — skipping[/yellow]")
+        if result.stderr:
+            console.print(f"[dim]{result.stderr.strip()}[/dim]")
+        return None
+
+    parsed = json.loads(result.stdout)
+    return parsed["result"]
 
 
 def _compute_opponent_metrics(episodes: list[EpisodeData]) -> dict[str, Any]:

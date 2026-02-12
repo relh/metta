@@ -348,6 +348,95 @@ export type EpisodeStatsResponse = {
   steps: number | null
 }
 
+// Dashboard types
+export type DashboardKpis = {
+  // Efficiency (0-1)
+  move_efficiency: number
+  action_success_rate: number
+  vibe_change_rate: number
+  // Resource
+  resource_retention: number
+  // Vulnerability
+  freeze_vulnerability: number
+  // Junction
+  junction_control_rate: number
+  alignment_stability: number
+  net_alignment_rate: number
+  // Reward
+  avg_reward: number
+  // Additional
+  noop_rate: number
+  resource_efficiency_per_step: number
+  hearts_to_junction_rate: number
+  reward_consistency: number
+  reward_nonzero_pct: number
+  // Strategy profile (0-100)
+  profile_aggressive: number
+  profile_defensive: number
+  profile_resource_hoarder: number
+  profile_junction_hunter: number
+  profile_mobile_scout: number
+  // Diagnostics
+  diagnostics: string[]
+}
+
+export type DashboardTeamCompStats = {
+  composition: string
+  count: number
+  avg_reward: number
+  avg_move_efficiency: number
+  avg_junction_aligned: number
+  avg_resource_gained: number
+}
+
+export type DashboardOpponentStats = {
+  count: number
+  total_reward: number
+  avg_reward: number
+  avg_metrics: Record<string, number>
+  strategy_profile: Record<string, number>
+}
+
+export type DashboardDerived = {
+  kpis: DashboardKpis
+  team_comp: DashboardTeamCompStats[]
+  opponent_metrics: Record<string, DashboardOpponentStats>
+}
+
+export type DashboardEpisode = {
+  episode_id: string
+  job_id: string
+  opponent_name: string
+  opponent_version: number
+  team_composition: string
+  reward: number
+  status: string
+  error_type: string | null
+  steps: number
+  metrics: Record<string, number>
+}
+
+export type DashboardPolicy = {
+  id: string
+  name: string
+  version: number
+  rank: number | null
+  score: number | null
+  matches: number
+}
+
+export type DashboardResponse = {
+  policy: DashboardPolicy
+  episodes: DashboardEpisode[]
+  season: string
+  generated_at: string
+  derived: DashboardDerived
+}
+
+export type DashboardAnalysisResponse = {
+  analysis: string
+}
+
 export type RequestLogEntry = {
   id: string
   endpoint: string
@@ -761,6 +850,24 @@ export class Repo {
   async getPolicyMemberships(policyVersionId: string): Promise<MembershipHistoryEntry[]> {
     return this.apiCall<MembershipHistoryEntry[]>(
       `/tournament/policies/${encodeURIComponent(policyVersionId)}/memberships`
+    )
+  }
+
+  // Dashboard methods
+  async getDashboardData(policyVersionId: string): Promise<DashboardResponse> {
+    return this.apiCallWithBody<DashboardResponse>(
+      `/stats/policies/versions/${encodeURIComponent(policyVersionId)}/dashboard-data`,
+      {}
+    )
+  }
+
+  async getDashboardAnalysis(
+    policyVersionId: string,
+    summary: Record<string, any>
+  ): Promise<DashboardAnalysisResponse> {
+    return this.apiCallWithBody<DashboardAnalysisResponse>(
+      `/stats/policies/versions/${encodeURIComponent(policyVersionId)}/dashboard-analysis`,
+      { summary }
     )
   }
 }

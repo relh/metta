@@ -42,9 +42,14 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
           </div>
         </div>
         {pvInfo && (
-          <LinkButton href={`/policies/${pvInfo.policy_id}`} theme="tertiary">
-            ← Back to policy
-          </LinkButton>
+          <div className="flex gap-2">
+            <LinkButton href={`/policies/versions/${policyVersionId}/dashboard`} theme="secondary">
+              View Dashboard
+            </LinkButton>
+            <LinkButton href={`/policies/${pvInfo.policy_id}`} theme="tertiary">
+              &larr; Back to policy
+            </LinkButton>
+          </div>
         )}
       </div>
 

@@ -241,6 +241,10 @@ def _local_dev_env() -> dict[str, str]:
     env["LOCAL_DEV_AWS_PROFILE"] = LOCAL_AWS_PROFILE
     env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
 
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anthropic_key:
+        env["ANTHROPIC_API_KEY"] = anthropic_key
+
     aws_path = os.path.expanduser("~/.aws")
     source_mounts = [
         f"{aws_path}:/root/.aws",
@@ -377,6 +381,10 @@ def server(
     env["POLICY_S3_BUCKET"] = LOCAL_EVAL_BUCKET
     if otel_console:
         env["OTEL_METRICS_CONSOLE"] = "true"
+
+    # Forward ANTHROPIC_API_KEY if available (used by dashboard AI analysis)
+    if "ANTHROPIC_API_KEY" in os.environ:
+        env["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"]
 
     # Respect LOGIN_SERVICE_URL from environment (set by `up` command), otherwise use --login-server flag
     if "LOGIN_SERVICE_URL" not in env:

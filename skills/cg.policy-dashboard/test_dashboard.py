@@ -22,6 +22,7 @@ from generate import (  # noqa: E402
     EpisodeData,
     PolicyVersion,
     aggregate_agent_metrics,
+    build_analysis_summary,
     compute_derived_metrics,
     compute_team_comp_analysis,
     data_to_dict,
@@ -675,6 +676,126 @@ def test_alignment_stability_formula():
     )
 
 
+# === Claude Analysis Summary Tests ===
+
+
+def _make_dashboard_data(n_episodes=10):
+    """Helper to create DashboardData with realistic metrics."""
+    metrics = {
+        "action.move.success": 500,
+        "action.move.failed": 50,
+        "action.noop.success": 30,
+        "action.change_vibe.success": 5,
+        "action.failed": 10,
+        "junction.aligned_by_agent": 3,
+        "junction.scrambled_by_agent": 1,
+        "heart.gained": 5,
+        "heart.lost": 2,
+        "carbon.gained": 100,
+        "carbon.amount": 80,
+        "carbon.lost": 20,
+        "oxygen.gained": 30,
+        "oxygen.amount": 25,
+        "oxygen.lost": 5,
+        "silicon.gained": 50,
+        "silicon.amount": 40,
+        "silicon.lost": 10,
+        "germanium.gained": 20,
+        "germanium.amount": 15,
+        "germanium.lost": 5,
+        "heart.amount": 3,
+        "status.frozen.ticks": 50,
+    }
+    episodes = [
+        _make_episode(
+            episode_id=f"ep_{i}",
+            reward=1.0 + i * 0.1,
+            opponent="opp_a" if i % 2 == 0 else "opp_b",
+            team_comp="4v4" if i % 3 != 0 else "6v2",
+            metrics=metrics,
+        )
+        for i in range(n_episodes)
+    ]
+    derived = compute_derived_metrics(episodes)
+    return DashboardData(
+        policy=PolicyVersion(id="test_id", name="test_policy", version=3, rank=5, score=2.5, matches=50),
+        episodes=episodes,
+        season="test-season",
+        generated_at="2025-01-01T00:00:00",
+        derived=derived,
+    )
+
+
+def test_build_analysis_summary_has_expected_keys():
+    """build_analysis_summary returns all required top-level keys."""
+    data = _make_dashboard_data()
+    summary = build_analysis_summary(data)
+
+    for key in [
+        "policy",
+        "kpis",
+        "strategy_profile",
+        "diagnostics",
+        "opponents",
+        "team_comp",
+        "reward_distribution",
+        "episode_count",
+        "completed_count",
+        "season",
+    ]:
+        assert key in summary, f"Missing key: {key}"
+
+
+def test_build_analysis_summary_excludes_raw_episodes():
+    """Summary must not contain raw episode data or per-episode metrics."""
+    data = _make_dashboard_data()
+    summary = build_analysis_summary(data)
+
+    assert "episodes" not in summary
+    summary_str = json.dumps(summary)
+    # Should not contain episode_id values (raw episode leakage)
+    assert "ep_0" not in summary_str
+
+
+def test_build_analysis_summary_under_20kb():
+    """Summary JSON must stay under 20KB even with 100 episodes."""
+    data = _make_dashboard_data(n_episodes=100)
+    summary = build_analysis_summary(data)
+    summary_json = json.dumps(summary)
+
+    assert len(summary_json) < 20_000, f"Summary is {len(summary_json)} bytes, expected < 20KB"
+
+
+def test_build_analysis_summary_opponent_breakdown():
+    """Summary includes per-opponent stats with strategy profiles."""
+    data = _make_dashboard_data()
+    summary = build_analysis_summary(data)
+
+    assert "opp_a" in summary["opponents"]
+    assert "opp_b" in summary["opponents"]
+    opp_a = summary["opponents"]["opp_a"]
+    assert "count" in opp_a
+    assert "avg_reward" in opp_a
+    assert "strategy_profile" in opp_a
+
+
+def test_build_analysis_summary_empty_episodes():
+    """Summary handles zero episodes gracefully."""
+    data = DashboardData(
+        policy=PolicyVersion(id="test", name="empty", version=1),
+        episodes=[],
+        season="test",
+        generated_at="2025-01-01T00:00:00",
+    )
+    summary = build_analysis_summary(data)
+
+    assert summary["episode_count"] == 0
+    assert summary["completed_count"] == 0
+    assert summary["opponents"] == {}
+    assert summary["team_comp"] == {}
+    assert summary["reward_distribution"] == {}
+
+
 def main():
     """Run all tests."""
     tests = [
@@ -712,6 +833,12 @@ def main():
         test_game_stat_ingestion,
         # Bug regression tests
         test_alignment_stability_formula,
+        # Claude analysis summary
+        test_build_analysis_summary_has_expected_keys,
+        test_build_analysis_summary_excludes_raw_episodes,
+        test_build_analysis_summary_under_20kb,
+        test_build_analysis_summary_opponent_breakdown,
+        test_build_analysis_summary_empty_episodes,
     ]
 
     passed = 0

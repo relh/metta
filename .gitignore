@@ -14,6 +14,7 @@ resources
 .idea/
 .task
 .omc/
+.local/
 *.local.code-workspace
 
 # OS-specific
