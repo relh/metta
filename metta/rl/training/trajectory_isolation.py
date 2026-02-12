@@ -398,6 +398,23 @@ class TrajectoryIsolator(TrainerComponent):
     def training_phase_policy_slice_counts(self) -> dict[str, dict[str, int]]:
         return self._training_phase_policy_slice_counts
 
+    @property
+    def per_env_agent_slices(self) -> list[tuple[str, int, int]]:
+        """Contiguous (name, start, end) agent-index ranges within a single env.
+
+        Only meaningful for ``agent_count`` slicing where agent position within
+        an environment deterministically maps to a slice.  Returns an empty list
+        for ``env_ratio`` (assignment is per-environment, not per-agent-index).
+        """
+        if self.config.slicing_method != "agent_count":
+            return []
+        boundaries: list[tuple[str, int, int]] = []
+        offset = 0
+        for s in self.config.slices:
+            boundaries.append((s.name, offset, offset + s.agent_count))
+            offset += s.agent_count
+        return boundaries
+
     def reward_centering_initial_means(self) -> torch.Tensor:
         runtime_slices = self.slice_plan
 

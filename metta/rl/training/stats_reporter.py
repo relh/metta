@@ -203,7 +203,12 @@ class StatsReporter(TrainerComponent):
     def process_rollout(self, raw_infos: list[dict[str, Any]]) -> None:
         if not raw_infos:
             return
+
+        slice_infos = self._build_per_slice_infos(raw_infos)
+
         accumulate_rollout_stats(raw_infos, self._state.rollout_stats)
+        if slice_infos:
+            accumulate_rollout_stats(slice_infos, self._state.rollout_stats)
 
     def report_epoch(
         self,
@@ -303,6 +308,35 @@ class StatsReporter(TrainerComponent):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _build_per_slice_infos(self, raw_infos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Build per-slice averaged info dicts from per_agent data.
+
+        Delegates agent→slice mapping to ``TrajectoryIsolator.per_env_agent_slices``
+        so the stats reporter doesn't reimplement slicing logic.  ``per_agent`` is
+        always popped to prevent it leaking into the general stats pipeline.
+        """
+        boundaries = self._context.trajectory_isolator.per_env_agent_slices
+
+        slice_infos: list[dict[str, Any]] = []
+        for info in raw_infos:
+            per_agent_dict = info.pop("per_agent", None)
+            if not per_agent_dict or not boundaries:
+                continue
+
+            for name, start, end in boundaries:
+                count = end - start
+                slice_avg: dict[str, float] = {}
+                for i in range(start, end):
+                    for k, v in per_agent_dict[str(i)].items():
+                        slice_avg[k] = slice_avg.get(k, 0) + v
+                inv = 1.0 / count
+                for k in slice_avg:
+                    slice_avg[k] *= inv
+
+                slice_infos.append({"agent": {f"{name}_slice": slice_avg}})
+
+        return slice_infos
 
     def accumulate_infos(self, info: dict[str, Any] | list[dict[str, Any]] | None) -> None:
         """Accumulate rollout info dictionaries for later aggregation."""
