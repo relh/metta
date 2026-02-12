@@ -26,6 +26,17 @@ class FormatterResult:
 FormatterRunner = Callable[[bool, set[str] | None, bool], FormatterResult]
 
 
+CHECK_PYRIGHT_PACKAGES = [
+    "agent",
+    "app_backend",
+    "common",
+    "metta/gridworks",
+    # "metta/rl",
+    "packages/cogames",
+    "packages/mettagrid/python/src",  # mettagrid/tests is not type-safe yet
+]
+
+
 class FormatterConfig(BaseModel):
     name: str
     format_cmds: tuple[tuple[str, ...], ...] = ()
@@ -284,13 +295,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
                         "uv",
                         "run",
                         "pyright",
-                        "agent",
-                        "app_backend",
-                        "common",
-                        "metta/gridworks",
-                        # "metta/rl",
-                        "packages/cogames",
-                        "packages/mettagrid/python/src",
+                        *CHECK_PYRIGHT_PACKAGES,
                     ),
                 ),
                 format_cmds=(
@@ -298,13 +303,7 @@ def get_formatters() -> dict[str, FormatterConfig]:
                         "uv",
                         "run",
                         "pyright",
-                        "agent",
-                        "app_backend",
-                        "common",
-                        "metta/gridworks",
-                        # "metta/rl",
-                        "packages/cogames",
-                        "packages/mettagrid/python/src",
+                        *CHECK_PYRIGHT_PACKAGES,
                     ),
                 ),
                 extensions=(".py",),

@@ -4,23 +4,28 @@ This tool is the single source of truth for CI checks.
 Both local development (metta ci) and GitHub Actions call this same tool.
 
 GitHub Actions workflow calls individual stages:
-  - uv run metta ci --stage lint
-  - uv run metta ci --stage pyright
-  - uv run metta ci --stage python-tests
-  - uv run metta ci --stage cpp-tests
-  - uv run metta ci --stage cpp-benchmarks
-  - uv run metta ci --stage recipe-tests
-  - uv run metta ci --stage cogames-docsync
+  - metta ci lint
+  - metta ci python-tests
+  - metta ci cpp-tests
+  - metta ci cpp-benchmarks
+  - metta ci nim-tests
+  - metta ci recipe-tests
+  - metta ci cogames-docsync
 
-Local development can run all stages:
-  - metta ci (runs all stages)
-  - metta ci --stage <name> (runs specific stage)
+Local development can run all default stages:
+  - metta ci
+
+Extra arguments are passed through to the underlying command:
+  - metta ci python-tests --skip-package app_backend
+  - metta ci recipe-tests --job some_filter
 """
 
+import os
 import shlex
 import subprocess
 import sys
-from typing import Annotated, Callable, Sequence
+from dataclasses import dataclass, field
+from typing import Sequence
 
 import typer
 from rich.console import Console
@@ -28,275 +33,141 @@ from rich.panel import Panel
 from rich.table import Table
 
 from metta.common.util.fs import get_repo_root
-from metta.setup.tools.test_runner.test_python import PACKAGES as PYTEST_PACKAGES
 from metta.setup.utils import error, info, success
 
 console = Console()
 
-ALLOWED_SKIP_PACKAGES = {package.name.lower() for package in PYTEST_PACKAGES}
+
+@dataclass(frozen=True)
+class Stage:
+    name: str
+    display: str
+    cmd: list[str] = field(default_factory=list)
+    default: bool = True
 
 
-class CheckResult:
-    def __init__(self, name: str, passed: bool):
-        self.name = name
-        self.passed = passed
+STAGES: list[Stage] = [
+    Stage(
+        name="lint",
+        display="Lint",
+        cmd=["uv", "run", "metta", "lint"],
+    ),
+    Stage(
+        name="python-tests",
+        display="Python Tests",
+        cmd=["uv", "run", "metta", "pytest", "--ci", "--test"],
+    ),
+    Stage(
+        name="cpp-tests",
+        display="C++ Tests",
+        cmd=["uv", "run", "metta", "cpptest", "--test"],
+    ),
+    Stage(
+        name="cpp-benchmarks",
+        display="C++ Benchmarks",
+        cmd=["uv", "run", "metta", "cpptest", "--benchmark"],
+    ),
+    Stage(
+        name="nim-tests",
+        display="Nim Tests",
+        cmd=["uv", "run", "metta", "nimtest"],
+    ),
+    Stage(
+        name="recipe-tests",
+        display="Recipe Tests",
+        cmd=["uv", "run", "./devops/stable/cli.py", "--suite=ci", "--skip-submitting-metrics"],
+    ),
+    Stage(
+        name="cogames-docsync",
+        display="CoGames Docsync",
+        cmd=["uv", "run", "cogames", "docsync", "check"],
+        default=False,
+    ),
+    Stage(
+        name="cleanup-cancelled-runs",
+        display="Cleanup Cancelled Runs",
+        cmd=["uv", "run", ".github/actions/cleanup-cancelled-runs/cleanup_cancelled_runs.py"],
+        default=False,
+    ),
+]
 
-
-def _format_cmd_for_display(cmd: Sequence[str]) -> str:
-    return shlex.join(cmd)
-
-
-def _print_header(title: str) -> None:
-    console.print(f"\n[bold cyan]{title}[/bold cyan]")
-    console.print("=" * 60)
-
-
-def _ensure_no_extra_args(stage_name: str, extra_args: Sequence[str] | None) -> None:
-    if extra_args:
-        error(f"Stage '{stage_name}' does not accept extra arguments.")
-        raise typer.Exit(1)
-
-
-def _normalize_python_stage_args(extra_args: Sequence[str] | None) -> list[str]:
-    if not extra_args:
-        return []
-
-    sanitized: list[str] = []
-    args = list(extra_args)
-    idx = 0
-    while idx < len(args):
-        token = args[idx]
-        if token == "--skip-package":
-            if idx + 1 >= len(args):
-                error("'--skip-package' requires a package name.")
-                raise typer.Exit(1)
-            package_name = args[idx + 1]
-            if package_name.lower() not in ALLOWED_SKIP_PACKAGES:
-                allowed = ", ".join(sorted(ALLOWED_SKIP_PACKAGES))
-                error(f"Unsupported package '{package_name}' for --skip-package.")
-                info(f"Allowed packages: {allowed}")
-                raise typer.Exit(1)
-            sanitized.extend([token, package_name])
-            idx += 2
-            continue
-
-        error(f"Argument '{token}' is not supported for python-tests stage.")
-        info("Allowed arguments: --skip-package <package>")
-        raise typer.Exit(1)
-
-    return sanitized
+STAGE_MAP: dict[str, Stage] = {s.name: s for s in STAGES}
 
 
 def _run_command(cmd: Sequence[str], description: str, *, verbose: bool = False) -> bool:
-    display_cmd = _format_cmd_for_display(cmd)
+    display_cmd = shlex.join(cmd)
     info(f"Running: {display_cmd}")
-    try:
-        subprocess.run(
-            cmd,
-            cwd=get_repo_root(),
-            check=True,
-            capture_output=not verbose,
-            text=True,
-        )
+
+    in_ci = bool(os.environ.get("CI"))
+    capture = not verbose and not in_ci
+
+    proc = subprocess.run(
+        cmd,
+        cwd=get_repo_root(),
+        capture_output=capture,
+        text=True,
+    )
+
+    passed = proc.returncode == 0
+
+    if capture and not passed:
+        if proc.stdout:
+            console.print(proc.stdout, markup=False)
+        if proc.stderr:
+            console.print(proc.stderr, markup=False)
+
+    if passed:
         success(f"{description} passed")
-        return True
-    except subprocess.CalledProcessError as exc:
+    else:
         error(f"{description} failed")
-        if not verbose:
-            if exc.stdout:
-                console.print(exc.stdout, markup=False)
-            if exc.stderr:
-                console.print(exc.stderr, markup=False)
-        return False
+
+    return passed
 
 
-def _run_lint(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("lint", extra_args)
-    _print_header("Linting")
-
-    cmd = ["uv", "run", "metta", "lint"]
-    passed = _run_command(cmd, "Linting", verbose=verbose)
-    return CheckResult("Lint", passed)
-
-
-def _run_python_tests(
-    *,
-    verbose: bool = False,
-    extra_args: Sequence[str] | None = None,
-) -> CheckResult:
-    _print_header("Python Tests")
-
-    cmd = ["uv", "run", "metta", "pytest", "--ci", "--test"]
-    cmd.extend(_normalize_python_stage_args(extra_args))
-    passed = _run_command(cmd, "Python tests", verbose=verbose)
-
-    return CheckResult("Python Tests", passed)
+def _run_stage(stage: Stage, extra_args: Sequence[str] = (), *, verbose: bool = False) -> tuple[str, bool]:
+    console.print(f"\n[bold cyan]{stage.display}[/bold cyan]")
+    console.print("=" * 60)
+    cmd = [*stage.cmd, *extra_args]
+    passed = _run_command(cmd, stage.display, verbose=verbose)
+    return stage.display, passed
 
 
-def _run_nim_tests(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("nim-tests", extra_args)
-    _print_header("Nim Tests")
-
-    cmd = ["uv", "run", "metta", "nimtest"]
-    passed = _run_command(cmd, "Nim tests", verbose=verbose)
-    return CheckResult("Nim Tests", passed)
-
-
-def _run_cpp_tests(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("cpp-tests", extra_args)
-    _print_header("C++ Tests")
-
-    cmd = ["uv", "run", "metta", "cpptest", "--test"]
-    if verbose:
-        cmd.append("--verbose")
-    passed = _run_command(cmd, "C++ unit tests", verbose=verbose)
-
-    return CheckResult("C++ Tests", passed)
-
-
-def _run_cpp_benchmarks(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("cpp-benchmarks", extra_args)
-    _print_header("C++ Benchmarks")
-
-    cmd = ["uv", "run", "metta", "cpptest", "--benchmark"]
-    if verbose:
-        cmd.append("--verbose")
-    passed = _run_command(cmd, "C++ benchmarks", verbose=verbose)
-
-    return CheckResult("C++ Benchmarks", passed)
-
-
-def _run_cleanup_cancelled_runs(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("cleanup-cancelled-runs", extra_args)
-    _print_header("Cleanup Cancelled Runs")
-
-    cmd = [
-        "uv",
-        "run",
-        str(get_repo_root() / ".github/actions/cleanup-cancelled-runs/cleanup_cancelled_runs.py"),
-    ]
-    passed = _run_command(cmd, "Cleanup cancelled runs", verbose=verbose)
-    return CheckResult("Cleanup Cancelled Runs", passed)
-
-
-def _run_recipe_tests(*, verbose: bool = False, name_filter: str | None = None, **_kwargs) -> CheckResult:
-    _print_header("Recipe Smoke Tests")
-
-    cmd = ["uv", "run", "./devops/stable/cli.py", "--suite=ci", "--skip-submitting-metrics"]
-    if name_filter:
-        cmd.extend(["--job", name_filter])
-
-    passed = _run_command(cmd, "Recipe CI tests", verbose=verbose)
-    return CheckResult("Recipe Tests", passed)
-
-
-def _run_cogames_docsync(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("cogames-docsync", extra_args)
-    _print_header("CoGames Documentation Sync")
-
-    cmd = ["uv", "run", "cogames", "docsync", "check"]
-    passed = _run_command(cmd, "CoGames documentation sync", verbose=verbose)
-    return CheckResult("CoGames Docsync", passed)
-
-
-_CHECK_PYRIGHT_PACKAGES = [
-    "agent",
-    "app_backend",
-    "common",
-    "metta/gridworks",
-    # "metta/rl",
-    "packages/cogames",
-    "packages/mettagrid/python/src",  # mettagrid/tests is not type-safe yet
-]
-
-
-def _run_pyright(*, verbose: bool = False, extra_args: Sequence[str] | None = None) -> CheckResult:
-    _ensure_no_extra_args("pyright", extra_args)
-    _print_header("Pyright")
-
-    cmd = ["uv", "run", "pyright", *_CHECK_PYRIGHT_PACKAGES]
-    passed = _run_command(cmd, "Pyright", verbose=verbose)
-    return CheckResult("Pyright", passed)
-
-
-def _print_summary(results: list[CheckResult]) -> None:
+def _print_summary(results: list[tuple[str, bool]]) -> None:
     console.print()
 
     table = Table(title="CI Check Summary", show_header=True, header_style="bold magenta")
     table.add_column("Check", style="cyan", no_wrap=True)
     table.add_column("Status", justify="center")
 
-    for result in results:
-        status = "[green]PASSED[/green]" if result.passed else "[red]FAILED[/red]"
-        table.add_row(result.name, status)
+    for name, passed in results:
+        status = "[green]PASSED[/green]" if passed else "[red]FAILED[/red]"
+        table.add_row(name, status)
 
     console.print(table)
     console.print()
 
 
-StageRunner = Callable[[bool, Sequence[str] | None, str | None, bool], CheckResult]
-
-stages: dict[str, StageRunner] = {
-    "lint": lambda v, args, name, _: _run_lint(verbose=v, extra_args=args),
-    "pyright": lambda v, args, name, _: _run_pyright(verbose=v, extra_args=args),
-    "python-tests": lambda v, args, name, _: _run_python_tests(verbose=v, extra_args=args),
-    "cpp-tests": lambda v, args, name, _: _run_cpp_tests(verbose=v, extra_args=args),
-    "cpp-benchmarks": lambda v, args, name, _: _run_cpp_benchmarks(verbose=v, extra_args=args),
-    "nim-tests": lambda v, args, name, _: _run_nim_tests(verbose=v, extra_args=args),
-    "recipe-tests": lambda v, args, name, ni: _run_recipe_tests(verbose=v, name_filter=name),
-    "cleanup-cancelled-runs": lambda v, args, name, _: _run_cleanup_cancelled_runs(verbose=v, extra_args=args),
-    "cogames-docsync": lambda v, args, name, _: _run_cogames_docsync(verbose=v, extra_args=args),
-}
-
-DEFAULT_STAGES = {
-    "lint",
-    "pyright",
-    "python-tests",
-    "cpp-tests",
-    "cpp-benchmarks",
-    "nim-tests",
-    "recipe-tests",
-}
-
-
 def cmd_ci(
     ctx: typer.Context,
-    stage: Annotated[
-        str | None,
-        typer.Option(help=f"Run specific stage: {', '.join(stages.keys())}"),
-    ] = None,
-    name: Annotated[
-        str | None,
-        typer.Option(help="Filter recipe-tests by job name substring"),
-    ] = None,
-    continue_on_error: Annotated[bool, typer.Option("--continue-on-error", help="Don't stop on first failure")] = False,
-    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Show detailed output")] = False,
-    no_interactive: Annotated[
-        bool, typer.Option("--no-interactive", help="Disable live display for CI environments")
-    ] = False,
+    stage: str | None = typer.Argument(None, help=f"Stage to run: {', '.join(STAGE_MAP)}"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show detailed output"),
+    continue_on_error: bool = typer.Option(False, "--continue-on-error", help="Don't stop on first failure"),
 ):
     """Run CI checks locally to match remote CI behavior."""
-    extra_args = list(getattr(ctx, "args", []))
+    extra_args = ctx.args
 
     if extra_args and stage is None:
-        error("Extra arguments require specifying a --stage.")
-        raise typer.Exit(1)
-
-    if name and stage != "recipe-tests":
-        error("--name can only be used with --stage recipe-tests")
+        error("Extra arguments require specifying a stage.")
         raise typer.Exit(1)
 
     if stage:
-        if stage == "python-tests-and-benchmarks":
-            info("Stage 'python-tests-and-benchmarks' is deprecated; use 'python-tests'.")
-            stage = "python-tests"
-        if stage not in stages:
+        if stage not in STAGE_MAP:
             error(f"Unknown stage: {stage}")
-            info(f"Valid stages: {', '.join(stages.keys())}")
+            info(f"Valid stages: {', '.join(STAGE_MAP)}")
             raise typer.Exit(1)
 
-        result = stages[stage](verbose, extra_args, name, no_interactive)
-        if result.passed:
+        _name, passed = _run_stage(STAGE_MAP[stage], extra_args, verbose=verbose)
+        if passed:
             success(f"Stage '{stage}' passed!")
             sys.exit(0)
         else:
@@ -305,21 +176,21 @@ def cmd_ci(
 
     console.print(Panel.fit("[bold]Running All CI Checks[/bold]", border_style="cyan"))
 
-    results: list[CheckResult] = []
+    results: list[tuple[str, bool]] = []
 
-    for stage_name, stage_func in stages.items():
-        if stage_name not in DEFAULT_STAGES:
+    for s in STAGES:
+        if not s.default:
             continue
-        result = stage_func(verbose, None, None, no_interactive)
-        results.append(result)
-        if not result.passed and not continue_on_error:
+        name, passed = _run_stage(s, verbose=verbose)
+        results.append((name, passed))
+        if not passed and not continue_on_error:
             _print_summary(results)
-            error(f"Stage '{stage_name}' failed. Fix errors and try again.")
+            error(f"Stage '{s.name}' failed. Fix errors and try again.")
             raise typer.Exit(1)
 
     _print_summary(results)
 
-    all_passed = all(r.passed for r in results)
+    all_passed = all(passed for _, passed in results)
     if all_passed:
         success("All CI checks passed!")
         sys.exit(0)

@@ -2,12 +2,13 @@ name: "Setup Environment"
 description: "Set up the environment for CI"
 inputs:
   install-mode:
-    description: "Installation mode: 'testing', 'runtime', 'metta-cli', or 'minimal'"
-    required: false
+    description: "Installation mode: 'testing', 'runtime' or 'minimal'"
     default: "testing"
+  pnpm:
+    description: "Install pnpm dependencies"
+    default: "false"
   extra-dependencies:
     description: "Extra pip dependencies to install (newline-separated list)"
-    required: false
     default: ""
 
   # NOTE: This action automatically sets UV_NO_SYNC=1 to prevent uv from syncing ALL project dependencies
@@ -174,3 +175,20 @@ runs:
         else
           echo "No extra inline pip dependencies specified"
         fi
+
+    # Install pnpm dependencies
+    - uses: pnpm/action-setup@v4
+      if: inputs.pnpm == 'true'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      if: inputs.pnpm == 'true'
+      with:
+        node-version: 24
+        cache: pnpm
+        cache-dependency-path: pnpm-lock.yaml
+
+    - name: Install pnpm dependencies
+      run: pnpm install
+      if: inputs.pnpm == 'true'
+      shell: bash

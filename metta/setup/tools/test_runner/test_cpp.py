@@ -18,19 +18,33 @@ def _run_cmd(cmd: list[str], cwd: str, env: dict[str, str] | None = None) -> int
     return subprocess.run(cmd, cwd=cwd, env=env, check=False).returncode
 
 
+def _write_github_summary(stage: str, passed: bool) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path:
+        return
+    bullet = "\u2705" if passed else "\u274c"
+    status = "passed" if passed else "failed"
+    rerun = f"\n- Re-run locally: `metta cpptest --{stage}`" if not passed else ""
+    with open(summary_path, "a", encoding="utf-8") as fh:
+        fh.write(f"## C++ {stage.title()}\n- {bullet} {status}.{rerun}\n\n")
+
+
 def _run_test(mettagrid_dir: str) -> None:
     info("Building debug...")
     exit_code = _run_cmd(["bazel", "build", "--config=dbg", "//:mettagrid_c"], cwd=mettagrid_dir)
     if exit_code != 0:
         error("C++ build failed!")
+        _write_github_summary("test", passed=False)
         raise typer.Exit(exit_code)
 
     info("Running unit tests...")
     exit_code = _run_cmd(["bazel", "test", "--config=dbg", "//tests:tests_all"], cwd=mettagrid_dir)
     if exit_code != 0:
         error("C++ test failed!")
+        _write_github_summary("test", passed=False)
         raise typer.Exit(exit_code)
 
+    _write_github_summary("test", passed=True)
     success("C++ test completed successfully!")
 
 
@@ -42,6 +56,7 @@ def _run_benchmark(mettagrid_dir: str, *, verbose: bool) -> None:
     )
     if exit_code != 0:
         error("C++ benchmark build failed!")
+        _write_github_summary("benchmark", passed=False)
         raise typer.Exit(exit_code)
 
     info("Creating build-release directory...")
@@ -67,8 +82,10 @@ def _run_benchmark(mettagrid_dir: str, *, verbose: bool) -> None:
     exit_code = _run_cmd(pytest_cmd, cwd=mettagrid_dir)
     if exit_code != 0:
         error("C++ benchmark failed!")
+        _write_github_summary("benchmark", passed=False)
         raise typer.Exit(exit_code)
 
+    _write_github_summary("benchmark", passed=True)
     success("C++ benchmark completed successfully!")
 
 

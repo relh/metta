@@ -7,7 +7,7 @@
 - **Purpose**: Verify recipes don't crash, not performance
 - **Runs**: On every commit (will run on GitHub pre-merge soon)
 - **Characteristics**: 10k timesteps, 5-minute timeouts, runs locally
-- **Run with**: `metta ci --stage recipe-tests`
+- **Run with**: `metta ci recipe-tests`
 
 **Stable Suite** (`stable_suite.py`) - Performance validation
 
@@ -26,7 +26,7 @@ Add **both** test types to your recipe:
 ### Quick Commands
 
 ```bash
-metta ci --stage recipe-tests
+metta ci recipe-tests
 
 # Run stable suite validation (performance tests on remote infrastructure)
 python devops/stable/stable.py validate
