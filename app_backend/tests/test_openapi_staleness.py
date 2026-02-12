@@ -1,5 +1,6 @@
 import hashlib
 import json
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -28,25 +29,32 @@ def _hash_file(path: Path) -> str:
 
 
 def _generate_schema(spec_json: str, openapi_ts_bin: Path, prettier_bin: Path, cwd: Path, output: Path) -> None:
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, dir=str(cwd)) as f:
         f.write(spec_json)
-        spec_path = f.name
-    result = subprocess.run(
-        [str(openapi_ts_bin), spec_path, "-o", str(output)],
-        capture_output=True,
-        text=True,
-        cwd=str(cwd),
-    )
-    Path(spec_path).unlink()
-    assert result.returncode == 0, f"openapi-typescript failed:\n{result.stderr}\n{result.stdout}"
+        spec_path = Path(f.name)
 
-    if prettier_bin.exists():
-        subprocess.run(
-            [str(prettier_bin), "--write", str(output)],
+    tmp_output = cwd / f".tmp_schema_{id(output)}.d.ts"
+    try:
+        result = subprocess.run(
+            [str(openapi_ts_bin), str(spec_path), "-o", str(tmp_output)],
             capture_output=True,
             text=True,
             cwd=str(cwd),
         )
+        assert result.returncode == 0, f"openapi-typescript failed:\n{result.stderr}\n{result.stdout}"
+
+        if prettier_bin.exists():
+            subprocess.run(
+                [str(prettier_bin), "--write", str(tmp_output)],
+                capture_output=True,
+                text=True,
+                cwd=str(cwd),
+            )
+
+        shutil.move(str(tmp_output), str(output))
+    finally:
+        spec_path.unlink(missing_ok=True)
+        tmp_output.unlink(missing_ok=True)
 
 
 @pytest.mark.skipif(not _OBSERVATORY_OPENAPI_TS_BIN.exists(), reason="openapi-typescript not installed")

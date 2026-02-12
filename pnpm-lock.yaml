@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       prettier:
-        specifier: ^3.6.2
+        specifier: ^3.7.4
         version: 3.8.1
       prettier-plugin-sh:
         specifier: ^0.18.0
@@ -200,7 +200,7 @@ importers:
         specifier: ^16.1.4
         version: 16.1.6(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
       prettier:
-        specifier: ^3.5.3
+        specifier: ^3.7.4
         version: 3.8.1
       prettier-plugin-tailwindcss:
         specifier: ^0.7.2
@@ -303,6 +303,9 @@ importers:
       openapi-typescript:
         specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
+      prettier:
+        specifier: ^3.7.4
+        version: 3.8.1
       typescript:
         specifier: ^5.2.2
         version: 5.9.3
