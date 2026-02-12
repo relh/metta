@@ -75,12 +75,13 @@ about what's available, and handlers don't need to reason about partial auth.
 
 ## Roadmap
 
-1. Go live with API docs
-2. Frontends (softmax.com, Observatory) consume types from the internal OpenAPI spec
-3. Consolidate and clean endpoints (backwards-incompatible)
-4. Remove `/stats/` prefix: deploy both old and new paths, migrate frontends/clients to new paths, then remove old paths
-5. Update existing TournamentClient and StatsClient
-6. Gate non-public endpoints behind is-softmax auth, enforced by route-level auth test
-7. CI drift detection: compare generated OpenAPI spec against checked-in copy in `app_backend/.../generated/`
-8. Update cogames repo to reference the docs
-9. Enrich API docs with field-level descriptions (agent stats, game stats)
+- [ x ] Go live with API docs
+- [ x ] Frontends (softmax.com, Observatory) consume types from the internal OpenAPI spec
+- [ ] Consolidate and clean endpoints (backwards-incompatible)
+- [ ] Update existing TournamentClient and StatsClient
+- [ ] Gate non-public endpoints behind is-softmax auth, enforced by route-level auth test
+- [ ] CI drift detection: compare generated OpenAPI spec against checked-in copy in `app_backend/.../generated/`
+- [ ] Update cogames repo to reference the docs
+- [ ] Enrich API docs with field-level descriptions (agent stats, game stats)
+- [ ] Remove `/stats/` prefix: deploy both old and new paths, migrate frontends/clients to new paths, then remove old
+      paths
