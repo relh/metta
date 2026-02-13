@@ -98,6 +98,25 @@ def _iter_trunk_params(module: nn.Module) -> Iterator[nn.Parameter]:
             yield param
 
 
+def _ddp_keepalive(*params: nn.Parameter) -> torch.Tensor | None:
+    """Attach params to the graph with zero weight for DDP gradient synchronization.
+
+    To keep per-step overhead low, only touch a single element from each parameter
+    instead of reducing the full tensor.
+    """
+    if not torch.is_grad_enabled():
+        return None
+
+    keepalive: torch.Tensor | None = None
+    for param in params:
+        if not param.requires_grad:
+            continue
+        first_index = (0,) * param.dim()
+        term = param[first_index] * 0.0
+        keepalive = term if keepalive is None else keepalive + term
+    return keepalive
+
+
 def _make_trunk_lr_mult_hook(param: nn.Parameter) -> Callable[[torch.Tensor], torch.Tensor]:
     def _hook(grad: torch.Tensor) -> torch.Tensor:
         mult = float(getattr(param, "_cortex_trunk_lr_mult", 1.0))
@@ -262,12 +281,14 @@ class RoutedAdapterLinear(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         base = F.linear(x, self.weight, self.bias)
+        keepalive = _ddp_keepalive(self.adapter_A, self.adapter_B)
         resolved = self._resolve_route_ids(x)
         if resolved is None:
-            return base
+            return base if keepalive is None else base + keepalive
         ids, batch_dim = resolved
         delta = self._adapter_delta(x, ids, batch_dim)
-        return base + delta * self.scale
+        out = base + delta * self.scale
+        return out if keepalive is None else out + keepalive
 
 
 class RoutedAdapterHeadwiseLinearExpand(nn.Module):
@@ -371,6 +392,7 @@ class RoutedAdapterHeadwiseLinearExpand(nn.Module):
         return base, delta
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        keepalive = _ddp_keepalive(self.adapter_A, self.adapter_B)
         if x.dim() == 2:
             batch_size, hidden_size = x.shape
             xh = x.view(batch_size, self.num_heads, self.head_dim)
@@ -388,7 +410,7 @@ class RoutedAdapterHeadwiseLinearExpand(nn.Module):
 
         if self.bias is not None:
             y = y + self.bias
-        return y
+        return y if keepalive is None else y + keepalive
 
 
 def _is_headwise_linear_expand(module: nn.Module) -> bool:

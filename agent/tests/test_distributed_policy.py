@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Optional
 
 import torch
-from cortex.routed_adapter import RoutedAdapterLinear
 from tensordict import TensorDict
 
 from metta.agent.policy import DistributedPolicy, Policy
@@ -33,21 +32,16 @@ class _SimplePolicy(Policy):
         pass
 
 
-class _RoutedPolicy(_SimplePolicy):
-    def __init__(self, policy_env_info: PolicyEnvInterface) -> None:
-        super().__init__(policy_env_info)
-        self.routed = RoutedAdapterLinear(
-            in_features=4,
-            out_features=4,
-            bias=True,
-            num_slots=2,
-            rank=2,
-            require_route_ids=False,
-        )
+def test_distributed_policy_disables_find_unused_by_default(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    captured_kwargs: dict[str, object] = {}
 
+    def fake_ddp_init(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        captured_kwargs.update(kwargs)
+        object.__setattr__(self, "module", kwargs["module"])
 
-def test_distributed_policy_detects_routed_adapters() -> None:
+    monkeypatch.setattr("metta.agent.policy.DistributedDataParallel.__init__", fake_ddp_init)
     env_info = _make_policy_env_info()
+    policy = _SimplePolicy(env_info)
+    DistributedPolicy(policy, torch.device("cpu"))
 
-    assert DistributedPolicy._uses_routed_adapters(_RoutedPolicy(env_info))
-    assert not DistributedPolicy._uses_routed_adapters(_SimplePolicy(env_info))
+    assert captured_kwargs["find_unused_parameters"] is False

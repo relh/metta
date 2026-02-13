@@ -101,6 +101,24 @@ def test_routed_adapter_linear_missing_route_ids_uses_slot_zero() -> None:
     assert torch.allclose(y_none, y_zero, atol=1e-6)
 
 
+def test_routed_adapter_linear_bypass_keeps_adapter_params_in_graph() -> None:
+    torch.manual_seed(0)
+    linear = nn.Linear(6, 4, bias=False)
+    cfg = RoutedAdapterConfig(num_slots=3, rank=2, dropout=0.0, freeze_base=False, require_route_ids=False)
+    adapter = RoutedAdapterLinear.from_linear(linear, cfg)
+
+    # 1D input bypasses route-id matching logic inside RoutedAdapterLinear.
+    x = torch.randn(6)
+    with use_route_ids(None):
+        y = adapter(x)
+    y.sum().backward()
+
+    assert adapter.adapter_A.grad is not None
+    assert adapter.adapter_B.grad is not None
+    assert torch.allclose(adapter.adapter_A.grad, torch.zeros_like(adapter.adapter_A.grad), atol=0.0, rtol=0.0)
+    assert torch.allclose(adapter.adapter_B.grad, torch.zeros_like(adapter.adapter_B.grad), atol=0.0, rtol=0.0)
+
+
 def test_routed_adapter_trunk_lr_mult_can_be_updated_on_the_fly() -> None:
     torch.manual_seed(0)
 
