@@ -59,6 +59,9 @@ TOKEN=$(gh auth token)
   "cd /workspace/metta && test \"\$(git rev-parse origin/main)\" = \"$MAIN_SHA\""
 ```
 
+- Treat this as a hard gate, not a best effort check.
+- If `origin/main != MAIN_SHA`, stop and refetch until they match.
+
 - Reject benchmarking stale branches. Prefer merge-tested refs (`origin/<branch>` merged/rebased on latest
   `origin/main`).
 
@@ -67,6 +70,16 @@ TOKEN=$(gh auth token)
   "cd /workspace/metta && test \"\$(git merge-base origin/<branch> origin/main)\" = \"\$(git rev-parse origin/main)\""
 ```
 
+### Freshness Invariant (hard requirement)
+
+All publishable numbers must satisfy:
+
+- `MAIN_SHA` is captured from GitHub immediately before the benchmark set.
+- Baseline runs at `origin/main == MAIN_SHA`.
+- Branch run uses a branch with `merge-base(branch, main) == MAIN_SHA`.
+- Re-check `MAIN_SHA` between baseline and branch run. If it changed, abort and restart the set with the new
+  `MAIN_SHA`.
+
 ## Step 3: Baseline run (same machine)
 
 ```bash
@@ -74,6 +87,13 @@ TOKEN=$(gh auth token)
 ./devops/mettabox/cli.py run metta1 -- recipes.experiment.cogsguard.train \
   run=<baseline_run> trainer.total_timesteps=6291456
 while ./devops/mettabox/cli.py runs metta1 | rg -q "<baseline_run>"; do sleep 30; done
+```
+
+Then immediately re-check main freshness before launching the branch:
+
+```bash
+MAIN_SHA_LATEST=$(gh api repos/Metta-AI/metta/commits/main --jq .sha)
+test "$MAIN_SHA_LATEST" = "$MAIN_SHA" || { echo "main moved; restart benchmark set"; exit 1; }
 ```
 
 ## Step 4: Branch run (same args)
@@ -96,6 +116,7 @@ while ./devops/mettabox/cli.py runs metta1 | rg -q "<baseline_run>"; do sleep 30
 
 - Do not publish if any condition fails:
   - branch behind current main
+  - `MAIN_SHA` drifted between baseline and branch run
   - config mismatch
   - concurrent workload on same machine during run
   - suspicious magnitude for non-perf PR (for example huge negative swings)
@@ -129,6 +150,8 @@ When invalid: mark result as non-comparable and rerun after fixing freshness/par
 ```
 
 - Use `./devops/skypilot/sandbox.py` + `uv run sky logs` for status; keep baseline and branch on same sandbox.
+- For `uv run sky exec` workflows, set `CUDA_VISIBLE_DEVICES` explicitly (for example `0,1,2,3`) before running
+  training so GPU visibility is deterministic.
 - If sandbox jobs fail early, check launcher/controller logs for environment issues (for example missing `CUDA_HOME`).
 
 ## Quick Reference
