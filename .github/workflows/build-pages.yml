@@ -68,13 +68,11 @@ jobs:
 
       # Build Mettascope first with its dependencies
       - name: Install Mettascope Dependencies
-        if: github.ref == 'refs/heads/main' || steps.changes.outputs.mettascope == 'true'
         run: |
           cd ..
           nimby sync -g metta/packages/mettagrid/nim/mettascope/nimby.lock
 
       - name: Build mettascope
-        if: github.ref == 'refs/heads/main' || steps.changes.outputs.mettascope == 'true'
         run: |
           mkdir -p packages/mettagrid/nim/mettascope/dist
           nim c -d:emscripten packages/mettagrid/nim/mettascope/src/mettascope.nim
@@ -82,13 +80,11 @@ jobs:
 
       # Then build Vibescope with its dependencies
       - name: Install Vibescope Dependencies
-        if: github.ref == 'refs/heads/main' || steps.changes.outputs.vibescope == 'true'
         run: |
           cd ..
           nimby sync -g metta/packages/mettagrid/nim/vibescope/nimby.lock
 
       - name: Build vibescope
-        if: github.ref == 'refs/heads/main' || steps.changes.outputs.vibescope == 'true'
         run: |
           mkdir -p packages/mettagrid/nim/vibescope/dist
           nim c -d:emscripten packages/mettagrid/nim/vibescope/src/vibescope.nim
@@ -100,8 +96,6 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Create deployment directory
-        # Only needed when deploying.
-        if: github.ref == 'refs/heads/main'
         run: |
           mkdir -p deploy/mettascope
           cp -r packages/mettagrid/nim/mettascope/dist/* deploy/mettascope/
@@ -120,3 +114,20 @@ jobs:
         if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Configure AWS credentials
+        # Only deploy for main branch
+        if: github.ref == 'refs/heads/main'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE }}
+          aws-region: us-east-1
+
+      - name: Deploy to S3
+        # Only deploy for main branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          VERSION=$(grep 'const FormatVersion\*' packages/mettagrid/nim/mettascope/src/mettascope/replays.nim | sed 's/[^0-9]//g')
+          echo "Deploying mettascope version: ${VERSION}"
+          aws s3 sync ./deploy/mettascope/ "s3://softmax-public/mettascope/${VERSION}/" --delete
+          echo "Deployed to https://softmax-public.s3.amazonaws.com/mettascope/${VERSION}/"
