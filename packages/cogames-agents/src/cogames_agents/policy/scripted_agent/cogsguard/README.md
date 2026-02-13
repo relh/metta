@@ -219,7 +219,7 @@ hardcoding a mix like 3 aligners, 3 miners, 2 scramblers, 2 scouts when running 
 ```bash
 # 10 agents: aligner, miner, scrambler, scout repeating (3/3/2/2)
 ./tools/run.py recipes.experiment.cogsguard.play \
-    policy_uri="metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout" \
+    policy_uri="metta://policy/role?role_cycle=aligner,miner,scrambler,scout" \
     sim.env.game.num_agents=10 \
     sim.env.game.map_builder.instance.spawn_count=10
 ```

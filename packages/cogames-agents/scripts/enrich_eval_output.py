@@ -11,10 +11,10 @@ that the core eval pipeline does not provide, including:
 Usage:
 
   # Pipe eval output directly:
-  cogames eval -m arena.battle -p role_py --format json | python enrich_eval_output.py
+  cogames eval -m arena.battle -p role --format json | python enrich_eval_output.py
 
   # Or from a saved file:
-  cogames eval -m arena.battle -p role_py --format json > eval.json
+  cogames eval -m arena.battle -p role --format json > eval.json
   python enrich_eval_output.py --input eval.json
 
   # Save enriched output:

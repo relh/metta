@@ -37,7 +37,7 @@ class TestRoleURIResolution:
 
     _ROLE_VARIANTS = [
         "role",
-        "role_py",
+        "role_nim",
         "miner",
         "scout",
         "aligner",

@@ -9,7 +9,7 @@
 #   ./scripts/eval_cogas.sh
 #   ./scripts/eval_cogas.sh --episodes 20
 #   ./scripts/eval_cogas.sh --params 'miner=2&aligner=4&scrambler=3'
-#   ./scripts/eval_cogas.sh --policy role_py --episodes 10 --threshold 1000
+#   ./scripts/eval_cogas.sh --policy role --episodes 10 --threshold 1000
 
 set -euo pipefail
 

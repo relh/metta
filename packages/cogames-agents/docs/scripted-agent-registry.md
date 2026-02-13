@@ -24,12 +24,12 @@ python -c "from cogames_agents.policy.scripted_registry import list_scripted_age
 
 ## CogsGuard (Nim)
 
-- `role` - Nim multi-role policy
+- `role_nim` - Nim multi-role policy
 - `alignall` - Nim align-all policy
 
 ## CogsGuard (Python)
 
-- `role_py` - Python multi-role policy
+- `role` - Python multi-role policy
 - `wombo` - Generalist multi-role policy
 - `cogsguard_control` - Control variant
 - `cogsguard_targeted` - Targeted variant

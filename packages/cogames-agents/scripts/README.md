@@ -82,8 +82,8 @@ Registered scripted agents (from `cogames-agents` package):
 
 | Agent                | Description                     |
 | -------------------- | ------------------------------- |
-| `role`               | Multi-role Nim CogsGuard policy |
-| `role_py`            | Python multi-role CogsGuard     |
+| `role`               | Python multi-role CogsGuard     |
+| `role_nim`           | Multi-role Nim CogsGuard policy |
 | `planky`             | Plank-focused strategy          |
 | `wombo`              | Alternative multi-role          |
 | `baseline`           | Standard baseline               |

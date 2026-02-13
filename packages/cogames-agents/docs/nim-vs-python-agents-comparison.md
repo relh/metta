@@ -110,10 +110,10 @@ Python `SmartRoleCoordinator` implementation.
 
 ## Which Version is Used by Default?
 
-The default depends on how the policy is invoked:
+Current policy URI behavior:
 
-1. **`metta://policy/role`** - Uses **Nim** implementation (`CogsguardAgentsMultiPolicy`)
-2. **`metta://policy/role_py`** - Uses **Python** implementation (`CogsguardPolicy`)
+1. **`metta://policy/role`** - Uses **Python** implementation (`CogsguardPolicy`)
+2. **`metta://policy/role_nim`** - Uses **Nim** implementation (`CogsguardAgentsMultiPolicy`)
 3. **`metta://policy/teacher`** - Uses **Nim** implementation via `CogsguardAgentsMultiPolicy` wrapped by Python teacher
 4. **`metta://policy/miner`**, **`scout`**, **`aligner`**, **`scrambler`** - Uses **Python** role-specific
    implementations
@@ -121,8 +121,8 @@ The default depends on how the policy is invoked:
 **Short name registry:**
 
 ```
-role          -> Nim (CogsguardAgentsMultiPolicy)
-role_py       -> Python (CogsguardPolicy)
+role          -> Python (CogsguardPolicy)
+role_nim      -> Nim (CogsguardAgentsMultiPolicy)
 wombo         -> Python (CogsguardWomboPolicy)
 cogsguard_control  -> Python (CogsguardControlAgent)
 cogsguard_targeted -> Python (CogsguardTargetedAgent)

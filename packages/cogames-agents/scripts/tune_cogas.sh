@@ -8,7 +8,7 @@
 # Examples:
 #   ./scripts/tune_cogas.sh
 #   ./scripts/tune_cogas.sh --episodes 20
-#   ./scripts/tune_cogas.sh --policy role_py --configs custom_configs.txt
+#   ./scripts/tune_cogas.sh --policy role --configs custom_configs.txt
 
 set -euo pipefail
 

@@ -1315,16 +1315,16 @@ class CogsguardPolicy(MultiAgentPolicy):
     - heart: do nothing
 
     Initial vibe counts can be specified via URI query parameters:
-        metta://policy/role_py?miner=4&scrambler=2&gear=1
+        metta://policy/role?miner=4&scrambler=2&gear=1
     You can also set a fixed role pattern with:
-        metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
-        metta://policy/role_py?role_order=aligner,miner,aligner,miner,scout
+        metta://policy/role?role_cycle=aligner,miner,scrambler,scout
+        metta://policy/role?role_order=aligner,miner,aligner,miner,scout
 
     Vibes are assigned to agents in order. If counts don't sum to num_agents,
     remaining agents get "gear" vibe (which picks a role via the smart coordinator).
     """
 
-    short_names = ["role_py"]
+    short_names = ["role"]
 
     def __init__(
         self,

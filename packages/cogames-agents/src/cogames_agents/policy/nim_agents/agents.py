@@ -57,7 +57,7 @@ class RaceCarAgentsMultiPolicy(NimMultiAgentPolicy):
 
 
 class CogsguardAgentsMultiPolicy(NimMultiAgentPolicy):
-    short_names = ["role"]
+    short_names = ["role_nim"]
 
     def __init__(
         self,

@@ -195,7 +195,7 @@ def main() -> int:
     parser.add_argument("--recipe", default="recipes.experiment.cogsguard")
     parser.add_argument(
         "--policy-uri",
-        default="metta://policy/role_py?miner=1&scout=1",
+        default="metta://policy/role?miner=1&scout=1",
     )
     parser.add_argument("--trace-every", type=int, default=200)
     args = parser.parse_args()

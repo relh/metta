@@ -18,7 +18,7 @@ Common scripted policy names include:
 
 - Baselines: `baseline`, `tiny_baseline`, `ladybug_py`
 - Nim baselines: `thinky`, `race_car`, `ladybug`, `nim_random`
-- CogsGuard core: `role`, `role_py`, `wombo`
+- CogsGuard core: `role`, `role_nim`, `wombo`
 - CogsGuard variants: `alignall`, `cogsguard_control`, `cogsguard_targeted`, `cogsguard_v2`
 - CogsGuard roles: `miner`, `scout`, `aligner`, `scrambler`
 - Teacher: `teacher`
@@ -32,13 +32,13 @@ Role-specific policies are exposed via role names (miner/scout/aligner/scrambler
 metta://policy/teacher?role_vibes=miner,scout
 ```
 
-Fixed-role mixes and explicit orderings are configured via `role_py` parameters:
+Fixed-role mixes and explicit orderings are configured via `role` parameters:
 
 Examples:
 
 ```
-metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
-metta://policy/role_py?role_order=aligner,miner,aligner,miner,scout
+metta://policy/role?role_cycle=aligner,miner,scrambler,scout
+metta://policy/role?role_order=aligner,miner,aligner,miner,scout
 ```
 
 ## Recipe usage

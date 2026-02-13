@@ -26,7 +26,8 @@ AGENTS=""
 # All registered scripted agents (from short_names scan)
 ALL_AGENTS=(
   role
-  role_py
+  role
+  role_nim
   planky
   wombo
   baseline
