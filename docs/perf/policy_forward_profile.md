@@ -16,8 +16,9 @@
 
 ## Overview
 
-This document profiles the policy network forward pass used in the CogsGuard training recipe. The analysis focuses on
-the ViT-based policy architecture (ViTDefaultConfig) to identify performance bottlenecks and optimization opportunities.
+This document profiles the policy network forward pass used in the CogsGuard training recipe. The analysis focuses on a
+ViT-style observation encoding stack (as configured in `tests/perf/profile_policy_forward.py`) to identify performance
+bottlenecks and optimization opportunities.
 
 ## Test Environment
 
@@ -27,7 +28,7 @@ the ViT-based policy architecture (ViTDefaultConfig) to identify performance bot
 
 ## Architecture Summary
 
-The ViTDefaultConfig policy consists of the following components in the forward pass:
+The profiled policy-style stack consists of the following components in the forward pass:
 
 ```
 Raw Observations (uint8 tokens)
@@ -140,11 +141,11 @@ benchmarks.
 
 ### 3. Enable torch.compile for Cortex
 
-The `core_compile=True` option in ViTDefaultConfig enables torch.compile for the Cortex stack:
+The `cortex_compile=True` option in `DefaultPolicyConfig` enables torch.compile for the Cortex stack:
 
 ```python
-ViTDefaultConfig(
-    core_compile=True,  # Enable torch.compile
+DefaultPolicyConfig(
+    cortex_compile=True,  # Enable torch.compile
     ...
 )
 ```
@@ -174,7 +175,7 @@ uv run scripts/obs_encoder_benchmark.py --num-agents 6 --steps 20 --iters 50
 ### Full Forward Pass Profiling
 
 ```bash
-uv run tests/perf/profile_policy_forward.py --batch-sizes 64 128 256
+uv run python tests/perf/profile_policy_forward.py --batch-sizes 64 128 256
 ```
 
 ## Known Issues
@@ -187,7 +188,7 @@ uv run tests/perf/profile_policy_forward.py --batch-sizes 64 128 256
 
 ## References
 
-- `agent/src/metta/agent/policies/vit.py` - ViT policy configuration
+- `agent/src/metta/agent/policies/default.py` - Default policy configuration
 - `agent/src/metta/agent/components/obs_enc.py` - Observation encoder implementations
 - `agent/src/metta/agent/components/cortex.py` - Cortex recurrent core
 - `scripts/obs_encoder_benchmark.py` - Observation encoder benchmarking script

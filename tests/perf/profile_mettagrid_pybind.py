@@ -8,7 +8,7 @@ Measures:
 4. GIL release behavior during step()
 
 Usage:
-    METTAGRID_PROFILING=1 python tests/perf/profile_mettagrid_pybind.py --agents 8 --steps 10000
+    METTAGRID_PROFILING=1 uv run python tests/perf/profile_mettagrid_pybind.py --agents 8 --steps 10000
 """
 
 import argparse

@@ -23,8 +23,8 @@ Reduce end-to-end observation encoding time per step without regressing training
 
 Candidate code locations (to confirm):
 
-- `metta/agent/components/obs_enc.py` (attention encoder modules)
-- Policy configs (e.g. `metta/agent/policies/vit*.py`)
+- `agent/src/metta/agent/components/obs_enc.py` (attention encoder modules)
+- Policy configs (e.g. `agent/src/metta/agent/policies/*.py`)
 
 ## Success Metrics
 

@@ -5,15 +5,16 @@ This script profiles individual components of the ViT policy architecture used i
 breaking down timing by component and layer type.
 
 Usage:
-    uv run tests/perf/profile_policy_forward.py
-    uv run tests/perf/profile_policy_forward.py --batch-sizes 32 64 128 256
-    uv run tests/perf/profile_policy_forward.py --sweep-mode
+    uv run python tests/perf/profile_policy_forward.py
+    uv run python tests/perf/profile_policy_forward.py --batch-sizes 32 64 128 256
+    uv run python tests/perf/profile_policy_forward.py --sweep-mode
 """
 
 import argparse
 import logging
 import statistics
 import time
+from dataclasses import dataclass
 from typing import Callable
 
 import torch
@@ -22,13 +23,23 @@ from tensordict import TensorDict
 from metta.agent.components.obs_enc import ObsPerceiverLatent, ObsPerceiverLatentConfig
 from metta.agent.components.obs_shim import ObsShimTokens, ObsShimTokensConfig
 from metta.agent.components.obs_tokenizers import ObsAttrEmbedFourier, ObsAttrEmbedFourierConfig
-from metta.agent.policies.vit import ViTDefaultConfig
 from mettagrid.builder.envs import make_arena
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator.simulator import Simulator
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ProfilePolicyConfig:
+    max_tokens: int = 128
+    token_embed_dim: int = 8
+    fourier_freqs: int = 3
+    latent_dim: int = 128
+    core_num_heads: int = 4
+    core_num_latents: int = 12
+    obs_shim_ignore_inventory_power_tokens: bool = True
 
 
 def create_policy_env_info(num_agents: int = 6) -> tuple[PolicyEnvInterface, Simulator]:
@@ -71,14 +82,14 @@ def benchmark_obs_encoding_pipeline(
     policy_env_info: PolicyEnvInterface,
     device: torch.device,
     dtype: torch.dtype,
-    config: ViTDefaultConfig,
+    config: ProfilePolicyConfig,
     warmup: int = 5,
     iters: int = 50,
 ) -> dict[str, dict[str, float]]:
     """Benchmark the observation encoding pipeline components."""
     max_tokens = config.max_tokens
-    attr_embed_dim = config._token_embed_dim
-    num_freqs = config._fourier_freqs
+    attr_embed_dim = config.token_embed_dim
+    num_freqs = config.fourier_freqs
     feat_dim = attr_embed_dim + (4 * num_freqs) + 1
 
     # Create components
@@ -208,13 +219,13 @@ def benchmark_batch_scaling(
     batch_sizes: list[int],
     device: torch.device,
     dtype: torch.dtype,
-    config: ViTDefaultConfig,
+    config: ProfilePolicyConfig,
     iters: int = 20,
 ) -> dict[int, dict[str, float]]:
     """Benchmark how encoding time scales with batch size."""
     max_tokens = config.max_tokens
-    attr_embed_dim = config._token_embed_dim
-    num_freqs = config._fourier_freqs
+    attr_embed_dim = config.token_embed_dim
+    num_freqs = config.fourier_freqs
     feat_dim = attr_embed_dim + (4 * num_freqs) + 1
 
     shim = ObsShimTokens(
@@ -322,19 +333,16 @@ def main():
     policy_env_info, sim = create_policy_env_info(args.num_agents)
 
     if args.sweep_mode:
-        config = ViTDefaultConfig(
+        config = ProfilePolicyConfig(
             obs_shim_ignore_inventory_power_tokens=False,
-            actor_hidden=384,
-            critic_hidden=768,
             latent_dim=96,
-            core_resnet_layers=1,
             core_num_heads=4,
             core_num_latents=16,
         )
-        logger.info("Using sweep_mode architecture (1.17M params)")
+        logger.info("Using sweep_mode profiling architecture")
     else:
-        config = ViTDefaultConfig(obs_shim_ignore_inventory_power_tokens=False)
-        logger.info("Using default architecture (2.8M params)")
+        config = ProfilePolicyConfig(obs_shim_ignore_inventory_power_tokens=False)
+        logger.info("Using default profiling architecture")
 
     logger.info(f"Architecture: latent_dim={config.latent_dim}, core_num_latents={config.core_num_latents}")
 
@@ -379,7 +387,7 @@ def main():
         device,
         dtype,
         config,
-        iters=args.iters // 2,
+        iters=max(1, args.iters // 2),
     )
 
     # Summary

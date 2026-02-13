@@ -10,13 +10,13 @@ This script profiles memory allocation patterns in the PPO training loop to iden
 
 Usage:
     # Run with CUDA memory profiling
-    python tests/perf/profile_ppo_memory.py --device cuda
+    uv run python tests/perf/profile_ppo_memory.py --device cuda
 
     # Run with tracemalloc for Python allocations
-    python tests/perf/profile_ppo_memory.py --device cuda --trace-python
+    uv run python tests/perf/profile_ppo_memory.py --device cuda --trace-python
 
     # Run a short training loop with torch profiler
-    python tests/perf/profile_ppo_memory.py --device cuda --torch-profile
+    uv run python tests/perf/profile_ppo_memory.py --device cuda --torch-profile
 """
 
 from __future__ import annotations

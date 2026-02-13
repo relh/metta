@@ -179,13 +179,13 @@ timing:
 
 ```bash
 # Run with default settings
-python tests/perf/profile_logging_overhead.py --epochs 5
+uv run python tests/perf/profile_logging_overhead.py --epochs 5
 
 # Disable wandb for baseline comparison
-python tests/perf/profile_logging_overhead.py --disable-wandb --epochs 5
+uv run python tests/perf/profile_logging_overhead.py --disable-wandb --epochs 5
 
 # Output to JSON
-python tests/perf/profile_logging_overhead.py --output results.json
+uv run python tests/perf/profile_logging_overhead.py --output results.json
 ```
 
 ## Benchmark Results

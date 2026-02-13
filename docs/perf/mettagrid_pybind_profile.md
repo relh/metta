@@ -133,7 +133,7 @@ tests/perf/profile_mettagrid_pybind.py
 Usage:
 
 ```bash
-METTAGRID_PROFILING=1 python tests/perf/profile_mettagrid_pybind.py \
+METTAGRID_PROFILING=1 uv run python tests/perf/profile_mettagrid_pybind.py \
     --agents 8 --map-size 40 --steps 10000 --output results.json
 ```
 

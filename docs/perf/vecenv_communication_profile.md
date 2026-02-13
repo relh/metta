@@ -45,12 +45,12 @@ Main Process                    Worker Processes
 
 ### Key Components
 
-| Component         | Location                      | Purpose                         |
-| ----------------- | ----------------------------- | ------------------------------- |
-| `Multiprocessing` | `pufferlib/vector.py:254-547` | Process pool with shared memory |
-| `Serial`          | `pufferlib/vector.py:56-183`  | Single-process vectorization    |
-| `_worker_process` | `pufferlib/vector.py:185-252` | Worker loop (semaphore polling) |
-| `make_vecenv`     | `metta/rl/vecenv.py:52-102`   | MettaGrid vecenv factory        |
+| Component         | Location                                                  | Purpose                         |
+| ----------------- | --------------------------------------------------------- | ------------------------------- |
+| `Multiprocessing` | `packages/pufferlib-core/src/pufferlib/vector.py:254-547` | Process pool with shared memory |
+| `Serial`          | `packages/pufferlib-core/src/pufferlib/vector.py:56-183`  | Single-process vectorization    |
+| `_worker_process` | `packages/pufferlib-core/src/pufferlib/vector.py:185-252` | Worker loop (semaphore polling) |
+| `make_vecenv`     | `metta/rl/vecenv.py:52-102`                               | MettaGrid vecenv factory        |
 
 ## 2. IPC Overhead Analysis
 

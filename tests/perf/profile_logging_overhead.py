@@ -10,7 +10,7 @@ components in the metta training pipeline:
 4. System/memory monitoring
 
 Usage:
-    python tests/perf/profile_logging_overhead.py [--epochs N] [--output FILE]
+    uv run python tests/perf/profile_logging_overhead.py [--epochs N] [--output FILE]
 
 The script patches logging components to instrument timing and outputs a
 detailed breakdown of where time is spent during training.
