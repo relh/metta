@@ -214,5 +214,5 @@ class TestTypeIdentityBreakingChange:
             "carrot": WallConfig(name="carrot"),
         }
         cfg = GameConfig(objects=objects)
-        cpp_cfg = convert_to_cpp_game_config(cfg)
+        cpp_cfg, _ = convert_to_cpp_game_config(cfg)
         assert cpp_cfg is not None
