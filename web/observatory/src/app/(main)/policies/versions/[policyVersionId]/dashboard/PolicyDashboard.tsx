@@ -561,12 +561,12 @@ export const PolicyDashboard: FC<{
                     margin={{ top: 5, right: 20, bottom: 5, left: 100 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                    <XAxis type="number" domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
                     <YAxis type="category" dataKey="label" tick={{ fontSize: 12 }} width={95} />
                     <Tooltip
-                      content={({ payload }) => {
+                      content={({ payload }: { payload?: ReadonlyArray<{ payload: KpiComparisonRow }> }) => {
                         if (!payload?.length) return null
-                        const d = payload[0].payload as KpiComparisonRow
+                        const d = payload[0].payload
                         return (
                           <div className="bg-white border border-gray-200 rounded shadow-lg p-2 text-xs">
                             <p className="font-medium">{d.label}</p>
@@ -696,7 +696,11 @@ export const PolicyDashboard: FC<{
                     }}
                   />
                   <Tooltip
-                    content={({ payload }) => {
+                    content={({
+                      payload,
+                    }: {
+                      payload?: ReadonlyArray<{ payload: (typeof rewardScatterData)[number] }>
+                    }) => {
                       if (!payload?.length) return null
                       const d = payload[0].payload
                       return (

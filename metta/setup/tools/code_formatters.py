@@ -51,7 +51,7 @@ class FormatterConfig(BaseModel):
             return self.runner(fix, files, is_full_run)
         if files is not None and not self.accepts_file_args:
             return FormatterResult(success=True, processed_files=0)
-        commands = self.check_cmds if not fix else self.format_cmds
+        commands = self.check_cmds if not fix else (self.format_cmds or self.check_cmds)
         if not commands:
             return FormatterResult(success=True, processed_files=len(files or []))
         file_count = len(files or [])
