@@ -12,6 +12,7 @@ resolution-markers = [
 members = [
     "cogames",
     "cogames-agents",
+    "cogames-rl-researcher",
     "cortexcore",
     "gitta",
     "metta",
@@ -665,6 +666,37 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'test'" },
 ]
 provides-extras = ["test"]
+
+[[package]]
+name = "cogames-rl-researcher"
+version = "0.1.0"
+source = { editable = "packages/cogames-rl-researcher" }
+dependencies = [
+    { name = "cogames" },
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-xdist" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cogames", editable = "packages/cogames" },
+    { name = "pydantic", specifier = ">=2.12.2" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.3.3" },
+    { name = "pytest-cov", specifier = ">=6.1.1" },
+    { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "ruff", specifier = ">=0.11.13" },
+]
 
 [[package]]
 name = "colorama"
@@ -2336,6 +2368,7 @@ dependencies = [
     { name = "boto3" },
     { name = "cogames" },
     { name = "cogames-agents" },
+    { name = "cogames-rl-researcher" },
     { name = "colorama" },
     { name = "cortexcore" },
     { name = "cpplint" },
@@ -2471,6 +2504,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "cogames", editable = "packages/cogames" },
     { name = "cogames-agents", editable = "packages/cogames-agents" },
+    { name = "cogames-rl-researcher", editable = "packages/cogames-rl-researcher" },
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "cortexcore", editable = "packages/cortex" },
     { name = "cpplint", specifier = ">=2.0.2" },

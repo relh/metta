@@ -15,6 +15,7 @@ dependencies = [
   "boto3>=1.38.32",
   "cogames",
   "cogames-agents",
+  "cogames-rl-researcher",
   "colorama>=0.4.6",
   "cortexcore",
   "cpplint>=2.0.2",
@@ -149,6 +150,7 @@ members = [
   "app_backend",
   "common",
   "packages/cogames-agents",
+  "packages/cogames-rl-researcher",
   "packages/cogames",
   "packages/cortex",
   "packages/gitta",
@@ -160,6 +162,7 @@ members = [
 
 [tool.uv.sources]
 cogames-agents = { workspace = true }
+cogames-rl-researcher = { workspace = true }
 cogames = { workspace = true }
 cortexcore = { workspace = true }
 gitta = { workspace = true }
