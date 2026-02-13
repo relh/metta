@@ -41,3 +41,8 @@ wandb
 
 # Ignore .metta directory at root (used temporarily during docker build)
 /.metta
+
+# Exclude .git — it's large and unnecessary for builds.  Packages that use
+# setuptools_scm all declare fallback_version so they build without git history.
+# The SkyPilot training image re-initializes git at runtime via setup.sh.
+.git

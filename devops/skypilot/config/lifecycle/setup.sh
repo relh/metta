@@ -94,13 +94,18 @@ setup_deploy_key
 # Ensure repo exists (AMI doesn't include it by default)
 if [ ! -d "${REPO_DIR}/.git" ]; then
   if [ -d "${REPO_DIR}" ]; then
-    echo "[SETUP] Found ${REPO_DIR} without a git repo; refusing to proceed. Please clean up the directory."
-    exit 1
+    # Docker image has the code but .git was excluded via .dockerignore.
+    # Initialize a repo in-place so fetch/checkout below can update to the
+    # requested commit without discarding the pre-built venv.
+    echo "[SETUP] Initializing git in existing directory (Docker image without .git)..."
+    cd "${REPO_DIR}"
+    git init
+    git remote add origin "git@github.com:${GITHUB_REPOSITORY}.git"
+  else
+    echo "[SETUP] Cloning metta repo..."
+    cd /workspace
+    git clone "git@github.com:${GITHUB_REPOSITORY}.git" metta
   fi
-
-  echo "[SETUP] Cloning metta repo..."
-  cd /workspace
-  git clone git@github.com:${GITHUB_REPOSITORY}.git metta
 fi
 
 cd "${REPO_DIR}"
@@ -144,7 +149,9 @@ git config advice.detachedHead false
 
 echo "[SETUP] Fetching latest from origin..."
 git fetch origin "$METTA_GIT_REF" || git fetch --depth=1000 origin
-git checkout "$METTA_GIT_REF"
+# -f: when .git was freshly init'd inside a Docker image, existing files are
+# untracked and would otherwise block checkout.
+git checkout -f "$METTA_GIT_REF"
 echo "[SETUP] Checked out: $(git rev-parse HEAD)"
 
 echo "[SETUP] Installing system dependencies..."
