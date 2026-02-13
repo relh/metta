@@ -16,7 +16,7 @@ import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic.main import BaseModel
 
-from metta.app_backend.auth import get_user
+from metta.app_backend.auth import NoAuthRequired, get_user
 from metta.app_backend.config import settings
 from metta.app_backend.database import run_alembic_upgrade
 from metta.app_backend.otel.http_metrics import HttpMetricsMiddleware
@@ -144,7 +144,7 @@ def create_app() -> fastapi.FastAPI:
         app.include_router(router)
 
     @app.get("/whoami")
-    async def whoami(request: fastapi.Request) -> WhoAmIResponse:
+    async def whoami(request: fastapi.Request, _user: NoAuthRequired) -> WhoAmIResponse:
         user = await get_user(request)
         return WhoAmIResponse(user_email=user.email if user else "unknown")
 

@@ -19,7 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
-from metta.app_backend.auth import CheckSoftmaxUser, CheckUser
+from metta.app_backend.auth import SoftmaxUser
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
@@ -47,7 +47,6 @@ from metta.app_backend.otel.job_metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.queries.episode_stats import PolicyVersionSummary, compute_episode_stats
 from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.routes.docs_routes import public_api
 from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
@@ -190,13 +189,12 @@ class EpisodeStatsResponse(BaseModel):
     steps: int | None
 
 
-@public_api
 def create_job_router() -> APIRouter:
     router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-    @router.post("/batch", include_in_schema=False)
+    @router.post("/batch")
     @timed_http_handler
-    async def create_jobs_batch(jobs: list[JobRequestCreate], user: CheckSoftmaxUser) -> list[UUID]:
+    async def create_jobs_batch(jobs: list[JobRequestCreate], user: SoftmaxUser) -> list[UUID]:
         if not jobs:
             return []
 
@@ -293,7 +291,7 @@ def create_job_router() -> APIRouter:
     @router.get("")
     @timed_http_handler
     async def list_jobs(
-        user: CheckSoftmaxUser,
+        user: SoftmaxUser,
         job_type: JobType | None = Query(default=None),
         statuses: list[JobStatus] | None = Query(default=None),
         job_id: UUID | None = Query(default=None),
@@ -425,7 +423,7 @@ def create_job_router() -> APIRouter:
 
     @router.get("/{job_id}/artifacts/{artifact_type}")
     @timed_http_handler
-    async def get_job_artifact(job_id: UUID, artifact_type: str, _user: CheckSoftmaxUser) -> Response:
+    async def get_job_artifact(job_id: UUID, artifact_type: str, _user: SoftmaxUser) -> Response:
         if artifact_type not in ARTIFACT_TYPES:
             raise HTTPException(status_code=400, detail=f"Unknown artifact type: {artifact_type}")
 
@@ -441,7 +439,7 @@ def create_job_router() -> APIRouter:
 
     @router.get("/{job_id}/episode-stats")
     @timed_http_handler
-    async def get_job_episode_stats(job_id: UUID, _user: CheckUser) -> EpisodeStatsResponse:
+    async def get_job_episode_stats(job_id: UUID, _user: SoftmaxUser) -> EpisodeStatsResponse:
         async with db_session() as session:
             query = (
                 select(JobRequest)
@@ -495,7 +493,7 @@ def create_job_router() -> APIRouter:
 
     @router.get("/{job_id}")
     @timed_http_handler
-    async def get_job(job_id: UUID, user: CheckSoftmaxUser) -> JobRequestResponse:
+    async def get_job(job_id: UUID, user: SoftmaxUser) -> JobRequestResponse:
         async with db_session() as session:
             query = (
                 select(JobRequest)
@@ -514,9 +512,9 @@ def create_job_router() -> APIRouter:
             await fill_user_data([response], current_user=user)
             return response
 
-    @router.post("/{job_id}", include_in_schema=False)
+    @router.post("/{job_id}")
     @timed_http_handler
-    async def update_job(job_id: UUID, request: JobRequestUpdate, _user: CheckSoftmaxUser) -> JobRequest:
+    async def update_job(job_id: UUID, request: JobRequestUpdate, _user: SoftmaxUser) -> JobRequest:
         async with db_session() as session:
             result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
             job = result.scalar_one_or_none()

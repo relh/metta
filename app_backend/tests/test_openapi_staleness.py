@@ -73,10 +73,10 @@ def test_observatory_schema_dts_up_to_date():
         )
 
         if not _OBSERVATORY_SCHEMA_DTS.exists():
-            pytest.fail("schema.d.ts is missing. Run: cd web/observatory && npm run generate-api-types")
+            pytest.fail("schema.d.ts is missing. Run: metta observatory generate-api-types")
 
         if _hash_file(_OBSERVATORY_SCHEMA_DTS) != _hash_file(fresh_schema):
-            pytest.fail("schema.d.ts is outdated. Run: cd web/observatory && npm run generate-api-types")
+            pytest.fail("schema.d.ts is outdated. Run: metta observatory generate-api-types")
 
 
 @pytest.mark.skipif(not _SOFTMAX_OPENAPI_TS_BIN.exists(), reason="openapi-typescript not installed")
@@ -95,7 +95,7 @@ def test_softmax_schema_dts_up_to_date():
         )
 
         if not _SOFTMAX_SCHEMA_DTS.exists():
-            pytest.fail("schema.d.ts is missing. Run: cd web/softmax.com && npm run generate-api-types")
+            pytest.fail("schema.d.ts is missing. Run: metta observatory generate-api-types")
 
         if _hash_file(_SOFTMAX_SCHEMA_DTS) != _hash_file(fresh_schema):
-            pytest.fail("schema.d.ts is outdated. Run: cd web/softmax.com && npm run generate-api-types")
+            pytest.fail("schema.d.ts is outdated. Run: metta observatory generate-api-types")

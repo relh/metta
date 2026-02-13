@@ -13,7 +13,7 @@ from sqlmodel import col, select
 # pyright: reportArgumentType=false
 # SQLModel's Relationship() returns the target type, not SQLAlchemy's InstrumentedAttribute,
 # causing false positives on join() and selectinload() calls.
-from metta.app_backend.auth import CheckMaybeUser, CheckUser
+from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.job_artifacts import job_logs_key, read_job_artifact
 from metta.app_backend.models.episodes import Episode, EpisodeJob
@@ -183,7 +183,7 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/seasons")
     @timed_http_handler
-    async def list_seasons(session: AsyncSession = Depends(get_session)) -> list[SeasonResponse]:
+    async def list_seasons(_user: NoAuthRequired, session: AsyncSession = Depends(get_session)) -> list[SeasonResponse]:
         seasons = (
             (
                 await session.execute(
@@ -204,6 +204,7 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_season(
         season_name: str,
+        _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
         include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
     ) -> SeasonResponse:
@@ -221,7 +222,7 @@ def create_tournament_router() -> APIRouter:
     @router.get("/seasons/{season_name}/pools/{pool_name}/config")
     @timed_http_handler
     async def get_pool_config(
-        season_name: str, pool_name: str, session: AsyncSession = Depends(get_session)
+        season_name: str, pool_name: str, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
     ) -> JSONResponse:
         name, version = parse_season_ref(season_name)
         if name not in SEASONS or name in HIDDEN_SEASONS:
@@ -245,7 +246,9 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/configs/{config_id}")
     @timed_http_handler
-    async def get_config(config_id: UUID, session: AsyncSession = Depends(get_session)) -> JSONResponse:
+    async def get_config(
+        config_id: UUID, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
+    ) -> JSONResponse:
         from metta.app_backend.models.tournament import MettagridEnvConfig  # noqa: PLC0415
 
         env_config = (await session.execute(select(MettagridEnvConfig).filter_by(id=config_id))).scalar_one_or_none()
@@ -257,6 +260,7 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def list_season_versions(
         season_name: str,
+        _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
     ) -> list[SeasonVersionInfo]:
         name, _ = parse_season_ref(season_name)
@@ -278,6 +282,7 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_leaderboard(
         season_name: str,
+        _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
         include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
     ) -> list[LeaderboardEntry]:
@@ -325,7 +330,7 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_policies(
         season_name: str,
-        user: CheckMaybeUser,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
         mine: bool = Query(default=False, description="Filter to only policies owned by the authenticated user"),
         include_hidden: bool = Query(
@@ -459,6 +464,7 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_matches(
         season_name: str,
+        _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
         limit: int = 50,
         offset: int = 0,
@@ -521,7 +527,9 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/matches/{match_id}")
     @timed_http_handler
-    async def get_match(match_id: UUID, session: AsyncSession = Depends(get_session)) -> MatchResponse:
+    async def get_match(
+        match_id: UUID, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
+    ) -> MatchResponse:
         query = (
             select(Match)
             .where(Match.id == match_id)
@@ -586,7 +594,7 @@ def create_tournament_router() -> APIRouter:
         match_id: UUID,
         policy_version_id: UUID,
         artifact_type: str,
-        user: CheckUser,
+        user: ExternalUser,
         session: AsyncSession = Depends(get_session),
     ) -> Response:
         if artifact_type not in MATCH_ARTIFACT_TYPES:
@@ -627,7 +635,7 @@ def create_tournament_router() -> APIRouter:
     @router.post("/seasons/{season_name}/submissions")
     @timed_http_handler
     async def submit_policy(
-        season_name: str, request: SubmitRequest, _user: CheckUser, session: AsyncSession = Depends(get_session)
+        season_name: str, request: SubmitRequest, _user: ExternalUser, session: AsyncSession = Depends(get_session)
     ) -> SubmitResponse:
         name, version = parse_season_ref(season_name)
         if name not in SEASONS:
@@ -659,7 +667,7 @@ def create_tournament_router() -> APIRouter:
     @router.get("/policies/{policy_version_id}/memberships")
     @timed_http_handler
     async def get_policy_memberships(
-        policy_version_id: UUID, session: AsyncSession = Depends(get_session)
+        policy_version_id: UUID, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
     ) -> list[MembershipHistoryEntry]:
         changes = (
             (
@@ -698,7 +706,9 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/my-memberships")
     @timed_http_handler
-    async def get_my_memberships(user: CheckUser, session: AsyncSession = Depends(get_session)) -> dict[str, list[str]]:
+    async def get_my_memberships(
+        user: ExternalUser, session: AsyncSession = Depends(get_session)
+    ) -> dict[str, list[str]]:
         """Get all season memberships for the authenticated user's policy versions.
 
         Returns a mapping of policy_version_id -> list of season names.

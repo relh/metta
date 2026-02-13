@@ -12,7 +12,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 import gitta as git
-from metta.app_backend.auth import CheckSoftmaxUser
+from metta.app_backend.auth import SoftmaxUser
 from metta.app_backend.models.eval_task import FinishedTaskStatus, TaskStatus
 from metta.app_backend.queries import eval_task_queries
 from metta.app_backend.queries.eval_task_queries import EvalTaskRow, TaskAttemptRow
@@ -87,7 +87,7 @@ class TaskAttemptsResponse(BaseModel):
 
 
 def create_eval_task_router() -> APIRouter:
-    router = APIRouter(prefix="/tasks", tags=["eval_tasks"], include_in_schema=False)
+    router = APIRouter(prefix="/tasks", tags=["eval_tasks"])
 
     # Cache for latest commit
     _latest_commit_cache: Optional[tuple[str, datetime]] = None
@@ -109,7 +109,7 @@ def create_eval_task_router() -> APIRouter:
 
     @router.post("")
     @timed_http_handler
-    async def create_task(request: TaskCreateRequest, user: CheckSoftmaxUser) -> EvalTaskRow:
+    async def create_task(request: TaskCreateRequest, user: SoftmaxUser) -> EvalTaskRow:
         data_uri = None
         if request.data_file:
             file_path = f"data_file_{uuid.uuid4()}.json"
@@ -136,7 +136,7 @@ def create_eval_task_router() -> APIRouter:
 
     @router.get("/latest", response_model=EvalTaskRow)
     @timed_http_handler
-    async def get_latest_assigned_task_for_worker(assignee: str, user: CheckSoftmaxUser) -> EvalTaskRow | None:
+    async def get_latest_assigned_task_for_worker(assignee: str, user: SoftmaxUser) -> EvalTaskRow | None:
         task = await eval_task_queries.get_latest_assigned_task_for_worker(assignee=assignee)
         if task:
             await fill_user_data([task], current_user=user)
@@ -145,7 +145,7 @@ def create_eval_task_router() -> APIRouter:
     @router.get("/available")
     @timed_http_handler
     async def get_available_tasks(
-        user: CheckSoftmaxUser,
+        user: SoftmaxUser,
         limit: int = Query(default=200, ge=1, le=1000),
     ) -> TasksResponse:
         tasks = await eval_task_queries.get_available_tasks(limit=limit)
@@ -154,7 +154,7 @@ def create_eval_task_router() -> APIRouter:
 
     @router.post("/claim")
     @timed_http_handler
-    async def claim_tasks(request: TaskClaimRequest, _user: CheckSoftmaxUser) -> TaskClaimResponse:
+    async def claim_tasks(request: TaskClaimRequest, _user: SoftmaxUser) -> TaskClaimResponse:
         claimed_ids = await eval_task_queries.claim_tasks(
             task_ids=request.tasks,
             assignee=request.assignee,
@@ -163,21 +163,21 @@ def create_eval_task_router() -> APIRouter:
 
     @router.get("/claimed")
     @timed_http_handler
-    async def get_claimed_tasks(user: CheckSoftmaxUser, assignee: str | None = Query(None)) -> TasksResponse:
+    async def get_claimed_tasks(user: SoftmaxUser, assignee: str | None = Query(None)) -> TasksResponse:
         tasks = await eval_task_queries.get_claimed_tasks(assignee=assignee)
         await fill_user_data(tasks, current_user=user)
         return TasksResponse(tasks=tasks)
 
     @router.post("/git-hashes")
     @timed_http_handler
-    async def get_git_hashes_for_workers(request: GitHashesRequest, _user: CheckSoftmaxUser) -> GitHashesResponse:
+    async def get_git_hashes_for_workers(request: GitHashesRequest, _user: SoftmaxUser) -> GitHashesResponse:
         git_hashes = await eval_task_queries.get_git_hashes_for_workers(assignees=request.assignees)
         return GitHashesResponse(git_hashes=git_hashes)
 
     @router.get("/all")
     @timed_http_handler
     async def get_all_tasks(
-        user: CheckSoftmaxUser,
+        user: SoftmaxUser,
         limit: int = Query(default=500, ge=1, le=1000),
         statuses: list[TaskStatus] | None = Query(default=None),
         git_hash: str | None = Query(default=None),
@@ -193,7 +193,7 @@ def create_eval_task_router() -> APIRouter:
     @router.get("/paginated")
     @timed_http_handler
     async def get_tasks_paginated(
-        user: CheckSoftmaxUser,
+        user: SoftmaxUser,
         page: int = Query(default=1, ge=1),
         page_size: int = Query(default=50, ge=1, le=100),
         status: str | None = Query(default=None),
@@ -225,13 +225,13 @@ def create_eval_task_router() -> APIRouter:
 
     @router.post("/{task_id}/start")
     @timed_http_handler
-    async def start_task(task_id: int, _user: CheckSoftmaxUser) -> TaskIdResponse:
+    async def start_task(task_id: int, _user: SoftmaxUser) -> TaskIdResponse:
         await eval_task_queries.start_task(task_id=task_id)
         return TaskIdResponse(task_id=task_id)
 
     @router.post("/{task_id}/finish")
     @timed_http_handler
-    async def finish_task(task_id: int, request: TaskFinishRequest, _user: CheckSoftmaxUser) -> TaskIdResponse:
+    async def finish_task(task_id: int, request: TaskFinishRequest, _user: SoftmaxUser) -> TaskIdResponse:
         await eval_task_queries.finish_task(
             task_id=task_id, status=request.status, status_details=request.status_details, log_path=request.log_path
         )
@@ -239,7 +239,7 @@ def create_eval_task_router() -> APIRouter:
 
     @router.get("/{task_id}")
     @timed_http_handler
-    async def get_task(task_id: int, user: CheckSoftmaxUser) -> EvalTaskRow:
+    async def get_task(task_id: int, user: SoftmaxUser) -> EvalTaskRow:
         """Get a single task by ID with full details including attributes."""
         task = await eval_task_queries.get_task_by_id(task_id)
         if not task:
@@ -249,14 +249,14 @@ def create_eval_task_router() -> APIRouter:
 
     @router.get("/{task_id}/attempts")
     @timed_http_handler
-    async def get_task_attempts(task_id: int, _user: CheckSoftmaxUser) -> TaskAttemptsResponse:
+    async def get_task_attempts(task_id: int, _user: SoftmaxUser) -> TaskAttemptsResponse:
         """Get all attempts for a specific task."""
         attempts = await eval_task_queries.get_task_attempts(task_id)
         return TaskAttemptsResponse(attempts=attempts)
 
     @router.get("/{task_id}/logs/{log_type}")
     @timed_http_handler
-    async def get_task_logs(task_id: int, log_type: str, _user: CheckSoftmaxUser):
+    async def get_task_logs(task_id: int, log_type: str, _user: SoftmaxUser):
         """Stream log files from S3 for a specific task.
 
         Args:

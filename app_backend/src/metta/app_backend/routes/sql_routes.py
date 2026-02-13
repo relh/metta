@@ -11,7 +11,7 @@ from psycopg import errors as pg_errors
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from metta.app_backend.auth import CheckSoftmaxUser
+from metta.app_backend.auth import SoftmaxUser
 from metta.app_backend.config import settings
 from metta.app_backend.database import db_session
 from metta.app_backend.route_logger import timed_route
@@ -49,11 +49,11 @@ class AIQueryResponse(BaseModel):
 
 
 def create_sql_router() -> APIRouter:
-    router = APIRouter(prefix="/sql", tags=["sql"], include_in_schema=False)
+    router = APIRouter(prefix="/sql", tags=["sql"])
 
     @router.get("/tables")
     @timed_route("list_tables")
-    async def list_tables(user: CheckSoftmaxUser) -> list[TableInfo]:
+    async def list_tables(user: SoftmaxUser) -> list[TableInfo]:
         try:
             async with db_session() as session:
                 tables_query = text("""
@@ -94,7 +94,7 @@ def create_sql_router() -> APIRouter:
 
     @router.get("/tables/{table_name}/schema")
     @timed_route("get_table_schema")
-    async def get_table_schema(table_name: str, user: CheckSoftmaxUser) -> TableSchema:
+    async def get_table_schema(table_name: str, user: SoftmaxUser) -> TableSchema:
         try:
             if table_name == "schema_migrations":
                 raise HTTPException(status_code=403, detail="Access to schema_migrations table is not allowed")
@@ -142,7 +142,7 @@ def create_sql_router() -> APIRouter:
 
     @router.post("/query")
     @timed_route("execute_sql_query")
-    async def execute_query(request: SQLQueryRequest, user: CheckSoftmaxUser) -> SQLQueryResponse:
+    async def execute_query(request: SQLQueryRequest, user: SoftmaxUser) -> SQLQueryResponse:
         try:
             query_lower = request.query.lower()
             if "schema_migrations" in query_lower:
@@ -191,7 +191,7 @@ def create_sql_router() -> APIRouter:
 
     @router.post("/generate-query")
     @timed_route("generate_ai_query")
-    async def generate_ai_query(request: AIQueryRequest, user: CheckSoftmaxUser) -> AIQueryResponse:
+    async def generate_ai_query(request: AIQueryRequest, user: SoftmaxUser) -> AIQueryResponse:
         """Generate a SQL query from natural language description using Claude."""
         # Get API key from environment variable
         if not settings.ANTHROPIC_API_KEY:

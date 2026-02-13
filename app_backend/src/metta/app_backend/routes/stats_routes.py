@@ -9,13 +9,13 @@ import duckdb
 from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, Field
 
-from metta.app_backend.auth import CheckMaybeUser, CheckSoftmaxUser, CheckUser
+from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
 from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.routes.docs_routes import public_api
+from metta.app_backend.routes.docs_routes import exclude_from_public_docs, public_api
 from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
@@ -203,7 +203,7 @@ def create_stats_router() -> APIRouter:
 
     @router.post("/policies")
     @timed_http_handler
-    async def upsert_policy(policy: PolicyCreate, user: CheckSoftmaxUser) -> UUIDResponse:
+    async def upsert_policy(policy: PolicyCreate, user: SoftmaxUser) -> UUIDResponse:
         """
         Internal endpoint. Cogames uploads use submit/presigned-url and submit/complete.
         """
@@ -223,7 +223,7 @@ def create_stats_router() -> APIRouter:
     @router.post("/policies/{policy_id_str}/versions")
     @timed_http_handler
     async def create_policy_version(
-        policy_id_str: str, policy_version: PolicyVersionCreate, user: CheckSoftmaxUser
+        policy_id_str: str, policy_version: PolicyVersionCreate, user: SoftmaxUser
     ) -> UUIDResponse:
         """
         Internal endpoint. Cogames uploads use submit/presigned-url and submit/complete.
@@ -241,10 +241,11 @@ def create_stats_router() -> APIRouter:
         )
         return UUIDResponse(id=policy_version_id)
 
-    @router.put("/policy-versions/{policy_version_id_str}/tags", include_in_schema=False)
+    @router.put("/policy-versions/{policy_version_id_str}/tags")
+    @exclude_from_public_docs
     @timed_http_handler
     async def update_policy_version_tags_route(
-        policy_version_id_str: str, tags: Annotated[dict[str, str], Body(...)], user: CheckSoftmaxUser
+        policy_version_id_str: str, tags: Annotated[dict[str, str], Body(...)], user: SoftmaxUser
     ) -> UUIDResponse:
         policy_version_id = uuid.UUID(policy_version_id_str)
         await policy_queries.upsert_policy_version_tags(policy_version_id, tags)
@@ -252,7 +253,7 @@ def create_stats_router() -> APIRouter:
 
     @router.post("/policies/submit/presigned-url")
     @timed_http_handler
-    async def get_submit_policy_presigned_url(user: CheckUser) -> PresignedUploadUrlResponse:
+    async def get_submit_policy_presigned_url(user: ExternalUser) -> PresignedUploadUrlResponse:
         from botocore.config import Config  # noqa: PLC0415
 
         upload_id = uuid.uuid4()
@@ -274,7 +275,7 @@ def create_stats_router() -> APIRouter:
 
     @router.post("/policies/submit/complete")
     @timed_http_handler
-    async def complete_policy_submit(request: CompletePolicySubmitRequest, user: CheckUser) -> PolicyVersionResponse:
+    async def complete_policy_submit(request: CompletePolicySubmitRequest, user: ExternalUser) -> PolicyVersionResponse:
         s3_key = f"cogames/submissions/{user.id}/{request.upload_id}.zip"
 
         try:
@@ -304,7 +305,7 @@ def create_stats_router() -> APIRouter:
     @router.post("/episodes/bulk_upload/presigned-url")
     @timed_http_handler
     async def get_bulk_upload_presigned_url(
-        user: CheckSoftmaxUser,  # only softmax users can bulk-upload
+        user: SoftmaxUser,  # only softmax users can bulk-upload
     ) -> PresignedUploadUrlResponse:
         from botocore.config import Config  # noqa: PLC0415
 
@@ -329,7 +330,7 @@ def create_stats_router() -> APIRouter:
     @timed_http_handler
     async def complete_bulk_upload(
         request: CompleteBulkUploadRequest,
-        user: CheckSoftmaxUser,  # only softmax users can bulk-upload
+        user: SoftmaxUser,  # only softmax users can bulk-upload
     ) -> BulkEpisodeUploadResponse:
         from metta.app_backend.episode_stats_db import (  # noqa: PLC0415
             read_agent_metrics,
@@ -426,7 +427,7 @@ def create_stats_router() -> APIRouter:
     @router.get("/policies")
     @timed_http_handler
     async def get_policies(
-        user: CheckMaybeUser,
+        user: MaybeAuthenticatedUser,
         name_exact: Optional[str] = None,
         name_fuzzy: Optional[str] = None,
         limit: int = 50,
@@ -447,7 +448,7 @@ def create_stats_router() -> APIRouter:
 
     @router.get("/policy-versions/{policy_version_id}")
     @timed_http_handler
-    async def get_policy_version_detail(policy_version_id: uuid.UUID, user: CheckMaybeUser) -> PolicyVersionRow:
+    async def get_policy_version_detail(policy_version_id: uuid.UUID, user: MaybeAuthenticatedUser) -> PolicyVersionRow:
         filter_visibility = not (user and user.is_softmax_team_member)
         include_internal = bool(user and user.is_softmax_team_member)
         pv = await policy_queries.get_policy_version_with_name(
@@ -464,7 +465,7 @@ def create_stats_router() -> APIRouter:
     @router.get("/policy-versions")
     @timed_http_handler
     async def get_policy_versions(
-        user: CheckMaybeUser,
+        user: MaybeAuthenticatedUser,
         name_exact: Optional[str] = None,
         name_fuzzy: Optional[str] = None,
         version: Optional[int] = None,
@@ -497,7 +498,7 @@ def create_stats_router() -> APIRouter:
 
     @router.post("/episodes/query")
     @timed_http_handler
-    async def query_episodes(request: EpisodeQueryRequest) -> EpisodeQueryResponse:
+    async def query_episodes(request: EpisodeQueryRequest, _user: NoAuthRequired) -> EpisodeQueryResponse:
         episodes = await episode_queries.get_episodes(
             primary_policy_version_ids=request.primary_policy_version_ids,
             episode_ids=request.episode_ids,

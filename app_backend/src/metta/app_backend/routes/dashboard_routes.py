@@ -11,7 +11,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from metta.app_backend.auth import CheckUser
+from metta.app_backend.auth import ExternalUser
 from metta.app_backend.config import settings
 from metta.app_backend.dashboard import (
     DashboardDerived,
@@ -47,7 +47,7 @@ def create_dashboard_router() -> APIRouter:
 
     @router.post("/{policy_version_id}/dashboard-data")
     @timed_http_handler
-    async def get_dashboard_data(policy_version_id: str, user: CheckUser) -> DashboardResponse:
+    async def get_dashboard_data(policy_version_id: str, user: ExternalUser) -> DashboardResponse:
         """Compute dashboard data for a policy version."""
         pv_id = UUID(policy_version_id)
 
@@ -207,7 +207,7 @@ def create_dashboard_router() -> APIRouter:
     @router.post("/{policy_version_id}/dashboard-analysis")
     @timed_http_handler
     async def get_dashboard_analysis(
-        policy_version_id: str, request: AnalysisRequest, user: CheckUser
+        policy_version_id: str, request: AnalysisRequest, user: ExternalUser
     ) -> AnalysisResponse:
         """Run Claude AI analysis on pre-computed dashboard summary."""
         if not settings.ANTHROPIC_API_KEY:

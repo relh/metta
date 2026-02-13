@@ -88,10 +88,18 @@ async def get_softmax_user_or_raise(request: Request) -> User:
     return user
 
 
-# Dependency types for use in route decorators
-CheckUser = Annotated[User, Depends(get_user_or_raise)]
-CheckSoftmaxUser = Annotated[User, Depends(get_softmax_user_or_raise)]
-CheckMaybeUser = Annotated[Optional[User], Depends(get_user)]
+async def _no_auth() -> None:
+    pass
+
+
+# Dependency types for use in route decorators.
+#
+# These control runtime auth only. Public API visibility is separate — see docs_routes.py.
+# To hide a specific endpoint from the public OpenAPI spec, use @exclude_from_public_docs.
+ExternalUser = Annotated[User, Depends(get_user_or_raise)]  # 401 if not logged in
+SoftmaxUser = Annotated[User, Depends(get_softmax_user_or_raise)]  # 403 if not softmax team
+MaybeAuthenticatedUser = Annotated[Optional[User], Depends(get_user)]  # always succeeds, user may be None
+NoAuthRequired = Annotated[None, Depends(_no_auth)]  # always succeeds, no-op
 
 
 async def validate_token_via_login_service(token: str) -> Optional[User]:

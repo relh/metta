@@ -165,8 +165,8 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
 
 # --- Authorization Tests ---
 # These tests verify the auth model:
-# - Internal routes (policy creation, version creation, tags, bulk upload) require CheckSoftmaxUser
-# - Public routes (cogames CLI submit, read endpoints) use CheckUser or are public
+# - Internal routes (policy creation, version creation, tags, bulk upload) require SoftmaxUser
+# - Public routes (cogames CLI submit, read endpoints) use ExternalUser or are public
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from metta.app_backend.auth import CheckSoftmaxUser, User
+from metta.app_backend.auth import SoftmaxUser, User
 from metta.app_backend.config import settings
 from metta.app_backend.smart_plugs import SmartPlugStatus, fetch_statuses, set_power
 
@@ -30,10 +30,10 @@ class SmartPlugSetResponse(BaseModel):
 
 
 def create_smart_plug_router() -> APIRouter:
-    router = APIRouter(prefix="/infra/smart-plugs", tags=["infra"], include_in_schema=False)
+    router = APIRouter(prefix="/infra/smart-plugs", tags=["infra"])
 
     @router.get("/status", response_model=SmartPlugStatusResponse)
-    async def get_status(user: CheckSoftmaxUser) -> SmartPlugStatusResponse:
+    async def get_status(user: SoftmaxUser) -> SmartPlugStatusResponse:
         if not settings.SMART_PLUGS_ENABLED:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Smart plugs are disabled")
 
@@ -49,7 +49,7 @@ def create_smart_plug_router() -> APIRouter:
         return SmartPlugStatusResponse(refreshed_at=datetime.now(timezone.utc), items=items)
 
     @router.post("/power", response_model=SmartPlugSetResponse)
-    async def set_power_state(request: SmartPlugSetRequest, user: CheckSoftmaxUser) -> SmartPlugSetResponse:
+    async def set_power_state(request: SmartPlugSetRequest, user: SoftmaxUser) -> SmartPlugSetResponse:
         _ensure_writable(user)
         try:
             await set_power(request.key, request.on, request.toggle_after)

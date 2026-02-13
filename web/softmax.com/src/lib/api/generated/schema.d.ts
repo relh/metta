@@ -198,74 +198,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/jobs": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** List Jobs */
-    get: operations["list_jobs_jobs_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/jobs/{job_id}/artifacts/{artifact_type}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Job Artifact */
-    get: operations["get_job_artifact_jobs__job_id__artifacts__artifact_type__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/jobs/{job_id}/episode-stats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Job Episode Stats */
-    get: operations["get_job_episode_stats_jobs__job_id__episode_stats_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/jobs/{job_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Job */
-    get: operations["get_job_jobs__job_id__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/tournament/seasons": {
     parameters: {
       query?: never;
@@ -507,17 +439,6 @@ export interface components {
         [key: string]: number;
       };
     };
-    /** AgentStatsDetail */
-    AgentStatsDetail: {
-      /** Agent Id */
-      agent_id: number;
-      /** Reward */
-      reward: number;
-      /** Metrics */
-      metrics: {
-        [key: string]: number;
-      };
-    };
     /**
      * BulkEpisodeUploadResponse
      * @description Response for bulk episode upload.
@@ -553,18 +474,6 @@ export interface components {
       name: string;
       /** Season */
       season?: string | null;
-    };
-    /** EpisodePolicyStat */
-    EpisodePolicyStat: {
-      /**
-       * Policy Version Id
-       * Format: uuid
-       */
-      policy_version_id: string;
-      /** Num Agents */
-      num_agents: number;
-      /** Avg Reward */
-      avg_reward: number | null;
     };
     /** EpisodeQueryRequest */
     EpisodeQueryRequest: {
@@ -621,17 +530,6 @@ export interface components {
        */
       created_at: string;
     };
-    /** EpisodeStatsResponse */
-    EpisodeStatsResponse: {
-      /** Game Stats */
-      game_stats: {
-        [key: string]: number;
-      };
-      /** Policy Stats */
-      policy_stats: components["schemas"]["PolicyStatsDetail"][];
-      /** Steps */
-      steps: number | null;
-    };
     /** EpisodeWithTags */
     EpisodeWithTags: {
       /**
@@ -667,88 +565,6 @@ export interface components {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
     };
-    /** JobEpisodeInfo */
-    JobEpisodeInfo: {
-      /** Replay Url */
-      replay_url?: string | null;
-      /** Attributes */
-      attributes?: {
-        [key: string]: unknown;
-      } | null;
-      /**
-       * Policy Stats
-       * @default []
-       */
-      policy_stats: components["schemas"]["EpisodePolicyStat"][];
-    };
-    /** JobMatchInfo */
-    JobMatchInfo: {
-      /** Pool Name */
-      pool_name?: string | null;
-      /** Season Name */
-      season_name?: string | null;
-    };
-    /** JobPolicyVersionSummary */
-    JobPolicyVersionSummary: {
-      /** Position */
-      position: number;
-      policy: components["schemas"]["PolicyVersionSummary"];
-    };
-    /** JobRequestResponse */
-    JobRequestResponse: {
-      /** User Id */
-      user_id: string;
-      user?: components["schemas"]["UserRow"] | null;
-      /**
-       * Id
-       * Format: uuid
-       */
-      id: string;
-      job_type: components["schemas"]["JobType"];
-      /** Job */
-      job: {
-        [key: string]: unknown;
-      };
-      status: components["schemas"]["JobStatus"];
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Dispatched At */
-      dispatched_at: string | null;
-      /** Running At */
-      running_at: string | null;
-      /** Completed At */
-      completed_at: string | null;
-      /** Worker */
-      worker: string | null;
-      /** Result */
-      result: {
-        [key: string]: unknown;
-      } | null;
-      /** Error */
-      error: string | null;
-      /** Error Type */
-      error_type: string | null;
-      /**
-       * Policy Versions
-       * @default []
-       */
-      policy_versions: components["schemas"]["JobPolicyVersionSummary"][];
-      episode?: components["schemas"]["JobEpisodeInfo"] | null;
-      match?: components["schemas"]["JobMatchInfo"] | null;
-    };
-    /**
-     * JobStatus
-     * @enum {string}
-     */
-    JobStatus: "pending" | "dispatched" | "running" | "completed" | "failed";
-    /**
-     * JobType
-     * @enum {string}
-     */
-    JobType: "episode";
     /** LeaderboardEntry */
     LeaderboardEntry: {
       /** Rank */
@@ -870,27 +686,6 @@ export interface components {
       };
       /** Version Count */
       version_count: number;
-    };
-    /** PolicyStatsDetail */
-    PolicyStatsDetail: {
-      /** Position */
-      position: number;
-      /** Policy Version Id */
-      policy_version_id: string | null;
-      /** Policy Name */
-      policy_name: string | null;
-      /** Policy Version */
-      policy_version: number | null;
-      /** Num Agents */
-      num_agents: number;
-      /** Avg Metrics */
-      avg_metrics: {
-        [key: string]: number;
-      };
-      /** Avg Reward */
-      avg_reward: number;
-      /** Agents */
-      agents: components["schemas"]["AgentStatsDetail"][];
     };
     /** PolicySummary */
     PolicySummary: {
@@ -1479,138 +1274,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["EpisodeQueryResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  list_jobs_jobs_get: {
-    parameters: {
-      query?: {
-        job_type?: components["schemas"]["JobType"] | null;
-        statuses?: components["schemas"]["JobStatus"][] | null;
-        job_id?: string | null;
-        policy_version_id?: string | null;
-        season_id?: string | null;
-        pool_id?: string | null;
-        limit?: number;
-        offset?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["JobRequestResponse"][];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_job_artifact_jobs__job_id__artifacts__artifact_type__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        job_id: string;
-        artifact_type: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_job_episode_stats_jobs__job_id__episode_stats_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        job_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["EpisodeStatsResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_job_jobs__job_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        job_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["JobRequestResponse"];
         };
       };
       /** @description Validation Error */

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.orm import raiseload, selectinload
 from sqlmodel import col, select
 
+from metta.app_backend.auth import NoAuthRequired
 from metta.app_backend.database import DbSession
 from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodeTag
 from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest
@@ -51,7 +52,7 @@ def create_episode_router() -> APIRouter:
 
     @router.get("/{episode_id}")
     @timed_http_handler
-    async def get_episode(episode_id: UUID, session: DbSession) -> EpisodeResponse:
+    async def get_episode(episode_id: UUID, _user: NoAuthRequired, session: DbSession) -> EpisodeResponse:
         query = select(Episode).where(Episode.id == episode_id).options(*_EPISODE_LOAD_OPTIONS)
         episode = (await session.execute(query)).scalar_one_or_none()
         if not episode:
@@ -61,6 +62,7 @@ def create_episode_router() -> APIRouter:
     @router.get("")
     @timed_http_handler
     async def list_episodes(
+        _user: NoAuthRequired,
         session: DbSession,
         policy_version_id: UUID | None = Query(default=None),
         tags: str | None = Query(default=None, description="Comma-separated key:value filters"),
