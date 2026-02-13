@@ -77,8 +77,7 @@ All publishable numbers must satisfy:
 - `MAIN_SHA` is captured from GitHub immediately before the benchmark set.
 - Baseline runs at `origin/main == MAIN_SHA`.
 - Branch run uses a branch with `merge-base(branch, main) == MAIN_SHA`.
-- Re-check `MAIN_SHA` between baseline and branch run. If it changed, abort and restart the set with the new
-  `MAIN_SHA`.
+- Re-check `MAIN_SHA` between baseline and branch run. If it changed, abort and restart the set with the new `MAIN_SHA`.
 
 ## Step 3: Baseline run (same machine)
 
@@ -150,8 +149,8 @@ When invalid: mark result as non-comparable and rerun after fixing freshness/par
 ```
 
 - Use `./devops/skypilot/sandbox.py` + `uv run sky logs` for status; keep baseline and branch on same sandbox.
-- For `uv run sky exec` workflows, set `CUDA_VISIBLE_DEVICES` explicitly (for example `0,1,2,3`) before running
-  training so GPU visibility is deterministic.
+- For `uv run sky exec` workflows, set `CUDA_VISIBLE_DEVICES` explicitly (for example `0,1,2,3`) before running training
+  so GPU visibility is deterministic.
 - If sandbox jobs fail early, check launcher/controller logs for environment issues (for example missing `CUDA_HOME`).
 
 ## Quick Reference
