@@ -26,22 +26,22 @@ def test_cumulants_config_normalizes_name_mapping_and_counts_features() -> None:
     cfg = DiffHordeCumulantsConfig.model_validate(
         {
             "hp": {"kind": "env_obs_feature", "feature": "inv:hp", "normalize": True},
-            "junction_held": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction.held"},
+            "territory_now": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction"},
             "core2": {"kind": "td_key", "key": "core", "slice": "0:2"},
         }
     )
 
-    assert [spec.name for spec in cfg.specs] == ["hp", "junction_held", "core2"]
+    assert [spec.name for spec in cfg.specs] == ["hp", "territory_now", "core2"]
     assert cfg.num_cumulants == 4
     assert cfg.required_td_keys() == {"env_obs", "core"}
-    assert cfg.required_info_keys() == {"env_collective/cogs/aligned.junction.held"}
+    assert cfg.required_info_keys() == {"env_collective/cogs/aligned.junction"}
 
 
 def test_cumulant_extractor_combines_env_info_and_td_sources() -> None:
     cfg = DiffHordeCumulantsConfig.model_validate(
         {
             "hp": {"kind": "env_obs_feature", "feature": "inv:hp", "reduce": "mean", "normalize": True},
-            "junction_held": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction.held"},
+            "territory_now": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction"},
             "core2": {"kind": "td_key", "key": "core", "slice": "1:3"},
         }
     )
@@ -60,7 +60,7 @@ def test_cumulant_extractor_combines_env_info_and_td_sources() -> None:
             "core": torch.tensor([[9.0, 8.0, 7.0], [1.0, 2.0, 3.0]], dtype=torch.float32),
             "env_info": TensorDict(
                 {
-                    "env_collective/cogs/aligned.junction.held": torch.tensor([1.5, 2.5], dtype=torch.float32),
+                    "env_collective/cogs/aligned.junction": torch.tensor([1.5, 2.5], dtype=torch.float32),
                 },
                 batch_size=[2],
             ),
@@ -82,7 +82,7 @@ def test_cumulant_extractor_combines_env_info_and_td_sources() -> None:
 
 def test_cumulant_extractor_raises_when_info_key_missing() -> None:
     cfg = DiffHordeCumulantsConfig.model_validate(
-        [{"kind": "info_scalar", "name": "junction_held", "key": "env_collective/cogs/aligned.junction.held"}]
+        [{"kind": "info_scalar", "name": "territory_now", "key": "env_collective/cogs/aligned.junction"}]
     )
     extractor = DiffHordeCumulantExtractor(cfg, _policy_env_info())
     td = TensorDict({"env_info": TensorDict({}, batch_size=[2])}, batch_size=[2])

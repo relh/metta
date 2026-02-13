@@ -77,6 +77,10 @@ class Loss:
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         raise NotImplementedError("Losses must implement policy_output_keys")
 
+    def env_info_missing_scalar_default(self) -> float | None:
+        """Optional default used when requested scalar env_info keys are missing."""
+        return None
+
     # --------- Control flow hooks; override in subclasses when custom behaviour is needed ---------
 
     def on_epoch_start(self, context: ComponentContext | None = None) -> None:

@@ -139,6 +139,80 @@ def test_diff_horde_requires_policy_log_probs_for_rho_correction() -> None:
         loss.train(shared, context, mb_idx=0)
 
 
+def test_diff_horde_rollout_normalizes_cumulants_with_rms_and_clip() -> None:
+    policy = _ToyPolicy()
+    registry = _PolicyRegistry(policy)
+    env = SimpleNamespace(single_action_space=gym_spaces.Discrete(4))
+    cfg = DiffHordeLossConfig(
+        cumulants=[{"kind": "td_key", "name": "core3", "key": "core", "slice": "0:3"}],
+        beta=0.0,
+        psi_all_actions_key=None,
+        h_all_actions_key=None,
+        cumulant_rms_alpha=1.0,
+        cumulant_rms_clip=0.5,
+    )
+    loss = cfg.create(registry, SimpleNamespace(), env, torch.device("cpu"), "diff_horde")
+    context = _make_context(registry)
+
+    rollout_td = TensorDict(
+        {
+            "learner0": TensorDict(
+                {
+                    "agent_slot_ids": torch.tensor([[0], [1]], dtype=torch.long),
+                    "actions": torch.tensor([0, 1], dtype=torch.int32),
+                    "core": torch.tensor([[100.0, 0.0, -100.0], [50.0, 0.0, -50.0]], dtype=torch.float32),
+                },
+                batch_size=[2],
+            )
+        },
+        batch_size=[2],
+    )
+    loss.rollout_postprocess(rollout_td, context)
+    learner_td = rollout_td["learner0"]
+
+    assert float(learner_td["cumulants"].abs().max().item()) <= 0.5 + 1e-6
+    assert int(loss.cumulant_rms_updates.item()) == 1
+    assert bool(torch.all(loss.cumulant_rms_sq_F >= 0))
+    assert float(loss.cumulant_rms_sq_F.max().item()) > 0.0
+    torch.testing.assert_close(learner_td["cumulants_phi_bar"], learner_td["cumulants"])
+
+
+def test_diff_horde_rollout_can_disable_cumulant_normalization() -> None:
+    policy = _ToyPolicy()
+    registry = _PolicyRegistry(policy)
+    env = SimpleNamespace(single_action_space=gym_spaces.Discrete(4))
+    cfg = DiffHordeLossConfig(
+        cumulants=[{"kind": "td_key", "name": "core3", "key": "core", "slice": "0:3"}],
+        beta=0.0,
+        psi_all_actions_key=None,
+        h_all_actions_key=None,
+        normalize_cumulants=False,
+    )
+    loss = cfg.create(registry, SimpleNamespace(), env, torch.device("cpu"), "diff_horde")
+    context = _make_context(registry)
+
+    core = torch.tensor([[100.0, 0.0, -100.0], [50.0, 0.0, -50.0]], dtype=torch.float32)
+    rollout_td = TensorDict(
+        {
+            "learner0": TensorDict(
+                {
+                    "agent_slot_ids": torch.tensor([[0], [1]], dtype=torch.long),
+                    "actions": torch.tensor([0, 1], dtype=torch.int32),
+                    "core": core,
+                },
+                batch_size=[2],
+            )
+        },
+        batch_size=[2],
+    )
+    loss.rollout_postprocess(rollout_td, context)
+    learner_td = rollout_td["learner0"]
+
+    torch.testing.assert_close(learner_td["cumulants"], core)
+    torch.testing.assert_close(learner_td["cumulants_phi_bar"], learner_td["cumulants"])
+    assert int(loss.cumulant_rms_updates.item()) == 0
+
+
 def test_ppo_critic_rollout_updates_internal_reward_baseline() -> None:
     policy = _ToyPolicy()
     registry = _PolicyRegistry(policy)

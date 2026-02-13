@@ -29,7 +29,7 @@ def test_teacher_ppo_begin_step_adds_ppo_train_run_gates() -> None:
 def test_cogsguard_diff_horde_wires_loss_architecture_and_slice() -> None:
     tool = cogsguard.train(
         diff_horde_cumulants={
-            "junction_held": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction.held"},
+            "territory_now": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction"},
             "core2": {"kind": "td_key", "key": "core", "slice": "0:2"},
         }
     )
@@ -92,3 +92,55 @@ def test_cogsguard_diff_horde_added_to_sliced_teacher_led_and_student_slices() -
     assert "diff_horde" in ppo_slice.losses
     assert "diff_horde" in teacher_slice.losses
     assert "diff_horde" in student_slice.losses
+
+
+def test_cogsguard_horde_variants_wire_diff_horde() -> None:
+    tool = cogsguard.train(horde_variants=["junctions", "vitals"])
+
+    learner_arch = tool.policy_assets["learner0"].architecture
+    assert learner_arch is not None
+    assert hasattr(learner_arch, "horde_num_cumulants")
+    assert learner_arch.horde_num_cumulants == 6
+
+    diff_horde_cfg = tool.trainer.losses["diff_horde"]
+    assert diff_horde_cfg.cumulants.num_cumulants == 6
+    assert diff_horde_cfg.cumulants.required_info_keys() >= {
+        "env_collective/cogs/aligned.junction",
+        "env_collective/clips/aligned.junction",
+        "agent/hp.amount",
+        "agent/energy.amount",
+    }
+
+
+def test_cogsguard_horde_variants_support_cortex_core_td_key() -> None:
+    tool = cogsguard.train(horde_variants=["cortex_core"])
+
+    learner_arch = tool.policy_assets["learner0"].architecture
+    assert learner_arch is not None
+    assert hasattr(learner_arch, "horde_num_cumulants")
+
+    cumulants = tool.trainer.losses["diff_horde"].cumulants
+    specs_by_name = {spec.name: spec for spec in cumulants.specs}
+    assert "cortex_core" in specs_by_name
+    assert specs_by_name["cortex_core"].kind == "td_key"
+    assert specs_by_name["cortex_core"].key == "core"
+    assert specs_by_name["cortex_core"].size == cumulants.num_cumulants
+    assert learner_arch.horde_num_cumulants == cumulants.num_cumulants
+
+
+def test_cogsguard_horde_variants_merge_with_explicit_cumulants() -> None:
+    tool = cogsguard.train(
+        horde_variants=["junctions"],
+        diff_horde_cumulants={
+            "cogs_junction_now": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction.held"},
+            "core2": {"kind": "td_key", "key": "core", "slice": "0:2"},
+        },
+    )
+
+    cumulants = tool.trainer.losses["diff_horde"].cumulants
+    specs_by_name = {spec.name: spec for spec in cumulants.specs}
+
+    assert "clips_junction_now" in specs_by_name
+    assert "core2" in specs_by_name
+    assert specs_by_name["cogs_junction_now"].key == "env_collective/cogs/aligned.junction.held"
+    assert cumulants.num_cumulants == 4

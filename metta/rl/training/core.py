@@ -35,6 +35,39 @@ def _collect_requested_env_info_keys(*, losses: dict[str, Loss], context: Compon
     return requested_keys
 
 
+def _resolve_missing_env_info_scalar_default(*, losses: dict[str, Loss], context: ComponentContext) -> float | None:
+    defaults: list[float | None] = []
+    for loss in losses.values():
+        if not loss._loss_gate_allows("rollout", context):
+            continue
+        required_fn = getattr(loss, "required_env_info_keys", None)
+        if required_fn is None:
+            continue
+        required = required_fn()
+        if not required:
+            continue
+        defaults.append(loss.env_info_missing_scalar_default())
+
+    if not defaults:
+        return None
+    if all(value is None for value in defaults):
+        return None
+    if any(value is None for value in defaults):
+        raise RuntimeError(
+            "Conflicting env_info missing-key handling across active losses. "
+            "Either all losses must use strict missing-key checks or all must define a numeric default."
+        )
+
+    numeric_defaults = [float(value) for value in defaults if value is not None]
+    first_default = numeric_defaults[0]
+    for value in numeric_defaults[1:]:
+        if value != first_default:
+            raise RuntimeError(
+                f"Conflicting env_info missing-key defaults across active losses: {sorted(set(numeric_defaults))}"
+            )
+    return first_default
+
+
 def _partition_requested_env_info_keys(
     requested_keys: set[str],
 ) -> tuple[tuple[str, ...], tuple[str, ...], str]:
@@ -105,6 +138,7 @@ def _tensorize_requested_env_info(
     requested_env_keys: tuple[str, ...] | None = None,
     requested_agent_keys: tuple[str, ...] | None = None,
     requested_keys_desc: str | None = None,
+    missing_scalar_default: float | None = None,
     batch_size: int,
     num_env_rows: int,
     agents_per_env: int,
@@ -208,7 +242,10 @@ def _tensorize_requested_env_info(
         for row_index, row in enumerate(flattened_env_rows):
             value = _lookup_env_info_value(row, key)
             if value is _MISSING:
-                raise RuntimeError(f"Missing requested env info key '{key}' in info row {row_index}")
+                if missing_scalar_default is None:
+                    raise RuntimeError(f"Missing requested env info key '{key}' in info row {row_index}")
+                values.append(float(missing_scalar_default))
+                continue
             values.append(_coerce_env_info_scalar(value=value, key=key, row_index=row_index))
         value_tensor = torch.tensor(values, dtype=torch.float32, device=device)
         if per_env_aligned and not per_agent_aligned:
@@ -222,7 +259,10 @@ def _tensorize_requested_env_info(
         values = []
         for row_index, row in enumerate(flattened_agent_rows):
             if agent_key not in row:
-                raise RuntimeError(f"Missing requested agent info key '{key}' in agent row {row_index}")
+                if missing_scalar_default is None:
+                    raise RuntimeError(f"Missing requested agent info key '{key}' in agent row {row_index}")
+                values.append(float(missing_scalar_default))
+                continue
             values.append(_coerce_env_info_scalar(value=row[agent_key], key=key, row_index=row_index))
         env_info_td[key] = torch.tensor(values, dtype=torch.float32, device=device)
     return env_info_td
@@ -380,6 +420,7 @@ class CoreTrainingLoop:
         self.trajectory_isolator.on_rollout_start()
         self._prepare_reward_centering_betas()
         requested_env_info_keys = _collect_requested_env_info_keys(losses=self.losses, context=context)
+        missing_env_info_scalar_default = _resolve_missing_env_info_scalar_default(losses=self.losses, context=context)
         requested_env_keys: tuple[str, ...] = ()
         requested_agent_keys: tuple[str, ...] = ()
         requested_keys_desc = "[]"
@@ -490,6 +531,7 @@ class CoreTrainingLoop:
                         requested_env_keys=requested_env_keys,
                         requested_agent_keys=requested_agent_keys,
                         requested_keys_desc=requested_keys_desc,
+                        missing_scalar_default=missing_env_info_scalar_default,
                         batch_size=batch_size,
                         num_env_rows=num_env_rows,
                         agents_per_env=agents_per_env,

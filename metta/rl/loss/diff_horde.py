@@ -32,6 +32,11 @@ class DiffHordeLossConfig(LossConfig):
     gamma: float | list[float] = 1.0
     lambda_: float | list[float] = 0.95
     reduce_cumulants: Literal["mean", "sum"] = "mean"
+    normalize_cumulants: bool = True
+    cumulant_rms_alpha: float = Field(default=1e-3, gt=0, le=1.0)
+    cumulant_rms_epsilon: float = Field(default=1e-6, gt=0)
+    cumulant_rms_min_scale: float = Field(default=1e-3, gt=0)
+    cumulant_rms_clip: float | None = Field(default=5.0, gt=0)
     aux_module_name: str = "gtd_aux"
 
     actions_key: str = "actions"
@@ -47,6 +52,7 @@ class DiffHordeLossConfig(LossConfig):
     cumulants_phi_bar_key: Literal["cumulants_phi_bar"] = "cumulants_phi_bar"
     behavior_log_prob_key: Literal["act_log_prob"] = "act_log_prob"
     target_log_prob_key: Literal["act_log_prob"] = "act_log_prob"
+    missing_info_scalar_default: float | None = 0.0
 
     def create(
         self,
@@ -68,6 +74,8 @@ class DiffHordeLoss(Loss):
         "_aux_module_params",
         "_gamma_vector_cache",
         "_lambda_vector_cache",
+        "cumulant_rms_sq_F",
+        "cumulant_rms_updates",
     )
 
     def __init__(
@@ -83,10 +91,13 @@ class DiffHordeLoss(Loss):
         policy_env_info = getattr(env, "policy_env_info", None)
         self.cumulant_extractor = DiffHordeCumulantExtractor(cfg.cumulants, policy_env_info)
         self.phi_bar_agentF = torch.empty((0, self._num_cumulants), dtype=torch.float32, device=self.device)
+        self.cumulant_rms_sq_F = torch.ones((self._num_cumulants,), dtype=torch.float32, device=self.device)
+        self.cumulant_rms_updates = torch.zeros((), dtype=torch.int64, device=self.device)
         self._aux_module_params: tuple[Tensor, ...] | None = None
         self._gamma_vector_cache: dict[tuple[torch.device, torch.dtype], Tensor] = {}
         self._lambda_vector_cache: dict[tuple[torch.device, torch.dtype], Tensor] = {}
         self.register_state_attr("phi_bar_agentF")
+        self.register_state_attr("cumulant_rms_sq_F", "cumulant_rms_updates")
 
     @property
     def _num_cumulants(self) -> int:
@@ -94,6 +105,9 @@ class DiffHordeLoss(Loss):
 
     def required_env_info_keys(self) -> set[str]:
         return self.cfg.cumulants.required_info_keys()
+
+    def env_info_missing_scalar_default(self) -> float | None:
+        return self.cfg.missing_info_scalar_default
 
     def get_experience_spec(self) -> Composite:
         act_space = self.env.single_action_space
@@ -127,6 +141,8 @@ class DiffHordeLoss(Loss):
             return
 
         phi_bF = self.cumulant_extractor(student_td)
+        if self.cfg.normalize_cumulants:
+            phi_bF = self._update_and_normalize_cumulants(phi_bF)
 
         self._ensure_phi_bar_agentF(total_agents=int(context.experience.total_agents), device=phi_bF.device)
 
@@ -149,6 +165,28 @@ class DiffHordeLoss(Loss):
                 phi_bF=phi_bF,
                 eta=float(self.cfg.eta),
             )
+
+    def _update_and_normalize_cumulants(self, phi_bF: Tensor) -> Tensor:
+        phi_f32 = phi_bF.to(device=self.device, dtype=torch.float32)
+        with torch.no_grad():
+            # Keep RMS stats rank-local: rollout postprocess runs per trajectory slice and
+            # slices can be empty on some ranks, so cross-rank collectives can deadlock.
+            batch_sq_mean_F = phi_f32.pow(2).mean(dim=0)
+            if int(self.cumulant_rms_updates.item()) == 0:
+                self.cumulant_rms_sq_F.copy_(batch_sq_mean_F)
+            else:
+                self.cumulant_rms_sq_F.lerp_(batch_sq_mean_F, float(self.cfg.cumulant_rms_alpha))
+            self.cumulant_rms_updates.add_(1)
+
+            scale_F = torch.sqrt(self.cumulant_rms_sq_F + float(self.cfg.cumulant_rms_epsilon)).clamp_min(
+                float(self.cfg.cumulant_rms_min_scale)
+            )
+
+        normalized = phi_f32 / scale_F.unsqueeze(0)
+        if self.cfg.cumulant_rms_clip is not None:
+            clip = float(self.cfg.cumulant_rms_clip)
+            normalized = normalized.clamp(min=-clip, max=clip)
+        return normalized
 
     def run_train(
         self,

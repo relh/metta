@@ -46,6 +46,7 @@ from metta.cogworks.curriculum.curriculum import (
     DiscreteRandomConfig,
 )
 from metta.rl.diff_horde.cumulants import DiffHordeCumulantsConfig
+from metta.rl.diff_horde.presets.cogsguard import resolve_cogsguard_horde_cumulants
 from metta.rl.loss.diff_horde import DiffHordeLossConfig
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
@@ -92,6 +93,17 @@ def _infer_td_key_cumulant_sizes_from_policy(
     policy = policy_architecture.model_copy(deep=True).make_policy(policy_env_info)
     policy.initialize_to_environment(policy_env_info, torch.device("cpu"))
     cumulants.infer_td_key_sizes_from_policy(policy)
+
+
+def _merge_cumulants_by_name(
+    *,
+    base: DiffHordeCumulantsConfig,
+    override: DiffHordeCumulantsConfig,
+) -> DiffHordeCumulantsConfig:
+    merged_specs: dict[str, dict[str, object]] = {spec.name: spec.model_dump(exclude_none=True) for spec in base.specs}
+    for spec in override.specs:
+        merged_specs[spec.name] = spec.model_dump(exclude_none=True)
+    return DiffHordeCumulantsConfig.model_validate(merged_specs)
 
 
 def _make_cogsguard_mission(
@@ -416,6 +428,7 @@ def train(
     policy_architecture: PolicyArchitecture | str | None = None,
     teacher: Optional[TeacherConfig] = None,
     diff_horde_cumulants: DiffHordeCumulantsConfig | dict[str, object] | list[dict[str, object]] | None = None,
+    horde_variants: str | Sequence[str] | None = None,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
@@ -516,12 +529,21 @@ def train(
             "Pass a DefaultPolicyConfig(cortex_routed_adapter=...) explicitly to use a custom architecture."
         )
 
-    resolved_diff_horde_cumulants: DiffHordeCumulantsConfig | None = None
+    resolved_diff_horde_cumulants = resolve_cogsguard_horde_cumulants(horde_variants)
     if diff_horde_cumulants is not None:
         if isinstance(diff_horde_cumulants, DiffHordeCumulantsConfig):
-            resolved_diff_horde_cumulants = diff_horde_cumulants
+            explicit_cumulants = diff_horde_cumulants
         else:
-            resolved_diff_horde_cumulants = DiffHordeCumulantsConfig.model_validate(diff_horde_cumulants)
+            explicit_cumulants = DiffHordeCumulantsConfig.model_validate(diff_horde_cumulants)
+        if resolved_diff_horde_cumulants is None:
+            resolved_diff_horde_cumulants = explicit_cumulants
+        else:
+            resolved_diff_horde_cumulants = _merge_cumulants_by_name(
+                base=resolved_diff_horde_cumulants,
+                override=explicit_cumulants,
+            )
+
+    if resolved_diff_horde_cumulants is not None:
         _infer_td_key_cumulant_sizes_from_policy(
             cumulants=resolved_diff_horde_cumulants,
             policy_architecture=resolved_architecture,

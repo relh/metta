@@ -187,6 +187,26 @@ Recipes that accept `diff_horde_cumulants` (currently `recipes/experiment/cogsgu
 `policy_architecture.horde_num_cumulants` to match the total cumulant size and attach the `diff_horde` loss to the
 appropriate training slice(s).
 
+CogsGuard also supports preset cumulant groups via `horde_variants` (implemented in
+`metta/rl/diff_horde/presets/cogsguard.py`). Preset names are stackable and resolve into `diff_horde_cumulants`;
+explicit `diff_horde_cumulants` entries with the same `name` override preset entries.
+
+### CogsGuard preset variants
+
+Available CogsGuard horde variants:
+
+- `all`: alias that expands to all variants below.
+- `junctions`: team-level junction control snapshot now (`cogs` and `clips` aligned junction counts).
+- `vitals`: agent internal state now (`hp`, `energy`, `influence`, `solar`).
+- `roles`: agent role/gear inventory now (`miner`, `aligner`, `scrambler`, `scout` amounts).
+- `cortex_core`: policy-internal `core` representation (`td_key` cumulant over `core`).
+- `economy_agent`: agent resource cargo now (`carbon`, `oxygen`, `germanium`, `silicon`, `heart` amounts).
+- `economy_collective`: team bank/resource totals now for Cogs (`carbon`, `oxygen`, `germanium`, `silicon`, `heart`).
+- `tempo`: episode progression signals (`steps`, `max_steps`, agent `reward_step`).
+- `junction_events`: junction event flow (`gained/lost` for both teams) and agent align/scramble counts.
+- `economy_flow`: resource/gear transaction deltas (agent gained/lost and team deposited/withdrawn flows).
+- `action_counters`: per-agent action counters (`move/noop/change_vibe` outcomes, failures, cells visited).
+
 ### Spec format
 
 `diff_horde_cumulants` is passed as JSON and can be either:
@@ -204,9 +224,9 @@ All spec kinds support:
 - `info_scalar`: reads a scalar from `env_info[<key>]` (tensorized from the env `info` payload at rollout time for the
   requested keys). Keys are slash-separated (nested env dicts are flattened) and support an `env_` prefix alias, so
   `env_collective/...` matches raw payload keys like `collective/...`. Use env-level keys like
-  `env_collective/cogs/aligned.junction.held` (broadcast to all agents in an env) or per-agent keys prefixed with
-  `agent/` (sourced from the env `_per_agent_infos` payload, e.g. `agent/reward_step`). Values must be numeric scalars
-  (missing keys or non-scalar values are hard errors).
+  `env_collective/cogs/aligned.junction` (broadcast to all agents in an env) or per-agent keys prefixed with `agent/`
+  (sourced from the env `_per_agent_infos` payload, e.g. `agent/reward_step`). Values must be numeric scalars
+  (non-scalar values are hard errors; missing keys use the loss-level default, `0.0` by default for `diff_horde`).
 - `env_obs_feature`: extracts a single feature from token observations `env_obs` and reduces across matching tokens
   (`"mean"|"sum"|"max"`). `env_obs` is shaped like `[B,M,3]` bytes `{location, feature_id, value}`; empty token slots
   are padded with `location=255`. Set `feature` to a name (e.g. `"inv:hp"`) or numeric feature id; set `normalize=true`
@@ -217,13 +237,27 @@ All spec kinds support:
   whole flattened vector and infers size from the policy/output tensor for that `key`. Provide `size` only when a key
   cannot be inferred from policy outputs.
 
+Guidance: prefer instantaneous cumulants (`*.amount`, `aligned.junction`) over cumulative counters (`*.held`,
+`*.success`) when possible; they are typically more stationary and easier to learn.
+
+### Normalization defaults
+
+`DiffHordeLoss` applies per-cumulant RMS normalization by default (`normalize_cumulants=true`) before computing targets,
+with configurable EMA/clip knobs:
+
+- `trainer.losses.diff_horde.normalize_cumulants`
+- `trainer.losses.diff_horde.cumulant_rms_alpha`
+- `trainer.losses.diff_horde.cumulant_rms_epsilon`
+- `trainer.losses.diff_horde.cumulant_rms_min_scale`
+- `trainer.losses.diff_horde.cumulant_rms_clip`
+
 ### Examples (CLI overrides)
 
 ```bash
 # kind=info_scalar
 ./devops/run.sh recipes.experiment.cogsguard.train \
   run=your_run_name \
-  'diff_horde_cumulants={"junction_held":{"kind":"info_scalar","key":"env_collective/cogs/aligned.junction.held"}}'
+  'diff_horde_cumulants={"territory_now":{"kind":"info_scalar","key":"env_collective/cogs/aligned.junction"}}'
 ```
 
 ```bash
@@ -252,6 +286,20 @@ All spec kinds support:
 ./devops/run.sh recipes.experiment.cogsguard.train \
   run=your_run_name \
   'diff_horde_cumulants={"core2":{"kind":"td_key","key":"core","slice":"0:2"}}'
+```
+
+```bash
+# preset groups (stackable)
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'horde_variants=["junctions","vitals","roles","cortex_core"]'
+```
+
+```bash
+# all preset variants
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  'horde_variants=["all"]'
 ```
 
 ## Useful recipes and games
