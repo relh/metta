@@ -280,7 +280,6 @@ class GitHooksSetup(SetupModule):
         if push_mode == PushHookMode.NONE:
             sys.exit(0)
 
-        info("Running full lint check before push (same as CI)...")
         lint_cmd = ["uv", "run", "--no-sync", "python", "-m", "metta.setup.tools.code_formatters"]
         try:
             subprocess.run(lint_cmd, cwd=self.repo_root, check=True)
