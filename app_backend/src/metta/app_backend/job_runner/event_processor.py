@@ -59,10 +59,11 @@ def _get_db_engine():
     if _db_engine is None:
         if not settings.STATS_DB_URI:
             raise ValueError("STATS_DB_URI not set")
-        # Normalize postgres:// to postgresql:// for SQLAlchemy compatibility
         uri = settings.STATS_DB_URI
         if uri.startswith("postgres://"):
-            uri = uri.replace("postgres://", "postgresql://", 1)
+            uri = uri.replace("postgres://", "postgresql+psycopg://", 1)
+        elif uri.startswith("postgresql://"):
+            uri = uri.replace("postgresql://", "postgresql+psycopg://", 1)
         _db_engine = create_engine(uri, pool_pre_ping=True)
     return _db_engine
 

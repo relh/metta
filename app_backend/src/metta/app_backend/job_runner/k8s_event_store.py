@@ -27,7 +27,9 @@ def _get_engine():
             return None
         uri = settings.STATS_DB_URI
         if uri.startswith("postgres://"):
-            uri = uri.replace("postgres://", "postgresql://", 1)
+            uri = uri.replace("postgres://", "postgresql+psycopg://", 1)
+        elif uri.startswith("postgresql://"):
+            uri = uri.replace("postgresql://", "postgresql+psycopg://", 1)
         _engine = create_engine(uri, pool_pre_ping=True)
     return _engine
 

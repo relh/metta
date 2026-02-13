@@ -25,7 +25,9 @@ _current_session: ContextVar[AsyncSession | None] = ContextVar("current_session"
 def get_sync_db_url() -> str:
     url = settings.STATS_DB_URI
     if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg://", 1)
+    elif url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
 
 
