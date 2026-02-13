@@ -4,6 +4,16 @@ This page covers how to run training jobs locally and on SkyPilot sandboxes.
 
 For general `tools/run.py` usage (recipes, discovery, override syntax), see `docs/tools.md`.
 
+## Table of contents
+
+- [SkyPilot sandboxes](#skypilot-sandboxes)
+- [Discovering And Explaining Training Knobs](#discovering-and-explaining-training-knobs)
+- [Kickstarting with a teacher](#kickstarting-with-a-teacher)
+- [Routed adapters for multi-agent training](#routed-adapters-for-multi-agent-training)
+- [Horde prediction framework](#horde-prediction-framework)
+- [Useful recipes and games](#useful-recipes-and-games)
+  - [CogsGuard](#cogsguard)
+
 ## SkyPilot sandboxes
 
 ### Create a sandbox
@@ -117,6 +127,56 @@ currently are `scripted.eer_cloner.sliced` and `scripted.supervisor.mixed`.
 ```
 
 See `metta/rl/training/teacher.py` for available teacher modes and knobs (e.g. `teacher.kwargs.*` for per-mode config).
+
+## Routed adapters for multi-agent training
+
+Routed adapters are per-agent low-rank adapters (LoRA-style) injected into the Cortex policy’s linear layers. They’re a
+useful middle ground between “one fully shared policy for all agents” and “a separate policy per agent”: you keep a
+single shared trunk, but give each agent its own small set of parameters to specialize.
+
+### How it works
+
+When enabled, Cortex replaces linear-like modules with adapter-augmented versions. Each adapted module keeps its base
+weights (the shared trunk), plus `num_slots` sets of low-rank adapter weights. At runtime, each batch element provides a
+`route_id` (typically the agent index); the module selects the corresponding adapter slot and adds its low-rank delta on
+top of the shared base computation.
+
+In Metta’s multi-agent rollouts, `route_id` is derived from `agent_slot_ids` (agent index within an env), then mapped
+into `[0, num_slots)` via modulo. This means:
+
+- `num_slots == num_agents` gives each agent its own adapter.
+- `num_slots < num_agents` makes multiple agents share an adapter slot (less capacity, but cheaper and encourages
+  sharing).
+
+### Key parameters and tradeoffs
+
+- `routed_adapter.rank`: adapter capacity per slot (higher rank = more parameters per agent, typically better
+  specialization). Tradeoff: higher rank increases memory usage and slows SPS due to extra matmuls/parameters. Rank `8`
+  has worked well in practice for CogsGuard, but the right value depends on your perf budget.
+- `routed_adapter.trunk_lr_mult`: gradient multiplier applied to the shared trunk parameters in the adapted module tree.
+  Values `< 1` update the trunk slower than the adapters (often helpful to reduce cross-agent interference while letting
+  adapters learn quickly). Tradeoff: too small can starve the trunk of learning signal; `0` effectively freezes the
+  trunk (within the adapted module tree).
+- `routed_adapter.num_slots`: number of adapter slots. More slots = more per-agent (or per-role) capacity; fewer slots =
+  more sharing and lower overhead.
+
+Other knobs you may occasionally want:
+
+- `routed_adapter.alpha`: scales the adapter contribution (defaults to `rank`, which gives a scale of `1.0`).
+- `routed_adapter.dropout`: regularization on the adapter path.
+- `routed_adapter.freeze_base`: freezes the base linear weights (adapter-only learning).
+
+### Example (CogsGuard)
+
+```bash
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  variants='["no_clips","milestones","no_objective"]' \
+  'teacher.policy_uri=metta://policy/nlanky?miner=4&aligner=2&disable_role_switching=1' \
+  routed_adapter.enabled=true \
+  routed_adapter.rank=8 \
+  routed_adapter.trunk_lr_mult=0.5
+```
 
 ## Horde prediction framework
 
