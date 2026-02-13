@@ -332,6 +332,7 @@ def get_file_linters() -> list[FileLinter]:
                     "packages/mettagrid/python/src/mettagrid/renderer/assets/",
                     "packages/mettagrid/nim/mettascope/data/",
                     ".import_linter_cache/",
+                    ".grimp_cache/",
                 ),
             ),
         ),

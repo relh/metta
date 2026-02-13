@@ -161,6 +161,7 @@ terraform.tfstate
 tools/dev/python_imports/*.json
 tools/dev/python_imports/*.txt
 .import_linter_cache/
+.grimp_cache
 
 # In-repo worktrees
 .worktrees/

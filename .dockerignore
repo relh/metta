@@ -33,6 +33,8 @@ test_data
 **/mettagrid_debug.log
 cpplint_output*
 
+.grimp_cache
+
 **/node_modules
 **/.next
 **/.vite
