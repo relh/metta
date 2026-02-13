@@ -275,7 +275,7 @@ export function AccountCard({ user }: AccountCardProps) {
           <span className={tosLocked ? "text-[#4a5f8c]" : undefined}>
             I have read and agree to the{" "}
             <a
-              href="https://softmax.com/privacy-policy.pdf"
+              href="/privacy"
               target="_blank"
               rel="noopener noreferrer"
               className="font-semibold text-[#1a3875] underline"

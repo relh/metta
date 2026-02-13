@@ -20,6 +20,11 @@ const nextConfig: NextConfig = {
         destination: "/alignmentleague",
         permanent: true,
       },
+      {
+        source: "/privacy-policy.pdf",
+        destination: "/privacy",
+        permanent: true,
+      },
     ];
   },
 };
