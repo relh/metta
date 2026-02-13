@@ -33,7 +33,30 @@ non-public endpoints. Define a change policy that prevents accidental drift whil
 
 Account status, uploading policies, submitting to pools, checking policy status within a season, leaderboard.
 
-### Per-Episode Outputs
+### Game Results
+
+The public API exposes game results through two resource types:
+
+**Match** — the tournament-facing resource. Always exists once scheduled, even if the game fails. Includes season/pool
+context, participating policies, assignments, scores, and an error message for failed matches. In list responses,
+includes `episode_id`; in detail responses, includes the full inline Episode.
+
+**Episode** — the game data resource. Only created when a game completes successfully. Includes replay URL, game-level
+stats, per-policy results (avg reward, avg metrics), and per-agent breakdowns.
+
+Both resources embed `PolicyVersionSummary` (`{id, name, version}`) rather than inlining policy fields. Policy-level
+metrics are simple averages of the underlying agent-level metrics.
+
+**Logs** are accessible via Match (`GET /matches/{id}/logs/{policy_version_id}`), auth-gated to the policy submitter.
+Initially returns full job logs; TODO to filter to the specified policy's output.
+
+**Job** endpoints are internal-only (softmax auth). All useful Job data is surfaced through Match (status, error, logs)
+or Episode (stats, replay).
+
+### Visibility
+
+Matches and episodes are public — tournament results are inherently public. Logs are auth-gated to the policy submitter.
+Job endpoints are softmax-internal.
 
 ## Design Decisions
 
@@ -61,10 +84,11 @@ about what's available, and handlers don't need to reason about partial auth.
 - [x] Frontends (softmax.com, Observatory) consume types from the internal OpenAPI spec
 - [x] CI drift detection: compare generated OpenAPI spec against checked-in copy in `app_backend/.../generated/`
 - [x] Consolidate and clean endpoints (backwards-incompatible, partial progress in nishad/api-cleanup)
-- [ ] Add docs for things we don't yet document: job logs, agent stats, game stats
-- [ ] Update existing TournamentClient and StatsClient
-- [ ] Update cogames repo to reference the docs
-- [ ] Include field-level descriptions (agent stats, game stats)
-- [ ] Gate non-public endpoints behind is-softmax auth, enforced by route-level auth test
+- [ ] Add Match and Episode public endpoints with schemas per design doc
+- [ ] Add `GET /matches/{id}/logs/{policy_version_id}` (auth-gated, full logs initially; TODO policy-specific filtering)
+- [ ] Gate Job endpoints behind is-softmax auth, enforced by route-level auth test
 - [ ] Remove `/stats/` prefix: deploy both old and new paths, migrate frontends/clients to new paths, then remove old
       paths
+- [ ] Update existing TournamentClient and StatsClient to use new Match/Episode endpoints
+- [ ] Update cogames repo to reference the docs
+- [ ] Include field-level descriptions (agent stats, game stats)
