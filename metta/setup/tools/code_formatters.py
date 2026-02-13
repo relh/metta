@@ -13,7 +13,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import gitta as git
 from metta.common.util.fs import get_repo_root
-from metta.setup.utils import error, info, success, warning
+from metta.setup.utils import error, get_console, info, success, warning
 
 
 @dataclass
@@ -472,7 +472,7 @@ def cmd_lint(
         TextColumn("{task.description}", justify="left"),
     )
 
-    with Progress(*columns, transient=True) as progress:
+    with Progress(*columns, transient=True, console=get_console()) as progress:
         with ThreadPoolExecutor(max_workers=len(all_runners) or 1) as executor:
             futures = {}
             for runner in all_runners:
@@ -493,13 +493,14 @@ def cmd_lint(
             for future in as_completed(futures):
                 runner, task_id, planned_count = futures[future]
                 result = future.result()
-                processed = result.processed_files or planned_count
-                final_action = "Formatted" if fix else "Checked"
-                final_color = "green" if result.success else "red"
-                final_desc = _format_progress_message(runner.name, final_action, processed, final_color)
-                progress.update(task_id, description=final_desc)
-                progress.stop_task(task_id)
-                if not result.success:
+                if result.success:
+                    progress.remove_task(task_id)
+                else:
+                    processed = result.processed_files or planned_count
+                    final_action = "Formatted" if fix else "Checked"
+                    final_desc = _format_progress_message(runner.name, final_action, processed, "red")
+                    progress.update(task_id, description=final_desc)
+                    progress.stop_task(task_id)
                     failed_formatters.append((runner.name, result.output))
 
     if failed_formatters:
