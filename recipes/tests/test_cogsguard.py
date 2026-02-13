@@ -10,6 +10,7 @@ import random
 import pytest
 
 from cogames.cogs_vs_clips.config import CvCConfig
+from metta.agent.policies.puffer_default import PufferDefaultConfig
 from metta.cogworks.curriculum.task_generator import BucketedTaskGenerator, SingleTaskGenerator, TaskGeneratorSet
 from metta.rl.training.teacher import TeacherConfig
 from metta.sweep.parameter_config import ParameterConfig
@@ -237,6 +238,14 @@ def test_train_does_not_enable_teacher_by_default() -> None:
     assert not tool.trainer.losses.has_loss("teacher_led")
     assert not tool.trainer.losses.has_loss("student_led")
     assert tool.scheduler is None
+
+
+def test_train_accepts_policy_architecture_spec_string() -> None:
+    tool = cogsguard.train(
+        policy_architecture="metta.agent.policies.puffer_default.PufferDefaultConfig(hidden_size=64)"
+    )
+    assert isinstance(tool.policy_assets["learner0"].architecture, PufferDefaultConfig)
+    assert tool.policy_assets["learner0"].architecture.hidden_size == 64
 
 
 def test_sweep_sweeps_hypers_and_fixes_variants_and_timesteps() -> None:

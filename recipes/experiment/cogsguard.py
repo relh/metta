@@ -413,7 +413,7 @@ def simulations(
 
 def train(
     curriculum: Optional[CurriculumConfig] = None,
-    policy_architecture: Optional[PolicyArchitecture] = None,
+    policy_architecture: PolicyArchitecture | str | None = None,
     teacher: Optional[TeacherConfig] = None,
     diff_horde_cumulants: DiffHordeCumulantsConfig | dict[str, object] | list[dict[str, object]] | None = None,
     variants: str | Sequence[str] | None = None,
@@ -431,6 +431,9 @@ def train(
 ) -> tools.TrainTool:
     if isinstance(teacher, dict):
         teacher = TeacherConfig.model_validate(teacher)
+
+    if isinstance(policy_architecture, str):
+        policy_architecture = PolicyArchitecture.from_spec(policy_architecture)
 
     if isinstance(routed_adapter, dict):
         routed_adapter_overrides = dict(routed_adapter)
