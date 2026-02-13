@@ -1,9 +1,5 @@
 FROM ubuntu:22.04
 
-WORKDIR /workspace
-
-COPY . /workspace/metta
-
 WORKDIR /workspace/metta
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,11 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:0.9.5 /uv /uvx /bin/
 
-COPY .python-version pyproject.toml uv.lock ./
-RUN uv python install
+COPY . /workspace/metta
 
-RUN bash install.sh --profile softmax-docker --non-interactive
-RUN uv sync --frozen
+RUN uv python install
+RUN uv run --no-sync python -m metta.setup.components.system_packages.bootstrap --non-interactive
+RUN uv sync --frozen --package metta-app-backend --no-dev
 
 WORKDIR /workspace/metta/app_backend
 EXPOSE 8000
