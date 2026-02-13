@@ -98,7 +98,7 @@ preconditions and execute in priority order.
 | Weaknesses   | Goal evaluation overhead per tick. Entity map doesn't persist across episodes. No team-level coordination beyond role distribution.                                                                                                          |
 | Machina1 fit | **Moderate to good**. Goal-tree priority handles the mixed-terrain well (recharge goals fire when needed). Stem role adapts to discovered map state. Lacks the junction-alignment sophistication of CoGsGuard.                               |
 
-### CoGsGuard (role_py)
+### CoGsGuard (role)
 
 **Architecture**: Multi-role vibe system with SmartRoleCoordinator. Tracks junction alignments, manages structure
 discovery, coordinates role selection across team.
@@ -334,7 +334,7 @@ This would produce generation-over-generation shifts in the role population.
 | baseline              | Poor                 | Ablation baseline                 |
 | ladybug_py            | Poor-Moderate        | Adversarial unclipping            |
 | planky                | Moderate-Good        | Goal-priority research            |
-| role_py (CoGsGuard)   | Good                 | General competitive play          |
+| role (CoGsGuard)      | Good                 | General competitive play          |
 | cogsguard_v2          | Good-Strong          | Balanced default teams            |
 | wombo                 | Strong (competitive) | Junction control focus            |
 | **cogsguard_control** | **Strong**           | **Best for machina1 leaderboard** |

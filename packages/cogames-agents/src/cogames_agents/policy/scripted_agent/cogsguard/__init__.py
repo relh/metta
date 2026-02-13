@@ -22,12 +22,6 @@ from cogames_agents.policy.evolution.cogsguard.evolutionary_coordinator import (
 from cogames_agents.policy.scripted_agent.cogsguard.behavior_hooks import build_cogsguard_behavior_hooks
 from cogames_agents.policy.scripted_agent.cogsguard.control_agent import CogsguardControlAgent
 from cogames_agents.policy.scripted_agent.cogsguard.policy import CogsguardPolicy, CogsguardWomboPolicy
-from cogames_agents.policy.scripted_agent.cogsguard.roles import (
-    AlignerPolicy,
-    MinerPolicy,
-    ScoutPolicy,
-    ScramblerPolicy,
-)
 from cogames_agents.policy.scripted_agent.cogsguard.targeted_agent import CogsguardTargetedAgent
 from cogames_agents.policy.scripted_agent.cogsguard.v2_agent import CogsguardV2Agent
 
@@ -45,10 +39,6 @@ __all__ = [
     "CogsguardWomboPolicy",
     "CogsguardTargetedAgent",
     "CogsguardV2Agent",
-    "MinerPolicy",
-    "ScoutPolicy",
-    "AlignerPolicy",
-    "ScramblerPolicy",
     # Evolution types
     "BehaviorDef",
     "BehaviorSource",

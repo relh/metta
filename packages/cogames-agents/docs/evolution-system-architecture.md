@@ -237,7 +237,7 @@ Values `1`, `true`, `yes`, and `on` (case-insensitive) are all accepted.
 Example URI:
 
 ```
-metta://policy/role_py?evolution=1&miner=4&scrambler=2
+metta://policy/role?evolution=1&miner=4&scrambler=2
 ```
 
 ### How the flag flows

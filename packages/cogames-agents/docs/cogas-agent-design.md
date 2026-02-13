@@ -323,7 +323,7 @@ accumulation. The catalog tracks:
 | Agent             | Expected `aligned.junction.held` |
 | ----------------- | -------------------------------- |
 | baseline          | ~0 (energy starvation)           |
-| role_py           | ~0-100 (limited aligner logic)   |
+| role              | ~0-100 (limited aligner logic)   |
 | cogsguard_control | ~100-500 (best current)          |
 | **cogas**         | **> 1500** (target)              |
 

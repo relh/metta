@@ -27,8 +27,10 @@ uv run cogames play -m cogsguard_arena.basic -p role -r unicode
 uv run cogames play -m cogsguard_arena.basic -p role -r log -s 500
 ```
 
-Available scripted policies: `role`, `role_py`, `miner`, `scout`, `aligner`, `scrambler`, `teacher`, `baseline`,
-`cogsguard_v2`, `wombo`, `cogsguard_control`, `cogsguard_targeted`.
+Available scripted policies: `role`, `role_nim`, `teacher`, `baseline`, `cogsguard_v2`, `wombo`, `cogsguard_control`,
+`cogsguard_targeted`.
+
+Tutorial role specialists (`miner`, `scout`, `aligner`, `scrambler`) are canonical in `cogames`.
 
 Use `uv run cogames policies` to list all policies.
 
@@ -296,8 +298,8 @@ Exit code 0 = pass, 1 = failure detected.
 
 ```bash
 uv run python scripts/run_cogsguard_parity.py \
-  --policy-a "metta://policy/role" \
-  --policy-b "metta://policy/role_py" \
+  --policy-a "metta://policy/role_nim" \
+  --policy-b "metta://policy/role" \
   --steps 500 \
   --agents 10
 ```
@@ -313,7 +315,7 @@ verifying Nim/Python parity or comparing policy versions.
 uv run python scripts/run_cogsguard_instrumented_audit.py \
   --steps 1000 \
   --agents 2 \
-  --policy-uri "metta://policy/role_py?miner=1&scout=1" \
+  --policy-uri "metta://policy/role?miner=1&scout=1" \
   --trace-every 200
 ```
 
@@ -340,7 +342,7 @@ uv run python scripts/run_cogsguard_rollout.py --steps 500 --agents 10 --trace-r
 uv run python scripts/run_cogsguard_instrumented_audit.py --steps 1000 --agents 10 --trace-every 50
 
 # 3. If comparing two implementations: run parity
-uv run python scripts/run_cogsguard_parity.py --policy-a role --policy-b role_py --steps 500
+uv run python scripts/run_cogsguard_parity.py --policy-a role_nim --policy-b role --steps 500
 ```
 
 ### What to Look For

@@ -20,13 +20,12 @@ Common scripted policy names include:
 - Nim baselines: `thinky`, `race_car`, `ladybug`, `nim_random`
 - CogsGuard core: `role`, `role_nim`, `wombo`
 - CogsGuard variants: `alignall`, `cogsguard_control`, `cogsguard_targeted`, `cogsguard_v2`
-- CogsGuard roles: `miner`, `scout`, `aligner`, `scrambler`
 - Teacher: `teacher`
 
 For the full registry snapshot, see `docs/scripted-agent-registry.md`.
 
-Role-specific policies are exposed via role names (miner/scout/aligner/scrambler). For the teacher policy, you can pass
-`role_vibes` as a comma-separated list:
+Tutorial role specialists (`miner`, `scout`, `aligner`, `scrambler`) are canonical in `cogames`, not this package. For
+the teacher policy, you can pass `role_vibes` as a comma-separated list:
 
 ```
 metta://policy/teacher?role_vibes=miner,scout
@@ -47,7 +46,7 @@ The `recipes.experiment.scripted_agents` recipe accepts the same scripted policy
 
 ```
 ./tools/run.py recipes.experiment.scripted_agents.play agent=thinky suite=cvc_arena
-./tools/run.py recipes.experiment.scripted_agents.play agent=miner suite=cogsguard
+./tools/run.py recipes.experiment.scripted_agents.play agent=role suite=cogsguard
 ```
 
 ## Included policies

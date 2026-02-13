@@ -59,7 +59,7 @@ hub recipes.
 
 ---
 
-### 2.2 Role_py / CoGsGuard (`metta://policy/role_py`)
+### 2.2 Role / CoGsGuard (`metta://policy/role`)
 
 **Architecture:** Multi-role vibe system with SmartRoleCoordinator. Dynamic role switching.
 
@@ -123,7 +123,7 @@ assigns roles based on team state:
 
 **Key observations:**
 
-- Unlike base role_py, V2 **always includes a scout** (for teams >= 3).
+- Unlike base role, V2 **always includes a scout** (for teams >= 3).
 - Balanced scrambler/aligner split.
 - Miner-heavy remainder ensures resource economy.
 - Static allocation -- no dynamic switching beyond what the smart coordinator provides at runtime.
@@ -235,12 +235,12 @@ All CoGsGuard-family agents accept role count parameters via URI query strings:
 metta://policy/<agent>?miner=N&scout=N&aligner=N&scrambler=N&gear=N
 ```
 
-### Base role_py additional params:
+### Base role additional params:
 
 ```
-metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout  # Repeating cycle
-metta://policy/role_py?role_order=aligner,miner,aligner,miner    # Exact sequence
-metta://policy/role_py?evolution=1                                 # Evolutionary roles
+metta://policy/role?role_cycle=aligner,miner,scrambler,scout  # Repeating cycle
+metta://policy/role?role_order=aligner,miner,aligner,miner    # Exact sequence
+metta://policy/role?evolution=1                                 # Evolutionary roles
 ```
 
 ### Planky additional params:
@@ -267,13 +267,13 @@ For a standard 10-agent team:
 | Agent                 | Miner        | Scout   | Aligner | Scrambler | Dynamic? | Notes                                           |
 | --------------------- | ------------ | ------- | ------- | --------- | -------- | ----------------------------------------------- |
 | **planky** (default)  | 4 (40%)      | 0 (0%)  | 2 (20%) | 4 (40%)   | No       | No scouts; denial-heavy                         |
-| **role_py** (default) | 4 (40%)      | 0-2\*   | 0-2\*   | 1 (10%)   | Yes      | 5 dynamic `gear` agents fill gaps               |
+| **role** (default)    | 4 (40%)      | 0-2\*   | 0-2\*   | 1 (10%)   | Yes      | 5 dynamic `gear` agents fill gaps               |
 | **cogsguard_v2**      | 5 (50%)      | 1 (10%) | 2 (20%) | 2 (20%)   | Limited  | Balanced static formula                         |
 | **cogsguard_control** | 5-7          | 1-2     | 0-2     | 1-2       | Yes      | Phase-aware; commander reassigns every 40 steps |
 | **wombo**             | 4-5 (40-50%) | 2 (20%) | 2 (20%) | 2 (20%)   | Yes      | Per-agent generalist; junction-push mode        |
 | **teacher**           | 1 (25%)      | 1 (25%) | 1 (25%) | 1 (25%)   | Rotates  | Even split for training signal diversity        |
 
-\*role_py `gear` agents are assigned by the SmartRoleCoordinator at runtime based on game state.
+\*role `gear` agents are assigned by the SmartRoleCoordinator at runtime based on game state.
 
 ---
 
@@ -314,7 +314,7 @@ per scramble). Without miners producing hearts, combat roles starve.
 **Heavy aligner strategy (scoring-focused):**
 
 ```
-metta://policy/role_py?scrambler=2&aligner=3&miner=4&scout=1
+metta://policy/role?scrambler=2&aligner=3&miner=4&scout=1
 ```
 
 Prioritizes junction control. Works when opponent is passive.
@@ -338,7 +338,7 @@ Phase-aware distribution handles all game states. Best general-purpose choice.
 **Maximum economy (resource-gathering focus):**
 
 ```
-metta://policy/role_py?miner=7&scout=1&aligner=1&scrambler=1
+metta://policy/role?miner=7&scout=1&aligner=1&scrambler=1
 ```
 
 Maximizes heart production. Best for non-competitive or pure resource metrics.
@@ -356,7 +356,7 @@ Aggressive junction control with double scouts and generalist role switching.
 ## 6. Conclusions
 
 1. **No agent currently uses a theoretically optimal distribution out of the box.** Planky lacks scouts entirely in its
-   defaults. Role_py's defaults are miner-heavy with most agents dynamically assigned.
+   defaults. Role defaults are miner-heavy with most agents dynamically assigned.
 
 2. **Dynamic role switching outperforms static allocation.** CoGsGuard Control and Wombo (the highest-rated agents in
    machina1 analysis) both use adaptive distributions.

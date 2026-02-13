@@ -91,10 +91,6 @@ Registered scripted agents (from `cogames-agents` package):
 | `cogsguard_v2`       | CogsGuard v2                    |
 | `cogsguard_control`  | Control-focused variant         |
 | `cogsguard_targeted` | Targeted behavior               |
-| `miner`              | Single-role: miner              |
-| `scout`              | Single-role: scout              |
-| `aligner`            | Single-role: aligner            |
-| `scrambler`          | Single-role: scrambler          |
 | `teacher`            | Teacher wrapper                 |
 | `ladybug_py`         | Ladybug Python                  |
 | `thinky`             | High-cognition Nim              |
@@ -102,3 +98,5 @@ Registered scripted agents (from `cogames-agents` package):
 | `race_car`           | Race car Nim                    |
 | `ladybug`            | Ladybug Nim                     |
 | `alignall`           | All-aligner Nim                 |
+
+Canonical tutorial role policies (`miner`, `scout`, `aligner`, `scrambler`) live in `cogames`.

@@ -19,8 +19,8 @@ cogames-agents/src/cogames_agents/policy/
 │   ├── unclipping_agent.py            # UnclippingPolicy (short_name: "ladybug_py")
 │   ├── demo_policy.py                 # DemoPolicy (short_name: "tiny_baseline")
 │   ├── cogsguard/                     # Team-play agent with roles
-│   │   ├── policy.py                  # CogsGuardPolicy (short_name: "role_py")
-│   │   ├── roles.py                   # Per-role policies (miner, scout, etc.)
+│   │   ├── policy.py                  # CogsGuardPolicy (short_name: "role")
+│   │   ├── role_trace.py              # Diagnostics helpers for role transitions/traces
 │   │   ├── types.py                   # CogsGuard-specific state types
 │   │   └── ...
 │   └── planky/                        # Goal-tree agent
@@ -233,7 +233,7 @@ metta://policy/my_agent?param1=value1&param2=value2
 The CogsGuard agent uses URI parameters to control role distribution:
 
 ```
-metta://policy/role_py?miner=3&scout=2&aligner=2&scrambler=3
+metta://policy/role?miner=3&scout=2&aligner=2&scrambler=3
 ```
 
 To support URI parameters, accept `**kwargs` in your `__init__`:
@@ -390,11 +390,11 @@ uv run cogames play --mission evals.diagnostic_radial -p my_agent --cogs 1 --ste
 
 ```bash
 # Play with role-based agent
-uv run cogames play --mission recipes.experiment.cogsguard.play -p role_py
+uv run cogames play --mission recipes.experiment.cogsguard.play -p role
 
 # With custom role distribution
 uv run cogames play --mission recipes.experiment.cogsguard.play \
-    -p "role_py?miner=3&scout=2&aligner=2&scrambler=3"
+    -p "role?miner=3&scout=2&aligner=2&scrambler=3"
 ```
 
 ### Running the evaluation suite

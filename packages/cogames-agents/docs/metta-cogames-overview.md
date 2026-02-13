@@ -129,8 +129,8 @@ class=my_policy.MyPolicy,data=./weights.safetensors,kw.hidden_size=256
 class=baseline,proportion=0.5
 
 # URI format (role-based)
-metta://policy/role_py?role_cycle=aligner,miner,scrambler,scout
-metta://policy/role_py?miner=4&aligner=2&scrambler=4&scout=0
+metta://policy/role?role_cycle=aligner,miner,scrambler,scout
+metta://policy/role?miner=4&aligner=2&scrambler=4&scout=0
 ```
 
 ## 4. CogsGuard Game Mechanics
@@ -235,8 +235,8 @@ Recipe execution:
 
 - `baseline`, `tiny_baseline`, `ladybug_py` -- Python heuristics
 - `thinky`, `race_car`, `ladybug` -- Nim-compiled (faster)
-- `role`, `role_py`, `wombo` -- Role-rotation strategies
-- `miner`, `scout`, `aligner`, `scrambler` -- Role specialists
+- `role`, `role_nim`, `wombo` -- Role-rotation strategies
+- `miner`, `scout`, `aligner`, `scrambler` -- Tutorial role specialists (canonical in `cogames`)
 - `teacher` -- Role assignment meta-policy
 
 **Templates** (from cogames):

@@ -9,8 +9,8 @@ starvation problem that prevents agents from effectively navigating and completi
 
 ### 1. Scripted Agents Are NOT Successfully Aligning Junctions
 
-After running `cogames play` with both the Nim (`metta://policy/role`) and Python (`metta://policy/role_py`) policies, I
-observed:
+After running `cogames play` with both the Nim (`metta://policy/role_nim`) and Python (`metta://policy/role`) policies,
+I observed:
 
 - **clips.aligned.junction.held: ~135,000** (over 5000 steps)
 - **cogs.aligned.junction.held: 0** (zero junctions aligned to cogs)
@@ -126,9 +126,8 @@ Same structure as hub, but junctions are clips-aligned, so they:
 
 ## Follow-up (2026-01-27): Scripted Agent Position/Action Drift
 
-I audited the Python scripted agents (`role_py`) with the debug harness to verify whether they are behaving sensibly in
-the current Cogsguard arena. The results point to a concrete failure mode in the scripted agent stack, independent of
-PPO.
+I audited the Python scripted agents (`role`) with the debug harness to verify whether they are behaving sensibly in the
+current Cogsguard arena. The results point to a concrete failure mode in the scripted agent stack, independent of PPO.
 
 ### Summary
 
@@ -204,7 +203,7 @@ causing junctions to fill the map and extractors to be ignored as unsafe/unreach
 - Re-run multi-seed audits (e.g., seeds 1–5) and longer rollouts (2–5k steps) to confirm resource accumulation, gear
   acquisition, and alignment/scramble loops are restored.
 
-### Likely Failure Modes Across Scripted Agents (Role Py, Teacher, Targeted)
+### Likely Failure Modes Across Scripted Agents (Role, Teacher, Targeted)
 
 Below are the top suspected failure modes that explain _all_ observed symptoms (no gear, no mining loop, no alignment),
 and what would definitively confirm or clear each one. These are ordered by impact.
@@ -247,19 +246,19 @@ and what would definitively confirm or clear each one. These are ordered by impa
 
 ### Agent-Specific Failure Modes to Check
 
-**Role Py (multi-role scripted policy)**
+**Role (multi-role scripted policy)**
 
 - **Action tracking drift**: already observed in audit; this is the primary suspect.
 - **Gear acquisition race**: scramblers spam gear stations without resources early; miners/scouts stay gearless.
 - **Map pollution**: junctions/extractors mislocalized if tag precedence + action timing are both off.
-- **Definitive checks**: fix action timing; enforce tag precedence; re-run role_py audit.
+- **Definitive checks**: fix action timing; enforce tag precedence; re-run role audit.
 
 **Teacher (CogsguardTeacherPolicy + Nim backend)**
 
 - **Vibe reset / schedule issues**: teacher relies on episode pct + scheduler; resets could pin agents in wrong vibe.
 - **Cross-impl parity**: Nim agents may interpret obs/vibe tags differently than Python.
-- **Definitive checks**: run teacher in the same debug harness for 200–500 steps with verbose vibe logs; compare to
-  role_py on identical seed/map. If behavior diverges, Nim parity is suspect.
+- **Definitive checks**: run teacher in the same debug harness for 200–500 steps with verbose vibe logs; compare to role
+  on identical seed/map. If behavior diverges, Nim parity is suspect.
 
 **Targeted/Control/V2 policies**
 
@@ -302,7 +301,7 @@ and what would definitively confirm or clear each one. These are ordered by impa
 
 - **Policy URI mismatch during audits**: `cogsguard_py` is not a registered short name; `teacher` does not accept
   role-count kwargs. Passing the wrong URI can silently invalidate comparisons.
-  - **Test:** use `role_py` for multi-role counts and `teacher` with no role args.
+  - **Test:** use `role` for multi-role counts and `teacher` with no role args.
 
 ### Shortlist: 3–5 Things That Should Clear This Up
 
@@ -321,7 +320,7 @@ If we want the fastest route to clarity, do these in order:
 uv run tools/run.py cogsguard.play "policy_uri=metta://policy/teacher" render=log max_steps=3000
 
 # Run with Python policy
-uv run tools/run.py cogsguard.play "policy_uri=metta://policy/role_py" render=log max_steps=3000
+uv run tools/run.py cogsguard.play "policy_uri=metta://policy/role" render=log max_steps=3000
 
 # Check simulation state
 uv run python -c "
@@ -348,8 +347,8 @@ junction hold time.
 | policy_uri              | cogs.aligned.junction.held | clips.aligned.junction.held |
 | ----------------------- | -------------------------- | --------------------------- |
 | metta://policy/wombo    | 0.00                       | 35033.00                    |
-| metta://policy/role     | 0.00                       | 37000.00                    |
-| metta://policy/role_py  | 0.00                       | 29023.00                    |
+| metta://policy/role_nim | 0.00                       | 37000.00                    |
+| metta://policy/role     | 0.00                       | 29023.00                    |
 | metta://policy/alignall | 0.00                       | 28021.00                    |
 | metta://policy/teacher  | 0.00                       | 36022.00                    |
 
@@ -364,14 +363,14 @@ The debug harness gives role/gear/structure visibility that the eval pipeline do
 - gear station use is mostly without resources (e.g., aligner 1055 uses, 1 with resources)
 - gear resource windows are rare (8-16 steps total), and even rarer when a role is adjacent (0-4 steps)
 
-#### role_py with miner-heavy ratio
+#### role with miner-heavy ratio
 
 Command:
 
 ```bash
 uv run packages/cogames-agents/scripts/run_cogsguard_rollout.py \
   --steps 1000 --max-steps 1000 --seed 42 --agents 10 \
-  --policy-uri 'metta://policy/role_py?miner=5&scout=1&aligner=2&scrambler=2' \
+  --policy-uri 'metta://policy/role?miner=5&scout=1&aligner=2&scrambler=2' \
   --allow-missing-roles
 ```
 
@@ -385,8 +384,8 @@ Findings:
 
 #### Note on Nim role policy
 
-The Nim `metta://policy/role` policy does not expose per-agent `_state` to the harness, so role-level instrumentation
-appears empty. Use `role_py` for detailed instrumentation.
+The Nim `metta://policy/role_nim` policy does not expose per-agent `_state` to the harness, so role-level
+instrumentation appears empty. Use `role` for detailed instrumentation.
 
 ### 3) Interpretation
 
@@ -413,16 +412,16 @@ block `cogs.aligned.junction.held`, regardless of role mix.
    - Outcome: role agents fail to equip, so alignment actions never trigger.
 
 2. **Aligner/scrambler action rate is extremely low**
-   - Even with role_py and miner-heavy ratios, align/scramble attempts are sparse.
+   - Even with role and miner-heavy ratios, align/scramble attempts are sparse.
    - Outcome: junctions remain clips-aligned, so cogs never get junction hold credit.
 
 3. **Role thrash / non-concurrent roles**
-   - In role_py, the “agents=10” count reflects agents spending time in that role at some point, not concurrent role
+   - In role, the “agents=10” count reflects agents spending time in that role at some point, not concurrent role
      assignment. This suggests roles may be cycling without sustained role coverage.
    - Outcome: miners/aligners/scramblers are not reliably present at the same time to complete the multi-step flow.
 
 4. **Instrumentation visibility mismatch (Nim vs Python)**
-   - Nim `role` policy does not expose `_state`, so debug harness visibility is limited. This can mask state/role
+   - Nim `role_nim` policy does not expose `_state`, so debug harness visibility is limited. This can mask state/role
      misbehaviors in the Nim path.
    - Outcome: we may be missing a Nim-specific failure mode (pathing/role execution), distinct from Python behavior.
 
@@ -445,11 +444,11 @@ These are designed to be decisive; each should either confirm a root cause or el
    - Goal: determine if action failures are due to missing hearts/influence versus pathing/targeting.
 
 3. **Concurrent role coverage audit**
-   - Track per-tick role counts and role transitions for role_py/wombo.
+   - Track per-tick role counts and role transitions for role/wombo.
    - Goal: measure how often the miner + scrambler + aligner roles are simultaneously staffed for >N steps.
 
 4. **Nim vs Python parity check**
-   - Run the same scenario with `role` (Nim) vs `role_py`, capturing only metrics available to both (e.g., action
+   - Run the same scenario with `role_nim` (Nim) vs `role`, capturing only metrics available to both (e.g., action
      counts, movement success).
    - Goal: isolate Nim-specific logic or pathing regressions that don’t exist in Python.
 

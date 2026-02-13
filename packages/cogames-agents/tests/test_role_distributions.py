@@ -38,10 +38,6 @@ class TestRoleURIResolution:
     _ROLE_VARIANTS = [
         "role",
         "role_nim",
-        "miner",
-        "scout",
-        "aligner",
-        "scrambler",
         "wombo",
         "teacher",
     ]

@@ -26,7 +26,6 @@ AGENTS=""
 # All registered scripted agents (from short_names scan)
 ALL_AGENTS=(
   role
-  role
   role_nim
   planky
   wombo
@@ -35,10 +34,6 @@ ALL_AGENTS=(
   cogsguard_v2
   cogsguard_control
   cogsguard_targeted
-  miner
-  scout
-  aligner
-  scrambler
   teacher
   ladybug_py
   thinky

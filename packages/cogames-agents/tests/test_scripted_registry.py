@@ -10,18 +10,14 @@ def test_resolve_scripted_agent_uri_known() -> None:
     names = set(list_scripted_agent_names())
     expected = {
         "alignall",
-        "aligner",
         "baseline",
         "cogsguard_control",
         "cogsguard_targeted",
         "cogsguard_v2",
-        "miner",
         "nim_random",
         "race_car",
         "role",
         "role_nim",
-        "scout",
-        "scrambler",
         "teacher",
         "thinky",
         "tiny_baseline",
