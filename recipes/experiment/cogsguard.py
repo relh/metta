@@ -625,6 +625,7 @@ def miner(
         clips_overrides={"disabled": True},
     )
     env = mission.make_env()
+    env.game.actions.change_vibe.enabled = False
     if resolved_rewards:
         apply_reward_variants(env, variants=list(resolved_rewards))
 
@@ -689,6 +690,7 @@ def aligner(
     for team in mission.teams.values():
         team.initial_hearts = 120
     env = mission.make_env()
+    env.game.actions.change_vibe.enabled = False
     if resolved_rewards:
         apply_reward_variants(env, variants=list(resolved_rewards))
 
