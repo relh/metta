@@ -1,19 +1,15 @@
 #!/bin/bash
 set -e
 
-# Get the directory of this script
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Check commit hook mode early to avoid unnecessary setup
 CONFIG_FILE="$HOME/.metta/config.yaml"
 
 if [ -f "$CONFIG_FILE" ]; then
-    # Extract commit_hook_mode from YAML
-    MODE=$(grep "commit_hook_mode:" "$CONFIG_FILE" 2>/dev/null | awk '{print $2}' || echo "check")
+    MODE=$(grep "push_hook_mode:" "$CONFIG_FILE" 2>/dev/null | awk '{print $2}' || echo "check")
 
     if [ "$MODE" = "none" ]; then
-        # Exit silently for 'none' mode
         exit 0
     fi
 fi
@@ -28,9 +24,8 @@ if ! check_cmd uv; then
     exit 1
 fi
 
-if ! uv run --active metta run githooks pre-commit; then
+if ! uv run --active metta run githooks pre-push; then
     exit 1
 fi
 
-# No output on success - GitHub Desktop works better with silent success
 exit 0

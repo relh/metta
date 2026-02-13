@@ -35,6 +35,29 @@ class CommitHookMode(Enum):
             return cls.get_default()
 
 
+class PushHookMode(Enum):
+    NONE = "none"
+    CHECK = "check"
+
+    def get_description(self) -> str:
+        descriptions = {
+            PushHookMode.NONE: "No pre-push linting",
+            PushHookMode.CHECK: "Full lint check before pushing (catches what CI catches)",
+        }
+        return descriptions.get(self, self.value)
+
+    @classmethod
+    def get_default(cls) -> "PushHookMode":
+        return PushHookMode.CHECK
+
+    @classmethod
+    def parse(cls, value: str | None) -> "PushHookMode":
+        try:
+            return PushHookMode(value)
+        except ValueError:
+            return cls.get_default()
+
+
 class GitLeaksMode(Enum):
     NONE = "none"
     CHECK = "check"
@@ -149,6 +172,7 @@ class GitHooksSetup(SetupModule):
     def get_configuration_options(self) -> dict[str, tuple[str, str]]:
         return {
             "commit_hook_mode": (CommitHookMode.CHECK.value, "Pre-commit hook behavior"),
+            "push_hook_mode": (PushHookMode.CHECK.value, "Pre-push hook behavior"),
             "gitleaks_mode": (GitLeaksMode.BLOCK.value, "Gitleaks secrets scanning behavior"),
         }
 
@@ -156,11 +180,12 @@ class GitHooksSetup(SetupModule):
         info("Configuring git commit hooks...")
 
         current_commit = CommitHookMode.parse(self.get_setting("commit_hook_mode", default=None))
+        current_push = PushHookMode.parse(self.get_setting("push_hook_mode", default=None))
         current_gitleaks = GitLeaksMode.parse(self.get_setting("gitleaks_mode", default=None))
 
-        # Prompt for new modes
         if os.environ.get("METTA_TEST_ENV") or os.environ.get("CI"):
             commit_mode = CommitHookMode.get_default()
+            push_mode = PushHookMode.get_default()
             gitleaks_mode = GitLeaksMode.get_default()
         else:
             commit_mode = prompt_choice(
@@ -170,6 +195,13 @@ class GitHooksSetup(SetupModule):
                 current=current_commit,
             )
 
+            push_mode = prompt_choice(
+                "Select pre-push hook behavior:",
+                [(mode, mode.get_description()) for mode in PushHookMode],
+                default=PushHookMode.get_default(),
+                current=current_push,
+            )
+
             gitleaks_mode = prompt_choice(
                 "Select gitleaks secrets scanning behavior:",
                 [(mode, mode.get_description()) for mode in GitLeaksMode],
@@ -177,8 +209,8 @@ class GitHooksSetup(SetupModule):
                 current=current_gitleaks,
             )
 
-        # Save the settings
         self.set_setting("commit_hook_mode", commit_mode.value)
+        self.set_setting("push_hook_mode", push_mode.value)
         self.set_setting("gitleaks_mode", gitleaks_mode.value)
 
         if commit_mode.value == CommitHookMode.CHECK.value:
@@ -186,6 +218,7 @@ class GitHooksSetup(SetupModule):
         else:
             info(f"Commit hook mode set to: {colorize(commit_mode.get_description(), 'green')}")
 
+        info(f"Push hook mode set to: {colorize(push_mode.get_description(), 'green')}")
         info(f"Gitleaks mode set to: {colorize(gitleaks_mode.get_description(), 'green')}")
 
     def _check_gitleaks_installed(self) -> bool:
@@ -233,10 +266,30 @@ class GitHooksSetup(SetupModule):
                 return True
 
     def run(self, args: list[str]) -> None:
-        if not args or args[0] != "pre-commit":
-            error("Usage: metta run githooks pre-commit")
+        if not args or args[0] not in ("pre-commit", "pre-push"):
+            error("Usage: metta run githooks <pre-commit|pre-push>")
             sys.exit(1)
 
+        if args[0] == "pre-push":
+            self._run_pre_push()
+        else:
+            self._run_pre_commit()
+
+    def _run_pre_push(self) -> None:
+        push_mode = PushHookMode.parse(self.get_setting("push_hook_mode", default=None))
+        if push_mode == PushHookMode.NONE:
+            sys.exit(0)
+
+        info("Running full lint check before push (same as CI)...")
+        lint_cmd = ["uv", "run", "--no-sync", "python", "-m", "metta.setup.tools.code_formatters"]
+        try:
+            subprocess.run(lint_cmd, cwd=self.repo_root, check=True)
+        except subprocess.CalledProcessError as e:
+            error("Pre-push lint failed. Fix issues before pushing.")
+            error("Run `metta lint --fix` to auto-fix, then commit the changes.")
+            sys.exit(e.returncode)
+
+    def _run_pre_commit(self) -> None:
         hook_mode = CommitHookMode.parse(self.get_setting("commit_hook_mode", default=None))
         gitleaks_mode = GitLeaksMode.parse(self.get_setting("gitleaks_mode", default=None))
 
