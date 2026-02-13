@@ -418,6 +418,23 @@ def watcher():
     )
 
 
+@app.command(name="event-processor", help="Run the job event processor on host")
+@handle_errors
+def event_processor():
+    env = _local_dev_env()
+    env["STATS_SERVER_URI"] = LOCAL_BACKEND_URL
+    env["AWS_ENDPOINT_URL_S3"] = LOCALSTACK_ENDPOINT_HOST
+    env["EVAL_S3_BUCKET"] = LOCAL_EVAL_BUCKET
+    env["HEALTH_PORT"] = "8082"  # Avoid collision with watcher (8080) and tournament (8081)
+
+    info("Starting event processor...")
+    subprocess.run(
+        ["uv", "run", "python", "-m", "metta.app_backend.job_runner.event_processor"],
+        env=env,
+        check=True,
+    )
+
+
 @app.command(name="frontend")
 @handle_errors
 def frontend(

@@ -10,7 +10,8 @@ Observatory is the tournament and job orchestration platform. It includes:
 - **Frontend** (Next.js) - Web UI
 - **PostgreSQL** - Data storage
 - **K8s Job Runner** - Executes policy evaluation jobs
-- **Watcher** - Monitors K8s jobs, reports results
+- **Watcher** - Monitors K8s pod events, stores them to database
+- **Event Processor** - Processes stored events, reads results from S3, updates job statuses
 - **Tournament Commissioner** - Creates matches, updates scores
 
 ## Quick Start

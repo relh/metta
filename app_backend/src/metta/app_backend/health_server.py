@@ -37,7 +37,11 @@ class HealthHandler(BaseHTTPRequestHandler):
         pass
 
 
-def start_health_server(port: int = 8080):
+def start_health_server(port: int | None = None):
+    import os  # noqa: PLC0415
+
+    if port is None:
+        port = int(os.environ.get("HEALTH_PORT", "8080"))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     logger.info(f"Health server started on port {port}")

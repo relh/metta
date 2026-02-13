@@ -144,6 +144,20 @@ processes:
         condition: process_healthy
 
   # ===========================================================================
+  # EVENT PROCESSOR
+  # ===========================================================================
+  # Processes K8s pod events stored by the watcher. Reads episode results from
+  # S3, records episodes, and updates job statuses (completed/failed). Without
+  # this, job statuses never transition and match statuses never update.
+  event-processor:
+    command: metta observatory event-processor
+    depends_on:
+      server:
+        condition: process_healthy
+      localstack:
+        condition: process_healthy
+
+  # ===========================================================================
   # TOURNAMENT RUNNER
   # ===========================================================================
   # Runs tournament commissioners (one per season) that create matches and update scores.
