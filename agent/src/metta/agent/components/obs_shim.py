@@ -375,11 +375,13 @@ class ObsTokenToBoxShim(nn.Module):
         )
         # Create mask for valid tokens
 
-        valid_tokens = coords_byte != 0xFF
+        # 0xFF is padding, 0xFE is a global (non-spatial) token marker.
+        valid_tokens = (coords_byte != 0xFF) & (coords_byte != 0xFE)
 
-        # Additional validation: ensure atr_indices are within valid range
-        valid_atr = atr_indices < self.num_layers
-        valid_mask = valid_tokens & valid_atr
+        # Additional validation: ensure indices are within valid range
+        valid_spatial = (x_coord_indices < self.out_width) & (y_coord_indices < self.out_height)
+        valid_atr = (atr_indices >= 0) & (atr_indices < self.num_layers)
+        valid_mask = valid_tokens & valid_spatial & valid_atr
 
         # Log warning for out-of-bounds indices
         invalid_atr_mask = valid_tokens & ~valid_atr
