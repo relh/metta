@@ -111,8 +111,10 @@ recipes/experiment/scratchpad/
 # Cursor MCP configuration (may contain credentials)
 .cursor-mcp/
 
+# Runner state folders
+devops/*/state/
+
 # Stable Release System
-devops/stable/state/
 devops/stable/release-notes/
 
 mcp_servers/pr_similarity/cache/

@@ -199,9 +199,13 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/seasons/{season_name}")
     @timed_http_handler
-    async def get_season(season_name: str, session: AsyncSession = Depends(get_session)) -> SeasonResponse:
+    async def get_season(
+        season_name: str,
+        session: AsyncSession = Depends(get_session),
+        include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
+    ) -> SeasonResponse:
         name, version = parse_season_ref(season_name)
-        if name not in SEASONS or name in HIDDEN_SEASONS:
+        if name not in SEASONS or (name in HIDDEN_SEASONS and not include_hidden):
             raise HTTPException(status_code=404, detail="Season not found")
 
         season = await resolve_season(session, name, version)
@@ -416,11 +420,12 @@ def create_tournament_router() -> APIRouter:
         session: AsyncSession = Depends(get_session),
         limit: int = 50,
         offset: int = 0,
+        include_hidden: bool = Query(default=False, description="Include matches of a hidden season (for testing)"),
         pool_names: list[str] | None = Query(default=None),
         policy_version_ids: list[UUID] | None = Query(default=None),
     ) -> list[MatchSummary]:
         name, version = parse_season_ref(season_name)
-        if name not in SEASONS or name in HIDDEN_SEASONS:
+        if name not in SEASONS or (name in HIDDEN_SEASONS and not include_hidden):
             raise HTTPException(status_code=404, detail="Season not found")
 
         season = await resolve_season(session, name, version)

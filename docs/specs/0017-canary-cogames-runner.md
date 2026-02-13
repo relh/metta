@@ -9,14 +9,14 @@ A daily job, with a workflow setup similar to `stable-release.yml`.
 - Pre-generated _bad [(3)](#ref-3)_ policy from `./devops/canary/policies`
 - Upload the policies with `cogames upload` [(1)](#ref-1)
 - Ensure the bad policy does not pass local validation
-- Submit the policies to _test_season [(2)](#ref-2)_, with `cogames submit`, using `--skip-validation` on the bad
+- Submit the policies to _test-season [(2)](#ref-2)_, with `cogames submit`, using `--skip-validation` on the bad
   policy.
 - Validate the submission progress
-  - Ensure existence with both `cogames submissions --season=test_season` and `cogames submissions <policy>`
+  - Ensure existence with both `cogames submissions --season=test-season` and `cogames submissions <policy>`
   - Start a poll to the Observatory API's `/job/<id>` that checks status of job
   - Ensure that the bad policy at some stage reports that it has not qualified (error state)
   - Ensure that the good policy at some stage reports that it was successful
-  - On completion, check the `cogames leaderboard --season=test_season` result and ensure the good policy exists
+  - On completion, check the `cogames leaderboard --season=test-season` result and ensure the good policy exists
 - For each step, collect metrics and/or errors
 - Write metrics to a well-formatted Discord message
 - Send the results to a specified Discord channel (`canary-runs` ?)
@@ -42,7 +42,7 @@ The script is an entrypoint to a `Canary -> run` method which runs the steps out
 
 ### Pre-requisites
 
-- Ensure `test_season` is created and excluded from Observatory's queries.
+- Ensure `test-season` is created and excluded from Observatory's queries.
 
 - Pre-baked good and bad policies which can be generated with `cogames tutorial make-policy`.
 

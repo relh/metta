@@ -12,7 +12,7 @@ from pathlib import Path
 import wandb
 
 from devops.runners.job import ExecutorType, Job, JobHandle, JobStatus
-from metta.common.util.constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
+from devops.runners.metta_constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
 
 
 def _now() -> datetime:

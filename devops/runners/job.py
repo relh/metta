@@ -10,7 +10,7 @@ from typing import Any, Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 
 from devops.runners.acceptance_criterion import AcceptanceCriterion
-from metta.common.util.constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
+from devops.runners.metta_constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
 
 
 class JobStatus(StrEnum):
@@ -51,6 +51,7 @@ class Job(BaseModel):
     dependencies: list[str] = Field(default_factory=list)
     acceptance: list[AcceptanceCriterion] = Field(default_factory=list)
     wandb_run_name: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     status: JobStatus = JobStatus.NOT_STARTED
     exit_code: int | None = None
@@ -78,6 +79,7 @@ class Job(BaseModel):
 class ExecutorType(StrEnum):
     LOCAL = "local"
     SKYPILOT = "skypilot"
+    COGAMES = "cogames"
 
 
 @runtime_checkable

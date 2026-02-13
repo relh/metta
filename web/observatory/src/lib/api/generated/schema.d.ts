@@ -1872,7 +1872,10 @@ export interface operations {
   }
   get_season_tournament_seasons__season_name__get: {
     parameters: {
-      query?: never
+      query?: {
+        /** @description Include leaderboard of a hidden season (for testing) */
+        include_hidden?: boolean
+      }
       header?: never
       path: {
         season_name: string
@@ -2070,6 +2073,8 @@ export interface operations {
       query?: {
         limit?: number
         offset?: number
+        /** @description Include matches of a hidden season (for testing) */
+        include_hidden?: boolean
         pool_names?: string[] | null
         policy_version_ids?: string[] | null
       }

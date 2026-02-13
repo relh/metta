@@ -1,0 +1,64 @@
+name: "Daily Canary Cogames Runner"
+
+on:
+  schedule:
+    # Run daily at 3:00 AM UTC (offset from stable)
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+env:
+  CI_APP_ID: ${{ secrets.CI_APP_ID }}
+  CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+jobs:
+  canary:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      id-token: write # For potential AWS if needed
+
+    steps:
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-environment
+        with:
+          install-mode: testing
+
+      - name: Create state directory
+        run: mkdir -p devops/canary/state
+
+      - name: Run Canary Runner
+        run: |
+          docker build \
+          -f devops/canary/Dockerfile.canary_runner \
+          -t canary-runner:latest \
+          .
+
+          docker run \
+            --rm \
+            -v "$(pwd)/devops/canary/state:/app/devops/canary/state" \
+            -e OBSERVATORY_TOKEN="${{ secrets.OBSERVATORY_TOKEN }}" \
+            canary-runner:latest --server prod
+
+      - name: Send Discord notification
+        if: always()
+        uses: ./.github/actions/discord-webhook
+        with:
+          webhook-url: ${{ github.ref == 'refs/heads/main' && secrets.DISCORD_STABLE_HOOK || secrets.DISCORD_INFRA_ALERTS_TESTING_HOOK }}
+          content-file: devops/canary/state/discord_summary.txt
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-logs
+          path: devops/canary/state/
+          retention-days: 30

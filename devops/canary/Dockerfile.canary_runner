@@ -1,0 +1,20 @@
+FROM python:3.12.11-slim-bookworm
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc g++ build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir cogames httpx pydantic typer wandb
+
+WORKDIR /app
+
+COPY devops ./devops
+
+RUN touch \
+    devops/canary/__init__.py \
+    devops/runners/executors/__init__.py \
+    devops/runners/reporters/__init__.py
+
+ENV PYTHONPATH=/app
+
+ENTRYPOINT ["python", "devops/canary/cli.py"]
