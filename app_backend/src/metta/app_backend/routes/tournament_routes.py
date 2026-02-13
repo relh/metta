@@ -1,11 +1,13 @@
+import logging
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import raiseload, selectinload
 from sqlmodel import col, select
 
 # pyright: reportArgumentType=false
@@ -13,7 +15,9 @@ from sqlmodel import col, select
 # causing false positives on join() and selectinload() calls.
 from metta.app_backend.auth import CheckMaybeUser, CheckUser
 from metta.app_backend.database import db_session
-from metta.app_backend.models.job_request import JobRequest
+from metta.app_backend.job_runner.job_artifacts import job_logs_key, read_job_artifact
+from metta.app_backend.models.episodes import Episode, EpisodeJob
+from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import (
     Match,
@@ -24,26 +28,23 @@ from metta.app_backend.models.tournament import (
     PoolPlayer,
     Season,
 )
+from metta.app_backend.queries.episode_stats import (
+    EpisodeResponse,
+    PolicyVersionSummary,
+    build_episode_response,
+)
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.routes.docs_routes import public_api
 from metta.app_backend.tournament.registry import SEASONS
 from metta.app_backend.tournament.season_resolver import get_season_versions, parse_season_ref, resolve_season
 from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
 
+logger = logging.getLogger(__name__)
+
 
 async def get_session():
     async with db_session() as session:
         yield session
-
-
-class PolicyVersionSummary(BaseModel):
-    id: UUID
-    name: str | None
-    version: int | None
-
-    @classmethod
-    def from_model(cls, pv: PolicyVersion) -> "PolicyVersionSummary":
-        return cls(id=pv.id, name=pv.policy.name, version=pv.version)
 
 
 class LeaderboardEntry(BaseModel):
@@ -75,21 +76,23 @@ class SubmitResponse(BaseModel):
     pools: list[str]
 
 
-class MatchPlayerSummary(BaseModel):
+class MatchPlayerInfo(BaseModel):
     policy: PolicyVersionSummary
-    policy_index: int
+    num_agents: int
     score: float | None
 
 
-class MatchSummary(BaseModel):
+class MatchResponse(BaseModel):
     id: UUID
+    season_name: str
     pool_name: str
     status: str
     assignments: list[int]
-    players: list[MatchPlayerSummary]
-    job_id: UUID | None
-    episode_id: str | None
-    created_at: str
+    players: list[MatchPlayerInfo]
+    error: str | None
+    episode_id: UUID | None
+    episode: EpisodeResponse | None = None
+    created_at: datetime
 
 
 class MembershipHistoryEntry(BaseModel):
@@ -413,6 +416,45 @@ def create_tournament_router() -> APIRouter:
 
         return sorted(results, key=lambda x: x.entered_at, reverse=True)
 
+    def _match_response(
+        m: Match,
+        season_name: str,
+        episode_id: str | None,
+        error: str | None,
+        *,
+        episode: EpisodeResponse | None = None,
+    ) -> MatchResponse:
+        assignments = m.assignments or []
+        agent_counts: dict[int, int] = {}
+        for idx in assignments:
+            agent_counts[idx] = agent_counts.get(idx, 0) + 1
+
+        players = [
+            MatchPlayerInfo(
+                policy=PolicyVersionSummary.from_model(mp.pool_player.policy_version),
+                num_agents=agent_counts.get(mp.policy_index, 0),
+                score=mp.score,
+            )
+            for mp in sorted(m.players, key=lambda p: p.policy_index)
+        ]
+
+        ep_id: UUID | None = None
+        if episode_id:
+            ep_id = UUID(episode_id)
+
+        return MatchResponse(
+            id=m.id,
+            season_name=season_name,
+            pool_name=m.pool.name,
+            status=m.status.value,
+            assignments=assignments,
+            players=players,
+            error=error if m.status == MatchStatus.failed else None,
+            episode_id=ep_id,
+            episode=episode,
+            created_at=m.created_at,
+        )
+
     @router.get("/seasons/{season_name}/matches")
     @timed_http_handler
     async def get_matches(
@@ -423,7 +465,7 @@ def create_tournament_router() -> APIRouter:
         include_hidden: bool = Query(default=False, description="Include matches of a hidden season (for testing)"),
         pool_names: list[str] | None = Query(default=None),
         policy_version_ids: list[UUID] | None = Query(default=None),
-    ) -> list[MatchSummary]:
+    ) -> list[MatchResponse]:
         name, version = parse_season_ref(season_name)
         if name not in SEASONS or (name in HIDDEN_SEASONS and not include_hidden):
             raise HTTPException(status_code=404, detail="Season not found")
@@ -432,7 +474,12 @@ def create_tournament_router() -> APIRouter:
         if not season:
             raise HTTPException(status_code=404, detail="Season version not found")
 
-        query = select(Match, JobRequest.episode_id).join(Match.job).join(Match.pool).where(Pool.season_id == season.id)
+        query = (
+            select(Match, JobRequest.episode_id, JobRequest.error)
+            .join(Match.job)
+            .join(Match.pool)
+            .where(Pool.season_id == season.id)
+        )
 
         if pool_names:
             query = query.where(col(Pool.name).in_(pool_names))
@@ -451,11 +498,18 @@ def create_tournament_router() -> APIRouter:
             .limit(limit)
             .offset(offset)
             .options(
-                selectinload(Match.players)
-                .selectinload(MatchPlayer.pool_player)
-                .selectinload(PoolPlayer.policy_version)
-                .selectinload(PolicyVersion.policy),
-                selectinload(Match.pool),
+                selectinload(Match.players).options(
+                    selectinload(MatchPlayer.pool_player).options(
+                        selectinload(PoolPlayer.policy_version).options(
+                            selectinload(PolicyVersion.policy),
+                            raiseload("*"),
+                        ),
+                        raiseload("*"),
+                    ),
+                    raiseload("*"),
+                ),
+                selectinload(Match.pool).raiseload("*"),
+                raiseload("*"),
             )
         )
 
@@ -463,26 +517,112 @@ def create_tournament_router() -> APIRouter:
         if not rows:
             return []
 
-        return [
-            MatchSummary(
-                id=m.id,
-                pool_name=m.pool.name,
-                status=m.status.value,
-                assignments=m.assignments or [],
-                players=[
-                    MatchPlayerSummary(
-                        policy=PolicyVersionSummary.from_model(mp.pool_player.policy_version),
-                        policy_index=mp.policy_index,
-                        score=mp.score,
-                    )
-                    for mp in sorted(m.players, key=lambda p: p.policy_index)
-                ],
-                job_id=m.job_id,
-                episode_id=episode_id,
-                created_at=m.created_at.isoformat() if m.created_at else "",
+        return [_match_response(m, name, episode_id, error) for m, episode_id, error in rows]
+
+    @router.get("/matches/{match_id}")
+    @timed_http_handler
+    async def get_match(match_id: UUID, session: AsyncSession = Depends(get_session)) -> MatchResponse:
+        query = (
+            select(Match)
+            .where(Match.id == match_id)
+            .options(
+                selectinload(Match.players).options(
+                    selectinload(MatchPlayer.pool_player).options(
+                        selectinload(PoolPlayer.policy_version).options(
+                            selectinload(PolicyVersion.policy),
+                            raiseload("*"),
+                        ),
+                        raiseload("*"),
+                    ),
+                    raiseload("*"),
+                ),
+                selectinload(Match.pool).options(
+                    selectinload(Pool.season).raiseload("*"),
+                    raiseload("*"),
+                ),
+                selectinload(Match.job).options(
+                    selectinload(JobRequest.policy_versions).options(
+                        selectinload(JobPolicyVersion.policy_version).options(
+                            selectinload(PolicyVersion.policy),
+                            raiseload("*"),
+                        ),
+                        raiseload("*"),
+                    ),
+                    selectinload(JobRequest.episode_jobs).options(
+                        selectinload(EpisodeJob.episode).options(
+                            selectinload(Episode.tags),
+                            raiseload("*"),
+                        ),
+                        raiseload("*"),
+                    ),
+                    raiseload("*"),
+                ),
+                raiseload("*"),
             )
-            for m, episode_id in rows
-        ]
+        )
+        m = (await session.execute(query)).scalar_one_or_none()
+        if not m:
+            raise HTTPException(status_code=404, detail="Match not found")
+
+        job = m.job
+        episode_id_str = job.episode_id if job else None
+        error = job.error if job else None
+        season_name = m.pool.season.name if m.pool and m.pool.season else "unknown"
+
+        episode_resp: EpisodeResponse | None = None
+        if job and job.episode_jobs:
+            episode = job.episode_jobs[0].episode
+            if episode:
+                assignments: list[int] = job.job.get("assignments", [])
+                episode_resp = build_episode_response(episode, assignments, job.policy_versions)
+
+        return _match_response(m, season_name, episode_id_str, error, episode=episode_resp)
+
+    MATCH_ARTIFACT_TYPES = {"logs": (job_logs_key, "text/plain")}
+
+    @router.get("/matches/{match_id}/{policy_version_id}/artifacts/{artifact_type}")
+    @timed_http_handler
+    async def get_match_artifact(
+        match_id: UUID,
+        policy_version_id: UUID,
+        artifact_type: str,
+        user: CheckUser,
+        session: AsyncSession = Depends(get_session),
+    ) -> Response:
+        if artifact_type not in MATCH_ARTIFACT_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unknown artifact type: {artifact_type}")
+
+        match = (
+            await session.execute(
+                select(Match)
+                .where(Match.id == match_id)
+                .options(
+                    selectinload(Match.players)
+                    .raiseload("*")
+                    .selectinload(MatchPlayer.pool_player)
+                    .raiseload("*")
+                    .selectinload(PoolPlayer.policy_version)
+                    .raiseload("*")
+                    .selectinload(PolicyVersion.policy)
+                    .raiseload("*"),
+                    raiseload("*"),
+                )
+            )
+        ).scalar_one_or_none()
+        if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+        if not match.job_id:
+            raise HTTPException(status_code=404, detail="Match has no associated job")
+
+        pv_player = next((mp for mp in match.players if mp.pool_player.policy_version_id == policy_version_id), None)
+        if not pv_player:
+            raise HTTPException(status_code=403, detail="Policy is not a participant in this match")
+        if pv_player.pool_player.policy_version.policy.user_id != user.id:
+            raise HTTPException(status_code=403, detail="You do not own this policy")
+
+        key_fn, media_type = MATCH_ARTIFACT_TYPES[artifact_type]
+        content, content_type = await read_job_artifact(match.job_id, key_fn, media_type, artifact_label=artifact_type)
+        return Response(content=content, media_type=content_type)
 
     @router.post("/seasons/{season_name}/submissions")
     @timed_http_handler

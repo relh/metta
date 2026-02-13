@@ -3,7 +3,6 @@
 
 import asyncio
 import io
-import json
 import logging
 import zipfile
 from collections import defaultdict
@@ -13,7 +12,6 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
-import boto3
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -23,7 +21,6 @@ from sqlmodel import col, select
 
 from metta.app_backend.auth import CheckSoftmaxUser, CheckUser
 from metta.app_backend.database import db_session
-from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
     job_debug_key,
@@ -32,6 +29,7 @@ from metta.app_backend.job_runner.job_artifacts import (
     job_results_key,
     job_runtime_info_key,
     job_spec_key,
+    read_job_artifact,
 )
 from metta.app_backend.metta_scheme_resolver import parse_policy_identifier
 from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodePolicyMetric
@@ -47,9 +45,9 @@ from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.models.tournament import Match, Pool
 from metta.app_backend.otel.job_metrics import get_job_metrics
 from metta.app_backend.queries import policy_queries
+from metta.app_backend.queries.episode_stats import PolicyVersionSummary, compute_episode_stats
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.routes.docs_routes import public_api
-from metta.app_backend.routes.tournament_routes import PolicyVersionSummary
 from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
@@ -438,23 +436,8 @@ def create_job_router() -> APIRouter:
             if not result.scalar_one_or_none():
                 raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-        cfg = get_dispatch_config()
-        if not cfg.EVAL_S3_BUCKET:
-            raise HTTPException(status_code=501, detail="Storage not configured")
-
-        def _read() -> bytes:
-            s3 = boto3.client("s3")
-            body = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=key_fn(job_id))["Body"].read()
-            return extract(body)
-
-        try:
-            content = await asyncio.to_thread(_read)
-            return Response(content=content, media_type=media_type)
-        except Exception as e:
-            if "NoSuchKey" in type(e).__name__ or "NoSuchKey" in str(e) or isinstance(e, KeyError):
-                raise HTTPException(status_code=404, detail=f"No {artifact_type} found for job {job_id}") from None
-            logger.error(f"Failed to read {artifact_type} for job {job_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to read {artifact_type}") from e
+        content, content_type = await read_job_artifact(job_id, key_fn, media_type, extract, artifact_type)
+        return Response(content=content, media_type=content_type)
 
     @router.get("/{job_id}/episode-stats")
     @timed_http_handler
@@ -484,64 +467,25 @@ def create_job_router() -> APIRouter:
             if not episode:
                 raise HTTPException(status_code=404, detail="Episode not found")
 
-            raw_attrs = episode.attributes or {}
-            parsed = json.loads(raw_attrs) if isinstance(raw_attrs, str) else raw_attrs
-            attributes = parsed if isinstance(parsed, dict) else {}
-            stats = attributes.get("stats", {})
-            agent_stats_list: list[dict[str, float]] = stats.get("agent", [])
-            rewards_list: list[float] = attributes.get("rewards", [])
-            game_stats: dict[str, float] = stats.get("game", {})
-            steps: int | None = attributes.get("steps") or stats.get("steps")
-
             assignments: list[int] = job.job.get("assignments", [])
-            policy_map: dict[int, JobPolicyVersion] = {jpv.position: jpv for jpv in job.policy_versions}
+            game_stats, policy_results, steps = compute_episode_stats(episode, assignments, job.policy_versions)
 
-            policy_agents: dict[int, list[tuple[int, dict[str, float], float]]] = defaultdict(list)
-            for agent_id, agent_metrics in enumerate(agent_stats_list):
-                policy_idx = assignments[agent_id] if agent_id < len(assignments) else -1
-                reward = rewards_list[agent_id] if agent_id < len(rewards_list) else 0.0
-                policy_agents[policy_idx].append((agent_id, agent_metrics, reward))
-
-            policy_stats: list[PolicyStatsDetail] = []
-            for position in sorted(policy_agents.keys()):
-                agents = policy_agents[position]
-                jpv = policy_map.get(position)
-
-                all_metric_names = set()
-                for _, metrics, _ in agents:
-                    all_metric_names.update(metrics.keys())
-
-                avg_metrics: dict[str, float] = {}
-                for name in sorted(all_metric_names):
-                    values = [m[name] for _, m, _ in agents if name in m and m[name] is not None]
-                    if values:
-                        avg_metrics[name] = sum(values) / len(values)
-
-                reward_values = [r for _, _, r in agents]
-                avg_reward = sum(reward_values) / len(reward_values) if reward_values else 0.0
-
-                agent_details = [
-                    AgentStatsDetail(
-                        agent_id=aid,
-                        reward=reward,
-                        metrics={k: v for k, v in metrics.items() if v is not None},
-                    )
-                    for aid, metrics, reward in agents
-                ]
-
-                pv = jpv.policy_version if jpv else None
-                policy_stats.append(
-                    PolicyStatsDetail(
-                        position=position,
-                        policy_version_id=jpv.policy_version_id if jpv else None,
-                        policy_name=pv.policy.name if pv and pv.policy else None,
-                        policy_version=pv.version if pv else None,
-                        num_agents=len(agents),
-                        avg_metrics=avg_metrics,
-                        avg_reward=avg_reward,
-                        agents=agent_details,
-                    )
+            _sentinel = UUID(int=0)
+            policy_stats = [
+                PolicyStatsDetail(
+                    position=pr.position,
+                    policy_version_id=None if pr.policy.id == _sentinel else pr.policy.id,
+                    policy_name=pr.policy.name,
+                    policy_version=pr.policy.version,
+                    num_agents=pr.num_agents,
+                    avg_metrics=pr.avg_metrics,
+                    avg_reward=pr.avg_reward,
+                    agents=[
+                        AgentStatsDetail(agent_id=a.agent_id, reward=a.reward, metrics=a.metrics) for a in pr.agents
+                    ],
                 )
+                for pr in policy_results
+            ]
 
             return EpisodeStatsResponse(
                 game_stats=game_stats,

@@ -52,7 +52,6 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
           </TableHeader>
           <TableBody>
             {filteredMatches.map((match) => {
-              const agentCounts = match.players.map((p) => match.assignments.filter((a) => a === p.policy_index).length)
               return (
                 <TR key={match.id}>
                   <TD className="text-foreground-muted text-sm">{formatRelativeTime(match.created_at)}</TD>
@@ -67,14 +66,6 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
                         </Link>
                       ) : (
                         <MatchStatusBadge status={match.status} />
-                      )}
-                      {match.job_id && (
-                        <Link
-                          href={`/episode-jobs?jobId=${match.job_id}`}
-                          className="px-2 py-1 rounded text-xs font-medium bg-surface-alt text-foreground-subtle hover:bg-border-strong transition-colors"
-                        >
-                          Job
-                        </Link>
                       )}
                     </div>
                   </TD>
@@ -110,8 +101,8 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
                   </TD>
                   <TD>
                     <div className="flex flex-col gap-1 font-mono text-xs">
-                      {match.players.map((_, i) => (
-                        <span key={i}>{agentCounts[i]}</span>
+                      {match.players.map((p, i) => (
+                        <span key={i}>{p.num_agents}</span>
                       ))}
                     </div>
                   </TD>

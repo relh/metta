@@ -1,6 +1,6 @@
 import type {
   LeaderboardEntry,
-  MatchSummary,
+  MatchResponse,
   MembershipHistoryEntry,
   PolicySummary,
   SeasonResponse,
@@ -11,7 +11,7 @@ import { loadUserById } from "./user";
 
 export type {
   LeaderboardEntry,
-  MatchSummary,
+  MatchResponse,
   MembershipHistoryEntry,
   PolicySummary,
   SeasonResponse,
@@ -21,7 +21,7 @@ export type { PoolMembership, PolicyVersionSummary } from "@/lib/api";
 
 export type LeaderboardResponse = LeaderboardEntry[];
 export type PoliciesResponse = PolicySummary[];
-export type MatchesResponse = MatchSummary[];
+export type MatchesResponse = MatchResponse[];
 export type MembershipHistoryResponse = MembershipHistoryEntry[];
 
 const decodePathSegment = (value: string) => {

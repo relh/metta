@@ -35,6 +35,7 @@ class Episode(SQLModel, table=True):
     )
 
     episode_policies: list["EpisodePolicy"] = Relationship(back_populates="episode")
+    episode_jobs: list["EpisodeJob"] = Relationship(back_populates="episode")
     tags: list["EpisodeTag"] = Relationship(back_populates="episode")
 
 
@@ -84,4 +85,9 @@ class EpisodeJob(SQLModel, table=True):
     episode_id: UUID = Field(sa_column=Column(Uuid, ForeignKey("episodes.id", ondelete="CASCADE"), primary_key=True))
     job_id: UUID = Field(sa_column=Column(Uuid, ForeignKey("job_requests.id", ondelete="CASCADE"), primary_key=True))
 
-    episode: Episode = Relationship()
+    episode: Episode = Relationship(back_populates="episode_jobs")
+    job: "JobRequest" = Relationship(back_populates="episode_jobs")
+
+
+# Import after classes are defined to avoid circular imports
+from metta.app_backend.models.job_request import JobRequest as JobRequest  # noqa: E402, F401

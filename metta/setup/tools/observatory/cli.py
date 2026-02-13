@@ -435,6 +435,17 @@ def event_processor():
     )
 
 
+@app.command(
+    name="generate-api-types",
+    help="Generate API types",
+)
+@handle_errors
+def generate_api_types():
+    roots = [repo_root / "web/observatory", repo_root / "web/softmax.com"]
+    for root in roots:
+        subprocess.run(["pnpm", "run", "generate-api-types"], cwd=root, check=True)
+
+
 @app.command(name="frontend")
 @handle_errors
 def frontend(

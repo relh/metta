@@ -6,18 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { H2 } from "@/components/H2";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/Table";
 import { MATCHES_PAGE_SIZE, METTASCOPE_BASE_URL } from "@/lib/constants";
-import type { MatchSummary, SeasonResponse } from "@/lib/observatoryClient";
+import type { MatchResponse, SeasonResponse } from "@/lib/observatoryClient";
 import { formatPolicyLabel } from "@/lib/policyUtils";
 
 import { PolicyTag } from "./PolicyTag";
-
-function countAgentsPerPlayer(assignments: number[]): Map<number, number> {
-  const counts = new Map<number, number>();
-  for (const playerIdx of assignments) {
-    counts.set(playerIdx, (counts.get(playerIdx) ?? 0) + 1);
-  }
-  return counts;
-}
 
 type PolicyOption = {
   id: string;
@@ -44,7 +36,7 @@ export function RecentMatches() {
   };
 
   const [seasonName, setSeasonName] = useState("");
-  const [matches, setMatches] = useState<MatchSummary[]>([]);
+  const [matches, setMatches] = useState<MatchResponse[]>([]);
   const [pools, setPools] = useState<{ name: string; description: string }[]>(
     [],
   );
@@ -134,7 +126,7 @@ export function RecentMatches() {
           `/api/tournament/seasons/${encodeSeasonRef(seasonRef)}/matches?${params.toString()}`,
         );
         if (!res.ok) throw new Error("Failed to fetch matches");
-        const data: MatchSummary[] = await res.json();
+        const data: MatchResponse[] = await res.json();
         setHasMore(data.length > MATCHES_PAGE_SIZE);
         const matchesToShow = data.slice(0, MATCHES_PAGE_SIZE);
         setMatches(matchesToShow);
@@ -317,9 +309,6 @@ export function RecentMatches() {
                   </THead>
                   <TBody>
                     {matches.map((match) => {
-                      const agentCounts = countAgentsPerPlayer(
-                        match.assignments,
-                      );
                       const replayUrl = match.episode_id
                         ? replayUrls.get(match.episode_id)
                         : undefined;
@@ -372,7 +361,7 @@ export function RecentMatches() {
                             <div className="min-h-[2.75rem] space-y-1">
                               {match.players.map((player, i) => (
                                 <div key={i} className="text-sm">
-                                  {agentCounts.get(player.policy_index) ?? 0}
+                                  {player.num_agents}
                                 </div>
                               ))}
                             </div>

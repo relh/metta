@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+  "/episodes/{episode_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Episode */
+    get: operations["get_episode_episodes__episode_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/episodes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Episodes */
+    get: operations["list_episodes_episodes_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/stats/policies": {
     parameters: {
       query?: never;
@@ -368,6 +402,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/tournament/matches/{match_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Match */
+    get: operations["get_match_tournament_matches__match_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/tournament/matches/{match_id}/{policy_version_id}/artifacts/{artifact_type}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Match Artifact */
+    get: operations["get_match_artifact_tournament_matches__match_id___policy_version_id__artifacts__artifact_type__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/tournament/seasons/{season_name}/submissions": {
     parameters: {
       query?: never;
@@ -428,6 +496,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** AgentResult */
+    AgentResult: {
+      /** Agent Id */
+      agent_id: number;
+      /** Reward */
+      reward: number;
+      /** Metrics */
+      metrics: {
+        [key: string]: number;
+      };
+    };
     /** AgentStatsDetail */
     AgentStatsDetail: {
       /** Agent Id */
@@ -512,6 +591,35 @@ export interface components {
     EpisodeQueryResponse: {
       /** Episodes */
       episodes: components["schemas"]["EpisodeWithTags"][];
+    };
+    /** EpisodeResponse */
+    EpisodeResponse: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Replay Url */
+      replay_url: string | null;
+      /** Thumbnail Url */
+      thumbnail_url: string | null;
+      /** Tags */
+      tags: {
+        [key: string]: string;
+      };
+      /** Game Stats */
+      game_stats: {
+        [key: string]: number;
+      };
+      /** Policy Results */
+      policy_results: components["schemas"]["PolicyResult"][];
+      /** Steps */
+      steps: number | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
     };
     /** EpisodeStatsResponse */
     EpisodeStatsResponse: {
@@ -651,21 +759,23 @@ export interface components {
       /** Matches */
       matches: number;
     };
-    /** MatchPlayerSummary */
-    MatchPlayerSummary: {
+    /** MatchPlayerInfo */
+    MatchPlayerInfo: {
       policy: components["schemas"]["PolicyVersionSummary"];
-      /** Policy Index */
-      policy_index: number;
+      /** Num Agents */
+      num_agents: number;
       /** Score */
       score: number | null;
     };
-    /** MatchSummary */
-    "MatchSummary-Output": {
+    /** MatchResponse */
+    MatchResponse: {
       /**
        * Id
        * Format: uuid
        */
       id: string;
+      /** Season Name */
+      season_name: string;
       /** Pool Name */
       pool_name: string;
       /** Status */
@@ -673,12 +783,16 @@ export interface components {
       /** Assignments */
       assignments: number[];
       /** Players */
-      players: components["schemas"]["MatchPlayerSummary"][];
-      /** Job Id */
-      job_id: string | null;
+      players: components["schemas"]["MatchPlayerInfo"][];
+      /** Error */
+      error: string | null;
       /** Episode Id */
       episode_id: string | null;
-      /** Created At */
+      episode?: components["schemas"]["EpisodeResponse"] | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
       created_at: string;
     };
     /** MembershipHistoryEntry */
@@ -716,6 +830,22 @@ export interface components {
        * @default false
        */
       is_system_policy: boolean;
+    };
+    /** PolicyResult */
+    PolicyResult: {
+      /** Position */
+      position: number;
+      policy: components["schemas"]["PolicyVersionSummary"];
+      /** Num Agents */
+      num_agents: number;
+      /** Avg Reward */
+      avg_reward: number;
+      /** Avg Metrics */
+      avg_metrics: {
+        [key: string]: number;
+      };
+      /** Agents */
+      agents: components["schemas"]["AgentResult"][];
     };
     /** PolicyRow */
     PolicyRow: {
@@ -986,6 +1116,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  get_episode_episodes__episode_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        episode_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EpisodeResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_episodes_episodes_get: {
+    parameters: {
+      query?: {
+        policy_version_id?: string | null;
+        /** @description Comma-separated key:value filters */
+        tags?: string | null;
+        limit?: number;
+        offset?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EpisodeResponse"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   get_policies_stats_policies_get: {
     parameters: {
       query?: {
@@ -1670,7 +1866,71 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["MatchSummary-Output"][];
+          "application/json": components["schemas"]["MatchResponse"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_match_tournament_matches__match_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        match_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MatchResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_match_artifact_tournament_matches__match_id___policy_version_id__artifacts__artifact_type__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        match_id: string;
+        policy_version_id: string;
+        artifact_type: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

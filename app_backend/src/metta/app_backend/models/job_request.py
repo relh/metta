@@ -84,7 +84,7 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
     completed_at: datetime | None = None
 
     policy_versions: list["JobPolicyVersion"] = Relationship(back_populates="job")
-    episode_jobs: list["EpisodeJob"] = Relationship()
+    episode_jobs: list["EpisodeJob"] = Relationship(back_populates="job")
     matches: list["Match"] = Relationship(back_populates="job")
 
     @hybrid_property

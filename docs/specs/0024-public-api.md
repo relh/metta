@@ -47,8 +47,8 @@ stats, per-policy results (avg reward, avg metrics), and per-agent breakdowns.
 Both resources embed `PolicyVersionSummary` (`{id, name, version}`) rather than inlining policy fields. Policy-level
 metrics are simple averages of the underlying agent-level metrics.
 
-**Logs** are accessible via Match (`GET /matches/{id}/logs/{policy_version_id}`), auth-gated to the policy submitter.
-Initially returns full job logs; TODO to filter to the specified policy's output.
+**Artifacts** are accessible via Match (`GET /matches/{id}/{policy_version_id}/artifacts/{artifact_type}`), auth-gated
+to the policy submitter. Currently only `logs` is supported as an artifact type; more may be added later.
 
 **Job** endpoints are internal-only (softmax auth). All useful Job data is surfaced through Match (status, error, logs)
 or Episode (stats, replay).
@@ -84,8 +84,8 @@ about what's available, and handlers don't need to reason about partial auth.
 - [x] Frontends (softmax.com, Observatory) consume types from the internal OpenAPI spec
 - [x] CI drift detection: compare generated OpenAPI spec against checked-in copy in `app_backend/.../generated/`
 - [x] Consolidate and clean endpoints (backwards-incompatible, partial progress in nishad/api-cleanup)
-- [ ] Add Match and Episode public endpoints with schemas per design doc
-- [ ] Add `GET /matches/{id}/logs/{policy_version_id}` (auth-gated, full logs initially; TODO policy-specific filtering)
+- [x] Add Match and Episode public endpoints with schemas per design doc
+- [x] Add `GET /matches/{id}/{policy_version_id}/artifacts/{type}` (auth-gated, `logs` type initially)
 - [ ] Gate Job endpoints behind is-softmax auth, enforced by route-level auth test
 - [ ] Remove `/stats/` prefix: deploy both old and new paths, migrate frontends/clients to new paths, then remove old
       paths

@@ -83,7 +83,7 @@ async def fill_user_data(entities: Sequence[Ownable], *, current_user: Optional[
                     _user_info_cache[uid] = info
                     resolved[uid] = info
         except Exception:
-            logger.warning("Failed to resolve user data", exc_info=True)
+            logger.warning("Failed to resolve user data", exc_info=(not settings.LOCAL_DEV))
 
     for entity in entities:
         info = resolved.get(entity.user_id)

@@ -15,5 +15,7 @@ class Settings(BaseSettings):
     SMART_PLUGS_ALLOW_WRITE: bool = Field(default=False, description="Allow on/off actions for smart plugs")
     SMART_PLUGS_CONFIG_JSON: str | None = None
 
+    LOCAL_DEV: bool = False
+
 
 settings = Settings()
