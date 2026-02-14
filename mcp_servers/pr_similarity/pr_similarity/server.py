@@ -23,10 +23,7 @@ if TYPE_CHECKING:
 def _find_repo_root() -> Path:
     current = Path(__file__).resolve()
     for parent in current.parents:
-        if (parent / ".git").exists():
-            return parent
-    for parent in current.parents:
-        if (parent / "pyproject.toml").exists():
+        if (parent / ".repo-root").exists():
             return parent
     return current.parents[-1]
 

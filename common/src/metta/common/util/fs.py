@@ -20,11 +20,11 @@ def get_repo_root() -> Path:
     search_paths = [current] + list(current.parents)
 
     for parent in search_paths:
-        if (parent / ".git").exists():
+        if (parent / ".repo-root").exists():
             return parent
 
-    # If we get here, no .git directory was found
-    raise SystemExit("Repository root not found - no .git directory in current path or parent directories")
+    # If we get here, no .repo-root file was found
+    raise SystemExit("Repository root not found - no .repo-root file in current path or parent directories")
 
 
 def cd_repo_root():
