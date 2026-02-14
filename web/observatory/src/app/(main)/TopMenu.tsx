@@ -9,6 +9,7 @@ import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
 import { UserDropdown } from './UserDropdown'
+import { config } from '@/config'
 
 const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ href, children, isActive = false }) => {
   return (
@@ -61,7 +62,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
               <DropdownMenuItem
                 title="Public API"
                 onClick={() => {
-                  window.open('/api/docs', '_blank')
+                  window.open(`${config.apiBaseUrl}/docs`, '_blank')
                   close()
                 }}
               />
