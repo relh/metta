@@ -45,7 +45,10 @@ function buildAuthConfig(): NextAuthConfig {
   }
 
   const config: NextAuthConfig = {
-    adapter: PrismaAdapter(prisma),
+    // @auth/prisma-adapter types expect PrismaClient from @prisma/client,
+    // which Prisma 7 no longer exports (generated client lives at @/generated/prisma/client).
+    // Runtime API is compatible; cast until the adapter ships Prisma 7 support.
+    adapter: PrismaAdapter(prisma as any),
     providers,
     callbacks: {
       async session({ session, user }) {

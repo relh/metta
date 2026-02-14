@@ -51,8 +51,7 @@
     "zod-form-data": "^3.0.0"
   },
   "devDependencies": {
-    "@auth/core": "^0.40.0",
-    "@auth/prisma-adapter": "^2.10.0",
+    "@auth/prisma-adapter": "2.11.0",
     "@tailwindcss/postcss": "^4.1.17",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.10.12",
