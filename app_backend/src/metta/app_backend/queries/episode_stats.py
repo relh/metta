@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from metta.app_backend.models.episodes import Episode
 from metta.app_backend.models.job_request import JobPolicyVersion
@@ -11,9 +11,9 @@ from metta.app_backend.models.policies import PolicyVersion
 
 
 class PolicyVersionSummary(BaseModel):
-    id: UUID
-    name: str | None
-    version: int | None
+    id: UUID = Field(description="Unique identifier of the policy version")
+    name: str | None = Field(description="Human-readable policy name")
+    version: int | None = Field(description="Sequential version number within the policy")
 
     @classmethod
     def from_model(cls, pv: PolicyVersion) -> "PolicyVersionSummary":
@@ -21,29 +21,29 @@ class PolicyVersionSummary(BaseModel):
 
 
 class AgentResult(BaseModel):
-    agent_id: int
-    reward: float
-    metrics: dict[str, float]
+    agent_id: int = Field(description="Index of the agent within the episode")
+    reward: float = Field(description="Total reward earned by this agent")
+    metrics: dict[str, float] = Field(description="Per-agent game metrics")
 
 
 class PolicyResult(BaseModel):
-    position: int
-    policy: PolicyVersionSummary
-    num_agents: int
-    avg_reward: float
-    avg_metrics: dict[str, float]
-    agents: list[AgentResult]
+    position: int = Field(description="Policy position index in the match assignment")
+    policy: PolicyVersionSummary = Field(description="Identity of the policy version")
+    num_agents: int = Field(description="Number of agents controlled by this policy")
+    avg_reward: float = Field(description="Mean reward across all agents for this policy")
+    avg_metrics: dict[str, float] = Field(description="Mean of each metric across all agents for this policy")
+    agents: list[AgentResult] = Field(description="Per-agent breakdown of rewards and metrics")
 
 
 class EpisodeResponse(BaseModel):
-    id: UUID
-    replay_url: str | None
-    thumbnail_url: str | None
-    tags: dict[str, str]
-    game_stats: dict[str, float]
-    policy_results: list[PolicyResult]
-    steps: int | None
-    created_at: datetime
+    id: UUID = Field(description="Unique episode identifier")
+    replay_url: str | None = Field(description="URL to the episode replay recording")
+    thumbnail_url: str | None = Field(description="URL to a thumbnail image of the episode")
+    tags: dict[str, str] = Field(description="Key-value tags attached to this episode")
+    game_stats: dict[str, float] = Field(description="Game-level aggregate statistics")
+    policy_results: list[PolicyResult] = Field(description="Results broken down by policy")
+    steps: int | None = Field(description="Number of environment steps in the episode")
+    created_at: datetime = Field(description="When the episode was recorded")
 
 
 def _build_policy_map(policy_versions: list[JobPolicyVersion]) -> dict[int, PolicyVersionSummary]:

@@ -430,11 +430,20 @@ export interface components {
   schemas: {
     /** AgentResult */
     AgentResult: {
-      /** Agent Id */
+      /**
+       * Agent Id
+       * @description Index of the agent within the episode
+       */
       agent_id: number;
-      /** Reward */
+      /**
+       * Reward
+       * @description Total reward earned by this agent
+       */
       reward: number;
-      /** Metrics */
+      /**
+       * Metrics
+       * @description Per-agent game metrics
+       */
       metrics: {
         [key: string]: number;
       };
@@ -506,27 +515,47 @@ export interface components {
       /**
        * Id
        * Format: uuid
+       * @description Unique episode identifier
        */
       id: string;
-      /** Replay Url */
+      /**
+       * Replay Url
+       * @description URL to the episode replay recording
+       */
       replay_url: string | null;
-      /** Thumbnail Url */
+      /**
+       * Thumbnail Url
+       * @description URL to a thumbnail image of the episode
+       */
       thumbnail_url: string | null;
-      /** Tags */
+      /**
+       * Tags
+       * @description Key-value tags attached to this episode
+       */
       tags: {
         [key: string]: string;
       };
-      /** Game Stats */
+      /**
+       * Game Stats
+       * @description Game-level aggregate statistics
+       */
       game_stats: {
         [key: string]: number;
       };
-      /** Policy Results */
+      /**
+       * Policy Results
+       * @description Results broken down by policy
+       */
       policy_results: components["schemas"]["PolicyResult"][];
-      /** Steps */
+      /**
+       * Steps
+       * @description Number of environment steps in the episode
+       */
       steps: number | null;
       /**
        * Created At
        * Format: date-time
+       * @description When the episode was recorded
        */
       created_at: string;
     };
@@ -567,20 +596,37 @@ export interface components {
     };
     /** LeaderboardEntry */
     LeaderboardEntry: {
-      /** Rank */
+      /**
+       * Rank
+       * @description 1-indexed position on the leaderboard
+       */
       rank: number;
+      /** @description Identity of the ranked policy version */
       policy: components["schemas"]["PolicyVersionSummary"];
-      /** Score */
+      /**
+       * Score
+       * @description Elo or rating score
+       */
       score: number;
-      /** Matches */
+      /**
+       * Matches
+       * @description Number of matches played
+       */
       matches: number;
     };
     /** MatchPlayerInfo */
     MatchPlayerInfo: {
+      /** @description Identity of the participating policy version */
       policy: components["schemas"]["PolicyVersionSummary"];
-      /** Num Agents */
+      /**
+       * Num Agents
+       * @description Number of agents controlled by this policy in the match
+       */
       num_agents: number;
-      /** Score */
+      /**
+       * Score
+       * @description Score awarded to this player, if the match completed
+       */
       score: number | null;
     };
     /** MatchResponse */
@@ -588,42 +634,84 @@ export interface components {
       /**
        * Id
        * Format: uuid
+       * @description Unique match identifier
        */
       id: string;
-      /** Season Name */
+      /**
+       * Season Name
+       * @description Name of the season this match belongs to
+       */
       season_name: string;
-      /** Pool Name */
+      /**
+       * Pool Name
+       * @description Name of the pool this match was played in
+       */
       pool_name: string;
-      /** Status */
+      /**
+       * Status
+       * @description Match status: pending, running, completed, or failed
+       */
       status: string;
-      /** Assignments */
+      /**
+       * Assignments
+       * @description Per-agent policy index assignment
+       */
       assignments: number[];
-      /** Players */
+      /**
+       * Players
+       * @description Participating policies and their results
+       */
       players: components["schemas"]["MatchPlayerInfo"][];
-      /** Error */
+      /**
+       * Error
+       * @description Error message if the match failed
+       */
       error: string | null;
-      /** Episode Id */
+      /**
+       * Episode Id
+       * @description Episode identifier, present if a game was recorded
+       */
       episode_id: string | null;
+      /** @description Full episode data, included in detail responses */
       episode?: components["schemas"]["EpisodeResponse"] | null;
       /**
        * Created At
        * Format: date-time
+       * @description When the match was created
        */
       created_at: string;
     };
     /** MembershipHistoryEntry */
     MembershipHistoryEntry: {
-      /** Season Name */
+      /**
+       * Season Name
+       * @description Name of the season
+       */
       season_name: string;
-      /** Season Version */
+      /**
+       * Season Version
+       * @description Version of the season
+       */
       season_version: number | null;
-      /** Pool Name */
+      /**
+       * Pool Name
+       * @description Name of the pool
+       */
       pool_name: string;
-      /** Action */
+      /**
+       * Action
+       * @description Membership action (e.g. added, removed, retired)
+       */
       action: string;
-      /** Notes */
+      /**
+       * Notes
+       * @description Optional notes about the membership change
+       */
       notes: string | null;
-      /** Created At */
+      /**
+       * Created At
+       * @description ISO 8601 timestamp of the membership change
+       */
       created_at: string;
     };
     /** PoliciesResponse */
@@ -649,18 +737,34 @@ export interface components {
     };
     /** PolicyResult */
     PolicyResult: {
-      /** Position */
+      /**
+       * Position
+       * @description Policy position index in the match assignment
+       */
       position: number;
+      /** @description Identity of the policy version */
       policy: components["schemas"]["PolicyVersionSummary"];
-      /** Num Agents */
+      /**
+       * Num Agents
+       * @description Number of agents controlled by this policy
+       */
       num_agents: number;
-      /** Avg Reward */
+      /**
+       * Avg Reward
+       * @description Mean reward across all agents for this policy
+       */
       avg_reward: number;
-      /** Avg Metrics */
+      /**
+       * Avg Metrics
+       * @description Mean of each metric across all agents for this policy
+       */
       avg_metrics: {
         [key: string]: number;
       };
-      /** Agents */
+      /**
+       * Agents
+       * @description Per-agent breakdown of rewards and metrics
+       */
       agents: components["schemas"]["AgentResult"][];
     };
     /** PolicyRow */
@@ -689,10 +793,17 @@ export interface components {
     };
     /** PolicySummary */
     PolicySummary: {
+      /** @description Identity of the policy version */
       policy: components["schemas"]["PolicyVersionSummary"];
-      /** Pools */
+      /**
+       * Pools
+       * @description Pool membership details for this policy
+       */
       pools: components["schemas"]["PoolMembership"][];
-      /** Entered At */
+      /**
+       * Entered At
+       * @description ISO 8601 timestamp of when the policy entered the season
+       */
       entered_at: string;
     };
     /** PolicyVersionCreate */
@@ -773,11 +884,18 @@ export interface components {
       /**
        * Id
        * Format: uuid
+       * @description Unique identifier of the policy version
        */
       id: string;
-      /** Name */
+      /**
+       * Name
+       * @description Human-readable policy name
+       */
       name: string | null;
-      /** Version */
+      /**
+       * Version
+       * @description Sequential version number within the policy
+       */
       version: number | null;
     };
     /** PolicyVersionsResponse */
@@ -789,26 +907,53 @@ export interface components {
     };
     /** PoolInfo */
     PoolInfo: {
-      /** Id */
+      /**
+       * Id
+       * @description Database identifier of the pool
+       */
       id?: string | null;
-      /** Name */
+      /**
+       * Name
+       * @description Name of the pool
+       */
       name: string;
-      /** Description */
+      /**
+       * Description
+       * @description Human-readable description of the pool
+       */
       description: string;
-      /** Config Id */
+      /**
+       * Config Id
+       * @description Identifier of the pool's environment configuration
+       */
       config_id?: string | null;
     };
     /** PoolMembership */
     PoolMembership: {
-      /** Pool Name */
+      /**
+       * Pool Name
+       * @description Name of the pool
+       */
       pool_name: string;
-      /** Active */
+      /**
+       * Active
+       * @description Whether the policy is currently active in this pool
+       */
       active: boolean;
-      /** Completed */
+      /**
+       * Completed
+       * @description Number of completed matches
+       */
       completed: number;
-      /** Failed */
+      /**
+       * Failed
+       * @description Number of failed matches
+       */
       failed: number;
-      /** Pending */
+      /**
+       * Pending
+       * @description Number of pending matches
+       */
       pending: number;
     };
     /**
@@ -831,34 +976,71 @@ export interface components {
       /**
        * Id
        * Format: uuid
+       * @description Unique season identifier
        */
       id: string;
-      /** Name */
+      /**
+       * Name
+       * @description Short name of the season
+       */
       name: string;
-      /** Version */
+      /**
+       * Version
+       * @description Season version number
+       */
       version: number;
-      /** Canonical */
+      /**
+       * Canonical
+       * @description Whether this is the canonical (active) version
+       */
       canonical: boolean;
-      /** Summary */
+      /**
+       * Summary
+       * @description Human-readable description of the season
+       */
       summary: string;
-      /** Entry Pool */
+      /**
+       * Entry Pool
+       * @description Name of the pool where new policies are submitted
+       */
       entry_pool?: string | null;
-      /** Leaderboard Pool */
+      /**
+       * Leaderboard Pool
+       * @description Name of the pool used for the leaderboard
+       */
       leaderboard_pool?: string | null;
-      /** Is Default */
+      /**
+       * Is Default
+       * @description Whether this is the default season
+       */
       is_default: boolean;
-      /** Pools */
+      /**
+       * Pools
+       * @description Pools in this season
+       */
       pools: components["schemas"]["PoolInfo"][];
     };
     /** SeasonVersionInfo */
     SeasonVersionInfo: {
-      /** Version */
+      /**
+       * Version
+       * @description Season version number
+       */
       version: number;
-      /** Canonical */
+      /**
+       * Canonical
+       * @description Whether this is the canonical (active) version
+       */
       canonical: boolean;
-      /** Disabled At */
+      /**
+       * Disabled At
+       * @description ISO 8601 timestamp when this version was disabled
+       */
       disabled_at: string | null;
-      /** Created At */
+      /**
+       * Created At
+       * @description ISO 8601 timestamp when this version was created
+       */
       created_at: string;
     };
     /** SubmitRequest */
@@ -866,12 +1048,16 @@ export interface components {
       /**
        * Policy Version Id
        * Format: uuid
+       * @description ID of the policy version to submit
        */
       policy_version_id: string;
     };
     /** SubmitResponse */
     SubmitResponse: {
-      /** Pools */
+      /**
+       * Pools
+       * @description Names of pools the policy was added to
+       */
       pools: string[];
     };
     /** UUIDResponse */

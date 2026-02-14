@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import raiseload, selectinload
@@ -48,86 +48,86 @@ async def get_session():
 
 
 class LeaderboardEntry(BaseModel):
-    rank: int
-    policy: PolicyVersionSummary
-    score: float
-    matches: int
+    rank: int = Field(description="1-indexed position on the leaderboard")
+    policy: PolicyVersionSummary = Field(description="Identity of the ranked policy version")
+    score: float = Field(description="Elo or rating score")
+    matches: int = Field(description="Number of matches played")
 
 
 class PoolMembership(BaseModel):
-    pool_name: str
-    active: bool
-    completed: int
-    failed: int
-    pending: int
+    pool_name: str = Field(description="Name of the pool")
+    active: bool = Field(description="Whether the policy is currently active in this pool")
+    completed: int = Field(description="Number of completed matches")
+    failed: int = Field(description="Number of failed matches")
+    pending: int = Field(description="Number of pending matches")
 
 
 class PolicySummary(BaseModel):
-    policy: PolicyVersionSummary
-    pools: list[PoolMembership]
-    entered_at: str
+    policy: PolicyVersionSummary = Field(description="Identity of the policy version")
+    pools: list[PoolMembership] = Field(description="Pool membership details for this policy")
+    entered_at: str = Field(description="ISO 8601 timestamp of when the policy entered the season")
 
 
 class SubmitRequest(BaseModel):
-    policy_version_id: UUID
+    policy_version_id: UUID = Field(description="ID of the policy version to submit")
 
 
 class SubmitResponse(BaseModel):
-    pools: list[str]
+    pools: list[str] = Field(description="Names of pools the policy was added to")
 
 
 class MatchPlayerInfo(BaseModel):
-    policy: PolicyVersionSummary
-    num_agents: int
-    score: float | None
+    policy: PolicyVersionSummary = Field(description="Identity of the participating policy version")
+    num_agents: int = Field(description="Number of agents controlled by this policy in the match")
+    score: float | None = Field(description="Score awarded to this player, if the match completed")
 
 
 class MatchResponse(BaseModel):
-    id: UUID
-    season_name: str
-    pool_name: str
-    status: str
-    assignments: list[int]
-    players: list[MatchPlayerInfo]
-    error: str | None
-    episode_id: UUID | None
-    episode: EpisodeResponse | None = None
-    created_at: datetime
+    id: UUID = Field(description="Unique match identifier")
+    season_name: str = Field(description="Name of the season this match belongs to")
+    pool_name: str = Field(description="Name of the pool this match was played in")
+    status: str = Field(description="Match status: pending, running, completed, or failed")
+    assignments: list[int] = Field(description="Per-agent policy index assignment")
+    players: list[MatchPlayerInfo] = Field(description="Participating policies and their results")
+    error: str | None = Field(description="Error message if the match failed")
+    episode_id: UUID | None = Field(description="Episode identifier, present if a game was recorded")
+    episode: EpisodeResponse | None = Field(default=None, description="Full episode data, included in detail responses")
+    created_at: datetime = Field(description="When the match was created")
 
 
 class MembershipHistoryEntry(BaseModel):
-    season_name: str
-    season_version: int | None
-    pool_name: str
-    action: str
-    notes: str | None
-    created_at: str
+    season_name: str = Field(description="Name of the season")
+    season_version: int | None = Field(description="Version of the season")
+    pool_name: str = Field(description="Name of the pool")
+    action: str = Field(description="Membership action (e.g. added, removed, retired)")
+    notes: str | None = Field(description="Optional notes about the membership change")
+    created_at: str = Field(description="ISO 8601 timestamp of the membership change")
 
 
 class PoolInfo(BaseModel):
-    id: UUID | None = None
-    name: str
-    description: str
-    config_id: UUID | None = None
+    id: UUID | None = Field(default=None, description="Database identifier of the pool")
+    name: str = Field(description="Name of the pool")
+    description: str = Field(description="Human-readable description of the pool")
+    config_id: UUID | None = Field(default=None, description="Identifier of the pool's environment configuration")
 
 
 class SeasonVersionInfo(BaseModel):
-    version: int
-    canonical: bool
-    disabled_at: str | None
-    created_at: str
+    version: int = Field(description="Season version number")
+    canonical: bool = Field(description="Whether this is the canonical (active) version")
+    disabled_at: str | None = Field(description="ISO 8601 timestamp when this version was disabled")
+    created_at: str = Field(description="ISO 8601 timestamp when this version was created")
 
 
 class SeasonResponse(BaseModel):
-    id: UUID
-    name: str
-    version: int
-    canonical: bool
-    summary: str
-    entry_pool: str | None = None
-    leaderboard_pool: str | None = None
-    is_default: bool
-    pools: list[PoolInfo]
+    id: UUID = Field(description="Unique season identifier")
+    name: str = Field(description="Short name of the season")
+    version: int = Field(description="Season version number")
+    canonical: bool = Field(description="Whether this is the canonical (active) version")
+    summary: str = Field(description="Human-readable description of the season")
+    entry_pool: str | None = Field(default=None, description="Name of the pool where new policies are submitted")
+    leaderboard_pool: str | None = Field(default=None, description="Name of the pool used for the leaderboard")
+    is_default: bool = Field(description="Whether this is the default season")
+    pools: list[PoolInfo] = Field(description="Pools in this season")
 
     @classmethod
     def from_commissioner(

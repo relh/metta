@@ -87,8 +87,8 @@ about what's available, and handlers don't need to reason about partial auth.
 - [x] Add Match and Episode public endpoints with schemas per design doc
 - [x] Add `GET /matches/{id}/{policy_version_id}/artifacts/{type}` (auth-gated, `logs` type initially)
 - [x] Gate Job endpoints behind is-softmax auth, enforced by route-level auth test
-- [ ] Include field-level descriptions (agent stats, game stats)
-- [ ] Update existing TournamentClient and StatsClient to use new Match/Episode endpoints. Update cogames repo to
+- [x] Include field-level descriptions (agent stats, game stats)
+- [x] Update existing TournamentClient and StatsClient to use new Match/Episode endpoints. Update cogames repo to
       reference the docs where they're hosted and give usage suggestions
 - [ ] Remove `/stats/` prefix: deploy both old and new paths, migrate frontends/clients to new paths, then remove old
       paths
