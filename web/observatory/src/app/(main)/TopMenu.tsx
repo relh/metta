@@ -2,14 +2,14 @@
 import clsx from 'clsx'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FC, PropsWithChildren } from 'react'
+import { FC, PropsWithChildren, use } from 'react'
 
 import { AutoRefreshBadge } from '@/components/AutoRefreshBadge'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
+import { AppContext } from './AppContext'
 import { UserDropdown } from './UserDropdown'
-import { config } from '@/config'
 
 const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ href, children, isActive = false }) => {
   return (
@@ -27,6 +27,7 @@ const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ 
 
 export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ currentUser, devMode }) => {
   const pathname = usePathname()
+  const { apiBaseUrl } = use(AppContext)
 
   const isPoliciesActive = pathname === '/' || pathname.startsWith('/policies')
 
@@ -62,7 +63,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
               <DropdownMenuItem
                 title="Public API"
                 onClick={() => {
-                  window.open(`${config.apiBaseUrl}/docs`, '_blank')
+                  window.open(`${apiBaseUrl}/docs`, '_blank')
                   close()
                 }}
               />
