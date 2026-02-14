@@ -23,7 +23,31 @@ class PolicyVersionSummary(BaseModel):
 class AgentResult(BaseModel):
     agent_id: int = Field(description="Index of the agent within the episode")
     reward: float = Field(description="Total reward earned by this agent")
-    metrics: dict[str, float] = Field(description="Per-agent game metrics")
+    metrics: dict[str, float] = Field(
+        description="Per-agent game metrics accumulated over the episode. "
+        "Keys use dotted names: action stats (action.move.success, action.move.failed, action.noop.success, "
+        "action.change_vibe.success, action.failed), resource stats with .amount/.gained/.lost suffixes "
+        "(energy, heart, hp, influence), role stats with .amount/.gained/.lost suffixes "
+        "(miner, aligner, scout, scrambler), junction.aligned_by_agent, "
+        "and status.max_steps_without_motion.",
+        json_schema_extra={
+            "examples": [
+                {
+                    "action.move.success": 623.0,
+                    "action.move.failed": 51.0,
+                    "action.noop.success": 326.0,
+                    "energy.amount": 8.0,
+                    "energy.gained": 1954.0,
+                    "energy.lost": 1946.0,
+                    "hp.amount": 67.0,
+                    "hp.gained": 1075.0,
+                    "hp.lost": 1008.0,
+                    "junction.aligned_by_agent": 2.0,
+                    "status.max_steps_without_motion": 17.0,
+                }
+            ]
+        },
+    )
 
 
 class PolicyResult(BaseModel):
@@ -31,7 +55,10 @@ class PolicyResult(BaseModel):
     policy: PolicyVersionSummary = Field(description="Identity of the policy version")
     num_agents: int = Field(description="Number of agents controlled by this policy")
     avg_reward: float = Field(description="Mean reward across all agents for this policy")
-    avg_metrics: dict[str, float] = Field(description="Mean of each metric across all agents for this policy")
+    avg_metrics: dict[str, float] = Field(
+        description="Mean of each metric across all agents for this policy. "
+        "Same keys as AgentResult.metrics — see that field for the full key reference."
+    )
     agents: list[AgentResult] = Field(description="Per-agent breakdown of rewards and metrics")
 
 
@@ -39,8 +66,33 @@ class EpisodeResponse(BaseModel):
     id: UUID = Field(description="Unique episode identifier")
     replay_url: str | None = Field(description="URL to the episode replay recording")
     thumbnail_url: str | None = Field(description="URL to a thumbnail image of the episode")
-    tags: dict[str, str] = Field(description="Key-value tags attached to this episode")
-    game_stats: dict[str, float] = Field(description="Game-level aggregate statistics")
+    tags: dict[str, str] = Field(
+        description="Key-value tags attached to this episode. "
+        "Common keys: game (game name, e.g. 'cogsguard'), match_type (e.g. 'self_play', 'pairing'), "
+        "job_id, scheduler_git_ref."
+    )
+    game_stats: dict[str, float] = Field(
+        description="Game-level aggregate statistics. "
+        "Keys include object counts (objects.<type>, e.g. objects.junction, objects.wall, "
+        "objects.agent.agent, objects.hub, objects.chest, objects.*_extractor, objects.*_station) "
+        "and observation token stats (tokens_written, tokens_dropped, tokens_free_space).",
+        json_schema_extra={
+            "examples": [
+                {
+                    "objects.agent.agent": 10.0,
+                    "objects.junction": 107.0,
+                    "objects.wall": 3304.0,
+                    "objects.hub": 1.0,
+                    "objects.chest": 2.0,
+                    "objects.carbon_extractor": 48.0,
+                    "objects.aligner_station": 1.0,
+                    "tokens_written": 379639.0,
+                    "tokens_dropped": 0.0,
+                    "tokens_free_space": 1622361.0,
+                }
+            ]
+        },
+    )
     policy_results: list[PolicyResult] = Field(description="Results broken down by policy")
     steps: int | None = Field(description="Number of environment steps in the episode")
     created_at: datetime = Field(description="When the episode was recorded")

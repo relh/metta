@@ -442,7 +442,20 @@ export interface components {
       reward: number;
       /**
        * Metrics
-       * @description Per-agent game metrics
+       * @description Per-agent game metrics accumulated over the episode. Keys use dotted names: action stats (action.move.success, action.move.failed, action.noop.success, action.change_vibe.success, action.failed), resource stats with .amount/.gained/.lost suffixes (energy, heart, hp, influence), role stats with .amount/.gained/.lost suffixes (miner, aligner, scout, scrambler), junction.aligned_by_agent, and status.max_steps_without_motion.
+       * @example {
+       *       "action.move.failed": 51,
+       *       "action.move.success": 623,
+       *       "action.noop.success": 326,
+       *       "energy.amount": 8,
+       *       "energy.gained": 1954,
+       *       "energy.lost": 1946,
+       *       "hp.amount": 67,
+       *       "hp.gained": 1075,
+       *       "hp.lost": 1008,
+       *       "junction.aligned_by_agent": 2,
+       *       "status.max_steps_without_motion": 17
+       *     }
        */
       metrics: {
         [key: string]: number;
@@ -530,14 +543,26 @@ export interface components {
       thumbnail_url: string | null;
       /**
        * Tags
-       * @description Key-value tags attached to this episode
+       * @description Key-value tags attached to this episode. Common keys: game (game name, e.g. 'cogsguard'), match_type (e.g. 'self_play', 'pairing'), job_id, scheduler_git_ref.
        */
       tags: {
         [key: string]: string;
       };
       /**
        * Game Stats
-       * @description Game-level aggregate statistics
+       * @description Game-level aggregate statistics. Keys include object counts (objects.<type>, e.g. objects.junction, objects.wall, objects.agent.agent, objects.hub, objects.chest, objects.*_extractor, objects.*_station) and observation token stats (tokens_written, tokens_dropped, tokens_free_space).
+       * @example {
+       *       "objects.agent.agent": 10,
+       *       "objects.aligner_station": 1,
+       *       "objects.carbon_extractor": 48,
+       *       "objects.chest": 2,
+       *       "objects.hub": 1,
+       *       "objects.junction": 107,
+       *       "objects.wall": 3304,
+       *       "tokens_dropped": 0,
+       *       "tokens_free_space": 1622361,
+       *       "tokens_written": 379639
+       *     }
        */
       game_stats: {
         [key: string]: number;
@@ -756,7 +781,7 @@ export interface components {
       avg_reward: number;
       /**
        * Avg Metrics
-       * @description Mean of each metric across all agents for this policy
+       * @description Mean of each metric across all agents for this policy. Same keys as AgentResult.metrics — see that field for the full key reference.
        */
       avg_metrics: {
         [key: string]: number;
