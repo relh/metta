@@ -8,7 +8,7 @@ from metta.app_backend.auth import _no_auth, get_softmax_user_or_raise, get_user
 
 AUTH_DEPENDENCIES = {get_user, get_user_or_raise, get_softmax_user_or_raise, _no_auth}
 
-FRAMEWORK_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
+FRAMEWORK_PATHS = {"/openapi.json"}
 
 
 def _has_auth_param(endpoint: object) -> bool:

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { FC, PropsWithChildren } from 'react'
 
 import { AutoRefreshBadge } from '@/components/AutoRefreshBadge'
+import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { ThemeToggle } from '@/components/ThemeToggle'
 
 import { UserDropdown } from './UserDropdown'
@@ -52,8 +53,32 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           </MenuLink>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <AutoRefreshBadge />
+        <Dropdown
+          render={({ close }) => (
+            <DropdownMenu>
+              <DropdownMenuItem
+                title="Public API"
+                onClick={() => {
+                  window.open('/api/docs', '_blank')
+                  close()
+                }}
+              />
+              <DropdownMenuItem
+                title="Internal API"
+                onClick={() => {
+                  window.open('/api/internal/docs', '_blank')
+                  close()
+                }}
+              />
+            </DropdownMenu>
+          )}
+        >
+          <span className="text-sm text-foreground-muted cursor-pointer hover:text-foreground transition-colors border border-border-strong rounded px-2 py-1">
+            API Docs
+          </span>
+        </Dropdown>
         <UserDropdown currentUser={currentUser} devMode={devMode} />
         <ThemeToggle />
       </div>

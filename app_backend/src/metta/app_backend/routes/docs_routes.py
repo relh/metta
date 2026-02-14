@@ -30,7 +30,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.routing import APIRoute
 
-from metta.app_backend.auth import SoftmaxUser
+from metta.app_backend.auth import NoAuthRequired, SoftmaxUser
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
@@ -144,6 +144,10 @@ def create_docs_router(app, public_tags: set[str]) -> APIRouter:
 
     app.openapi = public_openapi  # type: ignore[method-assign]
 
+    @router.get("/docs")
+    async def public_docs(_user: NoAuthRequired) -> HTMLResponse:
+        return _swagger_html("openapi.json")
+
     @router.get("/internal/openapi.json")
     async def internal_openapi(_user: SoftmaxUser) -> JSONResponse:
         if _full_schema is None:
@@ -152,15 +156,17 @@ def create_docs_router(app, public_tags: set[str]) -> APIRouter:
 
     @router.get("/internal/docs")
     async def internal_docs(_user: SoftmaxUser) -> HTMLResponse:
-        return HTMLResponse("""
-        <!DOCTYPE html>
-        <html><head>
-        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui.css">
-        </head><body>
-        <div id="swagger-ui"></div>
-        <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist/swagger-ui-bundle.js"></script>
-        <script>SwaggerUIBundle({url: "/internal/openapi.json", dom_id: "#swagger-ui"})</script>
-        </body></html>
-        """)
+        return _swagger_html("openapi.json")
 
     return router
+
+
+def _swagger_html(openapi_url: str) -> HTMLResponse:
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+</head><body>
+<div id="swagger-ui"></div>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>SwaggerUIBundle({{url: "{openapi_url}", dom_id: "#swagger-ui"}})</script>
+</body></html>""")

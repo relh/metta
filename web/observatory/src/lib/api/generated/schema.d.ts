@@ -977,6 +977,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/docs': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Public Docs */
+    get: operations['public_docs_docs_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/internal/openapi.json': {
     parameters: {
       query?: never
@@ -4031,6 +4048,26 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['WhoAmIResponse']
+        }
+      }
+    }
+  }
+  public_docs_docs_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': unknown
         }
       }
     }
