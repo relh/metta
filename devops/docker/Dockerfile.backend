@@ -1,4 +1,7 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
+
+ARG GIT_COMMIT=""
+ENV GIT_COMMIT=${GIT_COMMIT}
 
 WORKDIR /workspace/metta
 
@@ -17,9 +20,4 @@ RUN uv python install
 RUN uv run --no-sync python -m metta.setup.components.system_packages.bootstrap --non-interactive
 RUN uv sync --frozen --package metta-app-backend --no-dev
 
-WORKDIR /workspace/metta/app_backend
-EXPOSE 8000
-ENV HOST=0.0.0.0
-ENV PORT=8000
-
-CMD ["uv", "run", "--no-sync", "python", "src/metta/app_backend/server.py"]
+CMD ["/bin/bash"]

@@ -1,0 +1,62 @@
+name: "Deploy Watcher"
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy for the watcher. Leave empty to use the current orchestrator image tag."
+        required: false
+
+env:
+  CI_APP_ID: ${{ secrets.CI_APP_ID }}
+  CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
+jobs:
+  deploy:
+    name: "Deploy Watcher"
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_tag: ${{ inputs.image_tag }}
+    steps:
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Configure EKS
+        uses: ./.github/actions/eks-configure
+        with:
+          aws_role: ${{ vars.AWS_ROLE }}
+
+      - name: Deploy watcher
+        run: |
+          helm upgrade \
+            -n orchestrator \
+            orchestrator \
+            ./devops/charts/orchestrator \
+            --reuse-values \
+            --set watcher.imageTag=${{ inputs.image_tag }}
+
+  notify-discord:
+    name: Notify Discord
+    needs: [deploy]
+    if: always()
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/notify-discord-status
+      - uses: ./.github/actions/notify-discord-status
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          package-name: watcher
+          version: ${{ needs.deploy.outputs.image_tag }}
+          success-message: "watcher deployed with image tag: `${{ needs.deploy.outputs.image_tag }}`"
+          needs-context: ${{ toJSON(needs) }}

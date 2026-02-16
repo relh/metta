@@ -5,7 +5,7 @@ replicaCount: 1
 
 image:
   registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
-  name: metta-policy-evaluator
+  name: metta-app-backend
   pullPolicy: Always
   tag: "latest"
 
@@ -41,6 +41,7 @@ datadog:
 
 watcher:
   enabled: true
+  imageTag: ""
   dbSecret: "observatory-backend-env"
   evalClusterRoleArn: "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
   evalClusterName: "tournament"
