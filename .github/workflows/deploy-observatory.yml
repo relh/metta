@@ -63,6 +63,7 @@ jobs:
             orchestrator \
             ./devops/charts/orchestrator \
             --reuse-values \
+            --set image.name=metta-app-backend \
             --set image.tag=${{ needs.build-and-deploy-backend.outputs.image_tag }}
 
   notify-discord:

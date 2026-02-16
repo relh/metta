@@ -29,12 +29,18 @@ spec:
         - name: server
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "tag is required" .Values.image.tag }}"
           imagePullPolicy: Always
+          command: ["uv", "run", "--no-sync", "python", "src/metta/app_backend/server.py"]
+          workingDir: /workspace/metta/app_backend
           envFrom:
           - secretRef:
               name: {{ .Values.secret_name }}
           env:
           - name: EPISODE_RUNNER_IMAGE
             value: "{{ .Values.episodeRunnerImage.registry }}/{{ .Values.episodeRunnerImage.name }}:{{ .Values.episodeRunnerImage.tag }}"
+          - name: HOST
+            value: "0.0.0.0"
+          - name: PORT
+            value: "8000"
           - name: STATS_SERVER_URI
             value: "https://{{ .Values.host }}"
           - name: HOST_IP
