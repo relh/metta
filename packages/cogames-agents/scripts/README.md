@@ -76,6 +76,30 @@ Fast single-agent eval for development iteration (3 episodes, 500 steps by defau
 ./scripts/quick_eval.sh wombo -e 5 -s 1000 --seed 99
 ```
 
+### `run_scripted_baselines_report.py`
+
+Thread Vision staged one-command artifact pipeline for scripted baselines. Runs static role specialists + adaptive
+gap-filler on a fixed seed matrix and writes:
+
+- `scripted_baselines_report.json` (Stage 2 + Stage 3 technical bundle: KPI/guardrail threshold checks, stage rollups,
+  richer role-event signals, BC-readiness checks, shaped-reward alignment checks, and locked technical sprint-gate
+  results; retention/cohort metrics are intentionally out-of-scope for this script)
+- `scripted_baselines_report.html` (shareable summary with stage-status cards, compact role fingerprint radar, pass/fail
+  badges, and per-role failure symptom/next fix)
+
+```bash
+# Default seeds (11,23,42)
+uv run python packages/cogames-agents/scripts/run_scripted_baselines_report.py
+
+# Custom output directory and seeds
+uv run python packages/cogames-agents/scripts/run_scripted_baselines_report.py \
+  --output-dir outputs/scripted_baselines_stage2_3 \
+  --seeds 11,23,42
+
+# Allow report generation without failing CI/automation on gate misses
+uv run python packages/cogames-agents/scripts/run_scripted_baselines_report.py --no-enforce-gates
+```
+
 ## Available Agents
 
 Registered scripted agents (from `cogames-agents` package):

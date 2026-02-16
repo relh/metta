@@ -99,7 +99,8 @@ class _PlankyDiagnosticBase(Mission):
         )
     )
 
-    # Disable clips scramble/align events for deterministic tests
+    # Disable clips events for deterministic tests unless a mission opts in.
+    clips_initial_start: int = Field(default=99999)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
 
@@ -118,6 +119,11 @@ class _PlankyDiagnosticBase(Mission):
             for name, team in self.teams.items()
         }
 
+        original_clips = self.clips.model_copy(deep=True)
+        self.clips.initial_clips_start = self.clips_initial_start
+        self.clips.scramble_start = self.clips_scramble_start
+        self.clips.align_start = self.clips_align_start
+
         try:
             cfg = super().make_env()
             cfg.game.map_builder = custom_map
@@ -135,6 +141,7 @@ class _PlankyDiagnosticBase(Mission):
         finally:
             self.site.map_builder = original_map_builder
             self.teams = original_teams
+            self.clips = original_clips
 
 
 # ==============================================================================
@@ -213,6 +220,7 @@ class PlankyAlignerAvoidAOE(_PlankyDiagnosticBase):
     max_steps: int = Field(default=400)
     inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"aligner": 1, "heart": 3})
     # Let initial_clips fire at step 10 to create one clips junction
+    clips_initial_start: int = Field(default=10)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
 
@@ -236,6 +244,7 @@ class PlankyScramblerTarget(_PlankyDiagnosticBase):
     max_steps: int = Field(default=300)
     inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"scrambler": 1, "heart": 3})
     # Let initial_clips fire at step 10 to create the clips junction target
+    clips_initial_start: int = Field(default=10)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
 
@@ -334,6 +343,7 @@ class PlankyScramblerFullCycle(_PlankyDiagnosticBase):
     map_name: str = "scrambler_full_cycle.map"
     max_steps: int = Field(default=400)
     # Let initial_clips fire at step 10
+    clips_initial_start: int = Field(default=10)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
 
@@ -379,7 +389,8 @@ class PlankyScramblerRecovery(_PlankyDiagnosticBase):
     description: str = "Scrambler without gear/hearts recovers both."
     map_name: str = "scrambler_full_cycle.map"
     max_steps: int = Field(default=400)
-    # No gear/hearts seed — must get both from stations
+    # No gear/hearts seed — must get both from stations. Keep one enemy target present.
+    clips_initial_start: int = Field(default=10)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
 

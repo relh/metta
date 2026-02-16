@@ -69,16 +69,9 @@ VIBE_TO_ROLE = {
 SMART_ROLE_SWITCH_COOLDOWN = 40
 SCRAMBLER_GEAR_PRIORITY_STEPS = 25
 
-_GLOBAL_COORDINATORS: dict[int, "SmartRoleCoordinator"] = {}
 
-
-def _shared_coordinator(policy_env_info: PolicyEnvInterface) -> "SmartRoleCoordinator":
-    key = id(policy_env_info)
-    coordinator = _GLOBAL_COORDINATORS.get(key)
-    if coordinator is None or coordinator.num_agents != policy_env_info.num_agents:
-        coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
-        _GLOBAL_COORDINATORS[key] = coordinator
-    return coordinator
+def _agent_rng_seed(agent_id: int, *, salt: int = 0) -> int:
+    return 0xC0A15EED + salt + (agent_id + 1) * 1_000_003
 
 
 if TYPE_CHECKING:
@@ -133,6 +126,7 @@ class SmartRoleCoordinator:
     junction_alignment_overrides: dict[tuple[int, int], Optional[str]] = field(default_factory=dict)
     station_offsets: dict[str, tuple[int, int]] = field(default_factory=dict)
     recent_scrambles: dict[tuple[int, int], int] = field(default_factory=dict)
+    agent_rngs: dict[int, random.Random] = field(default_factory=dict)
 
     def update_agent(self, s: CogsguardAgentState) -> None:
         hub_pos = s.stations.get("hub")
@@ -279,7 +273,7 @@ class SmartRoleCoordinator:
         """Pick a role vibe based on aggregated snapshots."""
         snapshot = self.agent_snapshots.get(agent_id)
         if snapshot is None:
-            return random.choice(ROLE_VIBES)
+            return self._rng_for_agent(agent_id).choice(ROLE_VIBES)
 
         structures_known = self._aggregate_structures()
         if "hub" not in structures_known or "chest" not in structures_known:
@@ -309,6 +303,13 @@ class SmartRoleCoordinator:
         if self._aggregate_structures_seen() < 10:
             return "scout"
         return "miner"
+
+    def _rng_for_agent(self, agent_id: int) -> random.Random:
+        rng = self.agent_rngs.get(agent_id)
+        if rng is None:
+            rng = random.Random(_agent_rng_seed(agent_id, salt=17))
+            self.agent_rngs[agent_id] = rng
+        return rng
 
     def _aggregate_junction_counts(self) -> dict[str, int]:
         totals = {"c": 0, "clips": 0, "neutral": 0, "unknown": 0}
@@ -408,6 +409,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
         # Cache tag names on first use
         self._tag_names: dict[int, str] = {}
+        self._rng = random.Random(_agent_rng_seed(agent_id, salt=31))
 
     def _noop(self) -> Action:
         return Action(name="noop")
@@ -419,7 +421,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         if self._use_evolutionary_roles and self._evolutionary_role_coordinator is not None:
             return self._evolutionary_role_coordinator.choose_vibe(s.agent_id, s.step_count)
         if self._smart_role_coordinator is None:
-            return random.choice(ROLE_VIBES)
+            return self._rng.choice(ROLE_VIBES)
         return self._smart_role_coordinator.choose_role(s.agent_id)
 
     def _move(self, direction: str) -> Action:
@@ -512,16 +514,18 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         center_r, center_c = self._obs_hr, self._obs_wr
         token_value_base = None
         for tok in obs.tokens:
+            feature_name = tok.feature.name
+            if feature_name == "last_action":
+                last_action_id = tok.value
+                continue
+
             if tok.location == (center_r, center_c):
-                feature_name = tok.feature.name
                 if feature_name.startswith("inv:"):
                     if token_value_base is None:
                         token_value_base = int(tok.feature.normalization)
                     add_inventory_token(inv, feature_name, tok.value, token_value_base=token_value_base)
                 elif feature_name == "vibe":
                     vibe_id = tok.value
-                elif feature_name == "last_action":
-                    last_action_id = tok.value
 
         s.energy = inv.get("energy", 0)
         s.carbon = inv.get("carbon", 0)
@@ -572,6 +576,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Use last_action_executed from observation, NOT last_action (our intent)
         executed_action = s.last_action_executed
         intended_action = s.last_action.name if s.last_action else None
+        action_for_position = executed_action or intended_action
 
         # Debug: Log when intended != executed (action failed, delayed, or human control)
         if DEBUG and s.step_count <= 100:
@@ -584,8 +589,8 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # ONLY update position when:
         # 1. The executed action is a move
         # 2. We're not interacting with an object this step
-        if executed_action and executed_action.startswith("move_") and not s.using_object_this_step:
-            direction = executed_action[5:]  # Remove "move_" prefix
+        if action_for_position and action_for_position.startswith("move_") and not s.using_object_this_step:
+            direction = action_for_position[5:]  # Remove "move_" prefix
             if direction in self._move_deltas:
                 dr, dc = self._move_deltas[direction]
                 s.row += dr
@@ -968,11 +973,15 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             and s.role != Role.SCRAMBLER
             and s.step_count <= SCRAMBLER_GEAR_PRIORITY_STEPS
         ):
-            gear_counts = self._smart_role_coordinator.get_role_gear_counts()
-            if gear_counts.get("scrambler", 0) == 0:
-                if DEBUG and s.step_count % 5 == 0:
-                    print(f"[A{s.agent_id}] GET_GEAR: yielding to scrambler gear priority")
-                return self._explore(s)
+            has_scrambler_teammate = any(
+                snapshot.role == Role.SCRAMBLER for snapshot in self._smart_role_coordinator.agent_snapshots.values()
+            )
+            if has_scrambler_teammate:
+                gear_counts = self._smart_role_coordinator.get_role_gear_counts()
+                if gear_counts.get("scrambler", 0) == 0:
+                    if DEBUG and s.step_count % 5 == 0:
+                        print(f"[A{s.agent_id}] GET_GEAR: yielding to scrambler gear priority")
+                    return self._explore(s)
         station_name = s.get_gear_station_name()
         station_pos = s.get_structure_position(s.get_gear_station_type())
         hub_pos = s.get_structure_position(StructureType.HUB)
@@ -1242,7 +1251,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
     def _try_random_direction(self, s: CogsguardAgentState) -> Optional[Action]:
         """Try to move in a random free direction."""
         directions: list[CardinalDirection] = ["north", "south", "east", "west"]
-        random.shuffle(directions)
+        self._rng.shuffle(directions)
         for direction in directions:
             dr, dc = self._move_deltas[direction]
             nr, nc = s.row + dr, s.col + dc
@@ -1336,7 +1345,7 @@ class CogsguardPolicy(MultiAgentPolicy):
     ):
         super().__init__(policy_env_info, device=device)
         self._agent_policies: dict[int, StatefulAgentPolicy[CogsguardAgentState]] = {}
-        self._smart_role_coordinator = _shared_coordinator(policy_env_info)
+        self._smart_role_coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
         self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
         self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))

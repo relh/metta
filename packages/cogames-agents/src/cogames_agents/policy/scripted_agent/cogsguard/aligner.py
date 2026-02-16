@@ -64,17 +64,22 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         has_gear = s.aligner >= 1
         has_heart = s.heart >= 1
         has_influence = s.influence >= 1
+        known_junctions = s.get_structures_by_type(StructureType.CHARGER)
 
         # If we don't have gear, try to get it
         if not has_gear:
             return self._handle_no_gear(s)
 
-        # If we have gear but are missing resources, go get them
+        # If we have no known junctions yet, scout first so resource runs have a target.
+        if not known_junctions:
+            return self._explore_for_junctions(s)
+
+        # If we have gear but are missing resources, go get them first.
         if not has_heart or not has_influence:
             if DEBUG and s.step_count % 10 == 0:
                 print(
                     f"[A{s.agent_id}] ALIGNER: Have gear but missing resources "
-                    f"(heart={has_heart}, influence={has_influence}), getting them first"
+                    f"(heart={has_heart}, influence={has_influence}), getting resources first"
                 )
             return self._get_resources(s, need_influence=not has_influence, need_heart=not has_heart)
 
@@ -226,7 +231,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             s._heart_wait_start = 0
             return self._explore(s)
 
-        # Just need influence - wait for AOE regeneration near hub
+        # Just need influence - wait for AOE regeneration near hub.
         hub_pos = s.get_structure_position(StructureType.HUB)
         if hub_pos is None:
             return self._explore(s)
@@ -255,7 +260,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 if last_worked > 0 and s.step_count - last_worked < cooldown:
                     continue
                 junction = s.get_structure_at(pos)
-                if junction is not None and junction.alignment in ("c", "clips"):
+                if junction is not None and junction.alignment in ("c", "cogs", "clips"):
                     continue
                 dist = abs(pos[0] - s.row) + abs(pos[1] - s.col)
                 recent_candidates.append((dist, pos))
@@ -285,11 +290,10 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             if last_worked > 0 and s.step_count - last_worked < cooldown:
                 continue
 
-            # Skip already cogs-aligned junctions
-            if junction.alignment is not None:
+            # Aligner can only align neutral junctions.
+            if junction.alignment not in (None, "neutral"):
                 continue
 
-            # Add neutral junctions only
             unaligned_junctions.append((dist, pos))
 
         # Sort by distance and return closest
@@ -314,25 +318,30 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
     def _explore_for_junctions(self, s: CogsguardAgentState) -> Action:
         """Explore aggressively to find more junctions spread around the map."""
+        hub_pos = s.get_structure_position(StructureType.HUB)
+        if hub_pos is not None:
+            # Bias early search east/southeast from hub where junctions commonly spawn.
+            search_offsets = [
+                (2, 8),
+                (4, 10),
+                (0, 12),
+                (-2, 8),
+                (6, 8),
+                (2, 12),
+                (-4, 10),
+                (0, 6),
+            ]
+            idx = (s.agent_id + s.step_count // 16) % len(search_offsets)
+            dr, dc = search_offsets[idx]
+            target = (
+                max(1, min(s.map_height - 2, hub_pos[0] + dr)),
+                max(1, min(s.map_width - 2, hub_pos[1] + dc)),
+            )
+            if abs(target[0] - s.row) + abs(target[1] - s.col) > 2:
+                return self._move_towards(s, target, reach_adjacent=False)
+
         frontier_action = self._explore_frontier(s)
         if frontier_action is not None:
             return frontier_action
 
-        # Move in a direction based on agent ID and step count to spread out
-        directions = ["north", "south", "east", "west"]
-        # Cycle through directions, spending 20 steps in each direction
-        dir_idx = (s.agent_id + s.step_count // 20) % 4
-        direction = directions[dir_idx]
-
-        dr, dc = self._move_deltas[direction]
-        next_r, next_c = s.row + dr, s.col + dc
-
-        # Check if we can move in that direction
-        from cogames_agents.policy.scripted_agent.pathfinding import is_traversable  # noqa: PLC0415
-        from cogames_agents.policy.scripted_agent.types import CellType  # noqa: PLC0415
-
-        if is_traversable(s, next_r, next_c, CellType):  # type: ignore[arg-type]
-            return self._move(direction)
-
-        # Fall back to regular exploration if blocked
         return self._explore(s)

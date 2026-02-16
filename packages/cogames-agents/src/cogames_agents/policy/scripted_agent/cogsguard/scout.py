@@ -11,10 +11,14 @@ Scouts prioritize filling out their internal map by:
 
 from __future__ import annotations
 
+from cogames_agents.policy.scripted_agent.pathfinding import (
+    is_traversable as path_is_traversable,
+)
+from cogames_agents.policy.scripted_agent.types import CellType
 from mettagrid.simulator import Action
 
 from .policy import CogsguardAgentPolicyImpl
-from .types import CogsguardAgentState, Role
+from .types import CogsguardAgentState, Role, StructureType
 
 
 class ScoutAgentPolicyImpl(CogsguardAgentPolicyImpl):
@@ -24,6 +28,14 @@ class ScoutAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
     def execute_role(self, s: CogsguardAgentState) -> Action:
         """Execute scout behavior: prioritize filling out unexplored areas."""
+        if s.energy < s.MOVE_ENERGY_COST:
+            if s.get_structure_position(StructureType.HUB) is None:
+                return self._noop()
+            return self._do_recharge(s)
+        if s.last_action.name.startswith("move_") and s.last_action_executed == "noop":
+            s.exploration_target = None
+            s.cached_path = None
+            s.cached_path_target = None
         # Try frontier-based exploration first
         frontier_action = self._explore_frontier(s)
         if frontier_action is not None:
@@ -41,10 +53,8 @@ class ScoutAgentPolicyImpl(CogsguardAgentPolicyImpl):
             if steps_in_direction < 25:
                 dr, dc = self._move_deltas.get(s.exploration_target, (0, 0))
                 next_r, next_c = s.row + dr, s.col + dc
-                if 0 <= next_r < s.map_height and 0 <= next_c < s.map_width:
-                    if s.occupancy[next_r][next_c] == 1:  # FREE
-                        if (next_r, next_c) not in s.agent_occupancy:
-                            return self._move(s.exploration_target)
+                if path_is_traversable(s, next_r, next_c, CellType):  # type: ignore[arg-type]
+                    return self._move(s.exploration_target)
 
         # Cycle through directions systematically
         direction_cycle = ["north", "east", "south", "west"]
@@ -59,11 +69,9 @@ class ScoutAgentPolicyImpl(CogsguardAgentPolicyImpl):
             direction = direction_cycle[(next_idx + i) % 4]
             dr, dc = self._move_deltas[direction]
             next_r, next_c = s.row + dr, s.col + dc
-            if 0 <= next_r < s.map_height and 0 <= next_c < s.map_width:
-                if s.occupancy[next_r][next_c] == 1:  # FREE
-                    if (next_r, next_c) not in s.agent_occupancy:
-                        s.exploration_target = direction
-                        s.exploration_target_step = s.step_count
-                        return self._move(direction)
+            if path_is_traversable(s, next_r, next_c, CellType):  # type: ignore[arg-type]
+                s.exploration_target = direction
+                s.exploration_target_step = s.step_count
+                return self._move(direction)
 
         return self._noop()

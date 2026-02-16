@@ -57,6 +57,7 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._preferred_resource = self.RESOURCE_ORDER[self._agent_id % len(self.RESOURCE_ORDER)]
+        self._failed_extractors_until_step: dict[tuple[int, int], int] = {}
 
     def _get_nearest_aligned_depot(self, s: CogsguardAgentState) -> tuple[int, int] | None:
         """Find the nearest aligned building that accepts deposits.
@@ -139,6 +140,8 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             else:
                 if DEBUG:
                     print(f"[A{s.agent_id}] MINER: Mine failed after {MAX_RETRIES} retries, moving on")
+                if s._pending_action_target is not None:
+                    self._failed_extractors_until_step[s._pending_action_target] = s.step_count + 40
                 s.clear_pending_action()
 
         # === Gear re-acquisition logic ===
@@ -331,6 +334,12 @@ class MinerAgentPolicyImpl(CogsguardAgentPolicyImpl):
 
         # Navigate to extractor
         ext_pos = extractor.position
+        if self._failed_extractors_until_step.get(ext_pos, 0) > s.step_count:
+            other = s.get_nearest_usable_extractor(exclude=ext_pos)
+            if other is not None:
+                return self._move_towards(s, other.position, reach_adjacent=True)
+            return self._explore_for_extractors(s)
+
         agent_pos = (s.row, s.col)
         adjacent = is_adjacent(agent_pos, ext_pos)
         if DEBUG and s.step_count <= 60:

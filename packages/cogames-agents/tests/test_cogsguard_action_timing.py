@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from cogames_agents.policy.scripted_agent.cogsguard.policy import CogsguardAgentPolicyImpl
 from cogames_agents.policy.scripted_agent.cogsguard.types import CogsguardAgentState, Role
@@ -51,3 +53,43 @@ def test_position_updates_from_executed_action(policy_env_info: PolicyEnvInterfa
     policy._update_agent_position(state)
 
     assert (state.row, state.col) == (3, 2)
+
+
+def test_position_falls_back_to_intended_action_when_executed_action_missing(
+    policy_env_info: PolicyEnvInterface,
+) -> None:
+    policy = CogsguardAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.MINER)
+    state = _make_state()
+
+    state.last_action = Action(name="move_east")
+    state.last_action_executed = None
+
+    policy._update_agent_position(state)
+
+    assert (state.row, state.col) == (2, 3)
+
+
+def test_read_inventory_parses_last_action_without_center_location(
+    policy_env_info: PolicyEnvInterface,
+) -> None:
+    policy = CogsguardAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.MINER)
+    state = _make_state()
+
+    def _token(name: str, value: int, *, location: tuple[int, int] | None, normalization: int = 1) -> object:
+        return SimpleNamespace(
+            location=location,
+            value=value,
+            feature=SimpleNamespace(name=name, normalization=normalization),
+        )
+
+    obs = SimpleNamespace(
+        tokens=[
+            _token("vibe", 0, location=(1, 1)),
+            _token("last_action", 2, location=None),
+            _token("inv:energy", 100, location=(1, 1)),
+        ]
+    )
+
+    policy._read_inventory(state, obs)  # type: ignore[arg-type]
+
+    assert state.last_action_executed == "move_south"
