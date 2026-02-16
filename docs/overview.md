@@ -904,7 +904,7 @@ and more.
 ### Docker
 
 - **Main image** (`devops/docker/Dockerfile`): CUDA 12.8.1, Ubuntu 24.04, Bazel, Nim, Python 3.12
-- **App backend** (`app_backend/Dockerfile`): Ubuntu 22.04, uv-managed Python
+- **Backend** (`devops/docker/Dockerfile.backend`): Ubuntu 24.04, uv-managed Python (observatory backend + orchestrator)
 - **Dev container** (`.devcontainer/Dockerfile`): Full dev environment with all toolchains
 
 ---
@@ -1003,12 +1003,13 @@ symlink)
 
 ### Build Workflows
 
-| Workflow                      | Purpose                |
-| ----------------------------- | ---------------------- |
-| `build-image.yml`             | Main Docker image      |
-| `build-app-backend-image.yml` | Backend API image      |
-| `build-*-image.yml`           | Various service images |
-| `build-pages.yml`             | Documentation site     |
+| Workflow                 | Purpose                                            |
+| ------------------------ | -------------------------------------------------- |
+| `build-image.yml`        | Main Docker image                                  |
+| `deploy-observatory.yml` | Backend + orchestrator (single image, two deploys) |
+| `deploy-watcher.yml`     | Watcher-only deploys                               |
+| `build-*-image.yml`      | Various service images                             |
+| `build-pages.yml`        | Documentation site                                 |
 
 ### AI Review Workflows
 

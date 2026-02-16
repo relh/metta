@@ -18,7 +18,7 @@ app_backend/src/metta/app_backend/job_runner/
 ```
 
 **Flow:** Dispatcher creates job with presigned GET URLs (policy, job spec) and PUT URLs (results) → K8s runs
-`Dockerfile.policy_evaluator` → Episode runner writes results to S3 → Watcher reads results, updates DB
+`Dockerfile.backend` → Episode runner writes results to S3 → Watcher reads results, updates DB
 
 **K8s namespace:** `jobs`
 
@@ -49,7 +49,7 @@ kubectl --context tournament get job <job-name> -n jobs -o yaml
 
 ## Key Files
 
-- `devops/docker/Dockerfile.policy_evaluator` - Container that runs episodes
+- `devops/docker/Dockerfile.backend` - Container that runs episodes
 - `packages/mettagrid/python/src/mettagrid/runner/pure_single_episode_runner.py` - Episode execution
 - `devops/tf/tournament/` - Tournament cluster terraform
 

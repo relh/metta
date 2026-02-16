@@ -50,8 +50,7 @@ jobs:
           max-deletions: "120"
           max-deletions-per-workflow: "10"
           workflow-caps: |
-            build-policy-evaluator-image.yml=12
-            build-app-backend-image.yml=12
+            deploy-observatory.yml=12
             build-observatory-image.yml=12
             build-home-image.yml=12
             build-image.yml=12

@@ -1,6 +1,6 @@
 # Policy Process Isolation
 
-> **Status:** Draft **Author:** Nishad **Created:** 2026-02-02
+> **Status:** Implemented **Author:** Nishad **Created:** 2026-02-02
 
 Implements the "multiple Python processes" phase from
 [0015-thunderdome-policy-isolation](0015-thunderdome-policy-isolation.md).

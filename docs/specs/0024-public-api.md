@@ -1,6 +1,6 @@
 # Public API
 
-> **Status:** Draft **Author:** Nishad **Created:** 2025-02-11
+> **Status:** In progress **Author:** Nishad **Created:** 2025-02-11
 
 ## Summary
 

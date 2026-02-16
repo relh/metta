@@ -359,9 +359,9 @@ kubectl --context tournament -n jobs get events --sort-by=.lastTimestamp | tail 
 
 | Area                     | Path                                                 |
 | ------------------------ | ---------------------------------------------------- |
-| Backend build workflow   | `.github/workflows/build-app-backend-image.yml`      |
+| Observatory deploy       | `.github/workflows/deploy-observatory.yml`           |
 | Frontend build workflow  | `.github/workflows/build-observatory-image.yml`      |
-| Policy eval workflow     | `.github/workflows/build-policy-evaluator-image.yml` |
+| Watcher deploy           | `.github/workflows/deploy-watcher.yml`               |
 | Reusable deploy template | `.github/workflows/_build-and-deploy.yml`            |
 | Docker build action      | `.github/actions/docker-build/action.yml`            |
 | EKS configure action     | `.github/actions/eks-configure/action.yml`           |

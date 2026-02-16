@@ -67,7 +67,10 @@ class TestDockerIntegration:
             # Build the Docker image first
             self.logger.info("Building Docker image for app_backend")
             image, build_logs = client.images.build(
-                path=str(project_root), dockerfile="app_backend/Dockerfile", tag="test-app-backend:latest", rm=True
+                path=str(project_root),
+                dockerfile="devops/docker/Dockerfile.backend",
+                tag="test-app-backend:latest",
+                rm=True,
             )
             self.logger.info("Successfully built Docker image")
 
