@@ -3,6 +3,7 @@ import hashlib
 import inspect
 import json
 import logging
+import os
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -19,8 +20,6 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
-
-import gitta
 
 # pyright: reportArgumentType=false, reportCallIssue=false
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
@@ -659,7 +658,10 @@ class CommissionerBase(ABC):
                 assignments=request.assignments,
                 env=request.env,
                 seed=request.seed,
-                episode_tags={**request.episode_tags, "scheduler_git_ref": gitta.get_current_commit()},
+                episode_tags={
+                    **request.episode_tags,
+                    **({"scheduler_git_ref": git_ref} if (git_ref := os.environ.get("GIT_COMMIT")) else {}),
+                },
             ).model_dump()
 
             stats_client = StatsClient(settings.STATS_SERVER_URI, machine_token=settings.MACHINE_TOKEN)
