@@ -181,13 +181,11 @@ class Checkpointer(TrainerComponent):
 
         optimizer_state = None
         optimizer = getattr(policy, "optimizer", None)
+        is_schedulefree = optimizer is not None and is_schedulefree_optimizer(optimizer)
         if optimizer is not None:
-            is_schedulefree = is_schedulefree_optimizer(optimizer)
             if is_schedulefree:
                 optimizer.eval()
             optimizer_state = optimizer.state_dict()
-            if is_schedulefree:
-                optimizer.train()
 
         uri = self._checkpoint_manager.save_policy_checkpoint(
             state_dict=policy.state_dict(),
@@ -195,6 +193,10 @@ class Checkpointer(TrainerComponent):
             epoch=epoch,
             optimizer_state=optimizer_state,
         )
+
+        if is_schedulefree:
+            assert optimizer is not None
+            optimizer.train()
 
         self._latest_policy_uri = uri
         latest_uris = getattr(self.context, "latest_policy_uris", None)
