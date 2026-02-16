@@ -328,6 +328,7 @@ class CoreTrainingLoop:
         device: torch.device,
         context: ComponentContext,
         trajectory_isolator: TrajectoryIsolator,
+        cuda_teacher=None,
     ):
         """Initialize core training loop.
 
@@ -335,12 +336,14 @@ class CoreTrainingLoop:
             experience: Experience buffer for storing rollouts
             losses: Dictionary of loss instances to use
             device: Device to run on
+            cuda_teacher: Optional CudaTeacherRunner for trainer-side teacher actions
         """
         self.experience = experience
         self.losses = losses
         self.device = device
         self.accumulate_minibatches = experience.accumulate_minibatches
         self.context = context
+        self.cuda_teacher = cuda_teacher
         self.last_action = torch.zeros(
             experience.total_agents,
             1,
@@ -490,6 +493,16 @@ class CoreTrainingLoop:
                     dones = d.to(device=target_device, dtype=torch.float32, non_blocking=True)
                     truncateds = t.to(device=target_device, dtype=torch.float32, non_blocking=True)
                     teacher_actions = ta.to(device=target_device, dtype=torch.long, non_blocking=True)
+
+                if self.cuda_teacher is not None:
+                    obs_gpu = o.to(device=self.device, non_blocking=True)
+                    ta_gpu = torch.empty(o.shape[0], device=self.device, dtype=torch.long)
+                    # CUDA teacher state must reset on any episode boundary, including time-limit truncations.
+                    episode_reset_mask_gpu = torch.logical_or(d, t).to(
+                        device=self.device, dtype=torch.bool, non_blocking=True
+                    )
+                    self.cuda_teacher.step_batch(obs_gpu, ta_gpu, episode_reset_mask_gpu)
+                    teacher_actions = ta_gpu.to(device=target_device, dtype=torch.long, non_blocking=True)
 
                 if transfer_stream is not None:
                     current_stream = torch.cuda.current_stream(device=target_device)

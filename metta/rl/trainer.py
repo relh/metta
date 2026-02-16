@@ -40,6 +40,7 @@ class Trainer:
         device: torch.device,
         distributed_helper: Optional[DistributedHelper] = None,
         run_name: Optional[str] = None,
+        cuda_teacher=None,
     ):
         """Initialize trainer with all components.
 
@@ -202,6 +203,7 @@ class Trainer:
             device=self._device,
             context=self._context,
             trajectory_isolator=trajectory_isolator,
+            cuda_teacher=cuda_teacher,
         )
 
         self._losses = losses

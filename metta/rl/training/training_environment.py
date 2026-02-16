@@ -83,6 +83,9 @@ class TrainingEnvironmentConfig(Config):
 
     supervisor_policy_uri: Optional[str] = Field(default=None)
 
+    cuda_teacher_policy_uri: Optional[str] = Field(default=None)
+    """When set, the trainer creates a CudaTeacherRunner instead of env-side supervisor."""
+
     maps_cache_size: Optional[int] = Field(default=None, ge=1)
     """Number of maps to cache in shared memory. None disables caching."""
 

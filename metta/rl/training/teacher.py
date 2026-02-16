@@ -66,6 +66,7 @@ class TeacherConfig(Config):
 
     policy_uri: str | None = DEFAULT_TEACHER_POLICY_URI
     mode: TeacherMode = DEFAULT_TEACHER_MODE
+    execution: Literal["env_side", "trainer_side"] = "env_side"
     steps: int | None = DEFAULT_TEACHER_STEPS
     # Teacher (led) and student slices should leave some remainder for PPO.
     # Defaults align with the standard supervisor preset.
@@ -134,7 +135,10 @@ def apply_teacher_phase(
 
     if mode_parts.family in supervisor_modes:
         _require_policy_uri(teacher_cfg)
-        training_env_cfg.supervisor_policy_uri = teacher_cfg.policy_uri
+        if teacher_cfg.execution == "trainer_side":
+            training_env_cfg.cuda_teacher_policy_uri = teacher_cfg.policy_uri
+        else:
+            training_env_cfg.supervisor_policy_uri = teacher_cfg.policy_uri
 
     if mode_parts.family in teacher_asset_modes:
         _require_policy_uri(teacher_cfg)

@@ -270,6 +270,16 @@ class TrainTool(Tool):
 
         env = VectorizedTrainingEnvironment(self.training_env, supervisor_policy_spec=supervisor_policy_spec)
 
+        cuda_teacher = None
+        if self.training_env.cuda_teacher_policy_uri:
+            from metta.rl.training.cuda_teacher import CudaTeacherRunner  # noqa: PLC0415
+
+            cuda_teacher = CudaTeacherRunner(
+                policy_uri=self.training_env.cuda_teacher_policy_uri,
+                device=torch.device(self.system.device),
+                policy_env_info=env.policy_env_info,
+            )
+
         if needs_preflight and not can_thread_preflight:
             if not self.system.local_only:
                 storage_decision = auto_policy_storage_decision(run_name)
@@ -340,7 +350,7 @@ class TrainTool(Tool):
         if self.losses is not None:
             self.trainer.losses = self.losses
 
-        trainer = self._initialize_trainer(env, policy_assets, distributed_helper)
+        trainer = self._initialize_trainer(env, policy_assets, distributed_helper, cuda_teacher=cuda_teacher)
 
         self._log_run_configuration(distributed_helper, checkpoint_manager, env)
 
@@ -394,6 +404,8 @@ class TrainTool(Tool):
         env: VectorizedTrainingEnvironment,
         policy_assets: PolicyAssetRegistry,
         distributed_helper: DistributedHelper,
+        *,
+        cuda_teacher=None,
     ) -> Trainer:
         trainer = Trainer(
             self.trainer,
@@ -404,6 +416,7 @@ class TrainTool(Tool):
             device=torch.device(self.system.device),
             distributed_helper=distributed_helper,
             run_name=self.run,
+            cuda_teacher=cuda_teacher,
         )
 
         if not self.gradient_reporter.epoch_interval and getattr(self.trainer, "grad_mean_variance_interval", 0):
