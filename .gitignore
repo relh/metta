@@ -173,9 +173,11 @@ tools/dev/python_imports/*.txt
 # AI-generated implementation plans (ephemeral, not for review)
 docs/plans/
 
+
 # Gas Town (added by gt)
 .runtime/
-.claude/
+.claude/*
+!.claude/settings.json
 .logs/
 
 # Can be created by sandboxed agents
