@@ -244,14 +244,23 @@ def render_eval_summary(
         _print(assignment_table)
 
     if verbose:
-        _print("\n[bold cyan]Average Game Stats[/bold cyan]")
+        _print("\n[bold cyan]Average Game Stats (end-of-episode / time-averaged)[/bold cyan]")
         game_stats_table = Table(show_header=True, header_style="bold magenta")
         game_stats_table.add_column("Simulation")
         game_stats_table.add_column("Metric")
-        game_stats_table.add_column("Average", justify="right")
+        game_stats_table.add_column("End", justify="right")
+        game_stats_table.add_column("Avg", justify="right")
         for s_name, s in sim_summaries:
-            for key, value in s.avg_game_stats.items():
-                game_stats_table.add_row(s_name, key, f"{value:.2f}")
+            all_keys = sorted(set(s.avg_game_stats) | set(s.avg_time_averaged_game_stats))
+            for key in all_keys:
+                end_val = s.avg_game_stats.get(key)
+                avg_val = s.avg_time_averaged_game_stats.get(key)
+                game_stats_table.add_row(
+                    s_name,
+                    key,
+                    f"{end_val:.2f}" if end_val is not None else "-",
+                    f"{avg_val:.2f}" if avg_val is not None else "-",
+                )
         _print(game_stats_table)
 
     if verbose and any(policy.action_timeouts for s in summaries for policy in s.policy_summaries):
