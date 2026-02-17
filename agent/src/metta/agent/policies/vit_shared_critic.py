@@ -45,6 +45,8 @@ class ViTSharedCriticConfig(PolicyArchitecture):
     # Whether to torch.compile the trunk (Cortex stack)
     cortex_compile: bool = False
 
+    agents_per_env_slice: int | None = None
+
     components: List[ComponentConfig] = []
 
     action_probs_config: ActionProbsConfig = ActionProbsConfig(in_key="logits")
@@ -107,6 +109,7 @@ class ViTSharedCriticConfig(PolicyArchitecture):
                 name="shared_critic",
                 in_features=self.latent_dim,
                 hidden_features=[self.critic_hidden],
+                agents_per_env_slice=self.agents_per_env_slice,
             ),
             ActorHeadConfig(in_key="actor_hidden", out_key="logits", input_dim=self.actor_hidden),
         ]

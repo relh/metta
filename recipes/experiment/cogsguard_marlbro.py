@@ -167,17 +167,22 @@ def build_two_policy_role_train_tool(
         event_profiles=event_profiles,
     )
 
-    default_architecture = CnnSharedCriticConfig()
     policy_run_namespace = run or auto_run_name(prefix=run_name_prefix)
     tt.run = policy_run_namespace
 
-    policy_names = list(dict.fromkeys(policy_name for _, _, policy_name, _ in slice_configs))
+    # Build a mapping from policy_name -> agent_count for that slice.
+    policy_slice_agents: dict[str, int] = {}
+    for _, agent_count, policy_name, _ in slice_configs:
+        policy_slice_agents.setdefault(policy_name, agent_count)
+
     tt.policy_assets = {
         policy_name: PolicyAssetConfig(
             run=f"{policy_run_namespace}.{policy_name}",
-            architecture=policy_architecture or default_architecture,
+            architecture=(policy_architecture or CnnSharedCriticConfig()).model_copy(
+                update={"agents_per_env_slice": slice_agent_count}
+            ),
         )
-        for policy_name in policy_names
+        for policy_name, slice_agent_count in policy_slice_agents.items()
     }
 
     _set_role_id_assignment(tt.training_env.curriculum, role_ids)
