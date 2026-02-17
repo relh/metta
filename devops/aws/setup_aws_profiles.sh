@@ -120,6 +120,17 @@ EOF
   aws configure set profile.tournament-admin.sso_role_name AdministratorAccess
   aws configure set profile.tournament-admin.region us-east-1
 
+  # Set up sandbox profile (isolated account for dev sandboxes)
+  aws configure set profile.sandbox.sso_session softmax-sso
+  aws configure set profile.sandbox.sso_account_id 015142856185
+  aws configure set profile.sandbox.sso_role_name PowerUserAccess
+  aws configure set profile.sandbox.region us-east-1
+
+  aws configure set profile.sandbox-admin.sso_session softmax-sso
+  aws configure set profile.sandbox-admin.sso_account_id 015142856185
+  aws configure set profile.sandbox-admin.sso_role_name AdministratorAccess
+  aws configure set profile.sandbox-admin.region us-east-1
+
   echo "AWS profiles have been configured successfully."
 
   # Function to get the correct zshrc path based on ZDOTDIR
@@ -189,18 +200,12 @@ if [ "$IS_TEST_ENV" = "false" ]; then
     initialize_aws_config
   else
     # Check if we already have a valid token
+    # Always run initialize_aws_config to pick up new profiles (it's idempotent)
+    initialize_aws_config
+
     if check_sso_token; then
-      if ! has_sso_config; then
-        echo "Valid SSO token found but config is missing; initializing AWS config..."
-        initialize_aws_config
-      fi
       echo "Valid SSO token already exists for softmax-sso"
-      echo "Skip initialization as token is valid."
-      echo "Use --reset if you need to completely reset your AWS configuration."
       exit 0
-    else
-      echo "No valid SSO token found, initializing AWS config..."
-      initialize_aws_config
     fi
   fi
 

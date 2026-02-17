@@ -67,3 +67,14 @@ resource "spacelift_aws_integration" "tournament" {
   autoattach_enabled = true
   labels             = ["autoattach:tournament-aws"]
 }
+
+# Sandbox account integration
+# IAM role bootstrapped via devops/tf/sandbox-bootstrap/
+# Stacks in devops/tf/sandbox* should use label "autoattach:sandbox-aws"
+resource "spacelift_aws_integration" "sandbox" {
+  name               = "sandbox-aws"
+  role_arn           = "arn:aws:iam::015142856185:role/Spacelift"
+  duration_seconds   = 3600
+  autoattach_enabled = true
+  labels             = ["autoattach:sandbox-aws"]
+}
