@@ -175,6 +175,10 @@ jobs:
           languages: python
           api_key: ${{ secrets.DD_API_KEY }}
 
+      - name: Pre-pull Docker images for tests
+        if: needs.setup-checks.outputs.app_backend_has_changes == 'true'
+        run: docker pull postgres:17
+
       - name: Run Python tests
         shell: bash
         env:

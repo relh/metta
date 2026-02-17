@@ -38,19 +38,16 @@ def pytest_configure(config: pytest.Config):
 @pytest.fixture(scope="session")
 def postgres_container():
     """Create a PostgreSQL container for testing (session-scoped for performance)."""
-    try:
-        container = PostgresContainer(
-            image="postgres:17",
-            username="test_user",
-            password="test_password",
-            dbname="test_db",
-            driver=None,
-        )
-        container.start()
-        yield container
-        container.stop()
-    except Exception as e:
-        pytest.skip(f"Failed to start PostgreSQL container: {e}")
+    container = PostgresContainer(
+        image="postgres:17",
+        username="test_user",
+        password="test_password",
+        dbname="test_db",
+        driver=None,
+    )
+    container.start()
+    yield container
+    container.stop()
 
 
 TEMPLATE_DB_NAME = "test_template"

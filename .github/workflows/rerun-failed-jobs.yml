@@ -1,0 +1,24 @@
+name: "Rerun Failed Jobs"
+
+# Auto-rerun failed jobs on first attempt to handle infrastructure flakes
+# (network resets, Docker pull timeouts on cold runners, etc.)
+# Only reruns on attempt 1 to prevent infinite loops.
+on:
+  workflow_run:
+    workflows: ["Test and Benchmark"]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  rerun-on-failure:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt == 1
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - name: Rerun failed jobs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh run rerun ${{ github.event.workflow_run.id }} --failed --repo ${{ github.repository }}
