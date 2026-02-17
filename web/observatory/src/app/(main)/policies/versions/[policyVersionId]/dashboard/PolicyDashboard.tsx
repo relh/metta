@@ -1,7 +1,7 @@
 'use client'
 
-import { FC, useContext, useMemo, useState } from 'react'
-import Markdown from 'react-markdown'
+import { FC, useContext, useEffect, useMemo, useState } from 'react'
+import { AnalysisMarkdown } from './AnalysisMarkdown'
 import {
   ScatterChart,
   Scatter,
@@ -235,11 +235,24 @@ export const PolicyDashboard: FC<{
 }> = ({ policyVersionId, data }) => {
   const { repo } = useContext(AppContext)
   const [activeTab, setActiveTab] = useState<Tab>('overview')
-  const [analysis, setAnalysis] = useState<string | null>(null)
-  const [analysisDataSources, setAnalysisDataSources] = useState<string[]>([])
+
+  // Restore cached analysis from sessionStorage
+  const cacheKey = `analysis:${policyVersionId}`
+  const cached = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null
+  const cachedData = cached ? (JSON.parse(cached) as { analysis: string; dataSources: string[] }) : null
+
+  const [analysis, setAnalysis] = useState<string | null>(cachedData?.analysis ?? null)
+  const [analysisDataSources, setAnalysisDataSources] = useState<string[]>(cachedData?.dataSources ?? [])
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [showAnalysis, setShowAnalysis] = useState(true)
+
+  // Cache analysis to sessionStorage when it changes
+  useEffect(() => {
+    if (analysis) {
+      sessionStorage.setItem(cacheKey, JSON.stringify({ analysis, dataSources: analysisDataSources }))
+    }
+  }, [analysis, analysisDataSources, cacheKey])
 
   // Episode table sorting
   const [episodeSort, setEpisodeSort] = useState<string>('reward')
@@ -702,7 +715,7 @@ export const PolicyDashboard: FC<{
                 </div>
                 {showAnalysis && (
                   <div className="prose prose-sm dark:prose-invert max-w-none bg-surface-alt rounded-lg p-4 overflow-x-auto prose-headings:text-base prose-h1:text-lg prose-h1:font-semibold">
-                    <Markdown>{analysis}</Markdown>
+                    <AnalysisMarkdown text={analysis} data={data} />
                   </div>
                 )}
               </div>

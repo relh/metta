@@ -383,6 +383,32 @@ def down():
     )
 
 
+@app.command(name="restart", help="Restart one or more observatory services (e.g. metta observatory restart server)")
+@handle_errors
+def restart(
+    services: Annotated[list[str], typer.Argument(help="Services to restart")],
+):
+    for svc in services:
+        info(f"Restarting {svc}...")
+        subprocess.run(
+            ["process-compose", "process", "restart", svc, "-p", str(PROCESS_COMPOSE_PORT)],
+            check=True,
+        )
+
+
+@app.command(name="stop", help="Stop one or more observatory services (e.g. metta observatory stop server)")
+@handle_errors
+def stop(
+    services: Annotated[list[str], typer.Argument(help="Services to stop")],
+):
+    for svc in services:
+        info(f"Stopping {svc}...")
+        subprocess.run(
+            ["process-compose", "process", "stop", svc, "-p", str(PROCESS_COMPOSE_PORT)],
+            check=True,
+        )
+
+
 @app.command(
     name="postgres",
     context_settings={"allow_extra_args": True, "allow_interspersed_args": False},

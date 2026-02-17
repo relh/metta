@@ -523,6 +523,7 @@ def _build_snapshot(ep: DashboardEpisode) -> dict[str, Any]:
         "frz": round(m.get("status.frozen.ticks", 0)),
         "j_aln": round(m.get("junction.aligned_by_agent", 0)),
     }
+    snap["has_replay"] = bool(ep.replay_url)
     if ep.replay_url:
         snap["replay_url"] = ep.replay_url
     return snap
@@ -768,6 +769,8 @@ def build_analysis_prompt(summary: dict[str, Any]) -> str:
         " 4 sections. Do NOT repeat diagnostic messages"
         " verbatim — synthesize them into root causes"
         " and actionable advice.",
+        "",
+        "Reference episodes by their full ID and opponents by their exact name from the data.",
         "",
         "### Root Cause Analysis",
         "Connect multiple diagnostics and metrics to"

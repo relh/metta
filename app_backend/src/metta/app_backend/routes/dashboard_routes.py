@@ -296,8 +296,7 @@ def create_dashboard_router() -> APIRouter:
 
             steps = attributes.get("steps", 0)
 
-            # Capture replay_url from episode tags
-            replay_url = tags.get("replay_url")
+            replay_url = ep.replay_url
 
             dashboard_ep = DashboardEpisode(
                 episode_id=episode_id,
