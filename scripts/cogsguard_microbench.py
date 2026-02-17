@@ -10,9 +10,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from metta.cogworks.curriculum import Curriculum
 from metta.common.wandb.context import WandbConfig
 from metta.rl.torch_init import configure_torch_globally_for_performance
 from metta.rl.training import MicrobenchReporter, MicrobenchReporterConfig
+from metta.rl.training.batch import calculate_batch_sizes
 from recipes.experiment import cogsguard
 
 
@@ -39,6 +41,13 @@ def _best_effort_git_info() -> dict[str, str]:
     if branch:
         info["git_branch"] = branch
     return info
+
+
+def _largest_divisor_at_most(target: int, limit: int) -> int:
+    for divisor in range(min(target, limit), 0, -1):
+        if target % divisor == 0:
+            return divisor
+    return 1
 
 
 def main() -> int:
@@ -169,6 +178,22 @@ def main() -> int:
     tool.training_env.zero_copy = bool(args.zero_copy)
     tool.training_env.sync_traj = bool(args.sync_traj)
 
+    # Keep trainer batch geometry aligned with selected vecenv geometry.
+    # Experience requires: trainer.batch_size // bptt_horizon == total_parallel_agents.
+    curriculum = Curriculum(tool.training_env.curriculum)
+    num_agents = int(curriculum.get_task().get_env_cfg().game.num_agents)
+    _target_batch_size, env_batch_size, num_envs = calculate_batch_sizes(
+        forward_pass_minibatch_target_size=int(args.forward_pass_minibatch_target_size),
+        num_agents=num_agents,
+        num_workers=int(args.num_workers),
+        async_factor=int(args.async_factor),
+    )
+    total_parallel_agents = int(num_envs * num_agents)
+    bptt_horizon = int(tool.trainer.bptt_horizon)
+    tool.trainer.batch_size = total_parallel_agents * bptt_horizon
+    minibatch_segments = _largest_divisor_at_most(total_parallel_agents, 64)
+    tool.trainer.minibatch_size = minibatch_segments * bptt_horizon
+
     # StatsReporter already logs SPS and timing breakdowns; ensure it doesn't attempt wandb.
     tool.stats_reporter.report_to_wandb = False
     tool.stats_reporter.interval = 1
@@ -209,6 +234,11 @@ def main() -> int:
         "compile": bool(args.compile),
         "compile_mode": str(args.compile_mode),
         "torch_profiler": bool(args.torch_profiler),
+        "num_agents": num_agents,
+        "num_envs": num_envs,
+        "total_parallel_agents": total_parallel_agents,
+        "trainer_batch_size": int(tool.trainer.batch_size),
+        "trainer_minibatch_size": int(tool.trainer.minibatch_size),
         **_best_effort_git_info(),
     }
 
@@ -222,6 +252,10 @@ def main() -> int:
             run_metadata=run_metadata,
         )
     )
+
+    # Apply the same run/default mutations used by tools/run.py so invoke()
+    # sees a concrete run name and finalized policy/checkpoint settings.
+    tool.apply_defaults_and_mutations({"run": run})
 
     # Attach config snapshot for easier comparisons across artifacts.
     config_snapshot_path = out_path.with_name("microbench_config.json")

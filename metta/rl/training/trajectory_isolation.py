@@ -11,18 +11,13 @@ from tensordict import TensorDict
 
 from metta.rl.training.component import TrainerComponent
 from metta.rl.training.scheduler import ScheduleRule
+from metta.rl.utils import set_sequence_metadata
 from mettagrid.base_config import Config
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from metta.rl.training import Experience
-
-
-def _set_sequence_metadata(td: TensorDict, *, batch_size: int, time_steps: int = 1) -> None:
-    total = batch_size * time_steps
-    td.set("batch", torch.full((total,), batch_size, dtype=torch.long, device=td.device))
-    td.set("bptt", torch.full((total,), time_steps, dtype=torch.long, device=td.device))
 
 
 def _pad_tensor_like(slice_value: torch.Tensor, rollout_value: torch.Tensor) -> torch.Tensor:
@@ -64,6 +59,38 @@ def _pad_slice_td_like(slice_td: TensorDict, rollout_td: TensorDict | None) -> T
         padded_td.set(key, slice_value)
 
     return padded_td
+
+
+def _is_direct_writeback_compatible(slice_td: TensorDict, rollout_td: TensorDict) -> bool:
+    slice_keys = set(slice_td.keys())
+    rollout_keys = set(rollout_td.keys())
+    if slice_keys != rollout_keys:
+        return False
+
+    for key in rollout_keys:
+        slice_value = slice_td.get(key)
+        rollout_value = rollout_td.get(key)
+
+        if isinstance(rollout_value, TensorDict):
+            if not isinstance(slice_value, TensorDict):
+                return False
+            if not _is_direct_writeback_compatible(slice_value, rollout_value):
+                return False
+            continue
+
+        if isinstance(rollout_value, torch.Tensor):
+            if not isinstance(slice_value, torch.Tensor):
+                return False
+            if slice_value.shape != rollout_value.shape:
+                return False
+            if slice_value.dtype != rollout_value.dtype:
+                return False
+            continue
+
+        if type(slice_value) is not type(rollout_value):
+            return False
+
+    return True
 
 
 class RewardCenteringConfig(Config):
@@ -279,16 +306,16 @@ class TrajectoryIsolationSliceRuntime:
         if self.env_mask.numel() == 0:
             return None, None
 
-        env_indices = torch.arange(training_env_id.start, training_env_id.stop, device=td.device)
-        slice_mask = self.env_mask[env_indices]
+        slice_mask = self.env_mask[training_env_id]
 
         base_td = td[slice_mask]
         if base_td.batch_size.numel() == 0:
             return None, None
-        _set_sequence_metadata(base_td, batch_size=base_td.batch_size.numel(), time_steps=1)
+        set_sequence_metadata(base_td, batch_size=base_td.batch_size.numel(), time_steps=1)
         slice_td = TensorDict({}, batch_size=base_td.batch_size, device=base_td.device)
         for policy_name in self.cfg.policies:
-            slice_td.set(policy_name, base_td.clone())
+            # Keep policy containers independent while sharing immutable rollout inputs.
+            slice_td.set(policy_name, base_td.clone(recurse=False))
 
         return slice_td, slice_mask
 
@@ -350,8 +377,10 @@ class TrajectoryIsolator(TrainerComponent):
 
         # Latest per-slice TensorDict views created during rollout prep (ephemeral).
         self._slice_tds_rollout_step: dict[str, TensorDict] = {}
+        self._slice_row_indices_cache: dict[str, torch.Tensor] = {}
         self._slice_row_indices_sorted: dict[str, torch.Tensor] = {}
         self._slice_masks_rollout_step: dict[str, torch.Tensor] = {}
+        self._slice_writeback_mode: dict[str, Literal["direct", "pad"]] = {}
 
     def register(self, context) -> None:  # type: ignore[override]
         super().register(context)
@@ -439,29 +468,6 @@ class TrajectoryIsolator(TrainerComponent):
 
         return means
 
-    def sample_slice_minibatch(
-        self,
-        *,
-        experience: "Experience",
-        runtime_slice: TrajectoryIsolationSliceRuntime,
-        count: int,
-        mb_idx: int,
-        advantages: torch.Tensor,
-    ) -> TensorDict:
-        row_indices = self._slice_row_indices(experience, runtime_slice)
-        ordered_indices = self._sorted_slice_row_indices(experience, runtime_slice)
-        return experience.sample_from_indices(
-            indices=row_indices,
-            ordered_indices=ordered_indices,
-            count=count,
-            mb_idx=mb_idx,
-            advantages=advantages,
-            sampling_config=runtime_slice.cfg.sampling,
-            epoch=self.context.epoch,
-            total_timesteps=self.context.config.total_timesteps,
-            batch_size=self.context.config.batch_size,
-        )
-
     def _ensure_rand_assignments(self) -> None:
         # Only valid after register().
         # keep rand_assignments around: as we update every epoch, we want to try to keep the same trajectories
@@ -490,6 +496,7 @@ class TrajectoryIsolator(TrainerComponent):
         recompute every epoch.  For ``agent_count`` mode, assignment is deterministic
         and based on within-environment agent position.
         """
+        self._slice_row_indices_cache = {}
         self._slice_row_indices_sorted = {}
 
         if self.config.slicing_method == "agent_count":
@@ -618,6 +625,7 @@ class TrajectoryIsolator(TrainerComponent):
         """Create per-slice, policy-keyed TensorDicts for active envs."""
         self._slice_tds_rollout_step = {}
         self._slice_masks_rollout_step = {}
+        self._slice_writeback_mode = {}
 
         for runtime_slice in self._slice_plan:
             slice_td, slice_mask = runtime_slice._split_rollout_td_per_slice(
@@ -646,9 +654,13 @@ class TrajectoryIsolator(TrainerComponent):
             if not slices_with_policy:
                 continue
 
-            stitched_td = torch.cat(tds_with_policy, dim=0)
-            _set_sequence_metadata(stitched_td, batch_size=stitched_td.batch_size.numel(), time_steps=1)
-            split_sizes = [td.shape[0] for td in tds_with_policy]
+            split_sizes = [int(td.shape[0]) for td in tds_with_policy]
+            if len(tds_with_policy) == 1:
+                # Fast path: avoid cat/split churn when the policy serves a single active slice.
+                stitched_td = tds_with_policy[0]
+            else:
+                stitched_td = torch.cat(tds_with_policy, dim=0)
+            set_sequence_metadata(stitched_td, batch_size=stitched_td.batch_size.numel(), time_steps=1)
             batches.append(
                 RolloutPolicyBatch(
                     policy_name=policy_name,
@@ -661,9 +673,16 @@ class TrajectoryIsolator(TrainerComponent):
 
     def apply_rollout_policy_batch(self, batch: RolloutPolicyBatch) -> None:
         """Split a stitched policy TensorDict back into slice-specific TensorDicts."""
+        if len(batch.slices) == 1:
+            runtime_slice = batch.slices[0]
+            updated_td = batch.stitched_td
+            set_sequence_metadata(updated_td, batch_size=updated_td.batch_size.numel(), time_steps=1)
+            self._slice_tds_rollout_step[runtime_slice.name].set(batch.policy_name, updated_td)
+            return
+
         split_tds = batch.stitched_td.split(batch.split_sizes, dim=0)
         for runtime_slice, updated_td in zip(batch.slices, split_tds, strict=True):
-            _set_sequence_metadata(updated_td, batch_size=updated_td.batch_size.numel(), time_steps=1)
+            set_sequence_metadata(updated_td, batch_size=updated_td.batch_size.numel(), time_steps=1)
             self._slice_tds_rollout_step[runtime_slice.name].set(batch.policy_name, updated_td)
 
     def finalize_rollout_slices(self) -> None:
@@ -683,24 +702,53 @@ class TrajectoryIsolator(TrainerComponent):
                 mask = self._slice_masks_rollout_step[runtime_slice.name]
                 slice_td = self._slice_tds_rollout_step[runtime_slice.name]
                 rollout_slice_td = rollout_td[mask]
+                mode = self._slice_writeback_mode.get(runtime_slice.name)
+                if mode is None:
+                    mode = "direct" if _is_direct_writeback_compatible(slice_td, rollout_slice_td) else "pad"
+                    self._slice_writeback_mode[runtime_slice.name] = mode
+
+                if mode == "direct":
+                    try:
+                        rollout_td[mask] = slice_td
+                        continue
+                    except (RuntimeError, ValueError, KeyError, TypeError):
+                        self._slice_writeback_mode[runtime_slice.name] = "pad"
+
                 rollout_td[mask] = _pad_slice_td_like(slice_td, rollout_slice_td)
 
     def _slice_row_indices(
         self, experience: "Experience", runtime_slice: TrajectoryIsolationSliceRuntime
     ) -> torch.Tensor:
+        cached = self._slice_row_indices_cache.get(runtime_slice.name)
+        if cached is not None:
+            return cached
+
         agent_slot_ids = experience.buffer["agent_slot_ids"][:, 0, 0].to(
             dtype=torch.long,
             device=experience.device,
         )
 
-        slice_agent_slot_ids = torch.nonzero(runtime_slice.env_mask, as_tuple=False).flatten()
-        if slice_agent_slot_ids.numel() == 0:
-            return torch.empty((0,), device=experience.device, dtype=torch.long)
-        if slice_agent_slot_ids.device != experience.device:
-            slice_agent_slot_ids = slice_agent_slot_ids.to(device=experience.device)
+        slice_mask_by_agent_slot = runtime_slice.env_mask.to(device=experience.device, dtype=torch.bool)
+        if slice_mask_by_agent_slot.numel() == 0:
+            empty = torch.empty((0,), device=experience.device, dtype=torch.long)
+            self._slice_row_indices_cache[runtime_slice.name] = empty
+            return empty
 
-        mask = torch.isin(agent_slot_ids, slice_agent_slot_ids)
-        return torch.nonzero(mask, as_tuple=False).flatten().to(dtype=torch.long)
+        # Fast path: slice mask is keyed by agent-slot id.
+        if (
+            agent_slot_ids.numel()
+            and 0 <= int(agent_slot_ids.min())
+            and int(agent_slot_ids.max()) < int(slice_mask_by_agent_slot.numel())
+        ):
+            mask = slice_mask_by_agent_slot.index_select(0, agent_slot_ids)
+        else:
+            # Defensive fallback for malformed/out-of-range slot ids.
+            slice_agent_slot_ids = torch.nonzero(slice_mask_by_agent_slot, as_tuple=False).flatten()
+            mask = torch.isin(agent_slot_ids, slice_agent_slot_ids)
+
+        row_indices = torch.nonzero(mask, as_tuple=False).flatten().to(dtype=torch.long)
+        self._slice_row_indices_cache[runtime_slice.name] = row_indices
+        return row_indices
 
     def _sorted_slice_row_indices(
         self, experience: "Experience", runtime_slice: TrajectoryIsolationSliceRuntime

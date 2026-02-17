@@ -94,6 +94,13 @@ class TrainerConfig(Config):
     compile: bool = False
     compile_mode: Literal["default", "reduce-overhead", "max-autotune"] = "reduce-overhead"
     detect_anomaly: bool = Field(default=False)
+    cuda_sync_after_optimizer_step: bool = Field(
+        default=False,
+        description=(
+            "Debug-only fence to force CUDA synchronization after optimizer steps. "
+            "Disabled by default to avoid hot-loop stalls."
+        ),
+    )
 
     heartbeat: Optional[HeartbeatConfig] = Field(default_factory=HeartbeatConfig)
 

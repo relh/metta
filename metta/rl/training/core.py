@@ -656,6 +656,9 @@ class CoreTrainingLoop:
         primary_policy_slices = self.trajectory_isolator.training_phase_primary_policy_slices
         policy_specs = self.trajectory_isolator.training_phase_policy_specs
         policy_slice_counts = self.trajectory_isolator.training_phase_policy_slice_counts
+        distributed_world_size = self.context.distributed.get_world_size()
+        distributed_sync_period = max(1, self.accumulate_minibatches * 8)
+        cuda_sync_after_optimizer_step = bool(getattr(self.context.config, "cuda_sync_after_optimizer_step", False))
 
         self.experience.reset_importance_sampling_ratios()
 
@@ -721,51 +724,88 @@ class CoreTrainingLoop:
                     if policy_optimizer is None:
                         continue
 
-                    slice_mb_data: list[tuple[Any, TensorDict]] = []
+                    # Sample indices per slice, then clone/gather once per policy and slice via offsets.
+                    # This avoids per-slice sampled_mb clones and per-policy cat/split churn.
+                    bptt_horizon = int(self.experience.bptt_horizon)
+                    slice_samples: list[tuple[Any, int]] = []
+                    sampled_idx_chunks: list[torch.Tensor] = []
+                    prio_weights_chunks: list[torch.Tensor] = []
+
                     for runtime_slice in slices_with_policy:
-                        count = policy_slice_counts[policy_name].get(runtime_slice.name, 0)
-                        mb_data = self.trajectory_isolator.sample_slice_minibatch(
-                            experience=self.experience,
-                            runtime_slice=runtime_slice,
+                        count = int(policy_slice_counts[policy_name].get(runtime_slice.name, 0))
+                        if count <= 0:
+                            continue
+                        row_indices = self.trajectory_isolator._slice_row_indices(self.experience, runtime_slice)
+                        ordered_indices = self.trajectory_isolator._sorted_slice_row_indices(
+                            self.experience, runtime_slice
+                        )
+                        sampled_idx, prio_weights = self.experience.sample_indices_and_weights(
+                            indices=row_indices,
+                            ordered_indices=ordered_indices,
                             count=count,
                             mb_idx=mb_idx,
                             advantages=advantages_full,
+                            sampling_config=runtime_slice.cfg.sampling,
+                            epoch=self.context.epoch,
+                            total_timesteps=self.context.config.total_timesteps,
+                            batch_size=self.context.config.batch_size,
                         )
-                        if mb_idx == 0:
-                            mb_data["advantages_full"] = NonTensorData(advantages_full)
-                        slice_mb_data.append((runtime_slice, mb_data))
+                        if sampled_idx.numel() == 0:
+                            continue
+                        slice_samples.append((runtime_slice, count))
+                        sampled_idx_chunks.append(sampled_idx)
+                        prio_weights_chunks.append(prio_weights)
 
-                    tds_for_policy = [mb["sampled_mb"] for _slice, mb in slice_mb_data]
-                    total_segments = sum(int(td.batch_size[0]) for td in tds_for_policy)
-                    if total_segments == 0:
+                    if not slice_samples:
                         continue
 
-                    stitched_td = torch.cat(tds_for_policy, dim=0)
-                    policy_td = forward_policy_for_training(policy, stitched_td, policy_specs[policy_name])
+                    if len(sampled_idx_chunks) == 1:
+                        policy_sampled_idx = sampled_idx_chunks[0]
+                        policy_prio_weights = prio_weights_chunks[0]
+                    else:
+                        policy_sampled_idx = torch.cat(sampled_idx_chunks, dim=0)
+                        policy_prio_weights = torch.cat(prio_weights_chunks, dim=0)
 
-                    split_sizes = [int(td.batch_size[0]) for td in tds_for_policy]
-                    split_policy_tds = policy_td.split(split_sizes, dim=0)
+                    # Clone once for the policy to preserve "no views into replay buffer" invariants.
+                    policy_sampled_mb = self.experience.buffer[policy_sampled_idx].clone()
+                    policy_td = forward_policy_for_training(policy, policy_sampled_mb, policy_specs[policy_name])
+
+                    policy_indices_bt = policy_sampled_idx[:, None].expand(-1, bptt_horizon)
+                    policy_advantages = advantages_full[policy_sampled_idx]
 
                     used_keys: set[str] = set()
                     total_loss = torch.tensor(0.0, dtype=torch.float32, device=self.device)
-                    for (runtime_slice, mb_data), policy_split_td in zip(slice_mb_data, split_policy_tds, strict=True):
+                    offset = 0
+                    for runtime_slice, count in slice_samples:
                         context.current_slice_cfg = runtime_slice.cfg
-                        mb_data["policy_td"] = policy_split_td
-                        sampled_mb = mb_data["sampled_mb"]
-                        if "act_log_prob" in sampled_mb.keys() and "act_log_prob" in policy_split_td.keys():
-                            old_logprob = sampled_mb["act_log_prob"]
-                            new_logprob = policy_split_td["act_log_prob"].reshape(old_logprob.shape)
+
+                        mb_view = policy_sampled_mb[offset : offset + count]
+                        td_view = policy_td[offset : offset + count]
+                        mb_data = TensorDict({}, batch_size=(count, bptt_horizon), device=self.device)
+                        mb_data["sampled_mb"] = mb_view
+                        mb_data["policy_td"] = td_view
+                        mb_data["indices"] = policy_indices_bt[offset : offset + count]
+                        mb_data["advantages"] = policy_advantages[offset : offset + count]
+                        mb_data["prio_weights"] = policy_prio_weights[offset : offset + count]
+                        if mb_idx == 0:
+                            mb_data["advantages_full"] = NonTensorData(advantages_full)
+
+                        if "act_log_prob" in mb_view.keys() and "act_log_prob" in td_view.keys():
+                            old_logprob = mb_view["act_log_prob"]
+                            new_logprob = td_view["act_log_prob"].reshape(old_logprob.shape)
                             logratio = torch.clamp(new_logprob - old_logprob, -10, 10)
                             mb_data["importance_sampling_ratio"] = logratio.exp()
 
                         for loss_key in runtime_slice.cfg.losses:
                             loss_obj = self.losses[loss_key]
                             if loss_obj._loss_gate_allows("train", context):
-                                used_keys.update(loss_obj.policy_output_keys(policy_split_td))
+                                used_keys.update(loss_obj.policy_output_keys(td_view))
                             loss_val, mb_data, loss_requests_stop = loss_obj.train(mb_data, context, mb_idx)
                             total_loss = total_loss + loss_val
                             stop_update_epoch_mb = stop_update_epoch_mb or loss_requests_stop
+
                         context.current_slice_cfg = None
+                        offset += count
 
                     if stop_update_epoch_mb:
                         stop_update_epoch = True
@@ -789,9 +829,11 @@ class CoreTrainingLoop:
 
                         torch.nn.utils.clip_grad_norm_(policy.parameters(), actual_max_grad_norm)
                         policy_optimizer.step()
-
-                        if self.device.type == "cuda":
-                            torch.cuda.synchronize()
+                        if cuda_sync_after_optimizer_step and self.device.type == "cuda":
+                            if distributed_world_size == 1:
+                                torch.cuda.synchronize()
+                            elif (mb_idx + 1) % distributed_sync_period == 0:
+                                torch.cuda.synchronize()
 
                 # Notify losses of minibatch end
                 if stop_update_epoch:

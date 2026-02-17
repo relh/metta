@@ -241,3 +241,30 @@ class TestBackpressureRolloutPattern:
 
         assert exp.ready_for_training
         assert exp.full_rows == 4
+
+
+class TestPrefilteredStorePath:
+    """Fast-path store() behavior when rollout prefilters TensorDict keys."""
+
+    def test_prefiltered_store_accepts_preselected_keys(self) -> None:
+        exp = _make_experience(total_agents=4, bptt_horizon=2)
+        exp.reset_for_rollout()
+        exp.set_store_keys(["reward_baseline", "agent_slot_ids"])
+
+        td = _make_step_td(0, 2).select("reward_baseline", "agent_slot_ids")
+        exp.store(td, slice(0, 2), prefiltered=True)
+
+        assert int(exp.t_in_row[0].item()) == 1
+        assert int(exp.t_in_row[1].item()) == 1
+        # rewards are not part of the active store keys in this test.
+        torch.testing.assert_close(exp.buffer["rewards"][0, 0], torch.tensor(0.0))
+        torch.testing.assert_close(exp.buffer["rewards"][1, 0], torch.tensor(0.0))
+
+    def test_prefiltered_store_raises_for_missing_active_keys(self) -> None:
+        exp = _make_experience(total_agents=4, bptt_horizon=2)
+        exp.reset_for_rollout()
+        # Default store keys include "rewards".
+        td_missing_key = _make_step_td(0, 2).select("reward_baseline", "agent_slot_ids")
+
+        with pytest.raises(KeyError):
+            exp.store(td_missing_key, slice(0, 2), prefiltered=True)

@@ -243,13 +243,14 @@ class Experience:
 
         # Keys to use when writing into the buffer; defaults to all spec keys. Scheduler updates per loss gate activity.
         self._store_keys: List[Any] = list(self.buffer.keys(include_nested=True, leaves_only=True))
+        self._store_buffer = self.buffer.select(*self._store_keys)
 
     @property
     def ready_for_training(self) -> bool:
         """Check if buffer has enough data for training."""
         return self.full_rows >= self.segments
 
-    def store(self, data_td: TensorDict, env_id: slice) -> None:
+    def store(self, data_td: TensorDict, env_id: slice, *, prefiltered: bool = False) -> None:
         """Store a batch of experience.
 
         Raises if called for agents whose segments are already full. This catches
@@ -280,7 +281,15 @@ class Experience:
         if self._store_keys:
             row_ids = self.row_slot_ids[env_ids]
             t_in_row = self.t_in_row[env_ids]
-            self.buffer.update_at_(data_td.select(*self._store_keys), (row_ids, t_in_row))
+            if prefiltered:
+                # Fast path used by rollout: td is already projected to store keys.
+                td_keys = set(data_td.keys(include_nested=True, leaves_only=True))
+                missing = [key for key in self._store_keys if key not in td_keys]
+                if missing:
+                    raise KeyError(f"Prefiltered store td is missing required keys: {missing}")
+                self._store_buffer.update_at_(data_td, (row_ids, t_in_row))
+            else:
+                self._store_buffer.update_at_(data_td.select(*self._store_keys), (row_ids, t_in_row))
         else:
             raise ValueError("No store keys set. set_store_keys() was likely used incorrectly.")
 
@@ -362,6 +371,7 @@ class Experience:
         if missing_required:
             raise ValueError(f"Attempted to drop required experience keys: {missing_required}")
         self._store_keys = list(keys)
+        self._store_buffer = self.buffer.select(*self._store_keys)
 
     def required_store_keys(self) -> List[Any]:
         """Keys that should always be written into the experience buffer when present."""
@@ -371,6 +381,7 @@ class Experience:
     def reset_store_keys(self) -> None:
         """Reset store keys so that all spec keys are written on store."""
         self._store_keys = list(self.buffer.keys(include_nested=True, leaves_only=True))
+        self._store_buffer = self.buffer.select(*self._store_keys)
 
     def sample_from_indices(
         self,
@@ -385,17 +396,61 @@ class Experience:
         total_timesteps: int,
         batch_size: int,
     ) -> TensorDict:
+        device = self.device
+        sampled_idx, prio_weights = self.sample_indices_and_weights(
+            indices=indices,
+            ordered_indices=ordered_indices,
+            count=count,
+            mb_idx=mb_idx,
+            advantages=advantages,
+            sampling_config=sampling_config,
+            epoch=epoch,
+            total_timesteps=total_timesteps,
+            batch_size=batch_size,
+        )
+
+        bptt_horizon = self.bptt_horizon
+        if sampled_idx.numel() == 0:
+            shared_loss_mb_data = TensorDict({}, batch_size=(0, bptt_horizon), device=device)
+            shared_loss_mb_data["sampled_mb"] = self.buffer[sampled_idx].clone()
+            shared_loss_mb_data["indices"] = sampled_idx[:, None].expand(-1, bptt_horizon)
+            shared_loss_mb_data["advantages"] = torch.empty((0, bptt_horizon), device=device, dtype=advantages.dtype)
+            shared_loss_mb_data["prio_weights"] = prio_weights
+            return shared_loss_mb_data
+
+        minibatch = self.buffer[sampled_idx].clone()
+        shared_loss_mb_data = TensorDict({}, batch_size=minibatch.batch_size, device=device)
+        shared_loss_mb_data["prio_weights"] = prio_weights
+        shared_loss_mb_data["sampled_mb"] = minibatch
+        shared_loss_mb_data["indices"] = sampled_idx[:, None].expand(-1, bptt_horizon)
+        shared_loss_mb_data["advantages"] = advantages[sampled_idx]
+        return shared_loss_mb_data
+
+    def sample_indices_and_weights(
+        self,
+        *,
+        indices: Tensor,
+        ordered_indices: Tensor | None = None,
+        count: int,
+        mb_idx: int,
+        advantages: Tensor,
+        sampling_config: Any,
+        epoch: int,
+        total_timesteps: int,
+        batch_size: int,
+    ) -> tuple[Tensor, Tensor]:
+        """Sample row indices (and importance sampling weights) without cloning the replay buffer.
+
+        The trainer uses this to assemble one minibatch per policy (clone/gather once) and then slice by offsets,
+        avoiding per-slice minibatch cloning and per-policy cat/split churn.
+        """
         bptt_horizon = self.bptt_horizon
         device = self.device
 
         if count <= 0 or indices.numel() == 0:
             empty_idx = torch.empty((0,), device=device, dtype=torch.long)
-            shared_loss_mb_data = TensorDict({}, batch_size=(0, bptt_horizon), device=device)
-            shared_loss_mb_data["sampled_mb"] = self.buffer[empty_idx].clone()
-            shared_loss_mb_data["indices"] = empty_idx[:, None].expand(-1, bptt_horizon)
-            shared_loss_mb_data["advantages"] = torch.empty((0, bptt_horizon), device=device, dtype=advantages.dtype)
-            shared_loss_mb_data["prio_weights"] = torch.empty((0, bptt_horizon), device=device, dtype=torch.float32)
-            return shared_loss_mb_data
+            prio_weights = torch.empty((0, bptt_horizon), device=device, dtype=torch.float32)
+            return empty_idx, prio_weights
 
         indices = indices.to(device=device, dtype=torch.long)
         total = indices.numel()
@@ -426,13 +481,7 @@ class Experience:
             sampled_idx = self._sample_sequential_indices(indices, count, mb_idx, ordered_indices)
             prio_weights = torch.ones((count, bptt_horizon), device=device, dtype=torch.float32)
 
-        minibatch = self.buffer[sampled_idx].clone()
-        shared_loss_mb_data = TensorDict({}, batch_size=minibatch.batch_size, device=device)
-        shared_loss_mb_data["prio_weights"] = prio_weights
-        shared_loss_mb_data["sampled_mb"] = minibatch
-        shared_loss_mb_data["indices"] = sampled_idx[:, None].expand(-1, bptt_horizon)
-        shared_loss_mb_data["advantages"] = advantages[sampled_idx]
-        return shared_loss_mb_data
+        return sampled_idx, prio_weights
 
     def _sample_sequential_indices(
         self, indices: Tensor, count: int, mb_idx: int, ordered_indices: Tensor | None = None

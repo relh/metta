@@ -27,8 +27,9 @@ class _FakeExperience:
         self.ready_for_training = False
         self.stored_td = None
 
-    def store(self, data_td: TensorDict, env_id: slice) -> None:
+    def store(self, data_td: TensorDict, env_id: slice, *, prefiltered: bool = False) -> None:
         _ = env_id
+        _ = prefiltered
         self.stored_td = data_td.clone()
         self.ready_for_training = True
 

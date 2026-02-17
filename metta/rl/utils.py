@@ -66,6 +66,24 @@ def ensure_sequence_metadata(
         td.set("bptt", bptt_tensor)
 
 
+def set_sequence_metadata(
+    td: TensorDict,
+    *,
+    batch_size: int,
+    time_steps: int,
+    cache: dict[tuple[str, int, int], tuple[Tensor, Tensor]] | None = None,
+) -> None:
+    """Set sequence metadata on ``td``, overwriting any existing values.
+
+    This is required after operations like ``torch.cat`` and ``split`` where metadata tensors
+    may be present but no longer reflect the new batch/time geometry.
+    """
+    device = _infer_tensordict_device(td)
+    batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, batch_size, time_steps, cache=cache)
+    td.set("batch", batch_tensor)
+    td.set("bptt", bptt_tensor)
+
+
 def prepare_policy_forward_td(
     minibatch: TensorDict,
     spec: Composite,
