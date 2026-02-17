@@ -27,6 +27,7 @@ class DashboardEpisode(BaseModel):
     error_type: str | None = None
     steps: int = 0
     metrics: dict[str, Any] = {}
+    replay_url: str | None = None
 
 
 class DerivedMetrics(BaseModel):
@@ -107,6 +108,7 @@ class DashboardDerived(BaseModel):
     kpis: DerivedMetrics
     team_comp: list[TeamCompStats]
     opponent_metrics: dict[str, OpponentStats]
+    episode_logs: dict[str, Any] | None = None
 
 
 class DashboardResponse(BaseModel):
@@ -467,6 +469,145 @@ def compute_opponent_metrics(episodes: list[DashboardEpisode]) -> dict[str, Oppo
     return result
 
 
+# === Episode stats for Claude analysis ===
+
+_CORRELATION_METRICS = [
+    "action.move.success",
+    "action.move.failed",
+    "action.noop.success",
+    "junction.aligned_by_agent",
+    "junction.scrambled_by_agent",
+    "status.frozen.ticks",
+    "heart.gained",
+    "carbon.gained",
+    "action.change_vibe.success",
+]
+
+
+def compute_reward_correlations(episodes: list[DashboardEpisode]) -> dict[str, float]:
+    """Pearson correlation of key metrics with reward across episodes."""
+    completed = [e for e in episodes if e.status == "completed"]
+    if len(completed) < 5:
+        return {}
+
+    rewards = [e.reward for e in completed]
+    n = len(rewards)
+    mean_r = sum(rewards) / n
+
+    correlations: dict[str, float] = {}
+    for metric in _CORRELATION_METRICS:
+        vals = [e.metrics.get(metric, 0.0) for e in completed]
+        mean_v = sum(vals) / n
+        cov = sum((rewards[i] - mean_r) * (vals[i] - mean_v) for i in range(n))
+        var_r = sum((rewards[i] - mean_r) ** 2 for i in range(n))
+        var_v = sum((vals[i] - mean_v) ** 2 for i in range(n))
+        denom = (var_r * var_v) ** 0.5
+        if denom > 0:
+            correlations[metric] = round(cov / denom, 4)
+
+    return correlations
+
+
+def _build_snapshot(ep: DashboardEpisode) -> dict[str, Any]:
+    """Build a compact ~230-byte snapshot of an episode."""
+    m = ep.metrics
+    snap: dict[str, Any] = {
+        "id": ep.episode_id,
+        "opp": ep.opponent_name,
+        "comp": ep.team_composition,
+        "r": round(ep.reward, 2),
+        "steps": ep.steps,
+        "mv_s": round(m.get("action.move.success", 0)),
+        "mv_f": round(m.get("action.move.failed", 0)),
+        "noop": round(m.get("action.noop.success", 0)),
+        "frz": round(m.get("status.frozen.ticks", 0)),
+        "j_aln": round(m.get("junction.aligned_by_agent", 0)),
+    }
+    if ep.replay_url:
+        snap["replay_url"] = ep.replay_url
+    return snap
+
+
+def compute_episode_logs(episodes: list[DashboardEpisode]) -> dict[str, Any]:
+    """Compute episode-level stats for Claude analysis.
+
+    Returns:
+        - reward_correlations: Pearson correlation of metrics with reward
+        - top_vs_bottom: avg metrics for top 20% vs bottom 20%
+        - episode_snapshots: stratified sample of ~16 episodes
+    """
+    completed = [e for e in episodes if e.status == "completed"]
+    if not completed:
+        return {}
+
+    correlations = compute_reward_correlations(episodes)
+
+    # Top vs bottom comparison
+    sorted_eps = sorted(completed, key=lambda e: e.reward)
+    n = len(sorted_eps)
+    bottom_n = max(1, n // 5)
+    top_n = max(1, n // 5)
+    bottom = sorted_eps[:bottom_n]
+    top = sorted_eps[-top_n:]
+
+    def avg_metrics(eps: list[DashboardEpisode]) -> dict[str, float]:
+        if not eps:
+            return {}
+        agg: dict[str, float] = {}
+        for e in eps:
+            for k, v in e.metrics.items():
+                if isinstance(v, (int, float)):
+                    agg[k] = agg.get(k, 0) + v
+        count = len(eps)
+        return {k: round(v / count, 2) for k, v in agg.items()}
+
+    top_vs_bottom = {
+        "top_20_avg_reward": round(sum(e.reward for e in top) / len(top), 4),
+        "bottom_20_avg_reward": round(sum(e.reward for e in bottom) / len(bottom), 4),
+        "top_20_metrics": avg_metrics(top),
+        "bottom_20_metrics": avg_metrics(bottom),
+    }
+
+    # Episode snapshots: stratified sample
+    seen_ids: set[str] = set()
+    snapshots: list[dict] = []
+
+    def add_episodes(eps: list[DashboardEpisode], label: str, max_count: int):
+        for e in eps:
+            if e.episode_id not in seen_ids and len(snapshots) < 16:
+                seen_ids.add(e.episode_id)
+                snap = _build_snapshot(e)
+                snap["bucket"] = label
+                snapshots.append(snap)
+                if sum(1 for s in snapshots if s["bucket"] == label) >= max_count:
+                    break
+
+    # Top 5
+    add_episodes(sorted_eps[-5:][::-1], "top", 5)
+    # Bottom 5
+    add_episodes(sorted_eps[:5], "bottom", 5)
+
+    # Worst matchup (3)
+    by_opp: dict[str, list[DashboardEpisode]] = {}
+    for e in completed:
+        by_opp.setdefault(e.opponent_name, []).append(e)
+    opp_avgs = {opp: sum(e.reward for e in eps) / len(eps) for opp, eps in by_opp.items() if len(eps) >= 2}
+    if opp_avgs:
+        worst_opp = min(opp_avgs, key=opp_avgs.get)  # type: ignore[arg-type]
+        worst_opp_eps = sorted(by_opp[worst_opp], key=lambda e: e.reward)
+        add_episodes(worst_opp_eps[:3], "worst_matchup", 3)
+
+    # Behavioral outliers: highest freeze or noop
+    by_freeze = sorted(completed, key=lambda e: e.metrics.get("status.frozen.ticks", 0), reverse=True)
+    add_episodes(by_freeze[:3], "outlier", 3)
+
+    return {
+        "reward_correlations": correlations,
+        "top_vs_bottom": top_vs_bottom,
+        "episode_snapshots": snapshots,
+    }
+
+
 # === Claude analysis helpers ===
 
 
@@ -508,7 +649,7 @@ def build_analysis_summary(
         move_eff = move_s / (move_s + move_f) if (move_s + move_f) > 0 else 0
         j_control = j_aligned / j_total if j_total > 0 else 0
 
-        opponent_summary[opp] = {
+        opp_entry: dict[str, Any] = {
             "count": n,
             "avg_reward": round(sum(opp_rewards) / n, 4),
             "strategy_profile": {
@@ -518,6 +659,17 @@ def build_analysis_summary(
                 "mobile_scout": round(min(100, move_eff * 50 + (1 - noop_rate_p) * 50), 2),
             },
         }
+        if n >= 2:
+            opp_entry["reward_std"] = round(statistics.stdev(opp_rewards), 4)
+        if n >= 4:
+            mid = n // 2
+            first_half_avg = sum(opp_rewards[:mid]) / mid
+            second_half_avg = sum(opp_rewards[mid:]) / (n - mid)
+            opp_entry["temporal"] = {
+                "first_half_avg": round(first_half_avg, 4),
+                "second_half_avg": round(second_half_avg, 4),
+            }
+        opponent_summary[opp] = opp_entry
 
     # Team comp stats
     team_comp_summary: dict[str, list[float]] = {}
@@ -621,24 +773,35 @@ def build_analysis_prompt(summary: dict[str, Any]) -> str:
         "Connect multiple diagnostics and metrics to"
         " identify underlying causes. Look for patterns"
         " across KPIs, matchups, and team compositions"
-        " that point to the same root issue.",
+        " that point to the same root issue."
+        " Ground in specific episodes from episode_snapshots."
+        " If replay_summaries exist, identify when in the"
+        " game problems emerge (early vs late)."
+        " Cite top_vs_bottom metric gaps.",
         "",
         "### Top 3 Training Priorities",
         "Rank by expected ROI. For each priority, specify"
         " concrete changes: reward shaping adjustments,"
         " curriculum modifications, hyperparameter changes,"
-        " or architectural improvements.",
+        " or architectural improvements."
+        " Use reward_correlations to justify which metrics"
+        " yield highest ROI. If reward_shape is frontloaded,"
+        " suggest late-game incentives.",
         "",
         "### Opponent Adaptation",
         "For low-performing matchups, analyze the"
         " opponent's strategy profile and suggest"
         " counter-strategies. If no matchup data exists,"
-        " skip this section.",
+        " skip this section."
+        " Use per-opponent temporal trends to note if"
+        " opponents are adapting over time.",
         "",
         "### Policy Narrative",
         "A plain-language description (2-3 sentences) of"
         ' what this policy "feels like" — its personality,'
         " strengths, and blind spots. Write this for"
-        " someone who hasn't seen the data.",
+        " someone who hasn't seen the data."
+        " Reference replay temporal patterns to describe"
+        " the policy's game rhythm.",
     ]
     return "\n".join(sections)

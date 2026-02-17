@@ -18,8 +18,8 @@ export default async function DashboardPage(props: PageProps<'/policies/versions
       <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase text-gray-500 tracking-wide">Policy Dashboard</p>
-          <h1 className="text-2xl font-semibold text-gray-900">{policyDisplay}</h1>
+          <p className="text-xs font-semibold uppercase text-foreground-muted tracking-wide">Policy Dashboard</p>
+          <h1 className="text-2xl font-semibold text-foreground">{policyDisplay}</h1>
         </div>
         <LinkButton href={`/policies/versions/${policyVersionId}`} theme="tertiary">
           &larr; Back to policy version

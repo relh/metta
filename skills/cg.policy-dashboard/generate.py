@@ -1073,6 +1073,118 @@ def data_to_dict(data: DashboardData) -> dict:
     }
 
 
+_CORRELATION_METRICS = [
+    "action.move.success",
+    "action.move.failed",
+    "action.noop.success",
+    "junction.aligned_by_agent",
+    "junction.scrambled_by_agent",
+    "status.frozen.ticks",
+    "heart.gained",
+    "carbon.gained",
+    "action.change_vibe.success",
+]
+
+
+def _build_snapshot(ep: EpisodeData) -> dict[str, Any]:
+    """Build a compact snapshot of an episode."""
+    m = ep.metrics
+    return {
+        "id": ep.episode_id[:8],
+        "opp": ep.opponent_name,
+        "comp": ep.team_composition,
+        "r": round(ep.reward, 2),
+        "steps": ep.steps,
+        "mv_s": round(m.get("action.move.success", 0)),
+        "mv_f": round(m.get("action.move.failed", 0)),
+        "noop": round(m.get("action.noop.success", 0)),
+        "frz": round(m.get("status.frozen.ticks", 0)),
+        "j_aln": round(m.get("junction.aligned_by_agent", 0)),
+    }
+
+
+def _compute_episode_logs(completed: list[EpisodeData]) -> dict[str, Any]:
+    """Compute episode-level stats for Claude analysis."""
+    if not completed:
+        return {}
+
+    # Reward-metric correlations
+    n = len(completed)
+    rewards = [e.reward for e in completed]
+    correlations: dict[str, float] = {}
+    if n >= 5:
+        mean_r = sum(rewards) / n
+        for metric in _CORRELATION_METRICS:
+            vals = [e.metrics.get(metric, 0.0) for e in completed]
+            mean_v = sum(vals) / n
+            cov = sum((rewards[i] - mean_r) * (vals[i] - mean_v) for i in range(n))
+            var_r = sum((rewards[i] - mean_r) ** 2 for i in range(n))
+            var_v = sum((vals[i] - mean_v) ** 2 for i in range(n))
+            denom = (var_r * var_v) ** 0.5
+            if denom > 0:
+                correlations[metric] = round(cov / denom, 4)
+
+    # Top vs bottom
+    sorted_eps = sorted(completed, key=lambda e: e.reward)
+    bottom_n = max(1, n // 5)
+    top_n = max(1, n // 5)
+    bottom = sorted_eps[:bottom_n]
+    top = sorted_eps[-top_n:]
+
+    def avg_metrics(eps: list[EpisodeData]) -> dict[str, float]:
+        if not eps:
+            return {}
+        agg: dict[str, float] = {}
+        for e in eps:
+            for k, v in e.metrics.items():
+                if isinstance(v, (int, float)):
+                    agg[k] = agg.get(k, 0) + v
+        count = len(eps)
+        return {k: round(v / count, 2) for k, v in agg.items()}
+
+    top_vs_bottom = {
+        "top_20_avg_reward": round(sum(e.reward for e in top) / len(top), 4),
+        "bottom_20_avg_reward": round(sum(e.reward for e in bottom) / len(bottom), 4),
+        "top_20_metrics": avg_metrics(top),
+        "bottom_20_metrics": avg_metrics(bottom),
+    }
+
+    # Episode snapshots
+    seen_ids: set[str] = set()
+    snapshots: list[dict] = []
+
+    def add_episodes(eps: list[EpisodeData], label: str, max_count: int):
+        for e in eps:
+            if e.episode_id not in seen_ids and len(snapshots) < 16:
+                seen_ids.add(e.episode_id)
+                snap = _build_snapshot(e)
+                snap["bucket"] = label
+                snapshots.append(snap)
+                if sum(1 for s in snapshots if s["bucket"] == label) >= max_count:
+                    break
+
+    add_episodes(sorted_eps[-5:][::-1], "top", 5)
+    add_episodes(sorted_eps[:5], "bottom", 5)
+
+    by_opp: dict[str, list[EpisodeData]] = {}
+    for e in completed:
+        by_opp.setdefault(e.opponent_name, []).append(e)
+    opp_avgs = {opp: sum(e.reward for e in eps) / len(eps) for opp, eps in by_opp.items() if len(eps) >= 2}
+    if opp_avgs:
+        worst_opp = min(opp_avgs, key=opp_avgs.get)  # type: ignore[arg-type]
+        worst_opp_eps = sorted(by_opp[worst_opp], key=lambda e: e.reward)
+        add_episodes(worst_opp_eps[:3], "worst_matchup", 3)
+
+    by_freeze = sorted(completed, key=lambda e: e.metrics.get("status.frozen.ticks", 0), reverse=True)
+    add_episodes(by_freeze[:3], "outlier", 3)
+
+    return {
+        "reward_correlations": correlations,
+        "top_vs_bottom": top_vs_bottom,
+        "episode_snapshots": snapshots,
+    }
+
+
 def build_analysis_summary(data: DashboardData) -> dict:
     """Build compact summary of derived metrics for Claude analysis.
 
@@ -1110,7 +1222,7 @@ def build_analysis_summary(data: DashboardData) -> dict:
         move_eff = move_s / (move_s + move_f) if (move_s + move_f) > 0 else 0
         j_control = j_aligned / j_total if j_total > 0 else 0
 
-        opponent_summary[opp] = {
+        opp_entry: dict[str, Any] = {
             "count": n,
             "avg_reward": round(sum(opp_rewards) / n, 4),
             "strategy_profile": {
@@ -1120,6 +1232,17 @@ def build_analysis_summary(data: DashboardData) -> dict:
                 "mobile_scout": round(min(100, move_eff * 50 + (1 - noop_rate_p) * 50), 2),
             },
         }
+        if n >= 2:
+            opp_entry["reward_std"] = round(statistics.stdev(opp_rewards), 4)
+        if n >= 4:
+            mid = n // 2
+            first_half_avg = sum(opp_rewards[:mid]) / mid
+            second_half_avg = sum(opp_rewards[mid:]) / (n - mid)
+            opp_entry["temporal"] = {
+                "first_half_avg": round(first_half_avg, 4),
+                "second_half_avg": round(second_half_avg, 4),
+            }
+        opponent_summary[opp] = opp_entry
 
     # Team comp stats
     team_comp_summary = {}
@@ -1143,8 +1266,11 @@ def build_analysis_summary(data: DashboardData) -> dict:
         if len(rewards) >= 2:
             reward_stats["std"] = round(statistics.stdev(rewards), 4)
 
+    # Episode logs
+    episode_logs = _compute_episode_logs(completed)
+
     d = data.derived
-    return {
+    result: dict[str, Any] = {
         "policy": {
             "name": data.policy.name,
             "version": data.policy.version,
@@ -1183,6 +1309,9 @@ def build_analysis_summary(data: DashboardData) -> dict:
         "opponents": opponent_summary,
         "reward_distribution": reward_stats,
     }
+    if episode_logs:
+        result["episode_logs"] = episode_logs
+    return result
 
 
 def _build_analysis_prompt(summary: dict) -> str:
@@ -1215,27 +1344,92 @@ def _build_analysis_prompt(summary: dict) -> str:
         "Connect multiple diagnostics and metrics to"
         " identify underlying causes. Look for patterns"
         " across KPIs, matchups, and team compositions"
-        " that point to the same root issue.",
+        " that point to the same root issue."
+        " Ground in specific episodes from episode_snapshots."
+        " If replay_summaries exist, identify when in the"
+        " game problems emerge (early vs late)."
+        " Cite top_vs_bottom metric gaps.",
         "",
         "### Top 3 Training Priorities",
         "Rank by expected ROI. For each priority, specify"
         " concrete changes: reward shaping adjustments,"
         " curriculum modifications, hyperparameter changes,"
-        " or architectural improvements.",
+        " or architectural improvements."
+        " Use reward_correlations to justify which metrics"
+        " yield highest ROI. If reward_shape is frontloaded,"
+        " suggest late-game incentives.",
         "",
         "### Opponent Adaptation",
         "For low-performing matchups, analyze the"
         " opponent's strategy profile and suggest"
         " counter-strategies. If no matchup data exists,"
-        " skip this section.",
+        " skip this section."
+        " Use per-opponent temporal trends to note if"
+        " opponents are adapting over time.",
         "",
         "### Policy Narrative",
         "A plain-language description (2-3 sentences) of"
         ' what this policy "feels like" — its personality,'
         " strengths, and blind spots. Write this for"
-        " someone who hasn't seen the data.",
+        " someone who hasn't seen the data."
+        " Reference replay temporal patterns to describe"
+        " the policy's game rhythm.",
     ]
     return "\n".join(sections)
+
+
+def _fetch_replay_summaries(summary: dict) -> list[dict]:
+    """Fetch and summarize replays for selected episodes (sync, for CLI)."""
+    from metta.app_backend.replay.summarizer import (  # noqa: PLC0415
+        parse_replay,
+        select_replay_episodes,
+        summarize_replay,
+    )
+
+    episode_logs = summary.get("episode_logs")
+    if not episode_logs:
+        return []
+    snapshots = episode_logs.get("episode_snapshots", [])
+    episodes = []
+    for snap in snapshots:
+        replay_url = snap.get("replay_url")
+        if replay_url:
+            episodes.append(
+                {
+                    "reward": snap.get("r", 0),
+                    "replay_url": replay_url,
+                    "episode_id": snap.get("id", ""),
+                }
+            )
+    selected = select_replay_episodes(episodes, max_n=3)
+    if not selected:
+        return []
+
+    try:
+        from mettagrid.util.file import read as file_read  # noqa: PLC0415
+    except ImportError:
+        console.print("[dim]mettagrid not available — skipping replay fetch[/dim]")
+        return []
+
+    summaries = []
+    for ep in selected:
+        try:
+            data = file_read(ep["replay_url"])
+            replay = parse_replay(data)
+            num_agents = replay.get("num_agents", 0)
+            agent_indices = list(range(num_agents // 2)) if num_agents > 0 else []
+            result = summarize_replay(
+                replay,
+                agent_indices=agent_indices,
+                episode_idx=ep.get("index", 0),
+                reward=ep.get("reward", 0),
+                reason=ep.get("reason", "unknown"),
+            )
+            if result:
+                summaries.append(result.model_dump())
+        except Exception as e:
+            console.print(f"[dim]Failed to process replay: {e}[/dim]")
+    return summaries
 
 
 def run_claude_analysis(data: DashboardData, model: str) -> str | None:
@@ -1247,6 +1441,13 @@ def run_claude_analysis(data: DashboardData, model: str) -> str | None:
         return None
 
     summary = build_analysis_summary(data)
+
+    # Fetch replay summaries
+    replay_summaries = _fetch_replay_summaries(summary)
+    if replay_summaries:
+        summary["replay_summaries"] = replay_summaries
+        console.print(f"[green]Added {len(replay_summaries)} replay summaries[/green]")
+
     prompt = _build_analysis_prompt(summary)
 
     console.print(f"[bold]Running Claude analysis ({model})...[/bold]")

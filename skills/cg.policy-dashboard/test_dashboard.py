@@ -21,6 +21,7 @@ from generate import (  # noqa: E402
     DashboardData,
     EpisodeData,
     PolicyVersion,
+    _compute_episode_logs,
     aggregate_agent_metrics,
     build_analysis_summary,
     compute_derived_metrics,
@@ -747,14 +748,16 @@ def test_build_analysis_summary_has_expected_keys():
 
 
 def test_build_analysis_summary_excludes_raw_episodes():
-    """Summary must not contain raw episode data or per-episode metrics."""
+    """Summary must not contain raw episode list at top level."""
     data = _make_dashboard_data()
     summary = build_analysis_summary(data)
 
+    # No raw "episodes" list at top level
     assert "episodes" not in summary
-    summary_str = json.dumps(summary)
-    # Should not contain episode_id values (raw episode leakage)
-    assert "ep_0" not in summary_str
+    # Episode snapshots in episode_logs use compact keys, not full metric dicts
+    if "episode_logs" in summary:
+        for snap in summary["episode_logs"].get("episode_snapshots", []):
+            assert "metrics" not in snap  # Compact snapshots, not raw episodes
 
 
 def test_build_analysis_summary_under_20kb():
@@ -794,6 +797,98 @@ def test_build_analysis_summary_empty_episodes():
     assert summary["opponents"] == {}
     assert summary["team_comp"] == {}
     assert summary["reward_distribution"] == {}
+
+
+# === Episode Logs Tests ===
+
+
+def test_compute_episode_logs_has_expected_keys():
+    """Episode logs have correlations, top_vs_bottom, and snapshots."""
+    episodes = [
+        _make_episode(
+            episode_id=f"ep_{i}",
+            reward=1.0 + i * 0.5,
+            opponent="opp_a" if i % 2 == 0 else "opp_b",
+            metrics={
+                "action.move.success": 500 + i * 10,
+                "action.move.failed": 50,
+                "action.noop.success": 30 - i,
+                "junction.aligned_by_agent": i,
+                "status.frozen.ticks": 100 - i * 5,
+                "heart.gained": 5,
+                "carbon.gained": 100,
+                "action.change_vibe.success": 5,
+                "junction.scrambled_by_agent": 1,
+            },
+        )
+        for i in range(20)
+    ]
+    logs = _compute_episode_logs(episodes)
+
+    assert "reward_correlations" in logs
+    assert "top_vs_bottom" in logs
+    assert "episode_snapshots" in logs
+    # With 20 episodes, correlations should have some entries
+    assert len(logs["reward_correlations"]) > 0
+    # Should have top/bottom metrics
+    assert "top_20_avg_reward" in logs["top_vs_bottom"]
+    assert "bottom_20_avg_reward" in logs["top_vs_bottom"]
+    # Snapshots should exist
+    assert len(logs["episode_snapshots"]) > 0
+    assert len(logs["episode_snapshots"]) <= 16
+
+
+def test_compute_episode_logs_empty():
+    """Episode logs handle empty input."""
+    logs = _compute_episode_logs([])
+    assert logs == {}
+
+
+def test_compute_episode_logs_few_episodes():
+    """Episode logs work with < 5 episodes (no correlations)."""
+    episodes = [
+        _make_episode(episode_id=f"ep_{i}", reward=1.0 + i, metrics={"action.move.success": 100}) for i in range(3)
+    ]
+    logs = _compute_episode_logs(episodes)
+    # Fewer than 5 episodes: no correlations
+    assert logs["reward_correlations"] == {}
+    # But snapshots and top_vs_bottom should still exist
+    assert len(logs["episode_snapshots"]) > 0
+    assert "top_20_avg_reward" in logs["top_vs_bottom"]
+
+
+def test_build_analysis_summary_includes_episode_logs():
+    """Summary includes episode_logs when episodes are available."""
+    data = _make_dashboard_data(n_episodes=20)
+    summary = build_analysis_summary(data)
+
+    assert "episode_logs" in summary
+    logs = summary["episode_logs"]
+    assert "reward_correlations" in logs
+    assert "top_vs_bottom" in logs
+    assert "episode_snapshots" in logs
+
+
+def test_build_analysis_summary_opponent_temporal():
+    """Summary includes reward_std and temporal in opponent data."""
+    data = _make_dashboard_data(n_episodes=20)
+    summary = build_analysis_summary(data)
+
+    # opp_a should have >= 10 episodes (every even index)
+    opp_a = summary["opponents"]["opp_a"]
+    assert "reward_std" in opp_a
+    assert "temporal" in opp_a
+    assert "first_half_avg" in opp_a["temporal"]
+    assert "second_half_avg" in opp_a["temporal"]
+
+
+def test_build_analysis_summary_still_under_20kb_with_episode_logs():
+    """Summary JSON must stay under 20KB even with episode_logs."""
+    data = _make_dashboard_data(n_episodes=100)
+    summary = build_analysis_summary(data)
+    summary_json = json.dumps(summary)
+
+    assert len(summary_json) < 20_000, f"Summary is {len(summary_json)} bytes, expected < 20KB"
 
 
 def main():
@@ -839,6 +934,13 @@ def main():
         test_build_analysis_summary_under_20kb,
         test_build_analysis_summary_opponent_breakdown,
         test_build_analysis_summary_empty_episodes,
+        # Episode logs
+        test_compute_episode_logs_has_expected_keys,
+        test_compute_episode_logs_empty,
+        test_compute_episode_logs_few_episodes,
+        test_build_analysis_summary_includes_episode_logs,
+        test_build_analysis_summary_opponent_temporal,
+        test_build_analysis_summary_still_under_20kb_with_episode_logs,
     ]
 
     passed = 0

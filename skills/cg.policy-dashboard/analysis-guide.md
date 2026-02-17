@@ -378,6 +378,72 @@ behavior.
 
 ---
 
+## Replay Behavioral Data
+
+When replay files (.json.z) are available, the analysis includes temporal signals extracted from the sparse replay
+format:
+
+### Freeze Temporal Distribution
+
+`freeze_by_quarter` shows the percentage of time frozen in each quarter (Q1-Q4) of the episode.
+
+- `early_heavy`: Freezing concentrated in first half — policy may be vulnerable at game start
+- `late_heavy`: Freezing concentrated in second half — opponents may be adapting mid-game
+- `distributed`: Freezing spread evenly — consistent vulnerability
+- `none`: Minimal freezing
+
+### Reward Accumulation Shape
+
+`reward_by_quarter` shows reward earned in each quarter.
+
+- `frontloaded`: Most reward in first half — policy may stop trying after initial gains. Consider late-game reward
+  shaping.
+- `backloaded`: Most reward in second half — slow start, but strong finish
+- `linear`: Steady accumulation — healthy reward curve
+- `flat`: Near-zero reward throughout
+
+### Noop Clustering
+
+`noop_by_quarter` shows noop action percentage per quarter.
+
+- `clustered`: High noop rate concentrated in one quarter — policy may get stuck at specific game phases
+- `distributed`: Noops spread evenly — general indecision
+- `none`: Minimal noops
+
+## Episode Log Data
+
+### Compact Episode Keys
+
+Episode snapshots use short keys for compactness:
+
+| Key     | Full Name                  |
+| ------- | -------------------------- |
+| `id`    | Episode ID (first 8 chars) |
+| `opp`   | Opponent name              |
+| `comp`  | Team composition           |
+| `r`     | Reward                     |
+| `mv_s`  | action.move.success        |
+| `mv_f`  | action.move.failed         |
+| `noop`  | action.noop.success        |
+| `frz`   | status.frozen.ticks        |
+| `j_aln` | junction.aligned_by_agent  |
+
+### Reward Correlations
+
+`reward_correlations` maps metric names to their Pearson correlation with reward. High positive correlations suggest
+metrics that drive reward; high negative correlations suggest metrics that hurt reward.
+
+### Selection Criteria
+
+Episode snapshots are stratified into buckets:
+
+- `top`: 5 highest-reward episodes
+- `bottom`: 5 lowest-reward episodes
+- `worst_matchup`: 3 episodes from the worst-performing opponent matchup
+- `outlier`: 3 episodes with highest freeze ticks
+
+---
+
 ## Dashboard Features
 
 How the dashboard implements each analysis workflow from this guide.

@@ -3,6 +3,16 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    """FastAPI backend settings, loaded from environment variables and .env file.
+
+    There are two independent .env loading paths in Observatory:
+    - This file (config.py): pydantic-settings loads .env for backend settings (DB URI, API keys).
+    - cli.py (_base_env): dotenv_values loads .env for process-compose subprocess environments.
+    Both are intentional — they serve different processes at different stages.
+    """
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
     STATS_DB_URI: str = "postgresql://postgres:password@127.0.0.1/metta"
     OBSERVATORY_AUTH_SECRET: str | None = None
     DEBUG_USER_EMAIL: str | None = None  # if set, you can set machine_token to this value and it will be accepted

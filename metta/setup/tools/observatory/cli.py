@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from dotenv import dotenv_values
 
 from metta.app_backend.clients.base_client import get_machine_token
 from metta.app_backend.clients.stats_client import StatsClient
@@ -177,6 +178,7 @@ Observatory local development.
   metta observatory local-k8s logs     # Follow job logs
 
 [bold]Teardown:[/bold]
+  metta observatory down             # Stop all services
   metta observatory postgres down
   metta observatory local-k8s clean
 
@@ -200,7 +202,32 @@ app = typer.Typer(
 def _base_env() -> dict[str, str]:
     env = os.environ.copy()
     env.pop("VIRTUAL_ENV", None)
+    # .env provides defaults — real env vars take precedence.
+    # dotenv_values returns None for keys with no value; we skip those.
+    for key, value in dotenv_values(repo_root / ".env").items():
+        if key not in env and value is not None:
+            env[key] = value
     return env
+
+
+def _kill_stale_observatory() -> None:
+    """Kill any leftover observatory processes from a previous run."""
+    result = subprocess.run(
+        ["process-compose", "down", "-p", str(PROCESS_COMPOSE_PORT)],
+        capture_output=True,
+        timeout=10,
+    )
+    if result.returncode == 0:
+        info("Stopped previous observatory instance")
+        return
+
+    # Fallback: kill anything holding our ports (process-compose was likely hard-killed)
+    for port in (PROCESS_COMPOSE_PORT, SERVER_PORT):
+        result = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True)
+        pids = result.stdout.strip()
+        if pids:
+            info(f"Killing stale process on port {port}")
+            subprocess.run(["kill", *pids.split("\n")])
 
 
 def _get_db_uri() -> str:
@@ -240,10 +267,6 @@ def _local_dev_env() -> dict[str, str]:
     env["LOCAL_DEV_K8S_CONTEXT"] = _get_k8s_context()
     env["LOCAL_DEV_AWS_PROFILE"] = LOCAL_AWS_PROFILE
     env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
-
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    if anthropic_key:
-        env["ANTHROPIC_API_KEY"] = anthropic_key
 
     aws_path = os.path.expanduser("~/.aws")
     source_mounts = [
@@ -326,7 +349,12 @@ def up(
     services: Annotated[list[str] | None, typer.Argument(help="Services to start (default: all)")] = None,
     tui: Annotated[bool, typer.Option("-t", "--tui", help="Enable TUI mode")] = False,
     login_server: Annotated[str, typer.Option("--login-server", "-l", help="Login server: local or prod")] = "local",
+    force: Annotated[
+        bool, typer.Option("--force", "-f", help="Kill stale observatory processes before starting")
+    ] = False,
 ):
+    if force:
+        _kill_stale_observatory()
     compose_file = Path(__file__).parent / "process-compose.yaml"
     env = _process_compose_env()
 
@@ -344,6 +372,15 @@ def up(
         cmd.extend(services)
     info("Starting observatory services...")
     subprocess.run(cmd, cwd=repo_root, env=env, check=True)
+
+
+@app.command(name="down", help="Stop all observatory services")
+@handle_errors
+def down():
+    subprocess.run(
+        ["process-compose", "down", "-p", str(PROCESS_COMPOSE_PORT)],
+        check=True,
+    )
 
 
 @app.command(
@@ -381,10 +418,6 @@ def server(
     env["POLICY_S3_BUCKET"] = LOCAL_EVAL_BUCKET
     if otel_console:
         env["OTEL_METRICS_CONSOLE"] = "true"
-
-    # Forward ANTHROPIC_API_KEY if available (used by dashboard AI analysis)
-    if "ANTHROPIC_API_KEY" in os.environ:
-        env["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"]
 
     # Respect LOGIN_SERVICE_URL from environment (set by `up` command), otherwise use --login-server flag
     if "LOGIN_SERVICE_URL" not in env:

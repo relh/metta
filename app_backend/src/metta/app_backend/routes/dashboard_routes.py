@@ -1,6 +1,7 @@
 """Dashboard routes for policy performance analysis."""
 
 import ast
+import asyncio
 import logging
 import time
 from datetime import datetime
@@ -11,7 +12,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from metta.app_backend.auth import ExternalUser
+from metta.app_backend.auth import ExternalUser, SoftmaxUser
 from metta.app_backend.config import settings
 from metta.app_backend.dashboard import (
     DashboardDerived,
@@ -21,14 +22,21 @@ from metta.app_backend.dashboard import (
     PolicyInfo,
     build_analysis_prompt,
     compute_derived_metrics,
+    compute_episode_logs,
     compute_opponent_metrics,
     compute_team_comp_analysis,
 )
 from metta.app_backend.queries import episode_queries, policy_queries
+from metta.app_backend.replay.summarizer import (
+    parse_replay,
+    select_replay_episodes,
+    summarize_replay,
+)
 from metta.app_backend.route_logger import timed_http_handler
 
 logger = logging.getLogger(__name__)
 
+# TODO: persistent rate limiter for multi-instance deployments
 # Simple in-memory rate limit: user_email -> list of request timestamps
 _analysis_rate_limit: dict[str, list[float]] = {}
 ANALYSIS_RATE_LIMIT = 10  # requests per hour
@@ -40,6 +48,120 @@ class AnalysisRequest(BaseModel):
 
 class AnalysisResponse(BaseModel):
     analysis: str
+    data_sources: list[str]
+
+
+def _select_episode_ids_from_summary(summary: dict[str, Any]) -> list[str]:
+    """Extract episode IDs from the summary's episode_logs snapshots for replay analysis."""
+    episode_logs = summary.get("episode_logs")
+    if not episode_logs:
+        return []
+    snapshots = episode_logs.get("episode_snapshots", [])
+    # Build minimal episode dicts for select_replay_episodes (uses reward to pick best/worst/median)
+    episodes = []
+    for snap in snapshots:
+        episodes.append(
+            {
+                "reward": snap.get("r", 0),
+                "replay_url": snap.get("replay_url", "has_replay"),  # just needs to be truthy for selection
+                "episode_id": snap.get("id", ""),
+            }
+        )
+    selected = select_replay_episodes(episodes, max_n=3)
+    return [ep["episode_id"] for ep in selected if ep.get("episode_id")]
+
+
+async def _fetch_and_summarize_replays(episode_ids: list[str], policy_version_id: str) -> list[dict]:
+    """Fetch replay files for episodes (by ID from DB) and summarize them.
+
+    Resolves replay URLs from the database — never from user input — to prevent SSRF.
+    Uses episode tag data (assignments, policy_version_ids) to determine correct agent indices.
+    """
+    # Look up episodes from DB by UUID
+    uuid_ids = []
+    for eid in episode_ids:
+        try:
+            uuid_ids.append(UUID(eid))
+        except ValueError:
+            logger.debug("Skipping invalid episode ID: %s", eid)
+    if not uuid_ids:
+        return []
+
+    db_episodes = await episode_queries.get_episodes(episode_ids=uuid_ids, limit=len(uuid_ids))
+    if not db_episodes:
+        return []
+
+    # Build fetch list from DB-sourced replay URLs
+    fetch_list: list[tuple[str, str, dict[str, str]]] = []  # (replay_url, episode_id, tags)
+    for ep in db_episodes:
+        replay_url = ep.replay_url or ep.tags.get("replay_url")
+        if replay_url:
+            fetch_list.append((replay_url, str(ep.id), ep.tags))
+
+    if not fetch_list:
+        return []
+
+    # Build reward lookup from the original episode selection
+    reward_lookup: dict[str, float] = {}
+    for ep in db_episodes:
+        avg_rewards = ep.avg_rewards
+        pv_uuid = UUID(policy_version_id)
+        reward_lookup[str(ep.id)] = float(avg_rewards.get(pv_uuid, 0.0) or 0.0)
+
+    # Fetch replay data in parallel
+    async def _fetch_one(client: httpx.AsyncClient, url: str) -> bytes | None:
+        resp = await client.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.content
+
+    async with httpx.AsyncClient() as client:
+        tasks = [_fetch_one(client, url) for url, _, _ in fetch_list]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    summaries = []
+    for (_replay_url, episode_id, tags), result in zip(fetch_list, results, strict=True):
+        if isinstance(result, BaseException) or result is None:
+            logger.debug("Failed to fetch replay for episode %s: %s", episode_id, result)
+            continue
+        replay = parse_replay(result)
+
+        # Determine agent indices from episode tags (assignments + policy_version_ids)
+        num_agents = replay.get("num_agents", 0)
+        agent_indices = _agent_indices_from_tags(tags, policy_version_id, num_agents)
+
+        reward = reward_lookup.get(episode_id, 0.0)
+        summary = summarize_replay(
+            replay,
+            agent_indices=agent_indices,
+            episode_idx=0,
+            reward=reward,
+            reason="selected",
+        )
+        if summary:
+            summaries.append(summary.model_dump())
+
+    return summaries
+
+
+def _agent_indices_from_tags(tags: dict[str, str], policy_version_id: str, num_agents: int) -> list[int]:
+    """Determine which agent indices belong to the target policy using episode tags.
+
+    Falls back to half-split heuristic only if no assignment data exists.
+    """
+    assignments_str = tags.get("assignments", "")
+    pv_ids_str = tags.get("policy_version_ids", "")
+    if assignments_str and pv_ids_str:
+        try:
+            assignments = ast.literal_eval(assignments_str)
+            pv_ids_list = ast.literal_eval(pv_ids_str)
+            if policy_version_id in pv_ids_list:
+                policy_index = pv_ids_list.index(policy_version_id)
+                return [i for i, a in enumerate(assignments) if a == policy_index]
+        except Exception:
+            logger.debug("Failed to parse assignment tags for agent index resolution")
+
+    # Fallback: assume first half are ours (heuristic for tournament 2-policy games)
+    return list(range(num_agents // 2)) if num_agents > 0 else []
 
 
 def create_dashboard_router() -> APIRouter:
@@ -174,6 +296,9 @@ def create_dashboard_router() -> APIRouter:
 
             steps = attributes.get("steps", 0)
 
+            # Capture replay_url from episode tags
+            replay_url = tags.get("replay_url")
+
             dashboard_ep = DashboardEpisode(
                 episode_id=episode_id,
                 job_id=job_id,
@@ -184,6 +309,7 @@ def create_dashboard_router() -> APIRouter:
                 status="completed",
                 steps=steps,
                 metrics=metrics,
+                replay_url=replay_url,
             )
             dashboard_episodes.append(dashboard_ep)
 
@@ -191,6 +317,7 @@ def create_dashboard_router() -> APIRouter:
         derived = compute_derived_metrics(dashboard_episodes)
         team_comp_stats = compute_team_comp_analysis(dashboard_episodes)
         opponent_stats = compute_opponent_metrics(dashboard_episodes)
+        episode_logs = compute_episode_logs(dashboard_episodes)
 
         return DashboardResponse(
             policy=policy_info,
@@ -201,13 +328,14 @@ def create_dashboard_router() -> APIRouter:
                 kpis=derived,
                 team_comp=team_comp_stats,
                 opponent_metrics=opponent_stats,
+                episode_logs=episode_logs or None,
             ),
         )
 
     @router.post("/{policy_version_id}/dashboard-analysis")
     @timed_http_handler
     async def get_dashboard_analysis(
-        policy_version_id: str, request: AnalysisRequest, user: ExternalUser
+        policy_version_id: str, request: AnalysisRequest, user: SoftmaxUser
     ) -> AnalysisResponse:
         """Run Claude AI analysis on pre-computed dashboard summary."""
         if not settings.ANTHROPIC_API_KEY:
@@ -224,7 +352,22 @@ def create_dashboard_router() -> APIRouter:
         timestamps.append(now)
         _analysis_rate_limit[user_key] = timestamps
 
-        prompt = build_analysis_prompt(request.summary)
+        summary = request.summary
+
+        data_sources = ["kpis", "opponents", "team_comp"]
+
+        if summary.get("episode_logs"):
+            data_sources.append("episode_logs")
+
+        # Select episode IDs from summary snapshots, then fetch replays from DB (not user URLs)
+        episode_ids = _select_episode_ids_from_summary(summary)
+        if episode_ids:
+            replay_summaries = await _fetch_and_summarize_replays(episode_ids, policy_version_id)
+            if replay_summaries:
+                summary["replay_summaries"] = replay_summaries
+                data_sources.append("replays")
+
+        prompt = build_analysis_prompt(summary)
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -236,7 +379,7 @@ def create_dashboard_router() -> APIRouter:
                 },
                 json={
                     "model": "claude-sonnet-4-5-20250929",
-                    "max_tokens": 2000,
+                    "max_tokens": 2500,
                     "messages": [{"role": "user", "content": prompt}],
                 },
                 timeout=60.0,
@@ -245,6 +388,6 @@ def create_dashboard_router() -> APIRouter:
 
         data = response.json()
         analysis_text = data["content"][0]["text"].strip()
-        return AnalysisResponse(analysis=analysis_text)
+        return AnalysisResponse(analysis=analysis_text, data_sources=data_sources)
 
     return router

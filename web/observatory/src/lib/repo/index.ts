@@ -148,6 +148,7 @@ export type DashboardDerived = {
   kpis: DashboardKpis
   team_comp: DashboardTeamCompStats[]
   opponent_metrics: Record<string, DashboardOpponentStats>
+  episode_logs: Record<string, any> | null
 }
 
 export type DashboardEpisode = {
@@ -161,6 +162,7 @@ export type DashboardEpisode = {
   error_type: string | null
   steps: number
   metrics: Record<string, number>
+  replay_url: string | null
 }
 
 export type DashboardPolicy = {
@@ -182,6 +184,7 @@ export type DashboardResponse = {
 
 export type DashboardAnalysisResponse = {
   analysis: string
+  data_sources: string[]
 }
 
 export type RequestLogEntry = {

@@ -129,6 +129,9 @@ processes:
   # Port forwarding is configured in devcontainer.json runArgs.
   frontend:
     command: metta observatory frontend
+    depends_on:
+      server:
+        condition: process_healthy
 
   # ===========================================================================
   # JOB WATCHER

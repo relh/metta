@@ -1097,6 +1097,8 @@ export interface components {
     AnalysisResponse: {
       /** Analysis */
       analysis: string
+      /** Data Sources */
+      data_sources: string[]
     }
     /**
      * BulkEpisodeUploadResponse
@@ -1146,6 +1148,10 @@ export interface components {
       opponent_metrics: {
         [key: string]: components['schemas']['OpponentStats']
       }
+      /** Episode Logs */
+      episode_logs?: {
+        [key: string]: unknown
+      } | null
     }
     /**
      * DashboardEpisode
@@ -1180,6 +1186,8 @@ export interface components {
       metrics: {
         [key: string]: unknown
       }
+      /** Replay Url */
+      replay_url?: string | null
     }
     /**
      * DashboardResponse

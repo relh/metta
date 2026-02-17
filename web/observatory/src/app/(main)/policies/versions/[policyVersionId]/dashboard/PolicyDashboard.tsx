@@ -1,6 +1,7 @@
 'use client'
 
 import { FC, useContext, useMemo, useState } from 'react'
+import Markdown from 'react-markdown'
 import {
   ScatterChart,
   Scatter,
@@ -44,12 +45,12 @@ const KpiCard: FC<{ label: string; value: string; detail?: string; severity?: 'g
         ? 'border-yellow-400'
         : severity === 'bad'
           ? 'border-red-400'
-          : 'border-gray-200'
+          : 'border-border'
   return (
-    <div className={`bg-white border-2 ${borderColor} rounded-lg p-4 text-center`}>
-      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
-      {detail && <p className="text-xs text-gray-500 mt-1">{detail}</p>}
+    <div className={`bg-surface border-2 ${borderColor} rounded-lg p-4 text-center`}>
+      <p className="text-xs font-medium text-foreground-muted uppercase tracking-wide">{label}</p>
+      <p className="text-2xl font-bold text-foreground mt-1">{value}</p>
+      {detail && <p className="text-xs text-foreground-muted mt-1">{detail}</p>}
     </div>
   )
 }
@@ -93,7 +94,7 @@ const RadarChart: FC<{ kpis: DashboardKpis; size?: number }> = ({ kpis, size = 2
           key={ring}
           points={radarPoints(Array(n).fill(ring * 100), cx, cy, r)}
           fill="none"
-          stroke="#e5e7eb"
+          className="stroke-border-strong"
           strokeWidth="1"
         />
       ))}
@@ -101,7 +102,7 @@ const RadarChart: FC<{ kpis: DashboardKpis; size?: number }> = ({ kpis, size = 2
         const angle = (Math.PI * 2 * i) / n - Math.PI / 2
         const x = cx + r * Math.cos(angle)
         const y = cy + r * Math.sin(angle)
-        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#e5e7eb" strokeWidth="1" />
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} className="stroke-border-strong" strokeWidth="1" />
       })}
       <polygon
         points={radarPoints(values, cx, cy, r)}
@@ -120,7 +121,7 @@ const RadarChart: FC<{ kpis: DashboardKpis; size?: number }> = ({ kpis, size = 2
             y={ly}
             textAnchor="middle"
             dominantBaseline="middle"
-            className="text-[10px] fill-gray-600"
+            className="text-[10px] fill-foreground-muted"
           >
             {label.split('\n').map((line, j) => (
               <tspan key={j} x={lx} dy={j === 0 ? 0 : 12}>
@@ -154,7 +155,7 @@ function SortHeader({
   const active = currentSort === sortKey
   return (
     <th
-      className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700 select-none"
+      className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase tracking-wider cursor-pointer hover:text-foreground select-none"
       onClick={() => onSort(sortKey)}
     >
       {label} {active ? (currentDir === 'asc' ? '\u25B2' : '\u25BC') : ''}
@@ -220,6 +221,12 @@ function kpiSeverity(value: number, good: number, bad: number, higherBetter = tr
   return 'warn'
 }
 
+// === Tooltip wrapper ===
+
+const ChartTooltip: FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="bg-surface border border-border rounded shadow-lg p-2 text-xs text-foreground">{children}</div>
+)
+
 // === Main Dashboard ===
 
 export const PolicyDashboard: FC<{
@@ -229,6 +236,7 @@ export const PolicyDashboard: FC<{
   const { repo } = useContext(AppContext)
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [analysis, setAnalysis] = useState<string | null>(null)
+  const [analysisDataSources, setAnalysisDataSources] = useState<string[]>([])
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [showAnalysis, setShowAnalysis] = useState(true)
@@ -429,10 +437,12 @@ export const PolicyDashboard: FC<{
           { count: stats.count, avg_reward: stats.avg_reward, strategy_profile: stats.strategy_profile },
         ])
       ),
+      episode_logs: data.derived.episode_logs ?? null,
     }
     try {
       const result = await repo.getDashboardAnalysis(policyVersionId, summary)
       setAnalysis(result.analysis)
+      setAnalysisDataSources(result.data_sources)
     } catch (err: any) {
       setAnalysisError(err.message || 'Analysis failed')
     } finally {
@@ -444,9 +454,9 @@ export const PolicyDashboard: FC<{
     <div className="space-y-6">
       {/* Header info */}
       <Card>
-        <div className="flex flex-wrap gap-6 text-sm text-gray-600">
+        <div className="flex flex-wrap gap-6 text-sm text-foreground-muted">
           <span>
-            <strong>{policy.name}</strong> v{policy.version}
+            <strong className="text-foreground">{policy.name}</strong> v{policy.version}
           </span>
           {policy.rank && <span>Rank: #{policy.rank}</span>}
           {policy.score !== null && <span>Score: {policy.score?.toFixed(3)}</span>}
@@ -456,15 +466,15 @@ export const PolicyDashboard: FC<{
       </Card>
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 border-b border-gray-200">
+      <div className="flex border-b border-border">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2 text-sm font-medium -mb-px bg-transparent transition-colors border-b-2 border-x-0 border-t-0 ${
               activeTab === tab.key
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-b-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-b-transparent text-foreground-muted hover:text-foreground hover:border-b-border-strong'
             }`}
           >
             {tab.label}
@@ -530,7 +540,7 @@ export const PolicyDashboard: FC<{
                       <span
                         className={`mt-0.5 flex-shrink-0 w-2 h-2 rounded-full ${isWarning ? 'bg-yellow-400' : 'bg-blue-400'}`}
                       />
-                      <span className="text-gray-700">{d}</span>
+                      <span className="text-foreground-subtle">{d}</span>
                     </li>
                   )
                 })}
@@ -545,8 +555,10 @@ export const PolicyDashboard: FC<{
               <div className="grid grid-cols-2 gap-2 mt-4 text-sm">
                 {RADAR_KEYS.map((key) => (
                   <div key={key} className="flex justify-between px-2">
-                    <span className="text-gray-600 capitalize">{key.replace('profile_', '').replace('_', ' ')}</span>
-                    <span className="font-mono text-gray-900">{(kpis[key] ?? 0).toFixed(1)}</span>
+                    <span className="text-foreground-muted capitalize">
+                      {key.replace('profile_', '').replace('_', ' ')}
+                    </span>
+                    <span className="font-mono text-foreground">{(kpis[key] ?? 0).toFixed(1)}</span>
                   </div>
                 ))}
               </div>
@@ -568,13 +580,13 @@ export const PolicyDashboard: FC<{
                         if (!payload?.length) return null
                         const d = payload[0].payload
                         return (
-                          <div className="bg-white border border-gray-200 rounded shadow-lg p-2 text-xs">
+                          <ChartTooltip>
                             <p className="font-medium">{d.label}</p>
                             <p>Policy: {d.value.toFixed(1)}%</p>
                             <p>
                               Opponent range: {d.min.toFixed(1)}% - {d.max.toFixed(1)}%
                             </p>
-                          </div>
+                          </ChartTooltip>
                         )
                       }}
                     />
@@ -586,7 +598,7 @@ export const PolicyDashboard: FC<{
                     <Scatter dataKey="value" fill="#3b82f6" r={6} />
                   </ComposedChart>
                 </ResponsiveContainer>
-                <p className="text-xs text-gray-500 mt-2 text-center">
+                <p className="text-xs text-foreground-muted mt-2 text-center">
                   Blue dots = policy value, gray bars = opponent range (min-max)
                 </p>
               </Card>
@@ -596,28 +608,38 @@ export const PolicyDashboard: FC<{
           {/* Team Composition */}
           <Card title="Team Composition">
             {teamComp.length === 0 ? (
-              <p className="text-sm text-gray-500">No team composition data</p>
+              <p className="text-sm text-foreground-muted">No team composition data</p>
             ) : (
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Comp</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Count</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Avg Reward</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Move Eff.</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Junctions</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resources</th>
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Comp</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Count</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Avg Reward
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Move Eff.
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Junctions
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Resources
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {teamComp.map((tc) => (
-                    <tr key={tc.composition} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-3 py-2 font-mono font-bold">{tc.composition}</td>
-                      <td className="px-3 py-2">{tc.count}</td>
-                      <td className="px-3 py-2 font-mono">{tc.avg_reward.toFixed(2)}</td>
-                      <td className="px-3 py-2 font-mono">{(tc.avg_move_efficiency * 100).toFixed(0)}%</td>
-                      <td className="px-3 py-2 font-mono">{tc.avg_junction_aligned.toFixed(1)}</td>
-                      <td className="px-3 py-2 font-mono">{tc.avg_resource_gained.toFixed(0)}</td>
+                    <tr key={tc.composition} className="border-b border-border-subtle hover:bg-surface-alt">
+                      <td className="px-3 py-2 font-mono font-bold text-foreground">{tc.composition}</td>
+                      <td className="px-3 py-2 text-foreground">{tc.count}</td>
+                      <td className="px-3 py-2 font-mono text-foreground">{tc.avg_reward.toFixed(2)}</td>
+                      <td className="px-3 py-2 font-mono text-foreground">
+                        {(tc.avg_move_efficiency * 100).toFixed(0)}%
+                      </td>
+                      <td className="px-3 py-2 font-mono text-foreground">{tc.avg_junction_aligned.toFixed(1)}</td>
+                      <td className="px-3 py-2 font-mono text-foreground">{tc.avg_resource_gained.toFixed(0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -626,7 +648,13 @@ export const PolicyDashboard: FC<{
           </Card>
 
           {/* Claude Analysis */}
-          <Card title="AI Analysis">
+          <Card
+            title={
+              <>
+                AI Analysis <span className="text-xs font-normal text-foreground-muted ml-2">Experimental</span>
+              </>
+            }
+          >
             {!analysis && !analysisLoading && (
               <div className="text-center py-4">
                 <button
@@ -635,7 +663,7 @@ export const PolicyDashboard: FC<{
                 >
                   Run AI Analysis
                 </button>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-foreground-muted mt-2">
                   Uses Claude to analyze policy performance and suggest improvements (10-30s)
                 </p>
               </div>
@@ -643,24 +671,39 @@ export const PolicyDashboard: FC<{
             {analysisLoading && (
               <div className="flex items-center justify-center gap-2 py-8">
                 <Spinner />
-                <span className="text-sm text-gray-500">Running AI analysis...</span>
+                <span className="text-sm text-foreground-muted">Running AI analysis...</span>
               </div>
             )}
             {analysisError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{analysisError}</div>
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-400">
+                {analysisError}
+              </div>
             )}
             {analysis && (
               <div>
-                <button
-                  onClick={() => setShowAnalysis(!showAnalysis)}
-                  className="text-sm text-blue-600 hover:text-blue-800 mb-2"
-                >
-                  {showAnalysis ? 'Hide' : 'Show'} Analysis
-                </button>
+                <div className="flex items-center gap-3 mb-2">
+                  <button
+                    onClick={() => setShowAnalysis(!showAnalysis)}
+                    className="text-sm text-foreground-muted hover:text-foreground underline underline-offset-2 bg-transparent border-0 p-0 cursor-pointer"
+                  >
+                    {showAnalysis ? 'Hide' : 'Show'} Analysis
+                  </button>
+                  <div className="flex items-center gap-1.5 text-xs text-foreground-muted">
+                    <span>Based on:</span>
+                    {analysisDataSources.map((src) => (
+                      <span
+                        key={src}
+                        className="inline-block px-1.5 py-0.5 rounded bg-surface-alt text-foreground-muted font-medium"
+                      >
+                        {src.replace('_', ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
                 {showAnalysis && (
-                  <pre className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed font-sans bg-gray-50 rounded-lg p-4 overflow-x-auto">
-                    {analysis}
-                  </pre>
+                  <div className="prose prose-sm dark:prose-invert max-w-none bg-surface-alt rounded-lg p-4 overflow-x-auto prose-headings:text-base prose-h1:text-lg prose-h1:font-semibold">
+                    <Markdown>{analysis}</Markdown>
+                  </div>
                 )}
               </div>
             )}
@@ -704,12 +747,12 @@ export const PolicyDashboard: FC<{
                       if (!payload?.length) return null
                       const d = payload[0].payload
                       return (
-                        <div className="bg-white border border-gray-200 rounded shadow-lg p-2 text-xs">
+                        <ChartTooltip>
                           <p className="font-medium">{d.opponent}</p>
                           <p>Reward: {d.reward.toFixed(3)}</p>
                           <p>Team: {d.team}</p>
                           <p>Steps: {d.steps}</p>
-                        </div>
+                        </ChartTooltip>
                       )
                     }}
                   />
@@ -723,7 +766,7 @@ export const PolicyDashboard: FC<{
               {/* Legend */}
               <div className="flex flex-wrap gap-3 mt-2 px-2">
                 {Object.entries(colorMap).map(([name, color]) => (
-                  <div key={name} className="flex items-center gap-1 text-xs text-gray-600">
+                  <div key={name} className="flex items-center gap-1 text-xs text-foreground-muted">
                     <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: color }} />
                     {name}
                   </div>
@@ -737,7 +780,7 @@ export const PolicyDashboard: FC<{
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
+                  <tr className="border-b border-border">
                     <SortHeader
                       label="Opponent"
                       sortKey="opponent"
@@ -766,29 +809,29 @@ export const PolicyDashboard: FC<{
                       currentDir={episodeSortDir}
                       onSort={handleEpisodeSort}
                     />
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedEpisodes.slice(0, 50).map((ep) => (
-                    <tr key={ep.episode_id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="px-3 py-2">
+                    <tr key={ep.episode_id} className="border-b border-border-subtle hover:bg-surface-alt">
+                      <td className="px-3 py-2 text-foreground">
                         <span
                           className="inline-block w-2 h-2 rounded-full mr-2"
                           style={{ backgroundColor: colorMap[ep.opponent_name] ?? '#94a3b8' }}
                         />
                         {ep.opponent_name} v{ep.opponent_version}
                       </td>
-                      <td className="px-3 py-2 font-mono">{ep.team_composition}</td>
+                      <td className="px-3 py-2 font-mono text-foreground">{ep.team_composition}</td>
                       <td
-                        className={`px-3 py-2 font-mono ${ep.reward < 0.5 ? 'text-red-600' : ep.reward > 2.0 ? 'text-green-600' : ''}`}
+                        className={`px-3 py-2 font-mono ${ep.reward < 0.5 ? 'text-red-500' : ep.reward > 2.0 ? 'text-green-500' : 'text-foreground'}`}
                       >
                         {ep.reward.toFixed(2)}
                       </td>
-                      <td className="px-3 py-2 font-mono">{ep.steps}</td>
+                      <td className="px-3 py-2 font-mono text-foreground">{ep.steps}</td>
                       <td className="px-3 py-2">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${ep.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${ep.status === 'completed' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}
                         >
                           {ep.status}
                         </span>
@@ -798,7 +841,7 @@ export const PolicyDashboard: FC<{
                 </tbody>
               </table>
               {episodes.length > 50 && (
-                <p className="text-xs text-gray-500 mt-2 px-3">Showing 50 of {episodes.length} episodes</p>
+                <p className="text-xs text-foreground-muted mt-2 px-3">Showing 50 of {episodes.length} episodes</p>
               )}
             </div>
           </Card>
@@ -812,17 +855,25 @@ export const PolicyDashboard: FC<{
             <Card title="Opponent Breakdown">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Opponent</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Games</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Avg Reward</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total Reward</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Win Rate</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Agg</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Def</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Res</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Jnc</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Mob</th>
+                  <tr className="border-b border-border">
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Opponent
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Games</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Avg Reward
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Total Reward
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">
+                      Win Rate
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Agg</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Def</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Res</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Jnc</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-foreground-muted uppercase">Mob</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -834,39 +885,39 @@ export const PolicyDashboard: FC<{
                       const wins = oppEps.filter((e) => e.reward > 0.5).length
                       const winRate = oppEps.length > 0 ? wins / oppEps.length : 0
                       return (
-                        <tr key={opp} className="border-b border-gray-100 hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium">
+                        <tr key={opp} className="border-b border-border-subtle hover:bg-surface-alt">
+                          <td className="px-3 py-2 font-medium text-foreground">
                             <span
                               className="inline-block w-2 h-2 rounded-full mr-2"
                               style={{ backgroundColor: colorMap[opp] ?? '#94a3b8' }}
                             />
                             {opp}
                           </td>
-                          <td className="px-3 py-2">{stats.count}</td>
+                          <td className="px-3 py-2 text-foreground">{stats.count}</td>
                           <td
-                            className={`px-3 py-2 font-mono ${stats.avg_reward < 0.5 ? 'text-red-600' : stats.avg_reward > 2.0 ? 'text-green-600' : ''}`}
+                            className={`px-3 py-2 font-mono ${stats.avg_reward < 0.5 ? 'text-red-500' : stats.avg_reward > 2.0 ? 'text-green-500' : 'text-foreground'}`}
                           >
                             {stats.avg_reward.toFixed(2)}
                           </td>
-                          <td className="px-3 py-2 font-mono">{stats.total_reward.toFixed(2)}</td>
+                          <td className="px-3 py-2 font-mono text-foreground">{stats.total_reward.toFixed(2)}</td>
                           <td
-                            className={`px-3 py-2 font-mono ${winRate < 0.4 ? 'text-red-600' : winRate > 0.6 ? 'text-green-600' : ''}`}
+                            className={`px-3 py-2 font-mono ${winRate < 0.4 ? 'text-red-500' : winRate > 0.6 ? 'text-green-500' : 'text-foreground'}`}
                           >
                             {(winRate * 100).toFixed(0)}%
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs">
+                          <td className="px-3 py-2 font-mono text-xs text-foreground">
                             {(stats.strategy_profile.aggressive ?? 0).toFixed(0)}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs">
+                          <td className="px-3 py-2 font-mono text-xs text-foreground">
                             {(stats.strategy_profile.defensive ?? 0).toFixed(0)}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs">
+                          <td className="px-3 py-2 font-mono text-xs text-foreground">
                             {(stats.strategy_profile.resource_hoarder ?? 0).toFixed(0)}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs">
+                          <td className="px-3 py-2 font-mono text-xs text-foreground">
                             {(stats.strategy_profile.junction_hunter ?? 0).toFixed(0)}
                           </td>
-                          <td className="px-3 py-2 font-mono text-xs">
+                          <td className="px-3 py-2 font-mono text-xs text-foreground">
                             {(stats.strategy_profile.mobile_scout ?? 0).toFixed(0)}
                           </td>
                         </tr>
@@ -877,7 +928,7 @@ export const PolicyDashboard: FC<{
             </Card>
           ) : (
             <Card>
-              <p className="text-sm text-gray-500 text-center py-8">No opponent data available</p>
+              <p className="text-sm text-foreground-muted text-center py-8">No opponent data available</p>
             </Card>
           )}
         </>
