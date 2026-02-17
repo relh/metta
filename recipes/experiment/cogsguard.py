@@ -477,20 +477,17 @@ def train(
         )
     trainer_cfg = TrainerConfig()
     if sweep_mode:
-        # Tuned from relh.cg.0204 sweep runs.
-        trainer_cfg.sampling.method = "prioritized"
-        trainer_cfg.sampling.prio_alpha = 0.3098
-        trainer_cfg.sampling.prio_beta0 = 0.7994
-        trainer_cfg.advantage.gae_lambda = 0.9161
-        trainer_cfg.advantage.gamma = 0.9995
-        trainer_cfg.losses.ppo_actor.clip_coef = 0.3644
-        trainer_cfg.losses.ppo_actor.ent_coef = 0.0717
-        trainer_cfg.losses.ppo_critic.vf_coef = 1.3652
-        trainer_cfg.optimizer.learning_rate = 0.00924
-        trainer_cfg.optimizer.momentum = 0.9724
-        trainer_cfg.optimizer.weight_decay = 0.10
-        trainer_cfg.optimizer.eps = 2.5e-06
-        trainer_cfg.optimizer.warmup_steps = 1752
+        # Tuned from relh.cg.adapters.0213.2_trial_0015_3199a5.
+        trainer_cfg.sampling.method = "sequential"
+        trainer_cfg.sampling.prio_alpha = 0.0
+        trainer_cfg.sampling.prio_beta0 = 0.6
+        trainer_cfg.advantage.gae_lambda = 0.9354159832000732
+        trainer_cfg.advantage.gamma = 0.9986186027526855
+        trainer_cfg.optimizer.learning_rate = 0.00737503357231617
+        trainer_cfg.optimizer.momentum = 0.9794994592666626
+        trainer_cfg.optimizer.weight_decay = 0.3
+        trainer_cfg.optimizer.eps = 6.686864253424574e-06
+        trainer_cfg.optimizer.warmup_steps = 500
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
@@ -893,84 +890,84 @@ def sweep(
             D.LOG_NORMAL,
             min=1e-4,
             max=3e-2,
-            search_center=9.24e-3,
+            search_center=0.00737503357231617,
         ),
         SP.param(
             "trainer.optimizer.momentum",
             D.UNIFORM,
             min=0.90,
             max=0.995,
-            search_center=0.9724,
+            search_center=0.9794994592666626,
         ),
         SP.param(
             "trainer.optimizer.weight_decay",
             D.LOG_NORMAL,
             min=1e-4,
             max=0.30,
-            search_center=0.10,
+            search_center=0.3,
         ),
         SP.param(
             "trainer.optimizer.eps",
             D.LOG_NORMAL,
             min=1e-8,
             max=1e-4,
-            search_center=2.5e-6,
+            search_center=6.686864253424574e-06,
         ),
         SP.param(
             "trainer.optimizer.warmup_steps",
             D.INT_UNIFORM,
             min=500,
             max=5000,
-            search_center=1752,
+            search_center=500,
         ),
         SP.param(
             "trainer.sampling.prio_alpha",
             D.UNIFORM,
             min=0.0,
             max=1.0,
-            search_center=0.3098,
+            search_center=0.0,
         ),
         SP.param(
             "trainer.sampling.prio_beta0",
             D.UNIFORM,
             min=0.0,
             max=1.0,
-            search_center=0.7994,
+            search_center=0.6,
         ),
         SP.param(
             "trainer.advantage.gamma",
             D.UNIFORM,
             min=0.99,
             max=0.9999,
-            search_center=0.9995,
+            search_center=0.9986186027526855,
         ),
         SP.param(
             "trainer.advantage.gae_lambda",
             D.UNIFORM,
             min=0.80,
             max=0.99,
-            search_center=0.9161,
+            search_center=0.9354159832000732,
         ),
         SP.param(
             "trainer.losses.ppo_actor.clip_coef",
             D.UNIFORM,
             min=0.10,
             max=0.60,
-            search_center=0.3644,
+            search_center=0.36670681834220886,
         ),
         SP.param(
             "trainer.losses.ppo_actor.ent_coef",
             D.LOG_NORMAL,
             min=1e-4,
             max=2e-1,
-            search_center=0.0717,
+            search_center=0.02566424384713173,
         ),
         SP.param(
             "trainer.losses.ppo_critic.vf_coef",
             D.UNIFORM,
             min=0.50,
             max=2.50,
-            search_center=1.3652,
+            search_center=1.4647305011749268,
         ),
     ]
 
