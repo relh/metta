@@ -61,36 +61,12 @@ def _pad_slice_td_like(slice_td: TensorDict, rollout_td: TensorDict | None) -> T
     return padded_td
 
 
-def _is_direct_writeback_compatible(slice_td: TensorDict, rollout_td: TensorDict) -> bool:
-    slice_keys = set(slice_td.keys())
-    rollout_keys = set(rollout_td.keys())
-    if slice_keys != rollout_keys:
+def _shares_storage(a: torch.Tensor, b: torch.Tensor) -> bool:
+    """Return True if a and b may alias the same underlying storage."""
+    try:
+        return a.untyped_storage().data_ptr() == b.untyped_storage().data_ptr()
+    except Exception:
         return False
-
-    for key in rollout_keys:
-        slice_value = slice_td.get(key)
-        rollout_value = rollout_td.get(key)
-
-        if isinstance(rollout_value, TensorDict):
-            if not isinstance(slice_value, TensorDict):
-                return False
-            if not _is_direct_writeback_compatible(slice_value, rollout_value):
-                return False
-            continue
-
-        if isinstance(rollout_value, torch.Tensor):
-            if not isinstance(slice_value, torch.Tensor):
-                return False
-            if slice_value.shape != rollout_value.shape:
-                return False
-            if slice_value.dtype != rollout_value.dtype:
-                return False
-            continue
-
-        if type(slice_value) is not type(rollout_value):
-            return False
-
-    return True
 
 
 class RewardCenteringConfig(Config):
@@ -380,7 +356,7 @@ class TrajectoryIsolator(TrainerComponent):
         self._slice_row_indices_cache: dict[str, torch.Tensor] = {}
         self._slice_row_indices_sorted: dict[str, torch.Tensor] = {}
         self._slice_masks_rollout_step: dict[str, torch.Tensor] = {}
-        self._slice_writeback_mode: dict[str, Literal["direct", "pad"]] = {}
+        # rollout writeback no longer caches a "mode"; it writes back by key.
 
     def register(self, context) -> None:  # type: ignore[override]
         super().register(context)
@@ -625,7 +601,6 @@ class TrajectoryIsolator(TrainerComponent):
         """Create per-slice, policy-keyed TensorDicts for active envs."""
         self._slice_tds_rollout_step = {}
         self._slice_masks_rollout_step = {}
-        self._slice_writeback_mode = {}
 
         for runtime_slice in self._slice_plan:
             slice_td, slice_mask = runtime_slice._split_rollout_td_per_slice(
@@ -696,25 +671,66 @@ class TrajectoryIsolator(TrainerComponent):
             self._slice_tds_rollout_step[runtime_slice.name] = primary_policy_output_td
 
     def writeback_rollout_tds(self, rollout_td: TensorDict) -> None:
-        """Write slice outputs back into the outer rollout TensorDict."""
+        """Write slice outputs back into the outer rollout TensorDict.
+
+        Slice policy TensorDicts intentionally share immutable rollout inputs (`clone(recurse=False)`) to avoid
+        per-step cloning churn. This means most "input" keys already alias `rollout_td[mask]` storage and do not need
+        to be written back. We only write back keys whose values do not alias the rollout buffer (typically policy
+        outputs like `actions`, `logp`, `values`, etc.).
+        """
         for runtime_slice in self._slice_plan:
             if runtime_slice.name in self._slice_tds_rollout_step:
                 mask = self._slice_masks_rollout_step[runtime_slice.name]
                 slice_td = self._slice_tds_rollout_step[runtime_slice.name]
+                if mask.numel() == 0 or not bool(mask.any()):
+                    continue
+
+                # Fetch per-slice view once; we use it only for alias checks and shape/dtype compatibility.
                 rollout_slice_td = rollout_td[mask]
-                mode = self._slice_writeback_mode.get(runtime_slice.name)
-                if mode is None:
-                    mode = "direct" if _is_direct_writeback_compatible(slice_td, rollout_slice_td) else "pad"
-                    self._slice_writeback_mode[runtime_slice.name] = mode
 
-                if mode == "direct":
-                    try:
-                        rollout_td[mask] = slice_td
+                for key in slice_td.keys():
+                    slice_value = slice_td.get(key)
+
+                    # Nested TensorDicts are not expected on the rollout hot path; fall back to safe (but slower)
+                    # writeback when encountered.
+                    if isinstance(slice_value, TensorDict):
+                        rollout_td[mask] = _pad_slice_td_like(slice_td, rollout_slice_td).clone()
+                        break
+
+                    if not isinstance(slice_value, torch.Tensor):
+                        # Non-tensor keys should not be written back (and are usually not present).
                         continue
-                    except (RuntimeError, ValueError, KeyError, TypeError):
-                        self._slice_writeback_mode[runtime_slice.name] = "pad"
 
-                rollout_td[mask] = _pad_slice_td_like(slice_td, rollout_slice_td)
+                    if key in rollout_td.keys():
+                        rollout_value = rollout_td.get(key)
+                        if not isinstance(rollout_value, torch.Tensor):
+                            # Unexpected type mismatch; use the safe path.
+                            rollout_td[mask] = _pad_slice_td_like(slice_td, rollout_slice_td).clone()
+                            break
+
+                        # If the slice tensor aliases the rollout buffer, it already represents the updated value.
+                        if _shares_storage(slice_value, rollout_value):
+                            continue
+
+                        rollout_slice_value = rollout_slice_td.get(key)
+                        if slice_value.shape != rollout_slice_value.shape or slice_value.dtype != rollout_value.dtype:
+                            slice_value = _pad_tensor_like(slice_value, rollout_slice_value)
+                            if not isinstance(slice_value, torch.Tensor):
+                                rollout_td[mask] = _pad_slice_td_like(slice_td, rollout_slice_td).clone()
+                                break
+                            if slice_value.dtype != rollout_value.dtype:
+                                slice_value = slice_value.to(dtype=rollout_value.dtype)
+
+                        rollout_value[mask] = slice_value
+                        continue
+
+                    # New key: allocate a full-batch tensor and fill this slice's rows.
+                    batch = int(rollout_td.batch_size[0]) if rollout_td.batch_size else int(slice_value.shape[0])
+                    full_shape = (batch,) + tuple(slice_value.shape[1:])
+                    # Use a deterministic init because some keys may be emitted only in a subset of slices.
+                    full = torch.zeros(full_shape, device=slice_value.device, dtype=slice_value.dtype)
+                    rollout_td.set(key, full)
+                    rollout_td.get(key)[mask] = slice_value
 
     def _slice_row_indices(
         self, experience: "Experience", runtime_slice: TrajectoryIsolationSliceRuntime

@@ -286,7 +286,6 @@ def test_writeback_rollout_tds_uses_direct_mode_for_compatible_shapes() -> None:
 
     isolator.writeback_rollout_tds(rollout_td)
 
-    assert isolator._slice_writeback_mode["default"] == "direct"
     torch.testing.assert_close(rollout_td["actions"][mask], torch.tensor([7, 9], dtype=torch.int32))
     torch.testing.assert_close(rollout_td["values"][mask], torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
     torch.testing.assert_close(rollout_td["actions"][~mask], torch.tensor([-1, -1], dtype=torch.int32))
@@ -329,7 +328,6 @@ def test_writeback_rollout_tds_falls_back_to_pad_mode_for_shape_mismatch() -> No
 
     isolator.writeback_rollout_tds(rollout_td)
 
-    assert isolator._slice_writeback_mode["default"] == "pad"
     torch.testing.assert_close(
         rollout_td["obs"][mask],
         torch.tensor([[1.0, 2.0, 9.0], [3.0, 4.0, 9.0]], dtype=torch.float32),

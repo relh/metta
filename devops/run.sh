@@ -16,6 +16,7 @@ echo "  - Node index: $NODE_INDEX"
 echo "  - Arguments: $*"
 
 export PYTHONUNBUFFERED=1
+export PATH="${HOME}/.local/bin:${PATH}"
 export PYTHONPATH=${PYTHONPATH:-}:$(pwd)
 export PYTHONOPTIMIZE=1
 export WANDB_DIR="./wandb"
