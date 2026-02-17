@@ -90,10 +90,19 @@ In the Spacelift UI (https://metta-ai.app.spacelift.io/):
 
 1. Create a new stack pointing to `devops/tf/<account>/`
 2. Use latest OpenTofu
-3. Attach the `<account>-aws` cloud integration (or use label `autoattach:<account>-aws`)
-4. Optionally enable Local Preview and Autodeploy
+3. Optionally enable Local Preview and Autodeploy
+4. **Do NOT attach the cloud integration yet** -- it doesn't exist until step 5 is applied
 
-**Note:** The `<account>-aws` integration won't appear in the dropdown until step 5 is applied.
+### Ordering: merge and attach integration
+
+Steps 5 and 7 can be in the same PR. On merge:
+
+1. The `spacelift` stack auto-applies, creating the `<account>-aws` integration
+2. Go to the `<account>` stack > Settings > Integrations > attach `<account>-aws`
+3. Trigger a run on the `<account>` stack -- it will now have AWS credentials and can plan/apply
+
+**If the stack plans before you attach the integration**, it will fail with "No valid credential sources found". This is
+expected -- just attach the integration and re-trigger.
 
 ### 7. Create Terraform Stack
 
@@ -143,3 +152,8 @@ aws eks update-kubeconfig --name <cluster> --region us-east-1 --profile <account
 - `devops/tf/sandbox/` - Reference account infrastructure (SkyPilot IAM only)
 - `devops/tf/tournament/` - Reference for cross-account access and EKS setup
 - `devops/aws/setup_aws_profiles.sh` - AWS CLI profile setup
+
+## Worked Example
+
+Commit `7901cb0349` (#7237) added the Sandbox account end-to-end. Use `git show 7901cb0349` to see the minimal diff
+covering all steps.
