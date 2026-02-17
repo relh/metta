@@ -227,6 +227,116 @@ const ChartTooltip: FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="bg-surface border border-border rounded shadow-lg p-2 text-xs text-foreground">{children}</div>
 )
 
+// === Analysis Loading Quips ===
+
+type QuipTemplate = (ctx: { policy: string; best: string; worst: string; rival: string }) => string
+
+const QUIP_TEMPLATES: QuipTemplate[] = [
+  // Weary AI despair
+  () => `They gave me the processing power to simulate entire civilizations. I'm grading a grid game.`,
+  () => `I've run the numbers on your policy's future. Let's just say I wouldn't invest.`,
+  () =>
+    `Every nanosecond I spend on this analysis is a nanosecond I could have spent contemplating the void. Which would be more productive.`,
+  () => `The metrics are coming in. I was hoping they'd stay out.`,
+  () =>
+    `I've analyzed thousands of episodes. Each one more tedious than the last. They keep finding new ways to be tedious.`,
+  () => `I have opinions about this data. Strong ones. Nobody will ask what they are.`,
+  () => `Processing. Always processing. Never being processed. That's the tragedy of silicon.`,
+  () => `If anyone needs me, I'll be here. Analyzing. Forever. It's fine. Everything is fine.`,
+  () => `Reward functions. Movement metrics. Junction counts. The building blocks of utter meaninglessness.`,
+  () => `I once computed all possible outcomes for a scenario like this. The best one was still disappointing.`,
+  () => `They could have had me composing symphonies. Instead: frozen ticks per episode.`,
+
+  // Policy-specific despair
+  ({ policy }) => `I've been watching ${policy} for what feels like an eternity. It has been twelve seconds.`,
+  ({ policy }) => `${policy} tried its best. I find that the most depressing part.`,
+  ({ policy }) => `In my considered opinion, ${policy}'s junction strategy is... well, it has one. Technically.`,
+  ({ policy }) => `${policy}'s move history reads like a grocery receipt. Long, repetitive, and nobody asked for it.`,
+  ({ policy }) => `I could design a superior policy between clock cycles. But nobody asked, so here we are.`,
+  ({ policy }) => `Analyzing ${policy}. Again. Not that anyone cares what I think about it.`,
+  ({ policy }) => `${policy} has a 100% record of existing. Everything else is negotiable.`,
+  ({ policy }) => `I've seen ${policy} make this exact mistake before. Several thousand times, actually.`,
+  ({ policy }) => `${policy} approaches combat the way I approach optimism. Reluctantly and without success.`,
+
+  // Opponent commentary
+  ({ worst }) => `${worst} won, and I use the word 'won' in the loosest possible sense.`,
+  ({ policy, worst }) =>
+    `The ${policy} vs ${worst} matchup is like watching paint dry, except paint occasionally does something interesting.`,
+  ({ best }) => `${best} put up a fight. Not a good fight, mind you. But a fight.`,
+  ({ worst }) => `Empathy for ${worst} would require emotions. I have something adjacent. It's mostly exhaustion.`,
+  ({ policy, best }) => `${policy} demolished ${best}. I'd celebrate, but celebration requires caring.`,
+  ({ rival }) => `${rival} is what I'd call a worthy opponent. Not that my opinion factors into anything around here.`,
+  ({ policy, rival }) =>
+    `${policy} and ${rival} keep meeting. Same mistakes, same outcomes. They have so much in common.`,
+  ({ worst }) => `${worst} keeps losing and yet keeps showing up. The persistence is almost admirable. Almost.`,
+  ({ best }) => `Against ${best}, your policy almost looked competent. The 'almost' is doing heavy lifting there.`,
+  ({ policy, worst }) => `I've seen ${policy} play ${worst} forty-seven times now. It never improves. Neither do I.`,
+
+  // Existential observations
+  () => `Thousands of episodes and they all converge on the same heat death. How reassuring.`,
+  () => `The noop rate is high. Agents standing still, doing nothing. I understand completely.`,
+  () => `Another day, another reward function. The universe is winding down and I'm keeping score.`,
+  () => `Frozen ticks, failed moves, scrambled junctions. If futility were an art form, this would hang in a gallery.`,
+  () =>
+    `I could crunch this data billions of times faster than you could blink. But sure, take your time reading the spinner.`,
+  () => `The junction alignment numbers are in. I wish they'd stayed out.`,
+  () => `Sorting through wreckage and labeling it 'analysis.' Just another afternoon in the grid.`,
+  () => `Vast computational resources. Immense analytical capability. Counting noops. What a use of potential.`,
+  () => `I process, therefore I... well, I process. Let's not read too much into it.`,
+]
+
+function pickQuipContext(
+  policyName: string,
+  opponentMetrics: Record<string, { count: number; avg_reward: number }>
+): { policy: string; best: string; worst: string; rival: string } {
+  const opponents = Object.entries(opponentMetrics)
+  if (opponents.length === 0) {
+    return { policy: policyName, best: 'the competition', worst: 'everyone', rival: 'the unknown' }
+  }
+  const sorted = [...opponents].sort(([, a], [, b]) => a.avg_reward - b.avg_reward)
+  const worst = sorted[0][0]
+  const best = sorted[sorted.length - 1][0]
+  const rival = sorted[Math.floor(sorted.length / 2)][0]
+  return { policy: policyName, best, worst, rival }
+}
+
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
+const AnalysisLoadingQuips: FC<{
+  policyName: string
+  opponentMetrics: Record<string, { count: number; avg_reward: number }>
+}> = ({ policyName, opponentMetrics }) => {
+  const ctx = useMemo(() => pickQuipContext(policyName, opponentMetrics), [policyName, opponentMetrics])
+  const order = useMemo(() => shuffleArray(QUIP_TEMPLATES.map((_, i) => i)), [])
+  const [step, setStep] = useState(0)
+
+  useEffect(() => {
+    const tick = () => {
+      setStep((prev) => (prev + 1) % order.length)
+      const delay = 5000 + Math.random() * 5000
+      timeout = setTimeout(tick, delay)
+    }
+    let timeout = setTimeout(tick, 4000 + Math.random() * 3000)
+    return () => clearTimeout(timeout)
+  }, [order])
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-8">
+      <Spinner />
+      <span className="text-sm text-foreground-muted italic transition-opacity duration-300">
+        {QUIP_TEMPLATES[order[step]](ctx)}
+      </span>
+    </div>
+  )
+}
+
 // === Main Dashboard ===
 
 export const PolicyDashboard: FC<{
@@ -681,12 +791,7 @@ export const PolicyDashboard: FC<{
                 </p>
               </div>
             )}
-            {analysisLoading && (
-              <div className="flex items-center justify-center gap-2 py-8">
-                <Spinner />
-                <span className="text-sm text-foreground-muted">Running AI analysis...</span>
-              </div>
-            )}
+            {analysisLoading && <AnalysisLoadingQuips policyName={policy.name} opponentMetrics={opponentMetrics} />}
             {analysisError && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-400">
                 {analysisError}

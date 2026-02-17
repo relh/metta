@@ -368,22 +368,33 @@ def create_dashboard_router() -> APIRouter:
 
         prompt = build_analysis_prompt(summary)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": settings.ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                },
-                json={
-                    "model": "claude-sonnet-4-5-20250929",
-                    "max_tokens": 2500,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-                timeout=60.0,
-            )
-            response.raise_for_status()
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-api-key": settings.ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                    },
+                    json={
+                        "model": "claude-sonnet-4-5-20250929",
+                        "max_tokens": 2500,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+        except httpx.TimeoutException as e:
+            raise HTTPException(status_code=504, detail="Claude API timed out (60s limit)") from e
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            body = e.response.text
+            if status == 401:
+                raise HTTPException(status_code=502, detail="Anthropic API key is invalid or expired") from e
+            raise HTTPException(status_code=502, detail=f"Claude API returned {status}: {body[:200]}") from e
+        except httpx.ConnectError as e:
+            raise HTTPException(status_code=502, detail="Could not connect to Claude API (api.anthropic.com)") from e
 
         data = response.json()
         analysis_text = data["content"][0]["text"].strip()
