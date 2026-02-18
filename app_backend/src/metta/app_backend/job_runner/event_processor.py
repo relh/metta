@@ -493,17 +493,25 @@ def _get_runner_images_from_event(event_data: dict) -> tuple[str | None, str | N
     return container_status.get("image"), container_status.get("imageID")
 
 
-def _get_instance_type_from_event(event_data: dict, core_v1: client.CoreV1Api) -> str | None:
+def _get_node_pricing_info(event_data: dict, core_v1: client.CoreV1Api) -> dict[str, str]:
+    """Extract instance_type and capacity_type from the node the pod ran on."""
     pod_data = event_data.get("object", {})
     node_name = pod_data.get("spec", {}).get("nodeName")
     if not node_name:
-        return None
+        return {}
     try:
         node = cast(client.V1Node, core_v1.read_node(node_name))
     except ApiException:
-        return None
-    labels = node.metadata.labels if node.metadata else None
-    return (labels or {}).get("node.kubernetes.io/instance-type")
+        return {}
+    labels = node.metadata.labels if node.metadata else {}
+    result: dict[str, str] = {}
+    instance_type = (labels or {}).get("node.kubernetes.io/instance-type")
+    if instance_type:
+        result["instance_type"] = instance_type
+    capacity_type = (labels or {}).get("karpenter.sh/capacity-type")
+    if capacity_type:
+        result["capacity_type"] = capacity_type
+    return result
 
 
 def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
@@ -524,6 +532,7 @@ def _update_job_status(
     error: str | None = None,
     error_type: str | None = None,
     worker: str | None = None,
+    result: dict[str, Any] | None = None,
 ):
     try:
         current = stats_client.get_job(job_id)
@@ -534,7 +543,7 @@ def _update_job_status(
                 stats_client.update_job(job_id, JobRequestUpdate(error=error, error_type=error_type))
             return
         stats_client.update_job(
-            job_id, JobRequestUpdate(status=status, error=error, error_type=error_type, worker=worker)
+            job_id, JobRequestUpdate(status=status, error=error, error_type=error_type, worker=worker, result=result)
         )
     except Exception as e:
         logger.error(f"Failed to update job {job_id} status to {status}: {e}")
@@ -581,9 +590,7 @@ def _handle_pod_succeeded(
             result_data["runner_image"] = runner_image
         if runner_image_id:
             result_data["runner_image_id"] = runner_image_id
-        instance_type = _get_instance_type_from_event(event_data, core_v1)
-        if instance_type:
-            result_data["instance_type"] = instance_type
+        result_data.update(_get_node_pricing_info(event_data, core_v1))
         runtime_info = _read_runtime_info(job_id)
         result_data.update(runtime_info.model_dump(exclude_none=True))
 
@@ -635,7 +642,13 @@ def _process_event(
             error = log_error if log_error else k8s_error
             error_type = _classify_error(error)
 
-            _update_job_status(stats_client, job_id, JobStatus.failed, error=error, error_type=error_type)
+            # Capture instance type and capacity type so cost can be derived
+            pricing_info = _get_node_pricing_info(event_data, core_v1)
+            fail_result = pricing_info if pricing_info else None
+
+            _update_job_status(
+                stats_client, job_id, JobStatus.failed, error=error, error_type=error_type, result=fail_result
+            )
 
             # Log which error source was used for debugging
             error_source = "logs" if log_error else "k8s"

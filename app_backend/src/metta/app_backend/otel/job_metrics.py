@@ -29,6 +29,11 @@ class JobMetrics:
             description="Time spent in job lifecycle stages",
             unit="s",
         )
+        self._cost_counter = meter.create_counter(
+            "job.cost",
+            description="Cumulative job compute cost",
+            unit="USD",
+        )
         self._running_counts: dict[str, int] = {}
         self._outstanding_counts: dict[tuple[str, str], int] = {}
         meter.create_observable_gauge(
@@ -82,6 +87,7 @@ class JobMetrics:
         job: JobRequest,
         transition_time: datetime,
         error_type: Optional[str],
+        cost_per_pod_hour: float = 0.0,
     ) -> None:
         self._state_transition_counter.add(
             1,
@@ -99,6 +105,15 @@ class JobMetrics:
             self._record_stage_duration("dispatched", job.dispatched_at, transition_time, job.job_type)
         elif from_status == JobStatus.running:
             self._record_stage_duration("running", job.running_at, transition_time, job.job_type)
+            if cost_per_pod_hour > 0 and job.running_at is not None:
+                running_at = job.running_at.replace(tzinfo=UTC) if job.running_at.tzinfo is None else job.running_at
+                t_time = transition_time.replace(tzinfo=UTC) if transition_time.tzinfo is None else transition_time
+                duration_hours = (t_time - running_at).total_seconds() / 3600
+                if duration_hours > 0:
+                    self._cost_counter.add(
+                        duration_hours * cost_per_pod_hour,
+                        attributes={"job_type": job.job_type.value},
+                    )
 
     async def update_running_counts(self, session: AsyncSession, job_types: set[JobType]) -> None:
         if not job_types:

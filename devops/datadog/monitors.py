@@ -398,6 +398,35 @@ def job_no_activity_monitor() -> dict:
     }
 
 
+def job_daily_cost_monitor() -> dict:
+    """Monitor for daily job compute cost exceeding budget.
+
+    Alerts when cumulative job cost over the last day exceeds $10k, indicating
+    runaway eval scaling or unexpectedly long-running jobs.
+    """
+    return {
+        "name": "[Tournament] Daily Job Cost: ${{value}}",
+        "type": "query alert",
+        "query": "sum(last_1d):sum:job.cost{service:observatory-backend}.as_count() > 10000",
+        "message": (
+            "${{value}} spent on job compute in the last 24 hours (limit: $10,000).\n\n"
+            "Check:\n"
+            "- Running evals: https://observatory.softmax-research.net/episode-jobs?status=running\n"
+            "- Node count: `kubectl get nodes | wc -l`\n"
+            "- Consider pausing tournaments if spend is unexpected\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 10000, "warning": 8000},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
 ALL_MONITORS = [
     k8s_deployment_replicas_monitor,
     k8s_crashloopbackoff_monitor,
@@ -405,6 +434,7 @@ ALL_MONITORS = [
     job_failure_rate_monitor,
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
+    job_daily_cost_monitor,
     # Removed to avoid false positives:
     # job_stuck_pending_monitor,  # Too noisy - depends on tournament schedule
     # job_no_activity_monitor,    # Alerts during legitimate downtime
