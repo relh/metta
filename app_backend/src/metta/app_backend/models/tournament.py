@@ -54,6 +54,7 @@ class Season(SQLModel, table=True):
     version: int = Field(default=1, sa_column_kwargs={"server_default": text("1")})
     canonical: bool = Field(default=False, sa_column_kwargs={"server_default": text("false")})
     disabled_at: datetime | None = Field(default=None)
+    compat_version: str | None = Field(default=None)
     description: str | None = None
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}

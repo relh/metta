@@ -40,26 +40,26 @@ different seasons can coexist on different game versions.
 
 ### Version Scheme
 
-**Format:** `0.{compat}.{patch}` for both mettagrid and cogames.
+**Format:** `{compat}.{patch}` for both mettagrid and cogames.
 
-- `0` -- fixed prefix, signals pre-1.0. Natural graduation path to `1.x.y` later.
-- `compat` -- shared compatibility epoch, checked into repo, bumped manually for breaking changes.
+- `compat` -- shared compatibility string (e.g. `"0.4"`), checked into repo, bumped manually for breaking changes.
+  Pre-1.0 versions use `0.N`; graduation to `1.x` is just a new compat string with no code changes.
 - `patch` -- auto-bumped by `metta publish` (per-package, independent).
 
-**Source of truth:** `COMPAT_VERSION` file at repo root containing a single integer. Starting value: `4` (above existing
-`0.2.x`/`0.3.x` tags on PyPI).
+**Source of truth:** `COMPAT_VERSION` file at repo root containing a version string like `0.4`. Starting value: `0.4`
+(above existing `0.2.x`/`0.3.x` tags on PyPI).
 
-**Tag format:** `{package}-v0.{compat}.{patch}` (3-part). Old 4-part tags are ignored by publish logic.
+**Tag format:** `{package}-v{compat}.{patch}` (3-part). Old 4-part tags are ignored by publish logic.
 
 ### Season Model
 
-Add `compat_version: int | None` to the `Season` table. `NULL` means pre-compat-versioning (no enforcement).
+Add `compat_version: str | None` to the `Season` table. `NULL` means pre-compat-versioning (no enforcement).
 
 When `_ensure_season_exists()` creates a season, it records the compat version from the running cogames package.
 `CommissionerBase` gets a `compat_version` class attribute derived from the installed cogames version at import time.
 Season rolling carries `compat_version` forward unless explicitly changed.
 
-API models (`SeasonResponse`, `SeasonInfo`) expose `compat_version: int | None`.
+API models (`SeasonResponse`, `SeasonInfo`) expose `compat_version: str | None`.
 
 ### Client-Side Enforcement
 
@@ -69,7 +69,7 @@ cogames compat version (parsed from `importlib.metadata.version("cogames")` midd
 Mismatch is an error:
 
 ```
-Error: Season "beta-cvc" requires cogames compat version 4, but you have 0.3.1 (compat 3).
+Error: Season "beta-cvc" requires compat version 0.4, but you have cogames 0.3.1 (compat 0.3).
 Run: pip install --upgrade cogames
 ```
 
@@ -82,36 +82,37 @@ Only fires if the season has a non-null `compat_version`.
 
 **Image tags:**
 
-- `episode-runner:compat-v{N}` -- mutable tag, what seasons reference. Retagged on hotfix rebuilds.
+- `episode-runner:compat-v{compat}` -- mutable tag (e.g. `compat-v0.4`), what seasons reference. Retagged on hotfix
+  rebuilds.
 - `episode-runner:cogames-v0.4.2` -- immutable tag for auditability.
 
 **Dockerfile:** Takes `COGAMES_VERSION` build arg. Uses `pip install cogames==${COGAMES_VERSION}` and sets
 `ENV COGAMES_VERSION` so the running container can report it.
 
-**Job dispatch:** Commissioner passes the image tag based on `season.compat_version`:
-`episode-runner:compat-v{season.compat_version}`. If NULL, falls back to global `EPISODE_RUNNER_IMAGE` config.
-Observatory is updated to accept an input target episode runner image.
+**Job dispatch:** Commissioner passes the image tag based on `season.compat_version` (e.g.
+`episode-runner:compat-v0.4`). If NULL, falls back to global `EPISODE_RUNNER_IMAGE` config. Observatory is updated to
+accept an input target episode runner image.
 
 ### Publishing
 
-1. `metta publish` reads `COMPAT_VERSION` from repo root.
-2. Finds latest tag matching `{package}-v0.{compat}.*`, increments patch (starts at 0 for new compat).
-3. Tags as `{package}-v0.{compat}.{patch}`.
-4. When publishing cogames, pins `mettagrid==0.{compat}.{latest_mettagrid_patch}` -- same compat, but mettagrid's latest
+1. `metta publish` reads `COMPAT_VERSION` from repo root (e.g. `"0.4"`).
+2. Finds latest tag matching `{package}-v{compat}.*`, increments patch (starts at 0 for new compat).
+3. Tags as `{package}-v{compat}.{patch}`.
+4. When publishing cogames, pins `mettagrid=={compat}.{latest_mettagrid_patch}` -- same compat, but mettagrid's latest
    patch is resolved independently from its own tags (not cogames' patch number).
-5. CI builds episode runner with `COGAMES_VERSION=0.{compat}.{patch}`, pushes both image tags.
+5. CI builds episode runner with `COGAMES_VERSION={compat}.{patch}`, pushes both image tags.
 6. Refuses to publish if `COMPAT_VERSION` doesn't match the compat component being tagged.
 
 Version parsing (extracting compat/patch from tags and installed package versions) is shared between `metta publish` and
-`setuptools_scm` config so there's a single implementation for the `{package}-v0.{compat}.{patch}` format.
+`setuptools_scm` config so there's a single implementation for the `{package}-v{compat}.{patch}` format.
 
 ### Operational Flows
 
-**Hotfix:** Publish patch (e.g., `cogames-v0.4.2`). Rebuild and retag `episode-runner:compat-v4`. All compat-4 seasons
+**Hotfix:** Publish patch (e.g., `cogames-v0.4.2`). Rebuild and retag `episode-runner:compat-v0.4`. All `0.4` seasons
 pick up the hotfix on next dispatch. No season roll needed.
 
-**Breaking change:** Bump `COMPAT_VERSION` to 5. Publish `cogames-v0.5.0`. Build `episode-runner:compat-v5`. Create new
-seasons with `compat_version=5`. Old seasons keep running on `compat-v4`.
+**Breaking change:** Bump `COMPAT_VERSION` to `0.5`. Publish `cogames-v0.5.0`. Build `episode-runner:compat-v0.5`.
+Create new seasons with `compat_version="0.5"`. Old seasons keep running on `compat-v0.4`.
 
 ### Migration
 

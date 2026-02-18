@@ -9,6 +9,28 @@ from metta.app_backend.tournament.season_resolver import resolve_season
 
 
 @pytest.mark.asyncio
+async def test_season_compat_version_nullable(stats_repo: str) -> None:  # noqa: ARG001
+    async with db_session() as session:
+        season = Season(name="test-compat", canonical=True, compat_version="0.4")
+        session.add(season)
+        await session.flush()
+        result = await session.execute(select(Season).where(Season.name == "test-compat"))
+        s = result.scalar_one()
+        assert s.compat_version == "0.4"
+
+
+@pytest.mark.asyncio
+async def test_season_compat_version_null_default(stats_repo: str) -> None:  # noqa: ARG001
+    async with db_session() as session:
+        season = Season(name="test-no-compat", canonical=True)
+        session.add(season)
+        await session.flush()
+        result = await session.execute(select(Season).where(Season.name == "test-no-compat"))
+        s = result.scalar_one()
+        assert s.compat_version is None
+
+
+@pytest.mark.asyncio
 async def test_season_version_flow(stats_repo: str) -> None:  # noqa: ARG001
     async with db_session() as session:
         season_v1 = Season(name="integration-test", version=1, canonical=True)
