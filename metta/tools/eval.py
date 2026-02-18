@@ -3,6 +3,7 @@ import logging
 import math
 import multiprocessing
 from typing import Sequence
+from urllib.parse import parse_qs, urlparse
 
 from pydantic import Field
 
@@ -13,7 +14,7 @@ from metta.common.tool import Tool
 from metta.common.tool.tool import ToolResult, ToolWithResult
 from metta.common.wandb.context import WandbRunAppendContext
 from metta.sim.handle_results import render_eval_summary
-from metta.sim.runner import SimulationRunConfig, SimulationRunResult
+from metta.sim.runner import SimulationRunConfig, SimulationRunResult, apply_lineup_overrides
 from metta.sim.simulate_and_record import (
     ObservatoryWriter,
     WandbWriter,
@@ -21,14 +22,48 @@ from metta.sim.simulate_and_record import (
 )
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_replay_dir, auto_stats_server_uri, auto_wandb_config
-from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 logger = logging.getLogger(__name__)
 
 
+def _policy_display_name_from_uri(uri: str) -> str:
+    parsed = urlparse(uri)
+    if parsed.query:
+        qs = parse_qs(parsed.query)
+        # Lightweight naming without changing the `policy_uris` list contract.
+        for key in ("display_name", "name", "label"):
+            vals = qs.get(key)
+            if vals and vals[-1]:
+                return vals[-1]
+
+    base = uri.split("?", 1)[0]
+    if "://" in base:
+        path = urlparse(base).path.rstrip("/")
+        if path:
+            return path.rsplit("/", 1)[-1]
+    return base
+
+
 class EvaluateTool(Tool):
     simulations: Sequence[SimulationConfig] | Sequence[SimulationRunConfig]
-    policy_uris: str | list[str] = Field(description="Policy URIs to evaluate. The first URI is the primary policy.")
+    # Convenience for single-policy use (`policy_uri=...`). Use `policy_uris=[...]` for multi-policy.
+    policy_uri: str | None = None
+    policy_uris: list[str] = Field(
+        default_factory=list,
+        description="Policy URIs to evaluate. The first URI is the primary policy.",
+    )
+    assignments: list[int] | None = Field(
+        default=None,
+        description="Optional explicit policy index per agent for all simulations.",
+    )
+    proportions: list[float] | None = Field(
+        default=None,
+        description="Optional policy proportions for all simulations when assignments are omitted.",
+    )
+    shuffle_assignments: bool = Field(
+        default=True,
+        description="Shuffle policy assignments each episode when generated from proportions.",
+    )
 
     replay_dir: str = Field(default_factory=auto_replay_dir)
 
@@ -43,15 +78,15 @@ class EvaluateTool(Tool):
         return 0
 
     def run_eval(self) -> list[SimulationRunResult]:
-        if not self.policy_uris:
-            raise ValueError("policy_uris is required")
+        if self.policy_uri and self.policy_uris:
+            raise ValueError("Specify only one of policy_uri or policy_uris")
+        policy_uris = list(self.policy_uris) if self.policy_uris else ([self.policy_uri] if self.policy_uri else [])
+        if not policy_uris:
+            raise ValueError("policy_uris is required (or set policy_uri for a single policy)")
+        if self.assignments is not None and self.proportions is not None:
+            raise ValueError("Specify only one of assignments or proportions")
 
-        if isinstance(self.policy_uris, str):
-            policy_uris = [self.policy_uris]
-        else:
-            policy_uris = list(self.policy_uris)
-
-        policy_specs = [policy_spec_from_uri(uri) for uri in policy_uris]
+        policy_names = [_policy_display_name_from_uri(uri) for uri in policy_uris]
 
         observatory_writer: ObservatoryWriter | None = None
         wandb_writer: WandbWriter | None = None
@@ -92,7 +127,7 @@ class EvaluateTool(Tool):
         if self.push_metrics_to_wandb:
             if not primary_policy_version:
                 raise ValueError(
-                    "The first policy_uri needs to specify a policy registered in the stats server in order for "
+                    "The first entry in policy_uris must specify a policy registered in the stats server in order for "
                     "metrics to be pushed to WandB; it's needed to find the wandb run to push stats to."
                 )
             wandb_config = auto_wandb_config(primary_policy_version.name)
@@ -128,8 +163,15 @@ class EvaluateTool(Tool):
             sim_run_configs = [
                 sim.to_simulation_run_config() if isinstance(sim, SimulationConfig) else sim for sim in self.simulations
             ]
+            for sim_run in sim_run_configs:
+                apply_lineup_overrides(
+                    sim_run,
+                    assignments=self.assignments,
+                    proportions=self.proportions,
+                    shuffle_assignments=self.shuffle_assignments,
+                )
             rollout_results = simulate_and_record(
-                policy_specs=policy_specs,
+                policy_uris=policy_uris,
                 simulations=sim_run_configs,
                 replay_dir=self.replay_dir,
                 seed=self.system.seed,
@@ -141,7 +183,7 @@ class EvaluateTool(Tool):
 
         render_eval_summary(
             rollout_results,
-            policy_names=[(spec.init_kwargs or {}).get("display_name") or spec.name for spec in policy_specs],
+            policy_names=policy_names,
             verbose=self.verbose,
         )
 

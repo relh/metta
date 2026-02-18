@@ -6,7 +6,6 @@ from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.wandb.context import WandbRun
 from metta.sim.handle_results import send_eval_results_to_wandb, write_eval_results_to_observatory
 from metta.sim.runner import SimulationRunConfig, SimulationRunResult, run_simulations
-from mettagrid.policy.policy import PolicySpec
 
 
 class WandbWriter(BaseModel):
@@ -43,7 +42,7 @@ class ObservatoryWriter(BaseModel):
 
 
 def simulate_and_record(
-    policy_specs: Sequence[PolicySpec],
+    policy_uris: Sequence[str],
     simulations: Sequence[SimulationRunConfig],
     replay_dir: str,
     seed: int,
@@ -53,7 +52,7 @@ def simulate_and_record(
     on_progress: Callable[[str], None] = lambda x: None,
 ) -> list[SimulationRunResult]:
     rollout_results = run_simulations(
-        policy_specs=policy_specs,
+        policy_uris=policy_uris,
         simulations=simulations,
         replay_dir=replay_dir,
         seed=seed,

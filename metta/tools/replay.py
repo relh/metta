@@ -10,11 +10,9 @@ from pydantic import Field
 
 from metta.common.tool import Tool
 from metta.common.wandb.context import WandbConfig
-from metta.sim.runner import run_simulations
+from metta.sim.runner import apply_lineup_overrides, run_simulations
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_replay_dir, auto_wandb_config
-from mettagrid.policy.policy import PolicySpec
-from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 logger = logging.getLogger(__name__)
 
@@ -27,23 +25,38 @@ class ReplayTool(Tool):
 
     wandb: WandbConfig = auto_wandb_config()
     sim: SimulationConfig
-    policy_uri: Optional[str] = None
+    # Empty/None means "null agent" (MockAgent), matching the old `policy_uri=None` semantics.
+    # If you want random actions, pass `policy_uris=["metta://policy/random"]`.
+    # Back-compat: single-policy override for CLI usage (`policy_uri=...`). Prefer `policy_uris` going forward.
+    policy_uri: str | None = None
+    policy_uris: list[str] | None = None
+    assignments: list[int] | None = None
+    proportions: list[float] | None = None
+    shuffle_assignments: bool = True
     replay_dir: str = Field(default_factory=auto_replay_dir)
     open_browser_on_start: bool = True
     launch_viewer: bool = True
 
-    def _build_policy_spec(self, normalized_uri: Optional[str]) -> PolicySpec:
-        if normalized_uri is None:
-            return PolicySpec(class_path="metta.agent.mocks.mock_agent.MockAgent", data_path=None)
-        return policy_spec_from_uri(normalized_uri, device="cpu")
-
     def invoke(self, args: dict[str, str]) -> Optional[int]:
-        policy_spec = self._build_policy_spec(self.policy_uri)
+        if self.policy_uri and self.policy_uris:
+            raise ValueError("Specify only one of policy_uri or policy_uris")
+        policy_uris = list(self.policy_uris) if self.policy_uris else ([self.policy_uri] if self.policy_uri else [])
+        if not policy_uris:
+            # Must resolve inside the isolated episode-runner policy-server venv, which only
+            # guarantees `mettagrid` is installed (not `metta`). Use a registered mettagrid
+            # mock policy for "null agent" semantics.
+            policy_uris = ["mock://noop"]
 
         simulation_run = self.sim.to_simulation_run_config()
+        apply_lineup_overrides(
+            simulation_run,
+            assignments=self.assignments,
+            proportions=self.proportions,
+            shuffle_assignments=self.shuffle_assignments,
+        )
 
         simulation_results = run_simulations(
-            policy_specs=[policy_spec],
+            policy_uris=policy_uris,
             simulations=[simulation_run],
             replay_dir=self.replay_dir,
             seed=self.system.seed,

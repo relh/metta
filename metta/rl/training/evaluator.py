@@ -198,8 +198,8 @@ class Evaluator(TrainerComponent):
         # Remote evaluation
         if self._evaluate_remote and self._stats_client and policy_version_id:
             response = evaluate_remotely(
-                policy_version_id=policy_version_id,
                 simulations=sim_run_configs,
+                policy_uris=[f"metta://policy/{policy_version_id}"],
                 stats_client=self._stats_client,
                 git_hash=self._git_hash,
                 push_metrics_to_wandb=(self._wandb_run is not None),
@@ -232,7 +232,7 @@ class Evaluator(TrainerComponent):
                 record_heartbeat()
 
             rollout_results = simulate_and_record(
-                policy_specs=[policy_spec],
+                policy_uris=[policy_uri],
                 simulations=sim_run_configs,
                 replay_dir=self._replay_dir,
                 seed=self._seed,

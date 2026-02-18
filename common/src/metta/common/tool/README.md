@@ -107,6 +107,11 @@ This automatically creates empty `__init__.py` files in any subdirectories that 
 # Evaluate a policy
 ./tools/run.py evaluate arena policy_uri=file://./train_dir/my_run/checkpoints
 
+# Multi-policy (lineup) example
+./tools/run.py evaluate arena \
+  'policy_uris=["mock://noop","metta://policy/random"]' \
+  'assignments=[0,1,0,1]'
+
 # Interactive play (browser)
 ./tools/run.py play arena policy_uri=file://./train_dir/my_run/checkpoints
 

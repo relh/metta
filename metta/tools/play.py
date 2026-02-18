@@ -1,21 +1,21 @@
 """Interactive play tool for Metta simulations."""
 
 import logging
-import uuid
 from typing import Optional
 
 import torch
-from pydantic import PrivateAttr, model_validator
+from metta_alo.scoring import allocate_counts, validate_proportions
+from pydantic import PrivateAttr
 from rich.console import Console
 
-from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.tool import Tool
 from metta.common.wandb.context import WandbConfig
 from metta.sim.simulation_config import SimulationConfig
-from metta.tools.utils.auto_config import auto_stats_server_uri, auto_wandb_config
+from metta.tools.utils.auto_config import auto_wandb_config
 from mettagrid.map_builder.map_builder import HasSeed
 from mettagrid.renderer.renderer import RenderMode
 from mettagrid.runner.rollout import run_episode_local
+from mettagrid.runner.types import SingleEpisodeJob
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri
 
 logger = logging.getLogger(__name__)
@@ -32,9 +32,11 @@ class PlayTool(Tool):
     wandb: WandbConfig = auto_wandb_config()
     sim: SimulationConfig
 
-    policy_uri: str | None = None  # Deprecated, use policy_version_id or s3_path instead
-    s3_path: str | None = None
-    policy_version_id: str | None = None
+    # Back-compat: single-policy override for CLI usage (`policy_uri=...`). Prefer `policy_uris` going forward.
+    policy_uri: str | None = None
+    policy_uris: list[str] = []
+    assignments: list[int] | None = None
+    proportions: list[float] | None = None
 
     open_browser_on_start: bool = True
     max_steps: Optional[int] = None
@@ -46,7 +48,6 @@ class PlayTool(Tool):
     seed: int | None = None
     render: RenderMode = "gui"
     autostart: bool = False
-    stats_server_uri: str | None = auto_stats_server_uri()
 
     _explicit_seed_overrides: set[str] = PrivateAttr(default_factory=set)
 
@@ -79,11 +80,25 @@ class PlayTool(Tool):
 
         return tool
 
-    @model_validator(mode="after")
-    def validate(self) -> "PlayTool":
-        if len([x for x in [self.policy_uri, self.policy_version_id, self.s3_path] if x is not None]) > 1:
-            raise ValueError("Only one of policy_uri, policy_version_id, or s3_path can be specified")
-        return self
+    def _resolve_assignments(self, *, num_agents: int, num_policies: int) -> list[int]:
+        if self.assignments is not None and self.proportions is not None:
+            raise ValueError("Specify only one of assignments or proportions")
+
+        if self.assignments is not None:
+            if len(self.assignments) != num_agents:
+                raise ValueError(f"assignments length ({len(self.assignments)}) must equal num_agents ({num_agents})")
+            assignments = list(self.assignments)
+            if any(policy_idx < 0 or policy_idx >= num_policies for policy_idx in assignments):
+                raise ValueError(
+                    "assignments contains an out-of-range policy index "
+                    f"(num_policies={num_policies}, assignments={assignments})"
+                )
+            return assignments
+
+        proportions = list(self.proportions) if self.proportions is not None else [1.0] * num_policies
+        validate_proportions(proportions, num_policies)
+        counts = allocate_counts(num_agents, proportions)
+        return [i for i, c in enumerate(counts) for _ in range(c)]
 
     def invoke(self, args: dict[str, str]) -> int | None:
         """Run an interactive play session with the configured simulation."""
@@ -97,39 +112,32 @@ class PlayTool(Tool):
         if self.max_steps is not None:
             env_cfg.game.max_steps = self.max_steps
 
-        s3_path: str | None = self.s3_path
-        if self.policy_version_id:
-            if not self.stats_server_uri:
-                raise ValueError("stats_server_uri is required")
-            if s3_path:
-                raise ValueError("s3_path and policy_version_id cannot be specified together")
-            stats_client = StatsClient.create(self.stats_server_uri)
-            policy_version = stats_client.get_policy_version(uuid.UUID(self.policy_version_id))
-            s3_path = policy_version.s3_path
-            if not s3_path:
-                raise ValueError(f"Policy version {self.policy_version_id} has no s3 path")
-
-        if s3_path:
-            policy_specs = [policy_spec_from_uri(s3_path, device=str(device))]
-            logger.info("Using policy from s3 path")
-        elif self.policy_uri:
-            logger.info(f"Loading policy from URI: {self.policy_uri}")
-            policy_specs = [policy_spec_from_uri(self.policy_uri, device=str(device))]
-            logger.info("Using policy from deprecated-format policy uri")
-        else:
+        if self.policy_uri and self.policy_uris:
+            raise ValueError("Specify only one of policy_uri or policy_uris")
+        policy_uris = list(self.policy_uris) if self.policy_uris else ([self.policy_uri] if self.policy_uri else [])
+        if not policy_uris:
             # Fall back to random policies only when no policy was configured explicitly.
-            policy_specs = [policy_spec_from_uri("metta://policy/random", device=str(device))]
+            policy_uris = ["metta://policy/random"]
+        policy_specs = [policy_spec_from_uri(uri, device=str(device)) for uri in policy_uris]
+        assignments = self._resolve_assignments(num_agents=env_cfg.game.num_agents, num_policies=len(policy_specs))
 
         seed = self.seed
         if seed is None:
             seed = self.system.seed
 
+        job = SingleEpisodeJob(
+            policy_uris=list(policy_uris),
+            assignments=list(assignments),
+            env=env_cfg,
+            seed=int(seed),
+            max_action_time_ms=10000,
+        )
         episode_results, _replay = run_episode_local(
             policy_specs=policy_specs,
-            assignments=[0] * env_cfg.game.num_agents,
-            env=env_cfg,
-            seed=seed,
-            max_action_time_ms=10000,
+            assignments=job.assignments,
+            env=job.env,
+            seed=job.seed,
+            max_action_time_ms=job.max_action_time_ms,
             autostart=self.autostart,
             device=str(device),
             render_mode=self.render,

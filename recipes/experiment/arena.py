@@ -112,6 +112,8 @@ def train_shaped(rewards: bool = True) -> tools.TrainTool:
 def evaluate(
     policy_uris: list[str] | str,
 ) -> tools.EvaluateTool:
+    if isinstance(policy_uris, str):
+        policy_uris = [policy_uris]
     return tools.EvaluateTool(
         simulations=simulations(),
         policy_uris=policy_uris,

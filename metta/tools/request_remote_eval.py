@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Used to evaluate a policy on a remote simulation suite
 class RequestRemoteEvalTool(Tool):
-    policy_version_id: str | None = None
-    policy_uri: str | None = None
+    policy_uris: list[str]
     simulations: Sequence[SimulationRunConfig] | Sequence[SimulationConfig]
     stats_server_uri: str | None = auto_stats_server_uri()
     push_metrics_to_wandb: bool = False
@@ -37,9 +36,8 @@ class RequestRemoteEvalTool(Tool):
 
         task = evaluate_remotely(
             simulations=self._to_simulation_run_configs(),
+            policy_uris=self.policy_uris,
             stats_client=stats_client,
-            policy_version_id=self.policy_version_id,
-            policy_uri=self.policy_uri,
             git_hash=self.git_hash,
             push_metrics_to_wandb=self.push_metrics_to_wandb,
         )

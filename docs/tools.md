@@ -222,6 +222,29 @@ Run comprehensive policy evaluation with simulation suites and statistics export
 ./tools/run.py evaluate arena policy_uri=file://./train_dir/my_run/checkpoints/my_run:v12.pt
 ```
 
+### Policy Lineups (Single vs Multi)
+
+Most recipes/tools support a single-policy convenience `policy_uri=...`. For multi-policy runs, pass `policy_uris=[...]`
+and optionally control which agent gets which policy with `assignments` or `proportions`.
+
+```bash
+# Multi-policy eval: policy_uris[i] is policy index i
+./tools/run.py evaluate arena \
+  'policy_uris=["mock://noop","metta://policy/random"]' \
+  'assignments=[0,1,0,1]' \
+  shuffle_assignments=false
+
+# Mixture (auto-generate assignments from proportions)
+./tools/run.py evaluate arena \
+  'policy_uris=["s3://bucket/a.pt","s3://bucket/b.pt"]' \
+  'proportions=[0.75,0.25]'
+```
+
+Notes:
+
+- `assignments` is a per-agent list of policy indices; its length must equal `env.game.num_agents`.
+- If `assignments` is provided, it never shuffles (even if `shuffle_assignments=true`).
+
 **Key Features**:
 
 - Multiple policy evaluation in one run
