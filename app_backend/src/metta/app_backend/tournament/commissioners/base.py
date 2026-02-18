@@ -47,6 +47,7 @@ from metta.app_backend.tournament.settings import (
     POLL_INTERVAL_SECONDS,
     settings,
 )
+from metta.common.compat_version import get_compat_version
 from metta.common.otel.tracing import trace
 from mettagrid.runner.types import SingleEpisodeJob
 
@@ -88,7 +89,9 @@ class CommissionerBase(ABC):
     leaderboard_pool: str
     entry_pool: str
     summary: str = ""
-    compat_version: str | None = None
+    # Used only when creating the season. After creation, the DB value is
+    # authoritative and must be bumped manually (e.g. via admin API or SQL).
+    initial_compat_version: str | None = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -114,7 +117,7 @@ class CommissionerBase(ABC):
     def description(self) -> SeasonDescription:
         return self.description_for_version()
 
-    def get_referees(self, season_version: int) -> dict[str, RefereeBase]:
+    def get_referees(self, season_version: int) -> dict[str, RefereeBase]:  # type: ignore[unused-parameter]
         return self.referees
 
     @abstractmethod
@@ -128,7 +131,8 @@ class CommissionerBase(ABC):
     async def run(self) -> None:
         await self._ensure_season_exists()
         logger.info(
-            f"Starting commissioner for season '{self.season_name}' (compat={self.compat_version}, rss={_rss_mb()})"
+            f"Starting commissioner for season '{self.season_name}' "
+            f"(initial_compat={self.initial_compat_version}, rss={_rss_mb()})"
         )
         while True:
             async with db_session() as session:
@@ -139,15 +143,16 @@ class CommissionerBase(ABC):
                     logger.info(f"Canonical season '{self.season_name}' no longer exists, reloading")
                     await self._ensure_season_exists()
                 elif season.disabled_at is not None:
-                    logger.info(f"Season '{self.season_name}' is disabled, skipping cycle")
-                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                    logger.info(f"Season '{self.season_name}' is disabled, sleeping")
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS * 100)
                     continue
-                elif season.compat_version is not None and season.compat_version != self.compat_version:
+                elif season.compat_version is not None and season.compat_version != get_compat_version():
                     logger.warning(
-                        f"[{self.season_name}] compat mismatch: season requires {season.compat_version}, "
-                        f"commissioner declares compat {self.compat_version} — skipping"
+                        f"[{self.season_name}] season compat {season.compat_version} != "
+                        f"server compat {get_compat_version()} — game envs would be "
+                        f"incompatible with episode-runner:compat-v{season.compat_version}, sleeping"
                     )
-                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS * 100)
                     continue
 
             had_activity = False
@@ -165,7 +170,7 @@ class CommissionerBase(ABC):
         session = get_db()
         season = await resolve_season(session, self.season_name)
         if not season:
-            season = Season(name=self.season_name, canonical=True, compat_version=self.compat_version)
+            season = Season(name=self.season_name, canonical=True, compat_version=self.initial_compat_version)
             session.add(season)
             await session.commit()
             logger.info(f"Created season '{self.season_name}' (compat_version={season.compat_version})")

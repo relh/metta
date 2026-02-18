@@ -39,6 +39,7 @@ def _make_mock_session(season: Season | None):
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = season
     mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_session.commit = AsyncMock()
 
     @asynccontextmanager
     async def fake_db_session():
@@ -52,6 +53,7 @@ async def _run_n_iterations(
     n: int,
     *,
     season: Season | None,
+    server_compat: str = "0.3",
 ):
     iteration = 0
 
@@ -69,6 +71,7 @@ async def _run_n_iterations(
         patch.object(commissioner, "_run_cycle", new_callable=AsyncMock, return_value=False),
         patch("metta.app_backend.tournament.commissioners.base.db_session", _make_mock_session(season)),
         patch("metta.app_backend.tournament.commissioners.base.asyncio.sleep", side_effect=fake_sleep) as mock_sleep,
+        patch("metta.app_backend.tournament.commissioners.base.get_compat_version", return_value=server_compat),
     ):
         with pytest.raises(_StopLoop):
             await commissioner.run()
@@ -76,27 +79,25 @@ async def _run_n_iterations(
 
 
 @pytest.mark.asyncio
-async def test_compat_mismatch_skips_cycle():
+async def test_server_compat_mismatch_skips_cycle():
+    """Season requires 0.4 but server has 0.3 installed — skip to avoid incompatible env configs."""
     commissioner = _StubCommissioner()
-    commissioner.compat_version = "0.3"
-    season = _make_season(compat_version="0.2")
-    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season)
+    season = _make_season(compat_version="0.4")
+    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_compat_match_runs_cycle():
+async def test_server_compat_match_runs_cycle():
     commissioner = _StubCommissioner()
-    commissioner.compat_version = "0.2"
-    season = _make_season(compat_version="0.2")
-    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season)
+    season = _make_season(compat_version="0.3")
+    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_compat_none_runs_cycle():
     commissioner = _StubCommissioner()
-    commissioner.compat_version = "0.3"
     season = _make_season(compat_version=None)
-    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season)
+    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_called_once()
