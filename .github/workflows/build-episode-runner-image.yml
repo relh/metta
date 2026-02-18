@@ -71,7 +71,8 @@ jobs:
         run: |
           REPO="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           VERSION="${{ needs.resolve-version.outputs.cogames_version }}"
-          TAGS="${REPO}:cogames-${VERSION},${REPO}:latest"
+          COMPAT=$(echo "$VERSION" | cut -d. -f1-2)
+          TAGS="${REPO}:cogames-${VERSION},${REPO}:compat-v${COMPAT},${REPO}:latest"
 
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
