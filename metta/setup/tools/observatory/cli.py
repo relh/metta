@@ -660,6 +660,9 @@ def run_episode(
     source: Annotated[str, typer.Argument(help="Path to job spec JSON, or observatory job/episode UUID")],
     mode: Annotated[str, typer.Option("--mode", "-m", help="local, local-image, or prod-image")] = "local",
     output_dir: Annotated[str, typer.Option("--output-dir", "-o", help="Directory for results")] = "./episode-results",
+    image: Annotated[
+        str | None, typer.Option("--image", help="Override Docker image (local-image/prod-image modes)")
+    ] = None,
 ):
     """Run a single episode locally or in a Docker image.
 
@@ -675,14 +678,16 @@ def run_episode(
     if mode == "local":
         _run_episode_local(job, out)
     elif mode == "local-image":
-        _check_docker_prerequisites(IMAGE)
+        img = image or IMAGE
+        _check_docker_prerequisites(img)
         docker_platform = "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
-        _run_episode_docker(job, out, IMAGE, docker_platform)
+        _run_episode_docker(job, out, img, docker_platform)
     elif mode == "prod-image":
-        _check_docker_prerequisites(PROD_IMAGE)
-        info(f"Pulling {PROD_IMAGE}...")
-        subprocess.run(["docker", "pull", "--platform", "linux/amd64", PROD_IMAGE], check=True, timeout=300)
-        _run_episode_docker(job, out, PROD_IMAGE, "linux/amd64")
+        img = image or PROD_IMAGE
+        _check_docker_prerequisites(img)
+        info(f"Pulling {img}...")
+        subprocess.run(["docker", "pull", "--platform", "linux/amd64", img], check=True, timeout=300)
+        _run_episode_docker(job, out, img, "linux/amd64")
     else:
         error(f"Unknown mode: {mode}. Use local, local-image, or prod-image")
         raise typer.Exit(1)
