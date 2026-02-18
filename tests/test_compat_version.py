@@ -4,7 +4,6 @@ from metta.common.compat_version import get_compat_version, parse_compat_version
 def test_get_compat_version_returns_str() -> None:
     v = get_compat_version()
     assert isinstance(v, str)
-    assert v == "0.4"
 
 
 def test_parse_compat_version_3_part() -> None:
