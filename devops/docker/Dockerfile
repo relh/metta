@@ -4,6 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV TORCH_CUDA_ARCH_LIST=7.5;8.0;8.6;8.9;9.0
 ENV READTHEDOCS=True
 ENV UV_LINK_MODE=copy
+ENV UV_HTTP_TIMEOUT=300
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \

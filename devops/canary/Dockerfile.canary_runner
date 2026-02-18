@@ -4,6 +4,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc g++ build-essential && \
     rm -rf /var/lib/apt/lists/*
 
+ENV PIP_DEFAULT_TIMEOUT=300
 RUN pip install --no-cache-dir cogames httpx pydantic typer wandb
 
 WORKDIR /app

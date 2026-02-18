@@ -37,6 +37,7 @@ RUN ARCH=$(uname -m) && \
 
 # --- Everything above here is cached across rebuilds. ---
 
+ENV UV_HTTP_TIMEOUT=300
 RUN uv python install 3.12 && uv venv /opt/executor
 
 # Build both packages from source for the container's native platform.
