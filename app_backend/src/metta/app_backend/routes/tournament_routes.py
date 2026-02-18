@@ -116,6 +116,7 @@ class SeasonVersionInfo(BaseModel):
     canonical: bool = Field(description="Whether this is the canonical (active) version")
     disabled_at: str | None = Field(description="ISO 8601 timestamp when this version was disabled")
     created_at: str = Field(description="ISO 8601 timestamp when this version was created")
+    compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
 
 
 class SeasonResponse(BaseModel):
@@ -127,6 +128,7 @@ class SeasonResponse(BaseModel):
     entry_pool: str | None = Field(default=None, description="Name of the pool where new policies are submitted")
     leaderboard_pool: str | None = Field(default=None, description="Name of the pool used for the leaderboard")
     is_default: bool = Field(description="Whether this is the default season")
+    compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
     pools: list[PoolInfo] = Field(description="Pools in this season")
 
     @classmethod
@@ -137,6 +139,7 @@ class SeasonResponse(BaseModel):
         version: int = 1,
         canonical: bool = True,
         pools_by_name: dict[str, Pool] | None = None,
+        compat_version: str | None = None,
     ) -> "SeasonResponse":
         if season_name not in SEASONS:
             return cls(
@@ -147,6 +150,7 @@ class SeasonResponse(BaseModel):
                 summary="",
                 pools=[],
                 is_default=False,
+                compat_version=compat_version,
             )
         commissioner = SEASONS[season_name]()
         desc = commissioner.description_for_version(version)
@@ -160,6 +164,7 @@ class SeasonResponse(BaseModel):
             entry_pool=commissioner.entry_pool,
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
+            compat_version=compat_version,
             pools=[
                 PoolInfo(
                     id=db_pools[p.name].id if p.name in db_pools else None,
@@ -197,7 +202,11 @@ def create_tournament_router() -> APIRouter:
         results = []
         for s in seasons:
             pools_by_name = await _get_pools_by_name(session, s.id)
-            results.append(SeasonResponse.from_commissioner(s.id, s.name, s.version, s.canonical, pools_by_name))
+            results.append(
+                SeasonResponse.from_commissioner(
+                    s.id, s.name, s.version, s.canonical, pools_by_name, compat_version=s.compat_version
+                )
+            )
         return results
 
     @router.get("/seasons/{season_name}")
@@ -217,7 +226,9 @@ def create_tournament_router() -> APIRouter:
             raise HTTPException(status_code=404, detail="Season version not found")
 
         pools_by_name = await _get_pools_by_name(session, season.id)
-        return SeasonResponse.from_commissioner(season.id, name, season.version, season.canonical, pools_by_name)
+        return SeasonResponse.from_commissioner(
+            season.id, name, season.version, season.canonical, pools_by_name, compat_version=season.compat_version
+        )
 
     @router.get("/seasons/{season_name}/pools/{pool_name}/config")
     @timed_http_handler
@@ -274,6 +285,7 @@ def create_tournament_router() -> APIRouter:
                 canonical=s.canonical,
                 disabled_at=s.disabled_at.isoformat() if s.disabled_at else None,
                 created_at=s.created_at.isoformat(),
+                compat_version=s.compat_version,
             )
             for s in versions
         ]

@@ -88,6 +88,7 @@ class CommissionerBase(ABC):
     leaderboard_pool: str
     entry_pool: str
     summary: str = ""
+    compat_version: str | None = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -126,7 +127,9 @@ class CommissionerBase(ABC):
 
     async def run(self) -> None:
         await self._ensure_season_exists()
-        logger.info(f"Starting commissioner for season '{self.season_name}' (rss={_rss_mb()})")
+        logger.info(
+            f"Starting commissioner for season '{self.season_name}' (compat={self.compat_version}, rss={_rss_mb()})"
+        )
         while True:
             async with db_session() as session:
                 season = (
@@ -137,6 +140,13 @@ class CommissionerBase(ABC):
                     await self._ensure_season_exists()
                 elif season.disabled_at is not None:
                     logger.info(f"Season '{self.season_name}' is disabled, skipping cycle")
+                    await asyncio.sleep(POLL_INTERVAL_SECONDS)
+                    continue
+                elif season.compat_version is not None and season.compat_version != self.compat_version:
+                    logger.warning(
+                        f"[{self.season_name}] compat mismatch: season requires {season.compat_version}, "
+                        f"commissioner declares compat {self.compat_version} — skipping"
+                    )
                     await asyncio.sleep(POLL_INTERVAL_SECONDS)
                     continue
 
@@ -155,10 +165,10 @@ class CommissionerBase(ABC):
         session = get_db()
         season = await resolve_season(session, self.season_name)
         if not season:
-            season = Season(name=self.season_name, canonical=True)
+            season = Season(name=self.season_name, canonical=True, compat_version=self.compat_version)
             session.add(season)
             await session.commit()
-            logger.info(f"Created season '{self.season_name}'")
+            logger.info(f"Created season '{self.season_name}' (compat_version={season.compat_version})")
 
     @trace("commissioner.run_cycle")
     @with_db
@@ -205,7 +215,7 @@ class CommissionerBase(ABC):
             requests = referee.get_matches_to_schedule(players, match_counts, limit=slots_available)
             logger.info(f"[{self.season_name}] pool={pool_name} matches_to_schedule={len(requests)}")
             for req in requests:
-                success = await self._create_and_dispatch_match(pool.id, req)
+                success = await self._create_and_dispatch_match(pool.id, req, season.compat_version)
                 if success:
                     total_scheduled += 1
                     slots_available -= 1
@@ -623,7 +633,9 @@ class CommissionerBase(ABC):
 
         await session.commit()
 
-    async def _create_and_dispatch_match(self, pool_id: UUID, request: MatchRequest) -> bool:
+    async def _create_and_dispatch_match(
+        self, pool_id: UUID, request: MatchRequest, compat_version: str | None = None
+    ) -> bool:
         with tracer.start_as_current_span("tournament.job.enqueue", kind=SpanKind.PRODUCER) as span:
             span.set_attribute("tournament.season", self.season_name)
             span.set_attribute("tournament.pool_id", str(pool_id))
@@ -663,6 +675,10 @@ class CommissionerBase(ABC):
                     **({"scheduler_git_ref": git_ref} if (git_ref := os.environ.get("GIT_COMMIT")) else {}),
                 },
             ).model_dump()
+
+            if compat_version is not None:
+                registry = os.environ.get("EPISODE_RUNNER_REGISTRY", "ghcr.io/metta-ai/episode-runner")
+                job_spec["episode_runner_image"] = f"{registry}:compat-v{compat_version}"
 
             stats_client = StatsClient(settings.STATS_SERVER_URI, machine_token=settings.MACHINE_TOKEN)
             try:

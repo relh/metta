@@ -1040,6 +1040,11 @@ export interface components {
        */
       is_default: boolean;
       /**
+       * Compat Version
+       * @description Compatibility version string (e.g. '0.4')
+       */
+      compat_version?: string | null;
+      /**
        * Pools
        * @description Pools in this season
        */
@@ -1067,6 +1072,11 @@ export interface components {
        * @description ISO 8601 timestamp when this version was created
        */
       created_at: string;
+      /**
+       * Compat Version
+       * @description Compatibility version string (e.g. '0.4')
+       */
+      compat_version?: string | null;
     };
     /** SubmitRequest */
     SubmitRequest: {

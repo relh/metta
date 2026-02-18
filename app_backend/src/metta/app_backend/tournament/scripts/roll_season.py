@@ -21,7 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 async def roll_season_version(
-    session: AsyncSession, season_name: str, entry_pool: str, *, migrate_members: bool = False
+    session: AsyncSession,
+    season_name: str,
+    entry_pool: str,
+    *,
+    migrate_members: bool = False,
+    compat_version: str | None = None,
 ) -> Season:
     old_season = (
         await session.execute(
@@ -42,6 +47,7 @@ async def roll_season_version(
         version=old_season.version + 1,
         canonical=True,
         disabled_at=None,
+        compat_version=compat_version,
     )
     session.add(new_season)
     await session.flush()
@@ -112,12 +118,17 @@ def main() -> None:
     commissioner_cls = SEASONS.get(args.season_name)
     if not commissioner_cls:
         parser.error(f"Unknown season '{args.season_name}', expected one of {list(SEASONS.keys())}")
-    entry_pool = commissioner_cls().entry_pool
+    commissioner = commissioner_cls()
+    entry_pool = commissioner.entry_pool
 
     async def run() -> None:
         async with db_session() as session:
             new_season = await roll_season_version(
-                session, args.season_name, entry_pool, migrate_members=args.migrate_players
+                session,
+                args.season_name,
+                entry_pool,
+                migrate_members=args.migrate_players,
+                compat_version=commissioner.compat_version,
             )
             print(f"Rolled {args.season_name} to v{new_season.version}")
 
