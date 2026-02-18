@@ -51,6 +51,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     if not cfg.POLICY_S3_BUCKET or not cfg.EVAL_S3_BUCKET:
         raise ValueError("POLICY_S3_BUCKET and EVAL_S3_BUCKET must be set")
     job_spec = job.job.copy()
+    episode_runner_image = job_spec.pop("episode_runner_image", None) or cfg.EPISODE_RUNNER_IMAGE
     original_policy_uris: list[str] = job_spec.pop("policy_uris", [])
 
     resolved_s3_keys: list[str] = []
@@ -162,7 +163,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
                     containers=[
                         client.V1Container(
                             name="worker",
-                            image=cfg.EPISODE_RUNNER_IMAGE,
+                            image=episode_runner_image,
                             image_pull_policy="IfNotPresent" if cfg.LOCAL_DEV else "Always",
                             security_context=client.V1SecurityContext(
                                 capabilities=client.V1Capabilities(add=["PERFMON"]),
