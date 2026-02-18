@@ -12,15 +12,41 @@ bindings_dir = os.path.join(current_dir, "bindings/generated")
 if bindings_dir not in sys.path:
     sys.path.append(bindings_dir)
 
-na = importlib.import_module("nim_agents")
+_na = None
+
+
+def _nim_agents():
+    global _na
+    if _na is None:
+        try:
+            _na = importlib.import_module("nim_agents")
+        except (ImportError, OSError):
+            # Build the Nim bindings on demand rather than requiring them at import time.
+            # This keeps policy discovery cheap while still making `metta://policy/*nim*`
+            # URIs usable anywhere the build toolchain is available.
+            from cogames_agents.policy.nim_agents.build import build_nim  # noqa: PLC0415
+
+            build_nim()
+            _na = importlib.import_module("nim_agents")
+    return _na
+
+
+class _NimAgentsProxy:
+    def __getattr__(self, name: str):
+        return getattr(_nim_agents(), name)
+
+
+# Kept for callers/tests that expect `agents.na.<binding>`, but loaded lazily so importing
+# this module doesn't require Nim bindings to be present.
+na = _NimAgentsProxy()
 
 
 def start_measure():
-    na.start_measure()
+    _nim_agents().start_measure()
 
 
 def end_measure():
-    na.end_measure()
+    _nim_agents().end_measure()
 
 
 class ThinkyAgentsMultiPolicy(NimMultiAgentPolicy):
@@ -29,7 +55,7 @@ class ThinkyAgentsMultiPolicy(NimMultiAgentPolicy):
     def __init__(self, policy_env_info: PolicyEnvInterface, agent_ids: Sequence[int] | None = None):
         super().__init__(
             policy_env_info,
-            nim_policy_factory=na.ThinkyPolicy,
+            nim_policy_factory=_nim_agents().ThinkyPolicy,
             agent_ids=agent_ids,
         )
 
@@ -40,7 +66,7 @@ class RandomAgentsMultiPolicy(NimMultiAgentPolicy):
     def __init__(self, policy_env_info: PolicyEnvInterface, agent_ids: Sequence[int] | None = None):
         super().__init__(
             policy_env_info,
-            nim_policy_factory=na.RandomPolicy,
+            nim_policy_factory=_nim_agents().RandomPolicy,
             agent_ids=agent_ids,
         )
 
@@ -51,7 +77,7 @@ class RaceCarAgentsMultiPolicy(NimMultiAgentPolicy):
     def __init__(self, policy_env_info: PolicyEnvInterface, agent_ids: Sequence[int] | None = None):
         super().__init__(
             policy_env_info,
-            nim_policy_factory=na.RaceCarPolicy,
+            nim_policy_factory=_nim_agents().RaceCarPolicy,
             agent_ids=agent_ids,
         )
 
@@ -67,7 +93,7 @@ class CogsguardAgentsMultiPolicy(NimMultiAgentPolicy):
     ):
         super().__init__(
             policy_env_info,
-            nim_policy_factory=na.CogsguardPolicy,
+            nim_policy_factory=_nim_agents().CogsguardPolicy,
             agent_ids=agent_ids,
         )
 
@@ -83,7 +109,7 @@ class CogsguardAlignAllAgentsMultiPolicy(NimMultiAgentPolicy):
     ):
         super().__init__(
             policy_env_info,
-            nim_policy_factory=na.CogsguardAlignAllPolicy,
+            nim_policy_factory=_nim_agents().CogsguardAlignAllPolicy,
             agent_ids=agent_ids,
         )
 
@@ -108,6 +134,7 @@ class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
     def __init__(
         self,
         policy_env_info: PolicyEnvInterface,
+        device: str = "cpu",
         agent_ids: Sequence[int] | None = None,
         miner: int | str = -1,
         scout: int | str = 0,
@@ -117,10 +144,14 @@ class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
         trace: int | str = 0,
         trace_level: int | str = 1,
         trace_agent: int | str = -1,
+        bio: int | str = 0,
+        stats: int | str = 0,
         disable_role_switching: bool | int | str = 0,
         **_: object,
     ):
         # `cogames play -p "... kw.foo=1"` passes strings; be robust and coerce.
+        _ = int(bio)
+        _ = int(stats)
         miner_i = int(miner)
         scout_i = int(scout)
         aligner_i = int(aligner)
@@ -152,10 +183,11 @@ class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
                     },
                 }
             )
-            return na.PlankyPolicy(init_config_json)
+            return _nim_agents().PlankyPolicy(init_config_json)
 
         super().__init__(
             policy_env_info,
             nim_policy_factory=_policy_factory,
             agent_ids=agent_ids,
+            device=device,
         )
