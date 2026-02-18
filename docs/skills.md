@@ -44,6 +44,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `db.fix-traceback`
 - `db.run-and-triage`
 - `db.test-triage`
+- `do.datadog-api-auth`
 - `do.mettabox-ops`
 - `do.worktrunk`
 - `n.add-publishable-package`
