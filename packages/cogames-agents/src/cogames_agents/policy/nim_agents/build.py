@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import os
 import platform
 import shutil
@@ -13,6 +14,22 @@ from pathlib import Path
 
 NIM_AGENTS_DIR = Path(__file__).resolve().parent
 NIMBY_LOCK = NIM_AGENTS_DIR / "nimby.lock"
+
+# nimby is not designed for concurrent use. uv builds mettagrid and
+# cogames-agents in parallel, so we serialize all nimby invocations via an
+# OS-level file lock. Released automatically on process exit (even on crash).
+_NIMBY_SYNC_LOCK = Path.home() / ".nimby" / ".python_sync.lock"
+
+
+def _run_nimby_serialized(args: list[str], *, cwd: Path) -> None:
+    """Run a nimby command while holding a cross-process file lock."""
+    _NIMBY_SYNC_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(_NIMBY_SYNC_LOCK, "w") as lock_fd:
+        print("Acquiring nimby sync lock...")
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        subprocess.check_call(args, cwd=cwd)
+
+
 BINDINGS_DIR = NIM_AGENTS_DIR / "bindings" / "generated"
 
 
@@ -151,7 +168,7 @@ def build_nim() -> None:
         if shutil.which("git") is None:
             _manual_sync_nimby_lock(NIMBY_LOCK)
         else:
-            subprocess.check_call(["nimby", "sync", "-g", str(NIMBY_LOCK)], cwd=NIM_AGENTS_DIR)
+            _run_nimby_serialized(["nimby", "sync", "-g", str(NIMBY_LOCK)], cwd=NIM_AGENTS_DIR)
 
     BINDINGS_DIR.mkdir(parents=True, exist_ok=True)
 
