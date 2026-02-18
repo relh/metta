@@ -318,7 +318,7 @@ def evaluate_ci(policy_uri: str) -> EvaluateTool:
 def train_100m() -> TrainTool:
     """Arena single GPU - 100M timesteps."""
     return TrainTool(
-        trainer=TrainerConfig(total_timesteps=100_000_000),
+        trainer=TrainerConfig(total_timesteps=100_000_000, batch_size=2_088_960, minibatch_size=15360),
         training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
         policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )
@@ -335,7 +335,7 @@ def train_100m() -> TrainTool:
 def train_2b() -> TrainTool:
     """Arena multi GPU - 2B timesteps."""
     return TrainTool(
-        trainer=TrainerConfig(total_timesteps=2_000_000_000),
+        trainer=TrainerConfig(total_timesteps=2_000_000_000, batch_size=2_088_960, minibatch_size=15360),
         training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
         policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )
