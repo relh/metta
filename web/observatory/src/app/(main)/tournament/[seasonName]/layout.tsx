@@ -18,6 +18,14 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
     <div className="text-foreground-muted text-sm">
       <ServerDebugDrain />
       {season.summary && <div>{season.summary}</div>}
+      <div>
+        Compat version:{' '}
+        {season.compat_version ? (
+          <span className="font-mono text-foreground">compat-v{season.compat_version}</span>
+        ) : (
+          'not pinned to a specific runner compat version'
+        )}
+      </div>
       {season.pools.length > 0 && (
         <div className="mt-1 ml-4 space-y-0.5">
           {season.pools.map((pool) => (

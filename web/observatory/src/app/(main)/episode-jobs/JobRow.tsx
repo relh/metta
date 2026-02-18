@@ -220,10 +220,14 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const policyVersionEntries = job.policy_versions
   const episodeTags = job.job?.episode_tags as Record<string, string> | undefined
   const episodeId = job.result?.episode_id as string | undefined
-  const runnerImageShort = parseRunnerImageShort(job.result?.runner_image as string | undefined)
-  const runnerImageFull = job.result?.runner_image as string | undefined
+  const requestedRunnerImage = job.job?.episode_runner_image as string | undefined
+  const actualRunnerImage = job.result?.runner_image as string | undefined
+  const actualRunnerImageId = job.result?.runner_image_id as string | undefined
+  const actualRunnerImageShort = parseRunnerImageShort(actualRunnerImage)
+  const actualRunnerImageIdShort = parseRunnerImageShort(actualRunnerImageId)
   const gitCommit = job.result?.git_commit as string | undefined
   const instanceType = job.result?.instance_type as string | undefined
+  const cogamesVersion = job.result?.cogames_version as string | undefined
   const lifecycleError = job.error
   const [expanded, setExpanded] = useState(false)
   const [showSpec, setShowSpec] = useState(false)
@@ -516,10 +520,29 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                       <span className="font-mono text-xs">{instanceType}</span>
                     </LabelRow>
                   )}
-                  {!gitCommit && runnerImageShort && (
-                    <LabelRow label="Runner Image">
-                      <CopyButton text={runnerImageFull ?? ''} className="font-mono text-xs hover:text-foreground">
-                        <span>{runnerImageShort}</span>
+                  {cogamesVersion && (
+                    <LabelRow label="Runner Version">
+                      <span className="font-mono text-xs">{cogamesVersion}</span>
+                    </LabelRow>
+                  )}
+                  {requestedRunnerImage && (
+                    <LabelRow label="Requested Image">
+                      <CopyButton text={requestedRunnerImage} className="font-mono text-xs hover:text-foreground">
+                        <span>{parseRunnerImageShort(requestedRunnerImage) ?? requestedRunnerImage}</span>
+                      </CopyButton>
+                    </LabelRow>
+                  )}
+                  {actualRunnerImage && (
+                    <LabelRow label="Actual Image">
+                      <CopyButton text={actualRunnerImage} className="font-mono text-xs hover:text-foreground">
+                        <span>{actualRunnerImageShort ?? actualRunnerImage}</span>
+                      </CopyButton>
+                    </LabelRow>
+                  )}
+                  {actualRunnerImageId && (
+                    <LabelRow label="Actual Image ID">
+                      <CopyButton text={actualRunnerImageId} className="font-mono text-xs hover:text-foreground">
+                        <span>{actualRunnerImageIdShort ?? actualRunnerImageId}</span>
                       </CopyButton>
                     </LabelRow>
                   )}

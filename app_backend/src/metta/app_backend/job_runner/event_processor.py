@@ -482,14 +482,15 @@ def _classify_error(error: str) -> str:
     return "unknown"
 
 
-def _get_runner_image_from_event(event_data: dict) -> str | None:
-    """Extract runner image ID from stored event data."""
+def _get_runner_images_from_event(event_data: dict) -> tuple[str | None, str | None]:
+    """Extract runner image reference and immutable image ID from stored event data."""
     pod_data = event_data.get("object", {})
     status = pod_data.get("status", {})
     container_statuses = status.get("containerStatuses", [])
     if not container_statuses:
-        return None
-    return container_statuses[0].get("imageID")
+        return None, None
+    container_status = container_statuses[0]
+    return container_status.get("image"), container_status.get("imageID")
 
 
 def _get_instance_type_from_event(event_data: dict, core_v1: client.CoreV1Api) -> str | None:
@@ -573,11 +574,13 @@ def _handle_pod_succeeded(
         return
 
     try:
-        # Capture runner_image, instance_type, and runtime_info for episode recording
+        # Capture runner image details, instance_type, and runtime_info for episode recording
         result_data: dict[str, Any] = {}
-        runner_image = _get_runner_image_from_event(event_data)
+        runner_image, runner_image_id = _get_runner_images_from_event(event_data)
         if runner_image:
             result_data["runner_image"] = runner_image
+        if runner_image_id:
+            result_data["runner_image_id"] = runner_image_id
         instance_type = _get_instance_type_from_event(event_data, core_v1)
         if instance_type:
             result_data["instance_type"] = instance_type
