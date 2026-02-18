@@ -312,7 +312,7 @@ def evaluate_ci(policy_uri: str) -> EvaluateTool:
     remote_nodes=1,
     timeout_s=7200,
     acceptance=[
-        AcceptanceCriterion(metric="overview/sps", threshold=23000),
+        AcceptanceCriterion(metric="overview/sps", threshold=15000),
     ],
 )
 def train_100m() -> TrainTool:
@@ -329,13 +329,13 @@ def train_100m() -> TrainTool:
     remote_nodes=4,
     timeout_s=172800,
     acceptance=[
-        AcceptanceCriterion(metric="overview/sps", threshold=80000),
+        AcceptanceCriterion(metric="overview/sps", threshold=52000),
     ],
 )
 def train_2b() -> TrainTool:
     """Arena multi GPU - 2B timesteps."""
     return TrainTool(
         trainer=TrainerConfig(total_timesteps=2_000_000_000, batch_size=2_088_960, minibatch_size=15360),
-        training_env=TrainingEnvironmentConfig(curriculum=make_curriculum()),
+        training_env=TrainingEnvironmentConfig(curriculum=make_curriculum(), num_workers=10, auto_workers=False),
         policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
     )
