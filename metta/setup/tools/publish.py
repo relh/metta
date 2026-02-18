@@ -8,6 +8,7 @@ from typing import Annotated, Optional
 import typer
 
 import gitta
+from metta.common.compat_version import get_compat_version, parse_compat_version
 from metta.common.util.constants import METTA_GITHUB_ORGANIZATION, METTA_GITHUB_REPO
 from metta.common.util.discord import send_to_discord
 from metta.common.util.fs import get_repo_root
@@ -15,7 +16,6 @@ from metta.setup.utils import error, header, info, success, warning
 from softmax.aws.secrets_manager import get_secretsmanager_secret
 
 VERSION_PATTERN = re.compile(r"^(\d+\.\d+\.\d+(?:\.\d+)?)$")
-DEFAULT_INITIAL_VERSION = "0.0.0.1"
 
 DISCORD_CHANNEL_WEBHOOK_URL_SECRET_NAME = "discord/channel-webhook/updates"
 
@@ -87,6 +87,20 @@ def _get_latest_version_for_package(package: str, /) -> Optional[str]:
     return latest_version
 
 
+def _get_latest_version_for_compat(package: str, compat: str) -> str | None:
+    tag_prefix = _tag_prefix_for_package(package)
+    tags = [
+        line.strip()
+        for line in gitta.run_git("tag", "--list", f"{tag_prefix}{compat}.*", "--sort=-v:refname").splitlines()
+        if line.strip()
+    ]
+    for tag in tags:
+        version = tag[len(tag_prefix) :]
+        if len(version.split(".")) == 3:
+            return version
+    return None
+
+
 def _bump_last_part_of_version(version: str, /) -> str:
     parts = version.split(".")
     bumped = parts[:-1] + [str(int(parts[-1]) + 1)]
@@ -95,6 +109,7 @@ def _bump_last_part_of_version(version: str, /) -> str:
 
 def _get_next_version(*, package: str, version_override: Optional[str]) -> str:
     tag_prefix = _tag_prefix_for_package(package)
+    compat = get_compat_version()
 
     if version_override is not None:
         if not VERSION_PATTERN.match(version_override):
@@ -103,16 +118,22 @@ def _get_next_version(*, package: str, version_override: Optional[str]) -> str:
                 "(3-4 dot-separated integers)."
             )
             raise typer.Exit(1)
+        override_compat = parse_compat_version(version_override)
+        if override_compat != compat:
+            error(
+                f"Version override '{version_override}' has compat {override_compat}, but COMPAT_VERSION is {compat}."
+            )
+            raise typer.Exit(1)
         if gitta.resolve_git_ref(f"{tag_prefix}{version_override}"):
-            error(f"Tag '{version_override}' already exists.")
+            error(f"Tag '{tag_prefix}{version_override}' already exists.")
             raise typer.Exit(1)
 
         return version_override
 
     else:
-        latest_version = _get_latest_version_for_package(package)
+        latest_version = _get_latest_version_for_compat(package, compat)
         if latest_version is None:
-            next_version = DEFAULT_INITIAL_VERSION
+            next_version = f"{compat}.0"
         else:
             next_version = _bump_last_part_of_version(latest_version)
 
@@ -341,7 +362,13 @@ def _publish(
                 header(f"Resuming with publishing {package}...")
                 mettagrid_version_to_pin = mettagrid_version
             else:
-                info("Skipping mettagrid publish; continuing with cogames only.")
+                compat = get_compat_version()
+                mettagrid_latest = _get_latest_version_for_compat(Package.METTAGRID, compat)
+                if mettagrid_latest:
+                    mettagrid_version_to_pin = mettagrid_latest
+                    info(f"Pinning mettagrid to latest compat-{compat} version: {mettagrid_latest}")
+                else:
+                    info("No mettagrid version found for current compat; skipping mettagrid pin.")
 
         pins: dict[str, str] = {}
         if mettagrid_version_to_pin is not None:
@@ -375,7 +402,7 @@ def cmd_publish(
     package: Annotated[Package, typer.Argument(help="Package to publish")],
     version: Annotated[
         Optional[str],
-        typer.Option("--version", "-v", help="Explicit version to tag (3-4 dot-separated integers)"),
+        typer.Option("--version", "-v", help="Explicit version to tag (0.{compat}.{patch})"),
     ] = None,
     tag_only: Annotated[
         bool,
