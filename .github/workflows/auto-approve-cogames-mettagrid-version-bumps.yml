@@ -42,7 +42,7 @@ jobs:
             # Skip empty lines
             [ -z "$line" ] && continue
             # Each changed line must match the mettagrid dependency pattern
-            if ! echo "$line" | grep -qE '^[+-][[:space:]]+"mettagrid==[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+",?$'; then
+            if ! echo "$line" | grep -qE '^[+-][[:space:]]+"mettagrid==[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?",?$'; then
               echo "Found non-mettagrid change: $line"
               VALID=false
               break
