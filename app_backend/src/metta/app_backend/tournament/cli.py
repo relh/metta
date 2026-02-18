@@ -24,7 +24,7 @@ def run_commissioner():
     asyncio.run(run_all())
 
 
-def roll_season(season_name: str) -> None:
+def roll_season(season_name: str, *, compat_version: str | None = None) -> None:
     from metta.app_backend.database import db_session  # noqa: PLC0415
     from metta.app_backend.tournament.scripts.roll_season import roll_season_version  # noqa: PLC0415
 
@@ -33,10 +33,19 @@ def roll_season(season_name: str) -> None:
         raise ValueError(f"Unknown season '{season_name}', expected one of {list(SEASONS.keys())}")
     entry_pool = commissioner_cls().entry_pool
 
+    overrides: dict[str, str | None] = {}
+    if compat_version is not None:
+        overrides["compat_version"] = compat_version
+
     async def run() -> None:
         async with db_session() as session:
-            new_season = await roll_season_version(session, season_name, entry_pool)
-            print(f"Rolled {season_name} to v{new_season.version}")
+            new_season = await roll_season_version(
+                session,
+                season_name,
+                entry_pool,
+                overrides=overrides,
+            )
+            print(f"Rolled {season_name} to v{new_season.version} (compat={new_season.compat_version})")
 
     asyncio.run(run())
 

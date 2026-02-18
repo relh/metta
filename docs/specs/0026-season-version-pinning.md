@@ -1,6 +1,6 @@
 # Season Version Pinning
 
-> **Status:** Draft **Author:** Nishad **Created:** 2026-02-17
+> **Status:** Implemented **Author:** Nishad **Created:** 2026-02-17
 
 ## Summary
 
@@ -24,12 +24,12 @@ different seasons can coexist on different game versions.
 
 ## Goals
 
-- [ ] Seasons record their compat version at creation time
-- [ ] `cogames upload` and `cogames submit` reject mismatched compat versions with actionable error messages.
+- [x] Seasons record their compat version at creation time
+- [x] `cogames upload` and `cogames submit` reject mismatched compat versions with actionable error messages.
       `cogames validatate-bundle` fetches image/cogames version specific to the season's compat version.
-- [ ] Episode runner images are tagged per compat version, allowing concurrent seasons on different versions
-- [ ] Hotfixes (patch bumps) are deployed without season rolls
-- [ ] Zero disruption to existing seasons (nullable compat version, graceful fallback)
+- [x] Episode runner images are tagged per compat version, allowing concurrent seasons on different versions
+- [x] Hotfixes (patch bumps) are deployed without season rolls
+- [x] Zero disruption to existing seasons (nullable compat version, graceful fallback)
 
 ## Non-Goals
 

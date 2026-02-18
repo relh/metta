@@ -26,7 +26,7 @@ async def roll_season_version(
     entry_pool: str,
     *,
     migrate_members: bool = False,
-    compat_version: str | None = None,
+    overrides: dict[str, str | None] | None = None,
 ) -> Season:
     old_season = (
         await session.execute(
@@ -38,6 +38,9 @@ async def roll_season_version(
 
     if not old_season:
         raise ValueError(f"No canonical season found for '{season_name}'")
+
+    overrides = overrides or {}
+    compat_version = overrides["compat_version"] if "compat_version" in overrides else old_season.compat_version
 
     old_season.disabled_at = datetime.now(UTC)
     old_season.canonical = False
@@ -113,13 +116,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Roll a tournament season to a new version")
     parser.add_argument("season_name", help=f"Season to roll (one of {list(SEASONS.keys())})")
     parser.add_argument("--migrate-players", action="store_true", help="Migrate active players to the new season")
+    parser.add_argument("--compat-version", help="Set compat version on the new season (default: carry forward)")
     args = parser.parse_args()
 
     commissioner_cls = SEASONS.get(args.season_name)
     if not commissioner_cls:
         parser.error(f"Unknown season '{args.season_name}', expected one of {list(SEASONS.keys())}")
-    commissioner = commissioner_cls()
-    entry_pool = commissioner.entry_pool
+    entry_pool = commissioner_cls().entry_pool
+
+    overrides: dict[str, str | None] = {}
+    if args.compat_version is not None:
+        overrides["compat_version"] = args.compat_version
 
     async def run() -> None:
         async with db_session() as session:
@@ -128,9 +135,9 @@ def main() -> None:
                 args.season_name,
                 entry_pool,
                 migrate_members=args.migrate_players,
-                compat_version=commissioner.compat_version,
+                overrides=overrides,
             )
-            print(f"Rolled {args.season_name} to v{new_season.version}")
+            print(f"Rolled {args.season_name} to v{new_season.version} (compat={new_season.compat_version})")
 
     asyncio.run(run())
 

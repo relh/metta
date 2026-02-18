@@ -1,0 +1,97 @@
+name: Compat version reminder
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "packages/cogames/**"
+      - "packages/mettagrid/**"
+
+concurrency:
+  group: compat-reminder-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for COMPAT_VERSION change or version-only PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          COMPAT_CHANGED=$(git diff "$BASE"...HEAD -- COMPAT_VERSION | grep -c '^[+-][0-9]' || true)
+
+          # Skip if the only package files touched are pyproject.toml (version bumps)
+          PKG_FILES=$(git diff --name-only "$BASE"...HEAD -- packages/cogames/ packages/mettagrid/ | grep -v 'pyproject.toml$' || true)
+          if [ -z "$PKG_FILES" ]; then
+            echo "Only pyproject.toml changes, skipping"
+            COMPAT_CHANGED=1
+          fi
+
+          # Check if we already left an unresolved reminder on this PR
+          EXISTING=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $pr: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      isResolved
+                      comments(first: 1) {
+                        nodes { body }
+                      }
+                    }
+                  }
+                }
+              }
+            }' \
+            -f owner="${{ github.repository_owner }}" \
+            -f repo="${{ github.event.repository.name }}" \
+            -F pr=${{ github.event.pull_request.number }} \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | select(.comments.nodes[0].body | test("does not bump .COMPAT_VERSION"))] | length')
+
+          if [ "$EXISTING" != "0" ]; then
+            echo "Unresolved reminder already exists, skipping"
+            COMPAT_CHANGED=1
+          fi
+
+          # Pick a changed package file to anchor the review comment on
+          ANCHOR_FILE=""
+          if [ -n "$PKG_FILES" ]; then
+            ANCHOR_FILE=$(echo "$PKG_FILES" | head -1)
+          fi
+
+          echo "compat_changed=$COMPAT_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "anchor_file=$ANCHOR_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Leave review comment
+        if: steps.check.outputs.compat_changed == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ANCHOR="${{ steps.check.outputs.anchor_file }}"
+          COMMIT=$(gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q '.headRefOid')
+          PR=${{ github.event.pull_request.number }}
+
+          jq -n \
+            --arg commit "$COMMIT" \
+            --arg path "$ANCHOR" \
+            --arg body 'This PR touches `cogames` or `mettagrid` source code but does not bump `COMPAT_VERSION`.
+
+          If your change is backwards incompatible, bump `COMPAT_VERSION` in this PR and run `metta publish cogames` after merge. Examples:
+
+          - Changing observation/action space shape or semantics
+          - Adding/removing/renaming config fields
+          - Modifying the episode runner contract (inputs, outputs, environment variables)
+
+          If your change is backwards compatible, resolve this comment.' \
+            '{commit_id: $commit, path: $path, body: $body, subject_type: "file"}' \
+          | gh api "repos/${{ github.repository }}/pulls/${PR}/comments" --method POST --input -

@@ -4,6 +4,7 @@ from metta.app_backend.tournament.referees.no_clips import NoClipsPairingReferee
 
 class BetaCvcNoClipsCommissioner(BetaCommissioner):
     season_name = "beta-cvc-no-clips"
+    compat_version = "0.4"
     referees = {
         "qualifying": NoClipsSelfPlayReferee(),
         "competition": NoClipsPairingReferee(),

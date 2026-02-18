@@ -718,12 +718,17 @@ def tournament_roll_season(
     migrate_players: Annotated[
         bool, typer.Option("--migrate-players", help="Migrate active players to the new season")
     ] = False,
+    compat_version: Annotated[
+        str | None, typer.Option("--compat-version", help="Set compat version (default: carry forward from previous)")
+    ] = None,
 ):
     """Roll a season to a new version."""
     env = _local_dev_env()
     cmd = ["uv", "run", "python", ROLL_SEASON_SCRIPT, season_name]
     if migrate_players:
         cmd.append("--migrate-players")
+    if compat_version is not None:
+        cmd.extend(["--compat-version", compat_version])
     subprocess.run(cmd, env=env, check=True)
 
 
