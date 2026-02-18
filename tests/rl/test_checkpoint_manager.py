@@ -37,7 +37,7 @@ class ActionTestArchitecture(PolicyArchitecture):
 class ActionTestPolicy(Policy):
     def __init__(self, policy_env_info: PolicyEnvInterface | None, _: PolicyArchitecture | None = None):
         if policy_env_info is None:
-            from mettagrid.config import MettaGridConfig  # noqa: PLC0415
+            from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
             policy_env_info = PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
         super().__init__(policy_env_info)
@@ -61,7 +61,7 @@ class ActionTestPolicy(Policy):
 
 
 def _policy_env_info() -> PolicyEnvInterface:
-    from mettagrid.config import MettaGridConfig  # noqa: PLC0415
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     return PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
 

@@ -1,4 +1,4 @@
-from mettagrid.config import MettaGridConfig
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
 def f1():

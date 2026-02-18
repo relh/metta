@@ -14,7 +14,7 @@ from metta.tools.play import PlayTool
 from metta.tools.replay import ReplayTool
 from metta.tools.train import TrainTool
 from mettagrid.base_config import Config
-from mettagrid.config import MettaGridConfig
+from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.utils.storable_map import StorableMap, StorableMapDict
 

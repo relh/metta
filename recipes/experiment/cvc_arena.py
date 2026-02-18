@@ -19,7 +19,7 @@ from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgre
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
-from mettagrid.config import MettaGridConfig
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
 def mettagrid(num_agents: int = 24) -> MettaGridConfig:

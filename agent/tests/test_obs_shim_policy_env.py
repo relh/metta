@@ -13,7 +13,7 @@ from metta.agent.components.obs_shim import (
     ObsTokenPadStrip,
     ObsTokenToBoxShim,
 )
-from mettagrid.config import MettaGridConfig
+from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 

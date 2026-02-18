@@ -10,7 +10,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 
 def _make_policy_env_info() -> PolicyEnvInterface:
-    from mettagrid.config import MettaGridConfig  # noqa: PLC0415
+    from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
     return PolicyEnvInterface.from_mg_cfg(MettaGridConfig())
 
