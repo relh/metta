@@ -15,6 +15,7 @@ type
     cachedPath: Option[seq[Location]]
     cachedTarget: Option[Location]
     cachedReachAdjacent: bool
+    expectedPos: Option[Location]
     positionHistory: seq[Location]
     rng: Rand
 
@@ -23,6 +24,7 @@ proc newNavigator*(seed: int): Navigator =
     cachedPath: none(seq[Location]),
     cachedTarget: none(Location),
     cachedReachAdjacent: false,
+    expectedPos: none(Location),
     positionHistory: @[],
     rng: initRand(seed),
   )
@@ -31,6 +33,7 @@ proc clearCache*(nav: Navigator) =
   nav.cachedPath = none(seq[Location])
   nav.cachedTarget = none(Location)
   nav.cachedReachAdjacent = false
+  nav.expectedPos = none(Location)
 
 proc cachedTarget*(nav: Navigator): Option[Location] =
   nav.cachedTarget
@@ -192,14 +195,18 @@ proc astar(start: Location, goals: seq[Location], m: EntityMap, allowUnknown: bo
 
 proc getPath(nav: Navigator, start, target: Location, m: EntityMap, reachAdjacent: bool): seq[Location] =
   if nav.cachedPath.isSome and nav.cachedTarget.isSome and nav.cachedTarget.get() == target and nav.cachedReachAdjacent == reachAdjacent:
-    # Validate cached path (agents can invalidate it).
-    var ok = true
-    for p in nav.cachedPath.get():
-      if m.hasAgent(p):
-        ok = false
-        break
-    if ok:
-      return nav.cachedPath.get()
+    # Verify agent is where we expected (it followed our last suggestion)
+    if nav.expectedPos.isSome and start != nav.expectedPos.get():
+      nav.cachedPath = none(seq[Location])
+    else:
+      # Validate cached path (agents can invalidate it).
+      var ok = true
+      for p in nav.cachedPath.get():
+        if m.hasAgent(p):
+          ok = false
+          break
+      if ok:
+        return nav.cachedPath.get()
 
   let goals = computeGoals(target, m, reachAdjacent)
   if goals.len == 0:
@@ -285,6 +292,8 @@ proc getAction*(
       return moveAction(current, best.get())
     return naNoop
 
+  # Record where agent should be if it follows this suggestion
+  nav.expectedPos = some(nextPos)
   # Advance cached path
   if path.len > 1:
     nav.cachedPath = some(path[1 .. ^1])

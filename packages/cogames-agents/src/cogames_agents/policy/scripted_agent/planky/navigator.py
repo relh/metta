@@ -28,6 +28,7 @@ class Navigator:
         self._cached_path: Optional[list[tuple[int, int]]] = None
         self._cached_target: Optional[tuple[int, int]] = None
         self._cached_reach_adjacent: bool = False
+        self._expected_pos: Optional[tuple[int, int]] = None
         self._position_history: list[tuple[int, int]] = []
 
     def get_action(
@@ -80,6 +81,8 @@ class Navigator:
                 return _move_action(current, sidestep)
             return Action(name="noop")  # Wait for agent to move
 
+        # Record where agent should be if it follows this suggestion
+        self._expected_pos = next_pos
         # Advance path
         self._cached_path = path[1:] if len(path) > 1 else None
         return _move_action(current, next_pos)
@@ -116,12 +119,16 @@ class Navigator:
     ) -> Optional[list[tuple[int, int]]]:
         """Get cached path or compute new one."""
         if self._cached_path and self._cached_target == target and self._cached_reach_adjacent == reach_adjacent:
-            # Verify path is still valid
-            for pos in self._cached_path:
-                if map.has_agent(pos):
-                    break
+            # Verify agent is where we expected (it followed our last suggestion)
+            if self._expected_pos is not None and start != self._expected_pos:
+                self._cached_path = None
             else:
-                return self._cached_path
+                # Verify no agents blocking the path
+                for pos in self._cached_path:
+                    if map.has_agent(pos):
+                        break
+                else:
+                    return self._cached_path
 
         # Compute new path
         goal_cells = self._compute_goals(target, map, reach_adjacent)
@@ -328,6 +335,7 @@ class Navigator:
     def _break_stuck(self, current: tuple[int, int], map: EntityMap) -> Optional[Action]:
         self._cached_path = None
         self._cached_target = None
+        self._expected_pos = None
         self._position_history.clear()
         return self._random_move(current, map)
 
