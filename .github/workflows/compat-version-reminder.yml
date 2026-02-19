@@ -37,14 +37,13 @@ jobs:
             COMPAT_CHANGED=1
           fi
 
-          # Check if we already left an unresolved reminder on this PR
+          # Check if we already left a reminder on this PR (resolved or not)
           EXISTING=$(gh api graphql -f query='
             query($owner: String!, $repo: String!, $pr: Int!) {
               repository(owner: $owner, name: $repo) {
                 pullRequest(number: $pr) {
                   reviewThreads(first: 100) {
                     nodes {
-                      isResolved
                       comments(first: 1) {
                         nodes { body }
                       }
@@ -56,10 +55,10 @@ jobs:
             -f owner="${{ github.repository_owner }}" \
             -f repo="${{ github.event.repository.name }}" \
             -F pr=${{ github.event.pull_request.number }} \
-            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | select(.comments.nodes[0].body | test("does not bump .COMPAT_VERSION"))] | length')
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.comments.nodes[0].body | test("does not bump .COMPAT_VERSION"))] | length')
 
           if [ "$EXISTING" != "0" ]; then
-            echo "Unresolved reminder already exists, skipping"
+            echo "Reminder already exists, skipping"
             COMPAT_CHANGED=1
           fi
 
