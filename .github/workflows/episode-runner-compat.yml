@@ -1,0 +1,85 @@
+name: "Episode Runner Compat"
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "packages/cogames/**"
+      - "packages/mettagrid/**"
+      - "COMPAT_VERSION"
+
+permissions:
+  contents: read
+  packages: read
+  pull-requests: read
+
+concurrency:
+  group: episode-runner-compat-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-compat-version:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    outputs:
+      compat_changed: ${{ steps.check.outputs.compat_changed }}
+    steps:
+      - name: Check if COMPAT_VERSION changed
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHANGED=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files \
+            --paginate --jq '[.[] | select(.filename == "COMPAT_VERSION")] | length')
+          echo "compat_changed=$CHANGED" >> "$GITHUB_OUTPUT"
+
+  compat-test:
+    needs: check-compat-version
+    if: needs.check-compat-version.outputs.compat_changed == '0'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-environment
+        with:
+          install-mode: "testing"
+
+      - name: Mount image cache
+        uses: useblacksmith/stickydisk@v1
+        with:
+          key: episode-runner-image-${{ github.repository }}
+          path: /tmp/episode-runner-cache
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load or pull episode-runner image
+        run: |
+          IMAGE="ghcr.io/metta-ai/episode-runner:latest"
+          CACHE_DIR="/tmp/episode-runner-cache"
+          CACHE_FILE="$CACHE_DIR/episode-runner.tar"
+          DIGEST_FILE="$CACHE_DIR/digest"
+
+          # Get remote digest without pulling
+          REMOTE_DIGEST=$(docker manifest inspect --verbose "$IMAGE" 2>/dev/null | jq -r 'if type == "array" then .[] | select(.Descriptor.platform.architecture == "amd64") | .Descriptor.digest else .Descriptor.digest end' || echo "unknown")
+
+          # Check if cache is current
+          if [ -f "$CACHE_FILE" ] && [ -f "$DIGEST_FILE" ] && [ "$(cat "$DIGEST_FILE")" = "$REMOTE_DIGEST" ]; then
+            echo "Loading cached image (digest matches)"
+            docker load -i "$CACHE_FILE"
+          else
+            echo "Pulling fresh image (cache miss or stale)"
+            docker pull --platform linux/amd64 "$IMAGE"
+            PULLED_DIGEST=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}' | cut -d'@' -f2)
+            mkdir -p "$CACHE_DIR"
+            docker save "$IMAGE" -o "$CACHE_FILE"
+            echo "${PULLED_DIGEST:-$REMOTE_DIGEST}" > "$DIGEST_FILE"
+          fi
+
+      - name: Run compat test
+        run: uv run pytest packages/cogames/tests/test_episode_runner_compat.py -v --timeout=300
