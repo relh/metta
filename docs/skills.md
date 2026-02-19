@@ -10,7 +10,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 | `st.`   | Stack management (Graphite stacks)                   | st.make-stack, st.split             |
 | `tr.`   | Training / run orchestration                         | tr.cogames-command                  |
 | `db.`   | Debugging / triage                                   | db.fix-traceback                    |
-| `do.`   | DevOps / infra / ops                                 | do.mettabox-ops, do.worktrunk       |
+| `do.`   | DevOps / infra / ops                                 | do.kiosk-update, do.mettabox-ops    |
 | `cb.`   | Codebase analysis/refactor/cleanup                   | cb.review-main, cb.cleanup-refactor |
 | `cg.`   | CoGames play / submit / dashboard                    | cg.play, cg.submit                  |
 | `sk.`   | Skill management (create/update/submit/sync skills)  | sk.make-skill, sk.submit-skill      |
@@ -45,6 +45,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `db.run-and-triage`
 - `db.test-triage`
 - `do.datadog-api-auth`
+- `do.kiosk-update`
 - `do.mettabox-ops`
 - `do.worktrunk`
 - `n.add-publishable-package`

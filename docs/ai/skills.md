@@ -38,6 +38,7 @@ Shared skills live in `skills/`:
 - `db.run-and-triage`
 - `db.test-triage`
 - `do.datadog-api-auth`
+- `do.kiosk-update`
 - `do.mettabox-ops`
 - `do.worktrunk`
 - `n.add-publishable-package`
