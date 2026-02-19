@@ -5,7 +5,7 @@ import { formatPolicyVersion } from '@/utils/format'
 
 import { PolicyDashboard } from './PolicyDashboard'
 
-export default async function DashboardPage(props: PageProps<'/policies/versions/[policyVersionId]'>) {
+export default async function PerformanceDashboardPage(props: PageProps<'/policies/versions/[policyVersionId]'>) {
   const { policyVersionId } = await props.params
 
   const repo = await getRepo()
@@ -18,7 +18,9 @@ export default async function DashboardPage(props: PageProps<'/policies/versions
       <ServerDebugDrain />
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase text-foreground-muted tracking-wide">Policy Dashboard</p>
+          <p className="text-xs font-semibold uppercase text-foreground-muted tracking-wide">
+            Policy Performance Dashboard
+          </p>
           <h1 className="text-2xl font-semibold text-foreground">{policyDisplay}</h1>
         </div>
         <LinkButton href={`/policies/versions/${policyVersionId}`} theme="tertiary">
@@ -37,6 +39,6 @@ export async function generateMetadata({ params }: PageProps<'/policies/versions
   const pvInfo = await repo.getPolicyVersion(policyVersionId)
   const policyDisplay = formatPolicyVersion(pvInfo, policyVersionId)
   return {
-    title: `Dashboard: ${policyDisplay} | Observatory`,
+    title: `Performance Dashboard: ${policyDisplay} | Observatory`,
   }
 }

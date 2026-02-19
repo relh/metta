@@ -1,16 +1,23 @@
 """SQL query routes for self-service database access."""
 
 import asyncio
+import json
 import logging
 import time
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from psycopg import errors as pg_errors
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from metta.app_backend.anthropic import (
+    AnthropicConnectionError,
+    AnthropicHTTPError,
+    AnthropicResponseFormatError,
+    AnthropicTimeoutError,
+    request_anthropic_message,
+)
 from metta.app_backend.auth import SoftmaxUser
 from metta.app_backend.config import settings
 from metta.app_backend.database import db_session
@@ -55,7 +62,7 @@ def create_sql_router() -> APIRouter:
     @timed_route("list_tables")
     async def list_tables(user: SoftmaxUser) -> list[TableInfo]:
         try:
-            async with db_session() as session:
+            async with db_session(read_only=True) as session:
                 tables_query = text("""
                     SELECT
                         t.table_name,
@@ -99,7 +106,7 @@ def create_sql_router() -> APIRouter:
             if table_name == "schema_migrations":
                 raise HTTPException(status_code=403, detail="Access to schema_migrations table is not allowed")
 
-            async with db_session() as session:
+            async with db_session(read_only=True) as session:
                 schema_query = text("""
                     SELECT
                         column_name,
@@ -156,7 +163,7 @@ def create_sql_router() -> APIRouter:
                 )
 
             async def run_query():
-                async with db_session() as session:
+                async with db_session(read_only=True) as session:
                     await session.execute(text("SET statement_timeout = '20s'"))
                     result = await session.execute(text(request.query))
 
@@ -226,34 +233,29 @@ def create_sql_router() -> APIRouter:
         )
 
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "Content-Type": "application/json",
-                        "x-api-key": settings.ANTHROPIC_API_KEY,
-                        "anthropic-version": "2023-06-01",
-                    },
-                    json={
-                        "model": "claude-opus-4-20250514",
-                        "max_tokens": 1000,
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
-                    timeout=30.0,
-                )
-                response.raise_for_status()
-            data = response.json()
-            generated_query = data["content"][0]["text"].strip()
+            generated_query = await request_anthropic_message(
+                api_key=settings.ANTHROPIC_API_KEY,
+                prompt=prompt,
+                model="claude-opus-4-20250514",
+                max_tokens=1000,
+                timeout=30.0,
+            )
             return AIQueryResponse(query=generated_query)
-
-        except httpx.TimeoutException as e:
+        except AnthropicTimeoutError as e:
             raise HTTPException(status_code=408, detail="Request to Claude API timed out") from e
-        except httpx.HTTPStatusError as e:
-            error_data = e.response.json() if e.response.content else {}
-            error_msg = error_data.get("error", {}).get("message", f"API request failed: {e.response.status_code}")
-            raise HTTPException(status_code=e.response.status_code, detail=error_msg) from e
-        except httpx.RequestError as e:
+        except AnthropicHTTPError as e:
+            detail = f"API request failed: {e.status_code}"
+            if e.response_text:
+                try:
+                    error_data = json.loads(e.response_text)
+                    detail = error_data.get("error", {}).get("message", detail)
+                except ValueError:
+                    pass
+            raise HTTPException(status_code=e.status_code, detail=detail) from e
+        except AnthropicConnectionError as e:
             raise HTTPException(status_code=503, detail=f"Failed to connect to Claude API: {str(e)}") from e
+        except AnthropicResponseFormatError as e:
+            raise HTTPException(status_code=502, detail="Unexpected Claude API response format") from e
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to generate query: {str(e)}") from e
 

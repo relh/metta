@@ -8,6 +8,7 @@ from typing import Annotated, ParamSpec, TypeVar
 from alembic import command
 from alembic.config import Config
 from fastapi import Depends
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from metta.app_backend.config import settings
@@ -66,7 +67,7 @@ def get_db() -> AsyncSession:
 
 
 @asynccontextmanager
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
+async def db_session(read_only: bool = False) -> AsyncGenerator[AsyncSession, None]:
     existing = _current_session.get()
     if existing is not None:
         yield existing
@@ -76,6 +77,8 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with factory() as session:
         token = _current_session.set(session)
         try:
+            if read_only:
+                await session.execute(text("SET TRANSACTION READ ONLY"))
             yield session
             await session.commit()
         except Exception:
@@ -100,3 +103,11 @@ async def _db_dependency() -> AsyncGenerator[AsyncSession, None]:
 
 
 DbSession = Annotated[AsyncSession, Depends(_db_dependency)]
+
+
+async def _read_db_dependency() -> AsyncGenerator[AsyncSession, None]:
+    async with db_session(read_only=True) as session:
+        yield session
+
+
+ReadDbSession = Annotated[AsyncSession, Depends(_read_db_dependency)]

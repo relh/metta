@@ -1,0 +1,538 @@
+"""Dashboard routes for policy performance analysis."""
+
+import ast
+import asyncio
+import logging
+import time
+from datetime import datetime
+from typing import Any, Sequence
+from uuid import UUID
+
+import httpx
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from sqlalchemy.orm import selectinload
+from sqlmodel import col, select
+
+from metta.app_backend.anthropic import (
+    AnthropicConnectionError,
+    AnthropicHTTPError,
+    AnthropicResponseFormatError,
+    AnthropicTimeoutError,
+    request_anthropic_message,
+)
+from metta.app_backend.auth import SoftmaxUser
+from metta.app_backend.config import settings
+from metta.app_backend.database import db_session
+from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, JobType
+from metta.app_backend.models.policies import PolicyVersion
+from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
+from metta.app_backend.queries import episode_queries, policy_queries
+from metta.app_backend.replay.summarizer import parse_replay, select_replay_episodes, summarize_replay
+from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.state_page import diagnostics as claude_dashboard
+from metta.app_backend.state_page.diagnostics import (
+    DashboardDerived,
+    DashboardEpisode,
+    DashboardResponse,
+    DerivedMetrics,
+    EpisodeSelectionMetadata,
+    FailureSummary,
+    PolicyInfo,
+    compute_confidence_summary,
+    compute_crash_dump_summary,
+    compute_derived_metrics,
+    compute_failure_summary,
+    compute_instrumentation_validation,
+    compute_matchup_summary,
+    compute_opponent_metrics,
+    compute_outcome_summary,
+    compute_pattern_extraction_summary,
+    compute_team_comp_analysis,
+    compute_trend_explorer_summary,
+    compute_unsupported_state,
+    compute_version_trend_summary,
+)
+from metta.app_backend.state_page.episode_builder import build_dashboard_episodes
+from metta.app_backend.tournament.registry import SEASONS
+
+logger = logging.getLogger(__name__)
+
+DASHBOARD_LIMIT = 100
+
+# TODO: persistent rate limiter for multi-instance deployments
+_analysis_rate_limit: dict[str, list[float]] = {}
+ANALYSIS_RATE_LIMIT = 10  # requests per hour
+
+
+class DashboardAnalysisResponse(BaseModel):
+    analysis: str
+    data_sources: list[str]
+
+
+async def _require_policy_version(policy_version_id: str) -> tuple[UUID, Any]:
+    pv_id = UUID(policy_version_id)
+    pv = await policy_queries.get_policy_version_with_name(pv_id)
+    if not pv:
+        raise HTTPException(status_code=404, detail="Policy version not found")
+    return pv_id, pv
+
+
+async def _fetch_policy_episode_jobs(session: Any, policy_version_id: UUID, limit: int) -> list[Any]:
+    jobs_query = (
+        select(JobRequest)
+        .join(JobPolicyVersion, JobPolicyVersion.job_id == JobRequest.id)  # pyright: ignore[reportArgumentType]
+        .where(
+            JobPolicyVersion.policy_version_id == policy_version_id,
+            col(JobRequest.job_type) == JobType.episode,
+        )
+        .order_by(col(JobRequest.created_at).desc())
+        .limit(limit)
+    )
+    jobs_result = await session.execute(jobs_query)
+    return jobs_result.scalars().all()
+
+
+async def _fetch_policy_dashboard_sources(
+    policy_version_id: UUID,
+    limit: int,
+) -> tuple[list[Any], list[Any]]:
+    raw_episodes = await episode_queries.get_episodes(primary_policy_version_ids=[policy_version_id], limit=limit)
+    async with db_session(read_only=True) as session:
+        policy_jobs = await _fetch_policy_episode_jobs(session, policy_version_id, limit)
+    return raw_episodes, policy_jobs
+
+
+async def _build_sorted_dashboard_episodes(
+    raw_episodes: list[Any],
+    policy_version_id: UUID,
+    policy_version_id_str: str,
+    policy_jobs: Sequence[Any],
+    opponent_cache: dict[str, dict[str, Any]],
+) -> list[DashboardEpisode]:
+    dashboard_episodes = await build_dashboard_episodes(
+        raw_episodes=raw_episodes,
+        policy_version_id=policy_version_id,
+        policy_version_id_str=policy_version_id_str,
+        policy_jobs=policy_jobs,
+        opponent_cache=opponent_cache,
+    )
+    dashboard_episodes.sort(key=lambda episode: episode.created_at or "", reverse=True)
+    return dashboard_episodes
+
+
+def _agent_indices_from_tags(tags: dict[str, str], policy_version_id: str, num_agents: int) -> list[int]:
+    """Determine which agent indices belong to the target policy using episode tags.
+
+    Falls back to half-split heuristic only if no assignment data exists.
+    """
+    assignments_str = tags.get("assignments", "")
+    pv_ids_str = tags.get("policy_version_ids", "")
+    if assignments_str and pv_ids_str:
+        try:
+            assignments = ast.literal_eval(assignments_str)
+            pv_ids_list = ast.literal_eval(pv_ids_str)
+            if policy_version_id in pv_ids_list:
+                policy_index = pv_ids_list.index(policy_version_id)
+                return [i for i, a in enumerate(assignments) if a == policy_index]
+        except Exception:
+            logger.debug("Failed to parse assignment tags for agent index resolution")
+
+    return list(range(num_agents // 2)) if num_agents > 0 else []
+
+
+async def _fetch_and_summarize_replays(episode_ids: list[str], policy_version_id: str) -> list[dict[str, Any]]:
+    """Fetch replay files for episodes (by ID from DB) and summarize them.
+
+    Resolves replay URLs from the database — never from user input — to prevent SSRF.
+    Uses episode tag data (assignments, policy_version_ids) to determine correct agent indices.
+    """
+    uuid_ids: list[UUID] = []
+    for eid in episode_ids:
+        try:
+            uuid_ids.append(UUID(eid))
+        except ValueError:
+            logger.debug("Skipping invalid episode ID: %s", eid)
+    if not uuid_ids:
+        return []
+
+    db_episodes = await episode_queries.get_episodes(episode_ids=uuid_ids, limit=len(uuid_ids))
+    if not db_episodes:
+        return []
+
+    fetch_list: list[tuple[str, str, dict[str, str]]] = []  # (replay_url, episode_id, tags)
+    for ep in db_episodes:
+        replay_url = ep.replay_url or ep.tags.get("replay_url")
+        if replay_url:
+            fetch_list.append((replay_url, str(ep.id), ep.tags))
+
+    if not fetch_list:
+        return []
+
+    pv_uuid = UUID(policy_version_id)
+    reward_lookup: dict[str, float] = {}
+    for ep in db_episodes:
+        avg_rewards = ep.avg_rewards
+        reward_lookup[str(ep.id)] = float(avg_rewards.get(pv_uuid, 0.0) or 0.0)
+
+    async def _fetch_one(client: httpx.AsyncClient, url: str) -> bytes | None:
+        resp = await client.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return resp.content
+
+    async with httpx.AsyncClient() as client:
+        tasks = [_fetch_one(client, url) for url, _, _ in fetch_list]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    summaries: list[dict[str, Any]] = []
+    for (_replay_url, episode_id, tags), result in zip(fetch_list, results, strict=True):
+        if isinstance(result, BaseException) or result is None:
+            logger.debug("Failed to fetch replay for episode %s: %s", episode_id, result)
+            continue
+        replay = parse_replay(result)
+
+        num_agents = int(replay.get("num_agents", 0) or 0)
+        agent_indices = _agent_indices_from_tags(tags, policy_version_id, num_agents)
+
+        reward = reward_lookup.get(episode_id, 0.0)
+        summary = summarize_replay(
+            replay,
+            agent_indices=agent_indices,
+            episode_idx=0,
+            reward=reward,
+            reason="selected",
+        )
+        if summary:
+            summaries.append(summary.model_dump())
+
+    return summaries
+
+
+def create_state_page_router() -> APIRouter:
+    router = APIRouter(prefix="/stats/policies/versions", tags=["dashboard"])
+
+    @router.post("/{policy_version_id}/dashboard-data")
+    @timed_http_handler
+    async def get_dashboard_data(policy_version_id: str, user: SoftmaxUser) -> DashboardResponse:
+        """Compute dashboard data for a policy version."""
+        pv_id, pv = await _require_policy_version(policy_version_id)
+        raw_episodes, policy_jobs = await _fetch_policy_dashboard_sources(pv_id, DASHBOARD_LIMIT)
+
+        policy_info = PolicyInfo(
+            id=str(pv.id),
+            name=pv.policy.name,
+            version=pv.version,
+        )
+
+        season_name = "tournament"
+        baseline_policy: PolicyInfo | None = None
+        baseline_policy_version_id: UUID | None = None
+        baseline_policy_jobs: Sequence[Any] = []
+        recent_policy_versions: list[PolicyInfo] = []
+        population_policy_versions: list[PolicyInfo] = []
+
+        async with db_session(read_only=True) as session:
+            season_query = (
+                select(Season)
+                .join(Pool, Pool.season_id == Season.id)  # pyright: ignore[reportArgumentType]
+                .join(PoolPlayer, PoolPlayer.pool_id == Pool.id)  # pyright: ignore[reportArgumentType]
+                .where(PoolPlayer.policy_version_id == pv_id)
+                .order_by(col(Season.canonical).desc(), col(Season.version).desc(), col(Season.created_at).desc())
+                .limit(1)
+            )
+            season_result = await session.execute(season_query)
+            policy_season = season_result.scalar_one_or_none()
+
+            leaderboard_by_policy_id: dict[str, tuple[int, float, int]] = {}
+            if policy_season:
+                season_name = (
+                    policy_season.name if policy_season.canonical else f"{policy_season.name}:v{policy_season.version}"
+                )
+                if policy_season.name in SEASONS:
+                    commissioner = SEASONS[policy_season.name]()
+                    leaderboard = await commissioner.get_leaderboard(season_id=policy_season.id)
+                    leaderboard_by_policy_id = {
+                        str(lb_policy_id): (rank, score, match_count)
+                        for rank, (lb_policy_id, score, match_count) in enumerate(leaderboard, start=1)
+                    }
+                    population_policy_versions = [
+                        PolicyInfo(
+                            id=str(lb_policy_id),
+                            name=str(lb_policy_id),
+                            version=0,
+                            rank=rank,
+                            score=score,
+                            matches=match_count,
+                        )
+                        for rank, (lb_policy_id, score, match_count) in enumerate(leaderboard, start=1)
+                    ]
+                    current_entry = leaderboard_by_policy_id.get(str(pv_id))
+                    if current_entry:
+                        policy_info.rank = current_entry[0]
+                        policy_info.score = current_entry[1]
+                        policy_info.matches = current_entry[2]
+
+            # Compare against immediate previous version of the same policy.
+            baseline_query = (
+                select(PolicyVersion)
+                .where(
+                    PolicyVersion.policy_id == pv.policy_id,
+                    PolicyVersion.version < pv.version,
+                )
+                .order_by(col(PolicyVersion.version).desc())
+                .options(selectinload(PolicyVersion.policy))  # pyright: ignore[reportArgumentType]
+                .limit(1)
+            )
+            baseline_result = await session.execute(baseline_query)
+            baseline_version = baseline_result.scalar_one_or_none()
+            if baseline_version:
+                baseline_policy_version_id = baseline_version.id
+                baseline_policy = PolicyInfo(
+                    id=str(baseline_version.id),
+                    name=baseline_version.policy.name,
+                    version=baseline_version.version,
+                )
+                baseline_entry = leaderboard_by_policy_id.get(str(baseline_version.id))
+                if baseline_entry:
+                    baseline_policy.rank = baseline_entry[0]
+                    baseline_policy.score = baseline_entry[1]
+                    baseline_policy.matches = baseline_entry[2]
+
+                baseline_policy_jobs = await _fetch_policy_episode_jobs(
+                    session,
+                    baseline_policy_version_id,
+                    DASHBOARD_LIMIT,
+                )
+
+            recent_versions_query = (
+                select(PolicyVersion)
+                .where(
+                    PolicyVersion.policy_id == pv.policy_id,
+                    PolicyVersion.version <= pv.version,
+                )
+                .order_by(col(PolicyVersion.version).desc())
+                .options(selectinload(PolicyVersion.policy))  # pyright: ignore[reportArgumentType]
+                .limit(8)
+            )
+            recent_versions_result = await session.execute(recent_versions_query)
+            recent_versions = recent_versions_result.scalars().all()
+            recent_policy_versions = []
+            for recent in recent_versions:
+                recent_point = PolicyInfo(
+                    id=str(recent.id),
+                    name=recent.policy.name,
+                    version=recent.version,
+                )
+                recent_entry = leaderboard_by_policy_id.get(str(recent.id))
+                if recent_entry:
+                    recent_point.rank = recent_entry[0]
+                    recent_point.score = recent_entry[1]
+                    recent_point.matches = recent_entry[2]
+                recent_policy_versions.append(recent_point)
+
+        outcome_summary = compute_outcome_summary(policy_info, season_name, baseline_policy)
+        trend_summary = compute_version_trend_summary(recent_policy_versions)
+        trend_explorer_summary = compute_trend_explorer_summary(
+            recent_policy_versions,
+            population_policy_versions,
+        )
+
+        # Cache for opponent policy lookups
+        opponent_cache: dict[str, dict[str, Any]] = {}
+
+        dashboard_episodes = await _build_sorted_dashboard_episodes(
+            raw_episodes,
+            policy_version_id=pv_id,
+            policy_version_id_str=policy_version_id,
+            policy_jobs=policy_jobs,
+            opponent_cache=opponent_cache,
+        )
+
+        baseline_dashboard_episodes: list[DashboardEpisode] = []
+        if baseline_policy_version_id is not None:
+            baseline_raw_episodes = await episode_queries.get_episodes(
+                primary_policy_version_ids=[baseline_policy_version_id],
+                limit=DASHBOARD_LIMIT,
+            )
+            baseline_dashboard_episodes = await _build_sorted_dashboard_episodes(
+                baseline_raw_episodes,
+                policy_version_id=baseline_policy_version_id,
+                policy_version_id_str=str(baseline_policy_version_id),
+                policy_jobs=baseline_policy_jobs,
+                opponent_cache=opponent_cache,
+            )
+
+        matchup_summary = compute_matchup_summary(
+            dashboard_episodes,
+            baseline_dashboard_episodes or None,
+        )
+        unsupported_summary = compute_unsupported_state(dashboard_episodes)
+        instrumentation_summary = compute_instrumentation_validation(dashboard_episodes)
+        confidence_summary = compute_confidence_summary(
+            dashboard_episodes,
+            baseline_dashboard_episodes,
+        )
+        crash_dump_summary = compute_crash_dump_summary(dashboard_episodes)
+        selection_metadata = EpisodeSelectionMetadata(
+            limit=DASHBOARD_LIMIT,
+            offset=0,
+            ordering="created_at_desc",
+            sampled_episode_count=len(dashboard_episodes),
+            includes_failed_jobs_without_episode=True,
+            baseline_limit=DASHBOARD_LIMIT if baseline_policy_version_id is not None else None,
+        )
+
+        # Compute derived metrics
+        if dashboard_episodes:
+            derived = compute_derived_metrics(dashboard_episodes)
+            team_comp_stats = compute_team_comp_analysis(dashboard_episodes)
+            opponent_stats = compute_opponent_metrics(dashboard_episodes)
+            failure_summary = compute_failure_summary(dashboard_episodes)
+        else:
+            derived = DerivedMetrics()
+            team_comp_stats = []
+            opponent_stats = {}
+            failure_summary = FailureSummary()
+
+        pattern_summary = compute_pattern_extraction_summary(
+            outcome_summary,
+            failure_summary,
+            matchup_summary,
+            instrumentation_summary,
+            trend_explorer_summary,
+            unsupported_summary,
+        )
+
+        return DashboardResponse(
+            policy=policy_info,
+            episodes=dashboard_episodes,
+            season=season_name,
+            generated_at=datetime.now().isoformat(),
+            selection=selection_metadata,
+            derived=DashboardDerived(
+                kpis=derived,
+                team_comp=team_comp_stats,
+                opponent_metrics=opponent_stats,
+                outcome=outcome_summary,
+                failures=failure_summary,
+                crash_dump=crash_dump_summary,
+                matchup=matchup_summary,
+                confidence=confidence_summary,
+                trend=trend_summary,
+                trend_explorer=trend_explorer_summary,
+                patterns=pattern_summary,
+            ),
+        )
+
+    @router.post("/{policy_version_id}/dashboard-analysis")
+    @timed_http_handler
+    async def get_dashboard_analysis(policy_version_id: str, user: SoftmaxUser) -> DashboardAnalysisResponse:
+        """Run Claude AI analysis on computed dashboard data."""
+        if not settings.ANTHROPIC_API_KEY:
+            raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+
+        now = time.time()
+        user_key = user.email or str(user.id)
+        timestamps = _analysis_rate_limit.get(user_key, [])
+        timestamps = [t for t in timestamps if now - t < 3600]
+        if len(timestamps) >= ANALYSIS_RATE_LIMIT:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded (10 requests/hour)")
+        timestamps.append(now)
+        _analysis_rate_limit[user_key] = timestamps
+
+        pv_id, pv = await _require_policy_version(policy_version_id)
+
+        raw_episodes, policy_jobs = await _fetch_policy_dashboard_sources(pv_id, DASHBOARD_LIMIT)
+
+        opponent_cache: dict[str, dict[str, Any]] = {}
+        dashboard_episodes = await _build_sorted_dashboard_episodes(
+            raw_episodes,
+            policy_version_id=pv_id,
+            policy_version_id_str=policy_version_id,
+            policy_jobs=policy_jobs,
+            opponent_cache=opponent_cache,
+        )
+
+        kpis = compute_derived_metrics(dashboard_episodes) if dashboard_episodes else DerivedMetrics()
+
+        claude_policy = claude_dashboard.PolicyInfo(
+            id=str(pv.id),
+            name=pv.policy.name,
+            version=pv.version,
+        )
+        claude_kpis = claude_dashboard.DerivedMetrics.model_validate(kpis.model_dump())
+        claude_episodes = [
+            claude_dashboard.DashboardEpisode(
+                episode_id=ep.episode_id,
+                job_id=ep.job_id,
+                opponent_name=ep.opponent_name,
+                opponent_version=ep.opponent_version,
+                team_composition=ep.team_composition,
+                reward=ep.reward,
+                status=ep.status,
+                error_type=ep.error_type,
+                steps=ep.steps,
+                metrics=ep.metrics,
+                replay_url=ep.replay_url,
+            )
+            for ep in dashboard_episodes
+        ]
+
+        summary = claude_dashboard.build_analysis_summary(
+            claude_policy,
+            claude_episodes,
+            claude_kpis,
+            season="tournament",
+        )
+
+        data_sources = ["kpis", "opponents", "team_comp"]
+        episode_logs = claude_dashboard.compute_episode_logs(claude_episodes)
+        if episode_logs:
+            summary["episode_logs"] = episode_logs
+            data_sources.append("episode_logs")
+
+            snapshots = episode_logs.get("episode_snapshots", [])
+            candidates = []
+            for snap in snapshots:
+                candidates.append(
+                    {
+                        "reward": snap.get("r", 0),
+                        "replay_url": snap.get("replay_url", "has_replay"),
+                        "episode_id": snap.get("id", ""),
+                    }
+                )
+            selected = select_replay_episodes(candidates, max_n=3)
+            episode_ids = [ep["episode_id"] for ep in selected if ep.get("episode_id")]
+            if episode_ids:
+                replay_summaries = await _fetch_and_summarize_replays(episode_ids, policy_version_id)
+                if replay_summaries:
+                    summary["replay_summaries"] = replay_summaries
+                    data_sources.append("replays")
+
+        prompt = claude_dashboard.build_analysis_prompt(summary)
+
+        try:
+            analysis_text = await request_anthropic_message(
+                api_key=settings.ANTHROPIC_API_KEY,
+                prompt=prompt,
+                model="claude-sonnet-4-5-20250929",
+                max_tokens=2500,
+                timeout=60.0,
+            )
+        except AnthropicTimeoutError as e:
+            raise HTTPException(status_code=504, detail="Claude API timed out (60s limit)") from e
+        except AnthropicHTTPError as e:
+            if e.status_code == 401:
+                raise HTTPException(status_code=502, detail="Anthropic API key is invalid or expired") from e
+            raise HTTPException(
+                status_code=502,
+                detail=f"Claude API returned {e.status_code}: {e.response_text[:200]}",
+            ) from e
+        except AnthropicConnectionError as e:
+            raise HTTPException(status_code=502, detail="Could not connect to Claude API (api.anthropic.com)") from e
+        except AnthropicResponseFormatError as e:
+            raise HTTPException(status_code=502, detail="Claude API returned an unexpected response format") from e
+
+        return DashboardAnalysisResponse(analysis=analysis_text, data_sources=data_sources)
+
+    return router

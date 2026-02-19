@@ -35,7 +35,7 @@ export interface paths {
     put?: never
     /**
      * Get Dashboard Analysis
-     * @description Run Claude AI analysis on pre-computed dashboard summary.
+     * @description Run Claude AI analysis on computed dashboard data.
      */
     post: operations['get_dashboard_analysis_stats_policies_versions__policy_version_id__dashboard_analysis_post']
     delete?: never
@@ -1086,20 +1086,6 @@ export interface components {
         [key: string]: number
       }
     }
-    /** AnalysisRequest */
-    AnalysisRequest: {
-      /** Summary */
-      summary: {
-        [key: string]: unknown
-      }
-    }
-    /** AnalysisResponse */
-    AnalysisResponse: {
-      /** Analysis */
-      analysis: string
-      /** Data Sources */
-      data_sources: string[]
-    }
     /**
      * BulkEpisodeUploadResponse
      * @description Response for bulk episode upload.
@@ -1136,11 +1122,113 @@ export interface components {
       /** Season */
       season?: string | null
     }
-    /**
-     * DashboardDerived
-     * @description Derived analytics returned in the dashboard response.
-     */
-    DashboardDerived: {
+    /** ConfidenceInterval */
+    ConfidenceInterval: {
+      /** Key */
+      key: string
+      /** Label */
+      label: string
+      /** Point Estimate */
+      point_estimate?: number | null
+      /** Lower */
+      lower?: number | null
+      /** Upper */
+      upper?: number | null
+      /** Crosses Zero */
+      crosses_zero?: boolean | null
+      /**
+       * Current Samples
+       * @default 0
+       */
+      current_samples: number
+      /**
+       * Baseline Samples
+       * @default 0
+       */
+      baseline_samples: number
+      /**
+       * Interpretation
+       * @default Insufficient data to estimate confidence interval.
+       */
+      interpretation: string
+    }
+    /** ConfidenceSummary */
+    ConfidenceSummary: {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /** Intervals */
+      intervals?: components['schemas']['ConfidenceInterval'][]
+      /** Recommended Actions */
+      recommended_actions?: string[]
+    }
+    /** CrashDumpEntry */
+    CrashDumpEntry: {
+      /** Episode Id */
+      episode_id: string
+      /** Job Id */
+      job_id: string
+      /** Created At */
+      created_at?: string | null
+      /** Error Type */
+      error_type?: string | null
+      /** Error Message */
+      error_message?: string | null
+      /** Analysis Command */
+      analysis_command: string
+      /** Replay Url */
+      replay_url?: string | null
+    }
+    /** CrashDumpSignature */
+    CrashDumpSignature: {
+      /** Signature */
+      signature: string
+      /**
+       * Count
+       * @default 0
+       */
+      count: number
+      /**
+       * Error Type
+       * @default unknown
+       */
+      error_type: string
+      /** Example Message */
+      example_message?: string | null
+    }
+    /** CrashDumpSummary */
+    CrashDumpSummary: {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /**
+       * Headline
+       * @default No failed jobs detected in sampled episodes.
+       */
+      headline: string
+      /**
+       * Total Failed
+       * @default 0
+       */
+      total_failed: number
+      /** Signatures */
+      signatures?: components['schemas']['CrashDumpSignature'][]
+      /** Entries */
+      entries?: components['schemas']['CrashDumpEntry'][]
+    }
+    /** DashboardAnalysisResponse */
+    DashboardAnalysisResponse: {
+      /** Analysis */
+      analysis: string
+      /** Data Sources */
+      data_sources: string[]
+    }
+    /** DashboardDerived */
+    'DashboardDerived-Input': {
       kpis: components['schemas']['DerivedMetrics']
       /** Team Comp */
       team_comp: components['schemas']['TeamCompStats'][]
@@ -1148,20 +1236,45 @@ export interface components {
       opponent_metrics: {
         [key: string]: components['schemas']['OpponentStats']
       }
-      /** Episode Logs */
-      episode_logs?: {
-        [key: string]: unknown
-      } | null
+      outcome?: components['schemas']['OutcomeSummary'] | null
+      failures: components['schemas']['FailureSummary']
+      crash_dump?: components['schemas']['CrashDumpSummary'] | null
+      matchup?: components['schemas']['MatchupSummary'] | null
+      confidence?: components['schemas']['ConfidenceSummary'] | null
+      trend?: components['schemas']['VersionTrendSummary'] | null
+      trend_explorer?: components['schemas']['TrendExplorerSummary-Input'] | null
+      patterns?: components['schemas']['PatternExtractionSummary'] | null
     }
-    /**
-     * DashboardEpisode
-     * @description Episode data for dashboard computation.
-     */
+    /** DashboardDerived */
+    'DashboardDerived-Output': {
+      kpis: components['schemas']['DerivedMetrics']
+      /** Team Comp */
+      team_comp: components['schemas']['TeamCompStats'][]
+      /** Opponent Metrics */
+      opponent_metrics: {
+        [key: string]: components['schemas']['OpponentStats']
+      }
+      outcome?: components['schemas']['OutcomeSummary'] | null
+      failures: components['schemas']['FailureSummary']
+      crash_dump?: components['schemas']['CrashDumpSummary'] | null
+      matchup?: components['schemas']['MatchupSummary'] | null
+      confidence?: components['schemas']['ConfidenceSummary'] | null
+      trend?: components['schemas']['VersionTrendSummary'] | null
+      trend_explorer?: components['schemas']['TrendExplorerSummary-Output'] | null
+      patterns?: components['schemas']['PatternExtractionSummary'] | null
+    }
+    /** DashboardEpisode */
     DashboardEpisode: {
       /** Episode Id */
       episode_id: string
       /** Job Id */
       job_id: string
+      /** Created At */
+      created_at?: string | null
+      /** Replay Url */
+      replay_url?: string | null
+      /** Thumbnail Url */
+      thumbnail_url?: string | null
       /** Opponent Name */
       opponent_name: string
       /** Opponent Version */
@@ -1174,25 +1287,29 @@ export interface components {
       status: string
       /** Error Type */
       error_type?: string | null
+      /** Error Message */
+      error_message?: string | null
+      /** Error Context */
+      error_context?: {
+        [key: string]: unknown
+      }
       /**
        * Steps
        * @default 0
        */
       steps: number
-      /**
-       * Metrics
-       * @default {}
-       */
-      metrics: {
+      /** Raw Tags */
+      raw_tags?: {
+        [key: string]: string
+      }
+      /** Diagnostic Tags */
+      diagnostic_tags?: string[]
+      /** Metrics */
+      metrics?: {
         [key: string]: unknown
       }
-      /** Replay Url */
-      replay_url?: string | null
     }
-    /**
-     * DashboardResponse
-     * @description Full dashboard response returned by the API.
-     */
+    /** DashboardResponse */
     DashboardResponse: {
       policy: components['schemas']['PolicyInfo']
       /** Episodes */
@@ -1201,12 +1318,10 @@ export interface components {
       season: string
       /** Generated At */
       generated_at: string
-      derived: components['schemas']['DashboardDerived']
+      selection: components['schemas']['EpisodeSelectionMetadata']
+      derived: components['schemas']['DashboardDerived-Output']
     }
-    /**
-     * DerivedMetrics
-     * @description Computed KPIs derived from episode metrics.
-     */
+    /** DerivedMetrics */
     DerivedMetrics: {
       /**
        * Move Efficiency
@@ -1303,11 +1418,8 @@ export interface components {
        * @default 0
        */
       profile_mobile_scout: number
-      /**
-       * Diagnostics
-       * @default []
-       */
-      diagnostics: string[]
+      /** Diagnostics */
+      diagnostics?: string[]
     }
     /** EpisodePolicyStat */
     EpisodePolicyStat: {
@@ -1408,6 +1520,33 @@ export interface components {
        */
       created_at: string
     }
+    /** EpisodeSelectionMetadata */
+    EpisodeSelectionMetadata: {
+      /** Limit */
+      limit: number
+      /**
+       * Offset
+       * @default 0
+       */
+      offset: number
+      /**
+       * Ordering
+       * @default created_at_desc
+       */
+      ordering: string
+      /**
+       * Sampled Episode Count
+       * @default 0
+       */
+      sampled_episode_count: number
+      /**
+       * Includes Failed Jobs Without Episode
+       * @default true
+       */
+      includes_failed_jobs_without_episode: boolean
+      /** Baseline Limit */
+      baseline_limit?: number | null
+    }
     /** EpisodeStatsResponse */
     EpisodeStatsResponse: {
       /** Game Stats */
@@ -1500,6 +1639,59 @@ export interface components {
       finished_at?: string | null
       /** Output Log Path */
       output_log_path?: string | null
+    }
+    /** FailureSummary */
+    FailureSummary: {
+      /**
+       * Total Episodes
+       * @default 0
+       */
+      total_episodes: number
+      /**
+       * Completed Episodes
+       * @default 0
+       */
+      completed_episodes: number
+      /**
+       * Failed Episodes
+       * @default 0
+       */
+      failed_episodes: number
+      /**
+       * Failed Rate
+       * @default 0
+       */
+      failed_rate: number
+      /**
+       * Timeout Failures
+       * @default 0
+       */
+      timeout_failures: number
+      /**
+       * Oom Failures
+       * @default 0
+       */
+      oom_failures: number
+      /**
+       * Crash Failures
+       * @default 0
+       */
+      crash_failures: number
+      /**
+       * Other Failures
+       * @default 0
+       */
+      other_failures: number
+      /**
+       * Freeze Heavy Completed
+       * @default 0
+       */
+      freeze_heavy_completed: number
+      /**
+       * Noop Heavy Completed
+       * @default 0
+       */
+      noop_heavy_completed: number
     }
     /** GitHashesRequest */
     GitHashesRequest: {
@@ -1772,6 +1964,72 @@ export interface components {
        */
       created_at: string
     }
+    /** MatchupSlice */
+    MatchupSlice: {
+      /** Key */
+      key: string
+      /** Count */
+      count: number
+      /** Avg Reward */
+      avg_reward: number
+      /** Delta Vs Policy */
+      delta_vs_policy: number
+      /** Baseline Count */
+      baseline_count?: number | null
+      /** Baseline Avg Reward */
+      baseline_avg_reward?: number | null
+      /** Delta Vs Baseline */
+      delta_vs_baseline?: number | null
+    }
+    /** MatchupSummary */
+    MatchupSummary: {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /**
+       * Interaction Specific Issue
+       * @default false
+       */
+      interaction_specific_issue: boolean
+      /**
+       * Reason
+       * @default Insufficient matchup evidence. Collect more episodes.
+       */
+      reason: string
+      /**
+       * Current Avg Reward
+       * @default 0
+       */
+      current_avg_reward: number
+      /** Baseline Avg Reward */
+      baseline_avg_reward?: number | null
+      /** Global Reward Delta */
+      global_reward_delta?: number | null
+      /**
+       * Opponent Spread
+       * @default 0
+       */
+      opponent_spread: number
+      /** Best Opponent */
+      best_opponent?: string | null
+      /** Worst Opponent */
+      worst_opponent?: string | null
+      /**
+       * Composition Spread
+       * @default 0
+       */
+      composition_spread: number
+      /** Best Composition */
+      best_composition?: string | null
+      /** Worst Composition */
+      worst_composition?: string | null
+      /** Opponent Slices */
+      opponent_slices?: components['schemas']['MatchupSlice'][]
+      /** Composition Slices */
+      composition_slices?: components['schemas']['MatchupSlice'][]
+    }
     /** MembershipHistoryEntry */
     MembershipHistoryEntry: {
       /**
@@ -1805,10 +2063,7 @@ export interface components {
        */
       created_at: string
     }
-    /**
-     * OpponentStats
-     * @description Per-opponent metric aggregation.
-     */
+    /** OpponentStats */
     OpponentStats: {
       /** Count */
       count: number
@@ -1825,6 +2080,56 @@ export interface components {
         [key: string]: number
       }
     }
+    /** OutcomeDelta */
+    OutcomeDelta: {
+      /** Rank Delta */
+      rank_delta?: number | null
+      /** Score Delta */
+      score_delta?: number | null
+      /** Matches Delta */
+      matches_delta?: number | null
+    }
+    /** OutcomeSnapshot */
+    OutcomeSnapshot: {
+      /** Id */
+      id: string
+      /** Name */
+      name: string
+      /** Version */
+      version: number
+      /** Rank */
+      rank?: number | null
+      /** Score */
+      score?: number | null
+      /**
+       * Matches
+       * @default 0
+       */
+      matches: number
+      /** Season */
+      season: string
+    }
+    /** OutcomeSummary */
+    OutcomeSummary: {
+      /**
+       * Verdict
+       * @default inconclusive
+       */
+      verdict: string
+      /**
+       * Reason
+       * @default No baseline available for comparison.
+       */
+      reason: string
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      current: components['schemas']['OutcomeSnapshot']
+      baseline?: components['schemas']['OutcomeSnapshot'] | null
+      delta?: components['schemas']['OutcomeDelta']
+    }
     /** PaginatedTasksResponse */
     PaginatedTasksResponse: {
       /** Tasks */
@@ -1837,6 +2142,36 @@ export interface components {
       page_size: number
       /** Total Pages */
       total_pages: number
+    }
+    /** PatternExtractionSummary */
+    PatternExtractionSummary: {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /**
+       * Headline
+       * @default Collect more evidence before extracting strong patterns.
+       */
+      headline: string
+      /** Signals */
+      signals?: components['schemas']['PatternSignal'][]
+    }
+    /** PatternSignal */
+    PatternSignal: {
+      /** Code */
+      code: string
+      /** Title */
+      title: string
+      /** Severity */
+      severity: string
+      /** Confidence */
+      confidence: string
+      /** Evidence */
+      evidence: string
+      /** Next Action */
+      next_action: string
     }
     /** PoliciesResponse */
     PoliciesResponse: {
@@ -1859,10 +2194,7 @@ export interface components {
        */
       is_system_policy: boolean
     }
-    /**
-     * PolicyInfo
-     * @description Policy metadata for dashboard response.
-     */
+    /** PolicyInfo */
     PolicyInfo: {
       /** Id */
       id: string
@@ -2277,6 +2609,28 @@ export interface components {
       /** Items */
       items: components['schemas']['SmartPlugStatus'][]
     }
+    /** SubmissionPatternGroup */
+    SubmissionPatternGroup: {
+      /** Code */
+      code: string
+      /** Title */
+      title: string
+      /** Metric Key */
+      metric_key: string
+      /** Severity */
+      severity: string
+      /**
+       * Count
+       * @default 0
+       */
+      count: number
+      /** Versions */
+      versions?: string[]
+      /** Evidence */
+      evidence: string
+      /** Next Action */
+      next_action: string
+    }
     /** SubmitRequest */
     SubmitRequest: {
       /**
@@ -2424,10 +2778,7 @@ export interface components {
       /** Tasks */
       tasks: components['schemas']['EvalTaskRow'][]
     }
-    /**
-     * TeamCompStats
-     * @description Per-composition KPI breakdown.
-     */
+    /** TeamCompStats */
     TeamCompStats: {
       /** Composition */
       composition: string
@@ -2441,6 +2792,119 @@ export interface components {
       avg_junction_aligned: number
       /** Avg Resource Gained */
       avg_resource_gained: number
+    }
+    /** TrendDistribution */
+    TrendDistribution: {
+      /**
+       * Count
+       * @default 0
+       */
+      count: number
+      /** Mean */
+      mean?: number | null
+      /** Median */
+      median?: number | null
+      /** P10 */
+      p10?: number | null
+      /** P90 */
+      p90?: number | null
+    }
+    /** TrendExplorerSeries */
+    TrendExplorerSeries: {
+      /** Key */
+      key: string
+      /** Label */
+      label: string
+      /** Higher Is Better */
+      higher_is_better: boolean
+      /**
+       * Direction
+       * @default insufficient
+       */
+      direction: string
+      /**
+       * Reason
+       * @default Insufficient points for trend inference.
+       */
+      reason: string
+      /** Values */
+      values?: (number | null)[]
+      /** Deltas */
+      deltas?: (number | null)[]
+    }
+    /** TrendExplorerSummary */
+    'TrendExplorerSummary-Input': {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /**
+       * Selected Metric
+       * @default score
+       */
+      selected_metric: string
+      /** Version Labels */
+      version_labels?: string[]
+      /** Series */
+      series?: components['schemas']['TrendExplorerSeries'][]
+      /** Metric Overlays */
+      metric_overlays?: components['schemas']['TrendMetricOverlay'][]
+      /** Submission Patterns */
+      submission_patterns?: components['schemas']['SubmissionPatternGroup'][]
+    }
+    /** TrendExplorerSummary */
+    'TrendExplorerSummary-Output': {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /**
+       * Selected Metric
+       * @default score
+       */
+      selected_metric: string
+      /** Version Labels */
+      version_labels?: string[]
+      /** Series */
+      series?: components['schemas']['TrendExplorerSeries'][]
+      /** Metric Overlays */
+      metric_overlays?: components['schemas']['TrendMetricOverlay'][]
+      /** Submission Patterns */
+      submission_patterns?: components['schemas']['SubmissionPatternGroup'][]
+    }
+    /** TrendMetricOverlay */
+    TrendMetricOverlay: {
+      /** Key */
+      key: string
+      /** Label */
+      label: string
+      /** Higher Is Better */
+      higher_is_better: boolean
+      /** Current Value */
+      current_value?: number | null
+      /**
+       * Current Display
+       * @default -
+       */
+      current_display: string
+      team?: components['schemas']['TrendDistribution']
+      population?: components['schemas']['TrendDistribution']
+      /** Delta Vs Team Mean */
+      delta_vs_team_mean?: number | null
+      /** Delta Vs Population Mean */
+      delta_vs_population_mean?: number | null
+      /**
+       * Signal
+       * @default insufficient
+       */
+      signal: string
+      /**
+       * Reason
+       * @default Insufficient team/population overlay context.
+       */
+      reason: string
     }
     /** UUIDResponse */
     UUIDResponse: {
@@ -2469,6 +2933,53 @@ export interface components {
       msg: string
       /** Error Type */
       type: string
+    }
+    /** VersionTrendPoint */
+    VersionTrendPoint: {
+      /** Id */
+      id: string
+      /** Name */
+      name: string
+      /** Version */
+      version: number
+      /** Rank */
+      rank?: number | null
+      /** Score */
+      score?: number | null
+      /**
+       * Matches
+       * @default 0
+       */
+      matches: number
+      /**
+       * Has Leaderboard Data
+       * @default false
+       */
+      has_leaderboard_data: boolean
+    }
+    /** VersionTrendSummary */
+    VersionTrendSummary: {
+      /**
+       * Evidence Sufficient
+       * @default false
+       */
+      evidence_sufficient: boolean
+      /**
+       * Direction
+       * @default insufficient
+       */
+      direction: string
+      /**
+       * Reason
+       * @default Insufficient leaderboard points for trend inference.
+       */
+      reason: string
+      /** Score Delta From Oldest */
+      score_delta_from_oldest?: number | null
+      /** Rank Delta From Oldest */
+      rank_delta_from_oldest?: number | null
+      /** Points */
+      points?: components['schemas']['VersionTrendPoint'][]
     }
     /** WhoAmIResponse */
     WhoAmIResponse: {
@@ -2524,11 +3035,7 @@ export interface operations {
       }
       cookie?: never
     }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['AnalysisRequest']
-      }
-    }
+    requestBody?: never
     responses: {
       /** @description Successful Response */
       200: {
@@ -2536,7 +3043,7 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['AnalysisResponse']
+          'application/json': components['schemas']['DashboardAnalysisResponse']
         }
       }
       /** @description Validation Error */

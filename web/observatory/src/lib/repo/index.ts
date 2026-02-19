@@ -23,6 +23,7 @@ import type {
   SeasonDetail,
   SeasonMatchSummary,
   SeasonVersionInfo,
+  Schemas,
   SmartPlugStatus,
   SubmissionResponse,
   TableInfo,
@@ -104,87 +105,133 @@ export type TaskFilters = {
 export const ALL_JOB_STATUSES = ['pending', 'dispatched', 'running', 'completed', 'failed'] as const
 
 // Dashboard types (frontend-only, not from API spec)
-export type DashboardKpis = {
-  move_efficiency: number
-  action_success_rate: number
-  vibe_change_rate: number
-  resource_retention: number
-  freeze_vulnerability: number
-  junction_control_rate: number
-  alignment_stability: number
-  net_alignment_rate: number
-  avg_reward: number
-  noop_rate: number
-  resource_efficiency_per_step: number
-  hearts_to_junction_rate: number
-  reward_consistency: number
-  reward_nonzero_pct: number
-  profile_aggressive: number
-  profile_defensive: number
-  profile_resource_hoarder: number
-  profile_junction_hunter: number
-  profile_mobile_scout: number
-  diagnostics: string[]
+type Require<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]-?: Exclude<T[P], undefined>
 }
 
-export type DashboardTeamCompStats = {
-  composition: string
-  count: number
-  avg_reward: number
-  avg_move_efficiency: number
-  avg_junction_aligned: number
-  avg_resource_gained: number
+export type DashboardKpis = Require<Schemas['DerivedMetrics'], 'diagnostics'>
+export type DashboardTeamCompStats = Schemas['TeamCompStats']
+export type DashboardOpponentStats = Schemas['OpponentStats']
+export type DashboardAnalysisResponse = Schemas['DashboardAnalysisResponse']
+export type DashboardOutcomeSnapshot = Schemas['OutcomeSnapshot']
+export type DashboardOutcomeDelta = Schemas['OutcomeDelta']
+export type DashboardOutcomeSummary = Require<Schemas['OutcomeSummary'], 'delta'>
+export type DashboardMatchupSlice = Require<
+  Schemas['MatchupSlice'],
+  'baseline_count' | 'baseline_avg_reward' | 'delta_vs_baseline'
+>
+export type DashboardMatchupSummary = Omit<
+  Require<
+    Schemas['MatchupSummary'],
+    | 'baseline_avg_reward'
+    | 'global_reward_delta'
+    | 'best_opponent'
+    | 'worst_opponent'
+    | 'best_composition'
+    | 'worst_composition'
+  >,
+  'opponent_slices' | 'composition_slices'
+> & {
+  opponent_slices: DashboardMatchupSlice[]
+  composition_slices: DashboardMatchupSlice[]
 }
-
-export type DashboardOpponentStats = {
-  count: number
-  total_reward: number
-  avg_reward: number
-  avg_metrics: Record<string, number>
-  strategy_profile: Record<string, number>
+export type DashboardTrendPoint = Require<Schemas['VersionTrendPoint'], 'rank' | 'score'>
+export type DashboardTrendSummary = Omit<
+  Require<Schemas['VersionTrendSummary'], 'score_delta_from_oldest' | 'rank_delta_from_oldest'>,
+  'points'
+> & {
+  points: DashboardTrendPoint[]
+}
+export type DashboardTrendExplorerSeries = Require<Schemas['TrendExplorerSeries'], 'values' | 'deltas'>
+export type DashboardTrendDistribution = Require<Schemas['TrendDistribution'], 'mean' | 'median' | 'p10' | 'p90'>
+export type DashboardTrendMetricOverlay = Omit<
+  Require<Schemas['TrendMetricOverlay'], 'current_value' | 'delta_vs_team_mean' | 'delta_vs_population_mean'>,
+  'team' | 'population'
+> & {
+  team: DashboardTrendDistribution
+  population: DashboardTrendDistribution
+}
+export type DashboardSubmissionPatternGroup = Require<Schemas['SubmissionPatternGroup'], 'versions'>
+export type DashboardTrendExplorerSummary = Omit<
+  Require<Schemas['TrendExplorerSummary-Output'], 'version_labels'>,
+  'series' | 'metric_overlays' | 'submission_patterns'
+> & {
+  series: DashboardTrendExplorerSeries[]
+  metric_overlays: DashboardTrendMetricOverlay[]
+  submission_patterns: DashboardSubmissionPatternGroup[]
+}
+export type DashboardConfidenceInterval = Require<
+  Schemas['ConfidenceInterval'],
+  'point_estimate' | 'lower' | 'upper' | 'crosses_zero'
+>
+export type DashboardConfidenceSummary = Omit<
+  Require<Schemas['ConfidenceSummary'], 'recommended_actions'>,
+  'intervals'
+> & {
+  intervals: DashboardConfidenceInterval[]
+}
+export type DashboardPatternSignal = Schemas['PatternSignal']
+export type DashboardPatternSummary = Require<Schemas['PatternExtractionSummary'], 'signals'>
+export type DashboardCrashDumpSignature = Schemas['CrashDumpSignature']
+export type DashboardCrashDumpEntry = Schemas['CrashDumpEntry']
+export type DashboardCrashDumpSummary = Omit<
+  Require<Schemas['CrashDumpSummary'], 'signatures' | 'entries'>,
+  'signatures' | 'entries'
+> & {
+  signatures: DashboardCrashDumpSignature[]
+  entries: DashboardCrashDumpEntry[]
 }
 
 export type DashboardDerived = {
   kpis: DashboardKpis
   team_comp: DashboardTeamCompStats[]
   opponent_metrics: Record<string, DashboardOpponentStats>
-  episode_logs: Record<string, any> | null
+  outcome: DashboardOutcomeSummary | null
+  failures: DashboardFailureSummary
+  crash_dump: DashboardCrashDumpSummary | null
+  matchup: DashboardMatchupSummary | null
+  confidence: DashboardConfidenceSummary | null
+  trend: DashboardTrendSummary | null
+  trend_explorer: DashboardTrendExplorerSummary | null
+  patterns: DashboardPatternSummary | null
 }
 
-export type DashboardEpisode = {
-  episode_id: string
-  job_id: string
-  opponent_name: string
-  opponent_version: number
-  team_composition: string
-  reward: number
-  status: string
-  error_type: string | null
-  steps: number
-  metrics: Record<string, number>
+export type DashboardFailureSummary = Schemas['FailureSummary']
+
+type DashboardEpisodeSchema = Schemas['DashboardEpisode']
+export type DashboardEpisode = Omit<
+  DashboardEpisodeSchema,
+  | 'created_at'
+  | 'replay_url'
+  | 'thumbnail_url'
+  | 'error_type'
+  | 'error_message'
+  | 'error_context'
+  | 'raw_tags'
+  | 'diagnostic_tags'
+  | 'metrics'
+> & {
+  created_at: string | null
   replay_url: string | null
+  thumbnail_url: string | null
+  error_type: string | null
+  error_message: string | null
+  error_context: Record<string, string | number | boolean>
+  raw_tags: Record<string, string>
+  diagnostic_tags: string[]
+  metrics: Record<string, number>
 }
 
-export type DashboardPolicy = {
-  id: string
-  name: string
-  version: number
-  rank: number | null
-  score: number | null
-  matches: number
-}
+export type DashboardPolicy = Schemas['PolicyInfo']
+export type DashboardSelectionMetadata = Schemas['EpisodeSelectionMetadata']
 
 export type DashboardResponse = {
   policy: DashboardPolicy
   episodes: DashboardEpisode[]
   season: string
   generated_at: string
+  selection: DashboardSelectionMetadata
   derived: DashboardDerived
-}
-
-export type DashboardAnalysisResponse = {
-  analysis: string
-  data_sources: string[]
 }
 
 export type RequestLogEntry = {
@@ -611,13 +658,10 @@ export class Repo {
     )
   }
 
-  async getDashboardAnalysis(
-    policyVersionId: string,
-    summary: Record<string, any>
-  ): Promise<DashboardAnalysisResponse> {
+  async getDashboardAnalysis(policyVersionId: string): Promise<DashboardAnalysisResponse> {
     return this.apiCallWithBody<DashboardAnalysisResponse>(
       `/stats/policies/versions/${encodeURIComponent(policyVersionId)}/dashboard-analysis`,
-      { summary }
+      {}
     )
   }
 }

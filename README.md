@@ -21,7 +21,7 @@ A reinforcement learning codebase focusing on the emergence of cooperation and a
 ## What is Metta Learning?
 
 <p align="middle">
-<img src="docs/readme_showoff.gif" alt="Metta learning example video">
+<img src="packages/cogames/assets/showoff.gif" alt="Metta learning example video">
 <br>
 </p>
 

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 5173",
+    "dev": "next dev --webpack -p 5173",
     "build": "next build",
     "start": "next start",
     "typegen": "next typegen",
