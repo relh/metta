@@ -57,7 +57,7 @@ su - ubuntu -c "PATH=/usr/local/go/bin:\\$PATH CGO_ENABLED=1 \
 
 # Pre-install nimby (urllib.request.urlretrieve chokes on GitHub 302 redirects)
 curl -fsSL -o /home/ubuntu/.local/bin/nimby \
-  https://github.com/treeform/nimby/releases/download/0.1.23/nimby-Linux-X64
+  https://github.com/treeform/nimby/releases/download/0.1.26/nimby-Linux-X64
 chmod +x /home/ubuntu/.local/bin/nimby
 
 # Initialize Gas Town
