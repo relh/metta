@@ -120,7 +120,7 @@ class TrainingEnvironment(ABC):
         """Get the observations."""
 
     @abstractmethod
-    def send_actions(self, actions: np.ndarray) -> None:
+    def send_actions(self, actions: np.ndarray, vibe_actions: Optional[np.ndarray] = None) -> None:
         """Send the actions."""
 
     @property
@@ -312,8 +312,43 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
 
         return o, r, d, t, ta, info, training_env_id, mask, num_steps
 
-    def send_actions(self, actions: np.ndarray) -> None:
+    def send_actions(self, actions: np.ndarray, vibe_actions: Optional[np.ndarray] = None) -> None:
+        assert self._vecenv is not None
         if actions.dtype != dtype_actions:
             actions = actions.astype(dtype_actions, copy=False)
-        assert self._vecenv is not None
-        self._vecenv.send(actions)
+        payload: np.ndarray = actions
+        if vibe_actions is not None:
+            if vibe_actions.dtype != dtype_actions:
+                vibe_actions = vibe_actions.astype(dtype_actions, copy=False)
+            if actions.shape != vibe_actions.shape:
+                raise ValueError(
+                    "core and vibe action arrays must have the same shape; "
+                    f"got core={actions.shape} vibe={vibe_actions.shape}"
+                )
+            num_non_vibe_actions = len(self._policy_env_info.action_names)
+            num_vibe_actions = len(self._policy_env_info.vibe_action_names)
+            if num_vibe_actions <= 0:
+                raise ValueError("Received vibe actions, but environment has no configured vibe action space")
+            if num_non_vibe_actions <= 0:
+                raise ValueError("Environment has no non-vibe actions to pair with vibe actions")
+
+            actions_i64 = actions.astype(np.int64, copy=False)
+            vibe_actions_i64 = vibe_actions.astype(np.int64, copy=False)
+            if bool((actions_i64 < 0).any()) or bool((actions_i64 >= num_non_vibe_actions).any()):
+                raise ValueError(
+                    "core actions out of range for non-vibe action space; "
+                    f"expected [0,{num_non_vibe_actions}), got min={actions_i64.min()} max={actions_i64.max()}"
+                )
+            if bool((vibe_actions_i64 < 0).any()) or bool((vibe_actions_i64 >= num_vibe_actions).any()):
+                raise ValueError(
+                    "vibe actions out of range for vibe action space; "
+                    f"expected [0,{num_vibe_actions}), got min={vibe_actions_i64.min()} max={vibe_actions_i64.max()}"
+                )
+
+            payload_i64 = actions_i64 + num_non_vibe_actions * (vibe_actions_i64 + 1)
+            payload = payload_i64.astype(dtype_actions, copy=False)
+
+            initialized = getattr(self._vecenv, "initialized", None)
+            if initialized is False:
+                self._vecenv.initialized = True
+        self._vecenv.send(payload)

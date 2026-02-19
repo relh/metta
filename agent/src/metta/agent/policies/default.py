@@ -203,7 +203,29 @@ class DefaultPolicyConfig(PolicyArchitecture):
                     )
                 )
 
-        components.append(ActorHeadConfig(in_key="actor_hidden", out_key="logits", input_dim=self.actor_hidden))
+        components.append(
+            ActorHeadConfig(
+                in_key="actor_hidden",
+                out_key="logits",
+                input_dim=self.actor_hidden,
+                action_space="non_vibe",
+                name="actor_head",
+            )
+        )
+        if policy_env_info.vibe_action_names:
+            components.append(
+                ActorHeadConfig(
+                    in_key="actor_hidden",
+                    out_key="vibe_logits",
+                    input_dim=self.actor_hidden,
+                    action_space="vibe",
+                    name="vibe_actor_head",
+                )
+            )
+            if self.action_probs_config.vibe_in_key is None:
+                self.action_probs_config = self.action_probs_config.model_copy(update={"vibe_in_key": "vibe_logits"})
+        elif self.action_probs_config.vibe_in_key is not None:
+            self.action_probs_config = self.action_probs_config.model_copy(update={"vibe_in_key": None})
         self.components = components
         return super().make_policy(policy_env_info)
 

@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -587,6 +587,19 @@ class CoreTrainingLoop:
                     "Policies must emit a single discrete action id per agent; "
                     f"received tensor of shape {tuple(raw_actions.shape)}"
                 )
+            raw_vibe_actions: Optional[Tensor] = None
+            if "vibe_actions" in td.keys():
+                raw_vibe_actions = td["vibe_actions"].detach()
+                if raw_vibe_actions.dim() != 1:
+                    raise ValueError(
+                        "Policies must emit a single vibe action id per agent; "
+                        f"received tensor of shape {tuple(raw_vibe_actions.shape)}"
+                    )
+                if raw_vibe_actions.shape != raw_actions.shape:
+                    raise ValueError(
+                        "Core and vibe action tensors must share the same shape; "
+                        f"got core={tuple(raw_actions.shape)} vibe={tuple(raw_vibe_actions.shape)}"
+                    )
 
             actions_column = raw_actions.view(-1, 1)
 
@@ -612,12 +625,22 @@ class CoreTrainingLoop:
             # Ship actions to the environment
             with context.stopwatch("_rollout.send"):
                 td_actions3: Tensor = td["actions"]
+                td_vibe_actions3: Optional[Tensor] = td["vibe_actions"] if "vibe_actions" in td.keys() else None
                 if td_actions3.device.type == "cuda":
                     assert self._action_send_stager is not None
                     cpu_actions, ev = self._action_send_stager.to_numpy_ready_cpu(td_actions3)
                     ev.synchronize()
                     td_actions3 = cpu_actions
-                env.send_actions(td_actions3.cpu().numpy())
+                if td_vibe_actions3 is not None and td_vibe_actions3.device.type == "cuda":
+                    assert self._action_send_stager is not None
+                    cpu_vibe_actions, ev = self._action_send_stager.to_numpy_ready_cpu(td_vibe_actions3)
+                    ev.synchronize()
+                    td_vibe_actions3 = cpu_vibe_actions
+                core_actions_np = td_actions3.cpu().numpy()
+                if td_vibe_actions3 is None:
+                    env.send_actions(core_actions_np)
+                else:
+                    env.send_actions(core_actions_np, td_vibe_actions3.cpu().numpy())
 
             # Rollout env-info used for tensorized cumulants can be per-step; that is too
             # expensive to aggregate into raw_infos. Keep stats reporting focused on

@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Literal, Optional
 
 import torch
 import torch.nn as nn
@@ -107,6 +107,17 @@ class ActionProbsConfig(ComponentConfig):
     model_config = ConfigDict(extra="ignore")
 
     in_key: str
+    action_column: int = 0
+    actions_key: str = "actions"
+    act_log_prob_key: str = "act_log_prob"
+    entropy_key: str = "entropy"
+    full_log_probs_key: str = "full_log_probs"
+    vibe_in_key: Optional[str] = None
+    vibe_action_column: int = 1
+    vibe_actions_key: str = "vibe_actions"
+    vibe_act_log_prob_key: str = "vibe_act_log_prob"
+    vibe_entropy_key: str = "vibe_entropy"
+    vibe_full_log_probs_key: str = "vibe_full_log_probs"
     name: str = "action_probs"
 
     def make_component(self, env=None):
@@ -122,6 +133,7 @@ class ActionProbs(nn.Module):
         super().__init__()
         self.config = config
         self.num_actions = 0
+        self.num_vibe_actions = 0
 
     def _ensure_initialized(self) -> None:
         if self.num_actions <= 0:
@@ -138,6 +150,31 @@ class ActionProbs(nn.Module):
             raise TypeError(msg)
 
         self.num_actions = int(action_space.n)
+        self.num_vibe_actions = len(env.vibe_action_names)
+
+    def _select_action_indices(
+        self,
+        *,
+        action: torch.Tensor,
+        column: int,
+        td: TensorDict,
+        fallback_key: str,
+    ) -> torch.Tensor:
+        if action.dim() == 1:
+            if column == 0:
+                return action.to(dtype=torch.long)
+            if fallback_key in td.keys():
+                return td[fallback_key].reshape(-1).to(dtype=torch.long)
+            raise ValueError(f"Expected action column {column}, but action shape is {tuple(action.shape)}")
+
+        if action.dim() == 2:
+            if action.size(1) > column:
+                return action[:, column].to(dtype=torch.long)
+            if fallback_key in td.keys():
+                return td[fallback_key].reshape(-1).to(dtype=torch.long)
+            raise ValueError(f"Expected action column {column}, but action shape is {tuple(action.shape)}")
+
+        raise ValueError(f"Expected 1D or 2D action tensor, got shape {tuple(action.shape)}")
 
     def _mask_logits_if_needed(self, logits: torch.Tensor) -> torch.Tensor:
         """Sanitize logits and mask past the first 21 actions (keep full action_dim for checkpoint compatibility)."""
@@ -159,9 +196,17 @@ class ActionProbs(nn.Module):
         logits = self._mask_logits_if_needed(logits)
         action_logit_index, selected_log_probs, _, full_log_probs = sample_actions(logits)
 
-        td["actions"] = action_logit_index.to(dtype=torch.int32)
-        td["act_log_prob"] = selected_log_probs
-        td["full_log_probs"] = full_log_probs
+        td[self.config.actions_key] = action_logit_index.to(dtype=torch.int32)
+        td[self.config.act_log_prob_key] = selected_log_probs
+        td[self.config.full_log_probs_key] = full_log_probs
+
+        if self.config.vibe_in_key and self.num_vibe_actions > 0:
+            vibe_logits = td[self.config.vibe_in_key]
+            vibe_logits = self._mask_logits_if_needed(vibe_logits)
+            vibe_actions, vibe_log_probs, _, vibe_full_log_probs = sample_actions(vibe_logits)
+            td[self.config.vibe_actions_key] = vibe_actions.to(dtype=torch.int32)
+            td[self.config.vibe_act_log_prob_key] = vibe_log_probs
+            td[self.config.vibe_full_log_probs_key] = vibe_full_log_probs
 
         return td
 
@@ -176,22 +221,34 @@ class ActionProbs(nn.Module):
             # Also flatten the TD to match
             if td.batch_dims > 1:
                 td = td.reshape(td.batch_size.numel())
-
-        if action.dim() == 2 and action.size(1) == 1:
-            action = action.view(-1)
-
-        if action.dim() != 1:
-            raise ValueError(f"Expected flattened action indices, got shape {tuple(action.shape)}")
-
-        action_logit_index = action.to(dtype=torch.long)
         self._ensure_initialized()
         logits = self._mask_logits_if_needed(logits)
+        action_logit_index = self._select_action_indices(
+            action=action,
+            column=self.config.action_column,
+            td=td,
+            fallback_key=self.config.actions_key,
+        )
         selected_log_probs, entropy, action_log_probs = evaluate_actions(logits, action_logit_index)
 
         # Store in flattened TD (will be reshaped by caller if needed)
-        td["act_log_prob"] = selected_log_probs
-        td["entropy"] = entropy
-        td["full_log_probs"] = action_log_probs
+        td[self.config.act_log_prob_key] = selected_log_probs
+        td[self.config.entropy_key] = entropy
+        td[self.config.full_log_probs_key] = action_log_probs
+
+        if self.config.vibe_in_key and self.num_vibe_actions > 0:
+            vibe_logits = td[self.config.vibe_in_key]
+            vibe_logits = self._mask_logits_if_needed(vibe_logits)
+            vibe_action_index = self._select_action_indices(
+                action=action,
+                column=self.config.vibe_action_column,
+                td=td,
+                fallback_key=self.config.vibe_actions_key,
+            )
+            vibe_log_probs, vibe_entropy, vibe_full_log_probs = evaluate_actions(vibe_logits, vibe_action_index)
+            td[self.config.vibe_act_log_prob_key] = vibe_log_probs
+            td[self.config.vibe_entropy_key] = vibe_entropy
+            td[self.config.vibe_full_log_probs_key] = vibe_full_log_probs
 
         # ComponentPolicy reshapes the TD after training forward based on td["batch"] and td["bptt"]
         # The reshaping happens in ComponentPolicy.forward() after forward_training()
@@ -203,6 +260,7 @@ class ActorHeadConfig(ComponentConfig):
     out_key: str
     input_dim: int
     layer_init_std: float = 1.0
+    action_space: Literal["non_vibe", "vibe"] = "non_vibe"
     name: str = "actor_head"
 
     def make_component(self, env: PolicyEnvInterface):
@@ -217,7 +275,14 @@ class ActorHead(nn.Module):
         self.config = config
         self.in_key = self.config.in_key
         self.out_key = self.config.out_key
-        self.num_actions = int(env.action_space.n)
+        if self.config.action_space == "non_vibe":
+            self.num_actions = int(env.action_space.n)
+        elif self.config.action_space == "vibe":
+            self.num_actions = len(env.vibe_action_names)
+        else:
+            raise ValueError(f"Unsupported action_space setting: {self.config.action_space}")
+        if self.num_actions <= 0:
+            raise ValueError(f"Actor head '{self.out_key}' requires at least one action")
 
         linear = pufferlib.pytorch.layer_init(
             nn.Linear(self.config.input_dim, self.num_actions),
@@ -250,11 +315,15 @@ class ActorHead(nn.Module):
             state_dict[weight_key] = torch.cat([weight, weight_pad], dim=0)
             state_dict[bias_key] = torch.cat([bias, bias_pad], dim=0)
 
+        module_strict = strict
+        if self.config.action_space == "vibe" and (weight is None or bias is None):
+            module_strict = False
+
         super()._load_from_state_dict(
             state_dict,
             prefix,
             local_metadata,
-            strict,
+            module_strict,
             missing_keys,
             unexpected_keys,
             error_msgs,
