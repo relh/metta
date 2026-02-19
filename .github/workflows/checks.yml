@@ -46,6 +46,8 @@ jobs:
       has_relevant_changes: ${{ steps.filter.outputs.py_files || 'false' }}
       app_backend_has_changes: ${{ steps.filter.outputs.app_backend_files || 'false' }}
       cogames_docs_changed: ${{ steps.filter.outputs.cogames_docs || 'false' }}
+      compat_sources_changed: ${{ steps.filter.outputs.compat_sources || 'false' }}
+      compat_version_changed: ${{ steps.filter.outputs.compat_version || 'false' }}
       run_test: ${{ steps.determine_tasks.outputs.run_test || 'false' }}
       is_external: ${{ steps.detect-pr.outputs.is_external || 'true' }}
     steps:
@@ -98,6 +100,11 @@ jobs:
               - 'packages/cogames/**/*.py'
               - 'packages/cogames/**/*.ipynb'
               - 'packages/cogames/**/*.md'
+            compat_sources:
+              - 'packages/cogames/**'
+              - 'packages/mettagrid/**'
+            compat_version:
+              - 'COMPAT_VERSION'
 
       - name: Determine which tasks to run
         if: steps.graphite_ci.outputs.skip != 'true'
@@ -271,10 +278,38 @@ jobs:
       - name: Check cogames docs sync
         run: metta ci cogames-docsync
 
+  episode-runner-compat:
+    name: "Episode Runner Compat"
+    needs: setup-checks
+    if: |
+      needs.setup-checks.outputs.skip == 'false' &&
+      needs.setup-checks.outputs.compat_sources_changed == 'true' &&
+      needs.setup-checks.outputs.compat_version_changed != 'true'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Run episode-runner compat check
+        uses: ./.github/actions/episode-runner-compat
+        with:
+          github-actor: ${{ github.actor }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   # Single status check for branch protection rule
   tests-summary:
     name: "Tests"
-    needs: [python-tests, cpp-tests, recipe-tests, lint, cogames-docsync]
+    needs: [python-tests, cpp-tests, recipe-tests, lint, cogames-docsync, episode-runner-compat]
     if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
