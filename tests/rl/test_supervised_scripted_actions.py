@@ -97,6 +97,7 @@ def test_supervised_loss_uses_scripted_teacher_actions() -> None:
                 "actions": torch.zeros(num_agents, dtype=torch.long),
                 "teacher_actions": teacher_actions,
                 "act_log_prob": torch.zeros(num_agents, dtype=torch.float32),
+                "full_log_probs": torch.zeros((num_agents, int(policy_env_info.action_space.n)), dtype=torch.float32),
             },
             batch_size=[num_agents],
         )

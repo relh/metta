@@ -48,7 +48,7 @@ def test_puffer_default_policy_forward_rollout_and_training() -> None:
     )
 
     out = policy(td)
-    assert out["logits"].shape == (B, len(env_info.action_names))
+    assert out["logits"].shape == (B, int(env_info.action_space.n))
     assert out["values"].shape == (B,)
     assert out["h_values"].shape == (B,)
     assert out["actions"].shape == (B,)
@@ -76,7 +76,7 @@ def test_puffer_default_policy_forward_rollout_and_training() -> None:
     )
     actions = torch.zeros((total,), dtype=torch.long, device=device)
     out_train = policy(td_train, action=actions)
-    assert out_train["logits"].shape == (total, len(env_info.action_names))
+    assert out_train["logits"].shape == (total, int(env_info.action_space.n))
     assert out_train["values"].shape == (total,)
     assert out_train["h_values"].shape == (total,)
     assert out_train["act_log_prob"].shape == (total,)

@@ -22,7 +22,7 @@ def test_puffer_default_policy_forward_eval_updates_state() -> None:
     state = {"lstm_h": torch.zeros((2, 256)), "lstm_c": torch.zeros((2, 256))}
 
     logits, values = net.forward_eval(obs, state)  # type: ignore[call-arg]
-    assert logits.shape == (2, len(env_info.action_names))
+    assert logits.shape == (2, int(env_info.action_space.n))
     assert values.shape == (2, 1)
     assert state["lstm_h"] is not None
     assert state["lstm_c"] is not None
