@@ -7,7 +7,7 @@
     "dev": "next dev --webpack -p 5173",
     "build": "next build",
     "start": "next start",
-    "typegen": "next typegen",
+    "typegen": "rm -rf .next/types .next/dev/types && next typegen",
     "generate-api-types": "uv run ../../app_backend/scripts/export_openapi.py && openapi-typescript ../../app_backend/src/metta/app_backend/generated/internal-openapi.json -o src/lib/api/generated/schema.d.ts && prettier --write src/lib/api/generated/schema.d.ts",
     "type-check": "tsc",
     "lint:eslint": "eslint .",

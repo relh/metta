@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "typegen": "next typegen",
+    "typegen": "rm -rf .next/types .next/dev/types && next typegen",
     "type-check": "tsc --noEmit",
     "lint:eslint": "eslint .",
     "lint:prettier": "prettier --log-level warn --check .",

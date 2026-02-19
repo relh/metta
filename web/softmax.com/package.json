@@ -6,7 +6,7 @@
     "dev": "next dev -p 3002",
     "start": "next start",
     "build": "next build",
-    "typegen": "next typegen",
+    "typegen": "rm -rf .next/types .next/dev/types && next typegen",
     "type-check": "tsc --noEmit --pretty",
     "lint:prettier": "prettier --log-level warn --check .",
     "format": "prettier --write .",

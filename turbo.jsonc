@@ -15,7 +15,7 @@
       "dependsOn": ["lint:eslint", "lint:prettier"]
     },
     "typegen": {
-      "outputs": [".next/types/**"]
+      "outputs": [".next/types/**", ".next/dev/types/**", "next-env.d.ts"]
     },
     "type-check": {
       "dependsOn": ["typegen"]
