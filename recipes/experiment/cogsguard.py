@@ -448,6 +448,13 @@ def train(
     if isinstance(policy_architecture, str):
         policy_architecture = PolicyArchitecture.from_spec(policy_architecture)
 
+    if routed_adapter is None and policy_architecture is None:
+        # Tuned from relh.cg.adapters.0213.2_trial_0011_f83acf.
+        routed_adapter = {
+            "rank": 8,
+            "trunk_lr_mult": 0.5633060229085534,
+        }
+
     if isinstance(routed_adapter, dict):
         routed_adapter_overrides = dict(routed_adapter)
         routed_adapter_overrides.setdefault("num_slots", num_agents)
