@@ -10,7 +10,9 @@ from tensordict import TensorDict
 from torchrl.data import Composite, UnboundedDiscrete
 
 from metta.agent.policy import Policy
+from metta.rl.loss.action_supervised import ActionSupervisedConfig
 from metta.rl.loss.cmpo import CMPOConfig
+from metta.rl.loss.eer_cloner import EERClonerConfig
 from metta.rl.loss.loss import Loss
 from metta.rl.loss.stable_latent import StableLatentStateConfig
 from metta.rl.training.trajectory_isolation import TrajectoryIsolationSliceConfig
@@ -274,3 +276,64 @@ def test_cmpo_state_dict_with_prior_model() -> None:
     # Verify prior model weights were restored
     for p1, p2 in zip(cmpo1.prior_model.parameters(), cmpo2.prior_model.parameters(), strict=True):
         assert torch.allclose(p1, p2)
+
+
+def test_action_supervised_skips_invalid_teacher_labels_in_rollout_and_train() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
+    env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised")
+
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+    student_td = TensorDict(
+        {
+            "teacher_actions": torch.tensor([1, 99, 2], dtype=torch.long),
+            "actions": torch.tensor([0, 0, 0], dtype=torch.int32),
+            "full_log_probs": torch.zeros(3, 5, dtype=torch.float32),
+            "act_log_prob": torch.zeros(3, dtype=torch.float32),
+        },
+        batch_size=[3],
+    )
+    rollout_td = TensorDict({"primary": student_td}, batch_size=[])
+
+    loss.run_rollout_preprocess(rollout_td, context)
+    loss.run_rollout_postprocess(rollout_td, context)
+
+    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([1, 0, 2], dtype=np.int32))
+    np.testing.assert_array_equal(student_td["teacher_mask"].cpu().numpy(), np.array([True, False, True]))
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict(
+                {"teacher_actions": torch.tensor([[1, 99, 2]], dtype=torch.long)},
+                batch_size=[1, 3],
+            ),
+            "policy_td": TensorDict({"full_log_probs": torch.zeros(1, 3, 5, dtype=torch.float32)}, batch_size=[1, 3]),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)
+
+
+def test_eer_cloner_skips_invalid_teacher_labels_in_train() -> None:
+    cfg = EERClonerConfig(action_loss_coef=1.0, r_lambda=0.0)
+    env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "eer_cloner")
+
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict(
+                {"teacher_actions": torch.tensor([[0, 77, 1]], dtype=torch.long)},
+                batch_size=[1, 3],
+            ),
+            "policy_td": TensorDict({"full_log_probs": torch.zeros(1, 3, 5, dtype=torch.float32)}, batch_size=[1, 3]),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)

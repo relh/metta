@@ -7,6 +7,7 @@ from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.loss.teacher_action_utils import safe_teacher_action_indices
 from metta.rl.training import ComponentContext
 
 # Keep: heavy module + manages circular dependency (loss <-> trainer)
@@ -71,13 +72,19 @@ class ActionSupervised(Loss):
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
         primary_policy_name = context.current_slice_cfg.primary_policy
         student_td = td.get(primary_policy_name, None)
-        student_td["teacher_mask"] = self.teacher_mask.to(device=student_td.device)
-        if bool(self.teacher_mask.any()):
-            teacher_actions = student_td["teacher_actions"].to(dtype=student_td["actions"].dtype)
-            student_td["teacher_actions"] = teacher_actions
-            student_td["actions"][self.teacher_mask] = teacher_actions[self.teacher_mask]
+        num_actions = int(student_td["full_log_probs"].shape[-1])
+        teacher_actions_long, valid_teacher_actions, _ = safe_teacher_action_indices(
+            student_td["teacher_actions"],
+            num_actions,
+        )
+        teacher_mask = self.teacher_mask.to(device=student_td.device) & valid_teacher_actions
+        student_td["teacher_mask"] = teacher_mask
+        teacher_actions = teacher_actions_long.to(dtype=student_td["actions"].dtype)
+        student_td["teacher_actions"] = teacher_actions
+        if bool(teacher_mask.any()):
+            student_td["actions"][teacher_mask] = teacher_actions[teacher_mask]
             if "act_log_prob" in student_td.keys():
-                student_td["act_log_prob"][self.teacher_mask] = 0.0
+                student_td["act_log_prob"][teacher_mask] = 0.0
 
     def run_train(
         self,
@@ -90,15 +97,25 @@ class ActionSupervised(Loss):
 
         policy_full_log_probs: Tensor = policy_td["full_log_probs"]
         policy_full_log_probs = policy_full_log_probs.reshape(minibatch.shape[0], minibatch.shape[1], -1)
-        teacher_actions: Tensor = minibatch["teacher_actions"]
+        num_actions = int(policy_full_log_probs.shape[-1])
+        _, valid_teacher_actions, safe_teacher_actions = safe_teacher_action_indices(
+            minibatch["teacher_actions"],
+            num_actions,
+        )
         # get the student's logprob for the action that the teacher chose
-        student_log_probs = policy_full_log_probs.gather(dim=-1, index=teacher_actions.unsqueeze(-1))
+        student_log_probs = policy_full_log_probs.gather(dim=-1, index=safe_teacher_actions.unsqueeze(-1))
         student_log_probs = student_log_probs.reshape(minibatch.shape[0], minibatch.shape[1])
 
-        loss = -student_log_probs.mean() * self.cfg.action_loss_coef
+        if bool(valid_teacher_actions.any()):
+            loss = -student_log_probs[valid_teacher_actions].mean() * self.cfg.action_loss_coef
+        else:
+            loss = self._zero()
 
         assert self.loss_tracker is not None
         self.loss_tracker["supervised_action_loss"].append(float(loss.item()))
+        self.loss_tracker["supervised_action_label_valid_frac"].append(
+            float(valid_teacher_actions.float().mean().item())
+        )
 
         return loss, shared_loss_data, False
 

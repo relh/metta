@@ -9,6 +9,7 @@ from torchrl.data import Composite, UnboundedDiscrete
 if TYPE_CHECKING:
     from metta.rl.trainer_config import TrainerConfig
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.loss.teacher_action_utils import safe_teacher_action_indices, teacher_action_indices_and_valid_mask
 from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.training import ComponentContext
 
@@ -35,7 +36,7 @@ class EERClonerConfig(LossConfig):
 class EERCloner(Loss):
     cfg: EERClonerConfig
 
-    __slots__ = ("last_teacher_actions", "has_last_actions")
+    __slots__ = ("last_teacher_actions", "has_last_actions", "num_actions")
 
     def __init__(
         self,
@@ -52,6 +53,7 @@ class EERCloner(Loss):
         num_agents = self.env.total_parallel_agents
         self.last_teacher_actions = torch.zeros(num_agents, device=self.device, dtype=torch.long)
         self.has_last_actions = torch.zeros(num_agents, dtype=torch.bool, device=self.device)
+        self.num_actions = int(self.env.single_action_space.n)
 
     def get_experience_spec(self) -> Composite:
         return Composite(teacher_actions=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.long))
@@ -92,9 +94,16 @@ class EERCloner(Loss):
             # Add to rewards in place
             student_td["rewards"] += self.cfg.r_lambda * intrinsic_reward * valid_mask.float()
 
-        teacher_actions = student_td["teacher_actions"]
-        self.last_teacher_actions[agent_ids] = teacher_actions
-        self.has_last_actions[agent_ids] = True
+        teacher_actions, valid_teacher_actions = teacher_action_indices_and_valid_mask(
+            student_td["teacher_actions"],
+            self.num_actions,
+        )
+        if teacher_actions.dim() > 1:
+            teacher_actions = teacher_actions.squeeze(-1)
+            valid_teacher_actions = valid_teacher_actions.squeeze(-1)
+        cached_actions = self.last_teacher_actions[agent_ids]
+        self.last_teacher_actions[agent_ids] = torch.where(valid_teacher_actions, teacher_actions, cached_actions)
+        self.has_last_actions[agent_ids] = valid_teacher_actions
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return {"full_log_probs"}
@@ -110,12 +119,21 @@ class EERCloner(Loss):
 
         # Supervised Loss: Maximize log probability of the teacher's action -> L = - log(pi_student(a_teacher | s))
         policy_full_log_probs = policy_td["full_log_probs"].reshape(minibatch.shape[0], minibatch.shape[1], -1)
-        teacher_actions = minibatch["teacher_actions"]
-        student_log_probs = policy_full_log_probs.gather(dim=-1, index=teacher_actions.unsqueeze(-1))
+        _, valid_teacher_actions, safe_teacher_actions = safe_teacher_action_indices(
+            minibatch["teacher_actions"],
+            self.num_actions,
+        )
+        student_log_probs = policy_full_log_probs.gather(dim=-1, index=safe_teacher_actions.unsqueeze(-1))
         student_log_probs = student_log_probs.reshape(minibatch.shape[0], minibatch.shape[1])
 
-        loss = -student_log_probs.mean() * self.cfg.action_loss_coef
+        if bool(valid_teacher_actions.any()):
+            loss = -student_log_probs[valid_teacher_actions].mean() * self.cfg.action_loss_coef
+        else:
+            loss = self._zero()
 
         self.loss_tracker["supervised_action_loss"].append(float(loss.item()))
+        self.loss_tracker["supervised_action_label_valid_frac"].append(
+            float(valid_teacher_actions.float().mean().item())
+        )
 
         return loss, shared_loss_data, False

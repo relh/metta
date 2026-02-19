@@ -15,6 +15,7 @@ from tensordict import TensorDict
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
 from metta.rl.loss.loss import Loss, LossConfig
+from metta.rl.loss.teacher_action_utils import teacher_action_indices_and_valid_mask
 from metta.rl.training import ComponentContext
 
 # Keep: heavy module + manages circular dependency (loss <-> trainer)
@@ -37,7 +38,7 @@ class TeacherActionOverrideConfig(LossConfig):
 
 
 class TeacherActionOverride(Loss):
-    """Unconditionally replaces student actions with teacher actions during rollout.
+    """Replaces student actions with valid teacher actions during rollout.
 
     No gradient / training loss is produced — ``run_train`` returns zero (the
     base-class default).  The only effect is the ``run_rollout_postprocess``
@@ -45,6 +46,20 @@ class TeacherActionOverride(Loss):
     """
 
     cfg: TeacherActionOverrideConfig
+
+    __slots__ = ("num_actions",)
+
+    def __init__(
+        self,
+        policy_assets: Any,
+        trainer_cfg: "TrainerConfig",
+        vec_env: Any,
+        device: torch.device,
+        instance_name: str,
+        cfg: "TeacherActionOverrideConfig",
+    ):
+        super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
+        self.num_actions = int(self.env.single_action_space.n)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
         return set()
@@ -63,7 +78,13 @@ class TeacherActionOverride(Loss):
         )
 
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
-        # Unconditionally replace student actions with teacher actions.
         primary_policy_name = context.current_slice_cfg.primary_policy
         student_td = td.get(primary_policy_name, None)
-        student_td["actions"] = student_td["teacher_actions"].to(dtype=student_td["actions"].dtype)
+        teacher_actions, valid_teacher_actions = teacher_action_indices_and_valid_mask(
+            student_td["teacher_actions"],
+            self.num_actions,
+        )
+        if bool(valid_teacher_actions.any()):
+            student_td["actions"][valid_teacher_actions] = teacher_actions[valid_teacher_actions].to(
+                dtype=student_td["actions"].dtype
+            )
