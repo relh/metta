@@ -80,7 +80,6 @@ export async function loadDiagnoseDoctorNote(runId: string): Promise<DiagnoseDoc
 }
 
 export async function loadDiagnoseArtifact(runId: string, artifact: string): Promise<Uint8Array> {
-  assertValidRunId(runId)
   if (!RUN_ID_RE.test(artifact)) {
     throw new Error(`Invalid artifact name: ${artifact}`)
   }

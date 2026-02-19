@@ -39,6 +39,7 @@ export async function GET(
     headers.set('Content-Disposition', `attachment; filename="${artifact}"`)
   }
 
-  const bodyInit = body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as unknown as ArrayBuffer
+  const bodyInit = new ArrayBuffer(body.byteLength)
+  new Uint8Array(bodyInit).set(body)
   return new Response(bodyInit, { status: 200, headers })
 }
