@@ -30,6 +30,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
   const { apiBaseUrl } = use(AppContext)
 
   const isPoliciesActive = pathname === '/' || pathname.startsWith('/policies')
+  const isDiagnoseActive = pathname.startsWith('/cogames-diagnose')
 
   return (
     <nav className="border-b border-border-strong bg-surface px-5 flex justify-between items-center">
@@ -46,6 +47,9 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           </MenuLink>
           <MenuLink href="/sql-query" isActive={pathname === '/sql-query'}>
             SQL Query
+          </MenuLink>
+          <MenuLink href="/cogames-diagnose" isActive={isDiagnoseActive}>
+            Diagnose
           </MenuLink>
           <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
             Smart Plugs

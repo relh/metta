@@ -46,6 +46,9 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
             <LinkButton href={`/policies/versions/${policyVersionId}/dashboard`} theme="secondary">
               View Dashboard
             </LinkButton>
+            <LinkButton href="/cogames-diagnose" theme="secondary">
+              Diagnose Skill Tree
+            </LinkButton>
             <LinkButton href={`/policies/${pvInfo.policy_id}`} theme="tertiary">
               &larr; Back to policy
             </LinkButton>
