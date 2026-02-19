@@ -1,4 +1,8 @@
 # ruff: noqa: E402
+import os
+
+os.environ.setdefault("EPISODE_RUNNER_USE_ISOLATED_VENVS", "0")
+
 # need this to import and call suppress_noisy_logs first
 from metta.common.util.log_config import suppress_noisy_logs
 
