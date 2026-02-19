@@ -476,21 +476,20 @@ def train(
             event_profiles=event_profiles,
         )
     trainer_cfg = TrainerConfig()
-    if sweep_mode:
-        # Tuned from relh.cogsguard.0129_trial_0014_6a2d0b.
-        trainer_cfg.sampling.method = "sequential"
-        trainer_cfg.sampling.prio_alpha = 0.3097798228263855
-        trainer_cfg.sampling.prio_beta0 = 0.7994431257247925
-        trainer_cfg.advantage.gae_lambda = 0.9160579442977904
-        trainer_cfg.advantage.gamma = 0.9994999766349792
-        trainer_cfg.optimizer.learning_rate = 0.00924202986061573
-        trainer_cfg.optimizer.momentum = 0.9724040627479552
-        trainer_cfg.optimizer.weight_decay = 0.10000000149011612
-        trainer_cfg.optimizer.eps = 2.499021093171905e-06
-        trainer_cfg.optimizer.warmup_steps = 1752
-        trainer_cfg.losses.ppo_actor.clip_coef = 0.3643778562545776
-        trainer_cfg.losses.ppo_actor.ent_coef = 0.0716971904039383
-        trainer_cfg.losses.ppo_critic.vf_coef = 1.3651645183563232
+    # Tuned from relh.cg.adapters.0213.2_trial_0011_f83acf.
+    trainer_cfg.sampling.method = "sequential"
+    trainer_cfg.sampling.prio_alpha = 0.0
+    trainer_cfg.sampling.prio_beta0 = 0.6
+    trainer_cfg.advantage.gae_lambda = 0.9354159832000732
+    trainer_cfg.advantage.gamma = 0.9986186027526855
+    trainer_cfg.optimizer.learning_rate = 0.00737503357231617
+    trainer_cfg.optimizer.momentum = 0.9794994592666626
+    trainer_cfg.optimizer.weight_decay = 0.3
+    trainer_cfg.optimizer.eps = 6.686864253424574e-06
+    trainer_cfg.optimizer.warmup_steps = 500
+    trainer_cfg.losses.ppo_actor.clip_coef = 0.36670681834220886
+    trainer_cfg.losses.ppo_actor.ent_coef = 0.02566424384713173
+    trainer_cfg.losses.ppo_critic.vf_coef = 1.4647305011749268
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
@@ -884,7 +883,7 @@ def sweep(
 ) -> tools.SweepTool:
     # Fixed task setup; sweep only PPO/training hyperparameters.
     # Note: sweep suggestions are applied as post-construction overrides, so these
-    # parameters override the sweep_mode "winner defaults" in train_sweep().
+    # parameters override the tuned trainer defaults in train().
     parameters: list[dict[str, object]] = [
         {"variants": list(variants)},
         {"trainer.total_timesteps": 3_000_000_000},
@@ -893,84 +892,84 @@ def sweep(
             D.LOG_NORMAL,
             min=1e-4,
             max=3e-2,
-            search_center=0.00924202986061573,
+            search_center=0.00737503357231617,
         ),
         SP.param(
             "trainer.optimizer.momentum",
             D.UNIFORM,
             min=0.90,
             max=0.995,
-            search_center=0.9724040627479552,
+            search_center=0.9794994592666626,
         ),
         SP.param(
             "trainer.optimizer.weight_decay",
             D.LOG_NORMAL,
             min=1e-4,
             max=0.30,
-            search_center=0.10000000149011612,
+            search_center=0.3,
         ),
         SP.param(
             "trainer.optimizer.eps",
             D.LOG_NORMAL,
             min=1e-8,
             max=1e-4,
-            search_center=2.499021093171905e-06,
+            search_center=6.686864253424574e-06,
         ),
         SP.param(
             "trainer.optimizer.warmup_steps",
             D.INT_UNIFORM,
             min=500,
             max=5000,
-            search_center=1752,
+            search_center=500,
         ),
         SP.param(
             "trainer.sampling.prio_alpha",
             D.UNIFORM,
             min=0.0,
             max=1.0,
-            search_center=0.3097798228263855,
+            search_center=0.0,
         ),
         SP.param(
             "trainer.sampling.prio_beta0",
             D.UNIFORM,
             min=0.0,
             max=1.0,
-            search_center=0.7994431257247925,
+            search_center=0.6,
         ),
         SP.param(
             "trainer.advantage.gamma",
             D.UNIFORM,
             min=0.99,
             max=0.9999,
-            search_center=0.9994999766349792,
+            search_center=0.9986186027526855,
         ),
         SP.param(
             "trainer.advantage.gae_lambda",
             D.UNIFORM,
             min=0.80,
             max=0.99,
-            search_center=0.9160579442977904,
+            search_center=0.9354159832000732,
         ),
         SP.param(
             "trainer.losses.ppo_actor.clip_coef",
             D.UNIFORM,
             min=0.10,
             max=0.60,
-            search_center=0.3643778562545776,
+            search_center=0.36670681834220886,
         ),
         SP.param(
             "trainer.losses.ppo_actor.ent_coef",
             D.LOG_NORMAL,
             min=1e-4,
             max=2e-1,
-            search_center=0.0716971904039383,
+            search_center=0.02566424384713173,
         ),
         SP.param(
             "trainer.losses.ppo_critic.vf_coef",
             D.UNIFORM,
             min=0.50,
             max=2.50,
-            search_center=1.3651645183563232,
+            search_center=1.4647305011749268,
         ),
     ]
 
