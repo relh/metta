@@ -113,7 +113,14 @@ def create_app() -> fastapi.FastAPI:
             run_alembic_upgrade()
         yield
 
-    app = fastapi.FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
+    app = fastapi.FastAPI(
+        title="Softmax API",
+        description="Softmax Research tournament and evaluation platform.",
+        version="1.0.0",
+        lifespan=lifespan,
+        docs_url=None,
+        redoc_url=None,
+    )
 
     # Add CORS middleware
     app.add_middleware(
