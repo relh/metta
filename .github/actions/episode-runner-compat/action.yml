@@ -48,7 +48,32 @@ runs:
         username: ${{ inputs.github-actor }}
         password: ${{ inputs.github-token }}
 
+    - name: Check whether compat image exists in GHCR
+      id: image-check
+      shell: bash
+      env:
+        IMAGE: ${{ steps.image.outputs.image }}
+      run: |
+        set -euo pipefail
+
+        if INSPECT_OUTPUT="$(docker manifest inspect "$IMAGE" 2>&1)"; then
+          echo "image_exists=true" >> "$GITHUB_OUTPUT"
+          echo "Found image in GHCR: $IMAGE"
+          exit 0
+        fi
+
+        if echo "$INSPECT_OUTPUT" | grep -Eiq "(manifest unknown|no such manifest|name unknown)"; then
+          echo "image_exists=false" >> "$GITHUB_OUTPUT"
+          echo "Image not found in GHCR: $IMAGE"
+          exit 0
+        fi
+
+        echo "Failed to inspect image in GHCR: $IMAGE"
+        echo "$INSPECT_OUTPUT"
+        exit 1
+
     - name: Load or pull episode-runner image
+      if: steps.image-check.outputs.image_exists == 'true'
       shell: bash
       env:
         IMAGE: ${{ steps.image.outputs.image }}
@@ -74,7 +99,16 @@ runs:
         fi
 
     - name: Run compat test
+      if: steps.image-check.outputs.image_exists == 'true'
       shell: bash
       env:
         EPISODE_RUNNER_IMAGE: ${{ steps.image.outputs.image }}
       run: uv run pytest packages/cogames/tests/test_episode_runner_compat.py -v --timeout=300
+
+    - name: Skip compat test for unpublished compat image
+      if: steps.image-check.outputs.image_exists != 'true'
+      shell: bash
+      env:
+        IMAGE: ${{ steps.image.outputs.image }}
+      run: |
+        echo "::notice title=Skipping episode-runner compat check::No GHCR image exists for ${IMAGE}. Assuming this PR is introducing a new compat version and skipping the non-regression check."

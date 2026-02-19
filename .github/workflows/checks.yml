@@ -281,10 +281,11 @@ jobs:
   episode-runner-compat:
     name: "Episode Runner Compat"
     needs: setup-checks
+    # Run for compat-related source changes regardless of COMPAT_VERSION edits.
+    # The action itself skips when the corresponding compat image is not in GHCR yet.
     if: |
       needs.setup-checks.outputs.skip == 'false' &&
-      needs.setup-checks.outputs.compat_sources_changed == 'true' &&
-      needs.setup-checks.outputs.compat_version_changed != 'true'
+      needs.setup-checks.outputs.compat_sources_changed == 'true'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     permissions:
