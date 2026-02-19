@@ -85,7 +85,7 @@ jobs:
           ELAPSED=0
           echo "Waiting for cogames==${VERSION} on PyPI..."
           while [ $ELAPSED -le $MAX_WAIT ]; do
-            if curl -sf "https://pypi.org/pypi/cogames/${VERSION}/json" > /dev/null 2>&1; then
+            if curl -sf "https://pypi.org/simple/cogames/" | grep -qE "cogames-${VERSION}(-|\\.|$)"; then
               echo "cogames ${VERSION} is available on PyPI!"
               exit 0
             fi

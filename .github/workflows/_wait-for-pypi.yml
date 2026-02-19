@@ -54,7 +54,7 @@ jobs:
           ELAPSED=0
           echo "Waiting for ${DEPENDENCY}==${VERSION} on PyPI..."
           while [ $ELAPSED -le $MAX_WAIT ]; do
-            if curl -sf "https://pypi.org/pypi/${DEPENDENCY}/${VERSION}/json" > /dev/null 2>&1; then
+            if curl -sf "https://pypi.org/simple/${DEPENDENCY}/" | grep -qE "${DEPENDENCY}-${VERSION}(-|\\.|$)"; then
               echo "${DEPENDENCY} ${VERSION} is available on PyPI!"
               exit 0
             fi

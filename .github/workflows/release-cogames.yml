@@ -250,7 +250,7 @@ jobs:
           echo "Waiting for cogames==$VERSION to be available on $PYPI_URL..."
 
           while [ $ELAPSED -le $MAX_WAIT ]; do
-            if curl -sf "$PYPI_URL/pypi/cogames/$VERSION/json" > /dev/null 2>&1; then
+            if curl -sf "$PYPI_URL/simple/cogames/" | grep -qE "cogames-${VERSION}(-|\\.|$)"; then
               echo "✓ cogames $VERSION is available on $PYPI_URL!"
               exit 0
             fi
