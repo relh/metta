@@ -22,7 +22,7 @@ class DemoPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         self._agent_id = agent_id
         self._hyperparams = hyperparams
         self._policy_env_info = policy_env_info
-        self._action_names = policy_env_info.action_names
+        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
         self._move_deltas = {"north": (-1, 0), "south": (1, 0), "east": (0, 1), "west": (0, -1)}
 
         self._obs_hr = policy_env_info.obs_height // 2

@@ -117,7 +117,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         self._role = role
         self._shared_map = shared_map
         self._obs_parser = ObsParser(policy_env_info)
-        self._action_names = policy_env_info.action_names
+        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
 
         # Tracing
         self._trace_enabled = trace_enabled
@@ -371,7 +371,8 @@ class BuggyPolicy(MultiAgentPolicy):
     ) -> None:
         super().__init__(policy_env_info, device=device)
         self._feature_by_id = {f.id: f for f in policy_env_info.obs_features}
-        self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
+        action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
+        self._action_name_to_index = {name: idx for idx, name in enumerate(action_names)}
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
         # Tracing

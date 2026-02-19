@@ -16,6 +16,7 @@ def _make_policy_env_info(feature_map) -> PolicyEnvInterface:
     return PolicyEnvInterface(
         obs_features=obs_features,
         action_names=[],
+        vibe_action_names=[],
         tags=[],
         num_agents=1,
         observation_shape=(100, 3),  # Not used in test

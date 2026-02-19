@@ -14,6 +14,7 @@ def policy_env_info() -> PolicyEnvInterface:
         obs_features=[],
         tags=[],
         action_names=["noop", "move_north", "move_south", "move_east", "move_west"],
+        vibe_action_names=[],
         num_agents=1,
         observation_shape=(1, 1),
         egocentric_shape=(3, 3),

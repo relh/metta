@@ -15,6 +15,7 @@ def _policy_env_info() -> PolicyEnvInterface:
         ],
         tags=[],
         action_names=["noop"],
+        vibe_action_names=[],
         move_energy_cost=None,
         num_agents=2,
         observation_shape=(4, 3),

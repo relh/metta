@@ -6,22 +6,26 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 
 def _policy_env_info(*, num_agents: int) -> PolicyEnvInterface:
+    action_names = [
+        "noop",
+        "move_north",
+        "move_south",
+        "move_east",
+        "move_west",
+    ]
+    vibe_action_names = [
+        "change_vibe_default",
+        "change_vibe_gear",
+        "change_vibe_miner",
+        "change_vibe_scout",
+        "change_vibe_aligner",
+        "change_vibe_scrambler",
+    ]
     return PolicyEnvInterface(
         obs_features=[],
         tags=["agent", "hub", "junction"],
-        action_names=[
-            "noop",
-            "move_north",
-            "move_south",
-            "move_east",
-            "move_west",
-            "change_vibe_default",
-            "change_vibe_gear",
-            "change_vibe_miner",
-            "change_vibe_scout",
-            "change_vibe_aligner",
-            "change_vibe_scrambler",
-        ],
+        action_names=action_names,
+        vibe_action_names=vibe_action_names,
         num_agents=num_agents,
         observation_shape=(1, 1),
         egocentric_shape=(5, 5),

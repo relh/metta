@@ -28,7 +28,7 @@ class CogsguardTeacherPolicy(MultiAgentPolicy):
         super().__init__(policy_env_info, device=device)
         self._delegate = CogsguardAgentsMultiPolicy(policy_env_info)
         self._num_agents = policy_env_info.num_agents
-        self._action_names = list(policy_env_info.action_names)
+        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
         self._action_name_to_index = {name: idx for idx, name in enumerate(self._action_names)}
         self._delegate_agents = [self._delegate.agent_policy(i) for i in range(self._num_agents)]
 

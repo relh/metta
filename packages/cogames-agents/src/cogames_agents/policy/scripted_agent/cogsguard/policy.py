@@ -389,7 +389,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         self._obs_wr = policy_env_info.obs_width // 2
 
         # Action lookup
-        self._action_names = list(policy_env_info.action_names)
+        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
         self._action_set = set(self._action_names)
         self._vibe_names = [
             name[len("change_vibe_") :] for name in self._action_names if name.startswith("change_vibe_")
@@ -552,7 +552,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         # Read last executed action from observation
         # This tells us what the simulator actually did, not what we intended
         if last_action_id is not None:
-            action_names = self._policy_env_info.action_names
+            action_names = self._action_names
             if 0 <= last_action_id < len(action_names):
                 s.last_action_executed = action_names[last_action_id]
             else:
@@ -1347,7 +1347,8 @@ class CogsguardPolicy(MultiAgentPolicy):
         self._agent_policies: dict[int, StatefulAgentPolicy[CogsguardAgentState]] = {}
         self._smart_role_coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
         self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
-        self._action_name_to_index = {name: idx for idx, name in enumerate(policy_env_info.action_names)}
+        action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
+        self._action_name_to_index = {name: idx for idx, name in enumerate(action_names)}
         self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
 
         def _parse_flag(value: object) -> bool:
@@ -1369,9 +1370,7 @@ class CogsguardPolicy(MultiAgentPolicy):
         )
         self._evolutionary_hooks_configured = False
 
-        available_vibes = {
-            name[len("change_vibe_") :] for name in policy_env_info.action_names if name.startswith("change_vibe_")
-        }
+        available_vibes = {name[len("change_vibe_") :] for name in action_names if name.startswith("change_vibe_")}
         role_vibes = [vibe for vibe in ["scrambler", "aligner", "miner", "scout"] if vibe in available_vibes]
 
         self._initial_vibes: list[str] = []

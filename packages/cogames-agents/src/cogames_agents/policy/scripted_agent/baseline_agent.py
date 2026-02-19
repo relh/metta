@@ -73,7 +73,7 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         self._obs_wr = policy_env_info.obs_width // 2  # Egocentric observation half-radius (cols)
 
         # Action lookup
-        self._action_names = policy_env_info.action_names
+        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
         self._move_deltas = {
             "north": (-1, 0),
             "south": (1, 0),
