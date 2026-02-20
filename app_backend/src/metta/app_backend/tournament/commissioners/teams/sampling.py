@@ -4,32 +4,14 @@ import random
 from uuid import UUID
 
 
-def _weighted_sample_without_replacement(
+def _weighted_sample_with_replacement(
     policy_ids: list[UUID],
     weights: list[float],
     k: int,
 ) -> list[UUID]:
-    available = list(range(len(policy_ids)))
-    selected: list[UUID] = []
-    remaining_weights = list(weights)
-
-    for _ in range(k):
-        total = sum(remaining_weights[i] for i in available)
-        if total == 0:
-            pick = random.choice(available)
-        else:
-            r = random.random() * total
-            cumulative = 0.0
-            pick = available[-1]
-            for i in available:
-                cumulative += remaining_weights[i]
-                if cumulative >= r:
-                    pick = i
-                    break
-        selected.append(policy_ids[pick])
-        available.remove(pick)
-
-    return selected
+    if sum(weights) == 0:
+        return random.choices(policy_ids, k=k)
+    return random.choices(policy_ids, weights=weights, k=k)
 
 
 def sample_teams(
@@ -39,8 +21,8 @@ def sample_teams(
     min_teams_per_policy: int,
 ) -> list[list[UUID]]:
     policy_ids = list(policy_scores.keys())
-    if len(policy_ids) < team_size:
-        raise ValueError(f"Need at least {team_size} policies for {team_size}-policy teams, got {len(policy_ids)}")
+    if not policy_ids:
+        raise ValueError("Need at least one policy to sample teams")
 
     scores = [max(policy_scores[pid], 0.0) for pid in policy_ids]
     total = sum(scores)
@@ -53,20 +35,18 @@ def sample_teams(
     policy_counts: dict[UUID, int] = {pid: 0 for pid in policy_ids}
 
     for _ in range(num_teams):
-        team = _weighted_sample_without_replacement(policy_ids, weights, team_size)
+        team = _weighted_sample_with_replacement(policy_ids, weights, team_size)
         teams.append(team)
-        for pid in team:
+        for pid in set(team):
             policy_counts[pid] += 1
 
     for pid in policy_ids:
         while policy_counts[pid] < min_teams_per_policy:
-            remaining = [p for p in policy_ids if p != pid]
-            remaining_weights = [weights[policy_ids.index(p)] for p in remaining]
-            other = _weighted_sample_without_replacement(remaining, remaining_weights, team_size - 1)
-            team = [pid] + other
-            random.shuffle(team)
+            team = _weighted_sample_with_replacement(policy_ids, weights, team_size)
+            if pid not in team:
+                team[random.randrange(team_size)] = pid
             teams.append(team)
-            for p in team:
+            for p in set(team):
                 policy_counts[p] += 1
 
     return teams

@@ -47,7 +47,7 @@ class SampleStage(BaseModel):
 
     @property
     def description(self) -> str:
-        return f"Sample {self.num_teams} random {self.team_size}-policy teams weighted by score"
+        return f"Sample {self.num_teams} random {self.team_size}-policy teams weighted by score (with replacement)"
 
 
 class TeamEvalStage(BaseModel):

@@ -19,7 +19,7 @@ from metta.app_backend.tournament.commissioners.teams.config import (
 )
 from metta.app_backend.tournament.commissioners.teams.db_helpers import TeamDbHelpersMixin
 from metta.app_backend.tournament.commissioners.teams.sampling import (
-    _weighted_sample_without_replacement,
+    _weighted_sample_with_replacement,
     sample_teams,
 )
 from metta.app_backend.tournament.commissioners.teams.stage_execution import TeamStageExecutionMixin
@@ -172,5 +172,5 @@ class TeamCommissionerBase(
 __all__ = [
     "TeamCommissionerBase",
     "sample_teams",
-    "_weighted_sample_without_replacement",
+    "_weighted_sample_with_replacement",
 ]

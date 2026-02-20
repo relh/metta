@@ -22,7 +22,7 @@ from metta.app_backend.models.tournament import (
 )
 from metta.app_backend.tournament.commissioners.teams.base import (
     TeamCommissionerBase,
-    _weighted_sample_without_replacement,
+    _weighted_sample_with_replacement,
     sample_teams,
 )
 from metta.app_backend.tournament.commissioners.teams.config import (
@@ -290,25 +290,18 @@ def test_eval_referee_episode_tags_include_team_size():
 # -- _sample_teams --
 
 
-def test_weighted_sample_without_replacement_unique():
-    policy_ids = [uuid4() for _ in range(10)]
-    weights = [1.0] * 10
-    for _ in range(100):
-        sample = _weighted_sample_without_replacement(policy_ids, weights, 8)
-        assert len(sample) == 8
-        assert len(set(sample)) == 8
+def test_weighted_sample_with_replacement_allows_duplicates():
+    policy_id = uuid4()
+    sample = _weighted_sample_with_replacement([policy_id], [1.0], 8)
+    assert sample == [policy_id] * 8
 
 
-def test_sample_produces_8_unique_policy_teams():
-    policy_ids = [uuid4() for _ in range(10)]
-    scores = {pid: random.random() for pid in policy_ids}
-    teams = sample_teams(scores, team_size=8, num_teams=50, min_teams_per_policy=5)
-    assert len(teams) >= 50
+def test_sample_allows_duplicate_policies_within_team():
+    policy_id = uuid4()
+    teams = sample_teams({policy_id: 1.0}, team_size=8, num_teams=3, min_teams_per_policy=1)
+    assert len(teams) >= 3
     for team in teams:
-        assert len(team) == 8
-        assert len(set(team)) == 8, "Each team must have 8 unique policies"
-        for pid in team:
-            assert pid in scores
+        assert team == [policy_id] * 8
 
 
 def test_sample_ensures_min_coverage():
@@ -332,11 +325,9 @@ def test_sample_handles_zero_scores():
     assert len(teams) >= 10
 
 
-def test_sample_rejects_fewer_than_8_policies():
-    policy_ids = [uuid4() for _ in range(5)]
-    scores = {pid: 1.0 for pid in policy_ids}
+def test_sample_rejects_zero_policies():
     with pytest.raises(ValueError):
-        sample_teams(scores, team_size=8, num_teams=10, min_teams_per_policy=1)
+        sample_teams({}, team_size=8, num_teams=10, min_teams_per_policy=1)
 
 
 def test_sample_weighted_toward_high_scorers():
