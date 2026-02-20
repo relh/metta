@@ -10,6 +10,7 @@ from metta.app_backend.models import (  # noqa: F401
     job_request,
     k8s_events,
     policies,
+    service_accounts,
     sweep,
     tournament,
     user_settings,
