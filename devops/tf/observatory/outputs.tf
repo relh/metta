@@ -6,8 +6,12 @@ output "postgres_read_replica_endpoint" {
   value = aws_db_instance.postgres_read_replica.endpoint
 }
 
-output "dashboard_readonly_db_uri_secret_name" {
-  value = aws_secretsmanager_secret.dashboard_readonly_db_uri.name
+output "readonly_db_uri_secret_name" {
+  value = aws_secretsmanager_secret.readonly_db_uri.name
+}
+
+output "readonly_db_username" {
+  value = postgresql_role.readonly.name
 }
 
 output "postgres_password" {
