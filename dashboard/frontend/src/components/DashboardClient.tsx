@@ -1,17 +1,20 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
   DASHBOARD_API_BASE_URL,
   type DashboardAnalysisResponse,
+  type DashboardRolePercentilesResponse,
   type DashboardResponse,
   fetchDashboardAnalysis,
   fetchDashboardData,
+  fetchDashboardRolePercentiles,
 } from '../lib/api'
+import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab = 'overview' | 'eval_tree' | 'train_tree'
+type DashboardTab = 'overview' | 'roles' | 'eval_tree' | 'train_tree'
 
 export function DashboardClient() {
   const [policyVersionId, setPolicyVersionId] = useState('')
@@ -20,6 +23,9 @@ export function DashboardClient() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [analysis, setAnalysis] = useState<DashboardAnalysisResponse | null>(null)
+  const [rolePercentiles, setRolePercentiles] = useState<DashboardRolePercentilesResponse | null>(null)
+  const [roleLoading, setRoleLoading] = useState(false)
+  const [roleError, setRoleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
@@ -31,6 +37,9 @@ export function DashboardClient() {
   const onLoad = async () => {
     setError(null)
     setAnalysis(null)
+    setRolePercentiles(null)
+    setRoleError(null)
+    setRoleLoading(false)
     setLoading(true)
     try {
       const response = await fetchDashboardData(policyVersionId.trim())
@@ -57,6 +66,35 @@ export function DashboardClient() {
       setAnalysisLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (activeTab !== 'roles') return
+    const loadedPolicyVersionId = data?.policy?.id
+    if (!loadedPolicyVersionId) return
+
+    let cancelled = false
+    setRoleLoading(true)
+    setRoleError(null)
+
+    void fetchDashboardRolePercentiles(String(loadedPolicyVersionId))
+      .then((response) => {
+        if (cancelled) return
+        setRolePercentiles(response)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setRoleError(err instanceof Error ? err.message : String(err))
+        setRolePercentiles(null)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setRoleLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, data?.policy?.id, data?.generated_at])
 
   return (
     <main className="grid" style={{ gap: 16 }}>
@@ -95,6 +133,13 @@ export function DashboardClient() {
           <section className="card tab-row">
             <button type="button" onClick={() => setActiveTab('overview')} className={activeTab === 'overview' ? 'active-tab' : ''}>
               Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('roles')}
+              className={activeTab === 'roles' ? 'active-tab' : ''}
+            >
+              Roles
             </button>
             <button
               type="button"
@@ -195,6 +240,7 @@ export function DashboardClient() {
             </>
           )}
 
+          {activeTab === 'roles' && <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />}
           {activeTab === 'eval_tree' && <SkillTreePanel mode="eval" data={data} />}
           {activeTab === 'train_tree' && <SkillTreePanel mode="train" data={data} />}
         </>

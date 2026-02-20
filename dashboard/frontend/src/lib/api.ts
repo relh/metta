@@ -67,6 +67,39 @@ export type DashboardAnalysisResponse = {
   data_sources: string[]
 }
 
+export type DashboardRoleMetricDef = {
+  key: string
+  source_names: string[]
+  higher_is_better: boolean
+}
+
+export type DashboardRolePercentileMetric = {
+  avg?: number
+  percentile?: number
+  higher_is_better?: boolean
+  samples?: number
+  source_names?: string[]
+  source_metrics?: Record<string, unknown>
+}
+
+export type DashboardRolePercentileRow = {
+  role: string
+  percentile: number
+  details?: {
+    metrics?: Record<string, DashboardRolePercentileMetric>
+    overall_percentile?: number
+    [key: string]: unknown
+  }
+  updated_at: string
+}
+
+export type DashboardRolePercentilesResponse = {
+  pool_id: string | null
+  pool_name: string | null
+  roles: Record<string, DashboardRoleMetricDef[]>
+  rows: DashboardRolePercentileRow[]
+}
+
 async function parseJsonOrThrow(response: Response) {
   const text = await response.text()
   const maybeJson = text ? JSON.parse(text) : null
@@ -100,4 +133,16 @@ export async function fetchDashboardAnalysis(policyVersionId: string): Promise<D
     }
   )
   return (await parseJsonOrThrow(response)) as DashboardAnalysisResponse
+}
+
+export async function fetchDashboardRolePercentiles(policyVersionId: string): Promise<DashboardRolePercentilesResponse> {
+  const response = await fetch(
+    `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/role-percentiles`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+    }
+  )
+  return (await parseJsonOrThrow(response)) as DashboardRolePercentilesResponse
 }

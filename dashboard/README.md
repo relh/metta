@@ -12,6 +12,7 @@ This folder intentionally contains both dashboard backend and frontend code in o
 ### What it does
 
 - Serves dashboard endpoints from `dashboard/backend/dashboard_backend/state_page/router.py`
+- Also mounts role-stats endpoints from `metta.app_backend.routes.role_stats_routes`
 - Exposes internal docs at `http://127.0.0.1:8010/internal/docs`
 - Hides public docs (`/docs` is disabled)
 - Forces read-only DB usage for all dashboard queries in this process
@@ -41,6 +42,7 @@ uv run python -m dashboard.backend.dashboard_backend.main
 - Standalone dashboard UI that fetches from dashboard backend directly
 - Loads dashboard data by policy-version UUID
 - Renders KPI/diagnostics/episodes and can run AI analysis
+- Includes `Roles` tab backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
 
 ### Run
 

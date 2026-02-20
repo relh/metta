@@ -280,12 +280,79 @@ code {
   gap: 8px;
 }
 
+.role-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.role-card {
+  border: 1px solid #d8e3ef;
+  border-radius: 10px;
+  background: #f7faff;
+  padding: 10px 12px;
+}
+
+.role-card-title {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #4b6488;
+}
+
+.role-card-value {
+  margin: 6px 0 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.role-progress {
+  margin-top: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #dde7f3;
+  overflow: hidden;
+}
+
+.role-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: #2f6fd8;
+}
+
+.percentile-top {
+  color: #0c7446;
+}
+
+.percentile-high {
+  color: #115da9;
+}
+
+.percentile-mid {
+  color: #8a5b0c;
+}
+
+.percentile-low {
+  color: #9e2433;
+}
+
 @media (max-width: 1100px) {
   .skill-controls {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 
   .skill-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .role-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from dashboard.backend.dashboard_backend.config import settings
 from dashboard.backend.dashboard_backend.database import configure_dashboard_db
 from dashboard.backend.dashboard_backend.state_page.router import create_dashboard_router
+from metta.app_backend.routes.role_stats_routes import create_role_stats_router
 
 
 def create_app() -> FastAPI:
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(create_dashboard_router())
+    app.include_router(create_role_stats_router())
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> JSONResponse:

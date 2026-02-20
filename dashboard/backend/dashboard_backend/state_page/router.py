@@ -10,7 +10,7 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
@@ -52,6 +52,7 @@ from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, J
 from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
 from metta.app_backend.queries import episode_queries, policy_queries
+from metta.app_backend.queries.role_percentile_queries import ROLE_METRICS, compute_policy_role_percentiles
 from metta.app_backend.replay.summarizer import parse_replay, select_replay_episodes, summarize_replay
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.tournament.registry import SEASONS
@@ -68,6 +69,28 @@ ANALYSIS_RATE_LIMIT = 10  # requests per hour
 class DashboardAnalysisResponse(BaseModel):
     analysis: str
     data_sources: list[str]
+
+
+class RoleMetricDef(BaseModel):
+    key: str
+    source_names: list[str]
+    higher_is_better: bool
+
+
+class RolePercentileRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    role: str
+    percentile: float
+    details: dict[str, Any]
+    updated_at: datetime
+
+
+class DashboardRolePercentilesResponse(BaseModel):
+    pool_id: UUID | None
+    pool_name: str | None
+    roles: dict[str, list[RoleMetricDef]]
+    rows: list[RolePercentileRow]
 
 
 async def _require_policy_version(policy_version_id: str) -> tuple[UUID, Any]:
@@ -104,6 +127,57 @@ async def _fetch_policy_dashboard_sources(
     async with db_session(read_only=True) as session:
         policy_jobs = await _fetch_policy_episode_jobs(session, policy_version_id, limit)
     return raw_episodes, policy_jobs
+
+
+def _role_metric_definitions() -> dict[str, list[RoleMetricDef]]:
+    return {
+        role: [
+            RoleMetricDef(
+                key=metric.key,
+                source_names=list(metric.source_names),
+                higher_is_better=metric.higher_is_better,
+            )
+            for metric in metrics
+        ]
+        for role, metrics in ROLE_METRICS.items()
+    }
+
+
+def _preferred_pool_names_for_season(season_name: str) -> list[str]:
+    if season_name not in SEASONS:
+        return []
+    commissioner_cls = SEASONS[season_name]
+    preferred_names = [commissioner_cls.leaderboard_pool, commissioner_cls.entry_pool]
+    deduped = list(dict.fromkeys([name for name in preferred_names if name]))
+    return deduped
+
+
+async def _select_role_pool_for_policy(session: Any, policy_version_id: UUID) -> Pool | None:
+    pool_query = (
+        select(Pool, Season)
+        .join(Season, Pool.season_id == Season.id)  # pyright: ignore[reportArgumentType]
+        .join(PoolPlayer, PoolPlayer.pool_id == Pool.id)  # pyright: ignore[reportArgumentType]
+        .where(PoolPlayer.policy_version_id == policy_version_id)
+        .order_by(
+            col(Season.canonical).desc(),
+            col(Season.version).desc(),
+            col(Season.created_at).desc(),
+            col(PoolPlayer.retired).asc(),
+            col(Pool.created_at).desc(),
+        )
+    )
+    pool_rows = (await session.execute(pool_query)).all()
+    if not pool_rows:
+        return None
+
+    newest_season = pool_rows[0][1]
+    season_pools = [pool for pool, season in pool_rows if season.id == newest_season.id]
+    preferred_names = _preferred_pool_names_for_season(newest_season.name)
+    for preferred_name in preferred_names:
+        for pool in season_pools:
+            if pool.name == preferred_name:
+                return pool
+    return season_pools[0]
 
 
 async def _build_sorted_dashboard_episodes(
@@ -537,5 +611,33 @@ def create_dashboard_router() -> APIRouter:
             raise HTTPException(status_code=502, detail="Claude API returned an unexpected response format") from e
 
         return DashboardAnalysisResponse(analysis=analysis_text, data_sources=data_sources)
+
+    @router.get("/{policy_version_id}/role-percentiles")
+    @timed_http_handler
+    async def get_dashboard_role_percentiles(
+        policy_version_id: str,
+        user: SoftmaxUser,
+    ) -> DashboardRolePercentilesResponse:
+        pv_id, _pv = await _require_policy_version(policy_version_id)
+        roles = _role_metric_definitions()
+
+        async with db_session(read_only=True) as session:
+            preferred_pool = await _select_role_pool_for_policy(session, pv_id)
+
+        if preferred_pool is None:
+            return DashboardRolePercentilesResponse(
+                pool_id=None,
+                pool_name=None,
+                roles=roles,
+                rows=[],
+            )
+
+        rows = await compute_policy_role_percentiles(preferred_pool.id, pv_id)
+        return DashboardRolePercentilesResponse(
+            pool_id=preferred_pool.id,
+            pool_name=preferred_pool.name,
+            roles=roles,
+            rows=[RolePercentileRow.model_validate(row) for row in rows],
+        )
 
     return router
