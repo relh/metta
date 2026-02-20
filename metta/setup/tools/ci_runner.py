@@ -75,7 +75,13 @@ STAGES: list[Stage] = [
     Stage(
         name="recipe-tests",
         display="Recipe Tests",
-        cmd=["uv", "run", "./devops/stable/cli.py", "--suite=ci", "--skip-submitting-metrics"],
+        cmd=[
+            "uv",
+            "run",
+            "./devops/stable/stable_check_cli.py",
+            "--check-group=internal_training_light",
+            "--skip-submitting-metrics",
+        ],
     ),
     Stage(
         name="cogames-docsync",

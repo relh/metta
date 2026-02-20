@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List
 
+from datadog_api_client.v1.model.service_check import ServiceCheck
+from datadog_api_client.v1.model.service_check_status import ServiceCheckStatus
 from pydantic import BaseModel, Field
 
 
@@ -158,4 +160,43 @@ class MetricSample(BaseModel):
                 )
             ],
             tags=self.tag_list(),
+        )
+
+
+class ServiceCheckSample(BaseModel):
+    """Structured service check ready to be serialized for Datadog."""
+
+    check: str
+    status: int
+    host_name: str
+    tags: Dict[str, str] = Field(default_factory=dict)
+    message: str | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def tag_list(self) -> List[str]:
+        return [f"{key}:{value}" for key, value in sorted(self.tags.items())]
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = self.model_dump(mode="json", exclude_none=False)
+        return {
+            "check": data["check"],
+            "status": data["status"],
+            "tags": data["tags"],
+            "host_name": data["host_name"],
+            "message": data["message"],
+            "timestamp": data["timestamp"],
+        }
+
+    def to_service_check(self):  # type: ignore[override]
+        kwargs: Dict[str, Any] = {}
+        if self.message is not None:
+            kwargs["message"] = self.message
+        kwargs["timestamp"] = int(self.timestamp.timestamp())
+
+        return ServiceCheck(
+            check=self.check,
+            host_name=self.host_name,
+            status=ServiceCheckStatus(self.status),
+            tags=self.tag_list(),
+            **kwargs,
         )

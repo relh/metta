@@ -1,4 +1,5 @@
-from devops.stable.registry import ci_job
+from devops.stable.stable_check_groups import StableCheckGroup
+from devops.stable.stable_tool_check_registry import stable_tool_check
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.play import PlayTool
 from metta.tools.replay import ReplayTool
@@ -64,7 +65,10 @@ def play_null() -> PlayTool:
     return cfg
 
 
-@ci_job(timeout_s=120)
+@stable_tool_check(
+    timeout_s=120,
+    check_group=StableCheckGroup.INTERNAL_TRAINING_LIGHT,
+)
 def play_smoke() -> PlayTool:
     cfg = play_null()
     cfg.render = "log"

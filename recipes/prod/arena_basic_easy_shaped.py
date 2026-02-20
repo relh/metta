@@ -10,7 +10,8 @@ from typing import Optional
 import metta.cogworks.curriculum as cc
 import mettagrid.builder.envs as eb
 from devops.runners.acceptance_criterion import AcceptanceCriterion
-from devops.stable.registry import ci_job, stable_job
+from devops.stable.stable_check_groups import StableCheckGroup
+from devops.stable.stable_tool_check_registry import stable_tool_check
 from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -286,7 +287,10 @@ def train_ci() -> TrainTool:
     )
 
 
-@ci_job(timeout_s=120)
+@stable_tool_check(
+    timeout_s=120,
+    check_group=StableCheckGroup.INTERNAL_TRAINING_LIGHT,
+)
 def play_ci() -> PlayTool:
     """Play test with random policy."""
     return PlayTool(
@@ -307,10 +311,12 @@ def evaluate_ci(policy_uri: str) -> EvaluateTool:
     )
 
 
-@stable_job(
+@stable_tool_check(
+    timeout_s=2 * 60 * 60,
+    check_group=StableCheckGroup.INTERNAL_TRAINING_HEAVY,
+    datadog_metric_category="training",
     remote_gpus=1,
     remote_nodes=1,
-    timeout_s=7200,
     acceptance=[
         AcceptanceCriterion(metric="overview/sps", threshold=15000),
     ],
@@ -324,10 +330,12 @@ def train_100m() -> TrainTool:
     )
 
 
-@stable_job(
+@stable_tool_check(
+    timeout_s=2 * 24 * 60 * 60,
+    check_group=StableCheckGroup.INTERNAL_TRAINING_HEAVY,
+    datadog_metric_category="training",
     remote_gpus=4,
     remote_nodes=4,
-    timeout_s=172800,
     acceptance=[
         AcceptanceCriterion(metric="overview/sps", threshold=52000),
     ],

@@ -173,6 +173,7 @@ def dashboards_list(
     ),
 ) -> None:
     """List dashboards from Datadog."""
+    from devops.datadog.dashboards import get_all_dashboard_configs  # noqa: PLC0415
     from devops.datadog.dashboards_client import DatadogDashboardsClient  # noqa: PLC0415
 
     client = DatadogDashboardsClient()
@@ -182,7 +183,8 @@ def dashboards_list(
         dashboards = [d for d in dashboards if title_filter.lower() in d.get("title", "").lower()]
 
     if managed_only:
-        dashboards = [d for d in dashboards if "managed-by:code" in d.get("tags", [])]
+        managed_titles = {config["title"] for config in get_all_dashboard_configs()}
+        dashboards = [d for d in dashboards if d.get("title") in managed_titles]
 
     typer.echo(f"Found {len(dashboards)} dashboards:\n")
     for d in dashboards:

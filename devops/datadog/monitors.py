@@ -6,7 +6,22 @@ To preview:       uv run python -m devops.datadog.cli monitors sync --dry-run
 
 from __future__ import annotations
 
+from devops.stable.stable_check_lifecycle import StableCheckLifecycle
+from devops.stable.stable_check_metrics import (
+    STABLE_CHECK_COMPLETED_AT_METRIC,
+    STABLE_CHECK_EFFECTIVE_STATUS_SERVICE_CHECK,
+    job_path_to_job_tag,
+)
+from devops.stable.stable_check_registry import discover_stable_checks
+
 WEBHOOK_DISCORD = "@webhook-Discord"
+WEBHOOK_ONCALL = "@oncall-on-call"
+WEBHOOK_STABLE_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
+
+STABLE_STALE_HOURS = 28
+STABLE_STALE_MINUTES = STABLE_STALE_HOURS * 60
+STABLE_STALE_QUERY_LOOKBACK = "last_5m"
+STABLE_FAILED_SERVICE_CHECK_LAST_COUNT = 1
 
 
 def k8s_deployment_replicas_monitor() -> dict:
@@ -447,5 +462,65 @@ ALL_MONITORS = [
 ]
 
 
+def _stable_runner_stale_monitor(job_tag: str) -> dict:
+    return {
+        "name": f"[Stable] {job_tag} stale ({STABLE_STALE_HOURS}h)",
+        "type": "query alert",
+        "query": (f"max({STABLE_STALE_QUERY_LOOKBACK}):max:{STABLE_CHECK_COMPLETED_AT_METRIC}{{job:{job_tag}}} < 0"),
+        "message": (
+            f"No stable run reported for `{job_tag}` in the last {STABLE_STALE_HOURS} hours.\n\n{WEBHOOK_STABLE_ALERTS}"
+        ),
+        "tags": [
+            "team:infra",
+            "managed-by:code",
+            "service:stable-runner",
+            "scope:testing",
+            f"stable_job:{job_tag}",
+        ],
+        "priority": 3,
+        "thresholds": {"critical": 0},
+        "options": {
+            "notify_no_data": True,
+            "no_data_timeframe": STABLE_STALE_MINUTES,
+            "renotify_interval": 120,
+            "include_tags": True,
+        },
+    }
+
+
+def _stable_runner_failed_monitor(job_tag: str) -> dict:
+    return {
+        "name": f"[Stable] {job_tag} latest failed",
+        "type": "service check",
+        "query": (
+            f'"{STABLE_CHECK_EFFECTIVE_STATUS_SERVICE_CHECK}".over("job:{job_tag}").by("job")'
+            f".last({STABLE_FAILED_SERVICE_CHECK_LAST_COUNT}).count_by_status()"
+        ),
+        "message": (f"Latest stable run for `{job_tag}` is failed.\n\n{WEBHOOK_STABLE_ALERTS}"),
+        "tags": [
+            "team:infra",
+            "managed-by:code",
+            "service:stable-runner",
+            "scope:testing",
+            f"stable_job:{job_tag}",
+        ],
+        "priority": 2,
+        "thresholds": {"critical": 1},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 120,
+            "include_tags": True,
+        },
+    }
+
+
 def get_all_monitor_configs() -> list[dict]:
-    return [m() for m in ALL_MONITORS]
+    configs = [m() for m in ALL_MONITORS]
+    for check in discover_stable_checks():
+        if check.lifecycle is not StableCheckLifecycle.ACTIVE:
+            continue
+        check_path = f"{check.func.__module__}.{check.func.__name__}"
+        job_tag = job_path_to_job_tag(check_path)
+        configs.append(_stable_runner_stale_monitor(job_tag))
+        configs.append(_stable_runner_failed_monitor(job_tag))
+    return configs

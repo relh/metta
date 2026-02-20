@@ -5,10 +5,12 @@ import os
 from typing import Iterable
 
 from datadog_api_client import ApiClient, Configuration
+from datadog_api_client.v1.api.service_checks_api import ServiceChecksApi
+from datadog_api_client.v1.model.service_checks import ServiceChecks
 from datadog_api_client.v2.api.metrics_api import MetricsApi
 from datadog_api_client.v2.model.metric_payload import MetricPayload
 
-from devops.datadog.models import MetricSample
+from devops.datadog.models import MetricSample, ServiceCheckSample
 from metta.common.datadog.config import datadog_config
 from softmax.aws.secrets_manager import get_secretsmanager_secret
 
@@ -44,6 +46,30 @@ class DatadogMetricsClient:
                     logger.debug("Datadog response: %s", response.data)
         except Exception as e:
             logger.error("Failed to submit metrics to Datadog: %s", e, exc_info=True)
+            raise
+
+    def submit_service_checks(self, samples: Iterable[ServiceCheckSample]) -> None:
+        checks = [sample.to_service_check() for sample in samples]
+        if not checks:
+            logger.info("No service checks to submit.")
+            return
+
+        check_names = [check.check for check in checks]
+        logger.info(
+            "Submitting service checks to Datadog (site=%s): %s",
+            self._configuration.server_variables.get("site", "unknown"),
+            ", ".join(check_names),
+        )
+
+        payload = ServiceChecks(checks)
+        try:
+            with ApiClient(self._configuration) as api_client:
+                response = ServiceChecksApi(api_client).submit_service_check(body=payload)
+                logger.info("Submitted %s service checks to Datadog successfully", len(checks))
+                if hasattr(response, "errors") and response.errors:
+                    logger.warning("Datadog service check response errors: %s", response.errors)
+        except Exception as e:
+            logger.error("Failed to submit service checks to Datadog: %s", e, exc_info=True)
             raise
 
     def _build_configuration(self) -> Configuration:

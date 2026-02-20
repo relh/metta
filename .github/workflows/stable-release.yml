@@ -15,6 +15,10 @@ on:
         required: false
         type: boolean
         default: false
+      check_groups:
+        description: "Optional check group filter, e.g. live_tests_light"
+        required: false
+        type: string
 
 env:
   CI_APP_ID: ${{ secrets.CI_APP_ID }}
@@ -25,7 +29,6 @@ jobs:
     runs-on: ubuntu-8core
     permissions:
       contents: write # Needed to create tags and push to stable branch
-      issues: write # Needed for Asana integration (if used)
       id-token: write # Needed for AWS OIDC authentication
 
     steps:
@@ -90,7 +93,18 @@ jobs:
 
       - name: Run stable release process
         id: release
-        run: ./devops/stable/cli.py
+        run: |
+          CMD=(./devops/stable/stable_check_cli.py)
+          if [[ -n "${{ github.event.inputs.check_groups }}" ]]; then
+            IFS=',' read -ra GROUPS <<< "${{ github.event.inputs.check_groups }}"
+            for group in "${GROUPS[@]}"; do
+              trimmed="$(echo "$group" | xargs)"
+              if [[ -n "$trimmed" ]]; then
+                CMD+=(--check-group "$trimmed")
+              fi
+            done
+          fi
+          "${CMD[@]}"
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           OBSERVATORY_TOKEN: ${{ secrets.OBSERVATORY_TOKEN }}
@@ -99,8 +113,6 @@ jobs:
           # the setup phase (which downloads setup.sh via curl) will fail. For now this is acceptable.
           # because stable-release should finish on the order of single-digit hours
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ASANA_TOKEN: ${{ secrets.ASANA_TOKEN }}
-          ASANA_PROJECT_ID: ${{ secrets.ASANA_BUGS_PROJECT_ID }}
 
       - name: Send Discord notification
         if: always()
