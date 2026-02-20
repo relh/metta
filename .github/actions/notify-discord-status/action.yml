@@ -30,6 +30,9 @@ runs:
         SUCCESS_MESSAGE: ${{ inputs.success-message }}
         WORKFLOW_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         NEEDS_CONTEXT: ${{ inputs.needs-context }}
+        GH_TOKEN: ${{ github.token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
       run: |
         if [ -z "$WEBHOOK_URL" ]; then
           echo "No Discord webhook URL configured, skipping"
@@ -46,7 +49,28 @@ runs:
         if [ -n "$FAILED_JOBS" ]; then
           MSG="❌ **${PACKAGE_NAME} v${VERSION}** [failed](${WORKFLOW_URL}) at: ${FAILED_JOBS}"
         elif [ -n "$CANCELLED_JOBS" ]; then
-          MSG="⚠️ **${PACKAGE_NAME} v${VERSION}** [cancelled](${WORKFLOW_URL}) at: ${CANCELLED_JOBS}"
+          # Detect if this run was superseded by a newer run (concurrency cancel-in-progress)
+          SUPERSEDED=""
+          if [ -n "$GH_TOKEN" ]; then
+            RUN_INFO=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+              --jq '{workflow_id, created_at, head_branch}' 2>/dev/null) || true
+            if [ -n "$RUN_INFO" ]; then
+              WORKFLOW_ID=$(echo "$RUN_INFO" | jq -r '.workflow_id')
+              CREATED_AT=$(echo "$RUN_INFO" | jq -r '.created_at')
+              HEAD_BRANCH=$(echo "$RUN_INFO" | jq -r '.head_branch')
+              NEWER_COUNT=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_ID}/runs?per_page=10&branch=${HEAD_BRANCH}" \
+                --jq "[.workflow_runs[] | select(.created_at > \"${CREATED_AT}\" and .id != ${RUN_ID} and (.status == \"in_progress\" or .status == \"queued\" or (.conclusion != null and .conclusion != \"cancelled\")))] | length" 2>/dev/null) || true
+              if [ "${NEWER_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+                SUPERSEDED="true"
+              fi
+            fi
+          fi
+
+          if [ "$SUPERSEDED" = "true" ]; then
+            MSG="⏭️ **${PACKAGE_NAME} v${VERSION}** [superseded](${WORKFLOW_URL}) by newer run"
+          else
+            MSG="⚠️ **${PACKAGE_NAME} v${VERSION}** [cancelled](${WORKFLOW_URL}) at: ${CANCELLED_JOBS}"
+          fi
         else
           MSG="$SUCCESS_MESSAGE"
         fi
