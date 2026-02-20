@@ -196,6 +196,10 @@ export type AIQueryResponse = {
   query: string
 }
 
+// ── Service Accounts ────────────────────────────────────────────────────
+export type ServiceAccountResponseBase = Schemas['ServiceAccountResponseBase']
+export type ServiceAccountCreateResponse = Schemas['ServiceAccountCreateResponse']
+
 // ── Smart Plugs (not in generated spec — routes have include_in_schema=False) ──
 export type SmartPlugStatus = {
   key: string

@@ -26,6 +26,8 @@ import type {
   SeasonDetail,
   SeasonSummary,
   SeasonMatchSummary,
+  ServiceAccountCreateResponse,
+  ServiceAccountResponseBase,
   StageLeaderboardQuery,
   StageLeaderboardType,
   SeasonVersionInfo,
@@ -82,6 +84,8 @@ export type {
   SeasonSummary,
   SeasonMatchPlayerSummary,
   SeasonMatchSummary,
+  ServiceAccountCreateResponse,
+  ServiceAccountResponseBase,
   StageLeaderboardQuery,
   StageLeaderboardType,
   SeasonVersionInfo,
@@ -289,6 +293,19 @@ export class Repo {
     if (!response.ok) {
       await this.handleErrorResponse(response)
     }
+  }
+
+  // Service account methods
+  async listServiceAccounts(): Promise<ServiceAccountResponseBase[]> {
+    return this.apiCall<ServiceAccountResponseBase[]>('/service-accounts')
+  }
+
+  async createServiceAccount(name: string): Promise<ServiceAccountCreateResponse> {
+    return this.apiCallWithBody<ServiceAccountCreateResponse>('/service-accounts', { name })
+  }
+
+  async deleteServiceAccount(id: string): Promise<void> {
+    return this.apiCallDelete(`/service-accounts/${id}`)
   }
 
   // User methods

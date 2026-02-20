@@ -16,6 +16,7 @@ import { RequestDebugPanel } from '@/lib/debug/RequestDebugPanel'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { isOutageSimulated } from '@/lib/debug/simulate-outage'
 import { getRepo } from '@/lib/repo/server'
+import { ToastContainer } from 'react-toastify'
 
 export default async function RootLayout({ children }: PropsWithChildren) {
   const token = await getAuthToken()
@@ -63,6 +64,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
                   </div>
                   <ServerDebugDrain />
                   <RequestDebugPanel />
+                  <ToastContainer stacked />
                 </ResetErrorProvider>
               </AutoRefreshProvider>
             </AppProvider>
