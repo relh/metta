@@ -25,6 +25,7 @@ from metta.app_backend.routes import (
     episode_routes,
     eval_task_routes,
     job_routes,
+    role_stats_routes,
     smart_plug_routes,
     sql_routes,
     state_page_routes,
@@ -148,6 +149,7 @@ def create_app() -> fastapi.FastAPI:
         job_routes.create_job_router(),
         tournament_routes.create_tournament_router(),
         smart_plug_routes.create_smart_plug_router(),
+        role_stats_routes.create_role_stats_router(),
     ]
     for router in routers:
         app.include_router(router)

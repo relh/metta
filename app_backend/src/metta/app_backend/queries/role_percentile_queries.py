@@ -1,0 +1,337 @@
+from __future__ import annotations
+
+# pyright: reportArgumentType=false
+# pyright: reportAttributeAccessIssue=false
+# pyright: reportOptionalMemberAccess=false
+# pyright: reportCallIssue=false
+# SQLAlchemy typing for complex selects is noisy; keep this module readable.
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import func, select
+
+from metta.app_backend.database import get_db, with_db
+from metta.app_backend.models.episodes import Episode, EpisodeAgentMetric, EpisodeJob, EpisodePolicy
+from metta.app_backend.models.policies import Policy, PolicyVersion
+from metta.app_backend.models.tournament import Match, MatchStatus
+
+
+@dataclass(frozen=True)
+class RoleMetric:
+    key: str
+    source_names: tuple[str, ...]
+    higher_is_better: bool
+
+
+@dataclass(frozen=True)
+class RoleLeaderboardRow:
+    rank: int
+    policy_version_id: UUID
+    policy_name: str
+    policy_version: int
+    percentile: float
+    details: dict[str, Any]
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class RolePercentileRow:
+    role: str
+    percentile: float
+    details: dict[str, Any]
+    updated_at: datetime
+
+
+DEATH_SOURCE_NAMES = ("deaths",)
+
+ROLE_METRICS: dict[str, list[RoleMetric]] = {
+    "miner": [
+        RoleMetric("miner.gained", ("miner.gained",), higher_is_better=True),
+        RoleMetric("germanium.deposited", ("germanium.deposited",), higher_is_better=True),
+        RoleMetric("silicon.deposited", ("silicon.deposited",), higher_is_better=True),
+        RoleMetric("carbon.deposited", ("carbon.deposited",), higher_is_better=True),
+        RoleMetric("oxygen.deposited", ("oxygen.deposited",), higher_is_better=True),
+        RoleMetric("heart.gained", ("heart.gained",), higher_is_better=False),
+        RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
+        RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
+        RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=False),
+        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+    ],
+    "scout": [
+        RoleMetric("scout.gained", ("scout.gained",), higher_is_better=True),
+        RoleMetric("cell.visited", ("cell.visited",), higher_is_better=True),
+        RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
+        RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
+        RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=False),
+        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+    ],
+    "scrambler": [
+        RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=True),
+        RoleMetric(
+            "junction.scrambled",
+            ("junction.scrambled_by_agent",),
+            higher_is_better=True,
+        ),
+        RoleMetric("heart.gained", ("heart.gained",), higher_is_better=True),
+        RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
+        RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
+        RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=False),
+        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+    ],
+    "aligner": [
+        RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=True),
+        RoleMetric(
+            "junction.aligned",
+            ("junction.aligned_by_agent",),
+            higher_is_better=True,
+        ),
+        RoleMetric("heart.gained", ("heart.gained",), higher_is_better=True),
+        RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
+        RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
+        RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
+        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+    ],
+}
+
+
+def _validate_role_metrics(role_metrics: dict[str, list[RoleMetric]]) -> None:
+    for role, metrics in role_metrics.items():
+        for metric in metrics:
+            if len(metric.source_names) != 1:
+                raise ValueError(f"Role metric {role}.{metric.key} must have exactly one canonical source metric name")
+
+
+_validate_role_metrics(ROLE_METRICS)
+
+
+def _percentile_rank(value: float, values: list[float], higher_is_better: bool) -> float:
+    n = len(values)
+    if n <= 1:
+        return 100.0
+    if higher_is_better:
+        better = sum(1 for other_value in values if other_value > value)
+    else:
+        better = sum(1 for other_value in values if other_value < value)
+    return (1.0 - (better / (n - 1))) * 100.0
+
+
+def _pool_episode_internal_ids(pool_id: UUID):
+    return (
+        select(Episode.internal_id.label("episode_internal_id"))
+        .join(EpisodeJob, EpisodeJob.episode_id == Episode.id)
+        .join(Match, Match.job_id == EpisodeJob.job_id)
+        .where(Match.pool_id == pool_id, Match.status == MatchStatus.completed)
+        .distinct()
+        .subquery("pool_episodes")
+    )
+
+
+def _pool_policy_version_ids(pool_id: UUID):
+    pool_episodes = _pool_episode_internal_ids(pool_id)
+    return (
+        select(EpisodePolicy.policy_version_id)
+        .join(Episode, Episode.id == EpisodePolicy.episode_id)
+        .join(pool_episodes, pool_episodes.c.episode_internal_id == Episode.internal_id)
+        .distinct()
+    )
+
+
+async def _metric_percentiles(
+    pool_id: UUID,
+    metric: RoleMetric,
+) -> list[dict[str, Any]]:
+    session = get_db()
+    pool_episodes = _pool_episode_internal_ids(pool_id)
+    stmt = (
+        select(
+            PolicyVersion.id.label("policy_version_id"),
+            EpisodeAgentMetric.metric_name.label("metric_name"),
+            func.avg(EpisodeAgentMetric.value).label("avg_value"),
+            func.count().label("sample_count"),
+        )
+        .select_from(EpisodeAgentMetric)
+        .join(pool_episodes, pool_episodes.c.episode_internal_id == EpisodeAgentMetric.episode_internal_id)
+        .join(PolicyVersion, PolicyVersion.internal_id == EpisodeAgentMetric.pv_internal_id)
+        .where(EpisodeAgentMetric.metric_name.in_(metric.source_names))
+        .group_by(PolicyVersion.id, EpisodeAgentMetric.metric_name)
+    )
+    rows = (await session.execute(stmt)).mappings().all()
+    if not rows:
+        # If the metric is absent for the entire pool, it should not affect role scoring.
+        return []
+
+    pool_policies = _pool_policy_version_ids(pool_id)
+    all_policy_ids = set(await session.scalars(pool_policies))
+
+    per_policy: dict[UUID, dict[str, Any]] = {
+        pv_id: {"weighted_total": 0.0, "samples": 0, "source_metrics": {}} for pv_id in all_policy_ids
+    }
+
+    for row in rows:
+        pv_id: UUID = row["policy_version_id"]
+        data = per_policy[pv_id]
+        avg_value = float(row["avg_value"])
+        sample_count = int(row["sample_count"])
+        source_name = str(row["metric_name"])
+        data["weighted_total"] += avg_value * sample_count
+        data["samples"] += sample_count
+        data["source_metrics"][source_name] = {
+            "avg": avg_value,
+            "samples": sample_count,
+        }
+
+    if not per_policy:
+        return []
+
+    values = {
+        pv_id: float(data["weighted_total"]) / float(data["samples"])
+        for pv_id, data in per_policy.items()
+        if int(data["samples"]) > 0
+    }
+    if not values:
+        return []
+
+    all_values = list(values.values())
+    results: list[dict[str, Any]] = []
+    for pv_id, value in values.items():
+        data = per_policy[pv_id]
+        percentile = _percentile_rank(value, all_values, metric.higher_is_better)
+
+        results.append(
+            {
+                "policy_version_id": pv_id,
+                "avg_value": float(value),
+                "sample_count": int(data["samples"]),
+                "percentile": float(percentile),
+                "source_metrics": data["source_metrics"],
+            }
+        )
+    return results
+
+
+async def _compute_role_percentile_payloads(
+    pool_id: UUID,
+    roles: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    selected_roles = roles if roles is not None else tuple(ROLE_METRICS)
+    unknown_roles = [role for role in selected_roles if role not in ROLE_METRICS]
+    if unknown_roles:
+        unknown_csv = ", ".join(sorted(unknown_roles))
+        raise ValueError(f"Unknown role(s) requested: {unknown_csv}")
+
+    role_payloads: dict[tuple[UUID, str], dict[str, Any]] = {}
+
+    for role in selected_roles:
+        metrics = ROLE_METRICS[role]
+        for metric in metrics:
+            rows = await _metric_percentiles(pool_id, metric)
+            for row in rows:
+                pv_id = row["policy_version_id"]
+                key = (pv_id, role)
+                payload = role_payloads.setdefault(
+                    key,
+                    {
+                        "metrics": {},
+                        "percentile_sum": 0.0,
+                        "percentile_count": 0,
+                    },
+                )
+                percentile = float(row["percentile"])
+
+                payload["metrics"][metric.key] = {
+                    "avg": float(row["avg_value"]),
+                    "percentile": percentile,
+                    "higher_is_better": metric.higher_is_better,
+                    "samples": int(row["sample_count"]),
+                    "source_names": list(metric.source_names),
+                    "source_metrics": row["source_metrics"],
+                }
+                payload["percentile_sum"] += percentile
+                payload["percentile_count"] += 1
+
+    role_rows: list[dict[str, Any]] = []
+    for (pv_id, role), payload in role_payloads.items():
+        score_count = int(payload["percentile_count"])
+        if score_count <= 0:
+            continue
+        overall = float(payload["percentile_sum"]) / float(score_count)
+        role_rows.append(
+            {
+                "policy_version_id": pv_id,
+                "role": role,
+                "percentile": overall,
+                "details": {
+                    "metrics": payload["metrics"],
+                    "overall_percentile": overall,
+                },
+            }
+        )
+
+    return role_rows
+
+
+@with_db
+async def compute_policy_role_percentiles(pool_id: UUID, policy_version_id: UUID) -> list[RolePercentileRow]:
+    rows = await _compute_role_percentile_payloads(pool_id)
+    computed_at = datetime.now()
+    matching = [row for row in rows if row["policy_version_id"] == policy_version_id]
+    matching.sort(key=lambda row: str(row["role"]))
+    return [
+        RolePercentileRow(
+            role=str(row["role"]),
+            percentile=float(row["percentile"]),
+            details=row["details"],
+            updated_at=computed_at,
+        )
+        for row in matching
+    ]
+
+
+@with_db
+async def compute_role_leaderboard(pool_id: UUID, role: str, limit: int = 100) -> list[RoleLeaderboardRow]:
+    if role not in ROLE_METRICS:
+        return []
+
+    session = get_db()
+    role_rows = await _compute_role_percentile_payloads(pool_id, roles=(role,))
+    if not role_rows:
+        return []
+
+    role_rows.sort(
+        key=lambda row: (
+            -float(row["percentile"]),
+            str(row["policy_version_id"]),
+        )
+    )
+
+    selected_rows = role_rows[:limit]
+    selected_policy_ids = [row["policy_version_id"] for row in selected_rows]
+    info_stmt = (
+        select(PolicyVersion.id, Policy.name, PolicyVersion.version)
+        .join(Policy, Policy.id == PolicyVersion.policy_id)
+        .where(PolicyVersion.id.in_(selected_policy_ids))
+    )
+    info_rows = (await session.execute(info_stmt)).all()
+    policy_info: dict[UUID, tuple[str, int]] = {row[0]: (str(row[1]), int(row[2])) for row in info_rows}
+    computed_at = datetime.now()
+    results: list[RoleLeaderboardRow] = []
+    for idx, row in enumerate(selected_rows):
+        pv_id = row["policy_version_id"]
+        info = policy_info.get(pv_id)
+        if info is None:
+            raise AssertionError(f"Missing policy info for selected policy version {pv_id}")
+        policy_name, policy_version = info
+        results.append(
+            RoleLeaderboardRow(
+                rank=idx + 1,
+                policy_version_id=pv_id,
+                policy_name=policy_name,
+                policy_version=policy_version,
+                percentile=float(row["percentile"]),
+                details=row["details"],
+                updated_at=computed_at,
+            )
+        )
+    return results
