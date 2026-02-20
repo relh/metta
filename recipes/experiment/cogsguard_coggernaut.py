@@ -150,9 +150,9 @@ def build_two_policy_role_train_tool(
     event_profiles: Sequence[EventProfile] | None = None,
     run_name_prefix: str = "coggernaut_two_roles",
     role_ids: Sequence[int] = (0, 0, 0, 0, 1, 1, 1, 1),
-    slice_configs: Sequence[tuple[str, int, str, str]] = (
-        ("miner_slice", 4, "miner_policy", "miner"),
-        ("aligner_slice", 4, "aligner_policy", "aligner"),
+    slice_configs: Sequence[tuple[str, tuple[int, int], str, str]] = (
+        ("miner_slice", (0, 4), "miner_policy", "miner"),
+        ("aligner_slice", (4, 8), "aligner_policy", "aligner"),
     ),
 ) -> tools.TrainTool:
     if event_profiles is None:
@@ -160,8 +160,9 @@ def build_two_policy_role_train_tool(
 
     if num_agents != len(role_ids):
         raise ValueError(f"Expected num_agents={len(role_ids)} for this role split, got {num_agents}")
-    if sum(agent_count for _, agent_count, _, _ in slice_configs) != num_agents:
-        raise ValueError("Slice agent counts must sum to num_agents")
+    total_agent_range = sum(hi - lo for _, (lo, hi), _, _ in slice_configs)
+    if total_agent_range != num_agents:
+        raise ValueError("Slice agent_ranges must cover all agents")
 
     variants_with_role_conditional = _with_role_conditional(variants)
     variants_without_role_conditional = tuple(
@@ -207,16 +208,16 @@ def build_two_policy_role_train_tool(
         tt.trainer.losses.add_loss(f"ppo_critic_{loss_suffix}", PPOCriticConfig())
 
     tt.trajectory_isolation = TrajectoryIsolationConfig(
-        slicing_method="agent_count",
         num_agents_per_env=num_agents,
         slices=[
             TrajectoryIsolationSliceConfig(
                 name=slice_name,
-                agent_count=agent_count,
+                agent_range=agent_range,
+                env_ratio=1.0,
                 policies=[policy_name],
                 losses=[f"ppo_actor_{loss_suffix}", f"ppo_critic_{loss_suffix}"],
             )
-            for slice_name, agent_count, policy_name, loss_suffix in slice_configs
+            for slice_name, agent_range, policy_name, loss_suffix in slice_configs
         ],
     )
 

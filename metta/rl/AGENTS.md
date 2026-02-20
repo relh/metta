@@ -1,5 +1,7 @@
 # RL Experimentation Guide
 
+Last updated: Feb. 19, 2025
+
 Guide for coding agents making changes to RL algorithms, agent architectures, losses, or training configs. Read this
 before touching anything in `metta/rl/`, `agent/src/metta/agent/`, `packages/cortex/`, or `recipes/`.
 
@@ -426,8 +428,8 @@ how multi-policy training, teacher-student setups, and mixed-objective experimen
 
 ### Key concepts
 
-- **Slice**: A named partition of the batch defined by `env_ratio` (random assignment) or `agent_count` (deterministic
-  per-environment assignment)
+- **Slice**: A named partition of the batch defined by `env_ratio` (random assignment) and optionally `agent_range`
+  (deterministic per-environment agent-position restriction)
 - Each slice has its own `policies`, `primary_policy`, `losses`, `advantage` config, and `sampling` config
 - Slices are defined in `TrajectoryIsolationConfig` inside the recipe
 

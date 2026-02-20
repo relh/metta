@@ -13,17 +13,15 @@ from metta.rl.training.trajectory_isolation import (
 )
 
 
-def _build_agent_count_runtime() -> tuple[TrajectoryIsolator, dict[str, TrajectoryIsolationSliceRuntime]]:
+def _build_agent_range_runtime() -> tuple[TrajectoryIsolator, dict[str, TrajectoryIsolationSliceRuntime]]:
     config = TrajectoryIsolationConfig(
-        slicing_method="agent_count",
         num_agents_per_env=8,
         slices=[
-            TrajectoryIsolationSliceConfig(name="miner", agent_count=4, policies=["learner0"], losses=["ppo_actor"]),
             TrajectoryIsolationSliceConfig(
-                name="aligner",
-                agent_count=4,
-                policies=["learner0"],
-                losses=["ppo_critic"],
+                name="miner", agent_range=(0, 4), env_ratio=1.0, policies=["learner0"], losses=["ppo_actor"]
+            ),
+            TrajectoryIsolationSliceConfig(
+                name="aligner", agent_range=(4, 8), env_ratio=1.0, policies=["learner0"], losses=["ppo_critic"]
             ),
         ],
     )
@@ -32,8 +30,10 @@ def _build_agent_count_runtime() -> tuple[TrajectoryIsolator, dict[str, Trajecto
         experience=SimpleNamespace(total_agents=16),
         device=torch.device("cpu"),
         training_env_id=None,
+        epoch=0,
     )
-    runtime_slices = {runtime_slice.name: runtime_slice for runtime_slice in isolator._build_plan_agent_count()}
+    isolator._ensure_rand_assignments()
+    runtime_slices = {runtime_slice.name: runtime_slice for runtime_slice in isolator._build_plan(isolator._context)}
     return isolator, runtime_slices
 
 
@@ -46,8 +46,8 @@ def _make_rollout_td(start: int, stop: int) -> TensorDict:
     )
 
 
-def test_agent_count_slice_masks_align_with_agent_slot_windows() -> None:
-    isolator, runtime_slices = _build_agent_count_runtime()
+def test_agent_range_slice_masks_align_with_agent_slot_windows() -> None:
+    isolator, runtime_slices = _build_agent_range_runtime()
     miner_slice = runtime_slices["miner"]
     aligner_slice = runtime_slices["aligner"]
     context = SimpleNamespace()
@@ -109,7 +109,7 @@ def test_agent_count_slice_masks_align_with_agent_slot_windows() -> None:
 
 
 def test_slice_row_indices_handles_unordered_agent_slot_ids() -> None:
-    isolator, runtime_slices = _build_agent_count_runtime()
+    isolator, runtime_slices = _build_agent_range_runtime()
     miner_slice = runtime_slices["miner"]
     aligner_slice = runtime_slices["aligner"]
     experience = SimpleNamespace(
@@ -128,7 +128,7 @@ def test_slice_row_indices_handles_unordered_agent_slot_ids() -> None:
 
 
 def test_slice_row_indices_cached_per_slice() -> None:
-    isolator, runtime_slices = _build_agent_count_runtime()
+    isolator, runtime_slices = _build_agent_range_runtime()
     miner_slice = runtime_slices["miner"]
     experience = SimpleNamespace(
         buffer=TensorDict(
@@ -145,7 +145,7 @@ def test_slice_row_indices_cached_per_slice() -> None:
 
 
 def test_slice_row_indices_out_of_range_slots_fallback() -> None:
-    isolator, runtime_slices = _build_agent_count_runtime()
+    isolator, runtime_slices = _build_agent_range_runtime()
     miner_slice = runtime_slices["miner"]
     experience = SimpleNamespace(
         buffer=TensorDict(
