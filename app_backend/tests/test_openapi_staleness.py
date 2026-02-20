@@ -60,7 +60,7 @@ def _generate_schema(spec_json: str, openapi_ts_bin: Path, prettier_bin: Path, c
 @pytest.mark.skipif(not _OBSERVATORY_OPENAPI_TS_BIN.exists(), reason="openapi-typescript not installed")
 def test_observatory_schema_dts_up_to_date():
     app = create_app()
-    internal_spec = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    internal_spec = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         fresh_schema = Path(tmpdir) / "schema.d.ts"

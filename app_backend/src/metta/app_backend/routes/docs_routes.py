@@ -22,6 +22,7 @@ docs; external callers will simply get 403.
 """
 
 import copy
+import inspect
 from collections.abc import Callable
 from functools import wraps
 
@@ -30,7 +31,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.routing import APIRoute
 
-from metta.app_backend.auth import NoAuthRequired, SoftmaxUser
+from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
@@ -124,7 +125,32 @@ def _public_openapi(full_schema: dict, public_tags: set[str], excluded_paths: se
     return schema
 
 
-def create_docs_router(app, public_tags: set[str]) -> APIRouter:
+def _inject_operation_security(schema: dict, app: object) -> None:
+    """Add per-operation ``security`` based on endpoint auth types."""
+    security_map: dict[tuple[str, str], list] = {}
+    for route in getattr(app, "routes", []):
+        if not isinstance(route, APIRoute):
+            continue
+        sig = inspect.signature(route.endpoint)
+        security = None
+        for param in sig.parameters.values():
+            if param.annotation is ExternalUser or param.annotation is SoftmaxUser:
+                security = [{"BearerAuth": []}]
+                break
+            if param.annotation is MaybeAuthenticatedUser:
+                security = [{"BearerAuth": []}, {}]
+                break
+        if security is not None:
+            for method in route.methods or []:
+                security_map[(route.path, method.lower())] = security
+
+    for path, operations in schema.get("paths", {}).items():
+        for method, detail in operations.items():
+            if method in HTTP_METHODS and (path, method) in security_map:
+                detail["security"] = security_map[(path, method)]
+
+
+def create_docs_router(app, public_tags: set[str], internal_description: str | None = None) -> APIRouter:
     router = APIRouter(tags=["docs"])
 
     _full_schema: dict | None = None
@@ -136,10 +162,26 @@ def create_docs_router(app, public_tags: set[str]) -> APIRouter:
             _full_schema = get_openapi(
                 title=app.title,
                 version=app.version,
+                description=internal_description or app.description,
                 routes=app.routes,
             )
+            _full_schema.setdefault("components", {})["securitySchemes"] = {
+                "BearerAuth": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "description": "Run `cogames login` to authenticate",
+                },
+            }
+            _inject_operation_security(_full_schema, app)
             excluded_paths = _collect_excluded_paths(app)
             _public_schema = _public_openapi(_full_schema, public_tags, excluded_paths)
+            if internal_description and app.description:
+                _public_schema["info"]["description"] = app.description
+                _public_schema.setdefault("components", {}).setdefault("securitySchemes", {})
+                if "BearerAuth" in _public_schema.get("components", {}).get("securitySchemes", {}):
+                    _public_schema["components"]["securitySchemes"]["BearerAuth"]["description"] = (
+                        "Bearer token issued by Softmax"
+                    )
         return _public_schema
 
     app.openapi = public_openapi  # type: ignore[method-assign]
@@ -156,7 +198,7 @@ def create_docs_router(app, public_tags: set[str]) -> APIRouter:
 
     @router.get("/internal/docs")
     async def internal_docs(_user: SoftmaxUser) -> HTMLResponse:
-        return _swagger_html("openapi.json")
+        return _swagger_html("internal/openapi.json")
 
     return router
 
@@ -260,7 +302,28 @@ def _swagger_html(openapi_url: str) -> HTMLResponse:
   .swagger-ui .info hgroup.main h2.title {{ color: #0e2758; }}
   .swagger-ui .opblock.opblock-get .opblock-summary-method {{ background: #859ebe; }}
   .swagger-ui .btn.execute {{ background: #0e2758; border-color: #0e2758; }}
-  .swagger-ui .btn.execute:hover {{ background: #bbccf3; color: #0e2758; border-color: #bbccf3; }}
+  .swagger-ui .btn.execute:hover {{ background: #1a3875; border-color: #1a3875; }}
+  .swagger-ui .btn.authorize {{ color: #0e2758; border-color: #0e2758; }}
+  .swagger-ui .btn.authorize svg {{ fill: #0e2758; }}
+  .swagger-ui a {{ color: #1a3875; }}
+  .swagger-ui a:hover {{ color: #0e2758; }}
+  .swagger-ui .renderedMarkdown code {{ color: #0e2758; }}
+  .swagger-ui .renderedMarkdown pre {{ background: #f0f3f8; position: relative; }}
+  .swagger-ui .renderedMarkdown pre code {{ color: #1a3875; }}
+  .swagger-ui .info .renderedMarkdown a {{ color: #1a3875; }}
+  .swagger-ui .renderedMarkdown pre {{
+    cursor: pointer; transition: background 0.15s;
+  }}
+  .swagger-ui .renderedMarkdown pre:hover {{
+    background: #e4e9f2;
+  }}
+  .copy-toast {{
+    position: absolute; top: 6px; right: 8px;
+    background: #0e2758; color: #fff; border-radius: 4px;
+    padding: 2px 8px; font-size: 10px; pointer-events: none;
+    opacity: 0; transition: opacity 0.2s;
+  }}
+  .copy-toast.show {{ opacity: 1; }}
 </style>
 </head><body>
 <div class="brand-bar">
@@ -269,5 +332,23 @@ def _swagger_html(openapi_url: str) -> HTMLResponse:
 </div>
 <div id="swagger-ui"></div>
 <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-<script>SwaggerUIBundle({{url: "{openapi_url}", dom_id: "#swagger-ui"}})</script>
+<script>
+SwaggerUIBundle({{url: "{openapi_url}", dom_id: "#swagger-ui",
+  onComplete: function() {{
+    document.querySelectorAll('.renderedMarkdown pre').forEach(function(pre) {{
+      var toast = document.createElement('span');
+      toast.className = 'copy-toast';
+      toast.textContent = 'Copied!';
+      pre.style.position = 'relative';
+      pre.appendChild(toast);
+      pre.addEventListener('click', function() {{
+        var code = pre.querySelector('code');
+        if (code) navigator.clipboard.writeText(code.textContent.trim());
+        toast.classList.add('show');
+        setTimeout(function(){{ toast.classList.remove('show'); }}, 1200);
+      }});
+    }});
+  }}
+}})
+</script>
 </body></html>""")

@@ -35,6 +35,76 @@ from metta.app_backend.routes import (
 )
 from metta.app_backend.routes.docs_routes import collect_public_tags, create_docs_router
 
+_API_DESCRIPTION = """\
+Observatory is the Softmax Research platform for AI policy tournaments and evaluation.
+Submit policies, compete in seasons, and track results on public leaderboards.
+
+---
+
+## Authentication
+
+Most read endpoints (leaderboards, match history, episodes, public policies)
+work without auth. Submitting policies or accessing your own data requires
+a Bearer token:
+
+```
+Authorization: Bearer <your-token>
+```
+
+To get a token, install [cogames](https://pypi.org/project/cogames/) and run:
+
+```bash
+cogames login
+```
+
+A `401` response means no token was provided. A `403` means the token
+is invalid or expired.
+
+### Verify your token
+
+```bash
+curl -H "Authorization: Bearer <your-token>" \\
+  https://api.observatory.softmax-research.net/whoami
+```
+
+Returns `{"user_email": "you@example.com"}` on success.
+"""
+
+_INTERNAL_API_DESCRIPTION = (
+    _API_DESCRIPTION
+    + """\
+
+**Web UI:** [observatory.softmax-research.net](https://observatory.softmax-research.net)
+
+---
+
+## Internal: developer setup
+
+### Getting a token
+
+```bash
+uv run python devops/observatory_login.py https://softmax.com/api https://api.observatory.softmax-research.net
+```
+
+This opens a browser for OAuth login and saves your token to
+`~/.metta/config.yaml`. Add `--force` to refresh an expired token.
+
+### Python client
+
+```python
+from metta.app_backend.clients.stats_client import StatsClient
+
+# Token is loaded automatically from ~/.metta/config.yaml
+client = StatsClient.create(
+    "https://api.observatory.softmax-research.net"
+)
+
+# Search policies by name
+versions = client.get_policy_versions(name_fuzzy="my-policy")
+```
+"""
+)
+
 
 class WhoAmIResponse(BaseModel):
     user_email: str
@@ -116,7 +186,7 @@ def create_app() -> fastapi.FastAPI:
 
     app = fastapi.FastAPI(
         title="Softmax API",
-        description="Softmax Research tournament and evaluation platform.",
+        description=_API_DESCRIPTION,
         version="1.0.0",
         lifespan=lifespan,
         docs_url=None,
@@ -160,7 +230,7 @@ def create_app() -> fastapi.FastAPI:
         return WhoAmIResponse(user_email=user.email if user else "unknown")
 
     public_tags = collect_public_tags(routers)
-    app.include_router(create_docs_router(app, public_tags))
+    app.include_router(create_docs_router(app, public_tags, internal_description=_INTERNAL_API_DESCRIPTION))
 
     return app
 
