@@ -68,7 +68,7 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
   if (stageContext.teamSeason) {
     const progress = stageContext.progress
 
-    if (progress && !progress.started && parsed.view !== 'leaderboard') {
+    if (parsed.view !== 'leaderboard') {
       const nextParams = new URLSearchParams()
       if (parsed.stage) nextParams.set('stage', parsed.stage)
       const query = nextParams.toString()

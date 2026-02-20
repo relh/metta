@@ -79,10 +79,7 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
     {
       id: 'leaderboard',
       label: 'Leaderboard',
-      href:
-        stageContext.teamSeason && stageContext.progress && !stageContext.progress.started
-          ? `/tournament/${seasonName}?view=leaderboard`
-          : `/tournament/${seasonName}`,
+      href: stageContext.teamSeason ? `/tournament/${seasonName}?view=leaderboard` : `/tournament/${seasonName}`,
     },
     {
       id: 'matches',
