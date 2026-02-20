@@ -121,11 +121,8 @@ export const StageProgress: FC<{
         </div>
       </div>
       {selectedProgressItem && (
-        <div className="rounded-md border border-border bg-surface px-3 py-2">
-          <div className="text-sm font-medium">
-            {selectedProgressItem.index}. {selectedProgressItem.title}
-          </div>
-          <div className="mt-0.5 text-xs text-foreground-muted">{selectedProgressItem.poolsLine}</div>
+        <div className="px-1">
+          <div className="text-xs text-foreground-muted">{selectedProgressItem.poolsLine}</div>
           <div className="mt-1 text-sm text-foreground-muted">{selectedProgressItem.description}</div>
           {selectedProgressItem.status === 'active' && (
             <div className="mt-1 text-xs text-foreground-muted">

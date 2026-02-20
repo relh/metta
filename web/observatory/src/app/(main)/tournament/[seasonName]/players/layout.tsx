@@ -5,7 +5,7 @@ import { Spinner } from '@/components/Spinner'
 
 export default function PlayersLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Card title="Players">
+    <Card>
       <Suspense
         fallback={
           <div className="grid place-items-center min-h-80">
@@ -19,7 +19,7 @@ export default function PlayersLayout({ children }: { children: React.ReactNode 
   )
 }
 
-export async function generateMetadata({ params }: PageProps<'/tournament/[seasonName]/players'>) {
+export async function generateMetadata({ params }: LayoutProps<'/tournament/[seasonName]/players'>) {
   const { seasonName } = await params
   return {
     title: `Players for Season ${seasonName} | Observatory`,

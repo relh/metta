@@ -70,6 +70,7 @@ class DryRunTeamCommissioner(TeamCommissionerBase):
     """Commissioner that resolves matches instantly via a synthetic game model."""
 
     season_name = "teams"
+    display_name = "Teams"
     summary = "Test team tournament"
     entry_pool = _policy_pool(1)
     leaderboard_pool = _score_pool()

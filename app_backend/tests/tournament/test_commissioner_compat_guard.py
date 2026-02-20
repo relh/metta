@@ -12,6 +12,7 @@ from metta.app_backend.tournament.commissioners.base import CommissionerBase
 
 class _StubCommissioner(CommissionerBase):
     season_name = "test-season"
+    display_name = "Test Season"
     referees: dict = {}
     leaderboard_pool = None  # type: ignore[assignment]
     entry_pool = None  # type: ignore[assignment]

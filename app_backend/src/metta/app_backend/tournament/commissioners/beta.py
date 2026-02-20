@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class BetaCommissioner(CommissionerBase):
     season_name = "beta"
+    display_name = "Beta"
     leaderboard_pool = "competition"
     entry_pool = "qualifying"
     referees = {

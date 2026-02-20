@@ -1153,8 +1153,104 @@ export interface components {
        */
       team_appearances: number;
     };
-    /** SeasonResponse */
-    SeasonResponse: {
+    /** SeasonDetail */
+    SeasonDetail: {
+      /**
+       * Id
+       * Format: uuid
+       * @description Unique season identifier
+       */
+      id: string;
+      /**
+       * Name
+       * @description Short name of the season
+       */
+      name: string;
+      /**
+       * Version
+       * @description Season version number
+       */
+      version: number;
+      /**
+       * Canonical
+       * @description Whether this is the canonical (active) version
+       */
+      canonical: boolean;
+      /**
+       * Summary
+       * @description Human-readable description of the season
+       */
+      summary: string;
+      /**
+       * Entry Pool
+       * @description Name of the pool where new policies are submitted
+       */
+      entry_pool?: string | null;
+      /**
+       * Leaderboard Pool
+       * @description Name of the pool used for the leaderboard
+       */
+      leaderboard_pool?: string | null;
+      /**
+       * Is Default
+       * @description Whether this is the default season
+       */
+      is_default: boolean;
+      /**
+       * Compat Version
+       * @description Compatibility version string (e.g. '0.4')
+       */
+      compat_version?: string | null;
+      /**
+       * Pools
+       * @description Pools in this season
+       */
+      pools: components["schemas"]["PoolInfo"][];
+      /**
+       * Status
+       * @description High-level tournament status inferred from season/progress state
+       * @enum {string}
+       */
+      status: "not_started" | "in_progress" | "complete";
+      /**
+       * Display Name
+       * @description Human-readable season title for UI display
+       */
+      display_name: string;
+      /**
+       * Started At
+       * @description ISO 8601 timestamp when the season was started
+       */
+      started_at?: string | null;
+      /**
+       * Tournament Type
+       * @description Tournament format
+       * @enum {string}
+       */
+      tournament_type: "policy" | "team";
+      /**
+       * Entrant Count
+       * @description Unique policy versions that have entered the season
+       */
+      entrant_count: number;
+      /**
+       * Active Entrant Count
+       * @description Unique non-retired policy versions still active in the season
+       */
+      active_entrant_count: number;
+      /**
+       * Match Count
+       * @description Total matches created across all pools in this season
+       */
+      match_count: number;
+      /**
+       * Stage Count
+       * @description Number of configured stages
+       */
+      stage_count: number;
+    };
+    /** SeasonSummary */
+    SeasonSummary: {
       /**
        * Id
        * Format: uuid
@@ -1799,7 +1895,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SeasonResponse"][];
+          "application/json": components["schemas"]["SeasonSummary"][];
         };
       };
     };
@@ -1824,7 +1920,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["SeasonResponse"];
+          "application/json": components["schemas"]["SeasonDetail"];
         };
       };
       /** @description Validation Error */

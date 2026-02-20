@@ -133,6 +133,17 @@ class TestTournamentRouteSmoke:
     def test_list_seasons(self, test_client: TestClient, softmax_headers: dict):
         r = test_client.get("/tournament/seasons", headers=softmax_headers)
         assert r.status_code == 200
+        seasons = r.json()
+        assert isinstance(seasons, list)
+        if seasons:
+            assert "display_name" not in seasons[0]
+            assert isinstance(seasons[0]["summary"], str)
+            assert "pools" in seasons[0]
+            assert isinstance(seasons[0]["pools"], list)
+            assert "entry_pool" in seasons[0]
+            assert "leaderboard_pool" in seasons[0]
+            assert "status" not in seasons[0]
+            assert "entrant_count" not in seasons[0]
 
     @pytest.mark.asyncio
     async def test_get_season(self, test_client: TestClient, softmax_headers: dict, seed_season: dict):
@@ -140,6 +151,16 @@ class TestTournamentRouteSmoke:
             f"/tournament/seasons/{seed_season['season_name']}?include_hidden=true", headers=softmax_headers
         )
         assert r.status_code == 200
+        season = r.json()
+        assert season["display_name"]
+        assert isinstance(season["summary"], str)
+        assert season["status"] in {"not_started", "in_progress", "complete"}
+        assert season["started_at"] is None or isinstance(season["started_at"], str)
+        assert isinstance(season["entrant_count"], int)
+        assert isinstance(season["active_entrant_count"], int)
+        assert isinstance(season["match_count"], int)
+        assert isinstance(season["stage_count"], int)
+        assert "pools" in season
 
     @pytest.mark.asyncio
     async def test_get_matches(self, test_client: TestClient, softmax_headers: dict, seed_season: dict):

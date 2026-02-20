@@ -6,7 +6,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { H2 } from "@/components/H2";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/Table";
 import { MATCHES_PAGE_SIZE, METTASCOPE_BASE_URL } from "@/lib/constants";
-import type { MatchResponse, SeasonResponse } from "@/lib/observatoryClient";
+import type {
+  MatchResponse,
+  SeasonDetail,
+  SeasonSummary,
+} from "@/lib/observatoryClient";
 import { formatPolicyLabel } from "@/lib/policyUtils";
 
 import { PolicyTag } from "./PolicyTag";
@@ -40,7 +44,7 @@ export function RecentMatches() {
   const [pools, setPools] = useState<{ name: string; description: string }[]>(
     [],
   );
-  const [seasonList, setSeasonList] = useState<SeasonResponse[]>([]);
+  const [seasonList, setSeasonList] = useState<SeasonSummary[]>([]);
   const [policyInfoCache, setPolicyInfoCache] = useState<
     Map<string, PolicyOption>
   >(new Map());
@@ -64,7 +68,7 @@ export function RecentMatches() {
       try {
         const res = await fetch("/api/tournament/seasons");
         if (res.ok) {
-          const seasons: SeasonResponse[] = await res.json();
+          const seasons: SeasonSummary[] = await res.json();
           setSeasonList(seasons);
         }
       } catch (err) {
@@ -84,9 +88,37 @@ export function RecentMatches() {
       if (season.name !== seasonName) {
         setSeasonName(season.name);
       }
-      setPools(season.pools);
     }
   }, [seasonList, seasonParam, seasonName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchSeasonDetail() {
+      if (!seasonName) {
+        setPools([]);
+        return;
+      }
+      try {
+        const res = await fetch(
+          `/api/tournament/seasons/${encodeSeasonRef(seasonName)}`,
+        );
+        if (!res.ok) throw new Error("Failed to fetch season detail");
+        const season: SeasonDetail = await res.json();
+        if (!cancelled) {
+          setPools(season.pools);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setPools([]);
+        }
+      }
+    }
+    fetchSeasonDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [seasonName]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

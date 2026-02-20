@@ -84,6 +84,7 @@ class SeasonDescription(BaseModel):
 
 class CommissionerBase(ABC):
     season_name: str
+    display_name: str
     referees: dict[str, RefereeBase]
     leaderboard_pool: str
     entry_pool: str
@@ -101,6 +102,14 @@ class CommissionerBase(ABC):
         super().__init_subclass__(**kwargs)
         if inspect.isabstract(cls):
             return
+        season_name = getattr(cls, "season_name", None)
+        display_name = getattr(cls, "display_name", None)
+        if season_name is None and display_name is None:
+            return
+        if not isinstance(season_name, str) or not season_name:
+            raise ValueError(f"{cls.__name__}.season_name must be a non-empty string")
+        if not isinstance(display_name, str) or not display_name:
+            raise ValueError(f"{cls.__name__}.display_name must be a non-empty string")
         referees = getattr(cls, "referees", None)
         if referees is None:
             return

@@ -7,6 +7,7 @@ from metta.app_backend.tournament.referees.no_clips_no_vibes import (
 
 class BetaCvcNoClipsNoVibesCommissioner(BetaCommissioner):
     season_name = "beta-cvc-no-clips-no-vibes"
+    display_name = "Beta CvC No Clips No Vibes"
     referees = {
         "qualifying": NoClipsNoVibesSelfPlayReferee(),
         "competition": NoClipsNoVibesPairingReferee(),

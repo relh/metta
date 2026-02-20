@@ -10,15 +10,19 @@ from metta.app_backend.tournament.commissioners.base import CommissionerBase
 def _make_concrete_commissioner(
     *,
     referees: dict[str, object] | None = None,
+    season_name: str = "test",
+    display_name: str | None = "Test",
     entry_pool: str | None = None,
     leaderboard_pool: str | None = None,
 ) -> type:
     attrs: dict[str, object] = {
-        "season_name": "test",
+        "season_name": season_name,
         "referees": referees if referees is not None else {},
         "get_new_submission_membership_changes": lambda self, pv_id: [],
         "get_membership_changes": lambda self, pools: [],
     }
+    if display_name is not None:
+        attrs["display_name"] = display_name
     if entry_pool is not None:
         attrs["entry_pool"] = entry_pool
     if leaderboard_pool is not None:
@@ -65,3 +69,13 @@ def test_abstract_subclass_skips_validation():
         def extra(self) -> None: ...
 
     assert _AbstractCommissioner.entry_pool == "wrong"
+
+
+def test_missing_display_name_raises():
+    with pytest.raises(ValueError, match="display_name must be a non-empty string"):
+        _make_concrete_commissioner(display_name=None)
+
+
+def test_display_name_can_be_overridden():
+    cls = _make_concrete_commissioner(season_name="beta-cvc", display_name="Beta CvC")
+    assert cls.display_name == "Beta CvC"

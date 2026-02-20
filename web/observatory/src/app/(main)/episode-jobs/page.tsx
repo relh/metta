@@ -50,6 +50,8 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
     }),
     repo.getSeasons(),
   ])
+  const selectedSeason = seasons.find((s) => s.id === seasonIdFilter)
+  const selectedSeasonDetail = selectedSeason ? await repo.getSeason(selectedSeason.name) : null
 
   return (
     <div className="p-5 max-w-[1600px] mx-auto">
@@ -57,7 +59,7 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
       <AutoRefresh />
       <Card title="Episode Jobs">
         <div className="mb-4 flex flex-wrap gap-3 items-end">
-          <JobFilters seasons={seasons} />
+          <JobFilters seasons={seasons} selectedSeason={selectedSeasonDetail} />
           <div>
             <div className="text-xs text-foreground-muted mb-1">Job ID</div>
             <div className="w-64">

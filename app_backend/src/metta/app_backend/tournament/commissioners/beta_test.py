@@ -5,4 +5,5 @@ from metta.app_backend.tournament.commissioners.beta import BetaCommissioner
 
 class BetaTestCommissioner(BetaCommissioner):
     season_name = "test-season"
+    display_name = "Test Season"
     summary = "Test season: policies handled exactly the same as with Beta, but get excluded from the Observatory UI."

@@ -17,6 +17,7 @@ from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageRe
 
 class MockTeamsCommissioner(MockMatchExecutionMixin, TeamCommissionerBase):
     season_name = "teams-mock"
+    display_name = "Teams Mock"
     summary = "Fast local-only mock team tournament with mock scores and visible stage progress"
     entry_pool = _policy_pool(1)
     leaderboard_pool = _score_pool()

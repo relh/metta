@@ -3,7 +3,7 @@ import { useRouter, useSelectedLayoutSegment } from 'next/navigation'
 import { FC, use, useEffect, useMemo, useState } from 'react'
 import { AppContext } from '@/app/(main)/AppContext'
 import { Select } from '@/components/Select'
-import type { SeasonDetail, SeasonVersionInfo } from '@/lib/api'
+import type { SeasonSummary, SeasonVersionInfo } from '@/lib/api'
 
 type SeasonOption = { value: string; label: string }
 type VersionOption = { value: number; label: string; canonical: boolean }
@@ -34,7 +34,7 @@ const parseSeasonRef = (seasonRef: string | null) => {
 const formatSeasonRef = (name: string, version: number | null, canonical: boolean) =>
   version && !canonical ? `${name}:v${version}` : name
 
-export const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
+export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   const seasonRef = useSelectedLayoutSegment()
   const { repo } = use(AppContext)
   const decodedSeasonRef = useMemo(() => {

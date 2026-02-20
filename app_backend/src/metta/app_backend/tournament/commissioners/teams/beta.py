@@ -16,7 +16,12 @@ from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageRe
 
 class BetaTeamsCommissioner(TeamCommissionerBase):
     season_name = "beta-teams-large"
-    summary = "Progressive-widening team tournament: 1->2->4->8 policy teams"
+    display_name = "Beta Teams Tournament (Large)"
+    summary = (
+        "Allows any number of entrant policies. Evaluates each in a series of stages, "
+        "eliminating low scorers. The remaining policies are seeded into teams, sampled based on earlier performance. "
+        "Those teams run for three stages with progressive culling. Policies are scored based on their teams' ranks."
+    )
     entry_pool = _policy_pool(1)
     leaderboard_pool = _score_pool()
     referees = {

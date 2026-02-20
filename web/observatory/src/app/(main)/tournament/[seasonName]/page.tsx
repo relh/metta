@@ -88,7 +88,7 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
       stageContext.selectedStage ?? stageContext.progress?.stage_flow[0]?.input_pool ?? stageContext.stages[0]?.name
     if (!leaderboardStage) {
       return (
-        <Card title="Leaderboard">
+        <Card>
           <div className="text-foreground-muted text-sm">No stages configured.</div>
         </Card>
       )
@@ -96,14 +96,14 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
     const selectedFlowStage = progress.stage_flow.find((stage) => stage.input_pool === leaderboardStage)
     if (selectedFlowStage?.status === 'pending') {
       return (
-        <Card title="Leaderboard">
+        <Card>
           <div className="text-foreground-muted py-4 text-center">This stage has not started yet.</div>
         </Card>
       )
     }
 
     return (
-      <Card title="Leaderboard">
+      <Card>
         <StageLeaderboard
           seasonName={seasonName}
           stage={leaderboardStage}
@@ -115,7 +115,7 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
   }
 
   return (
-    <Card title="Leaderboard">
+    <Card>
       <Table>
         <TableHeader>
           <TH>Rank</TH>

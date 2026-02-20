@@ -13,7 +13,7 @@ from metta.app_backend.tournament.commissioners.teams.config import (
 
 class BetaTeamsSmallCommissioner(BetaTeamsCommissioner):
     season_name = "beta-teams-small"
-    summary = "Compact team tournament: 1->2->4->8 policy teams"
+    display_name = "Beta Teams Tournament"
     initial_config = TeamTournamentConfig(
         game=GameEnvGenerator(num_agents=8),
         stages=[

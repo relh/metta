@@ -24,6 +24,7 @@ import type {
   SQLQueryResponse,
   SeasonLeaderboardQuery,
   SeasonDetail,
+  SeasonSummary,
   SeasonMatchSummary,
   StageLeaderboardQuery,
   StageLeaderboardType,
@@ -78,6 +79,7 @@ export type {
   SQLQueryRequest,
   SQLQueryResponse,
   SeasonDetail,
+  SeasonSummary,
   SeasonMatchPlayerSummary,
   SeasonMatchSummary,
   StageLeaderboardQuery,
@@ -476,8 +478,8 @@ export class Repo {
   }
 
   // Tournament methods
-  async getSeasons(): Promise<SeasonDetail[]> {
-    return this.apiCall<SeasonDetail[]>('/tournament/seasons')
+  async getSeasons(): Promise<SeasonSummary[]> {
+    return this.apiCall<SeasonSummary[]>('/tournament/seasons')
   }
 
   async getSeason(seasonName: string): Promise<SeasonDetail> {

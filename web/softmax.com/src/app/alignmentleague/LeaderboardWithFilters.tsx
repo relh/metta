@@ -8,7 +8,7 @@ import { Table, TBody, TD, TH, THead, TR } from "@/components/Table";
 import type {
   LeaderboardEntry,
   LeaderboardResponse,
-  SeasonResponse,
+  SeasonSummary,
   SeasonVersionInfo,
 } from "@/lib/observatoryClient";
 
@@ -18,7 +18,7 @@ export function LeaderboardWithFilters() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [seasons, setSeasons] = useState<SeasonResponse[]>([]);
+  const [seasons, setSeasons] = useState<SeasonSummary[]>([]);
   const [selectedSeason, setSelectedSeason] = useState("");
   const [seasonVersions, setSeasonVersions] = useState<SeasonVersionInfo[]>([]);
   const [selectedVersion, setSelectedVersion] =
@@ -59,7 +59,7 @@ export function LeaderboardWithFilters() {
       try {
         const res = await fetch("/api/tournament/seasons");
         if (!res.ok) throw new Error("Failed to fetch seasons");
-        const data: SeasonResponse[] = await res.json();
+        const data: SeasonSummary[] = await res.json();
         setSeasons(data);
         const defaultSeason = data.find((s) => s.is_default) ?? data[0];
         if (defaultSeason) {

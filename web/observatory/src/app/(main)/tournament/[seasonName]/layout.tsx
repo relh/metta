@@ -4,12 +4,31 @@ import { FC, Suspense } from 'react'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { LinkTabs, type LinkTab } from '@/components/LinkTabs'
 import { Spinner } from '@/components/Spinner'
+import type { SeasonDetail } from '@/lib/api'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 
 import { StageProgress } from './StageProgress'
 import { defaultSelectedStage } from './stageSelection'
+
+const SEASON_STATUS_LABELS: Record<SeasonDetail['status'], string> = {
+  not_started: 'Not started',
+  in_progress: 'In progress',
+  complete: 'Complete',
+}
+
+const SEASON_STATUS_BADGE_CLASSES: Record<SeasonDetail['status'], string> = {
+  not_started: 'border-border text-foreground-muted bg-transparent',
+  in_progress: 'border-green-500/40 text-green-700 dark:text-green-300 bg-transparent',
+  complete: 'border-blue-500/40 text-blue-700 dark:text-blue-300 bg-transparent',
+}
+
+const formatStartedAt = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
 
 const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
   const repo = await getRepo()
@@ -19,16 +38,26 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
   }
 
   return (
-    <div className="text-foreground-muted text-sm">
+    <div className="space-y-2 rounded-lg border border-border bg-surface px-4 py-3">
       <ServerDebugDrain />
-      {season.summary && <div>{season.summary}</div>}
       <div>
-        Compat version:{' '}
-        {season.compat_version ? (
-          <span className="font-mono text-foreground">compat-v{season.compat_version}</span>
-        ) : (
-          'not pinned to a specific runner compat version'
-        )}
+        <div className="flex flex-wrap items-baseline gap-2">
+          <h1 className="text-3xl font-bold text-foreground">{season.display_name}</h1>
+          <span
+            className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium ${SEASON_STATUS_BADGE_CLASSES[season.status]}`}
+          >
+            {SEASON_STATUS_LABELS[season.status]}
+          </span>
+        </div>
+        {season.summary && <div className="mt-0.5 text-sm text-foreground-muted">{season.summary}</div>}
+      </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-foreground-muted">
+        <span>
+          Entrants: {season.entrant_count}
+          {season.active_entrant_count !== season.entrant_count ? ` (${season.active_entrant_count} active)` : ''}
+        </span>
+        <span>Stages: {season.stage_count}</span>
+        {season.started_at && <span>Started at: {formatStartedAt(season.started_at)}</span>}
       </div>
     </div>
   )
@@ -44,6 +73,7 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
     : undefined
 
   const tabs: LinkTab[] = [
+    { id: 'players', label: 'Players', href: `/tournament/${seasonName}/players` },
     {
       id: 'leaderboard',
       label: 'Leaderboard',
@@ -52,7 +82,6 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
           ? `/tournament/${seasonName}?view=leaderboard`
           : `/tournament/${seasonName}`,
     },
-    { id: 'players', label: 'Players', href: `/tournament/${seasonName}/players` },
     {
       id: 'matches',
       label: 'Matches',
@@ -95,7 +124,7 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
   )
 }
 
-export async function generateMetadata({ params }: PageProps<'/tournament/[seasonName]'>) {
+export async function generateMetadata({ params }: LayoutProps<'/tournament/[seasonName]'>) {
   const { seasonName } = await params
   return {
     title: `Season ${seasonName} | Observatory`,

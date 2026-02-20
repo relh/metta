@@ -5,7 +5,7 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState, useTransition } 
 import { AsyncSelect } from '@/components/AsyncSelect'
 import { Select } from '@/components/Select'
 import { Spinner } from '@/components/Spinner'
-import { ALL_JOB_STATUSES, JobStatus, PolicyVersionRow, SeasonDetail } from '@/lib/repo'
+import { ALL_JOB_STATUSES, JobStatus, PolicyVersionRow, SeasonDetail, SeasonSummary } from '@/lib/repo'
 
 type Option = { value: string; label: string }
 
@@ -118,7 +118,7 @@ const StatusSelect: FC = () => {
   )
 }
 
-const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
+const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   const [isPending, startTransition] = useTransition()
   const [seasonId, setSeasonId] = useQueryState(
     'seasonId',
@@ -160,9 +160,8 @@ const SeasonSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
   )
 }
 
-const PoolSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
+const PoolSelect: FC<{ selectedSeason: SeasonDetail | null }> = ({ selectedSeason }) => {
   const [isPending, startTransition] = useTransition()
-  const [seasonId] = useQueryState('seasonId', parseAsString.withDefault(''))
   const [poolId, setPoolId] = useQueryState(
     'poolId',
     parseAsString.withDefault('').withOptions({
@@ -173,11 +172,9 @@ const PoolSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
   )
 
   const options: Option[] = useMemo(() => {
-    if (!seasonId) return []
-    const season = seasons.find((s) => s.id === seasonId)
-    if (!season) return []
-    return season.pools.flatMap((p) => (p.id ? [{ value: p.id, label: p.name }] : []))
-  }, [seasons, seasonId])
+    if (!selectedSeason) return []
+    return selectedSeason.pools.flatMap((p) => (p.id ? [{ value: p.id, label: p.name }] : []))
+  }, [selectedSeason])
 
   useEffect(() => {
     if (poolId && !options.find((o) => o.value === poolId)) {
@@ -194,8 +191,8 @@ const PoolSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
           options={options}
           value={selected}
           onChange={(opt) => setPoolId(opt?.value ?? null)}
-          placeholder={seasonId ? 'All pools' : 'Select a season first'}
-          isDisabled={!seasonId}
+          placeholder={selectedSeason ? 'All pools' : 'Select a season first'}
+          isDisabled={!selectedSeason}
           isClearable
           instanceId="pool-select"
         />
@@ -207,10 +204,11 @@ const PoolSelect: FC<{ seasons: SeasonDetail[] }> = ({ seasons }) => {
   )
 }
 
-export const JobFilters: FC<{ seasons: SeasonDetail[]; defaultPolicyVersionId?: string }> = ({
-  seasons,
-  defaultPolicyVersionId,
-}) => {
+export const JobFilters: FC<{
+  seasons: SeasonSummary[]
+  selectedSeason: SeasonDetail | null
+  defaultPolicyVersionId?: string
+}> = ({ seasons, selectedSeason, defaultPolicyVersionId }) => {
   return (
     <>
       <div>
@@ -227,7 +225,7 @@ export const JobFilters: FC<{ seasons: SeasonDetail[]; defaultPolicyVersionId?: 
       </div>
       <div>
         <div className="text-xs text-foreground-muted mb-1">Pool</div>
-        <PoolSelect seasons={seasons} />
+        <PoolSelect selectedSeason={selectedSeason} />
       </div>
     </>
   )

@@ -159,7 +159,7 @@ class SeasonVersionInfo(BaseModel):
     compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
 
 
-class SeasonResponse(BaseModel):
+class SeasonSummary(BaseModel):
     id: UUID = Field(description="Unique season identifier")
     name: str = Field(description="Short name of the season")
     version: int = Field(description="Season version number")
@@ -174,40 +174,37 @@ class SeasonResponse(BaseModel):
     @classmethod
     async def from_commissioner(
         cls,
-        season_id: UUID,
+        season: Season,
         season_name: str,
-        version: int = 1,
-        canonical: bool = True,
         pools_by_name: dict[str, Pool] | None = None,
-        compat_version: str | None = None,
-    ) -> "SeasonResponse":
+    ) -> "SeasonSummary":
         if season_name not in tournament_registry.SEASONS:
             return cls(
-                id=season_id,
+                id=season.id,
                 name=season_name,
-                version=version,
-                canonical=canonical,
+                version=season.version,
+                canonical=season.canonical,
                 summary="",
-                pools=[],
+                entry_pool=None,
+                leaderboard_pool=None,
                 is_default=False,
-                compat_version=compat_version,
+                compat_version=season.compat_version,
+                pools=[],
             )
-        commissioner = await build_commissioner(
-            season_name,
-            season_id=season_id,
-        )
-        desc = commissioner.description_for_version(version)
+
+        commissioner = await build_commissioner(season_name, season_id=season.id)
+        desc = commissioner.description_for_version(season.version)
         db_pools = pools_by_name or {}
         return cls(
-            id=season_id,
+            id=season.id,
             name=season_name,
-            version=version,
-            canonical=canonical,
+            version=season.version,
+            canonical=season.canonical,
             summary=desc.summary,
             entry_pool=commissioner.entry_pool,
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
-            compat_version=compat_version,
+            compat_version=season.compat_version,
             pools=[
                 PoolInfo(
                     id=db_pools[p.name].id if p.name in db_pools else None,
@@ -218,6 +215,89 @@ class SeasonResponse(BaseModel):
                 for p in desc.pools
             ],
         )
+
+
+class SeasonDetail(SeasonSummary):
+    status: Literal["not_started", "in_progress", "complete"] = Field(
+        description="High-level tournament status inferred from season/progress state"
+    )
+    display_name: str = Field(description="Human-readable season title for UI display")
+    started_at: str | None = Field(default=None, description="ISO 8601 timestamp when the season was started")
+    tournament_type: Literal["policy", "team"] = Field(description="Tournament format")
+    entrant_count: int = Field(description="Unique policy versions that have entered the season")
+    active_entrant_count: int = Field(description="Unique non-retired policy versions still active in the season")
+    match_count: int = Field(description="Total matches created across all pools in this season")
+    stage_count: int = Field(description="Number of configured stages")
+
+    @classmethod
+    async def from_commissioner(
+        cls,
+        season: Season,
+        season_name: str,
+        counts: tuple[int, int, int],
+        pools_by_name: dict[str, Pool] | None = None,
+    ) -> "SeasonDetail":
+        commissioner = await build_commissioner(season_name, season_id=season.id)
+        desc = commissioner.description_for_version(season.version)
+        entrant_count, active_entrant_count, match_count = counts
+        tournament_type: Literal["policy", "team"] = "policy"
+        status = _infer_policy_season_status(season, match_count)
+        stage_count = len(desc.pools)
+        if isinstance(commissioner, TeamCommissionerBase):
+            tournament_type = "team"
+            progress = await commissioner.get_progress()
+            status = _infer_team_season_status(season, progress)
+            stage_count = len(progress.stage_flow)
+        db_pools = pools_by_name or {}
+        return cls(
+            id=season.id,
+            name=season_name,
+            version=season.version,
+            canonical=season.canonical,
+            summary=desc.summary,
+            entry_pool=commissioner.entry_pool,
+            leaderboard_pool=commissioner.leaderboard_pool,
+            is_default=season_name == DEFAULT_SEASON,
+            compat_version=season.compat_version,
+            pools=[
+                PoolInfo(
+                    id=db_pools[p.name].id if p.name in db_pools else None,
+                    name=p.name,
+                    description=p.description,
+                    config_id=db_pools[p.name].env_config_id if p.name in db_pools else None,
+                )
+                for p in desc.pools
+            ],
+            status=status,
+            display_name=commissioner.display_name,
+            started_at=season.started_at.isoformat() if season.started_at else None,
+            tournament_type=tournament_type,
+            entrant_count=entrant_count,
+            active_entrant_count=active_entrant_count,
+            match_count=match_count,
+            stage_count=stage_count,
+        )
+
+
+def _infer_policy_season_status(season: Season, match_count: int) -> Literal["not_started", "in_progress", "complete"]:
+    if season.disabled_at is not None:
+        return "complete"
+    if season.started_at is None and match_count == 0:
+        return "not_started"
+    return "in_progress"
+
+
+def _infer_team_season_status(
+    season: Season,
+    progress: TeamTournamentProgress,
+) -> Literal["not_started", "in_progress", "complete"]:
+    if season.disabled_at is not None:
+        return "complete"
+    if not progress.started:
+        return "not_started"
+    if progress.phase == "complete":
+        return "complete"
+    return "in_progress"
 
 
 async def _get_pools_by_name(session: AsyncSession, season_id: UUID) -> dict[str, Pool]:
@@ -408,7 +488,7 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/seasons")
     @timed_http_handler
-    async def list_seasons(_user: NoAuthRequired, session: AsyncSession = Depends(get_session)) -> list[SeasonResponse]:
+    async def list_seasons(_user: NoAuthRequired, session: AsyncSession = Depends(get_session)) -> list[SeasonSummary]:
         seasons = (
             (
                 await session.execute(
@@ -418,20 +498,10 @@ def create_tournament_router() -> APIRouter:
             .scalars()
             .all()
         )
-
-        results = []
-        for s in seasons:
-            pools_by_name = await _get_pools_by_name(session, s.id)
-            results.append(
-                await SeasonResponse.from_commissioner(
-                    s.id,
-                    s.name,
-                    s.version,
-                    s.canonical,
-                    pools_by_name,
-                    compat_version=s.compat_version,
-                )
-            )
+        results: list[SeasonSummary] = []
+        for season in seasons:
+            pools_by_name = await _get_pools_by_name(session, season.id)
+            results.append(await SeasonSummary.from_commissioner(season, season.name, pools_by_name))
         return results
 
     @router.get("/seasons/{season_name}")
@@ -441,16 +511,38 @@ def create_tournament_router() -> APIRouter:
         _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
         include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
-    ) -> SeasonResponse:
+    ) -> SeasonDetail:
         name, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+        entrant_count = (
+            await session.execute(
+                select(func.count(func.distinct(PoolPlayer.policy_version_id)))
+                .select_from(Pool)
+                .join(PoolPlayer, PoolPlayer.pool_id == Pool.id)
+                .where(Pool.season_id == season.id)
+            )
+        ).scalar_one()
+        active_entrant_count = (
+            await session.execute(
+                select(func.count(func.distinct(PoolPlayer.policy_version_id)))
+                .select_from(Pool)
+                .join(PoolPlayer, PoolPlayer.pool_id == Pool.id)
+                .where(Pool.season_id == season.id, col(PoolPlayer.retired).is_(False))
+            )
+        ).scalar_one()
+        match_count = (
+            await session.execute(
+                select(func.count(Match.id))
+                .select_from(Pool)
+                .join(Match, Match.pool_id == Pool.id)
+                .where(Pool.season_id == season.id)
+            )
+        ).scalar_one()
         pools_by_name = await _get_pools_by_name(session, season.id)
-        return await SeasonResponse.from_commissioner(
-            season.id,
+        return await SeasonDetail.from_commissioner(
+            season,
             name,
-            season.version,
-            season.canonical,
+            (int(entrant_count), int(active_entrant_count), int(match_count)),
             pools_by_name,
-            compat_version=season.compat_version,
         )
 
     @router.get("/seasons/{season_name}/pools/{pool_name}/config")

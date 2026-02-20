@@ -3,7 +3,8 @@ import type {
   MatchResponse,
   MembershipHistoryEntry,
   PolicySummary,
-  SeasonResponse,
+  SeasonDetail,
+  SeasonSummary,
   SeasonVersionInfo,
 } from "@/lib/api";
 
@@ -14,7 +15,8 @@ export type {
   MatchResponse,
   MembershipHistoryEntry,
   PolicySummary,
-  SeasonResponse,
+  SeasonDetail,
+  SeasonSummary,
   SeasonVersionInfo,
 } from "@/lib/api";
 export type { PoolMembership, PolicyVersionSummary } from "@/lib/api";
@@ -70,13 +72,19 @@ async function fetchApi(url: string, userId?: string): Promise<unknown> {
   return response.json();
 }
 
-export async function getSeasons(): Promise<SeasonResponse[]> {
-  return (await fetchApi("/tournament/seasons")) as SeasonResponse[];
+export async function getSeasons(): Promise<SeasonSummary[]> {
+  return (await fetchApi("/tournament/seasons")) as SeasonSummary[];
+}
+
+export async function getSeason(seasonName: string): Promise<SeasonDetail> {
+  return (await fetchApi(
+    `/tournament/seasons/${encodePathSegment(seasonName)}`,
+  )) as SeasonDetail;
 }
 
 export function findDefaultSeason(
-  seasons: SeasonResponse[],
-): SeasonResponse | undefined {
+  seasons: SeasonSummary[],
+): SeasonSummary | undefined {
   return seasons.find((s) => s.is_default) ?? seasons[0];
 }
 

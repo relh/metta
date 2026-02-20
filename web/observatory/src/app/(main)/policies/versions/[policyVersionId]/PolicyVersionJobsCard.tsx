@@ -44,12 +44,14 @@ export const PolicyVersionJobsCard: FC<{
     }),
     repo.getSeasons(),
   ])
+  const selectedSeason = seasons.find((s) => s.id === params.seasonId)
+  const selectedSeasonDetail = selectedSeason ? await repo.getSeason(selectedSeason.name) : null
 
   return (
     <Card title="Jobs">
       <div className="mb-4 flex flex-wrap gap-3 items-end">
         <ServerDebugDrain />
-        <JobFilters seasons={seasons} defaultPolicyVersionId={policyVersionId} />
+        <JobFilters seasons={seasons} selectedSeason={selectedSeasonDetail} defaultPolicyVersionId={policyVersionId} />
         <div>
           <div className="text-xs text-foreground-muted mb-1">Job ID</div>
           <div className="w-64">

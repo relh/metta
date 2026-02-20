@@ -26,6 +26,7 @@ class _CvcPairingV2(CvcPairingReferee):
 
 class BetaCvcCommissioner(BetaCommissioner):
     season_name = "beta-cvc"
+    display_name = "Beta CvC"
     referees = {
         "qualifying": CvcSelfPlayReferee(),
         "competition": CvcPairingReferee(),

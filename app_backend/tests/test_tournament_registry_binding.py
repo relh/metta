@@ -14,6 +14,7 @@ from metta.app_backend.tournament.referees.base import RefereeBase
 
 class _DynamicCommissioner(CommissionerBase):
     season_name = "dynamic-season"
+    display_name = "Dynamic Season"
     referees = cast(dict[str, RefereeBase], {"dynamic-pool": object()})
     leaderboard_pool = "dynamic-pool"
     entry_pool = "dynamic-pool"

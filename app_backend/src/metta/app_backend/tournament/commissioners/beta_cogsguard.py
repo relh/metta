@@ -7,6 +7,7 @@ from metta.app_backend.tournament.referees.cogsguard import (
 
 class BetaCogsguardCommissioner(BetaCommissioner):
     season_name = "beta-cogsguard"
+    display_name = "Beta CogsGuard"
     referees = {
         "qualifying": CogsguardSelfPlayReferee(),
         "competition": CogsguardPairingReferee(),

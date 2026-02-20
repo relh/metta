@@ -47,6 +47,7 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
   const showPendingState = selectedStage !== null && selectedStageStatus === 'pending'
   const showEmptyState = policies.length === 0
   const shouldRenderPlayerTable = !showPendingState && !showEmptyState
+  const teamPageSize = 200
   const stageScoreByPool = shouldRenderPlayerTable
     ? new Map(
         await Promise.all(
@@ -54,7 +55,19 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
             const stageKind = stageKindByPool.get(poolName)
             try {
               if (stageKind === 'team_eval') {
-                const teams = await repo.getSeasonStageLeaderboard(seasonName, 'team', poolName)
+                const teams: Awaited<ReturnType<typeof repo.getSeasonTeams>> = []
+                let offset = 0
+                while (true) {
+                  // Team stage leaderboard endpoint defaults to top-N results; use full team pages for ranking.
+                  const page = await repo.getSeasonTeams(seasonName, {
+                    pool_name: poolName,
+                    limit: teamPageSize,
+                    offset,
+                  })
+                  teams.push(...page)
+                  if (page.length < teamPageSize) break
+                  offset += teamPageSize
+                }
                 const totalsByPolicy = new Map<string, { sum: number; count: number }>()
                 for (const team of teams) {
                   if (team.score === null) continue
@@ -84,6 +97,20 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
         )
       )
     : new Map<string, Map<string, number>>()
+  const sortedPolicies = shouldRenderPlayerTable
+    ? [...policies].sort((a, b) => {
+        for (const poolName of [...poolNames].reverse()) {
+          const aScore = stageScoreByPool.get(poolName)?.get(a.policy.id)
+          const bScore = stageScoreByPool.get(poolName)?.get(b.policy.id)
+          if (aScore === undefined && bScore === undefined) continue
+          if (aScore === undefined) return 1
+          if (bScore === undefined) return -1
+          if (aScore !== bScore) return bScore - aScore
+        }
+        if (a.entered_at !== b.entered_at) return b.entered_at.localeCompare(a.entered_at)
+        return a.policy.id.localeCompare(b.policy.id)
+      })
+    : policies
 
   return (
     <div className="space-y-4">
@@ -117,7 +144,7 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
             })}
           </TableHeader>
           <TableBody>
-            {policies.map((policy) => {
+            {sortedPolicies.map((policy) => {
               const poolStatusMap = Object.fromEntries(policy.pools.map((p) => [p.pool_name, p]))
               return (
                 <TR key={policy.policy.id}>

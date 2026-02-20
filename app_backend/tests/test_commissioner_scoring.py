@@ -19,6 +19,7 @@ from mettagrid.config.mettagrid_config import MettaGridConfig
 
 class _TestCommissioner(CommissionerBase):
     season_name = "test-season"
+    display_name = "Test Season"
     leaderboard_pool = "test-pool"
     referees: dict[str, object] = {"test-pool": object()}
 
