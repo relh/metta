@@ -3,23 +3,62 @@ const DEFAULT_BASE_URL = 'http://127.0.0.1:8010'
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
 
+export type DashboardEpisode = {
+  id?: string
+  status?: string
+  avg_reward?: number
+  reward?: number
+  opponent_name?: string
+  team_composition?: string
+  diagnostic_tags?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardKpis = {
+  diagnostics?: string[]
+  mean_reward?: number
+  success_rate?: number
+  failure_rate?: number
+  total_episodes?: number
+  resource_efficiency_per_step?: number
+  resource_retention?: number
+  junction_control_rate?: number
+  alignment_stability?: number
+  move_efficiency?: number
+  action_success_rate?: number
+  freeze_vulnerability?: number
+  profile_aggressive?: number
+  profile_mobile_scout?: number
+  [key: string]: unknown
+}
+
+export type DashboardFailures = {
+  timeout_failures?: number
+  oom_failures?: number
+  crash_failures?: number
+  other_failures?: number
+  [key: string]: unknown
+}
+
+export type DashboardDerived = {
+  kpis?: DashboardKpis
+  failures?: DashboardFailures
+  outcome?: {
+    verdict?: string
+    evidence_sufficient?: boolean
+    reason?: string
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
 export type DashboardResponse = {
   policy?: { id?: string; name?: string; version?: number }
   season?: string
   generated_at?: string
-  episodes?: Array<Record<string, unknown>>
-  derived?: {
-    kpis?: {
-      diagnostics?: string[]
-      mean_reward?: number
-      success_rate?: number
-      failure_rate?: number
-      total_episodes?: number
-      [key: string]: unknown
-    }
-    failures?: Record<string, unknown>
-    [key: string]: unknown
-  }
+  episodes?: DashboardEpisode[]
+  derived?: DashboardDerived
+  selection?: { sampled_episode_count?: number; [key: string]: unknown }
   [key: string]: unknown
 }
 

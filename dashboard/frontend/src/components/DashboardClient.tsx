@@ -9,6 +9,9 @@ import {
   fetchDashboardAnalysis,
   fetchDashboardData,
 } from '../lib/api'
+import { SkillTreePanel } from './SkillTreePanel'
+
+type DashboardTab = 'overview' | 'eval_tree' | 'train_tree'
 
 export function DashboardClient() {
   const [policyVersionId, setPolicyVersionId] = useState('')
@@ -17,6 +20,7 @@ export function DashboardClient() {
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [analysis, setAnalysis] = useState<DashboardAnalysisResponse | null>(null)
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
   const diagnostics = useMemo(() => {
@@ -88,84 +92,111 @@ export function DashboardClient() {
 
       {data && (
         <>
-          <section className="grid two">
-            <article className="card">
-              <h2 style={{ marginTop: 0 }}>Policy</h2>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(data.policy ?? {}, null, 2)}</pre>
-            </article>
-            <article className="card">
-              <h2 style={{ marginTop: 0 }}>KPI Snapshot</h2>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                {JSON.stringify(data.derived?.kpis ?? {}, null, 2)}
-              </pre>
-            </article>
+          <section className="card tab-row">
+            <button type="button" onClick={() => setActiveTab('overview')} className={activeTab === 'overview' ? 'active-tab' : ''}>
+              Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('eval_tree')}
+              className={activeTab === 'eval_tree' ? 'active-tab' : ''}
+            >
+              Eval Tree
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('train_tree')}
+              className={activeTab === 'train_tree' ? 'active-tab' : ''}
+            >
+              Train Tree
+            </button>
           </section>
 
-          <section className="card">
-            <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
-            {diagnostics.length === 0 ? (
-              <p style={{ marginBottom: 0 }}>No diagnostics emitted.</p>
-            ) : (
-              <ul style={{ marginBottom: 0 }}>
-                {diagnostics.map((entry) => (
-                  <li key={entry}>{entry}</li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {activeTab === 'overview' && (
+            <>
+              <section className="grid two">
+                <article className="card">
+                  <h2 style={{ marginTop: 0 }}>Policy</h2>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(data.policy ?? {}, null, 2)}</pre>
+                </article>
+                <article className="card">
+                  <h2 style={{ marginTop: 0 }}>KPI Snapshot</h2>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                    {JSON.stringify(data.derived?.kpis ?? {}, null, 2)}
+                  </pre>
+                </article>
+              </section>
 
-          <section className="card">
-            <h2 style={{ marginTop: 0 }}>Episodes ({episodes.length})</h2>
-            <div style={{ overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Status</th>
-                    <th>Reward</th>
-                    <th>Opponent</th>
-                    <th>Diagnostics</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {episodes.slice(0, 40).map((episode) => {
-                    const id = String(episode.episode_id ?? episode.id ?? '')
-                    const status = String(episode.status ?? '')
-                    const reward = String(episode.avg_reward ?? episode.reward ?? '')
-                    const opponent = String(episode.opponent_name ?? '')
-                    const tags = Array.isArray(episode.diagnostic_tags)
-                      ? episode.diagnostic_tags.map((value) => String(value)).join(', ')
-                      : ''
+              <section className="card">
+                <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
+                {diagnostics.length === 0 ? (
+                  <p style={{ marginBottom: 0 }}>No diagnostics emitted.</p>
+                ) : (
+                  <ul style={{ marginBottom: 0 }}>
+                    {diagnostics.map((entry) => (
+                      <li key={entry}>{entry}</li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-                    return (
-                      <tr key={id}>
-                        <td>
-                          <code>{id}</code>
-                        </td>
-                        <td>{status}</td>
-                        <td>{reward}</td>
-                        <td>{opponent}</td>
-                        <td>{tags}</td>
+              <section className="card">
+                <h2 style={{ marginTop: 0 }}>Episodes ({episodes.length})</h2>
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Status</th>
+                        <th>Reward</th>
+                        <th>Opponent</th>
+                        <th>Diagnostics</th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                    </thead>
+                    <tbody>
+                      {episodes.slice(0, 40).map((episode) => {
+                        const id = String(episode.episode_id ?? episode.id ?? '')
+                        const status = String(episode.status ?? '')
+                        const reward = String(episode.avg_reward ?? episode.reward ?? '')
+                        const opponent = String(episode.opponent_name ?? '')
+                        const tags = Array.isArray(episode.diagnostic_tags)
+                          ? episode.diagnostic_tags.map((value) => String(value)).join(', ')
+                          : ''
 
-          {analysis && (
-            <section className="card">
-              <h2 style={{ marginTop: 0 }}>AI Analysis</h2>
-              <p style={{ marginTop: 0, whiteSpace: 'pre-wrap' }}>{analysis.analysis}</p>
-              <h3>Data sources</h3>
-              <ul style={{ marginBottom: 0 }}>
-                {analysis.data_sources.map((source) => (
-                  <li key={source}>{source}</li>
-                ))}
-              </ul>
-            </section>
+                        return (
+                          <tr key={id}>
+                            <td>
+                              <code>{id}</code>
+                            </td>
+                            <td>{status}</td>
+                            <td>{reward}</td>
+                            <td>{opponent}</td>
+                            <td>{tags}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              {analysis && (
+                <section className="card">
+                  <h2 style={{ marginTop: 0 }}>AI Analysis</h2>
+                  <p style={{ marginTop: 0, whiteSpace: 'pre-wrap' }}>{analysis.analysis}</p>
+                  <h3>Data sources</h3>
+                  <ul style={{ marginBottom: 0 }}>
+                    {analysis.data_sources.map((source) => (
+                      <li key={source}>{source}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </>
           )}
+
+          {activeTab === 'eval_tree' && <SkillTreePanel mode="eval" data={data} />}
+          {activeTab === 'train_tree' && <SkillTreePanel mode="train" data={data} />}
         </>
       )}
     </main>

@@ -25,7 +25,7 @@ uv run python -m dashboard.backend.dashboard_backend.main
 
 ### Environment
 
-- `DASHBOARD_DB_URI` (required for real data; should be read-only DB user)
+- `DASHBOARD_READONLY_DB_URI` (required runtime URI; aligned with `observatory/dashboard/readonly-db-uri`)
 - `DASHBOARD_HOST` (default `127.0.0.1`)
 - `DASHBOARD_PORT` (default `8010`)
 - `DASHBOARD_CORS_ORIGINS` (default `*`)

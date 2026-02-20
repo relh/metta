@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,6 +68,15 @@ def _write_guard(
         raise RuntimeError(f"Potentially mutating statement blocked by dashboard guard: {token.upper()}")
 
 
+def _validate_readonly_uri(uri: str) -> None:
+    parsed = urlparse(uri)
+    if parsed.username == "metta":
+        raise RuntimeError("Dashboard DB URI must not use writer username 'metta'.")
+    hostname = (parsed.hostname or "").lower()
+    if hostname and hostname not in {"localhost", "127.0.0.1"} and "-pg-ro." not in hostname:
+        raise RuntimeError("Dashboard DB URI must target the read-replica endpoint (expected '-pg-ro.' in hostname).")
+
+
 @asynccontextmanager
 async def _forced_readonly_db_session(read_only: bool = True) -> AsyncGenerator[AsyncSession, None]:
     del read_only
@@ -79,8 +89,11 @@ def configure_dashboard_db() -> None:
     if _CONFIGURED:
         return
 
+    readonly_uri = settings.DASHBOARD_READONLY_DB_URI
+    _validate_readonly_uri(readonly_uri)
+
     # Point shared app_backend query/model stack at the dashboard-specific (read-only role) URI.
-    app_config.settings.STATS_DB_URI = settings.DASHBOARD_DB_URI
+    app_config.settings.STATS_DB_URI = readonly_uri
 
     # Reset engine/session factory in case this process imported app_backend DB earlier.
     app_db._engine = None

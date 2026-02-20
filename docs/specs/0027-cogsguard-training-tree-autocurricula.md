@@ -27,10 +27,28 @@ Dashboard follow-up requested for this branch:
   - eval-centric evidence in one tab
   - training-curriculum-exists-and-works in another tab
 
-Implementation note:
+## Migration Update (2026-02-19)
 
-- The skill-tree UI moved to the standalone dashboard package (`dashboard/frontend`).
-- Observatory should act as a pointer into standalone dashboard per policy version, rather than host a duplicate UI.
+Branch integration context:
+
+- `richard-standalonedashboard` introduces a standalone package under `dashboard/`:
+  - `dashboard/backend` serves dashboard API outside `app_backend` route ownership
+  - `dashboard/frontend` is the new dashboard UI surface
+- `richard-observatory-read-replica` introduces infra-managed readonly DB URI secret for dashboard usage:
+  - secret name default: `observatory/dashboard/readonly-db-uri`
+  - intent: dashboard reads from read-replica endpoint with non-writer credentials
+
+Compatibility work added in `richard-shards`:
+
+- Keep Observatory as a pointer to standalone dashboard per policy version.
+- Port tree UI concepts into standalone frontend:
+  - add standalone `Eval Tree` and `Train Tree` tabs
+  - add standalone dendrogram + coverage matrix scaffolding
+  - include dashboard + diagnose + training node catalogs and missing-node queue
+- Align standalone backend config with readonly naming:
+  - prefer `DASHBOARD_READONLY_DB_URI`
+  - remove `DASHBOARD_DB_URI` fallback to avoid writer-URI ambiguity
+  - reject writer username (`metta`) at startup
 
 ## Problem
 
