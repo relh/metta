@@ -24,7 +24,7 @@ class CnnSharedCriticConfig(PolicyArchitecture):
     actor_hidden: int = Field(default=256)
     critic_hidden: int = Field(default=512)
 
-    pass_state_during_training: bool = False
+    pass_state_during_training: bool = True
 
     core_resnet_layers: int = 1
     core_resnet_pattern: str = "L"
