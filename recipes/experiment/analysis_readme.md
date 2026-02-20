@@ -260,13 +260,13 @@ Now that you have taken great care going through the above,
    2. Fixed params: (as discussed above) things like no attack
 3. Wait.
 4. Once the experiments have completed, analyze them by running the analysis script by running
-   `uv run ./tools/run.py experiments.analysis.compare` and fill out the necessary parameters. See the example code
-   block below. The output will print to the console. Additional reporting options are conveniently under the "Future
-   Work" section which doesn't exist. If you don't like the analysis options, the code is written such that you can
-   readily add your own methods, keeping complaints to a minimum. Params include things like summary statistic, run
+   `uv run ./tools/run.py recipes.experiment.analysis.compare` and fill out the necessary parameters. See the example
+   code block below. The output will print to the console. Additional reporting options are conveniently under the
+   "Future Work" section which doesn't exist. If you don't like the analysis options, the code is written such that you
+   can readily add your own methods, keeping complaints to a minimum. Params include things like summary statistic, run
    names in groups or paired run names (one or the other), analysis method(s) and additional parameters. Example usage:
 
-`uv run ./tools/run.py experiments.analysis.compare \ ` `summary.type=auc \ `
+`uv run ./tools/run.py recipes.experiment.analysis.compare \ ` `summary.type=auc \ `
 `summary.percent=null summary.step_min=8000000000 summary.step_max=10000000000 \ `
 `fetch.samples=None fetch.min_step=8000000000 fetch.max_step=10000000000 \ ` `fetch.keys=["overview/reward"] \ `
 `pairs='[{"control":"ppo.seed42","candidate":"not_ppo.seed42"}, {"control":"ppo.seed123","candidate":"not_ppo.seed123"},]`

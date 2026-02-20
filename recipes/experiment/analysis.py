@@ -10,10 +10,11 @@ import numpy as np
 import pandas as pd
 import scipy.stats as st  # type: ignore
 import wandb
-from metta.common.tool import Tool
-from metta.common.util.constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
 from pydantic import BaseModel, Field, model_validator
 from wandb.apis.public.runs import Run
+
+from metta.common.tool import Tool
+from metta.common.util.constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
 
 
 class RunPair(BaseModel):
@@ -62,9 +63,7 @@ class BootstrapSpec(BaseModel):
 
 class TTestSpec(BaseModel):
     enabled: bool = False
-    assumption_alpha: float = (
-        0.05  # this is for normality testing, not for the t-test itself
-    )
+    assumption_alpha: float = 0.05  # this is for normality testing, not for the t-test itself
 
 
 class PowerSpec(BaseModel):
@@ -125,9 +124,7 @@ def _fetch_series(run_id: str, metric_key: str, fetch: FetchSpec) -> _RunSeries:
         # Full scan path with step filtering
         try:
             records = list(
-                run.scan_history(
-                    keys=keys, min_step=fetch.min_step, max_step=fetch.max_step
-                )  # type: ignore[attr-defined]
+                run.scan_history(keys=keys, min_step=fetch.min_step, max_step=fetch.max_step)  # type: ignore[attr-defined]
             )
         except Exception as e:  # noqa: BLE001
             raise RuntimeError(f"Failed to scan history for run {run_id}: {e}") from e
@@ -137,11 +134,7 @@ def _fetch_series(run_id: str, metric_key: str, fetch: FetchSpec) -> _RunSeries:
             # If a sampling budget is provided together with a step window, adaptively
             # request enough global samples to obtain approximately `samples` points
             # inside the window, then uniformly downsample the window to the target.
-            if (
-                fetch.min_step is not None
-                and fetch.max_step is not None
-                and fetch.samples is not None
-            ):
+            if fetch.min_step is not None and fetch.max_step is not None and fetch.samples is not None:
                 desired = max(1, int(fetch.samples))
                 samples_n = max(desired, 2000)
                 max_samples_cap = 10_000
@@ -152,11 +145,9 @@ def _fetch_series(run_id: str, metric_key: str, fetch: FetchSpec) -> _RunSeries:
 
                 for _ in range(max_attempts):
                     df_all = run.history(samples=samples_n, keys=keys, pandas=True)  # type: ignore[assignment]
-                    if ("_step" not in df_all.columns) and (
-                        "step" not in df_all.columns
-                    ):
+                    if ("_step" not in df_all.columns) and ("step" not in df_all.columns):
                         raise ValueError(
-                            "Requested step window but no step column ('_step' or 'step') is present in fetched history."
+                            "Requested step window but no step column ('_step' or 'step') present in fetched history."
                         )
                     steps_all = _resolve_step_column(df_all)
                     lo = float(fetch.min_step)
@@ -195,9 +186,7 @@ def _fetch_series(run_id: str, metric_key: str, fetch: FetchSpec) -> _RunSeries:
                 # No window specified; regular global sampling is fine
                 df = run.history(samples=fetch.samples, keys=keys, pandas=True)  # type: ignore[assignment]
         except Exception as e:  # noqa: BLE001
-            raise RuntimeError(
-                f"Failed to fetch sampled history for run {run_id}: {e}"
-            ) from e
+            raise RuntimeError(f"Failed to fetch sampled history for run {run_id}: {e}") from e
 
     if metric_key not in df.columns:
         raise ValueError(f"Metric '{metric_key}' not found in run {run_id}")
@@ -209,9 +198,7 @@ def _fetch_series(run_id: str, metric_key: str, fetch: FetchSpec) -> _RunSeries:
     # raise value error if any values are NaN
     if np.isnan(values).any():
         raise ValueError(f"NaN values for metric '{metric_key}' in run {run_id}")
-    return _RunSeries(
-        run_id=run_id, steps=steps, values=values, has_real_step=has_real_step
-    )
+    return _RunSeries(run_id=run_id, steps=steps, values=values, has_real_step=has_real_step)
 
 
 def _reduce_summary(series: _RunSeries, summary: SummarySpec) -> float:
@@ -235,16 +222,12 @@ def _reduce_summary(series: _RunSeries, summary: SummarySpec) -> float:
     else:
         # Apply step bounds if provided; require both bounds if any is set
         if not series.has_real_step:
-            raise ValueError(
-                "summary.step_min/step_max requested but no step column ('_step' or 'step') is present"
-            )
+            raise ValueError("summary.step_min/step_max requested but no step column ('_step' or 'step') is present")
         if (s.step_min is None) and (s.step_max is None):
             steps_w = steps
             vals_w = vals
         elif (s.step_min is None) != (s.step_max is None):
-            raise ValueError(
-                "Both summary.step_min and summary.step_max must be provided together"
-            )
+            raise ValueError("Both summary.step_min and summary.step_max must be provided together")
         else:
             lo = float(s.step_min)
             hi = float(s.step_max)
@@ -253,17 +236,13 @@ def _reduce_summary(series: _RunSeries, summary: SummarySpec) -> float:
             vals_w = vals[mask]
 
     if len(steps_w) < 15:  # this is kind of arbitrary
-        raise ValueError(
-            f"Insufficient points in window for AUC (need >= 15) in run {series.run_id}"
-        )
+        raise ValueError(f"Insufficient points in window for AUC (need >= 15) in run {series.run_id}")
 
     auc = float(np.trapz(vals_w, steps_w))
     # below, we normalize by the duration of steps: this makes sense if the denominator is the same for all.
     if s.normalize_steps:
         if not series.has_real_step:
-            raise ValueError(
-                "summary.normalize_steps=True requires a real step column ('_step' or 'step')"
-            )
+            raise ValueError("summary.normalize_steps=True requires a real step column ('_step' or 'step')")
         duration = float(steps_w[-1] - steps_w[0])
         if duration <= 0:
             raise ValueError(f"Non-positive duration for window in run {series.run_id}")
@@ -350,9 +329,7 @@ def _paired_bootstrap_ci(
         # Jackknife leave-one-out means
         jack = np.array([float(np.mean(np.delete(diffs, i))) for i in range(n)])
         # CI via BCa
-        lo, hi = _mean_confidence_interval_bca(
-            boot, t_hat, alpha, jackknife_stats=jack, side=side
-        )
+        lo, hi = _mean_confidence_interval_bca(boot, t_hat, alpha, jackknife_stats=jack, side=side)
         # Bias-corrected point estimate via BCa median
         eps = 1e-12
         frac = float(np.mean(boot < t_hat))
@@ -401,9 +378,7 @@ def _unpaired_bootstrap_ci(
             jack_vals.append(float(np.mean(np.delete(candidate, j)) - np.mean(control)))
         jack = np.array(jack_vals)
         # CI via BCa
-        lo, hi = _mean_confidence_interval_bca(
-            boot, t_hat, alpha, jackknife_stats=jack, side=side
-        )
+        lo, hi = _mean_confidence_interval_bca(boot, t_hat, alpha, jackknife_stats=jack, side=side)
         # Bias-corrected point estimate via BCa median
         eps = 1e-12
         frac = float(np.mean(boot < t_hat))
@@ -435,23 +410,17 @@ def _ttest_optional(
     try:
         if paired:
             if len(control) != len(candidate):
-                raise ValueError(
-                    "paired t-test requires equal-length samples (control vs candidate)"
-                )
+                raise ValueError("paired t-test requires equal-length samples (control vs candidate)")
             diffs = candidate - control
             # Assumptions: normality on differences
             if len(diffs) < 2:
-                result["warnings"].append(
-                    "Insufficient samples for Shapiro-Wilk (n<2); skipping t-test"
-                )
+                result["warnings"].append("Insufficient samples for Shapiro-Wilk (n<2); skipping t-test")
                 return result
             w_stat, w_p = st.shapiro(diffs)
             # Compute test statistics but only report if assumptions pass
             t_stat, p_val = st.ttest_rel(candidate, control, nan_policy="raise")  # type: ignore
             if float(w_p) < assumption_alpha:
-                result["warnings"].append(
-                    f"Shapiro-Wilk normality on diffs failed (p={float(w_p):.6g})"
-                )
+                result["warnings"].append(f"Shapiro-Wilk normality on diffs failed (p={float(w_p):.6g})")
             else:
                 result["ttest"] = {"t_stat": float(t_stat), "p_value": float(p_val)}
             result["assumptions"].update(
@@ -471,9 +440,7 @@ def _ttest_optional(
             w_stat_t, w_p_t = st.shapiro(candidate)
             lev_stat, lev_p = st.levene(control, candidate, center="mean")
             # Compute Welch's t-test but only report if normality checks pass
-            t_stat, p_val = st.ttest_ind(
-                candidate, control, equal_var=False, nan_policy="raise"
-            )
+            t_stat, p_val = st.ttest_ind(candidate, control, equal_var=False, nan_policy="raise")
             violations: list[str] = []
             if float(w_p_c) < assumption_alpha:
                 violations.append(f"control normality (p={float(w_p_c):.6g})")
@@ -482,9 +449,7 @@ def _ttest_optional(
             if not violations:
                 result["ttest"] = {"t_stat": float(t_stat), "p_value": float(p_val)}
             else:
-                result["warnings"].append(
-                    "Assumption violations: " + "; ".join(violations)
-                )
+                result["warnings"].append("Assumption violations: " + "; ".join(violations))
             result["assumptions"].update(
                 {
                     "normality_control_W": float(w_stat_c),
@@ -521,16 +486,12 @@ class CompareTool(Tool):
     def _check_inputs(self) -> "CompareTool":
         if self.pairs is not None:
             if self.control_run_ids is not None or self.candidate_run_ids is not None:
-                raise ValueError(
-                    "Provide either pairs or control/candidate run lists, not both"
-                )
+                raise ValueError("Provide either pairs or control/candidate run lists, not both")
             if len(self.pairs) == 0:
                 raise ValueError("pairs cannot be empty")
         else:
             if not self.control_run_ids or not self.candidate_run_ids:
-                raise ValueError(
-                    "control_run_ids and candidate_run_ids are required for unpaired analysis"
-                )
+                raise ValueError("control_run_ids and candidate_run_ids are required for unpaired analysis")
         return self
 
     # ----------------------------------------------------------------------------------
@@ -567,24 +528,16 @@ class CompareTool(Tool):
                 diffs=diffs,
                 n_resamples=self.bootstrap.n_resamples,
                 alpha=self.bootstrap.alpha,
-                method=(
-                    "percentile" if self.bootstrap.method == "percentile" else "bca"
-                ),
+                method=("percentile" if self.bootstrap.method == "percentile" else "bca"),
                 side=self.bootstrap.side,
             )
 
             ttest_result = (
-                _ttest_optional(
-                    True, control_arr, candidate_arr, self.ttest.assumption_alpha
-                )
+                _ttest_optional(True, control_arr, candidate_arr, self.ttest.assumption_alpha)
                 if self.ttest.enabled
                 else None
             )
-            power_info = (
-                self._power_info(len(diffs), np.std(diffs, ddof=1))
-                if self.power.enabled
-                else None
-            )
+            power_info = self._power_info(len(diffs), np.std(diffs, ddof=1)) if self.power.enabled else None
 
             self._print_results(
                 paired=True,
@@ -602,9 +555,7 @@ class CompareTool(Tool):
                     path=self.output.csv_path,
                     summaries=[
                         ("paired", lbl, float(c), float(t))
-                        for lbl, c, t in zip(
-                            pair_labels, control_arr, candidate_arr, strict=False
-                        )
+                        for lbl, c, t in zip(pair_labels, control_arr, candidate_arr, strict=False)
                     ],
                     point=point,
                     ci=(ci_lo, ci_hi),
@@ -613,15 +564,11 @@ class CompareTool(Tool):
         else:
             # Unpaired analysis
             control_vals = [
-                _reduce_summary(
-                    _fetch_series(rid, self.metric_key, fetch_spec), self.summary
-                )
+                _reduce_summary(_fetch_series(rid, self.metric_key, fetch_spec), self.summary)
                 for rid in self.control_run_ids or []
             ]
             candidate_vals = [
-                _reduce_summary(
-                    _fetch_series(rid, self.metric_key, fetch_spec), self.summary
-                )
+                _reduce_summary(_fetch_series(rid, self.metric_key, fetch_spec), self.summary)
                 for rid in self.candidate_run_ids or []
             ]
 
@@ -633,29 +580,22 @@ class CompareTool(Tool):
                 candidate=candidate_arr,
                 n_resamples=self.bootstrap.n_resamples,
                 alpha=self.bootstrap.alpha,
-                method=(
-                    "percentile" if self.bootstrap.method == "percentile" else "bca"
-                ),
+                method=("percentile" if self.bootstrap.method == "percentile" else "bca"),
                 side=self.bootstrap.side,
             )
 
             ttest_result = (
-                _ttest_optional(
-                    False, control_arr, candidate_arr, self.ttest.assumption_alpha
-                )
+                _ttest_optional(False, control_arr, candidate_arr, self.ttest.assumption_alpha)
                 if self.ttest.enabled
                 else None
             )
             pooled_std = float(
                 np.sqrt(
-                    np.var(control_arr, ddof=1) / len(control_arr)
-                    + np.var(candidate_arr, ddof=1) / len(candidate_arr)
+                    np.var(control_arr, ddof=1) / len(control_arr) + np.var(candidate_arr, ddof=1) / len(candidate_arr)
                 )
             )
             power_info = (
-                self._power_info(len(control_arr) + len(candidate_arr), pooled_std)
-                if self.power.enabled
-                else None
+                self._power_info(len(control_arr) + len(candidate_arr), pooled_std) if self.power.enabled else None
             )
 
             self._print_results(
@@ -674,15 +614,11 @@ class CompareTool(Tool):
                     path=self.output.csv_path,
                     summaries=[
                         ("control", rid, float(val))
-                        for rid, val in zip(
-                            self.control_run_ids or [], control_arr, strict=False
-                        )
+                        for rid, val in zip(self.control_run_ids or [], control_arr, strict=False)
                     ]
                     + [
                         ("candidate", rid, float(val))
-                        for rid, val in zip(
-                            self.candidate_run_ids or [], candidate_arr, strict=False
-                        )
+                        for rid, val in zip(self.candidate_run_ids or [], candidate_arr, strict=False)
                     ],
                     point=point,
                     ci=(ci_lo, ci_hi),
@@ -719,17 +655,11 @@ class CompareTool(Tool):
         side = self.bootstrap.side
         print(f"  bootstrapped effect size (candidate - control): {point:.6g}")
         if side == "two-sided":
-            print(
-                f"  two-sided {1 - self.bootstrap.alpha:.0%} CI: [{ci[0]:.6g}, {ci[1]:.6g}]"
-            )
+            print(f"  two-sided {1 - self.bootstrap.alpha:.0%} CI: [{ci[0]:.6g}, {ci[1]:.6g}]")
         elif side == "greater":
-            print(
-                f"  one-sided {1 - self.bootstrap.alpha:.0%} CI (lower): [{ci[0]:.6g}, +inf)"
-            )
+            print(f"  one-sided {1 - self.bootstrap.alpha:.0%} CI (lower): [{ci[0]:.6g}, +inf)")
         else:  # side == "less"
-            print(
-                f"  one-sided {1 - self.bootstrap.alpha:.0%} CI (upper): (-inf, {ci[1]:.6g}]"
-            )
+            print(f"  one-sided {1 - self.bootstrap.alpha:.0%} CI (upper): (-inf, {ci[1]:.6g}]")
         if boot is not None:
             print("  bootstrap_samples:")
             print(f"    {boot}")
@@ -767,9 +697,7 @@ class CompareTool(Tool):
         # Rows: type,label,control?,candidate?,value
         with open(path, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(
-                ["group", "label", "value_or_control", "candidate_value_optional"]
-            )
+            w.writerow(["group", "label", "value_or_control", "candidate_value_optional"])
             for row in summaries:
                 if len(row) == 3:
                     grp, label, val = row  # type: ignore[misc]
