@@ -10,6 +10,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
+from metta.app_backend.config import DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.models.policies import Policy, PolicyVersion
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 POLICY_NAME_MAX_LENGTH = 64
+
+
+ALLOWED_EPISODE_AGENT_METRICS = set(DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST)
 
 
 def _validate_policy_name(name: str) -> str:
@@ -373,24 +377,20 @@ def create_stats_router() -> APIRouter:
             agent_policy_map_str = read_agent_policies(conn, str(episode_id))
             agent_policy_map = {agent_id: uuid.UUID(pv_id) for agent_id, pv_id in agent_policy_map_str.items()}
 
-            agent_metrics_result = read_agent_metrics(conn, str(episode_id))
+            raw_agent_metrics = read_agent_metrics(conn, str(episode_id))
+            agent_metrics_result = [
+                (agent_id, metric_name, metric_value)
+                for agent_id, metric_name, metric_value in raw_agent_metrics
+                if metric_name in ALLOWED_EPISODE_AGENT_METRICS
+            ]
 
             policy_metrics: dict[uuid.UUID, dict[str, float]] = {}
             for agent_id, metric_name, metric_value in agent_metrics_result:
-                if metric_name != "reward":
+                if agent_id not in agent_policy_map:
                     continue
-
-                pv_id = agent_policy_map.get(int(agent_id))
-                if pv_id is None:
-                    continue
-
-                if pv_id not in policy_metrics:
-                    policy_metrics[pv_id] = {}
-
-                if metric_name not in policy_metrics[pv_id]:
-                    policy_metrics[pv_id][metric_name] = 0.0
-
-                policy_metrics[pv_id][metric_name] += float(metric_value)
+                pv_id = agent_policy_map[agent_id]
+                metrics_for_policy = policy_metrics.setdefault(pv_id, {})
+                metrics_for_policy[metric_name] = metrics_for_policy.get(metric_name, 0.0) + float(metric_value)
 
             policy_agent_counts: dict[uuid.UUID, int] = {}
             for _agent_id, pv_id in agent_policy_map.items():
@@ -413,6 +413,8 @@ def create_stats_router() -> APIRouter:
                 tags=tags,
                 policy_versions=policy_versions,
                 policy_metrics=policy_metrics_list,
+                agent_policies=agent_policy_map,
+                agent_metrics=agent_metrics_result,
             )
 
             job_id_tag = dict(tags).get("job_id")

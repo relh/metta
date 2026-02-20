@@ -14,7 +14,14 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import aliased
 
 from metta.app_backend.database import get_db, with_db
-from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodePolicy, EpisodePolicyMetric, EpisodeTag
+from metta.app_backend.models.episodes import (
+    Episode,
+    EpisodeAgentMetric,
+    EpisodeJob,
+    EpisodePolicy,
+    EpisodePolicyMetric,
+    EpisodeTag,
+)
 from metta.app_backend.models.policies import PolicyVersion
 
 
@@ -44,6 +51,18 @@ class EpisodeWithTags(BaseModel):
         raise ValueError("attributes must be a dictionary")
 
 
+async def _policy_uuid_to_internal_id_map(pv_uuids: list[UUID]) -> dict[UUID, int]:
+    session = get_db()
+    stmt = select(PolicyVersion.id, PolicyVersion.internal_id).where(PolicyVersion.id.in_(pv_uuids))
+    pv_rows = (await session.execute(stmt)).all()
+    pv_uuid_to_internal: dict[UUID, int] = {row[0]: row[1] for row in pv_rows if row[1] is not None}
+    missing_pv_ids = [pv_id for pv_id in pv_uuids if pv_id not in pv_uuid_to_internal]
+    if missing_pv_ids:
+        missing_str = ", ".join(str(pv_id) for pv_id in missing_pv_ids)
+        raise ValueError(f"Missing policy_versions.internal_id for policy_version IDs: {missing_str}")
+    return pv_uuid_to_internal
+
+
 @with_db
 async def record_episode(
     id: UUID,
@@ -55,6 +74,8 @@ async def record_episode(
     tags: list[tuple[str, str]],
     policy_versions: list[tuple[UUID, int]],
     policy_metrics: list[tuple[UUID, str, float]],
+    agent_policies: dict[int, UUID] | None = None,
+    agent_metrics: list[tuple[int, str, float]] | None = None,
 ) -> UUID:
     session = get_db()
 
@@ -84,13 +105,7 @@ async def record_episode(
 
     if policy_metrics:
         pv_uuids = list({pv_id for pv_id, _, _ in policy_metrics})
-        stmt = select(PolicyVersion.id, PolicyVersion.internal_id).where(PolicyVersion.id.in_(pv_uuids))
-        pv_rows = (await session.execute(stmt)).all()
-        pv_uuid_to_internal: dict[UUID, int] = {row[0]: row[1] for row in pv_rows if row[1] is not None}
-        missing_pv_ids = [pv_id for pv_id in pv_uuids if pv_id not in pv_uuid_to_internal]
-        if missing_pv_ids:
-            missing_str = ", ".join(str(pv_id) for pv_id in missing_pv_ids)
-            raise ValueError(f"Missing policy_versions.internal_id for policy_version IDs: {missing_str}")
+        pv_uuid_to_internal = await _policy_uuid_to_internal_id_map(pv_uuids)
 
         for pv_id, metric_name, metric_value in policy_metrics:
             metric = EpisodePolicyMetric(
@@ -100,6 +115,27 @@ async def record_episode(
                 value=metric_value,
             )
             session.add(metric)
+
+    if agent_policies:
+        pv_uuids = list({pv_id for pv_id in agent_policies.values()})
+        pv_uuid_to_internal = await _policy_uuid_to_internal_id_map(pv_uuids)
+
+        agent_to_pv_internal = {agent_id: pv_uuid_to_internal[pv_id] for agent_id, pv_id in agent_policies.items()}
+
+        if agent_metrics:
+            for agent_id, metric_name, metric_value in agent_metrics:
+                if agent_id not in agent_to_pv_internal:
+                    continue
+                pv_internal_id = agent_to_pv_internal[agent_id]
+                session.add(
+                    EpisodeAgentMetric(
+                        episode_internal_id=episode.internal_id,
+                        pv_internal_id=pv_internal_id,
+                        agent_id=agent_id,
+                        metric_name=metric_name,
+                        value=metric_value,
+                    )
+                )
 
     await session.flush()
     return id

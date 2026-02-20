@@ -5067,7 +5067,10 @@ export interface operations {
   }
   get_progress_tournament_seasons__season_name__progress_get: {
     parameters: {
-      query?: never
+      query?: {
+        /** @description Include hidden season progress (for testing) */
+        include_hidden?: boolean
+      }
       header?: never
       path: {
         season_name: string
@@ -5098,7 +5101,10 @@ export interface operations {
   }
   start_season_tournament_seasons__season_name__start_post: {
     parameters: {
-      query?: never
+      query?: {
+        /** @description Include hidden seasons (for testing) */
+        include_hidden?: boolean
+      }
       header?: never
       path: {
         season_name: string
@@ -5135,6 +5141,8 @@ export interface operations {
         pool_name?: string | null
         eliminated?: boolean | null
         policy_version_id?: string | null
+        /** @description Include hidden season teams (for testing) */
+        include_hidden?: boolean
       }
       header?: never
       path: {
@@ -5166,7 +5174,10 @@ export interface operations {
   }
   get_stages_tournament_seasons__season_name__stages_get: {
     parameters: {
-      query?: never
+      query?: {
+        /** @description Include hidden season stages (for testing) */
+        include_hidden?: boolean
+      }
       header?: never
       path: {
         season_name: string

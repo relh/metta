@@ -64,6 +64,25 @@ class EpisodePolicyMetric(SQLModel, table=True):
     value: float
 
 
+class EpisodeAgentMetric(SQLModel, table=True):
+    __tablename__ = "episode_agent_metrics"  # type: ignore[assignment]
+    __table_args__ = (
+        Index("idx_episode_agent_metrics_pv_metric", "pv_internal_id", "metric_name"),
+        Index("idx_episode_agent_metrics_episode", "episode_internal_id"),
+        Index("idx_episode_agent_metrics_episode_metric", "episode_internal_id", "metric_name"),
+    )
+
+    episode_internal_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("episodes.internal_id", ondelete="CASCADE"), primary_key=True)
+    )
+    pv_internal_id: int = Field(
+        sa_column=Column(Integer, ForeignKey("policy_versions.internal_id", ondelete="CASCADE"), primary_key=True)
+    )
+    agent_id: int = Field(primary_key=True)
+    metric_name: str = Field(primary_key=True)
+    value: float
+
+
 class EpisodeTag(SQLModel, table=True):
     __tablename__ = "episode_tags"  # type: ignore[assignment]
     __table_args__ = (

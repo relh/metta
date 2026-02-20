@@ -1,6 +1,23 @@
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
+DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST: tuple[str, ...] = (
+    "reward",
+    "miner.gained",
+    "germanium.deposited",
+    "silicon.deposited",
+    "carbon.deposited",
+    "oxygen.deposited",
+    "heart.gained",
+    "scout.gained",
+    "scrambler.gained",
+    "aligner.gained",
+    "cell.visited",
+    "junction.scrambled_by_agent",
+    "junction.aligned_by_agent",
+    "deaths",
+)
+
 
 class Settings(BaseSettings):
     """FastAPI backend settings, loaded from environment variables and .env file.

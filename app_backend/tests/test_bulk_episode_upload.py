@@ -258,6 +258,7 @@ class TestBulkEpisodeUpload:
             insert_agent_policy(conn, episode_id, pv_id, agent_id)
             # Each agent gets reward of 10.0
             insert_agent_metric(conn, episode_id, agent_id, "reward", 10.0)
+            insert_agent_metric(conn, episode_id, agent_id, "miner.gained", 2.0)
 
         conn.close()
 
@@ -299,16 +300,30 @@ class TestBulkEpisodeUpload:
             assert values[0] == pytest.approx(40.0)
             assert values[1] == pytest.approx(20.0)
 
+            result = await con.execute(
+                """
+                SELECT metric_name, value
+                FROM episode_policy_metrics
+                WHERE metric_name = 'miner.gained'
+                ORDER BY value DESC
+                """
+            )
+            miner_metrics = await result.fetchall()
+            assert len(miner_metrics) == 2
+            miner_values = [m[1] for m in miner_metrics]
+            assert miner_values[0] == pytest.approx(8.0)
+            assert miner_values[1] == pytest.approx(4.0)
+
     @pytest.mark.asyncio
     @patch("metta.app_backend.routes.stats_routes.aioboto3")
-    async def test_non_reward_metrics_filtered(
+    async def test_only_allowlisted_metrics_are_persisted(
         self,
         mock_aioboto3: MagicMock,
         test_client: TestClient,
         softmax_headers: dict[str, str],
         stats_repo: str,
     ):
-        """Test that only 'reward' metrics are stored (whitelist) using presigned URL flow."""
+        """Test that only allowlisted metrics are stored using presigned URL flow."""
         # Create policy version in the database first
         pv_id = await self._create_policy_version(stats_repo)
 
@@ -327,9 +342,11 @@ class TestBulkEpisodeUpload:
             eval_task_id=None,
         )
 
-        # Add agent with multiple metrics
+        # Add agent with both allowlisted and non-allowlisted metrics.
         insert_agent_policy(conn, episode_id, pv_id_str, 0)
         insert_agent_metric(conn, episode_id, 0, "reward", 5.0)
+        insert_agent_metric(conn, episode_id, 0, "miner.gained", 2.0)
+        insert_agent_metric(conn, episode_id, 0, "deaths", 1.0)
         insert_agent_metric(conn, episode_id, 0, "steps", 100.0)
         insert_agent_metric(conn, episode_id, 0, "custom_metric", 42.0)
 
@@ -338,7 +355,7 @@ class TestBulkEpisodeUpload:
         self._setup_s3_mocks(mock_aioboto3, db_path)
         self._call_presigned_upload_flow(test_client, softmax_headers)
 
-        # Verify only reward metric is stored
+        # Verify only allowlisted metrics are stored.
         async with await AsyncConnection.connect(stats_repo, autocommit=True) as con:
             result = await con.execute(
                 """
@@ -349,7 +366,8 @@ class TestBulkEpisodeUpload:
             metrics = await result.fetchall()
             metric_names = [m[0] for m in metrics]
 
-            # Only 'reward' should be present
             assert "reward" in metric_names
+            assert "miner.gained" in metric_names
+            assert "deaths" in metric_names
             assert "steps" not in metric_names
             assert "custom_metric" not in metric_names

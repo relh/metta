@@ -39,11 +39,11 @@ from metta.app_backend.queries.episode_stats import (
 )
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.routes.docs_routes import public_api
+from metta.app_backend.tournament import registry as tournament_registry
 from metta.app_backend.tournament.commissioners.base import CommissionerBase
 from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.commissioners.teams.base import TeamCommissionerBase
 from metta.app_backend.tournament.progress import StageStats, TeamTournamentProgress
-from metta.app_backend.tournament.registry import SEASONS
 from metta.app_backend.tournament.season_resolver import get_season_versions, parse_season_ref, resolve_season
 from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
 from metta.app_backend.tournament.stage_stats import build_stage_stats_row, load_stage_stats_counts
@@ -181,7 +181,7 @@ class SeasonResponse(BaseModel):
         pools_by_name: dict[str, Pool] | None = None,
         compat_version: str | None = None,
     ) -> "SeasonResponse":
-        if season_name not in SEASONS:
+        if season_name not in tournament_registry.SEASONS:
             return cls(
                 id=season_id,
                 name=season_name,
@@ -232,7 +232,7 @@ async def _resolve_season_or_404(
     allow_hidden: bool = False,
 ) -> tuple[str, Season]:
     name, version = parse_season_ref(season_name)
-    if name not in SEASONS or (name in HIDDEN_SEASONS and not allow_hidden):
+    if name not in tournament_registry.SEASONS or (name in HIDDEN_SEASONS and not allow_hidden):
         raise HTTPException(status_code=404, detail="Season not found")
     season = await resolve_season(session, name, version)
     if not season:
@@ -929,10 +929,12 @@ def create_tournament_router() -> APIRouter:
         season_name: str,
         _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
+        include_hidden: bool = Query(default=False, description="Include hidden season progress (for testing)"),
     ) -> TeamTournamentProgress:
         _, _, commissioner = await _resolve_team_commissioner_or_400(
             session,
             season_name,
+            allow_hidden=include_hidden,
             detail="Progress not available for this season type",
         )
         return await commissioner.get_progress()
@@ -943,10 +945,12 @@ def create_tournament_router() -> APIRouter:
         season_name: str,
         _user: SoftmaxUser,
         session: AsyncSession = Depends(get_session),
+        include_hidden: bool = Query(default=False, description="Include hidden seasons (for testing)"),
     ) -> TeamTournamentProgress:
         _, season, commissioner = await _resolve_team_commissioner_or_400(
             session,
             season_name,
+            allow_hidden=include_hidden,
             detail="Only team seasons can be started",
         )
         if season.started_at is not None:
@@ -968,8 +972,9 @@ def create_tournament_router() -> APIRouter:
         pool_name: str | None = Query(default=None),
         eliminated: bool | None = Query(default=None),
         policy_version_id: UUID | None = Query(default=None),
+        include_hidden: bool = Query(default=False, description="Include hidden season teams (for testing)"),
     ) -> list[TeamSummary]:
-        _, season = await _resolve_season_or_404(session, season_name)
+        _, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
         return await _build_team_summaries(
             session,
             season_id=season.id,
@@ -986,8 +991,9 @@ def create_tournament_router() -> APIRouter:
         season_name: str,
         _user: NoAuthRequired,
         session: AsyncSession = Depends(get_session),
+        include_hidden: bool = Query(default=False, description="Include hidden season stages (for testing)"),
     ) -> list[StageStats]:
-        _, season = await _resolve_season_or_404(session, season_name)
+        _, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
         pools = (
             (await session.execute(select(Pool).where(Pool.season_id == season.id).order_by(Pool.created_at)))
             .scalars()
