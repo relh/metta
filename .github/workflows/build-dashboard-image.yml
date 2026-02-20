@@ -1,0 +1,30 @@
+name: "Build Dashboard Frontend Docker Image"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard/frontend/**"
+      - "devops/charts/dashboard/**"
+      - ".github/workflows/build-dashboard-image.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    permissions:
+      id-token: write
+      contents: read
+
+    uses: ./.github/workflows/_build-and-deploy.yml
+    secrets: inherit
+    with:
+      image_name: metta-app-frontend
+      dockerfile: dashboard/frontend/Dockerfile
+      tag_suffix: -dashboard
+      docker_build_args: |
+        NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.policy-dashboard.softmax-research.net
+      namespace: observatory
+      release: dashboard
+      chart: ./devops/charts/dashboard
+      production_helm_values: |
+        --set datadog.env=production

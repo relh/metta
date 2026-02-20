@@ -26,13 +26,13 @@ uv run python -m dashboard.backend.dashboard_backend.main
 
 ### Environment
 
-- `DASHBOARD_READONLY_DB_URI` (required runtime URI; aligned with `observatory/dashboard/readonly-db-uri`)
+- `STATS_DB_READ_ONLY_URI` (required runtime URI; aligned with `observatory/readonly-db-uri`)
 - `DASHBOARD_HOST` (default `127.0.0.1`)
 - `DASHBOARD_PORT` (default `8010`)
 - `DASHBOARD_CORS_ORIGINS` (default `*`)
 - `DASHBOARD_AUTH_SECRET` (optional)
 - `DASHBOARD_LOGIN_SERVICE_URL` (default `https://softmax.com`)
-- `DASHBOARD_DEV_AUTH_BYPASS` (default `true`, local convenience)
+- `DASHBOARD_DEV_AUTH_BYPASS` (default `true`; bypass applies only for localhost requests)
 - `ANTHROPIC_API_KEY` (optional, for analysis endpoint)
 
 ## Frontend
@@ -61,3 +61,17 @@ pnpm dev
 1. Start backend on `:8010`
 2. Start frontend on `:5174`
 3. Open `http://127.0.0.1:5174`
+
+## Production deployment
+
+- Frontend workflow: `.github/workflows/build-dashboard-image.yml`
+  - Deploys Helm chart: `devops/charts/dashboard/`
+  - Host: `https://policy-dashboard.softmax-research.net`
+- Backend workflow: `.github/workflows/deploy-dashboard-backend.yml`
+  - Deploys Helm chart: `devops/charts/dashboard-backend/`
+  - Host: `https://api.policy-dashboard.softmax-research.net`
+
+Backend requires `STATS_DB_READ_ONLY_URI`, provisioned as the `dashboard-backend-env` k8s secret from Terraform. The
+source URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (temporarily managed outside
+Terraform per `devops/tf/observatory/readonly_db.tf`), and runtime startup checks enforce non-writer + read-replica
+invariants.

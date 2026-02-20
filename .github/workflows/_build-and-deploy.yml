@@ -44,6 +44,11 @@ on:
         required: false
         type: string
         default: ""
+      docker_build_args:
+        description: "Additional Docker build args to pass through to docker-build action."
+        required: false
+        type: string
+        default: ""
       production_helm_values:
         description: "Additional Helm values for production deployment."
         required: false
@@ -126,6 +131,7 @@ jobs:
           dockerfile: ${{ inputs.dockerfile }}
           suffix: ${{ inputs.tag_suffix }}
           aws_role: ${{ vars.AWS_ROLE }}
+          build_args: ${{ inputs.docker_build_args }}
 
       - name: Configure EKS
         if: github.ref == 'refs/heads/main' || env.BUILD_PREVIEW == 'true' || env.DELETE_PREVIEW == 'true'

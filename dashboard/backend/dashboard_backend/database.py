@@ -89,7 +89,7 @@ def configure_dashboard_db() -> None:
     if _CONFIGURED:
         return
 
-    readonly_uri = settings.DASHBOARD_READONLY_DB_URI
+    readonly_uri = settings.STATS_DB_READ_ONLY_URI
     _validate_readonly_uri(readonly_uri)
 
     # Point shared app_backend query/model stack at the dashboard-specific (read-only role) URI.

@@ -10,6 +10,11 @@ Frontend for https://observatory.softmax-research.net/
 metta observatory frontend --backend [prod|local]
 ```
 
+Environment variables:
+
+- `OBSERVATORY_API_URL` (default: `http://localhost:8000`)
+- `OBSERVATORY_POLICY_DASHBOARD_URL` (default: `http://127.0.0.1:5174`)
+
 ## Production
 
 Deployed to EKS via Helm chart at `devops/charts/observatory/`.

@@ -2,6 +2,7 @@ interface Config {
   apiBaseUrl: string
   authServerUrl: string
   authToken?: string
+  policyDashboardUrl: string
   siteUrl: string
 }
 
@@ -9,6 +10,7 @@ export const config: Config = {
   apiBaseUrl: process.env.OBSERVATORY_API_URL || 'http://localhost:8000',
   authToken: process.env.DEV_AUTH_TOKEN, // set in dev mode for convenience based on ~/.metta/config.yaml token
   authServerUrl: process.env.AUTH_SERVER_URL || 'https://softmax.com/api',
+  policyDashboardUrl: process.env.OBSERVATORY_POLICY_DASHBOARD_URL || 'http://127.0.0.1:5174',
   siteUrl: process.env.SITE_URL || 'http://localhost:5173',
 }
 

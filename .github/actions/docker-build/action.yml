@@ -19,6 +19,10 @@ inputs:
   aws_role:
     description: "AWS role to assume"
     required: true
+  build_args:
+    description: "Additional Docker build args (newline-delimited KEY=VALUE entries)"
+    required: false
+    default: ""
 
 outputs:
   tag:
@@ -62,3 +66,4 @@ runs:
         labels: ${{ steps.meta.outputs.labels }}
         build-args: |
           GIT_COMMIT=${{ github.sha }}
+          ${{ inputs.build_args }}

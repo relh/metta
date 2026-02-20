@@ -50,3 +50,13 @@ resource "kubernetes_secret" "observatory_backend_env" {
     SMART_PLUGS_CONFIG_JSON = data.aws_secretsmanager_secret_version.smart_plugs_config_version.secret_string
   }
 }
+
+resource "kubernetes_secret" "dashboard_backend_env" {
+  metadata {
+    name      = "dashboard-backend-env"
+    namespace = kubernetes_namespace.observatory.metadata[0].name
+  }
+  data = {
+    STATS_DB_READ_ONLY_URI = data.aws_secretsmanager_secret_version.readonly_db_uri.secret_string
+  }
+}

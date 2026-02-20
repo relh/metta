@@ -51,6 +51,9 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           <MenuLink href="/cogames-diagnose" isActive={isDiagnoseActive}>
             Diagnose
           </MenuLink>
+          <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
+            Policy Dashboard
+          </MenuLink>
           <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
             Smart Plugs
           </MenuLink>

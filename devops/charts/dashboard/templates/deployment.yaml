@@ -5,7 +5,7 @@ metadata:
   {{- if .Values.datadog.enabled }}
   labels:
     tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
-    tags.datadoghq.com/service: "observatory-frontend"
+    tags.datadoghq.com/service: "policy-dashboard-frontend"
     tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
   {{- end }}
 spec:
@@ -19,7 +19,7 @@ spec:
         app: {{ .Release.Name }}
         {{- if .Values.datadog.enabled }}
         tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
-        tags.datadoghq.com/service: "observatory-frontend"
+        tags.datadoghq.com/service: "policy-dashboard-frontend"
         tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
         admission.datadoghq.com/enabled: "true"
         {{- end }}
@@ -31,12 +31,8 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           env:
-          - name: OBSERVATORY_API_URL
+          - name: NEXT_PUBLIC_DASHBOARD_API_BASE_URL
             value: "{{ .Values.apiUrl }}"
-          - name: OBSERVATORY_POLICY_DASHBOARD_URL
-            value: "{{ .Values.policyDashboardUrl }}"
-          - name: SITE_URL
-            value: "https://{{ .Values.host }}"
           ports:
             - containerPort: 3000
           livenessProbe:

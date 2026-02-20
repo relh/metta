@@ -1,8 +1,6 @@
-host: observatory.softmax-research.net
+host: policy-dashboard.softmax-research.net
 
-apiUrl: https://api.observatory.softmax-research.net
-
-policyDashboardUrl: https://policy-dashboard.softmax-research.net
+apiUrl: https://api.policy-dashboard.softmax-research.net
 
 image:
   registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
@@ -23,4 +21,4 @@ resources:
 
 datadog:
   enabled: true
-  env: "" # will be set by CI/CD pipeline
+  env: production # overridden by CI/CD pipeline as needed

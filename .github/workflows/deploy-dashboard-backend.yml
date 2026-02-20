@@ -1,0 +1,35 @@
+name: "Deploy Dashboard Backend"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "dashboard/backend/**"
+      - "app_backend/**"
+      - "common/**"
+      - "packages/mettagrid/**"
+      - "packages/cogames/**"
+      - "packages/cogames-agents/**"
+      - "devops/docker/Dockerfile.backend"
+      - "devops/charts/dashboard-backend/**"
+      - ".github/workflows/deploy-dashboard-backend.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build-and-deploy:
+    permissions:
+      id-token: write
+      contents: read
+
+    uses: ./.github/workflows/_build-and-deploy.yml
+    secrets: inherit
+    with:
+      image_name: metta-app-backend
+      dockerfile: ./devops/docker/Dockerfile.backend
+      tag_suffix: -dashboard-backend
+      namespace: observatory
+      release: dashboard-backend
+      chart: ./devops/charts/dashboard-backend
+      production_helm_values: |
+        --set datadog.env=production

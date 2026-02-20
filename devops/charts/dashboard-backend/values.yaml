@@ -1,0 +1,24 @@
+host: api.policy-dashboard.softmax-research.net
+
+frontendHost: policy-dashboard.softmax-research.net
+
+image:
+  registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
+  name: metta-app-backend
+  tag: "" # will be set by CI/CD pipeline
+
+secret_name: dashboard-backend-env
+
+cert_manager_issuer: letsencrypt
+
+replicaCount: 2
+
+env:
+  DASHBOARD_HOST: "0.0.0.0"
+  DASHBOARD_PORT: "8010"
+  DASHBOARD_DEV_AUTH_BYPASS: "false"
+  DASHBOARD_LOGIN_SERVICE_URL: "https://softmax.com"
+
+datadog:
+  enabled: true
+  env: production # no previews for now

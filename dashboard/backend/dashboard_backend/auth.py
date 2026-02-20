@@ -15,6 +15,11 @@ class User(BaseModel):
     is_softmax_team_member: bool = Field(default=False, alias="is_softmax_team_member")
 
 
+def _is_local_request(request: Request) -> bool:
+    hostname = (request.url.hostname or "").lower()
+    return hostname in {"localhost", "127.0.0.1", "::1"}
+
+
 def _dev_user(request: Request) -> User:
     user_id = request.headers.get("X-User-Id", "dashboard-local-user")
     user_email = request.headers.get("X-User-Email", "dashboard-local@softmax.com")
@@ -72,8 +77,6 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
                 )
 
             return None
-    except HTTPException:
-        raise
     except httpx.TransportError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -103,7 +106,7 @@ async def get_user(request: Request) -> Optional[User]:
     if user:
         return user
 
-    if settings.DASHBOARD_DEV_AUTH_BYPASS:
+    if settings.DASHBOARD_DEV_AUTH_BYPASS and _is_local_request(request):
         return _dev_user(request)
 
     return None
