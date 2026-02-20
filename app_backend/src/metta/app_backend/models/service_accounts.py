@@ -10,6 +10,9 @@ class TokenPrefixType(StrEnum):
     """
     Defines types of service accounts.
     default = SOFTMAX; which is treated as an admin service account
+
+    N.B. When adding a new prefix, ensure that it has a trailing _
+    for parsing.
     """
 
     SOFTMAX = "ssa_"

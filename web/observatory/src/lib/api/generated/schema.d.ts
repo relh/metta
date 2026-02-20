@@ -1073,6 +1073,41 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/service-accounts': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Service Accounts */
+    get: operations['list_service_accounts_service_accounts_get']
+    put?: never
+    /** Create Service Account */
+    post: operations['create_service_account_service_accounts_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/service-accounts/{service_account_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Delete Service Account */
+    delete: operations['delete_service_account_service_accounts__service_account_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/whoami': {
     parameters: {
       query?: never
@@ -2335,6 +2370,61 @@ export interface components {
        * @description Compatibility version string (e.g. '0.4')
        */
       compat_version?: string | null
+    }
+    /** ServiceAccountCreate */
+    ServiceAccountCreate: {
+      /** Name */
+      name: string
+    }
+    /** ServiceAccountCreateResponse */
+    ServiceAccountCreateResponse: {
+      /** User Id */
+      user_id: string
+      user?: components['schemas']['UserRow'] | null
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string
+      /** Name */
+      name: string
+      /** Token Preview */
+      token_preview: string
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /** Token */
+      token: string
+    }
+    /** ServiceAccountDeleteResponse */
+    ServiceAccountDeleteResponse: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string
+    }
+    /** ServiceAccountResponseBase */
+    ServiceAccountResponseBase: {
+      /** User Id */
+      user_id: string
+      user?: components['schemas']['UserRow'] | null
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string
+      /** Name */
+      name: string
+      /** Token Preview */
+      token_preview: string
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
     }
     /** SmartPlugSetRequest */
     SmartPlugSetRequest: {
@@ -4721,6 +4811,90 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['RoleLeaderboardRow'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_service_accounts_service_accounts_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ServiceAccountResponseBase'][]
+        }
+      }
+    }
+  }
+  create_service_account_service_accounts_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ServiceAccountCreate']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ServiceAccountCreateResponse']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_service_account_service_accounts__service_account_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        service_account_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ServiceAccountDeleteResponse']
         }
       }
       /** @description Validation Error */
