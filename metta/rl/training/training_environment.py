@@ -347,8 +347,4 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
 
             payload_i64 = actions_i64 + num_non_vibe_actions * (vibe_actions_i64 + 1)
             payload = payload_i64.astype(dtype_actions, copy=False)
-
-            initialized = getattr(self._vecenv, "initialized", None)
-            if initialized is False:
-                self._vecenv.initialized = True
         self._vecenv.send(payload)
