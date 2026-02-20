@@ -248,6 +248,7 @@ class TeamDbHelpersMixin:
             teams,
             matches_per_team=matches_per_team,
             get_counts=lambda team: team_counts.get(team.team_id, zero_counts),
+            max_failed_attempts=self.config.max_failed_attempts,
             limit=slots,
         )
         if not pending:

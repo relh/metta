@@ -551,6 +551,125 @@ async def test_all_teams_done_when_retries_exhausted(stats_repo: str) -> None:  
 
 
 @pytest.mark.asyncio
+async def test_schedule_team_eval_matches_uses_configured_failure_cap(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    fail_cap = 1
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-schedule-fail-cap-{uuid4().hex[:8]}"
+    commissioner.initial_config = commissioner.initial_config.model_copy(update={"max_failed_attempts": fail_cap})
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        pool = Pool(season_id=season.id, name="team-round-1")
+        session.add(pool)
+        await session.flush()
+
+        policy = Policy(name=f"teams-schedule-policy-{uuid4().hex[:8]}", user_id="test")
+        session.add(policy)
+        await session.flush()
+
+        policy_version = PolicyVersion(policy_id=policy.id, version=1)
+        session.add(policy_version)
+        await session.flush()
+
+        pool_player = PoolPlayer(pool_id=pool.id, policy_version_id=policy_version.id)
+        session.add(pool_player)
+        await session.flush()
+
+        team = Team(pool_id=pool.id)
+        session.add(team)
+        await session.flush()
+
+        for pos in range(8):
+            session.add(TeamPolicyVersion(team_id=team.id, policy_version_id=policy_version.id, position=pos))
+
+        for _ in range(fail_cap):
+            session.add(
+                Match(
+                    pool_id=pool.id,
+                    team_id=team.id,
+                    assignments=[0] * 8,
+                    status=MatchStatus.failed,
+                )
+            )
+
+        await session.commit()
+        await commissioner._load_config()
+
+        alive_teams = await commissioner._get_alive_teams(pool.id)
+        team_configs = await commissioner._build_team_configs(pool.id, alive_teams)
+        scheduled = await commissioner._schedule_team_eval_matches(season, pool, team_configs, matches_per_team=2)
+
+        completed_matches = (
+            await session.execute(
+                select(func.count())
+                .select_from(Match)
+                .where(Match.pool_id == pool.id)
+                .where(Match.status == MatchStatus.completed)
+            )
+        ).scalar_one()
+
+        assert scheduled == 0
+        assert completed_matches == 0
+
+
+@pytest.mark.asyncio
+async def test_score_stage_completes_when_team_input_pool_is_empty(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-empty-score-stage-{uuid4().hex[:8]}"
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        session.add(Pool(season_id=season.id, name="team-round-1"))
+        await session.commit()
+        await commissioner._load_config()
+
+        bindings = commissioner._stage_bindings()
+        team_binding = next(binding for binding in bindings if isinstance(binding.stage, TeamEvalStage))
+        score_binding = next(binding for binding in bindings if isinstance(binding.stage, ScoreStage))
+        team_stage = team_binding.stage
+        score_stage = score_binding.stage
+        assert isinstance(team_stage, TeamEvalStage)
+        assert isinstance(score_stage, ScoreStage)
+
+        pools = await commissioner._get_pools(season.id)
+        changed, complete = await commissioner._run_team_eval_stage(season, pools, team_binding, team_stage)
+        assert changed is True
+        assert complete is True
+
+        pools = await commissioner._get_pools(season.id)
+        changed, complete = await commissioner._run_score_stage(season, pools, score_binding, score_stage)
+        assert changed is True
+        assert complete is True
+
+        pools = await commissioner._get_pools(season.id)
+        changed, complete = await commissioner._run_score_stage(season, pools, score_binding, score_stage)
+        assert changed is False
+        assert complete is True
+
+
+@pytest.mark.asyncio
 async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str) -> None:  # noqa: ARG001
     def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
         return {}

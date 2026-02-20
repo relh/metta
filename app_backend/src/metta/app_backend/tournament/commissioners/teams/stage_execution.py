@@ -436,10 +436,12 @@ class TeamStageExecutionMixin:
 
         session = get_db()
         output_pool = pools.get(binding.output_pool)
+        created_output_pool = False
         if output_pool is None:
             output_pool = Pool(season_id=season.id, name=binding.output_pool)
             session.add(output_pool)
             await session.flush()
+            created_output_pool = True
 
         existing_scores = await self._get_pool_players(output_pool.id)
         if existing_scores:
@@ -447,7 +449,9 @@ class TeamStageExecutionMixin:
 
         teams = await self._get_teams(input_pool.id)
         if not teams:
-            return False, False
+            if created_output_pool:
+                await session.commit()
+            return created_output_pool, True
 
         policy_ids = sorted({tpv.policy_version_id for team in teams for tpv in team.policy_versions})
         for pv_id in policy_ids:
