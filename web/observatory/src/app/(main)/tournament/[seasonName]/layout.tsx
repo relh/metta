@@ -4,6 +4,7 @@ import { FC, Suspense } from 'react'
 import { AutoRefresh } from '@/components/AutoRefresh'
 import { LinkTabs, type LinkTab } from '@/components/LinkTabs'
 import { Spinner } from '@/components/Spinner'
+import { TournamentDescriptionMeta } from '@/components/tournament/TournamentDescriptionMeta'
 import type { SeasonDetail } from '@/lib/api'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getSeasonStageContext } from '@/lib/tournament/api'
@@ -58,6 +59,7 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
         </span>
         <span>Stages: {season.stage_count}</span>
         {season.started_at && <span>Started at: {formatStartedAt(season.started_at)}</span>}
+        <TournamentDescriptionMeta season={season} />
       </div>
     </div>
   )

@@ -42,6 +42,8 @@ export const StageProgress: FC<{
   }
 
   const formatCount = (count: number | null) => (count === null ? '—' : count.toLocaleString())
+  const formatMatchCount = (stage: { status: string; matchCount: number }) =>
+    stage.status === 'pending' ? '—' : stage.matchCount.toLocaleString()
 
   return (
     <div className="space-y-3 rounded-md border border-border px-3 py-2">
@@ -51,19 +53,13 @@ export const StageProgress: FC<{
             const isPending = stage.status === 'pending'
             const isSelected = selectedProgressItem?.inputPool === stage.inputPool
             const compactTitle = stage.title.split(/\s+/).slice(0, 2).join(' ')
-            const selectedRingClass = !isSelected
-              ? 'opacity-70 hover:opacity-100'
-              : stage.status === 'active'
-                ? 'opacity-100 ring-2 ring-green-300/70 shadow-none'
-                : stage.status === 'complete'
-                  ? 'opacity-100 ring-2 ring-blue-300/70 shadow-none'
-                  : 'opacity-100 ring-2 ring-foreground-muted/40 shadow-none'
+            const selectedRingClass = !isSelected ? 'opacity-70 hover:opacity-100' : 'opacity-100 shadow-none'
             const toneClass = isSelected
               ? stage.status === 'active'
-                ? 'border-green-400 bg-green-100 text-green-950 dark:border-green-300 dark:bg-green-500/25 dark:text-green-100'
+                ? 'border-2 border-border-strong bg-green-100 text-green-950 dark:bg-green-500/25 dark:text-green-100'
                 : stage.status === 'complete'
-                  ? 'border-blue-400 bg-blue-100 text-blue-950 dark:border-blue-300 dark:bg-blue-500/25 dark:text-blue-100'
-                  : 'border-border-strong bg-surface-alt text-foreground'
+                  ? 'border-2 border-border-strong bg-blue-100 text-blue-950 dark:bg-blue-500/25 dark:text-blue-100'
+                  : 'border-2 border-border-strong bg-surface-alt text-foreground'
               : stage.status === 'active'
                 ? 'border-green-900/60 bg-green-950/15 text-foreground-muted hover:border-green-700 hover:bg-green-950/25 hover:text-foreground'
                 : stage.status === 'complete'
@@ -128,8 +124,7 @@ export const StageProgress: FC<{
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground-muted">
             {selectedProgressItem.showMatchCount && (
               <span>
-                <span className="text-foreground-subtle">Matches:</span>{' '}
-                {selectedProgressItem.matchCount.toLocaleString()}
+                <span className="text-foreground-subtle">Matches:</span> {formatMatchCount(selectedProgressItem)}
               </span>
             )}
             <span>
