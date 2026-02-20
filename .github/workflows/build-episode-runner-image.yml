@@ -50,11 +50,27 @@ jobs:
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 30
     permissions:
+      actions: read
       contents: read
       packages: write
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Download cogames wheel from triggering run
+        if: ${{ github.event_name == 'workflow_run' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: cogames-dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ./.episode-runner-artifacts
+
+      - name: Stage cogames wheel in build context
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          cp ./.episode-runner-artifacts/*.whl .
+          ls -lh ./*.whl
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -77,6 +93,7 @@ jobs:
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Wait for cogames on PyPI
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           VERSION: ${{ needs.resolve-version.outputs.cogames_version }}
         run: |
