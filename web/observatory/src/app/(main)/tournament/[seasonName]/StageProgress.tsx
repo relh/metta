@@ -41,10 +41,12 @@ export const StageProgress: FC<{
     router.replace(query ? `${pathname}?${query}` : pathname)
   }
 
+  const formatCount = (count: number | null) => (count === null ? '—' : count.toLocaleString())
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-md border border-border px-3 py-2">
       <div className="overflow-x-auto pb-1">
-        <div className="flex w-max min-w-full items-start gap-0">
+        <div className="flex w-max min-w-full items-start justify-center gap-0">
           {progressItems.map((stage, idx) => {
             const isPending = stage.status === 'pending'
             const isSelected = selectedProgressItem?.inputPool === stage.inputPool
@@ -122,13 +124,29 @@ export const StageProgress: FC<{
       </div>
       {selectedProgressItem && (
         <div className="px-1">
-          <div className="text-xs text-foreground-muted">{selectedProgressItem.poolsLine}</div>
-          <div className="mt-1 text-sm text-foreground-muted">{selectedProgressItem.description}</div>
-          {selectedProgressItem.status === 'active' && (
-            <div className="mt-1 text-xs text-foreground-muted">
-              {selectedProgressItem.matchCount} matches • {selectedProgressItem.completionPct.toFixed(0)}% complete
-            </div>
-          )}
+          <div className="text-sm text-foreground-muted">{selectedProgressItem.description}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-foreground-muted">
+            {selectedProgressItem.showMatchCount && (
+              <span>
+                <span className="text-foreground-subtle">Matches:</span>{' '}
+                {selectedProgressItem.matchCount.toLocaleString()}
+              </span>
+            )}
+            <span>
+              <span className="text-foreground-subtle">{selectedProgressItem.entrantLabel}:</span>{' '}
+              {formatCount(selectedProgressItem.entrantCount)}
+            </span>
+            <span>
+              <span className="text-foreground-subtle">{selectedProgressItem.exitLabel}:</span>{' '}
+              {formatCount(selectedProgressItem.exitCount)}
+            </span>
+            {selectedProgressItem.status === 'active' && (
+              <span>
+                <span className="text-foreground-subtle">Completion:</span>{' '}
+                {selectedProgressItem.completionPct.toFixed(0)}%
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>

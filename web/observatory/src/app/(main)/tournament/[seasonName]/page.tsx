@@ -109,6 +109,7 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
           stage={leaderboardStage}
           stageKind={stageContext.selectedStageKind}
           scorePoliciesPool={stageContext.scorePoliciesPool}
+          scorePoliciesDescription={stageContext.scorePoliciesDescription}
         />
       </Card>
     )

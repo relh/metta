@@ -30,7 +30,7 @@ class PolicyEvalStage(BaseModel):
 
     @property
     def description(self) -> str:
-        desc = f"Policy eval: {self.policies_per_team}-policy teams, {self.matches_per_combo} matches per combo"
+        desc = f"{self.policies_per_team}-policy teams, {self.matches_per_combo} matches per combo"
         match self.elim:
             case ThresholdElim(min_score=ms):
                 desc += f", eliminate below {ms} score"

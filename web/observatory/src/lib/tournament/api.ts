@@ -19,6 +19,7 @@ export type SeasonStageContext = {
   selectedStage: string | null
   selectedStageKind: StageKind | null
   scorePoliciesPool: string | null
+  scorePoliciesDescription: string | null
   hasTeams: boolean
 }
 
@@ -43,7 +44,9 @@ export async function getSeasonStageContext(
   const progress = teamSeason ? await repo.getSeasonProgress(seasonName) : null
   const selectedStage = progress ? resolveSelectedStage(stages, progress.stage_flow, rawStage, progress.started) : null
   const selectedStageKind = progress && selectedStage ? stageKindForPool(progress.stage_flow, selectedStage) : null
-  const scorePoliciesPool = progress?.stage_flow.find((stage) => stage.kind === 'score_policies')?.output_pool ?? null
+  const scorePoliciesStage = progress?.stage_flow.find((stage) => stage.kind === 'score_policies') ?? null
+  const scorePoliciesPool = scorePoliciesStage?.output_pool ?? null
+  const scorePoliciesDescription = scorePoliciesStage?.description ?? null
   const hasTeams = stages.some((stage) => (stage.team_count ?? 0) > 0)
 
   return {
@@ -53,6 +56,7 @@ export async function getSeasonStageContext(
     selectedStage,
     selectedStageKind,
     scorePoliciesPool,
+    scorePoliciesDescription,
     hasTeams,
   }
 }

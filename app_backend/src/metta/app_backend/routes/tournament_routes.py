@@ -44,6 +44,7 @@ from metta.app_backend.tournament.commissioners.base import CommissionerBase
 from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.commissioners.teams.base import TeamCommissionerBase
 from metta.app_backend.tournament.progress import StageStats, TeamTournamentProgress
+from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageReferee
 from metta.app_backend.tournament.season_resolver import get_season_versions, parse_season_ref, resolve_season
 from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
 from metta.app_backend.tournament.stage_stats import build_stage_stats_row, load_stage_stats_counts
@@ -73,6 +74,12 @@ class ScorePoliciesLeaderboardEntry(BaseModel):
         )
     )
     team_appearances: int = Field(description="Number of ranked teams containing this policy")
+    team_ranks: list[int] = Field(
+        description=(
+            "Sorted 1-indexed team ranks where this policy appears in the source team pool used for "
+            "score-policies placement scoring"
+        )
+    )
 
 
 class PoolMembership(BaseModel):
@@ -396,7 +403,22 @@ async def _build_score_policies_leaderboard(
     session: AsyncSession,
     commissioner: TeamCommissionerBase,
 ) -> list[ScorePoliciesLeaderboardEntry]:
-    leaderboard = await commissioner.get_leaderboard(pool_name=commissioner.leaderboard_pool)
+    row = (
+        await session.execute(
+            select(Pool, Season.version)
+            .join(Pool.season)
+            .where(Pool.season_id == commissioner.season_id)
+            .where(Pool.name == commissioner.leaderboard_pool)
+        )
+    ).one_or_none()
+    if row is None:
+        return []
+    pool, season_version = row
+
+    score_referee = commissioner.get_referees(season_version).get(commissioner.leaderboard_pool)
+    assert isinstance(score_referee, ScoreStageReferee)
+
+    leaderboard = await score_referee.get_leaderboard_with_team_ranks(pool.id)
     if not leaderboard:
         return []
 
@@ -407,9 +429,10 @@ async def _build_score_policies_leaderboard(
             rank=i + 1,
             policy=policy_summaries.get(pv_id, PolicyVersionSummary(id=pv_id, name=None, version=None)),
             placement_score=score,
-            team_appearances=team_appearances,
+            team_appearances=len(team_ranks),
+            team_ranks=team_ranks,
         )
-        for i, (pv_id, score, team_appearances) in enumerate(leaderboard)
+        for i, (pv_id, score, team_ranks) in enumerate(leaderboard)
     ]
 
 

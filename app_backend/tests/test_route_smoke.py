@@ -258,6 +258,9 @@ class TestTeamRouteSmoke:
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
+        if data:
+            assert "team_ranks" in data[0]
+            assert isinstance(data[0]["team_ranks"], list)
 
     @pytest.mark.asyncio
     async def test_get_score_policies_leaderboard(

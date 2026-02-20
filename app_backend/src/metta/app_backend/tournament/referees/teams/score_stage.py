@@ -37,7 +37,7 @@ class ScoreStageReferee(RefereeBase):
     ) -> list[MatchRequest]:  # type: ignore[unused-arg]
         return []
 
-    async def get_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, int]]:
+    async def _get_policy_placement_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, list[int]]]:
         session = get_db()
 
         output_pool = (await session.execute(select(Pool).where(Pool.id == pool_id))).scalar_one()
@@ -80,3 +80,10 @@ class ScoreStageReferee(RefereeBase):
         leaderboard = [(pv_id, placement_scores[pv_id][0], placement_scores[pv_id][1]) for pv_id in output_policy_ids]
 
         return sorted(leaderboard, key=lambda row: row[1])
+
+    async def get_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, int]]:
+        leaderboard = await self._get_policy_placement_leaderboard(pool_id)
+        return [(pv_id, score, len(team_ranks)) for pv_id, score, team_ranks in leaderboard]
+
+    async def get_leaderboard_with_team_ranks(self, pool_id: UUID) -> list[tuple[UUID, float, list[int]]]:
+        return await self._get_policy_placement_leaderboard(pool_id)

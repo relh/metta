@@ -2152,6 +2152,11 @@ export interface components {
        * @description Number of ranked teams containing this policy
        */
       team_appearances: number
+      /**
+       * Team Ranks
+       * @description Sorted 1-indexed team ranks where this policy appears in the source team pool used for score-policies placement scoring
+       */
+      team_ranks: number[]
     }
     /** SeasonDetail */
     SeasonDetail: {

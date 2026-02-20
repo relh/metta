@@ -49,7 +49,7 @@ def compute_policy_placement_scores(
     *,
     top_k: int,
     policy_ids: Iterable[UUID] | None = None,
-) -> dict[UUID, tuple[float, int]]:
+) -> dict[UUID, tuple[float, list[int]]]:
     positions_by_policy: dict[UUID, list[int]] = defaultdict(list)
     for position, team in enumerate(ranked_teams, start=1):
         for policy_version_id in {tpv.policy_version_id for tpv in team.policy_versions}:
@@ -57,12 +57,12 @@ def compute_policy_placement_scores(
 
     target_policy_ids = list(policy_ids) if policy_ids is not None else list(positions_by_policy.keys())
     penalty_position = len(ranked_teams) + 1
-    results: dict[UUID, tuple[float, int]] = {}
+    results: dict[UUID, tuple[float, list[int]]] = {}
     for policy_version_id in target_policy_ids:
         positions = sorted(positions_by_policy.get(policy_version_id, []))
         top_positions = positions[:top_k]
         while len(top_positions) < top_k:
             top_positions.append(penalty_position)
-        results[policy_version_id] = (float(sum(top_positions)), len(positions))
+        results[policy_version_id] = (float(sum(top_positions)), positions)
 
     return results

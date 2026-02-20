@@ -38,11 +38,11 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-surface px-4 py-3">
+    <div className="space-y-2">
       <ServerDebugDrain />
       <div>
         <div className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-3xl font-bold text-foreground">{season.display_name}</h1>
+          <h1 className="m-0 text-3xl font-bold text-foreground">{season.display_name}</h1>
           <span
             className={`inline-flex items-center rounded-full border px-1.5 py-0 text-[11px] font-medium ${SEASON_STATUS_BADGE_CLASSES[season.status]}`}
           >
