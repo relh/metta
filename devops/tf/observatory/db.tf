@@ -74,3 +74,16 @@ resource "aws_db_instance" "postgres" {
   password = random_password.db.result
 
 }
+
+resource "aws_db_instance" "postgres_read_replica" {
+  identifier = "${var.eks_cluster_name}-pg-ro"
+
+  replicate_source_db = aws_db_instance.postgres.arn
+  instance_class      = var.db_instance_class
+
+  performance_insights_enabled = true
+
+  db_subnet_group_name   = aws_db_subnet_group.this.name
+  vpc_security_group_ids = [aws_security_group.db.id]
+  publicly_accessible    = false
+}

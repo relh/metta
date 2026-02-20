@@ -25,6 +25,17 @@ resource "random_password" "auth_secret" {
   special = false
 }
 
+resource "aws_secretsmanager_secret" "dashboard_readonly_db_uri" {
+  name = var.dashboard_readonly_db_uri_secret_name
+}
+
+resource "aws_secretsmanager_secret_version" "dashboard_readonly_db_uri" {
+  count = var.dashboard_readonly_db_uri == null ? 0 : 1
+
+  secret_id = aws_secretsmanager_secret.dashboard_readonly_db_uri.id
+  secret_string = var.dashboard_readonly_db_uri
+}
+
 resource "kubernetes_secret" "observatory_backend_env" {
   metadata {
     name      = "observatory-backend-env"
