@@ -57,13 +57,20 @@ const Tags: FC<{ tags: Record<string, string> }> = ({ tags }) => {
   )
 }
 
-function parseRunnerImageShort(runnerImage: string | undefined): string | null {
+function normalizeRunnerImageRef(runnerImage: string | undefined): string | null {
   if (!runnerImage) return null
-  const digestMatch = runnerImage.match(/sha256:([a-f0-9]+)/)
-  if (digestMatch) return digestMatch[1].slice(0, 12)
-  const lastColon = runnerImage.lastIndexOf(':')
-  if (lastColon === -1) return runnerImage.split('/').pop() ?? runnerImage
-  return runnerImage.slice(lastColon + 1)
+  return runnerImage.replace(/^docker-pullable:\/\//, '')
+}
+
+function parseRequestedRunnerVersion(runnerImage: string | undefined): string | null {
+  const normalized = normalizeRunnerImageRef(runnerImage)
+  if (!normalized) return null
+  const digestIndex = normalized.lastIndexOf('@')
+  if (digestIndex !== -1) return normalized.slice(digestIndex + 1)
+  const lastSlash = normalized.lastIndexOf('/')
+  const lastColon = normalized.lastIndexOf(':')
+  if (lastColon <= lastSlash) return normalized.split('/').pop() ?? normalized
+  return normalized.slice(lastColon + 1)
 }
 
 const CopyButton: FC<{ text: string; children: React.ReactNode; className?: string; title?: string }> = ({
@@ -223,11 +230,10 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const requestedRunnerImage = job.job?.episode_runner_image as string | undefined
   const actualRunnerImage = job.result?.runner_image as string | undefined
   const actualRunnerImageId = job.result?.runner_image_id as string | undefined
-  const actualRunnerImageShort = parseRunnerImageShort(actualRunnerImage)
-  const actualRunnerImageIdShort = parseRunnerImageShort(actualRunnerImageId)
+  const requestedRunnerVersion = parseRequestedRunnerVersion(requestedRunnerImage)
+  const actualRunnerVersion = normalizeRunnerImageRef(actualRunnerImageId ?? actualRunnerImage)
   const gitCommit = job.result?.git_commit as string | undefined
   const instanceType = job.result?.instance_type as string | undefined
-  const cogamesVersion = job.result?.cogames_version as string | undefined
   const lifecycleError = job.error
   const [expanded, setExpanded] = useState(false)
   const [showSpec, setShowSpec] = useState(false)
@@ -504,7 +510,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                     </CopyButton>
                   </LabelRow>
                   {gitCommit && (
-                    <LabelRow label="Runner Commit">
+                    <LabelRow label="Actual Runner Commit">
                       <a
                         href={`https://github.com/${METTA_GITHUB_ORGANIZATION}/${METTA_GITHUB_REPO}/commit/${gitCommit}`}
                         target="_blank"
@@ -520,29 +526,17 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                       <span className="font-mono text-xs">{instanceType}</span>
                     </LabelRow>
                   )}
-                  {cogamesVersion && (
-                    <LabelRow label="Runner Version">
-                      <span className="font-mono text-xs">{cogamesVersion}</span>
-                    </LabelRow>
-                  )}
-                  {requestedRunnerImage && (
-                    <LabelRow label="Requested Image">
-                      <CopyButton text={requestedRunnerImage} className="font-mono text-xs hover:text-foreground">
-                        <span>{parseRunnerImageShort(requestedRunnerImage) ?? requestedRunnerImage}</span>
+                  {requestedRunnerVersion && (
+                    <LabelRow label="Requested Runner Version">
+                      <CopyButton text={requestedRunnerVersion} className="font-mono text-xs hover:text-foreground">
+                        <span>{requestedRunnerVersion}</span>
                       </CopyButton>
                     </LabelRow>
                   )}
-                  {actualRunnerImage && (
-                    <LabelRow label="Actual Image">
-                      <CopyButton text={actualRunnerImage} className="font-mono text-xs hover:text-foreground">
-                        <span>{actualRunnerImageShort ?? actualRunnerImage}</span>
-                      </CopyButton>
-                    </LabelRow>
-                  )}
-                  {actualRunnerImageId && (
-                    <LabelRow label="Actual Image ID">
-                      <CopyButton text={actualRunnerImageId} className="font-mono text-xs hover:text-foreground">
-                        <span>{actualRunnerImageIdShort ?? actualRunnerImageId}</span>
+                  {actualRunnerVersion && (
+                    <LabelRow label="Actual Runner Version">
+                      <CopyButton text={actualRunnerVersion} className="font-mono text-xs hover:text-foreground">
+                        <span className="break-all">{actualRunnerVersion}</span>
                       </CopyButton>
                     </LabelRow>
                   )}
