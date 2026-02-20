@@ -4,9 +4,9 @@ import ast
 from typing import Any, Sequence
 from uuid import UUID
 
+from dashboard.backend.dashboard_backend.state_page.diagnostics import DashboardEpisode, compute_episode_diagnostic_tags
 from metta.app_backend.models.job_request import JobStatus
 from metta.app_backend.queries import policy_queries
-from metta.app_backend.state_page.diagnostics import DashboardEpisode, compute_episode_diagnostic_tags
 
 
 def _parse_tag_list(raw_value: Any) -> list[Any]:

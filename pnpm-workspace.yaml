@@ -3,6 +3,7 @@ packages:
   # It's important not to have `./` prefix here for turbo to work,
   # see https://github.com/vercel/turborepo/discussions/8514#discussioncomment-9786742
   - web/* # gridworks, home, observatory, softmax.com
+  - "dashboard/frontend" # standalone dashboard web app
   - "notebooks/utils/scorecard_widget" # @softmax/scorecard_widget
   - "notebooks/utils/eval_finder_widget" # @softmax/eval_finder_widget
   - "notebooks/utils/policy_selector_widget" # @softmax/policy_selector_widget

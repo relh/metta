@@ -13,26 +13,26 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     RESOURCES,
     safe_div,
 )
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     action_success_rate as kpi_action_success_rate,
 )
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     action_success_total as kpi_action_success_total,
 )
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     junction_control_rate as kpi_junction_control_rate,
 )
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     move_efficiency as kpi_move_efficiency,
 )
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     noop_rate as kpi_noop_rate,
 )
-from metta.app_backend.state_page.kpi_math import (
+from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     resource_retention as kpi_resource_retention,
 )
 
@@ -2423,7 +2423,7 @@ _CORRELATION_METRICS = [
 def _build_episode_snapshot(episode: DashboardEpisode) -> dict[str, Any]:
     metrics = episode.metrics
     return {
-        "id": episode.episode_id[:8],
+        "id": episode.episode_id,
         "opp": episode.opponent_name,
         "comp": episode.team_composition,
         "r": round(episode.reward, 2),
@@ -2637,7 +2637,7 @@ def build_analysis_summary(
 
 
 # Cache the analysis guide at import time to avoid request-time file I/O.
-_ANALYSIS_GUIDE_PATH = Path(__file__).parents[5] / "skills" / "cg.policy-dashboard" / "analysis-guide.md"
+_ANALYSIS_GUIDE_PATH = Path(__file__).parents[4] / "skills" / "cg.policy-dashboard" / "analysis-guide.md"
 _ANALYSIS_GUIDE = (
     _ANALYSIS_GUIDE_PATH.read_text()
     if _ANALYSIS_GUIDE_PATH.exists()

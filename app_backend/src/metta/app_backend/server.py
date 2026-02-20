@@ -28,7 +28,6 @@ from metta.app_backend.routes import (
     role_stats_routes,
     smart_plug_routes,
     sql_routes,
-    state_page_routes,
     stats_routes,
     sweep_routes,
     tournament_routes,
@@ -140,7 +139,6 @@ def create_app() -> fastapi.FastAPI:
     app.add_middleware(HttpMetricsMiddleware)
 
     routers = [
-        state_page_routes.create_state_page_router(),
         episode_routes.create_episode_router(),
         eval_task_routes.create_eval_task_router(),
         sql_routes.create_sql_router(),

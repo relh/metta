@@ -14,24 +14,18 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
-from metta.app_backend.anthropic import (
+from dashboard.backend.dashboard_backend.anthropic import (
     AnthropicConnectionError,
     AnthropicHTTPError,
     AnthropicResponseFormatError,
     AnthropicTimeoutError,
     request_anthropic_message,
 )
-from metta.app_backend.auth import SoftmaxUser
-from metta.app_backend.config import settings
-from metta.app_backend.database import db_session
-from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, JobType
-from metta.app_backend.models.policies import PolicyVersion
-from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
-from metta.app_backend.queries import episode_queries, policy_queries
-from metta.app_backend.replay.summarizer import parse_replay, select_replay_episodes, summarize_replay
-from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.state_page import diagnostics as claude_dashboard
-from metta.app_backend.state_page.diagnostics import (
+from dashboard.backend.dashboard_backend.auth import SoftmaxUser
+from dashboard.backend.dashboard_backend.config import settings
+from dashboard.backend.dashboard_backend.database import db_session
+from dashboard.backend.dashboard_backend.state_page import diagnostics as claude_dashboard
+from dashboard.backend.dashboard_backend.state_page.diagnostics import (
     DashboardDerived,
     DashboardEpisode,
     DashboardResponse,
@@ -53,8 +47,13 @@ from metta.app_backend.state_page.diagnostics import (
     compute_unsupported_state,
     compute_version_trend_summary,
 )
-from metta.app_backend.state_page.episode_builder import build_dashboard_episodes
-from metta.app_backend.tournament.commissioners.factory import build_commissioner
+from dashboard.backend.dashboard_backend.state_page.episode_builder import build_dashboard_episodes
+from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, JobType
+from metta.app_backend.models.policies import PolicyVersion
+from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
+from metta.app_backend.queries import episode_queries, policy_queries
+from metta.app_backend.replay.summarizer import parse_replay, select_replay_episodes, summarize_replay
+from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.tournament.registry import SEASONS
 
 logger = logging.getLogger(__name__)
@@ -72,7 +71,10 @@ class DashboardAnalysisResponse(BaseModel):
 
 
 async def _require_policy_version(policy_version_id: str) -> tuple[UUID, Any]:
-    pv_id = UUID(policy_version_id)
+    try:
+        pv_id = UUID(policy_version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid policy version id format") from exc
     pv = await policy_queries.get_policy_version_with_name(pv_id)
     if not pv:
         raise HTTPException(status_code=404, detail="Policy version not found")
@@ -209,10 +211,10 @@ async def _fetch_and_summarize_replays(episode_ids: list[str], policy_version_id
     return summaries
 
 
-def create_state_page_router() -> APIRouter:
-    router = APIRouter(prefix="/stats/policies/versions", tags=["dashboard"])
+def create_dashboard_router() -> APIRouter:
+    router = APIRouter(prefix="/dashboard/v1/policies/versions", tags=["dashboard"])
 
-    @router.post("/{policy_version_id}/dashboard-data")
+    @router.get("/{policy_version_id}/data")
     @timed_http_handler
     async def get_dashboard_data(policy_version_id: str, user: SoftmaxUser) -> DashboardResponse:
         """Compute dashboard data for a policy version."""
@@ -250,8 +252,8 @@ def create_state_page_router() -> APIRouter:
                     policy_season.name if policy_season.canonical else f"{policy_season.name}:v{policy_season.version}"
                 )
                 if policy_season.name in SEASONS:
-                    commissioner = await build_commissioner(policy_season.name, season_id=policy_season.id)
-                    leaderboard = await commissioner.get_leaderboard()
+                    commissioner = SEASONS[policy_season.name]()
+                    leaderboard = await commissioner.get_leaderboard(season_id=policy_season.id)
                     leaderboard_by_policy_id = {
                         str(lb_policy_id): (rank, score, match_count)
                         for rank, (lb_policy_id, score, match_count) in enumerate(leaderboard, start=1)
@@ -425,7 +427,7 @@ def create_state_page_router() -> APIRouter:
             ),
         )
 
-    @router.post("/{policy_version_id}/dashboard-analysis")
+    @router.post("/{policy_version_id}/analysis")
     @timed_http_handler
     async def get_dashboard_analysis(policy_version_id: str, user: SoftmaxUser) -> DashboardAnalysisResponse:
         """Run Claude AI analysis on computed dashboard data."""
