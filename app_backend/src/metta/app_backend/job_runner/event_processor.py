@@ -525,6 +525,19 @@ def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
         return RuntimeInfo()
 
 
+def _build_result_metadata(event_data: dict, core_v1: client.CoreV1Api, job_id: UUID) -> dict[str, Any]:
+    """Build metadata persisted on job results for both success and failure paths."""
+    result_data: dict[str, Any] = {}
+    runner_image, runner_image_id = _get_runner_images_from_event(event_data)
+    if runner_image:
+        result_data["runner_image"] = runner_image
+    if runner_image_id:
+        result_data["runner_image_id"] = runner_image_id
+    result_data.update(_get_node_pricing_info(event_data, core_v1))
+    result_data.update(_read_runtime_info(job_id).model_dump(exclude_none=True))
+    return result_data
+
+
 def _update_job_status(
     stats_client: StatsClient,
     job_id: UUID,
@@ -583,16 +596,7 @@ def _handle_pod_succeeded(
         return
 
     try:
-        # Capture runner image details, instance_type, and runtime_info for episode recording
-        result_data: dict[str, Any] = {}
-        runner_image, runner_image_id = _get_runner_images_from_event(event_data)
-        if runner_image:
-            result_data["runner_image"] = runner_image
-        if runner_image_id:
-            result_data["runner_image_id"] = runner_image_id
-        result_data.update(_get_node_pricing_info(event_data, core_v1))
-        runtime_info = _read_runtime_info(job_id)
-        result_data.update(runtime_info.model_dump(exclude_none=True))
+        result_data = _build_result_metadata(event_data, core_v1, job_id)
 
         job = SingleEpisodeJob.model_validate(job_request.job)
         replay_uri = copy_replay_to_public(job_id)
@@ -642,12 +646,16 @@ def _process_event(
             error = log_error if log_error else k8s_error
             error_type = _classify_error(error)
 
-            # Capture instance type and capacity type so cost can be derived
-            pricing_info = _get_node_pricing_info(event_data, core_v1)
-            fail_result = pricing_info if pricing_info else None
+            # Capture runner/runtime info for failed jobs too (parse failures happen before results upload).
+            fail_result = _build_result_metadata(event_data, core_v1, job_id)
 
             _update_job_status(
-                stats_client, job_id, JobStatus.failed, error=error, error_type=error_type, result=fail_result
+                stats_client,
+                job_id,
+                JobStatus.failed,
+                error=error,
+                error_type=error_type,
+                result=fail_result or None,
             )
 
             # Log which error source was used for debugging
