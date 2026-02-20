@@ -1,5 +1,3 @@
-from typing import Callable
-
 from metta.app_backend.tournament.commissioners.base import CommissionerBase
 from metta.app_backend.tournament.commissioners.beta import BetaCommissioner
 from metta.app_backend.tournament.commissioners.beta_cogsguard import BetaCogsguardCommissioner
@@ -7,12 +5,24 @@ from metta.app_backend.tournament.commissioners.beta_cvc import BetaCvcCommissio
 from metta.app_backend.tournament.commissioners.beta_cvc_no_clips import BetaCvcNoClipsCommissioner
 from metta.app_backend.tournament.commissioners.beta_cvc_no_clips_no_vibes import BetaCvcNoClipsNoVibesCommissioner
 from metta.app_backend.tournament.commissioners.beta_test import BetaTestCommissioner
+from metta.app_backend.tournament.commissioners.teams.beta import BetaTeamsCommissioner
+from metta.app_backend.tournament.settings import settings
 
-SEASONS: dict[str, Callable[[], CommissionerBase]] = {
-    "beta": BetaCommissioner,
-    "beta-cogsguard": BetaCogsguardCommissioner,
-    "beta-cvc": BetaCvcCommissioner,
-    "beta-cvc-no-clips": BetaCvcNoClipsCommissioner,
-    "beta-cvc-no-clips-no-vibes": BetaCvcNoClipsNoVibesCommissioner,
-    "test-season": BetaTestCommissioner,
-}
+_ENABLED_SEASON_COMMISSIONERS: list[type[CommissionerBase]] = [
+    BetaCommissioner,
+    BetaCogsguardCommissioner,
+    BetaCvcCommissioner,
+    BetaCvcNoClipsCommissioner,
+    BetaCvcNoClipsNoVibesCommissioner,
+    BetaTestCommissioner,
+    BetaTeamsCommissioner,
+]
+
+
+if settings.ENABLE_MOCK_TOURNAMENTS:
+    from metta.app_backend.tournament.commissioners.teams.mock import MockTeamsCommissioner
+
+    _ENABLED_SEASON_COMMISSIONERS.append(MockTeamsCommissioner)
+
+
+SEASONS: dict[str, type[CommissionerBase]] = {c.season_name: c for c in _ENABLED_SEASON_COMMISSIONERS}

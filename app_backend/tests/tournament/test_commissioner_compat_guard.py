@@ -34,20 +34,6 @@ def _make_season(*, compat_version: str | None = None, disabled_at=None) -> Seas
     )
 
 
-def _make_mock_session(season: Season | None):
-    mock_session = MagicMock()
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = season
-    mock_session.execute = AsyncMock(return_value=mock_result)
-    mock_session.commit = AsyncMock()
-
-    @asynccontextmanager
-    async def fake_db_session():
-        yield mock_session
-
-    return fake_db_session
-
-
 async def _run_n_iterations(
     commissioner: _StubCommissioner,
     n: int,
@@ -56,6 +42,7 @@ async def _run_n_iterations(
     server_compat: str = "0.3",
 ):
     iteration = 0
+    commissioner.season_id = season.id if season is not None else uuid4()
 
     async def fake_sleep(_):
         nonlocal iteration
@@ -66,10 +53,15 @@ async def _run_n_iterations(
     class _StopLoop(Exception):
         pass
 
+    @asynccontextmanager
+    async def fake_db_session(*_, **__):
+        yield MagicMock()
+
     with (
         patch.object(commissioner, "_ensure_season_exists", new_callable=AsyncMock),
+        patch.object(commissioner, "_resolve_target_season", new_callable=AsyncMock, return_value=season),
         patch.object(commissioner, "_run_cycle", new_callable=AsyncMock, return_value=False),
-        patch("metta.app_backend.tournament.commissioners.base.db_session", _make_mock_session(season)),
+        patch("metta.app_backend.tournament.commissioners.base.db_session", fake_db_session),
         patch("metta.app_backend.tournament.commissioners.base.asyncio.sleep", side_effect=fake_sleep) as mock_sleep,
         patch("metta.app_backend.tournament.commissioners.base.get_compat_version", return_value=server_compat),
     ):
@@ -81,7 +73,7 @@ async def _run_n_iterations(
 @pytest.mark.asyncio
 async def test_server_compat_mismatch_skips_cycle():
     """Season requires 0.4 but server has 0.3 installed — skip to avoid incompatible env configs."""
-    commissioner = _StubCommissioner()
+    commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version="0.4")
     _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_not_called()
@@ -89,7 +81,7 @@ async def test_server_compat_mismatch_skips_cycle():
 
 @pytest.mark.asyncio
 async def test_server_compat_match_runs_cycle():
-    commissioner = _StubCommissioner()
+    commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version="0.3")
     _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_called_once()
@@ -97,7 +89,7 @@ async def test_server_compat_match_runs_cycle():
 
 @pytest.mark.asyncio
 async def test_compat_none_runs_cycle():
-    commissioner = _StubCommissioner()
+    commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version=None)
     _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_called_once()

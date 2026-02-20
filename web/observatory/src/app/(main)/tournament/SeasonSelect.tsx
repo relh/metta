@@ -3,7 +3,7 @@ import { useRouter, useSelectedLayoutSegment } from 'next/navigation'
 import { FC, use, useEffect, useMemo, useState } from 'react'
 import { AppContext } from '@/app/(main)/AppContext'
 import { Select } from '@/components/Select'
-import { SeasonDetail, SeasonVersionInfo } from '@/lib/repo'
+import type { SeasonDetail, SeasonVersionInfo } from '@/lib/api'
 
 type SeasonOption = { value: string; label: string }
 type VersionOption = { value: number; label: string; canonical: boolean }

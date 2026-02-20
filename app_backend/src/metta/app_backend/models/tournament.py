@@ -55,7 +55,9 @@ class Season(SQLModel, table=True):
     canonical: bool = Field(default=False, sa_column_kwargs={"server_default": text("false")})
     disabled_at: datetime | None = Field(default=None)
     compat_version: str | None = Field(default=None)
+    started_at: datetime | None = Field(default=None)
     description: str | None = None
+    team_tournament_config: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
@@ -124,6 +126,48 @@ class PoolPlayer(SQLModel, table=True):
     membership_changes: list["MembershipChange"] = Relationship(back_populates="pool_player")
 
 
+class Team(SQLModel, table=True):
+    __tablename__ = "teams"  # type: ignore[assignment]
+    __table_args__ = (Index("idx_teams_pool_eliminated", "pool_id", "eliminated"),)
+
+    id: UUID = Field(
+        default_factory=uuid4, primary_key=True, sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
+    )
+    pool_id: UUID = Field(
+        sa_column=Column(Uuid, ForeignKey("pools.id", ondelete="CASCADE"), index=True, nullable=False)
+    )
+    eliminated: bool = Field(default=False, sa_column_kwargs={"server_default": text("false")})
+    score: float | None = None
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
+    )
+
+    pool: Pool = Relationship()
+    policy_versions: list["TeamPolicyVersion"] = Relationship(
+        back_populates="team",
+        sa_relationship_kwargs={"lazy": "selectin", "order_by": "TeamPolicyVersion.position"},
+    )
+
+
+class TeamPolicyVersion(SQLModel, table=True):
+    __tablename__ = "team_policy_versions"  # type: ignore[assignment]
+    __table_args__ = (UniqueConstraint("team_id", "position", name="team_policy_versions_team_id_position_key"),)
+
+    id: UUID = Field(
+        default_factory=uuid4, primary_key=True, sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
+    )
+    team_id: UUID = Field(
+        sa_column=Column(Uuid, ForeignKey("teams.id", ondelete="CASCADE"), index=True, nullable=False)
+    )
+    policy_version_id: UUID = Field(
+        sa_column=Column(Uuid, ForeignKey("policy_versions.id", ondelete="CASCADE"), index=True, nullable=False)
+    )
+    position: int
+
+    team: Team = Relationship(back_populates="policy_versions")
+    policy_version: PolicyVersion = Relationship()
+
+
 class Match(SQLModel, table=True):
     __tablename__ = "matches"  # type: ignore[assignment]
     __table_args__ = (
@@ -141,6 +185,10 @@ class Match(SQLModel, table=True):
     job_id: UUID | None = Field(
         default=None,
         sa_column=Column(Uuid, ForeignKey("job_requests.id", ondelete="SET NULL"), nullable=True, index=True),
+    )
+    team_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True),
     )
     assignments: list[int] = Field(sa_column=Column(ARRAY(INTEGER), nullable=False))
     status: MatchStatus = Field(

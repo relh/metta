@@ -5,41 +5,71 @@ import { PaginatedControls } from '@/components/PaginatedControls'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
+import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 import { formatRelativeTime } from '@/utils/datetime'
 
 import { MatchStatusBadge } from '../MatchStatusBadge'
+import { stageFlowLabel } from '../stageSelection'
 import { formatPolicyDisplay } from '../utils'
 import { MatchFilters } from './MatchFilters'
 import { nuqsParams } from './searchParams'
 import { matchesRoute } from './utils'
 
 const parseSearchParams = createLoader(nuqsParams)
+const MATCHES_PAGE_SIZE = 50
 
 export default async function MatchesPage(params: PageProps<'/tournament/[seasonName]/matches'>) {
   const { seasonName } = await params.params
   const repo = await getRepo()
+  const parsed = await parseSearchParams(params.searchParams)
 
-  const season = await repo.getSeason(seasonName)
-  const policies = await repo.getSeasonPolicies(seasonName)
+  const [policies, stageContext] = await Promise.all([
+    repo.getSeasonPolicies(seasonName),
+    getSeasonStageContext(repo, seasonName, parsed.stage),
+  ])
+  const selectedStage = stageContext.selectedStage
+  const selectedFlowStage = selectedStage
+    ? stageContext.progress?.stage_flow.find((stage) => stage.input_pool === selectedStage)
+    : null
+  const selectedStageTitle = selectedFlowStage ? stageFlowLabel(selectedFlowStage) : null
+  const selectedStageStatus = selectedStage ? selectedFlowStage?.status : null
+  const poolNames = selectedStage ? [selectedStage] : parsed.pool_names.length > 0 ? parsed.pool_names : undefined
 
-  const searchParams = await parseSearchParams(params.searchParams)
-
-  const MATCHES_PAGE_SIZE = 50
+  if (selectedStage && selectedStageStatus === 'pending') {
+    return (
+      <div>
+        <ServerDebugDrain />
+        <MatchFilters policies={policies} />
+        <div className="text-foreground-muted py-4">This stage has not started yet.</div>
+      </div>
+    )
+  }
 
   const filteredMatches = await repo.getSeasonMatches(seasonName, {
     limit: MATCHES_PAGE_SIZE,
-    offset: searchParams.match_page * MATCHES_PAGE_SIZE,
-    pool_names: searchParams.pool_names.length > 0 ? searchParams.pool_names : undefined,
-    policy_version_ids: searchParams.policy_version_ids.length > 0 ? searchParams.policy_version_ids : undefined,
+    offset: parsed.match_page * MATCHES_PAGE_SIZE,
+    pool_names: poolNames,
+    policy_version_ids: parsed.policy_version_ids.length > 0 ? parsed.policy_version_ids : undefined,
   })
+
+  const selectedStageStats = selectedStage ? stageContext.stages.find((stage) => stage.name === selectedStage) : null
+  const hasMatchPhase = selectedStageStats ? selectedStageStats.match_count > 0 : false
 
   return (
     <div>
       <ServerDebugDrain />
-      <MatchFilters season={season} policies={policies} />
+      <MatchFilters policies={policies} />
       {filteredMatches.length === 0 ? (
-        <div className="text-foreground-muted py-4">No matches</div>
+        selectedStage && !hasMatchPhase ? (
+          <div className="py-4">
+            <div className="text-foreground-muted">
+              No matches in this phase ({selectedStageTitle ?? selectedStage}).
+            </div>
+          </div>
+        ) : (
+          <div className="text-foreground-muted py-4">No matches</div>
+        )
       ) : (
         <Table>
           <TableHeader>
@@ -70,16 +100,21 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
                     </div>
                   </TD>
                   <TD>
-                    <StyledLink
-                      href={matchesRoute(seasonName, {
-                        ...searchParams,
-                        pool_names: [match.pool_name],
-                        match_page: 0,
-                      })}
-                      theme="muted"
-                    >
-                      {match.pool_name}
-                    </StyledLink>
+                    {selectedStage ? (
+                      <span className="text-foreground-muted">{match.pool_name}</span>
+                    ) : (
+                      <StyledLink
+                        href={matchesRoute(seasonName, {
+                          stage: parsed.stage || undefined,
+                          pool_names: [match.pool_name],
+                          policy_version_ids: parsed.policy_version_ids,
+                          match_page: 0,
+                        })}
+                        theme="muted"
+                      >
+                        {match.pool_name}
+                      </StyledLink>
+                    )}
                   </TD>
                   <TD className="text-right">
                     <div className="flex flex-col gap-1 items-end">
@@ -87,7 +122,8 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
                         <StyledLink
                           key={i}
                           href={matchesRoute(seasonName, {
-                            ...searchParams,
+                            stage: selectedStage ?? (parsed.stage || undefined),
+                            pool_names: selectedStage ? undefined : parsed.pool_names,
                             policy_version_ids: [p.policy.id],
                             match_page: 0,
                           })}
@@ -119,7 +155,9 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
           </TableBody>
         </Table>
       )}
-      <PaginatedControls paramName="match_page" isLastPage={filteredMatches.length < MATCHES_PAGE_SIZE} />
+      {filteredMatches.length > 0 && (
+        <PaginatedControls paramName="match_page" isLastPage={filteredMatches.length < MATCHES_PAGE_SIZE} />
+      )}
     </div>
   )
 }

@@ -11,7 +11,9 @@ from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, Pool, PoolPlayer, Season
 from metta.app_backend.tournament.commissioners.base import CommissionerBase, MembershipChangeRequest
+from metta.app_backend.tournament.commissioners.teams.config import GameEnvGenerator, PolicyEvalStage
 from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.teams.policy_stage import MockPolicyStageReferee
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
@@ -42,7 +44,7 @@ class _TestReferee(RefereeBase):
 
 @pytest.mark.asyncio
 async def test_sync_match_scores_uses_episode_policy_num_agents(stats_repo: str) -> None:
-    commissioner = _TestCommissioner()
+    commissioner = _TestCommissioner(season_id=uuid4())
 
     episode_id = uuid4()
 
@@ -50,6 +52,7 @@ async def test_sync_match_scores_uses_episode_policy_num_agents(stats_repo: str)
         season = Season(name=commissioner.season_name, canonical=True)
         session.add(season)
         await session.flush()
+        commissioner.season_id = season.id
 
         pool = Pool(season_id=season.id, name=commissioner.leaderboard_pool)
         session.add(pool)
@@ -318,3 +321,78 @@ async def test_leaderboard_weighting_uses_episode_policy_num_agents(stats_repo: 
     # Policy A weighted score:
     # (4.5 * 2/3 + 0.0 * 1/3) / (2/3 + 1/3) => 3.0.
     assert scores_by_pv[pv_a.id] == pytest.approx(3.0)
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_uses_assignments_when_episode_counts_missing(stats_repo: str) -> None:
+    referee = MockPolicyStageReferee(
+        stage=PolicyEvalStage(policies_per_team=1, matches_per_combo=1),
+        game=GameEnvGenerator(num_agents=8),
+    )
+    pool_id: UUID
+    pv_a_id: UUID
+    pv_b_id: UUID
+
+    async with db_session() as session:
+        season = Season(name=f"leaderboard-no-episode-{uuid4()}", canonical=True)
+        session.add(season)
+        await session.flush()
+
+        pool = Pool(season_id=season.id, name="leaderboard-pool")
+        session.add(pool)
+        await session.flush()
+
+        policy_a = Policy(name=f"policy-a-{uuid4()}", user_id="test-user")
+        policy_b = Policy(name=f"policy-b-{uuid4()}", user_id="test-user")
+        session.add(policy_a)
+        session.add(policy_b)
+        await session.flush()
+
+        pv_a = PolicyVersion(policy_id=policy_a.id, version=1)
+        pv_b = PolicyVersion(policy_id=policy_b.id, version=1)
+        session.add(pv_a)
+        session.add(pv_b)
+        await session.flush()
+        pv_a_id = pv_a.id
+        pv_b_id = pv_b.id
+
+        pool_player_a = PoolPlayer(pool_id=pool.id, policy_version_id=pv_a.id)
+        pool_player_b = PoolPlayer(pool_id=pool.id, policy_version_id=pv_b.id)
+        session.add(pool_player_a)
+        session.add(pool_player_b)
+        await session.flush()
+
+        # No job_id / episode_id here: this matches mock tournament matches.
+        match_1 = Match(
+            pool_id=pool.id,
+            assignments=[0, 0, 0, 1],
+            status=MatchStatus.completed,
+        )
+        session.add(match_1)
+        await session.flush()
+        session.add(MatchPlayer(match_id=match_1.id, pool_player_id=pool_player_a.id, policy_index=0, score=1.0))
+        session.add(MatchPlayer(match_id=match_1.id, pool_player_id=pool_player_b.id, policy_index=1, score=0.0))
+
+        match_2 = Match(
+            pool_id=pool.id,
+            assignments=[0, 1, 1, 1],
+            status=MatchStatus.completed,
+        )
+        session.add(match_2)
+        await session.flush()
+        session.add(MatchPlayer(match_id=match_2.id, pool_player_id=pool_player_a.id, policy_index=0, score=0.0))
+        session.add(MatchPlayer(match_id=match_2.id, pool_player_id=pool_player_b.id, policy_index=1, score=0.5))
+        pool_id = pool.id
+
+    async with db_session():
+        leaderboard = await referee.get_leaderboard(pool_id)
+
+    scores_by_pv = {pv_id: score for pv_id, score, _ in leaderboard}
+    matches_by_pv = {pv_id: match_count for pv_id, _, match_count in leaderboard}
+
+    # Policy A: 1.0 * (3/4) + 0.0 * (1/4) = 0.75
+    assert scores_by_pv[pv_a_id] == pytest.approx(0.75)
+    # Policy B: 0.0 * (1/4) + 0.5 * (3/4) = 0.375
+    assert scores_by_pv[pv_b_id] == pytest.approx(0.375)
+    assert matches_by_pv[pv_a_id] == 2
+    assert matches_by_pv[pv_b_id] == 2

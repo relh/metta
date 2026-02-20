@@ -1,5 +1,11 @@
 from metta.app_backend.models.tournament import PoolPlayer
-from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.base import (
+    EpisodeTags,
+    MatchCountEntry,
+    MatchCounts,
+    MatchRequest,
+    RefereeBase,
+)
 from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
@@ -19,29 +25,28 @@ class SelfPlayRefereeBase(RefereeBase):
     ) -> list[MatchRequest]:
         assignments = (0,) * self.num_agents
         requests: list[MatchRequest] = []
+        zero_counts = MatchCountEntry.zero()
         for player in players:
             key = ((player.id,), assignments)
-            completed, failed, in_progress = match_counts.get(key, (0, 0, 0))
+            counts = match_counts.get(key, zero_counts)
 
-            if failed >= MAX_FAILED_ATTEMPTS:
+            if counts.failed >= MAX_FAILED_ATTEMPTS:
                 continue
-            if in_progress > 0:
+            if counts.in_progress > 0:
                 continue
 
             seed = 42
-            needed = self.matches_per_player - completed
-            episode_tags = {"match_type": "self_play"}
-            if self.game_tag:
-                episode_tags["game"] = self.game_tag
+            needed = self.matches_per_player - counts.completed
+            tags = EpisodeTags(match_type="self_play", game=self.game_tag)
 
             for match_i in range(needed):
                 requests.append(
                     MatchRequest(
                         pool_player_ids=[player.id],
                         assignments=[0] * self.num_agents,
-                        env=self.make_env(seed + completed + match_i),
+                        env=self.make_env(seed + counts.completed + match_i),
                         seed=seed,
-                        episode_tags=episode_tags,
+                        episode_tags=tags,
                     )
                 )
                 if limit > 0 and len(requests) >= limit:

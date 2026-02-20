@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from typing import NamedTuple
 from uuid import UUID
 
 from metta_alo.scoring import Scorer, WeightedScorer
@@ -10,18 +11,41 @@ from sqlmodel import col, select
 from metta.app_backend.models.episodes import EpisodePolicy
 from metta.app_backend.models.job_request import JobRequest
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
+from metta.app_backend.tournament.referees.leaderboard_rows import group_match_rows
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
+# -- Match counts --
+
+
+class MatchCountEntry(NamedTuple):
+    completed: int
+    failed: int
+    in_progress: int
+
+    @classmethod
+    def zero(cls) -> "MatchCountEntry":
+        return cls(completed=0, failed=0, in_progress=0)
+
+
 MatchCountKey = tuple[tuple[UUID, ...], tuple[int, ...]]
-MatchCounts = dict[MatchCountKey, tuple[int, int, int]]
+MatchCounts = dict[MatchCountKey, MatchCountEntry]
+
+
+class EpisodeTags(BaseModel):
+    match_type: str
+    team_size: int | None = None
+    team_id: UUID | None = None
+    game: str | None = None
+    assignments: str | None = None
 
 
 class MatchRequest(BaseModel):
     pool_player_ids: list[UUID]
     assignments: list[int]
     env: MettaGridConfig
-    episode_tags: dict[str, str] = {}
+    episode_tags: EpisodeTags
     seed: int
+    team_id: UUID | None = None
 
 
 class ScoredMatchData(BaseModel):
@@ -30,7 +54,7 @@ class ScoredMatchData(BaseModel):
     assignments: list[int]
     policy_version_ids: list[UUID]
     policy_agent_counts: dict[UUID, int]
-    episode_tags: dict[str, str] = {}
+    episode_tags: EpisodeTags | None = None
 
 
 class RefereeBase(ABC):
@@ -81,23 +105,10 @@ class RefereeBase(ABC):
         if not rows:
             return []
 
-        # Group flat rows by match_id
-        match_data: dict[UUID, dict] = {}
-        for row in rows:
-            mid = row.match_id
-            if mid not in match_data:
-                match_data[mid] = {
-                    "assignments": row.assignments,
-                    "episode_id": row.episode_id,
-                    "players": [],
-                }
-            match_data[mid]["players"].append((row.policy_index, row.score, row.policy_version_id))
+        match_data = group_match_rows(rows, include_episode_id=True)
 
         # Collect episode IDs for agent count lookup
-        episode_ids: list[UUID] = []
-        for md in match_data.values():
-            if md["episode_id"]:
-                episode_ids.append(UUID(md["episode_id"]))
+        episode_ids = [md.episode_id for md in match_data.values() if md.episode_id is not None]
 
         # Fetch agent counts — query EpisodePolicy directly, no need to join Episode table
         agent_counts_by_episode: dict[UUID, dict[UUID, int]] = defaultdict(dict)
@@ -118,17 +129,18 @@ class RefereeBase(ABC):
         scored_matches: list[ScoredMatchData] = []
 
         for mid, md in match_data.items():
-            if not md["players"] or any(score is None for _, score, _ in md["players"]):
+            if not md.players or any(score is None for _, score, _ in md.players):
                 continue
 
-            episode_id = UUID(md["episode_id"])
-            episode_agent_counts = agent_counts_by_episode.get(episode_id)
+            if md.episode_id is None:
+                continue
+            episode_agent_counts = agent_counts_by_episode.get(md.episode_id)
             if not episode_agent_counts:
                 continue
 
             policy_scores: dict[UUID, float] = {}
             policy_version_ids: list[UUID] = []
-            for policy_index, score, pv_id in sorted(md["players"], key=lambda x: x[0]):
+            for policy_index, score, pv_id in sorted(md.players, key=lambda x: x[0]):
                 policy_scores[pv_id] = score
                 if policy_index >= len(policy_version_ids):
                     policy_version_ids.append(pv_id)
@@ -139,7 +151,7 @@ class RefereeBase(ABC):
                 ScoredMatchData(
                     match_id=mid,
                     policy_scores=policy_scores,
-                    assignments=md["assignments"],
+                    assignments=md.assignments,
                     policy_version_ids=policy_version_ids,
                     policy_agent_counts=episode_agent_counts,
                 )

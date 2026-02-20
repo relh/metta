@@ -1,15 +1,23 @@
 import { FC, Suspense } from 'react'
+import { createLoader, parseAsString } from 'nuqs/server'
+import { redirect } from 'next/navigation'
 
 import { Card } from '@/components/Card'
 import { Spinner } from '@/components/Spinner'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 
 import { matchesRoute } from './matches/utils'
+import { StageLeaderboard } from './StageLeaderboard'
+import { StartTournamentButton } from './StartTournamentButton'
 import { formatPolicyDisplay } from './utils'
 
-const LeaderboardContent: FC<{ seasonName: string }> = async ({ seasonName }) => {
+const nuqsParams = { stage: parseAsString, view: parseAsString }
+const parseSearchParams = createLoader(nuqsParams)
+
+const FlatLeaderboard: FC<{ seasonName: string }> = async ({ seasonName }) => {
   const repo = await getRepo()
   const leaderboard = await repo.getSeasonLeaderboard(seasonName)
   if (leaderboard.length === 0) {
@@ -51,8 +59,60 @@ const LeaderboardContent: FC<{ seasonName: string }> = async ({ seasonName }) =>
   )
 }
 
-export default async function SeasonPage({ params }: PageProps<'/tournament/[seasonName]'>) {
+export default async function SeasonPage({ params, searchParams }: PageProps<'/tournament/[seasonName]'>) {
   const { seasonName } = await params
+  const parsed = await parseSearchParams(searchParams)
+  const repo = await getRepo()
+  const stageContext = await getSeasonStageContext(repo, seasonName, parsed.stage)
+
+  if (stageContext.teamSeason) {
+    const progress = stageContext.progress
+
+    if (progress && !progress.started && parsed.view !== 'leaderboard') {
+      const nextParams = new URLSearchParams()
+      if (parsed.stage) nextParams.set('stage', parsed.stage)
+      const query = nextParams.toString()
+      redirect(query ? `/tournament/${seasonName}/players?${query}` : `/tournament/${seasonName}/players`)
+    }
+
+    if (!progress || !progress.started) {
+      const policyCount = stageContext.stages[0]?.policy_count ?? 0
+      return (
+        <Card title="Tournament">
+          <StartTournamentButton seasonName={seasonName} policyCount={policyCount} />
+        </Card>
+      )
+    }
+
+    const leaderboardStage =
+      stageContext.selectedStage ?? stageContext.progress?.stage_flow[0]?.input_pool ?? stageContext.stages[0]?.name
+    if (!leaderboardStage) {
+      return (
+        <Card title="Leaderboard">
+          <div className="text-foreground-muted text-sm">No stages configured.</div>
+        </Card>
+      )
+    }
+    const selectedFlowStage = progress.stage_flow.find((stage) => stage.input_pool === leaderboardStage)
+    if (selectedFlowStage?.status === 'pending') {
+      return (
+        <Card title="Leaderboard">
+          <div className="text-foreground-muted py-4 text-center">This stage has not started yet.</div>
+        </Card>
+      )
+    }
+
+    return (
+      <Card title="Leaderboard">
+        <StageLeaderboard
+          seasonName={seasonName}
+          stage={leaderboardStage}
+          stageKind={stageContext.selectedStageKind}
+          scorePoliciesPool={stageContext.scorePoliciesPool}
+        />
+      </Card>
+    )
+  }
 
   return (
     <Card title="Leaderboard">
@@ -74,7 +134,7 @@ export default async function SeasonPage({ params }: PageProps<'/tournament/[sea
               </TR>
             }
           >
-            <LeaderboardContent seasonName={seasonName} />
+            <FlatLeaderboard seasonName={seasonName} />
           </Suspense>
         </TableBody>
       </Table>

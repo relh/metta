@@ -54,6 +54,7 @@ from metta.app_backend.state_page.diagnostics import (
     compute_version_trend_summary,
 )
 from metta.app_backend.state_page.episode_builder import build_dashboard_episodes
+from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.registry import SEASONS
 
 logger = logging.getLogger(__name__)
@@ -249,8 +250,8 @@ def create_state_page_router() -> APIRouter:
                     policy_season.name if policy_season.canonical else f"{policy_season.name}:v{policy_season.version}"
                 )
                 if policy_season.name in SEASONS:
-                    commissioner = SEASONS[policy_season.name]()
-                    leaderboard = await commissioner.get_leaderboard(season_id=policy_season.id)
+                    commissioner = await build_commissioner(policy_season.name, season_id=policy_season.id)
+                    leaderboard = await commissioner.get_leaderboard()
                     leaderboard_by_policy_id = {
                         str(lb_policy_id): (rank, score, match_count)
                         for rank, (lb_policy_id, score, match_count) in enumerate(leaderboard, start=1)

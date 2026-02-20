@@ -8,7 +8,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID
 
 from metta_alo.scoring import compute_average_scores_per_agent
@@ -39,8 +39,7 @@ from metta.app_backend.models.tournament import (
     PoolPlayer,
     Season,
 )
-from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
-from metta.app_backend.tournament.season_resolver import resolve_season
+from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchCounts, MatchRequest, RefereeBase
 from metta.app_backend.tournament.settings import (
     MAX_OUTSTANDING_MATCHES,
     POLL_INTERVAL_FAST_SECONDS,
@@ -69,7 +68,7 @@ def _rss_mb() -> str:
 class MembershipChangeRequest(BaseModel):
     pool_name: str
     policy_version_id: UUID
-    action: Literal["add", "remove"]
+    action: MembershipAction
     notes: str | None = None
 
 
@@ -88,10 +87,15 @@ class CommissionerBase(ABC):
     referees: dict[str, RefereeBase]
     leaderboard_pool: str
     entry_pool: str
+    # If False, season roll creates only the entry pool in the new version.
+    roll_copy_existing_pools: bool = True
     summary: str = ""
     # Used only when creating the season. After creation, the DB value is
     # authoritative and must be bumped manually (e.g. via admin API or SQL).
     initial_compat_version: str | None = None
+
+    def __init__(self, season_id: UUID) -> None:
+        self.season_id: UUID = season_id
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -120,6 +124,14 @@ class CommissionerBase(ABC):
     def get_referees(self, season_version: int) -> dict[str, RefereeBase]:  # type: ignore[unused-parameter]
         return self.referees
 
+    @classmethod
+    def get_initial_season_fields(cls) -> dict[str, Any]:
+        return {}
+
+    async def _resolve_target_season(self) -> Season | None:
+        db = get_db()
+        return (await db.execute(select(Season).where(Season.id == self.season_id))).scalar_one_or_none()
+
     @abstractmethod
     def get_new_submission_membership_changes(self, policy_version_id: UUID) -> list[MembershipChangeRequest]:
         pass
@@ -135,13 +147,10 @@ class CommissionerBase(ABC):
             f"(initial_compat={self.initial_compat_version}, rss={_rss_mb()})"
         )
         while True:
-            async with db_session() as session:
-                season = (
-                    await session.execute(select(Season).filter_by(name=self.season_name, canonical=True))
-                ).scalar_one_or_none()
+            async with db_session():
+                season = await self._resolve_target_season()
                 if not season:
-                    logger.info(f"Canonical season '{self.season_name}' no longer exists, reloading")
-                    await self._ensure_season_exists()
+                    raise ValueError(f"Bound season '{self.season_id}' no longer exists")
                 elif season.disabled_at is not None:
                     logger.info(f"Season '{self.season_name}' is disabled, sleeping")
                     await asyncio.sleep(POLL_INTERVAL_SECONDS * 100)
@@ -167,13 +176,9 @@ class CommissionerBase(ABC):
 
     @with_db
     async def _ensure_season_exists(self) -> None:
-        session = get_db()
-        season = await resolve_season(session, self.season_name)
+        season = await self._resolve_target_season()
         if not season:
-            season = Season(name=self.season_name, canonical=True, compat_version=self.initial_compat_version)
-            session.add(season)
-            await session.commit()
-            logger.info(f"Created season '{self.season_name}' (compat_version={season.compat_version})")
+            raise ValueError(f"Bound season '{self.season_id}' not found")
 
     @trace("commissioner.run_cycle")
     @with_db
@@ -185,13 +190,12 @@ class CommissionerBase(ABC):
 
         logger.info(f"[{self.season_name}] cycle start (rss={_rss_mb()})")
 
-        session = get_db()
-        season = await resolve_season(session, self.season_name)
+        season = await self._resolve_target_season()
         if not season:
-            raise ValueError(f"Season '{self.season_name}' not found - is the tournament running?")
+            raise ValueError(f"Bound season '{self.season_id}' not found - is the tournament running?")
         referees = self.get_referees(season.version)
 
-        pools = await self._ensure_pools_exist(referees)
+        pools = await self._ensure_pools_exist(season, referees)
         logger.info(f"[{self.season_name}] pools loaded: {list(pools.keys())} (rss={_rss_mb()})")
 
         status_changed = await self._sync_match_statuses()
@@ -236,30 +240,20 @@ class CommissionerBase(ABC):
         logger.info(f"[{self.season_name}] cycle complete (rss={_rss_mb()})")
         return status_changed or total_scheduled > 0 or len(changes) > 0
 
-    async def _get_pools(self) -> dict[str, Pool]:
+    async def _get_pools(self, season_id: UUID) -> dict[str, Pool]:
         session = get_db()
         pools = (
-            (
-                await session.execute(
-                    select(Pool)
-                    .join(Pool.season)
-                    .where(Season.name == self.season_name)
-                    .where(col(Season.canonical).is_(True))
-                    .options(selectinload(Pool.players))
-                )
-            )
+            (await session.execute(select(Pool).where(Pool.season_id == season_id).options(selectinload(Pool.players))))
             .scalars()
             .all()
         )
         return {p.name: p for p in pools if p.name}
 
     async def _get_season_matches(self) -> list[Match]:
-        session = get_db()
-        season = (
-            await session.execute(select(Season).filter_by(name=self.season_name, canonical=True))
-        ).scalar_one_or_none()
+        season = await self._resolve_target_season()
         if not season:
-            return []
+            raise ValueError(f"Bound season '{self.season_id}' not found")
+        session = get_db()
         matches = (
             (
                 await session.execute(
@@ -275,13 +269,9 @@ class CommissionerBase(ABC):
         )
         return list(matches)
 
-    async def _ensure_pools_exist(self, referees: dict[str, RefereeBase]) -> dict[str, Pool]:
+    async def _ensure_pools_exist(self, season: Season, referees: dict[str, RefereeBase]) -> dict[str, Pool]:
         session = get_db()
         logger.info(f"[{self.season_name}] _ensure_pools_exist: loading pools (rss={_rss_mb()})")
-
-        season = await resolve_season(session, self.season_name)
-        if not season:
-            raise ValueError(f"Season '{self.season_name}' not found - is the tournament running?")
 
         existing = list((await session.execute(select(Pool).filter_by(season_id=season.id))).scalars().all())
         existing_names = {p.name for p in existing if p.name}
@@ -293,7 +283,7 @@ class CommissionerBase(ABC):
 
         await session.commit()
 
-        pools_by_name = await self._get_pools()
+        pools_by_name = await self._get_pools(season.id)
 
         for pool_name, referee in referees.items():
             pool = pools_by_name.get(pool_name)
@@ -332,7 +322,7 @@ class CommissionerBase(ABC):
                     select(Match)
                     .join(Match.pool)
                     .join(Pool.season)
-                    .where(Season.name == self.season_name)
+                    .where(Season.id == self.season_id)
                     .where(col(Match.status).in_([MatchStatus.scheduled, MatchStatus.running]))
                     .options(selectinload(Match.job))
                 )
@@ -377,7 +367,7 @@ class CommissionerBase(ABC):
                 .join(Pool.season)
                 .join(Match.job)
                 .join(Match.players)
-                .where(Season.name == self.season_name)
+                .where(Season.id == self.season_id)
                 .where(Match.status == MatchStatus.completed)
                 .where(JobRequest.episode_id.is_not(None))
                 .where(col(MatchPlayer.score).is_(None))
@@ -471,8 +461,7 @@ class CommissionerBase(ABC):
             .select_from(Match)
             .join(Match.pool)
             .join(Pool.season)
-            .where(Season.name == self.season_name)
-            .where(col(Season.canonical).is_(True))
+            .where(Season.id == self.season_id)
             .where(col(Match.status).in_([MatchStatus.pending, MatchStatus.scheduled, MatchStatus.running]))
         )
         return result.scalar_one()
@@ -497,45 +486,44 @@ class CommissionerBase(ABC):
             matches[match_id][0].append(pp_id)
 
         counts: MatchCounts = {}
+        zero_counts = MatchCountEntry.zero()
         for players, assignments, status in matches.values():
             if not all(p in active_player_ids for p in players):
                 continue
             combo = tuple(sorted(players))
             key = (combo, tuple(assignments))
-            completed, failed, in_progress = counts.get(key, (0, 0, 0))
+            prev = counts.get(key, zero_counts)
             if status == MatchStatus.completed:
-                completed += 1
+                counts[key] = MatchCountEntry(prev.completed + 1, prev.failed, prev.in_progress)
             elif status == MatchStatus.failed:
-                failed += 1
+                counts[key] = MatchCountEntry(prev.completed, prev.failed + 1, prev.in_progress)
             else:
-                in_progress += 1
-            counts[key] = (completed, failed, in_progress)
+                counts[key] = MatchCountEntry(prev.completed, prev.failed, prev.in_progress + 1)
         return counts
 
     @with_db
     async def submit(self, policy_version_id: UUID) -> list[str]:
         changes = self.get_new_submission_membership_changes(policy_version_id)
         await self._apply_membership_changes(changes)
-        return [c.pool_name for c in changes if c.action == "add"]
+        return [c.pool_name for c in changes if c.action == MembershipAction.add]
 
     @with_db
-    async def get_leaderboard(self, season_id: UUID | None = None) -> list[tuple[UUID, float, int]]:
+    async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[UUID, float, int]]:
         session = get_db()
-        if season_id is not None:
-            query = select(Pool).where(Pool.season_id == season_id, Pool.name == self.leaderboard_pool)
-        else:
-            query = (
-                select(Pool)
-                .join(Pool.season)
-                .where(Season.name == self.season_name)
-                .where(col(Season.canonical).is_(True))
-                .where(Pool.name == self.leaderboard_pool)
+        target_pool = pool_name or self.leaderboard_pool
+
+        row = (
+            await session.execute(
+                select(Pool, Season).join(Pool.season).where(Pool.season_id == self.season_id, Pool.name == target_pool)
             )
-        pool = (await session.execute(query)).scalar_one_or_none()
-        if not pool:
+        ).one_or_none()
+        if not row:
             return []
 
-        referee = self.referees[self.leaderboard_pool]
+        pool, season = row
+        referee = self.get_referees(season.version).get(target_pool)
+        if not referee:
+            return []
         return await referee.get_leaderboard(pool.id)
 
     @with_db
@@ -543,11 +531,7 @@ class CommissionerBase(ABC):
         session = get_db()
         pool = (
             await session.execute(
-                select(Pool)
-                .join(Pool.season)
-                .where(Season.name == self.season_name)
-                .where(col(Season.canonical).is_(True))
-                .where(Pool.name == pool_name)
+                select(Pool).join(Pool.season).where(Season.id == self.season_id).where(Pool.name == pool_name)
             )
         ).scalar_one_or_none()
         if not pool:
@@ -576,11 +560,7 @@ class CommissionerBase(ABC):
 
         pool_names = {c.pool_name for c in changes}
         pools_result = await session.execute(
-            select(Pool)
-            .join(Pool.season)
-            .where(Season.name == self.season_name)
-            .where(col(Season.canonical).is_(True))
-            .where(col(Pool.name).in_(pool_names))
+            select(Pool).join(Pool.season).where(Season.id == self.season_id).where(col(Pool.name).in_(pool_names))
         )
         pools = {p.name: p for p in pools_result.scalars().all() if p.name}
 
@@ -606,7 +586,7 @@ class CommissionerBase(ABC):
                 continue
             key = (pool.id, change.policy_version_id)
 
-            if change.action == "add":
+            if change.action == MembershipAction.add:
                 if key in existing_players:
                     continue
                 player = PoolPlayer(pool_id=pool.id, policy_version_id=change.policy_version_id)
@@ -622,7 +602,7 @@ class CommissionerBase(ABC):
                 existing_players[key] = player
                 logger.info(f"Added {change.policy_version_id} to pool '{change.pool_name}'")
 
-            elif change.action == "remove":
+            elif change.action == MembershipAction.remove:
                 player = existing_players.get(key)
                 if player and not player.retired:
                     player.retired = True
@@ -666,19 +646,19 @@ class CommissionerBase(ABC):
             # Commit to release transaction before HTTP call
             await session.commit()
 
-            match = Match(pool_id=pool_id, assignments=request.assignments)  # type: ignore[call-arg]
+            match = Match(pool_id=pool_id, assignments=request.assignments, team_id=request.team_id)  # type: ignore[call-arg]
             match_id = match.id
             span.set_attribute("match.id", str(match_id))
 
+            tags = {k: str(v) for k, v in request.episode_tags.model_dump(exclude_none=True).items()}
+            if git_ref := os.environ.get("GIT_COMMIT"):
+                tags["scheduler_git_ref"] = git_ref
             job_spec = SingleEpisodeJob(
                 policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
                 assignments=request.assignments,
                 env=request.env,
                 seed=request.seed,
-                episode_tags={
-                    **request.episode_tags,
-                    **({"scheduler_git_ref": git_ref} if (git_ref := os.environ.get("GIT_COMMIT")) else {}),
-                },
+                episode_tags=tags,
             ).model_dump()
 
             if compat_version is not None:

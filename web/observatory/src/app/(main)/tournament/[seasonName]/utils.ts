@@ -1,6 +1,12 @@
-export function formatPolicyDisplay(p: { policy: { id: string; name: string | null; version: number | null } }) {
-  if (p.policy.name && p.policy.version !== null) {
-    return `${p.policy.name}:v${p.policy.version}`
+import type { PolicyVersionSummary } from '@/lib/api'
+
+export function formatPolicyTag(policy: PolicyVersionSummary): string {
+  if (policy.name && policy.version !== null) {
+    return `${policy.name}:v${policy.version}`
   }
-  return p.policy.id.slice(0, 8)
+  return policy.id.slice(0, 8)
+}
+
+export function formatPolicyDisplay(p: { policy: PolicyVersionSummary }) {
+  return formatPolicyTag(p.policy)
 }

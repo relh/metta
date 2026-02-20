@@ -2,10 +2,14 @@ import { notFound } from 'next/navigation'
 import { FC, Suspense } from 'react'
 
 import { AutoRefresh } from '@/components/AutoRefresh'
-import { LinkTabs } from '@/components/LinkTabs'
+import { LinkTabs, type LinkTab } from '@/components/LinkTabs'
 import { Spinner } from '@/components/Spinner'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
+import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
+
+import { StageProgress } from './StageProgress'
+import { defaultSelectedStage } from './stageSelection'
 
 const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
   const repo = await getRepo()
@@ -26,28 +30,6 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
           'not pinned to a specific runner compat version'
         )}
       </div>
-      {season.pools.length > 0 && (
-        <div className="mt-1 ml-4 space-y-0.5">
-          {season.pools.map((pool) => (
-            <div key={pool.name}>
-              <span className="font-medium text-foreground-muted">{pool.name}:</span> {pool.description}
-              {pool.config_id && (
-                <>
-                  {' '}
-                  <a
-                    href={`${repo.baseUrl}/tournament/configs/${pool.config_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-700"
-                  >
-                    [config]
-                  </a>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
@@ -55,31 +37,59 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
 export default async function SeasonPage({ params, children }: LayoutProps<'/tournament/[seasonName]'>) {
   const { seasonName } = await params
 
+  const repo = await getRepo()
+  const stageContext = await getSeasonStageContext(repo, seasonName)
+  const stageKindsByPool = stageContext.progress
+    ? Object.fromEntries(stageContext.progress.stage_flow.map((stage) => [stage.input_pool, stage.kind]))
+    : undefined
+
+  const tabs: LinkTab[] = [
+    {
+      id: 'leaderboard',
+      label: 'Leaderboard',
+      href:
+        stageContext.teamSeason && stageContext.progress && !stageContext.progress.started
+          ? `/tournament/${seasonName}?view=leaderboard`
+          : `/tournament/${seasonName}`,
+    },
+    { id: 'players', label: 'Players', href: `/tournament/${seasonName}/players` },
+    {
+      id: 'matches',
+      label: 'Matches',
+      href: `/tournament/${seasonName}/matches`,
+      ...(stageContext.progress ? { allowedStageKinds: ['team_eval', 'policy_eval'] } : {}),
+    },
+    ...(stageContext.hasTeams
+      ? [
+          {
+            id: 'teams',
+            label: 'Teams',
+            href: `/tournament/${seasonName}/teams`,
+            ...(stageContext.progress ? { allowedStageKinds: ['team_eval'] } : {}),
+          },
+        ]
+      : []),
+  ]
+
   return (
     <div className="space-y-6">
       <AutoRefresh interval={10000} />
       <Suspense fallback={<Spinner />}>
         <SeasonDetails seasonName={seasonName} />
       </Suspense>
-      <LinkTabs
-        tabs={[
-          {
-            id: 'leaderboard',
-            label: 'Leaderboard',
-            href: `/tournament/${seasonName}`,
-          },
-          {
-            id: 'players',
-            label: 'Players',
-            href: `/tournament/${seasonName}/players`,
-          },
-          {
-            id: 'matches',
-            label: 'Matches',
-            href: `/tournament/${seasonName}/matches`,
-          },
-        ]}
-      />
+      {stageContext.progress && (
+        <StageProgress
+          stageFlow={stageContext.progress.stage_flow}
+          stages={stageContext.progress.stages}
+          defaultStage={defaultSelectedStage(
+            stageContext.progress.stages,
+            stageContext.progress.stage_flow,
+            stageContext.progress.started
+          )}
+          started={stageContext.progress.started}
+        />
+      )}
+      <LinkTabs tabs={tabs} stageKindsByPool={stageKindsByPool} defaultStage={stageContext.selectedStage} />
       {children}
     </div>
   )

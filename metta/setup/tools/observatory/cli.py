@@ -267,6 +267,7 @@ def _local_dev_env() -> dict[str, str]:
     env["LOCAL_DEV_K8S_CONTEXT"] = _get_k8s_context()
     env["LOCAL_DEV_AWS_PROFILE"] = LOCAL_AWS_PROFILE
     env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
+    env["ENABLE_MOCK_TOURNAMENTS"] = "true"
 
     aws_path = os.path.expanduser("~/.aws")
     source_mounts = [

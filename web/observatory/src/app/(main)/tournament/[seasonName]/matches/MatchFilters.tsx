@@ -1,46 +1,33 @@
 'use client'
 import { FC } from 'react'
 import { Select } from '@/components/Select'
-import { PolicySummary, SeasonDetail } from '@/lib/repo'
+import type { PolicySummary } from '@/lib/api'
 
 import { formatPolicyDisplay } from '../utils'
 import { useMatchFilter } from './hooks'
 
-export const MatchFilters: FC<{ season: SeasonDetail; policies: PolicySummary[] }> = ({ season, policies }) => {
+export const MatchFilters: FC<{
+  policies: PolicySummary[]
+}> = ({ policies }) => {
   const [matchFilter, setMatchFilter] = useMatchFilter()
 
-  const poolOptions = season.pools.map((p) => ({ value: p.name, label: p.name }))
   const playerOptions = policies.map((p) => ({
     value: p.policy.id,
     label: formatPolicyDisplay(p),
   }))
 
   return (
-    <div className="flex gap-4 mb-4 pb-4 border-b border-border-subtle">
-      <div className="flex-1">
-        <div className="text-xs text-foreground-muted mb-1">Pool</div>
-        <Select
-          isMulti
-          options={poolOptions}
-          value={poolOptions.filter((o) => matchFilter.pool_names.includes(o.value))}
-          onChange={(selected) => setMatchFilter((f) => ({ ...f, pool_names: selected.map((s) => s.value) }))}
-          placeholder="All pools"
-          isClearable
-          instanceId="pool-select"
-        />
-      </div>
-      <div className="flex-1">
-        <div className="text-xs text-foreground-muted mb-1">Players</div>
-        <Select
-          isMulti
-          options={playerOptions}
-          value={playerOptions.filter((o) => matchFilter.policy_version_ids.includes(o.value))}
-          onChange={(selected) => setMatchFilter((f) => ({ ...f, policy_version_ids: selected.map((s) => s.value) }))}
-          placeholder="All players"
-          isClearable
-          instanceId="player-select"
-        />
-      </div>
+    <div className="mb-4 pb-4 border-b border-border-subtle">
+      <div className="text-xs text-foreground-muted mb-1">Players</div>
+      <Select
+        isMulti
+        options={playerOptions}
+        value={playerOptions.filter((o) => matchFilter.policy_version_ids.includes(o.value))}
+        onChange={(selected) => setMatchFilter((f) => ({ ...f, policy_version_ids: selected.map((s) => s.value) }))}
+        placeholder="All players"
+        isClearable
+        instanceId="player-select"
+      />
     </div>
   )
 }

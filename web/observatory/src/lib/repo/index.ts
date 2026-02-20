@@ -18,17 +18,25 @@ import type {
   PolicyVersionRow,
   PolicyVersionSummary,
   PolicyVersionsResponse,
+  ProgressResponse,
+  ScorePoliciesLeaderboardEntry,
   SQLQueryRequest,
   SQLQueryResponse,
+  SeasonLeaderboardQuery,
   SeasonDetail,
   SeasonMatchSummary,
+  StageLeaderboardQuery,
+  StageLeaderboardType,
   SeasonVersionInfo,
+  SeasonTeamsQuery,
   Schemas,
   SmartPlugStatus,
+  StageStats,
   SubmissionResponse,
   TableInfo,
   TableSchema,
   TaskAttemptsResponse,
+  TeamSummary,
 } from '@/lib/api'
 import { isOutageSimulated } from '@/lib/debug/simulate-outage'
 
@@ -64,17 +72,26 @@ export type {
   PolicyVersionsResponse,
   PoolInfo,
   PoolMembership,
+  ProgressResponse,
+  ScorePoliciesLeaderboardEntry,
+  SeasonLeaderboardQuery,
   SQLQueryRequest,
   SQLQueryResponse,
   SeasonDetail,
   SeasonMatchPlayerSummary,
   SeasonMatchSummary,
+  StageLeaderboardQuery,
+  StageLeaderboardType,
   SeasonVersionInfo,
+  SeasonTeamsQuery,
   SmartPlugStatus,
+  StageStats,
   SubmissionResponse,
   TableInfo,
   TableSchema,
   TaskAttemptsResponse,
+  TeamCogSummary,
+  TeamSummary,
   UserRow,
 } from '@/lib/api'
 
@@ -601,8 +618,46 @@ export class Repo {
     return this.apiCall<SeasonVersionInfo[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/versions`)
   }
 
-  async getSeasonLeaderboard(seasonName: string): Promise<LeaderboardEntry[]> {
-    return this.apiCall<LeaderboardEntry[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard`)
+  async getSeasonLeaderboard(seasonName: string, params?: SeasonLeaderboardQuery): Promise<LeaderboardEntry[]> {
+    const searchParams = new URLSearchParams()
+    if (params?.pool) searchParams.append('pool', params.pool)
+    if (params?.include_hidden !== undefined) searchParams.append('include_hidden', params.include_hidden.toString())
+    const query = searchParams.toString()
+    return this.apiCall<LeaderboardEntry[]>(
+      `/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard${query ? `?${query}` : ''}`
+    )
+  }
+
+  async getSeasonStageLeaderboard(
+    seasonName: string,
+    leaderboardType: 'policy',
+    poolName: string,
+    params?: StageLeaderboardQuery
+  ): Promise<LeaderboardEntry[]>
+  async getSeasonStageLeaderboard(
+    seasonName: string,
+    leaderboardType: 'team',
+    poolName: string,
+    params?: StageLeaderboardQuery
+  ): Promise<TeamSummary[]>
+  async getSeasonStageLeaderboard(
+    seasonName: string,
+    leaderboardType: 'score-policies',
+    poolName: string,
+    params?: StageLeaderboardQuery
+  ): Promise<ScorePoliciesLeaderboardEntry[]>
+  async getSeasonStageLeaderboard(
+    seasonName: string,
+    leaderboardType: StageLeaderboardType,
+    poolName: string,
+    params?: StageLeaderboardQuery
+  ): Promise<LeaderboardEntry[] | TeamSummary[] | ScorePoliciesLeaderboardEntry[]> {
+    const searchParams = new URLSearchParams()
+    if (params?.include_hidden !== undefined) searchParams.append('include_hidden', params.include_hidden.toString())
+    const query = searchParams.toString()
+    return this.apiCall<LeaderboardEntry[] | TeamSummary[] | ScorePoliciesLeaderboardEntry[]>(
+      `/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard/${encodePathSegment(leaderboardType)}/${encodePathSegment(poolName)}${query ? `?${query}` : ''}`
+    )
   }
 
   async getSeasonPolicies(seasonName: string): Promise<PolicySummary[]> {
@@ -647,6 +702,33 @@ export class Repo {
   async getPolicyMemberships(policyVersionId: string): Promise<MembershipHistoryEntry[]> {
     return this.apiCall<MembershipHistoryEntry[]>(
       `/tournament/policies/${encodeURIComponent(policyVersionId)}/memberships`
+    )
+  }
+
+  async getSeasonProgress(seasonName: string): Promise<ProgressResponse> {
+    return this.apiCall<ProgressResponse>(`/tournament/seasons/${encodePathSegment(seasonName)}/progress`)
+  }
+
+  async startSeason(seasonName: string): Promise<ProgressResponse> {
+    return this.apiCallWithBody<ProgressResponse>(`/tournament/seasons/${encodePathSegment(seasonName)}/start`, {})
+  }
+
+  async getSeasonStages(seasonName: string): Promise<StageStats[]> {
+    return this.apiCall<StageStats[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/stages`)
+  }
+
+  async getSeasonTeams(seasonName: string, params?: SeasonTeamsQuery): Promise<TeamSummary[]> {
+    const searchParams = new URLSearchParams()
+    if (params?.limit !== undefined) searchParams.append('limit', params.limit.toString())
+    if (params?.offset !== undefined) searchParams.append('offset', params.offset.toString())
+    if (params?.pool_name) searchParams.append('pool_name', params.pool_name)
+    if (params?.eliminated !== undefined && params.eliminated !== null) {
+      searchParams.append('eliminated', params.eliminated.toString())
+    }
+    if (params?.policy_version_id) searchParams.append('policy_version_id', params.policy_version_id)
+    const query = searchParams.toString()
+    return this.apiCall<TeamSummary[]>(
+      `/tournament/seasons/${encodePathSegment(seasonName)}/teams${query ? `?${query}` : ''}`
     )
   }
 

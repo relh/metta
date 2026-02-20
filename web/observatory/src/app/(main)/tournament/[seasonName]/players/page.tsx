@@ -1,39 +1,77 @@
 import clsx from 'clsx'
 import Link from 'next/link'
+import { createLoader, parseAsString } from 'nuqs/server'
 
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
+import { getPlayerStages, getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 import { formatRelativeTime } from '@/utils/datetime'
 
 import { matchesRoute } from '../matches/utils'
+import { stageFlowLabel, stageLabel } from '../stageSelection'
 import { formatPolicyDisplay } from '../utils'
 import { SubmitForm } from './SubmitForm'
 
-export default async function PlayersPage(params: PageProps<'/tournament/[seasonName]/players'>) {
-  const { seasonName } = await params.params
+const parseSearchParams = createLoader({ stage: parseAsString })
+
+export default async function PlayersPage({ params, searchParams }: PageProps<'/tournament/[seasonName]/players'>) {
+  const { seasonName } = await params
+  const parsed = await parseSearchParams(searchParams)
   const repo = await getRepo()
-  const [season, policies] = await Promise.all([repo.getSeason(seasonName), repo.getSeasonPolicies(seasonName)])
+  const [season, policies, stageContext] = await Promise.all([
+    repo.getSeason(seasonName),
+    repo.getSeasonPolicies(seasonName),
+    getSeasonStageContext(repo, seasonName, parsed.stage),
+  ])
   const existingPolicyVersionIds = new Set(policies.map((p) => p.policy.id))
-  const poolNames = season.pools.map((pool) => pool.name)
+  const selectedStage = stageContext.selectedStage
+  const selectedFlowStage = selectedStage
+    ? stageContext.progress?.stage_flow.find((stage) => stage.input_pool === selectedStage)
+    : null
+  const selectedStageStatus = selectedFlowStage?.status ?? null
+  const tournamentNotStarted = stageContext.progress?.started !== true
+  const playerStages = getPlayerStages(stageContext.stages, stageContext.progress)
+  const poolNames =
+    stageContext.progress && playerStages.length > 0
+      ? playerStages.map((stage) => stage.name)
+      : selectedStage
+        ? [selectedStage]
+        : season.pools.map((pool) => pool.name)
+  const stageFlowByPool = new Map((stageContext.progress?.stage_flow ?? []).map((stage) => [stage.input_pool, stage]))
+  const selectedDisplayStage = selectedStage && poolNames.includes(selectedStage) ? selectedStage : null
 
   return (
     <div className="space-y-4">
       <ServerDebugDrain />
-      <SubmitForm seasonName={seasonName} existingPolicyVersionIds={existingPolicyVersionIds} />
-      {policies.length === 0 ? (
+      {tournamentNotStarted && (
+        <SubmitForm seasonName={seasonName} existingPolicyVersionIds={existingPolicyVersionIds} />
+      )}
+      {selectedStage && selectedStageStatus === 'pending' ? (
+        <div className="text-foreground-muted py-4">This stage has not started yet.</div>
+      ) : policies.length === 0 ? (
         <div className="text-foreground-muted py-4">No players submitted yet</div>
       ) : (
         <Table>
           <TableHeader>
             <TH>Player</TH>
             <TH>Entered</TH>
-            {poolNames.map((poolName) => (
-              <TH key={poolName} className="capitalize">
-                {poolName}
-              </TH>
-            ))}
+            {poolNames.map((poolName) => {
+              const stageFlow = stageFlowByPool.get(poolName)
+              return (
+                <TH
+                  key={poolName}
+                  className={clsx(
+                    selectedDisplayStage === poolName
+                      ? 'bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200'
+                      : ''
+                  )}
+                >
+                  {stageFlow ? stageFlowLabel(stageFlow) : stageLabel(poolName)}
+                </TH>
+              )
+            })}
           </TableHeader>
           <TableBody>
             {policies.map((policy) => {
@@ -50,13 +88,19 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
                     const pool = poolStatusMap[poolName]
                     if (!pool) {
                       return (
-                        <TD key={poolName} className="text-foreground-muted">
+                        <TD
+                          key={poolName}
+                          className={clsx(
+                            'text-foreground-muted',
+                            selectedDisplayStage === poolName ? 'bg-blue-950/10' : ''
+                          )}
+                        >
                           -
                         </TD>
                       )
                     }
                     return (
-                      <TD key={poolName}>
+                      <TD key={poolName} className={selectedDisplayStage === poolName ? 'bg-blue-950/10' : ''}>
                         <div className="flex flex-col gap-1.5 items-start">
                           <span
                             className={clsx(
@@ -70,7 +114,8 @@ export default async function PlayersPage(params: PageProps<'/tournament/[season
                           </span>
                           <Link
                             href={matchesRoute(seasonName, {
-                              pool_names: [poolName],
+                              stage: stageContext.progress ? poolName : undefined,
+                              pool_names: stageContext.progress ? undefined : [poolName],
                               policy_version_ids: [policy.policy.id],
                             })}
                             className="no-underline text-sm text-foreground-muted hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors"

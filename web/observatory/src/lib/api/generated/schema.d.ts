@@ -802,6 +802,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/tournament/seasons/{season_name}/score-policies-leaderboard': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Score Policies Leaderboard */
+    get: operations['get_score_policies_leaderboard_tournament_seasons__season_name__score_policies_leaderboard_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/tournament/seasons/{season_name}/policies': {
     parameters: {
       query?: never
@@ -918,6 +935,91 @@ export interface paths {
      *     Returns a mapping of policy_version_id -> list of season names.
      */
     get: operations['get_my_memberships_tournament_my_memberships_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/tournament/seasons/{season_name}/progress': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Progress */
+    get: operations['get_progress_tournament_seasons__season_name__progress_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/tournament/seasons/{season_name}/start': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Start Season */
+    post: operations['start_season_tournament_seasons__season_name__start_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/tournament/seasons/{season_name}/teams': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Teams */
+    get: operations['get_teams_tournament_seasons__season_name__teams_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/tournament/seasons/{season_name}/stages': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Stages */
+    get: operations['get_stages_tournament_seasons__season_name__stages_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/tournament/seasons/{season_name}/leaderboard/{leaderboard_type}/{pool_name}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Stage Leaderboard By Type */
+    get: operations['get_stage_leaderboard_by_type_tournament_seasons__season_name__leaderboard__leaderboard_type___pool_name__get']
     put?: never
     post?: never
     delete?: never
@@ -2469,6 +2571,41 @@ export interface components {
        */
       upload_id: string
     }
+    /** ProgressStage */
+    ProgressStage: {
+      /**
+       * Index
+       * @description 1-indexed position of this stage in TeamTournamentConfig.stages
+       */
+      index: number
+      /**
+       * Kind
+       * @description Configured stage kind: policy_eval, sample_teams, team_eval, or score_policies
+       * @enum {string}
+       */
+      kind: 'policy_eval' | 'sample_teams' | 'team_eval' | 'score_policies'
+      /**
+       * Description
+       * @description Resolved stage description derived from configured stage parameters
+       */
+      description: string
+      /**
+       * Input Pool
+       * @description Name of the pool this stage reads from
+       */
+      input_pool: string
+      /**
+       * Output Pool
+       * @description Name of the pool this stage materializes/writes when complete
+       */
+      output_pool: string
+      /**
+       * Status
+       * @description Progress marker: complete = stage completion condition satisfied (output materialized/populated), active = first incomplete stage, pending = later stages
+       * @enum {string}
+       */
+      status: 'complete' | 'active' | 'pending'
+    }
     /** RunIdResponse */
     RunIdResponse: {
       /** Run Id */
@@ -2487,6 +2624,26 @@ export interface components {
       rows: unknown[][]
       /** Row Count */
       row_count: number
+    }
+    /** ScorePoliciesLeaderboardEntry */
+    ScorePoliciesLeaderboardEntry: {
+      /**
+       * Rank
+       * @description 1-indexed position on the score-policies leaderboard
+       */
+      rank: number
+      /** @description Identity of the ranked policy version */
+      policy: components['schemas']['PolicyVersionSummary']
+      /**
+       * Placement Score
+       * @description Sum of top team placements (lower is better)
+       */
+      placement_score: number
+      /**
+       * Team Appearances
+       * @description Number of ranked teams containing this policy
+       */
+      team_appearances: number
     }
     /** SeasonResponse */
     SeasonResponse: {
@@ -2608,6 +2765,42 @@ export interface components {
       refreshed_at: string
       /** Items */
       items: components['schemas']['SmartPlugStatus'][]
+    }
+    /** StageStats */
+    StageStats: {
+      /**
+       * Name
+       * @description Pool identifier for this stage row (Pool.name), such as 'stage-1', 'sample-1', or 'team-round-2'
+       */
+      name: string
+      /**
+       * Policy Count
+       * @description Number of policy memberships (PoolPlayer rows) counted for this pool under the endpoint rules
+       * @default 0
+       */
+      policy_count: number
+      /**
+       * Match Count
+       * @description Total number of matches in this pool across all statuses
+       * @default 0
+       */
+      match_count: number
+      /**
+       * Completion Pct
+       * @description Completed-match percentage for this pool: completed / total_matches * 100
+       * @default 0
+       */
+      completion_pct: number
+      /**
+       * Team Count
+       * @description Number of team records in this pool (null when this pool has no teams)
+       */
+      team_count?: number | null
+      /**
+       * Eliminated Count
+       * @description Number of teams in this pool with eliminated=true (null when team_count is null)
+       */
+      eliminated_count?: number | null
     }
     /** SubmissionPatternGroup */
     SubmissionPatternGroup: {
@@ -2778,6 +2971,16 @@ export interface components {
       /** Tasks */
       tasks: components['schemas']['EvalTaskRow'][]
     }
+    /** TeamCogSummary */
+    TeamCogSummary: {
+      /**
+       * Position
+       * @description 0-indexed slot position of this cog inside the team
+       */
+      position: number
+      /** @description Policy version backing this team slot */
+      policy: components['schemas']['PolicyVersionSummary']
+    }
     /** TeamCompStats */
     TeamCompStats: {
       /** Composition */
@@ -2792,6 +2995,117 @@ export interface components {
       avg_junction_aligned: number
       /** Avg Resource Gained */
       avg_resource_gained: number
+    }
+    /** TeamSummary */
+    'TeamSummary-Input': {
+      /**
+       * Id
+       * Format: uuid
+       * @description Unique team identifier
+       */
+      id: string
+      /**
+       * Pool Name
+       * @description Name of the pool (stage bucket) where this team record exists
+       */
+      pool_name: string
+      /**
+       * Eliminated
+       * @description Whether this team was culled in its team-eval round
+       */
+      eliminated: boolean
+      /**
+       * Score
+       * @description Team score computed for elimination ranking in its current round, if scored
+       */
+      score: number | null
+      /**
+       * Matches
+       * @description Number of completed match records linked to this team_id
+       * @default 0
+       */
+      matches: number
+      /**
+       * Cogs
+       * @description Ordered team composition; each cog is one slot containing a policy version
+       */
+      cogs: components['schemas']['TeamCogSummary'][]
+      /**
+       * Created At
+       * @description ISO 8601 timestamp when this team row was created
+       */
+      created_at: string
+    }
+    /** TeamSummary */
+    'TeamSummary-Output': {
+      /**
+       * Id
+       * Format: uuid
+       * @description Unique team identifier
+       */
+      id: string
+      /**
+       * Pool Name
+       * @description Name of the pool (stage bucket) where this team record exists
+       */
+      pool_name: string
+      /**
+       * Eliminated
+       * @description Whether this team was culled in its team-eval round
+       */
+      eliminated: boolean
+      /**
+       * Score
+       * @description Team score computed for elimination ranking in its current round, if scored
+       */
+      score: number | null
+      /**
+       * Matches
+       * @description Number of completed match records linked to this team_id
+       * @default 0
+       */
+      matches: number
+      /**
+       * Cogs
+       * @description Ordered team composition; each cog is one slot containing a policy version
+       */
+      cogs: components['schemas']['TeamCogSummary'][]
+      /**
+       * Created At
+       * @description ISO 8601 timestamp when this team row was created
+       */
+      created_at: string
+    }
+    /** TeamTournamentProgress */
+    TeamTournamentProgress: {
+      /**
+       * Phase
+       * @description Current workflow phase: first incomplete stage kind, or 'complete' when all stages are complete
+       */
+      phase: ('policy_eval' | 'sample_teams' | 'team_eval' | 'score_policies') | 'complete'
+      /**
+       * Phase Detail
+       * @description Phase metadata. When phase != 'complete', includes {'pool': input_pool_name, 'stage_index': 1-indexed stage index}; otherwise {}
+       */
+      phase_detail?: {
+        [key: string]: string | number
+      }
+      /**
+       * Stages
+       * @description Stage statistics for each configured stage input pool, plus the score pool
+       */
+      stages: components['schemas']['StageStats'][]
+      /**
+       * Stage Flow
+       * @description Ordered stage plan derived from TeamTournamentConfig.stages with current completion state
+       */
+      stage_flow?: components['schemas']['ProgressStage'][]
+      /**
+       * Started
+       * @description Whether Season.started_at is set (entry policy-eval waits until this is true)
+       * @default false
+       */
+      started: boolean
     }
     /** TrendDistribution */
     TrendDistribution: {
@@ -4460,6 +4774,8 @@ export interface operations {
       query?: {
         /** @description Include leaderboard of a hidden season (for testing) */
         include_hidden?: boolean
+        /** @description Pool name to scope leaderboard to (overrides default) */
+        pool?: string | null
       }
       header?: never
       path: {
@@ -4476,6 +4792,40 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['LeaderboardEntry'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_score_policies_leaderboard_tournament_seasons__season_name__score_policies_leaderboard_get: {
+    parameters: {
+      query?: {
+        /** @description Include leaderboard of a hidden season (for testing) */
+        include_hidden?: boolean
+      }
+      header?: never
+      path: {
+        season_name: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ScorePoliciesLeaderboardEntry'][]
         }
       }
       /** @description Validation Error */
@@ -4711,6 +5061,175 @@ export interface operations {
           'application/json': {
             [key: string]: string[]
           }
+        }
+      }
+    }
+  }
+  get_progress_tournament_seasons__season_name__progress_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        season_name: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TeamTournamentProgress']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  start_season_tournament_seasons__season_name__start_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        season_name: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TeamTournamentProgress']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_teams_tournament_seasons__season_name__teams_get: {
+    parameters: {
+      query?: {
+        limit?: number
+        offset?: number
+        pool_name?: string | null
+        eliminated?: boolean | null
+        policy_version_id?: string | null
+      }
+      header?: never
+      path: {
+        season_name: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TeamSummary-Output'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_stages_tournament_seasons__season_name__stages_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        season_name: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['StageStats'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_stage_leaderboard_by_type_tournament_seasons__season_name__leaderboard__leaderboard_type___pool_name__get: {
+    parameters: {
+      query?: {
+        /** @description Include leaderboard of a hidden season (for testing) */
+        include_hidden?: boolean
+      }
+      header?: never
+      path: {
+        season_name: string
+        leaderboard_type: 'policy' | 'team' | 'score-policies'
+        pool_name: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json':
+            | components['schemas']['LeaderboardEntry'][]
+            | components['schemas']['TeamSummary-Output'][]
+            | components['schemas']['ScorePoliciesLeaderboardEntry'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
         }
       }
     }

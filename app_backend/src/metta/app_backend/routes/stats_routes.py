@@ -10,6 +10,8 @@ from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
+from metta.app_backend.database import db_session
+from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
@@ -178,8 +180,6 @@ class PolicyVersionsResponse(BaseModel):
 
 @public_api
 def create_stats_router() -> APIRouter:
-    from metta.app_backend.job_runner.config import get_dispatch_config  # noqa: PLC0415
-
     policy_s3_bucket = get_dispatch_config().POLICY_S3_BUCKET or "observatory-private"
     router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -288,12 +288,18 @@ def create_stats_router() -> APIRouter:
         result = await _create_policy_version_from_s3_key(name=request.name, user_id=user.id, s3_key=s3_key)
 
         if request.season:
+            from metta.app_backend.tournament.commissioners.factory import build_commissioner  # noqa: PLC0415
             from metta.app_backend.tournament.registry import SEASONS  # noqa: PLC0415
+            from metta.app_backend.tournament.season_resolver import resolve_season  # noqa: PLC0415
 
             if request.season not in SEASONS:
                 raise HTTPException(400, f"Season '{request.season}' not found")
             try:
-                commissioner = SEASONS[request.season]()
+                async with db_session() as session:
+                    season = await resolve_season(session, request.season)
+                if season is None:
+                    raise ValueError(f"Season '{request.season}' not found")
+                commissioner = await build_commissioner(request.season, season_id=season.id)
                 pool_names = await commissioner.submit(result.id)
                 result.pools = pool_names
             except Exception:

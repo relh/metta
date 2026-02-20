@@ -13,10 +13,11 @@
  * spec improves (roadmap step 9), these overrides can be removed.
  */
 
-import type { components } from './generated/schema'
+import type { components, operations } from './generated/schema'
 
 // Shorthand for all component schemas
 export type Schemas = components['schemas']
+export type Operations = operations
 
 // Utility: make `user` field required-but-nullable (Pydantic always returns it)
 type WithUser<T extends { user?: Schemas['UserRow'] | null }> = Omit<T, 'user'> & {
@@ -135,6 +136,18 @@ export type EpisodeStatsResponse = Schemas['EpisodeStatsResponse']
 // ── Tournament ──────────────────────────────────────────────────────────
 export type PolicyVersionSummary = Schemas['PolicyVersionSummary']
 export type LeaderboardEntry = Schemas['LeaderboardEntry']
+export type ScorePoliciesLeaderboardEntry = Schemas['ScorePoliciesLeaderboardEntry']
+export type StageLeaderboardType =
+  operations['get_stage_leaderboard_by_type_tournament_seasons__season_name__leaderboard__leaderboard_type___pool_name__get']['parameters']['path']['leaderboard_type']
+export type StageLeaderboardQuery = NonNullable<
+  operations['get_stage_leaderboard_by_type_tournament_seasons__season_name__leaderboard__leaderboard_type___pool_name__get']['parameters']['query']
+>
+export type SeasonLeaderboardQuery = NonNullable<
+  operations['get_leaderboard_tournament_seasons__season_name__leaderboard_get']['parameters']['query']
+>
+export type SeasonTeamsQuery = NonNullable<
+  operations['get_teams_tournament_seasons__season_name__teams_get']['parameters']['query']
+>
 export type PoolInfo = Schemas['PoolInfo']
 export type PoolMembership = Schemas['PoolMembership']
 export type PolicySummary = Schemas['PolicySummary']
@@ -144,6 +157,12 @@ export type SeasonMatchSummary = Schemas['MatchResponse']
 export type SeasonMatchPlayerSummary = Schemas['MatchPlayerInfo']
 export type SubmissionResponse = Schemas['SubmitResponse']
 export type MembershipHistoryEntry = Schemas['MembershipHistoryEntry']
+export type ProgressResponse = Omit<Schemas['TeamTournamentProgress'], 'stage_flow'> & {
+  stage_flow: NonNullable<Schemas['TeamTournamentProgress']['stage_flow']>
+}
+export type StageStats = Schemas['StageStats']
+export type TeamSummary = Schemas['TeamSummary-Output']
+export type TeamCogSummary = Schemas['TeamCogSummary']
 
 // ── SQL (not in generated spec — routes have include_in_schema=False) ──
 export type TableInfo = {

@@ -1,7 +1,7 @@
 import { Card } from '@/components/Card'
 
 export default function MatchesLayout({ children }: { children: React.ReactNode }) {
-  return <Card title="Matches">{children}</Card>
+  return <Card>{children}</Card>
 }
 
 export async function generateMetadata({ params }: PageProps<'/tournament/[seasonName]/matches'>) {

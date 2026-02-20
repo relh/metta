@@ -745,9 +745,14 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
                 completed_count += 1
             else:
                 ref_time = job.dispatched_at or job.created_at
-                if ref_time and (now - ref_time).total_seconds() < RECONCILE_GRACE_PERIOD_SECONDS:
-                    skipped_count += 1
-                    continue
+                if ref_time:
+                    if ref_time.tzinfo is None:
+                        ref_time = ref_time.replace(tzinfo=UTC)
+                    else:
+                        ref_time = ref_time.astimezone(UTC)
+                    if (now - ref_time).total_seconds() < RECONCILE_GRACE_PERIOD_SECONDS:
+                        skipped_count += 1
+                        continue
                 logger.warning(f"Reconciliation: job {job.id} marked {job.status} but no pod found, marking failed")
                 _update_job_status(
                     stats_client,

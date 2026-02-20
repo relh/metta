@@ -1,11 +1,11 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { FC, use, useEffect, useState } from 'react'
+import { FC, use, useEffect, useMemo, useState } from 'react'
 import { AppContext } from '@/app/(main)/AppContext'
 import { AsyncSelect } from '@/components/AsyncSelect'
 import { Button } from '@/components/Button'
 import { Select } from '@/components/Select'
-import { PolicyRow, PolicyVersionRow } from '@/lib/repo'
+import type { PolicyRow, PolicyVersionRow } from '@/lib/api'
 
 type PolicyOption = {
   value: string
@@ -30,12 +30,20 @@ export const SubmitForm: FC<{
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null)
+  const [locallySubmittedVersionIds, setLocallySubmittedVersionIds] = useState<Set<string>>(new Set())
 
   const seasonVersionMatch = seasonName.match(/^(.*?)(?::v|:)(\d+)$/)
   const seasonVersion = seasonVersionMatch ? Number(seasonVersionMatch[2]) : null
   const isVersionedSeason = seasonVersion !== null && Number.isFinite(seasonVersion)
 
   const router = useRouter()
+  const submittedVersionIds = useMemo(() => {
+    const merged = new Set(existingPolicyVersionIds)
+    for (const id of locallySubmittedVersionIds) {
+      merged.add(id)
+    }
+    return merged
+  }, [existingPolicyVersionIds, locallySubmittedVersionIds])
 
   const loadPolicies = async (inputValue: string): Promise<PolicyOption[]> => {
     if (!inputValue) return []
@@ -91,10 +99,20 @@ export const SubmitForm: FC<{
     setSubmitError(null)
     setSubmitSuccess(null)
     try {
-      const result = await repo.submitToSeason(seasonName, selectedVersion.version.id)
+      const submittedVersionId = selectedVersion.version.id
+      const result = await repo.submitToSeason(seasonName, submittedVersionId)
       setSubmitSuccess(`Submitted to pools: ${result.pools.join(', ')}`)
-      setSelectedPolicy(null)
-      setSelectedVersion(null)
+      const nextSubmitted = new Set(submittedVersionIds)
+      nextSubmitted.add(submittedVersionId)
+      const nextVersion = versions.find((option) => !nextSubmitted.has(option.version.id))
+      setLocallySubmittedVersionIds((prev) => {
+        const next = new Set(prev)
+        next.add(submittedVersionId)
+        return next
+      })
+      if (nextVersion) {
+        setSelectedVersion(nextVersion)
+      }
       router.refresh()
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : 'Unknown error')
@@ -103,7 +121,7 @@ export const SubmitForm: FC<{
     }
   }
 
-  const isAlreadySubmitted = selectedVersion && existingPolicyVersionIds.has(selectedVersion.version.id)
+  const isAlreadySubmitted = selectedVersion && submittedVersionIds.has(selectedVersion.version.id)
 
   return (
     <div>

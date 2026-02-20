@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 
 from metta.app_backend.models.tournament import PoolPlayer
-from metta.app_backend.tournament.referees.base import MatchRequest
+from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchRequest
 from metta.app_backend.tournament.referees.cogsguard import CogsguardPairingReferee, CogsguardSelfPlayReferee
 from metta.app_backend.tournament.referees.pairing import PairingReferee
 from metta.app_backend.tournament.referees.selfplay import SelfPlayReferee
@@ -16,12 +16,13 @@ def _make_player(pool_id=None) -> PoolPlayer:
 
 
 def _to_job_spec(req: MatchRequest) -> dict:
+    tags = {k: str(v) for k, v in req.episode_tags.model_dump(exclude_none=True).items()}
     return SingleEpisodeJob(
         policy_uris=[f"metta://policy/{uuid4()}" for _ in req.pool_player_ids],
         assignments=req.assignments,
         env=req.env,
         seed=req.seed,
-        episode_tags=req.episode_tags,
+        episode_tags=tags,
     ).model_dump()
 
 
@@ -69,7 +70,7 @@ def test_selfplay_schedules_correct_count(referee):
 def test_selfplay_skips_completed_players(referee):
     p = _make_player()
     assignments = (0,) * referee.num_agents
-    counts = {((p.id,), assignments): (referee.matches_per_player, 0, 0)}
+    counts = {((p.id,), assignments): MatchCountEntry(referee.matches_per_player, 0, 0)}
     requests = referee.get_matches_to_schedule([p], counts)
     assert len(requests) == 0
 
@@ -78,7 +79,7 @@ def test_selfplay_skips_completed_players(referee):
 def test_selfplay_skips_in_progress_players(referee):
     p = _make_player()
     assignments = (0,) * referee.num_agents
-    counts = {((p.id,), assignments): (0, 0, 1)}
+    counts = {((p.id,), assignments): MatchCountEntry(0, 0, 1)}
     requests = referee.get_matches_to_schedule([p], counts)
     assert len(requests) == 0
 
@@ -87,7 +88,7 @@ def test_selfplay_skips_in_progress_players(referee):
 def test_selfplay_skips_after_max_failures(referee):
     p = _make_player()
     assignments = (0,) * referee.num_agents
-    counts = {((p.id,), assignments): (0, 3, 0)}
+    counts = {((p.id,), assignments): MatchCountEntry(0, 3, 0)}
     requests = referee.get_matches_to_schedule([p], counts)
     assert len(requests) == 0
 
@@ -96,9 +97,9 @@ def test_selfplay_skips_after_max_failures(referee):
 def test_selfplay_tags(referee):
     requests = referee.get_matches_to_schedule([_make_player()], {})
     for req in requests:
-        assert req.episode_tags["match_type"] == "self_play"
+        assert req.episode_tags.match_type == "self_play"
         if referee.game_tag:
-            assert req.episode_tags["game"] == referee.game_tag
+            assert req.episode_tags.game == referee.game_tag
 
 
 # -- pairing correctness --
@@ -129,7 +130,7 @@ def test_pairing_skips_completed_config(referee):
     p1, p2 = _make_player(), _make_player()
     config = referee.match_configurations[0]
     combo = tuple(sorted([p1.id, p2.id]))
-    counts = {(combo, tuple(config)): (referee.matches_per_config, 0, 0)}
+    counts = {(combo, tuple(config)): MatchCountEntry(referee.matches_per_config, 0, 0)}
     requests = referee.get_matches_to_schedule([p1, p2], counts)
     remaining_configs = {tuple(req.assignments) for req in requests}
     assert tuple(config) not in remaining_configs
@@ -140,7 +141,7 @@ def test_pairing_skips_in_progress_config(referee):
     p1, p2 = _make_player(), _make_player()
     config = referee.match_configurations[0]
     combo = tuple(sorted([p1.id, p2.id]))
-    counts = {(combo, tuple(config)): (0, 0, 1)}
+    counts = {(combo, tuple(config)): MatchCountEntry(0, 0, 1)}
     requests = referee.get_matches_to_schedule([p1, p2], counts)
     remaining_configs = {tuple(req.assignments) for req in requests}
     assert tuple(config) not in remaining_configs
@@ -151,7 +152,7 @@ def test_pairing_skips_after_max_failures(referee):
     p1, p2 = _make_player(), _make_player()
     config = referee.match_configurations[0]
     combo = tuple(sorted([p1.id, p2.id]))
-    counts = {(combo, tuple(config)): (0, 1, 0)}
+    counts = {(combo, tuple(config)): MatchCountEntry(0, 1, 0)}
     requests = referee.get_matches_to_schedule([p1, p2], counts)
     remaining_configs = {tuple(req.assignments) for req in requests}
     assert tuple(config) not in remaining_configs
@@ -161,9 +162,9 @@ def test_pairing_skips_after_max_failures(referee):
 def test_pairing_tags(referee):
     requests = referee.get_matches_to_schedule([_make_player(), _make_player()], {})
     for req in requests:
-        assert req.episode_tags["match_type"] == "pairing"
+        assert req.episode_tags.match_type == "pairing"
         if referee.game_tag:
-            assert req.episode_tags["game"] == referee.game_tag
+            assert req.episode_tags.game == referee.game_tag
 
 
 # -- env config correctness --

@@ -5,7 +5,7 @@ from sqlmodel import col, func, select
 
 # pyright: reportArgumentType=false
 from metta.app_backend.database import get_db
-from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, Pool, PoolPlayer
+from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, MembershipAction, Pool, PoolPlayer
 from metta.app_backend.tournament.commissioners.base import CommissionerBase, MembershipChangeRequest
 from metta.app_backend.tournament.referees.pairing import PairingReferee
 from metta.app_backend.tournament.referees.selfplay import MAX_FAILED_ATTEMPTS, SelfPlayReferee
@@ -28,7 +28,10 @@ class BetaCommissioner(CommissionerBase):
     def get_new_submission_membership_changes(self, policy_version_id: UUID) -> list[MembershipChangeRequest]:
         return [
             MembershipChangeRequest(
-                pool_name="qualifying", policy_version_id=policy_version_id, action="add", notes="User submission"
+                pool_name="qualifying",
+                policy_version_id=policy_version_id,
+                action=MembershipAction.add,
+                notes="User submission",
             )
         ]
 
@@ -55,7 +58,7 @@ class BetaCommissioner(CommissionerBase):
                         MembershipChangeRequest(
                             pool_name="qualifying",
                             policy_version_id=pv_id,
-                            action="remove",
+                            action=MembershipAction.remove,
                             notes=f"Exhausted retry attempts ({MAX_FAILED_ATTEMPTS} failures)",
                         )
                     )
@@ -68,7 +71,7 @@ class BetaCommissioner(CommissionerBase):
                         MembershipChangeRequest(
                             pool_name="competition",
                             policy_version_id=pv_id,
-                            action="add",
+                            action=MembershipAction.add,
                             notes=f"Promoted: avg_score={avg_score:.3f} >= {self.promotion_min_score}",
                         )
                     )
@@ -76,7 +79,7 @@ class BetaCommissioner(CommissionerBase):
                     MembershipChangeRequest(
                         pool_name="qualifying",
                         policy_version_id=pv_id,
-                        action="remove",
+                        action=MembershipAction.remove,
                         notes=f"Graduated to competition: avg_score={avg_score:.3f}",
                     )
                 )
@@ -87,7 +90,7 @@ class BetaCommissioner(CommissionerBase):
                     MembershipChangeRequest(
                         pool_name="qualifying",
                         policy_version_id=pv_id,
-                        action="remove",
+                        action=MembershipAction.remove,
                         notes=f"Score below threshold: avg_score={avg_str} < {self.promotion_min_score}",
                     )
                 )

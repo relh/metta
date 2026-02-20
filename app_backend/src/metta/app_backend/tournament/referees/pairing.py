@@ -1,7 +1,13 @@
 from uuid import UUID
 
 from metta.app_backend.models.tournament import PoolPlayer
-from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.base import (
+    EpisodeTags,
+    MatchCountEntry,
+    MatchCounts,
+    MatchRequest,
+    RefereeBase,
+)
 from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
@@ -22,6 +28,7 @@ class PairingRefereeBase(RefereeBase):
     ) -> list[MatchRequest]:
         pending: list[tuple[int, UUID, UUID, list[int], int]] = []
         player_ids = [p.id for p in players]
+        zero_counts = MatchCountEntry.zero()
 
         for i, pp1 in enumerate(player_ids):
             for pp2 in player_ids[i + 1 :]:
@@ -29,11 +36,12 @@ class PairingRefereeBase(RefereeBase):
 
                 for c_idx, config in enumerate(self.match_configurations):
                     key = (combo, tuple(config))
-                    completed, failed, in_progress = match_counts.get(key, (0, 0, 0))
-                    if failed >= MAX_FAILED_ATTEMPTS:
+                    counts = match_counts.get(key, zero_counts)
+                    if counts.failed >= MAX_FAILED_ATTEMPTS:
                         continue
-                    if in_progress > 0:
+                    if counts.in_progress > 0:
                         continue
+                    completed = counts.completed
                     needed = self.matches_per_config - completed
                     for match_i in range(needed):
                         map_seed_offset = c_idx * 1000 + match_i + completed
@@ -44,16 +52,12 @@ class PairingRefereeBase(RefereeBase):
         if limit > 0:
             pending = pending[:limit]
         seed = 42
-        episode_tags_base = {"match_type": "pairing"}
-        if self.game_tag:
-            episode_tags_base["game"] = self.game_tag
-
         return [
             MatchRequest(
                 pool_player_ids=[pp1, pp2],
                 assignments=config,
                 env=self.make_env(seed + map_seed_offset),
-                episode_tags={**episode_tags_base, "assignments": str(config)},
+                episode_tags=EpisodeTags(match_type="pairing", game=self.game_tag, assignments=str(config)),
                 seed=seed,
             )
             for _, pp1, pp2, config, map_seed_offset in pending
