@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     STATS_DB_URI: str = "postgresql://postgres:password@127.0.0.1/metta"
+    STATS_DB_READ_ONLY_URI: str | None = None
     OBSERVATORY_AUTH_SECRET: str | None = None
     DEBUG_USER_EMAIL: str | None = None  # if set, you can set machine_token to this value and it will be accepted
     HOST: str = "127.0.0.1"

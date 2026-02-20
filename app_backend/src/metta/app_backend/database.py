@@ -1,15 +1,15 @@
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from functools import wraps
 from pathlib import Path
-from typing import Annotated, ParamSpec, TypeVar
+from typing import Annotated, ParamSpec, TypeVar, overload
 
 from alembic import command
 from alembic.config import Config
 from fastapi import Depends
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from metta.app_backend.config import settings
 
@@ -18,13 +18,15 @@ _ALEMBIC_DIR = str(Path(__file__).parent.parent.parent.parent / "alembic")
 P = ParamSpec("P")
 T = TypeVar("T")
 
-_engine = None
-_session_factory = None
+_engine: AsyncEngine | None = None
+_read_only_engine: AsyncEngine | None = None
+_session_factory: async_sessionmaker[AsyncSession] | None = None
+_read_only_session_factory: async_sessionmaker[AsyncSession] | None = None
 _current_session: ContextVar[AsyncSession | None] = ContextVar("current_session", default=None)
 
 
 def get_sync_db_url() -> str:
-    url = settings.STATS_DB_URI
+    url = _get_db_uri(read_only=False)
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
     elif url.startswith("postgresql://"):
@@ -44,18 +46,45 @@ def _get_async_url(db_uri: str) -> str:
     return db_uri
 
 
-def _get_engine():
-    global _engine
+def _get_db_uri(read_only: bool) -> str:
+    if read_only and settings.STATS_DB_READ_ONLY_URI is not None:
+        return settings.STATS_DB_READ_ONLY_URI
+    return settings.STATS_DB_URI
+
+
+def _uses_distinct_read_only_uri() -> bool:
+    return settings.STATS_DB_READ_ONLY_URI is not None and settings.STATS_DB_READ_ONLY_URI != settings.STATS_DB_URI
+
+
+def _get_engine(read_only: bool = False) -> AsyncEngine:
+    global _engine, _read_only_engine
+    if read_only:
+        if not _uses_distinct_read_only_uri():
+            return _get_engine(read_only=False)
+        if _read_only_engine is None:
+            async_url = _get_async_url(_get_db_uri(read_only=True))
+            _read_only_engine = create_async_engine(async_url, pool_size=5, max_overflow=10)
+        return _read_only_engine
+
     if _engine is None:
-        async_url = _get_async_url(settings.STATS_DB_URI)
+        async_url = _get_async_url(_get_db_uri(read_only=False))
         _engine = create_async_engine(async_url, pool_size=5, max_overflow=10)
     return _engine
 
 
-def _get_session_factory() -> async_sessionmaker[AsyncSession]:
-    global _session_factory
+def _get_session_factory(read_only: bool = False) -> async_sessionmaker[AsyncSession]:
+    global _session_factory, _read_only_session_factory
+    if read_only:
+        if not _uses_distinct_read_only_uri():
+            return _get_session_factory(read_only=False)
+        if _read_only_session_factory is None:
+            _read_only_session_factory = async_sessionmaker(
+                _get_engine(read_only=True), class_=AsyncSession, expire_on_commit=False
+            )
+        return _read_only_session_factory
+
     if _session_factory is None:
-        _session_factory = async_sessionmaker(_get_engine(), class_=AsyncSession, expire_on_commit=False)
+        _session_factory = async_sessionmaker(_get_engine(read_only=False), class_=AsyncSession, expire_on_commit=False)
     return _session_factory
 
 
@@ -73,7 +102,7 @@ async def db_session(read_only: bool = False) -> AsyncGenerator[AsyncSession, No
         yield existing
         return
 
-    factory = _get_session_factory()
+    factory = _get_session_factory(read_only=read_only)
     async with factory() as session:
         token = _current_session.set(session)
         try:
@@ -88,13 +117,30 @@ async def db_session(read_only: bool = False) -> AsyncGenerator[AsyncSession, No
             _current_session.reset(token)
 
 
-def with_db(func: Callable[P, T]) -> Callable[P, T]:
-    @wraps(func)
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        async with db_session():
-            return await func(*args, **kwargs)  # type: ignore[misc]
+@overload
+def with_db(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]: ...
 
-    return wrapper  # type: ignore[return-value]
+
+@overload
+def with_db(*, read_only: bool) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]: ...
+
+
+def with_db(
+    func: Callable[P, Awaitable[T]] | None = None,
+    *,
+    read_only: bool = False,
+) -> Callable[P, Awaitable[T]] | Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
+    def decorator(inner: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        @wraps(inner)
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+            async with db_session(read_only=read_only):
+                return await inner(*args, **kwargs)
+
+        return wrapper
+
+    if func is None:
+        return decorator
+    return decorator(func)
 
 
 async def _db_dependency() -> AsyncGenerator[AsyncSession, None]:

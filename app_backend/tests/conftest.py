@@ -71,6 +71,7 @@ def template_db_uri(postgres_container: PostgresContainer) -> str:
     # Run Alembic migrations on template
     template_uri = db_uri.replace("/test_db", f"/{TEMPLATE_DB_NAME}")
     app_config.settings.STATS_DB_URI = template_uri
+    app_config.settings.STATS_DB_READ_ONLY_URI = template_uri
     run_alembic_upgrade()
 
     return db_uri  # Return base URI for cloning operations
@@ -177,8 +178,11 @@ def stats_repo(db_context: str) -> str:
     from metta.app_backend import database  # noqa: PLC0415
 
     database._engine = None
+    database._read_only_engine = None
     database._session_factory = None
+    database._read_only_session_factory = None
     app_config.settings.STATS_DB_URI = db_context
+    app_config.settings.STATS_DB_READ_ONLY_URI = db_context
 
     # No need to run migrations - template already has them!
     return db_context

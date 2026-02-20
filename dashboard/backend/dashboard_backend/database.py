@@ -93,16 +93,18 @@ def configure_dashboard_db() -> None:
     _validate_readonly_uri(readonly_uri)
 
     # Point shared app_backend query/model stack at the dashboard-specific (read-only role) URI.
-    app_config.settings.STATS_DB_URI = readonly_uri
+    app_config.settings.STATS_DB_READ_ONLY_URI = readonly_uri
 
     # Reset engine/session factory in case this process imported app_backend DB earlier.
     app_db._engine = None
+    app_db._read_only_engine = None
     app_db._session_factory = None
+    app_db._read_only_session_factory = None
 
     # Force all app_backend query decorators to use read-only sessions in this process.
     app_db.db_session = _forced_readonly_db_session
 
-    engine = app_db._get_engine()
+    engine = app_db._get_engine(read_only=True)
     if not getattr(engine.sync_engine, "_dashboard_write_guard_installed", False):
         event.listen(engine.sync_engine, "before_cursor_execute", _write_guard)
         engine.sync_engine._dashboard_write_guard_installed = True

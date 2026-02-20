@@ -426,8 +426,11 @@ class Benchmarker:
 def setup_database(db_uri: str):
     """Configure database connection and run migrations."""
     database._engine = None
+    database._read_only_engine = None
     database._session_factory = None
+    database._read_only_session_factory = None
     app_config.settings.STATS_DB_URI = db_uri
+    app_config.settings.STATS_DB_READ_ONLY_URI = db_uri
     app_config.settings.RUN_MIGRATIONS = True
     app_config.settings.OBSERVATORY_AUTH_SECRET = "benchmark_secret"
 
