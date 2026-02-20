@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -43,9 +44,12 @@ async def _run_n_iterations(
     server_compat: str = "0.3",
 ):
     iteration = 0
+    in_db_session = False
+    sleep_while_in_db: list[bool] = []
     commissioner.season_id = season.id if season is not None else uuid4()
 
     async def fake_sleep(_):
+        sleep_while_in_db.append(in_db_session)
         nonlocal iteration
         iteration += 1
         if iteration >= n:
@@ -56,7 +60,12 @@ async def _run_n_iterations(
 
     @asynccontextmanager
     async def fake_db_session(*_, **__):
-        yield MagicMock()
+        nonlocal in_db_session
+        in_db_session = True
+        try:
+            yield MagicMock()
+        finally:
+            in_db_session = False
 
     with (
         patch.object(commissioner, "_ensure_season_exists", new_callable=AsyncMock),
@@ -68,7 +77,7 @@ async def _run_n_iterations(
     ):
         with pytest.raises(_StopLoop):
             await commissioner.run()
-        return mock_sleep, commissioner._run_cycle
+        return mock_sleep, commissioner._run_cycle, sleep_while_in_db
 
 
 @pytest.mark.asyncio
@@ -76,15 +85,16 @@ async def test_server_compat_mismatch_skips_cycle():
     """Season requires 0.4 but server has 0.3 installed — skip to avoid incompatible env configs."""
     commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version="0.4")
-    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
+    _, mock_run_cycle, sleep_while_in_db = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_not_called()
+    assert sleep_while_in_db == [False]
 
 
 @pytest.mark.asyncio
 async def test_server_compat_match_runs_cycle():
     commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version="0.3")
-    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
+    _, mock_run_cycle, _ = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_called_once()
 
 
@@ -92,5 +102,14 @@ async def test_server_compat_match_runs_cycle():
 async def test_compat_none_runs_cycle():
     commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version=None)
-    _, mock_run_cycle = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
+    _, mock_run_cycle, _ = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
     mock_run_cycle.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_disabled_season_sleeps_outside_db_session():
+    commissioner = _StubCommissioner(season_id=uuid4())
+    season = _make_season(disabled_at=datetime.now(UTC))
+    _, mock_run_cycle, sleep_while_in_db = await _run_n_iterations(commissioner, 1, season=season)
+    mock_run_cycle.assert_not_called()
+    assert sleep_while_in_db == [False]
