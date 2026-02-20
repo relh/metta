@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import {
   DASHBOARD_API_BASE_URL,
@@ -34,7 +34,10 @@ export function DashboardClient() {
     return Array.isArray(maybe) ? maybe : []
   }, [data])
 
-  const onLoad = async () => {
+  const loadDashboardData = useCallback(async (rawPolicyVersionId: string) => {
+    const trimmedPolicyVersionId = rawPolicyVersionId.trim()
+    if (!trimmedPolicyVersionId) return
+
     setError(null)
     setAnalysis(null)
     setRolePercentiles(null)
@@ -42,14 +45,25 @@ export function DashboardClient() {
     setRoleLoading(false)
     setLoading(true)
     try {
-      const response = await fetchDashboardData(policyVersionId.trim())
+      const response = await fetchDashboardData(trimmedPolicyVersionId)
       setData(response)
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
+          url.searchParams.set('policyVersionId', trimmedPolicyVersionId)
+          window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(message)
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  const onLoad = async () => {
+    await loadDashboardData(policyVersionId)
   }
 
   const onRunAnalysis = async () => {
@@ -95,6 +109,14 @@ export function DashboardClient() {
       cancelled = true
     }
   }, [activeTab, data?.policy?.id, data?.generated_at])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const initialPolicyVersionId = new URLSearchParams(window.location.search).get('policyVersionId')?.trim()
+    if (!initialPolicyVersionId) return
+    setPolicyVersionId(initialPolicyVersionId)
+    void loadDashboardData(initialPolicyVersionId)
+  }, [loadDashboardData])
 
   return (
     <main className="grid" style={{ gap: 16 }}>
