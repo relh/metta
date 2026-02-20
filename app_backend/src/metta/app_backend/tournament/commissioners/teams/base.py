@@ -123,7 +123,11 @@ class TeamCommissionerBase(
         for binding in stage_bindings:
             match binding.stage:
                 case PolicyEvalStage():
-                    is_complete = binding.output_pool in pools
+                    output_pool = pools.get(binding.output_pool)
+                    required_output = self._required_output_policies(binding)
+                    is_complete = (
+                        output_pool is not None and counts.policy_counts.get(output_pool.id, 0) >= required_output
+                    )
                 case SampleStage():
                     output_pool = pools.get(binding.output_pool)
                     is_complete = output_pool is not None and counts.team_counts.get(output_pool.id, 0) > 0

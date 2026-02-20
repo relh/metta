@@ -1,6 +1,7 @@
 import json
 import random
 from collections.abc import Callable
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
@@ -670,6 +671,109 @@ async def test_score_stage_completes_when_team_input_pool_is_empty(stats_repo: s
 
 
 @pytest.mark.asyncio
+async def test_policy_stage_reopens_until_downstream_minimum_is_met(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-policy-min-output-{uuid4().hex[:8]}"
+    commissioner.initial_config = TeamTournamentConfig(
+        game=GameEnvGenerator(num_agents=8),
+        stages=[
+            PolicyEvalStage(policies_per_team=1, matches_per_combo=1, min_policies=1),
+            PolicyEvalStage(policies_per_team=1, matches_per_combo=1, min_policies=3),
+            SampleStage(team_size=1, num_teams=1, min_per_policy=1),
+            TeamEvalStage(matches_per_team=1, cull_fraction=0.0),
+            ScoreStage(top_k=1),
+        ],
+        max_outstanding_matches=1000,
+    )
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            started_at=datetime.now(timezone.utc),
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        stage_1 = Pool(season_id=season.id, name="stage-1")
+        stage_2 = Pool(season_id=season.id, name="stage-2")
+        session.add(stage_1)
+        session.add(stage_2)
+        await session.flush()
+
+        policy_a = Policy(name=f"policy-a-{uuid4().hex[:8]}", user_id="test")
+        policy_b = Policy(name=f"policy-b-{uuid4().hex[:8]}", user_id="test")
+        session.add(policy_a)
+        session.add(policy_b)
+        await session.flush()
+
+        pv_a = PolicyVersion(policy_id=policy_a.id, version=1)
+        pv_b = PolicyVersion(policy_id=policy_b.id, version=1)
+        session.add(pv_a)
+        session.add(pv_b)
+        await session.flush()
+
+        pp_a_stage_1 = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_a.id)
+        pp_b_stage_1 = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_b.id)
+        pp_a_stage_2 = PoolPlayer(pool_id=stage_2.id, policy_version_id=pv_a.id)
+        pp_b_stage_2 = PoolPlayer(pool_id=stage_2.id, policy_version_id=pv_b.id)
+        session.add(pp_a_stage_1)
+        session.add(pp_b_stage_1)
+        session.add(pp_a_stage_2)
+        session.add(pp_b_stage_2)
+        await session.flush()
+
+        for pp in (pp_a_stage_1, pp_b_stage_1):
+            match = Match(pool_id=stage_1.id, assignments=[0] * 8, status=MatchStatus.completed)
+            session.add(match)
+            await session.flush()
+            session.add(MatchPlayer(match_id=match.id, pool_player_id=pp.id, policy_index=0, score=1.0))
+
+        await session.commit()
+        await commissioner._load_config()
+
+        binding = commissioner._stage_bindings()[0]
+        assert isinstance(binding.stage, PolicyEvalStage)
+
+        pools = await commissioner._get_pools(season.id)
+        changed, complete = await commissioner._run_policy_eval_stage(season, pools, binding, binding.stage)
+        assert changed is False
+        assert complete is False
+        progress = await commissioner.get_progress()
+        assert progress.stage_flow[0].status == "active"
+        assert progress.stage_flow[1].status == "pending"
+
+        policy_c = Policy(name=f"policy-c-{uuid4().hex[:8]}", user_id="test")
+        session.add(policy_c)
+        await session.flush()
+        pv_c = PolicyVersion(policy_id=policy_c.id, version=1)
+        session.add(pv_c)
+        await session.flush()
+        pp_c_stage_1 = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_c.id)
+        session.add(pp_c_stage_1)
+        await session.flush()
+
+        match_c = Match(pool_id=stage_1.id, assignments=[0] * 8, status=MatchStatus.completed)
+        session.add(match_c)
+        await session.flush()
+        session.add(MatchPlayer(match_id=match_c.id, pool_player_id=pp_c_stage_1.id, policy_index=0, score=1.0))
+        await session.commit()
+
+        pools = await commissioner._get_pools(season.id)
+        changed, complete = await commissioner._run_policy_eval_stage(season, pools, binding, binding.stage)
+        assert changed is True
+        assert complete is True
+
+        stage_2_players = await commissioner._get_pool_players(stage_2.id)
+        assert {pp.policy_version_id for pp in stage_2_players} == {pv_a.id, pv_b.id, pv_c.id}
+
+
+@pytest.mark.asyncio
 async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str) -> None:  # noqa: ARG001
     def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
         return {}
@@ -690,7 +794,9 @@ async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str
         commissioner.season_id = season.id
 
         stage_1 = Pool(season_id=season.id, name="stage-1")
+        stage_2 = Pool(season_id=season.id, name="stage-2")
         session.add(stage_1)
+        session.add(stage_2)
         await session.flush()
 
         policy_ok = Policy(name=f"policy-ok-{uuid4().hex[:8]}", user_id="test")
@@ -707,8 +813,10 @@ async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str
 
         pp_ok = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_ok.id)
         pp_fail = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_fail.id)
+        pp_ok_retired_stage_2 = PoolPlayer(pool_id=stage_2.id, policy_version_id=pv_ok.id, retired=True)
         session.add(pp_ok)
         session.add(pp_fail)
+        session.add(pp_ok_retired_stage_2)
         await session.flush()
 
         # Failed-out policy: MAX_FAILED_ATTEMPTS failures and no score.
@@ -731,20 +839,31 @@ async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str
             input_pool=stage_1,
             output_pool_name="stage-2",
             stage=PolicyEvalStage(policies_per_team=1, matches_per_combo=10),
+            output_pool=stage_2,
         )
-
-        stage_2 = (
-            await session.execute(select(Pool).where(Pool.season_id == season.id, Pool.name == "stage-2"))
-        ).scalar_one()
         stage_2_pvs = {
             row[0]
             for row in (
                 await session.execute(select(PoolPlayer.policy_version_id).where(PoolPlayer.pool_id == stage_2.id))
             ).all()
         }
+        stage_2_rows = (
+            (
+                await session.execute(
+                    select(PoolPlayer).where(
+                        PoolPlayer.pool_id == stage_2.id,
+                        PoolPlayer.policy_version_id == pv_ok.id,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
 
         assert pv_ok.id in stage_2_pvs
         assert pv_fail.id not in stage_2_pvs
+        assert len(stage_2_rows) == 1
+        assert stage_2_rows[0].retired is True
         pp_ok_after = await session.get(PoolPlayer, pp_ok.id)
         pp_fail_after = await session.get(PoolPlayer, pp_fail.id)
         assert pp_ok_after is not None

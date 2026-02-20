@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from sqlmodel import select
+
 # pyright: reportAttributeAccessIssue=false
 from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.tournament import MembershipAction, Pool, PoolPlayer, Season, Team
@@ -124,13 +126,27 @@ class TeamStageExecutionMixin:
         in_flight = await self._count_in_flight_matches(pool.id)
         return not remaining and in_flight == 0
 
+    def _required_output_policies(self, binding: StageBinding) -> int:
+        if not isinstance(binding.stage, PolicyEvalStage):
+            raise AssertionError("required output policies only apply to policy stages")
+
+        policy_bindings = [b for b in self._stage_bindings() if isinstance(b.stage, PolicyEvalStage)]
+        required_by_index: dict[int, int] = {}
+        required_output = self.config.sample_stage.team_size
+        for policy_binding in reversed(policy_bindings):
+            required_by_index[policy_binding.index] = required_output
+            required_output = max(policy_binding.stage.min_policies or 0, required_output)
+
+        return required_by_index[binding.index]
+
     async def _advance_policy_stage(
         self,
         season: Season,
         input_pool: Pool,
         output_pool_name: str,
         stage: PolicyEvalStage,
-    ) -> None:
+        output_pool: Pool | None = None,
+    ) -> bool:
         session = get_db()
         input_pool_name = self._require_pool_name(input_pool)
         current_players = await self._get_pool_players(input_pool.id)
@@ -168,26 +184,47 @@ class TeamStageExecutionMixin:
                 self.config.max_failed_attempts,
             )
 
-        next_pool = Pool(season_id=season.id, name=output_pool_name)
-        session.add(next_pool)
-        await session.commit()
+        created_output_pool = output_pool is None
+        if output_pool is None:
+            output_pool = Pool(season_id=season.id, name=output_pool_name)
+            session.add(output_pool)
+            await session.commit()
+        else:
+            await session.commit()
+
+        if created_output_pool:
+            existing_output_policy_ids = set()
+        else:
+            existing_output_policy_ids = {
+                row[0]
+                for row in (
+                    await session.execute(
+                        select(PoolPlayer.policy_version_id).where(PoolPlayer.pool_id == output_pool.id)
+                    )
+                ).all()
+            }
 
         survivor_ids = {pp.policy_version_id for pp in current_players if pp.policy_version_id in survivors}
+        new_survivor_ids = survivor_ids - existing_output_policy_ids
         changes = self._build_policy_stage_membership_changes(
             input_pool_name=input_pool_name,
             output_pool_name=output_pool_name,
-            survivor_ids=survivor_ids,
+            survivor_ids=new_survivor_ids,
             failed_out_policy_ids=failed_out_policy_ids,
         )
         await self._apply_membership_changes(changes)
 
-        logger.info(
-            "[%s] policy stage advanced: %s -> %s (%s survivors)",
-            self.season_name,
-            input_pool_name,
-            output_pool_name,
-            len(survivors),
-        )
+        changed = created_output_pool or bool(new_survivor_ids) or bool(failed_out_policy_ids)
+        if changed:
+            logger.info(
+                "[%s] policy stage advanced: %s -> %s (%s survivors, %s newly promoted)",
+                self.season_name,
+                input_pool_name,
+                output_pool_name,
+                len(survivors),
+                len(new_survivor_ids),
+            )
+        return changed
 
     async def _advance_team_stage(
         self,
@@ -321,11 +358,33 @@ class TeamStageExecutionMixin:
                 )
             return scheduled > 0, False
 
-        if binding.output_pool in pools:
-            return False, True
+        output_pool = pools.get(binding.output_pool)
+        changed = await self._advance_policy_stage(
+            season,
+            input_pool,
+            binding.output_pool,
+            stage,
+            output_pool=output_pool,
+        )
 
-        await self._advance_policy_stage(season, input_pool, binding.output_pool, stage)
-        return True, True
+        pools = await self._get_pools(season.id)
+        output_pool = pools[binding.output_pool]
+
+        required_output = self._required_output_policies(binding)
+
+        output_players = await self._get_pool_players(output_pool.id)
+        if len(output_players) < required_output:
+            logger.info(
+                "[%s] %s waiting for promoted policies in %s: %s/%s",
+                self.season_name,
+                binding.input_pool,
+                binding.output_pool,
+                len(output_players),
+                required_output,
+            )
+            return changed, False
+
+        return changed, True
 
     async def _run_sample_stage(
         self,
