@@ -36,51 +36,47 @@ jobs:
 
       - name: Cleanup stale preview deployments
         env:
-          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           MAX_AGE_DAYS: 5
         run: |
+          set -euo pipefail
+
           NOW=$(date +%s)
           MAX_AGE_SECONDS=$((MAX_AGE_DAYS * 24 * 60 * 60))
 
-          # Find all releases with pr-preview=true label across all namespaces
-          helm list -A -l pr-preview=true -o json | jq -c '.[]' | while read -r release_json; do
+          RELEASES=$(helm list -A -l pr-preview=true -o json | jq -c '.[]')
+          if [[ -z "$RELEASES" ]]; then
+            echo "No preview releases found"
+            exit 0
+          fi
+
+          while read -r release_json; do
             NAMESPACE=$(echo "$release_json" | jq -r '.namespace')
             RELEASE=$(echo "$release_json" | jq -r '.name')
-            PR_NUM=$(echo "$release_json" | jq -r '.labels["pr-number"]')
             UPDATED=$(echo "$release_json" | jq -r '.updated')
 
-            # Check age
-            UPDATED_TS=$(date -d "$UPDATED" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "${UPDATED%.*}" +%s 2>/dev/null || echo "0")
+            # Extract PR number from release name (e.g. "observatory-pr-7030" -> "7030")
+            PR_NUM=$(echo "$RELEASE" | grep -oP 'pr-\K[0-9]+' || true)
+
+            # Helm updated format: "2026-02-15 12:34:56.123456789 +0000 UTC"
+            # Strip trailing " UTC" and fractional seconds so GNU date can parse it
+            CLEAN_DATE=$(echo "$UPDATED" | sed 's/ UTC$//' | sed 's/\.[0-9]* / /')
+            UPDATED_TS=$(date -d "$CLEAN_DATE" +%s)
             AGE_SECONDS=$((NOW - UPDATED_TS))
             AGE_DAYS=$((AGE_SECONDS / 86400))
 
             if [[ $AGE_SECONDS -gt $MAX_AGE_SECONDS ]]; then
-              echo "Deleting old preview: $RELEASE in $NAMESPACE (${AGE_DAYS} days old, PR #$PR_NUM)"
+              echo "Deleting old preview: $RELEASE in $NAMESPACE (${AGE_DAYS} days old, PR #${PR_NUM:-unknown})"
               helm delete -n "$NAMESPACE" "$RELEASE" --ignore-not-found
               continue
             fi
 
-            if [[ -z "$PR_NUM" || "$PR_NUM" == "null" ]]; then
-              echo "Warning: Release $RELEASE in $NAMESPACE has no pr-number label, skipping"
-              continue
+            if [[ -z "$PR_NUM" ]]; then
+              echo "ERROR: Could not extract PR number from release name '$RELEASE'"
+              exit 1
             fi
 
-            # Check if PR is still open (with retry for transient failures)
-            STATE=""
-            for attempt in 1 2 3; do
-              if STATE=$(gh pr view "$PR_NUM" --json state -q '.state' 2>&1); then
-                break
-              fi
-              if [[ $attempt -lt 3 ]]; then
-                echo "Warning: Failed to fetch PR #$PR_NUM state (attempt $attempt/3), retrying..."
-                sleep 2
-              fi
-            done
-
-            if [[ -z "$STATE" ]]; then
-              echo "Warning: Could not fetch PR #$PR_NUM state after 3 attempts, skipping $RELEASE"
-              continue
-            fi
+            STATE=$(gh pr view "$PR_NUM" --json state -q '.state')
 
             if [[ "$STATE" != "OPEN" ]]; then
               echo "Deleting stale preview: $RELEASE in $NAMESPACE (PR #$PR_NUM is $STATE)"
@@ -88,4 +84,4 @@ jobs:
             else
               echo "Keeping preview: $RELEASE in $NAMESPACE (PR #$PR_NUM is still open, ${AGE_DAYS} days old)"
             fi
-          done
+          done <<< "$RELEASES"
