@@ -87,6 +87,8 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `tr.cogames-command`
 - `tr.cogames-variant-debug`
 - `tr.perf-eval`
+- `tr.perf-eval-env`
+- `tr.perf-scorecard`
 - `tr.policy-save-load-audit`
 - `tr.recipe-curriculum-audit`
 - `tr.wandb-inspect`

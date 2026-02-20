@@ -28,8 +28,9 @@ digraph perf_eval {
   extract [label="Step 5: Extract + compare"];
   sanity [label="Step 6: Sanity gate"];
   publish [label="Step 7: Update PR"];
+  scorecard [label="Step 8: Update scorecard"];
 
-  preflight -> freshness -> baseline -> branch -> extract -> sanity -> publish;
+  preflight -> freshness -> baseline -> branch -> extract -> sanity -> publish -> scorecard;
   sanity -> freshness [label="invalid result"];
 }
 ```
@@ -139,6 +140,16 @@ When invalid: mark result as non-comparable and rerun after fixing freshness/par
   - epoch 2+3 average delta
 - Update title with short epoch-3 delta only after sanity passes.
 
+## Step 8: Update perf scorecard
+
+After publishing to the PR, update the perf scorecard with the results:
+
+```
+/tr.perf-scorecard
+```
+
+Provide: PR number, config (e.g. `1x4090, uv-run`), baseline commit, epoch window, N, delta %, and status.
+
 ## SkyPilot Sandbox Variant
 
 - Launch with explicit git ref and same benchmark args:
@@ -165,5 +176,4 @@ When invalid: mark result as non-comparable and rerun after fixing freshness/par
 
 ## Integration
 
-**Uses:** `do.mettabox-ops`  
-**Pairs with:** `tr.wandb-inspect`, `n.debug-jobs`, `n.monitor-infra`
+**Uses:** `do.mettabox-ops` **Pairs with:** `tr.perf-scorecard`, `tr.wandb-inspect`, `n.debug-jobs`, `n.monitor-infra`
