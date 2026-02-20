@@ -11,7 +11,7 @@ output "readonly_db_uri_secret_name" {
 }
 
 output "readonly_db_username" {
-  value = postgresql_role.readonly.name
+  value = var.readonly_db_username
 }
 
 output "postgres_password" {

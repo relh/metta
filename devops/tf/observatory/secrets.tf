@@ -25,26 +25,12 @@ resource "random_password" "auth_secret" {
   special = false
 }
 
-locals {
-  readonly_db_uri = "postgresql://${postgresql_role.readonly.name}:${urlencode(random_password.readonly_db_password.result)}@${aws_db_instance.postgres_read_replica.endpoint}/${aws_db_instance.postgres.db_name}"
-}
-
 resource "aws_secretsmanager_secret" "readonly_db_uri" {
   name = var.readonly_db_uri_secret_name
 }
 
-resource "aws_secretsmanager_secret_version" "readonly_db_uri" {
-  secret_id     = aws_secretsmanager_secret.readonly_db_uri.id
-  secret_string = local.readonly_db_uri
-
-  depends_on = [
-    postgresql_grant.readonly_database,
-    postgresql_grant.readonly_schema,
-    postgresql_grant.readonly_tables,
-    postgresql_grant.readonly_sequences,
-    postgresql_default_privileges.readonly_tables,
-    postgresql_default_privileges.readonly_sequences,
-  ]
+data "aws_secretsmanager_secret_version" "readonly_db_uri" {
+  secret_id = aws_secretsmanager_secret.readonly_db_uri.id
 }
 
 resource "kubernetes_secret" "observatory_backend_env" {
@@ -54,7 +40,7 @@ resource "kubernetes_secret" "observatory_backend_env" {
   }
   data = {
     STATS_DB_URI           = "postgresql://${aws_db_instance.postgres.username}:${aws_db_instance.postgres.password}@${aws_db_instance.postgres.endpoint}/${aws_db_instance.postgres.db_name}"
-    STATS_DB_READ_ONLY_URI = local.readonly_db_uri
+    STATS_DB_READ_ONLY_URI = data.aws_secretsmanager_secret_version.readonly_db_uri.secret_string
     # used by SQL query generator
     ANTHROPIC_API_KEY = data.aws_secretsmanager_secret_version.anthropic_api_key_version.secret_string
     # bypass for token auth in app_backend, allows softmax.com -> observatory communication
