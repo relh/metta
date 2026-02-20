@@ -67,7 +67,10 @@ class ScoreStage(BaseModel):
 
     @property
     def description(self) -> str:
-        return f"Score policies by sum of top {self.top_k} team placements (lower is better)"
+        return (
+            f"Score policies by sum of top {self.top_k} team placements; if a policy appears in fewer than "
+            f"{self.top_k} ranked teams, each missing placement counts as (total ranked teams + 1). Lower is better."
+        )
 
 
 TeamTournamentStage = Annotated[

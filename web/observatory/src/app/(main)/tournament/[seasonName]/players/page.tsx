@@ -40,7 +40,50 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
         ? [selectedStage]
         : season.pools.map((pool) => pool.name)
   const stageFlowByPool = new Map((stageContext.progress?.stage_flow ?? []).map((stage) => [stage.input_pool, stage]))
+  const stageKindByPool = new Map(
+    (stageContext.progress?.stage_flow ?? []).map((stage) => [stage.input_pool, stage.kind])
+  )
   const selectedDisplayStage = selectedStage && poolNames.includes(selectedStage) ? selectedStage : null
+  const showPendingState = selectedStage !== null && selectedStageStatus === 'pending'
+  const showEmptyState = policies.length === 0
+  const shouldRenderPlayerTable = !showPendingState && !showEmptyState
+  const stageScoreByPool = shouldRenderPlayerTable
+    ? new Map(
+        await Promise.all(
+          poolNames.map(async (poolName): Promise<readonly [string, Map<string, number>]> => {
+            const stageKind = stageKindByPool.get(poolName)
+            try {
+              if (stageKind === 'team_eval') {
+                const teams = await repo.getSeasonStageLeaderboard(seasonName, 'team', poolName)
+                const totalsByPolicy = new Map<string, { sum: number; count: number }>()
+                for (const team of teams) {
+                  if (team.score === null) continue
+                  for (const cog of team.cogs) {
+                    const existing = totalsByPolicy.get(cog.policy.id)
+                    if (existing) {
+                      existing.sum += team.score
+                      existing.count += 1
+                    } else {
+                      totalsByPolicy.set(cog.policy.id, { sum: team.score, count: 1 })
+                    }
+                  }
+                }
+                const averageByPolicy = new Map<string, number>()
+                for (const [policyId, totals] of totalsByPolicy) {
+                  if (totals.count > 0) averageByPolicy.set(policyId, totals.sum / totals.count)
+                }
+                return [poolName, averageByPolicy] as const
+              }
+
+              const leaderboard = await repo.getSeasonStageLeaderboard(seasonName, 'policy', poolName)
+              return [poolName, new Map(leaderboard.map((entry) => [entry.policy.id, entry.score]))] as const
+            } catch {
+              return [poolName, new Map()] as const
+            }
+          })
+        )
+      )
+    : new Map<string, Map<string, number>>()
 
   return (
     <div className="space-y-4">
@@ -48,9 +91,9 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
       {tournamentNotStarted && (
         <SubmitForm seasonName={seasonName} existingPolicyVersionIds={existingPolicyVersionIds} />
       )}
-      {selectedStage && selectedStageStatus === 'pending' ? (
+      {showPendingState ? (
         <div className="text-foreground-muted py-4">This stage has not started yet.</div>
-      ) : policies.length === 0 ? (
+      ) : showEmptyState ? (
         <div className="text-foreground-muted py-4">No players submitted yet</div>
       ) : (
         <Table>
@@ -99,18 +142,12 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
                         </TD>
                       )
                     }
+                    const averageScore = stageScoreByPool.get(poolName)?.get(policy.policy.id)
                     return (
                       <TD key={poolName} className={selectedDisplayStage === poolName ? 'bg-blue-950/10' : ''}>
                         <div className="flex flex-col gap-1.5 items-start">
-                          <span
-                            className={clsx(
-                              'inline-block px-2 py-1 rounded text-xs font-medium',
-                              pool.active
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                                : 'bg-surface-alt text-foreground-muted'
-                            )}
-                          >
-                            {pool.active ? 'active' : 'retired'}
+                          <span className="font-mono text-sm">
+                            {averageScore !== undefined ? averageScore.toPrecision(4) : '-'}
                           </span>
                           <Link
                             href={matchesRoute(seasonName, {

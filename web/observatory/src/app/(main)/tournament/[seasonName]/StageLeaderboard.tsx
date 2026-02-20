@@ -72,9 +72,10 @@ const policyColumns: LeaderboardColumn<LeaderboardEntry>[] = [
     key: 'score',
     header: 'Score',
     render: (entry) => (
-      <>
-        {entry.score.toPrecision(4)} <span className="text-foreground-muted text-xs">({entry.matches} matches)</span>
-      </>
+      <div className="flex flex-col items-start gap-0.5">
+        <span className="font-mono text-sm">{entry.score.toPrecision(4)}</span>
+        <span className="text-foreground-muted text-xs">({entry.matches} matches)</span>
+      </div>
     ),
   },
 ]
@@ -106,10 +107,10 @@ const teamColumns: LeaderboardColumn<TeamSummary>[] = [
     key: 'score',
     header: 'Score',
     render: (team) => (
-      <>
-        <span className="font-mono text-sm">{team.score !== null ? team.score.toPrecision(4) : '-'}</span>{' '}
+      <div className="flex flex-col items-start gap-0.5">
+        <span className="font-mono text-sm">{team.score !== null ? team.score.toPrecision(4) : '-'}</span>
         <span className="text-foreground-muted text-xs">({team.matches} matches)</span>
-      </>
+      </div>
     ),
   },
   {
@@ -147,12 +148,7 @@ const scorePolicyColumns: LeaderboardColumn<ScorePoliciesLeaderboardEntry>[] = [
   {
     key: 'placement',
     header: 'Placement Sum',
-    render: (entry) => (
-      <>
-        <span className="font-mono text-sm">{entry.placement_score.toPrecision(4)}</span>{' '}
-        <span className="text-foreground-muted text-xs">(lower is better)</span>
-      </>
-    ),
+    render: (entry) => <span className="font-mono text-sm">{entry.placement_score.toPrecision(4)}</span>,
   },
   {
     key: 'appearances',

@@ -15,7 +15,7 @@ from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageRe
 
 
 class BetaTeamsCommissioner(TeamCommissionerBase):
-    season_name = "teams"
+    season_name = "beta-teams-large"
     summary = "Progressive-widening team tournament: 1->2->4->8 policy teams"
     entry_pool = _policy_pool(1)
     leaderboard_pool = _score_pool()

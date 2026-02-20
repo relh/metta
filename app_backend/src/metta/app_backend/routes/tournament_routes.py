@@ -66,7 +66,12 @@ class LeaderboardEntry(BaseModel):
 class ScorePoliciesLeaderboardEntry(BaseModel):
     rank: int = Field(description="1-indexed position on the score-policies leaderboard")
     policy: PolicyVersionSummary = Field(description="Identity of the ranked policy version")
-    placement_score: float = Field(description="Sum of top team placements (lower is better)")
+    placement_score: float = Field(
+        description=(
+            "Sum of a policy's best team placements (top_k). "
+            "Missing appearances are penalized as (total ranked teams + 1)."
+        )
+    )
     team_appearances: int = Field(description="Number of ranked teams containing this policy")
 
 

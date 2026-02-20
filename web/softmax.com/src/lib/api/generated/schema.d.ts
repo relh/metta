@@ -1144,7 +1144,7 @@ export interface components {
       policy: components["schemas"]["PolicyVersionSummary"];
       /**
        * Placement Score
-       * @description Sum of top team placements (lower is better)
+       * @description Sum of a policy's best team placements (top_k). Missing appearances are penalized as (total ranked teams + 1).
        */
       placement_score: number;
       /**

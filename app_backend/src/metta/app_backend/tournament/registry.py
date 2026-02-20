@@ -6,6 +6,7 @@ from metta.app_backend.tournament.commissioners.beta_cvc_no_clips import BetaCvc
 from metta.app_backend.tournament.commissioners.beta_cvc_no_clips_no_vibes import BetaCvcNoClipsNoVibesCommissioner
 from metta.app_backend.tournament.commissioners.beta_test import BetaTestCommissioner
 from metta.app_backend.tournament.commissioners.teams.beta import BetaTeamsCommissioner
+from metta.app_backend.tournament.commissioners.teams.small import BetaTeamsSmallCommissioner
 from metta.app_backend.tournament.settings import settings
 
 _ENABLED_SEASON_COMMISSIONERS: list[type[CommissionerBase]] = [
@@ -16,6 +17,7 @@ _ENABLED_SEASON_COMMISSIONERS: list[type[CommissionerBase]] = [
     BetaCvcNoClipsNoVibesCommissioner,
     BetaTestCommissioner,
     BetaTeamsCommissioner,
+    BetaTeamsSmallCommissioner,
 ]
 
 
