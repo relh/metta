@@ -16,6 +16,9 @@ import { PolicyVersionTournamentMembershipsCard } from './PolicyVersionTournamen
 
 export default async function PolicyVersionPage(props: PageProps<'/policies/versions/[policyVersionId]'>) {
   const { policyVersionId } = await props.params
+  const standaloneDashboardBaseUrl =
+    process.env.OBSERVATORY_STANDALONE_DASHBOARD_URL?.replace(/\/$/, '') ?? 'http://localhost:5174'
+  const standaloneDashboardHref = `${standaloneDashboardBaseUrl}/?policyVersionId=${encodeURIComponent(policyVersionId)}`
 
   const repo = await getRepo()
   const pvInfo = await repo.getPolicyVersion(policyVersionId)
@@ -43,7 +46,7 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
         </div>
         {pvInfo && (
           <div className="flex gap-2">
-            <LinkButton href={`/policies/versions/${policyVersionId}/performance-dashboard`} theme="secondary">
+            <LinkButton href={standaloneDashboardHref} theme="secondary">
               View Dashboard
             </LinkButton>
             <LinkButton href="/cogames-diagnose" theme="secondary">
