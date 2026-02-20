@@ -12,6 +12,7 @@ from metta.app_backend.tournament.referees.base import (
 )
 from metta.app_backend.tournament.referees.envs import GameEnvGenerator
 from metta.app_backend.tournament.referees.mock import MockLeaderboardMixin
+from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
@@ -35,11 +36,13 @@ class PolicyStageReferee(RefereeBase):
         *,
         stage: PolicyEvalStage,
         game: GameEnvGenerator,
+        max_failed_attempts: int = MAX_FAILED_ATTEMPTS,
     ) -> None:
         self.stage = stage
         self.policies_per_team = stage.policies_per_team
         self.matches_per_combo = stage.matches_per_combo
         self.game = game
+        self.max_failed_attempts = max_failed_attempts
 
     def make_env(self, seed: int) -> MettaGridConfig:
         return self.game.make_env(seed)
@@ -58,6 +61,8 @@ class PolicyStageReferee(RefereeBase):
         for pp_ids, assignments in combos:
             key = (tuple(sorted(pp_ids)), tuple(assignments))
             counts = match_counts.get(key, zero_counts)
+            if counts.failed >= self.max_failed_attempts:
+                continue
             needed = self.matches_per_combo - counts.completed - counts.in_progress
             for match_i in range(needed):
                 seed_offset = counts.completed + counts.in_progress + match_i

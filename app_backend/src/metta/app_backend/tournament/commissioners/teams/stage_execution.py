@@ -18,7 +18,7 @@ from metta.app_backend.tournament.commissioners.teams.config import (
 from metta.app_backend.tournament.commissioners.teams.db_helpers import TeamMembershipChangeRequest
 from metta.app_backend.tournament.commissioners.teams.sampling import sample_teams
 from metta.app_backend.tournament.commissioners.teams.stage_planning import StageBinding
-from metta.app_backend.tournament.referees.base import RefereeBase
+from metta.app_backend.tournament.referees.base import MatchCountEntry, RefereeBase
 from metta.app_backend.tournament.referees.teams.team_stage import TeamStageReferee
 from metta.app_backend.tournament.teams.scoring import compute_policy_placement_scores, rank_teams_by_score
 
@@ -26,6 +26,59 @@ logger = logging.getLogger(__name__)
 
 
 class TeamStageExecutionMixin:
+    @staticmethod
+    def _require_pool_name(pool: Pool) -> str:
+        pool_name = pool.name
+        if pool_name is None:
+            raise AssertionError("Policy stage input pool must have a name")
+        return pool_name
+
+    def _failed_out_policy_ids(
+        self,
+        *,
+        current_players: list[PoolPlayer],
+        policy_scores: dict[UUID, float],
+        policy_counts: dict[UUID, MatchCountEntry],
+    ) -> set[UUID]:
+        zero_counts = MatchCountEntry.zero()
+        return {
+            player.policy_version_id
+            for player in current_players
+            if player.policy_version_id not in policy_scores
+            and policy_counts.get(player.id, zero_counts).failed >= self.config.max_failed_attempts
+        }
+
+    def _build_policy_stage_membership_changes(
+        self,
+        *,
+        input_pool_name: str,
+        output_pool_name: str,
+        survivor_ids: set[UUID],
+        failed_out_policy_ids: set[UUID],
+    ) -> list[MembershipChangeRequest]:
+        changes = [
+            MembershipChangeRequest(
+                pool_name=output_pool_name,
+                policy_version_id=policy_version_id,
+                action=MembershipAction.add,
+                notes=f"Advanced from {input_pool_name}",
+            )
+            for policy_version_id in sorted(survivor_ids)
+        ]
+        changes.extend(
+            MembershipChangeRequest(
+                pool_name=input_pool_name,
+                policy_version_id=policy_version_id,
+                action=MembershipAction.remove,
+                notes=(
+                    f"Failed out in {input_pool_name}: reached {self.config.max_failed_attempts} "
+                    "failed attempts without score"
+                ),
+            )
+            for policy_version_id in sorted(failed_out_policy_ids)
+        )
+        return changes
+
     async def _schedule_with_referee(
         self,
         season: Season,
@@ -79,42 +132,59 @@ class TeamStageExecutionMixin:
         stage: PolicyEvalStage,
     ) -> None:
         session = get_db()
+        input_pool_name = self._require_pool_name(input_pool)
         current_players = await self._get_pool_players(input_pool.id)
+        policy_scores = await self._compute_policy_scores(input_pool.id)
+
+        player_ids = {player.id for player in current_players}
+        policy_counts = await self._get_policy_match_counts(input_pool.id, player_ids)
+        failed_out_policy_ids = self._failed_out_policy_ids(
+            current_players=current_players,
+            policy_scores=policy_scores,
+            policy_counts=policy_counts,
+        )
 
         if stage.elim is None:
             survivors = {pp.policy_version_id for pp in current_players}
         else:
-            scores = await self._compute_policy_scores(input_pool.id)
-            assert scores, f"No scores for {input_pool.name} after stage completion"
+            if not policy_scores:
+                survivors = set()
+            else:
+                match stage.elim:
+                    case ThresholdElim(min_score=threshold):
+                        survivors = {pv_id for pv_id, score in policy_scores.items() if score >= threshold}
+                    case FractionElim(fraction=fraction):
+                        ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
+                        cutoff = max(1, int(len(ranked) * (1 - fraction)))
+                        survivors = {pv_id for pv_id, _ in ranked[:cutoff]}
 
-            match stage.elim:
-                case ThresholdElim(min_score=threshold):
-                    survivors = {pv_id for pv_id, score in scores.items() if score >= threshold}
-                case FractionElim(fraction=fraction):
-                    ranked = sorted(scores.items(), key=lambda row: row[1], reverse=True)
-                    cutoff = max(1, int(len(ranked) * (1 - fraction)))
-                    survivors = {pv_id for pv_id, _ in ranked[:cutoff]}
+        if failed_out_policy_ids:
+            survivors -= failed_out_policy_ids
+            logger.info(
+                "[%s] policy stage %s: %s failed out (>= %s failures without score)",
+                self.season_name,
+                input_pool_name,
+                len(failed_out_policy_ids),
+                self.config.max_failed_attempts,
+            )
 
         next_pool = Pool(season_id=season.id, name=output_pool_name)
         session.add(next_pool)
         await session.commit()
 
         survivor_ids = {pp.policy_version_id for pp in current_players if pp.policy_version_id in survivors}
-        changes = [
-            MembershipChangeRequest(
-                pool_name=output_pool_name,
-                policy_version_id=policy_version_id,
-                action=MembershipAction.add,
-                notes=f"Advanced from {input_pool.name}",
-            )
-            for policy_version_id in sorted(survivor_ids)
-        ]
+        changes = self._build_policy_stage_membership_changes(
+            input_pool_name=input_pool_name,
+            output_pool_name=output_pool_name,
+            survivor_ids=survivor_ids,
+            failed_out_policy_ids=failed_out_policy_ids,
+        )
         await self._apply_membership_changes(changes)
 
         logger.info(
             "[%s] policy stage advanced: %s -> %s (%s survivors)",
             self.season_name,
-            input_pool.name,
+            input_pool_name,
             output_pool_name,
             len(survivors),
         )
@@ -128,15 +198,33 @@ class TeamStageExecutionMixin:
         cull_fraction: float,
     ) -> None:
         session = get_db()
-        team_scores = await self._compute_team_scores(input_pool.id, {t.id for t in alive_teams})
+        team_ids = {team.id for team in alive_teams}
+        team_scores = await self._compute_team_scores(input_pool.id, team_ids)
+        team_counts = await self._get_team_match_counts(input_pool.id, team_ids)
+        zero_counts = MatchCountEntry.zero()
 
-        ranked = sorted(alive_teams, key=lambda t: team_scores[t.id], reverse=True)
-        for team in ranked:
-            team.score = team_scores[team.id]
+        failed_out_teams: list[Team] = []
+        ranked: list[Team] = []
+        for team in alive_teams:
+            if team.id in team_scores:
+                team.score = team_scores[team.id]
+                ranked.append(team)
+                continue
 
-        cutoff = max(1, int(len(ranked) * (1 - cull_fraction)))
+            counts = team_counts.get(team.id, zero_counts)
+            if counts.failed >= self.config.max_failed_attempts:
+                failed_out_teams.append(team)
+                continue
+
+            raise AssertionError(
+                f"Team {team.id} in {input_pool.name} has no score and has not exhausted retry attempts"
+            )
+
+        ranked.sort(key=lambda team: team_scores[team.id], reverse=True)
+
+        cutoff = max(1, int(len(ranked) * (1 - cull_fraction))) if ranked else 0
         survivors = ranked[:cutoff]
-        eliminated = ranked[cutoff:]
+        eliminated = ranked[cutoff:] + failed_out_teams
 
         for team in eliminated:
             team.eliminated = True
@@ -161,12 +249,13 @@ class TeamStageExecutionMixin:
         await self._apply_team_membership_changes(changes)
 
         logger.info(
-            "[%s] team stage advanced: %s -> %s (%s survivors, %s eliminated)",
+            "[%s] team stage advanced: %s -> %s (%s survivors, %s eliminated, %s failed out)",
             self.season_name,
             input_pool.name,
             output_pool_name,
             len(survivors),
             len(eliminated),
+            len(failed_out_teams),
         )
 
     async def _compute_final_scores(self, pools: dict[str, Pool]) -> dict[UUID, float]:
@@ -303,9 +392,17 @@ class TeamStageExecutionMixin:
 
         alive_teams = await self._get_alive_teams(input_pool.id)
         if not alive_teams:
-            return False, False
+            if binding.output_pool in pools:
+                return False, True
+            await self._advance_team_stage(season, input_pool, binding.output_pool, [], stage.cull_fraction)
+            return True, True
 
-        baseline_referee = TeamStageReferee(matches_per_team=stage.matches_per_team, teams=[], game=self.config.game)
+        baseline_referee = TeamStageReferee(
+            matches_per_team=stage.matches_per_team,
+            teams=[],
+            game=self.config.game,
+            max_failed_attempts=self.config.max_failed_attempts,
+        )
         await self._ensure_pools_exist(season, {binding.input_pool: baseline_referee})
 
         if not await self._all_teams_done(input_pool.id, alive_teams, stage.matches_per_team):

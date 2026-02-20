@@ -91,7 +91,11 @@ async def seed_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
 async def seed_teams_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
     async with db_session() as session:
         initial_fields = SEASONS["beta-teams-large"].get_initial_season_fields()
-        season = Season(name="teams", canonical=True, team_tournament_config=initial_fields["team_tournament_config"])
+        season = Season(
+            name="beta-teams-large",
+            canonical=True,
+            team_tournament_config=initial_fields["team_tournament_config"],
+        )
         session.add(season)
         await session.flush()
 

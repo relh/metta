@@ -12,6 +12,7 @@ from metta.app_backend.tournament.referees.base import (
     RefereeBase,
 )
 from metta.app_backend.tournament.referees.envs import GameEnvGenerator
+from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
@@ -26,11 +27,14 @@ def build_pending_team_match_schedule(
     *,
     matches_per_team: int,
     get_counts: Callable[[TeamConfig], MatchCountEntry],
+    max_failed_attempts: int = MAX_FAILED_ATTEMPTS,
     limit: int = 0,
 ) -> list[tuple[TeamConfig, int]]:
     pending: list[tuple[int, TeamConfig, int]] = []
     for team in teams:
         counts = get_counts(team)
+        if counts.failed >= max_failed_attempts:
+            continue
         needed = matches_per_team - counts.completed - counts.in_progress
         for match_i in range(needed):
             seed_offset = counts.completed + counts.in_progress + match_i
@@ -51,10 +55,12 @@ class TeamStageReferee(RefereeBase):
         matches_per_team: int,
         teams: list[TeamConfig],
         game: GameEnvGenerator,
+        max_failed_attempts: int = MAX_FAILED_ATTEMPTS,
     ) -> None:
         self.matches_per_team = matches_per_team
         self.teams = teams
         self.game = game
+        self.max_failed_attempts = max_failed_attempts
 
     def make_env(self, seed: int) -> MettaGridConfig:
         return self.game.make_env(seed)
@@ -73,6 +79,7 @@ class TeamStageReferee(RefereeBase):
                 (tuple(sorted(team.pool_player_ids)), tuple(team.assignments)),
                 zero_counts,
             ),
+            max_failed_attempts=self.max_failed_attempts,
             limit=limit,
         )
 

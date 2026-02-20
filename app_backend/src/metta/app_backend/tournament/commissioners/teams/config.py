@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from metta.app_backend.tournament.referees.envs import GameEnvGenerator
+from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
 from metta.app_backend.tournament.settings import MAX_OUTSTANDING_MATCHES
 
 
@@ -84,6 +85,13 @@ class TeamTournamentConfig(BaseModel):
     stages: list[TeamTournamentStage] = Field(description="Ordered tournament stages")
     max_outstanding_matches: int = Field(
         default=MAX_OUTSTANDING_MATCHES, description="Max concurrent matches across all stages"
+    )
+    max_failed_attempts: int = Field(
+        default=MAX_FAILED_ATTEMPTS,
+        ge=1,
+        description=(
+            "Maximum failed attempts per combo/team before scheduling is stopped and entries are treated as exhausted"
+        ),
     )
 
     @model_validator(mode="after")

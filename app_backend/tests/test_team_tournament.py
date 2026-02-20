@@ -37,6 +37,7 @@ from metta.app_backend.tournament.commissioners.teams.config import (
 from metta.app_backend.tournament.commissioners.teams.db_helpers import TeamMembershipChangeRequest
 from metta.app_backend.tournament.commissioners.teams.stage_planning import _policy_pool, _score_pool, _team_pool
 from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
 from metta.app_backend.tournament.referees.teams.policy_stage import (
     PolicyStageReferee,
     _generate_combos,
@@ -244,6 +245,18 @@ def test_eval_referee_skips_completed():
     assert len(requests) == 0
 
 
+def test_eval_referee_skips_exhausted_failed_combos():
+    players = [_make_player() for _ in range(2)]
+    referee = _make_policy_referee(policies_per_team=2, matches_per_combo=10)
+
+    p0, p1 = sorted([players[0].id, players[1].id])
+    counts = {
+        ((p0, p1), (0, 0, 0, 0, 1, 1, 1, 1)): MatchCountEntry(0, MAX_FAILED_ATTEMPTS, 0),
+    }
+    requests = referee.get_matches_to_schedule(players, counts)
+    assert len(requests) == 0
+
+
 def test_eval_referee_produces_serializable_jobs():
     players = [_make_player() for _ in range(3)]
     referee = _make_policy_referee(policies_per_team=1, matches_per_combo=1)
@@ -371,6 +384,20 @@ def test_elimination_skips_completed_teams():
     assert len(requests) == 0
 
 
+def test_elimination_skips_exhausted_failed_teams():
+    pp1, pp2 = uuid4(), uuid4()
+    team_cfg = TeamConfig(
+        team_id=uuid4(),
+        pool_player_ids=[pp1, pp2],
+        assignments=[0, 0, 0, 0, 1, 1, 1, 1],
+    )
+    referee = TeamStageReferee(matches_per_team=10, teams=[team_cfg], game=GameEnvGenerator())
+    key = (tuple(sorted([pp1, pp2])), (0, 0, 0, 0, 1, 1, 1, 1))
+    counts = {key: MatchCountEntry(0, MAX_FAILED_ATTEMPTS, 0)}
+    requests = referee.get_matches_to_schedule([], counts)
+    assert len(requests) == 0
+
+
 def test_elimination_multiple_teams():
     teams = []
     for _ in range(3):
@@ -469,6 +496,238 @@ async def test_team_eval_schedules_duplicate_team_compositions_per_team(stats_re
         )
         per_team_counts = {row[0]: row[1] for row in count_rows.all()}
         assert sorted(per_team_counts.values()) == [2, 2]
+
+
+@pytest.mark.asyncio
+async def test_all_teams_done_when_retries_exhausted(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    fail_cap = 1
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-fail-cap-{uuid4().hex[:8]}"
+    commissioner.initial_config = TeamTournamentConfig(
+        game=GameEnvGenerator(num_agents=8),
+        stages=[
+            PolicyEvalStage(policies_per_team=1, matches_per_combo=1),
+            SampleStage(team_size=8, num_teams=1, min_per_policy=1),
+            TeamEvalStage(matches_per_team=10, cull_fraction=0.0),
+            ScoreStage(top_k=1),
+        ],
+        max_failed_attempts=fail_cap,
+    )
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        pool = Pool(season_id=season.id, name="team-round-1")
+        session.add(pool)
+        await session.flush()
+
+        team = Team(pool_id=pool.id)
+        session.add(team)
+        await session.flush()
+
+        for _ in range(fail_cap):
+            session.add(
+                Match(
+                    pool_id=pool.id,
+                    team_id=team.id,
+                    assignments=[0] * 8,
+                    status=MatchStatus.failed,
+                )
+            )
+
+        await session.commit()
+        await commissioner._load_config()
+        assert await commissioner._all_teams_done(pool.id, [team], matches_per_team=10)
+
+
+@pytest.mark.asyncio
+async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    fail_cap = 1
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-policy-failout-{uuid4().hex[:8]}"
+    commissioner.initial_config = commissioner.initial_config.model_copy(update={"max_failed_attempts": fail_cap})
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        stage_1 = Pool(season_id=season.id, name="stage-1")
+        session.add(stage_1)
+        await session.flush()
+
+        policy_ok = Policy(name=f"policy-ok-{uuid4().hex[:8]}", user_id="test")
+        policy_fail = Policy(name=f"policy-fail-{uuid4().hex[:8]}", user_id="test")
+        session.add(policy_ok)
+        session.add(policy_fail)
+        await session.flush()
+
+        pv_ok = PolicyVersion(policy_id=policy_ok.id, version=1)
+        pv_fail = PolicyVersion(policy_id=policy_fail.id, version=1)
+        session.add(pv_ok)
+        session.add(pv_fail)
+        await session.flush()
+
+        pp_ok = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_ok.id)
+        pp_fail = PoolPlayer(pool_id=stage_1.id, policy_version_id=pv_fail.id)
+        session.add(pp_ok)
+        session.add(pp_fail)
+        await session.flush()
+
+        # Failed-out policy: MAX_FAILED_ATTEMPTS failures and no score.
+        for _ in range(fail_cap):
+            failed_match = Match(pool_id=stage_1.id, assignments=[0] * 8, status=MatchStatus.failed)
+            session.add(failed_match)
+            await session.flush()
+            session.add(MatchPlayer(match_id=failed_match.id, pool_player_id=pp_fail.id, policy_index=0))
+
+        # Healthy policy: at least one completed scored match.
+        completed_match = Match(pool_id=stage_1.id, assignments=[0] * 8, status=MatchStatus.completed)
+        session.add(completed_match)
+        await session.flush()
+        session.add(MatchPlayer(match_id=completed_match.id, pool_player_id=pp_ok.id, policy_index=0, score=1.0))
+        await session.commit()
+        await commissioner._load_config()
+
+        await commissioner._advance_policy_stage(
+            season=season,
+            input_pool=stage_1,
+            output_pool_name="stage-2",
+            stage=PolicyEvalStage(policies_per_team=1, matches_per_combo=10),
+        )
+
+        stage_2 = (
+            await session.execute(select(Pool).where(Pool.season_id == season.id, Pool.name == "stage-2"))
+        ).scalar_one()
+        stage_2_pvs = {
+            row[0]
+            for row in (
+                await session.execute(select(PoolPlayer.policy_version_id).where(PoolPlayer.pool_id == stage_2.id))
+            ).all()
+        }
+
+        assert pv_ok.id in stage_2_pvs
+        assert pv_fail.id not in stage_2_pvs
+        pp_ok_after = await session.get(PoolPlayer, pp_ok.id)
+        pp_fail_after = await session.get(PoolPlayer, pp_fail.id)
+        assert pp_ok_after is not None
+        assert pp_fail_after is not None
+        assert pp_ok_after.retired is False
+        assert pp_fail_after.retired is True
+
+
+@pytest.mark.asyncio
+async def test_advance_team_stage_excludes_failed_out_teams(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    fail_cap = 1
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-team-failout-{uuid4().hex[:8]}"
+    commissioner.initial_config = commissioner.initial_config.model_copy(update={"max_failed_attempts": fail_cap})
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        round_1 = Pool(season_id=season.id, name="team-round-1")
+        session.add(round_1)
+        await session.flush()
+
+        policy_ok = Policy(name=f"team-policy-ok-{uuid4().hex[:8]}", user_id="test")
+        policy_fail = Policy(name=f"team-policy-fail-{uuid4().hex[:8]}", user_id="test")
+        session.add(policy_ok)
+        session.add(policy_fail)
+        await session.flush()
+
+        pv_ok = PolicyVersion(policy_id=policy_ok.id, version=1)
+        pv_fail = PolicyVersion(policy_id=policy_fail.id, version=1)
+        session.add(pv_ok)
+        session.add(pv_fail)
+        await session.flush()
+
+        pp_ok = PoolPlayer(pool_id=round_1.id, policy_version_id=pv_ok.id)
+        pp_fail = PoolPlayer(pool_id=round_1.id, policy_version_id=pv_fail.id)
+        session.add(pp_ok)
+        session.add(pp_fail)
+        await session.flush()
+
+        team_ok = Team(pool_id=round_1.id)
+        team_fail = Team(pool_id=round_1.id)
+        session.add(team_ok)
+        session.add(team_fail)
+        await session.flush()
+
+        for pos in range(8):
+            session.add(TeamPolicyVersion(team_id=team_ok.id, policy_version_id=pv_ok.id, position=pos))
+            session.add(TeamPolicyVersion(team_id=team_fail.id, policy_version_id=pv_fail.id, position=pos))
+        await session.flush()
+
+        completed_match = Match(
+            pool_id=round_1.id,
+            team_id=team_ok.id,
+            assignments=[0] * 8,
+            status=MatchStatus.completed,
+        )
+        session.add(completed_match)
+        await session.flush()
+        session.add(MatchPlayer(match_id=completed_match.id, pool_player_id=pp_ok.id, policy_index=0, score=1.0))
+
+        for _ in range(fail_cap):
+            session.add(
+                Match(
+                    pool_id=round_1.id,
+                    team_id=team_fail.id,
+                    assignments=[0] * 8,
+                    status=MatchStatus.failed,
+                )
+            )
+
+        await session.commit()
+        await session.refresh(team_ok)
+        await session.refresh(team_fail)
+        await commissioner._load_config()
+
+        await commissioner._advance_team_stage(
+            season=season,
+            input_pool=round_1,
+            output_pool_name="team-round-2",
+            alive_teams=[team_ok, team_fail],
+            cull_fraction=0.0,
+        )
+
+        round_2 = (
+            await session.execute(select(Pool).where(Pool.season_id == season.id, Pool.name == "team-round-2"))
+        ).scalar_one()
+        transitioned = (await session.execute(select(Team).where(Team.pool_id == round_2.id))).scalars().all()
+
+        assert len(transitioned) == 1
+        assert team_fail.eliminated is True
+        assert team_ok.eliminated is False
 
 
 def test_elimination_respects_limit():
@@ -590,6 +849,22 @@ def test_config_min_teams_per_policy_override():
         ],
     )
     assert config.min_teams_per_policy == 20
+
+
+def test_config_legacy_snapshot_defaults_failed_attempt_cap():
+    legacy_snapshot = {
+        "game": {"kind": "cogsguard", "num_agents": 8},
+        "stages": [
+            {"kind": "policy_eval", "policies_per_team": 1},
+            {"kind": "sample_teams", "team_size": 8, "num_teams": 100},
+            {"kind": "team_eval", "matches_per_team": 10, "cull_fraction": 0.0},
+            {"kind": "score_policies", "top_k": 10},
+        ],
+        "max_outstanding_matches": 20,
+    }
+
+    config = TeamTournamentConfig.model_validate(legacy_snapshot)
+    assert config.max_failed_attempts == MAX_FAILED_ATTEMPTS
 
 
 def test_config_validates_num_agents_divisibility():

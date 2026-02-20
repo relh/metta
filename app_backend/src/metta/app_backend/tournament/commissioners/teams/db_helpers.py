@@ -67,6 +67,31 @@ class TeamDbHelpersMixin:
         ).all()
         return {row[0]: float(row[1]) for row in rows if row[1] is not None}
 
+    async def _get_policy_match_counts(self, pool_id: UUID, pool_player_ids: set[UUID]) -> dict[UUID, MatchCountEntry]:
+        session = get_db()
+        if not pool_player_ids:
+            return {}
+
+        result = await session.execute(
+            select(MatchPlayer.pool_player_id, Match.status, func.count())
+            .join(MatchPlayer.match)
+            .where(Match.pool_id == pool_id)
+            .where(col(MatchPlayer.pool_player_id).in_(pool_player_ids))
+            .group_by(MatchPlayer.pool_player_id, Match.status)
+        )
+
+        zero_counts = MatchCountEntry.zero()
+        counts: dict[UUID, MatchCountEntry] = {pool_player_id: zero_counts for pool_player_id in pool_player_ids}
+        for pool_player_id, status, count in result.all():
+            prev = counts.get(pool_player_id, zero_counts)
+            if status == MatchStatus.completed:
+                counts[pool_player_id] = MatchCountEntry(prev.completed + count, prev.failed, prev.in_progress)
+            elif status == MatchStatus.failed:
+                counts[pool_player_id] = MatchCountEntry(prev.completed, prev.failed + count, prev.in_progress)
+            else:
+                counts[pool_player_id] = MatchCountEntry(prev.completed, prev.failed, prev.in_progress + count)
+        return counts
+
     async def _create_team_pool(self, season_id: UUID, pool_name: str) -> Pool:
         session = get_db()
         pool = Pool(season_id=season_id, name=pool_name)
@@ -121,19 +146,21 @@ class TeamDbHelpersMixin:
         await session.commit()
 
     async def _all_teams_done(self, pool_id: UUID, teams: list[Team], matches_per_team: int) -> bool:
-        session = get_db()
         team_ids = {t.id for t in teams}
+        counts = await self._get_team_match_counts(pool_id, team_ids)
+        zero_counts = MatchCountEntry.zero()
 
-        result = await session.execute(
-            select(Match.team_id, func.count())
-            .where(Match.pool_id == pool_id)
-            .where(Match.status == MatchStatus.completed)
-            .where(col(Match.team_id).in_(team_ids))
-            .group_by(Match.team_id)
-        )
+        for team in teams:
+            team_counts = counts.get(team.id, zero_counts)
+            if team_counts.in_progress > 0:
+                return False
+            if team_counts.completed >= matches_per_team:
+                continue
+            if team_counts.failed >= self.config.max_failed_attempts:
+                continue
+            return False
 
-        counts = {row[0]: row[1] for row in result.all()}
-        return all(counts.get(t.id, 0) >= matches_per_team for t in teams)
+        return True
 
     async def _get_team_match_counts(self, pool_id: UUID, team_ids: set[UUID]) -> dict[UUID, MatchCountEntry]:
         session = get_db()
@@ -227,7 +254,12 @@ class TeamDbHelpersMixin:
             return 0
 
         seed = 42
-        referee = TeamStageReferee(matches_per_team=matches_per_team, teams=[], game=self.config.game)
+        referee = TeamStageReferee(
+            matches_per_team=matches_per_team,
+            teams=[],
+            game=self.config.game,
+            max_failed_attempts=self.config.max_failed_attempts,
+        )
         scheduled = 0
         for team, seed_offset in pending:
             request = MatchRequest(

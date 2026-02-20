@@ -97,6 +97,7 @@ class TeamStagePlanningMixin:
         return PolicyStageReferee(
             stage=stage,
             game=self.config.game,
+            max_failed_attempts=self.config.max_failed_attempts,
         )
 
     def get_referees(self, season_version: int) -> dict[str, RefereeBase]:  # type: ignore[unused-arg]
@@ -110,6 +111,7 @@ class TeamStagePlanningMixin:
                         matches_per_team=stage.matches_per_team,
                         teams=[],
                         game=self.config.game,
+                        max_failed_attempts=self.config.max_failed_attempts,
                     )
                 case ScoreStage() as stage:
                     refs[binding.output_pool] = ScoreStageReferee(
