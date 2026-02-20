@@ -15,6 +15,7 @@ from metta.app_backend.job_runner.config import (
 )
 from metta.app_backend.job_runner.job_artifacts import (
     job_debug_key,
+    job_policy_log_key,
     job_replay_key,
     job_results_key,
     job_runtime_info_key,
@@ -88,6 +89,25 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         )
         for name, (op, key) in presigned_env_vars.items()
     ]
+
+    # Generate presigned URLs for per-agent policy logs
+    assignments: list[int] = job_spec.get("assignments", [])
+    policy_log_urls: dict[str, str] = {}
+    for agent_idx, policy_idx in enumerate(assignments):
+        policy_uri = original_policy_uris[policy_idx]
+        # Extract policy_version_id from metta://policy/{id} URI
+        if policy_uri.startswith("metta://policy/"):
+            pv_id = policy_uri.split("/")[-1]
+            key = job_policy_log_key(job.id, pv_id, agent_idx)
+            url = presign_operation("put", cfg.EVAL_S3_BUCKET, key, exp, endpoint)
+            policy_log_urls[str(agent_idx)] = url
+    if policy_log_urls:
+        env_vars.append(
+            client.V1EnvVar(
+                name="POLICY_LOG_URLS",
+                value=json.dumps(policy_log_urls),
+            )
+        )
 
     if cfg.LOCAL_DEV and cfg.LOCAL_DEV_AWS_PROFILE:
         env_vars.append(client.V1EnvVar(name="AWS_PROFILE", value=cfg.LOCAL_DEV_AWS_PROFILE))
