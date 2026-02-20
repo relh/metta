@@ -94,7 +94,6 @@
     "CFLAGS",
     "charconv",
     "charliermarsh",
-    "Chebyshev",
     "checkpointed",
     "checkpointer",
     "chokepoint",
