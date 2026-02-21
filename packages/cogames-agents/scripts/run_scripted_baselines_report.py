@@ -25,10 +25,10 @@ from cogames_agents.evals.planky_evals import (
     PlankyScramblerFullCycle,
 )
 
+from cogames.cogs_vs_clips.cog import CogTeam
 from cogames.cogs_vs_clips.mission import CvCMission
 from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
 from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site
-from cogames.cogs_vs_clips.team import CogTeam
 from cogames.cogs_vs_clips.variants import ForcedRoleVibesVariant
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec

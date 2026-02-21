@@ -13,10 +13,9 @@ from typing import Dict
 
 from pydantic import Field
 
-from cogames.cogs_vs_clips.cog import CogConfig
+from cogames.cogs_vs_clips.cog import CogConfig, CogTeam
 from cogames.cogs_vs_clips.mission import CoGameSite as Site
 from cogames.cogs_vs_clips.mission import CvCMission as Mission
-from cogames.cogs_vs_clips.team import CogTeam
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
@@ -95,7 +94,6 @@ class _PlankyDiagnosticBase(Mission):
             initial_energy=255,
             initial_hp=100,
             hp_regen=0,
-            influence_regen=0,
         )
     )
 
@@ -286,7 +284,6 @@ class PlankySurviveRetreat(_PlankyDiagnosticBase):
             initial_energy=255,
             initial_hp=20,
             hp_regen=0,
-            influence_regen=0,
         )
     )
 

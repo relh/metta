@@ -195,14 +195,12 @@ class TestScaleClipsIntensity:
             initial_clips_start=10,
             initial_clips_spots=2,
             scramble_radius=25,
-            align_radius=30,
         )
         scaled = _scale_clips_intensity(clips, 0.5)
 
         assert scaled.initial_clips_start == 10
         assert scaled.initial_clips_spots == 2
         assert scaled.scramble_radius == 25
-        assert scaled.align_radius == 30
 
 
 class TestMetricScaling:

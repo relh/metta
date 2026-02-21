@@ -204,7 +204,6 @@ def _scale_clips_intensity(clips: ClipsConfig, intensity: float) -> ClipsConfig:
         scramble_radius=clips.scramble_radius,
         align_start=int(clips.align_start * scale_factor),
         align_interval=int(clips.align_interval * scale_factor),
-        align_radius=clips.align_radius,
     )
 
 
