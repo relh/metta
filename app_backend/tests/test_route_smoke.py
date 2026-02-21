@@ -184,6 +184,10 @@ class TestTournamentRouteSmoke:
             headers=softmax_headers,
         )
         assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        if data:
+            assert "score_stddev" in data[0]
 
 
 class TestEpisodeRouteSmoke:

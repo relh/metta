@@ -1661,6 +1661,11 @@ export interface components {
        */
       score: number
       /**
+       * Score Stddev
+       * @description Standard deviation of per-match policy scores under the leaderboard weighting.
+       */
+      score_stddev?: number | null
+      /**
        * Matches
        * @description Number of matches played
        */

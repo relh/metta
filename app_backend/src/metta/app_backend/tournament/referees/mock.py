@@ -7,7 +7,11 @@ from sqlmodel import col, select
 
 # pyright: reportArgumentType=false, reportCallIssue=false
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
-from metta.app_backend.tournament.referees.base import ScoredMatchData
+from metta.app_backend.tournament.referees.base import (
+    LeaderboardStatsRow,
+    ScoredMatchData,
+    compute_weighted_score_stddev,
+)
 from metta.app_backend.tournament.referees.leaderboard_rows import group_match_rows
 
 
@@ -16,7 +20,7 @@ class MockLeaderboardMixin:
 
     scorer: Scorer
 
-    async def get_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, int]]:
+    async def get_leaderboard_with_stats(self, pool_id: UUID) -> list[LeaderboardStatsRow]:
         from metta.app_backend.database import get_db  # noqa: PLC0415
 
         session = get_db()
@@ -86,8 +90,17 @@ class MockLeaderboardMixin:
             return []
 
         scores = self.scorer.compute_scores(list(all_policy_ids), scored_matches)
+        score_stddevs = compute_weighted_score_stddev(scores, scored_matches)
         return sorted(
-            ((pv_id, score, match_counts.get(pv_id, 0)) for pv_id, score in scores.items()),
-            key=lambda row: row[1],
+            (
+                LeaderboardStatsRow(
+                    policy_version_id=pv_id,
+                    score=score,
+                    match_count=match_counts.get(pv_id, 0),
+                    score_stddev=score_stddevs.get(pv_id),
+                )
+                for pv_id, score in scores.items()
+            ),
+            key=lambda row: row.score,
             reverse=True,
         )

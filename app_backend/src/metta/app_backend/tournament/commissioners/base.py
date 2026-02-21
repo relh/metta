@@ -39,7 +39,13 @@ from metta.app_backend.models.tournament import (
     PoolPlayer,
     Season,
 )
-from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchCounts, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.base import (
+    LeaderboardStatsRow,
+    MatchCountEntry,
+    MatchCounts,
+    MatchRequest,
+    RefereeBase,
+)
 from metta.app_backend.tournament.settings import (
     MAX_OUTSTANDING_MATCHES,
     POLL_INTERVAL_FAST_SECONDS,
@@ -522,24 +528,37 @@ class CommissionerBase(ABC):
         await self._apply_membership_changes(changes)
         return [c.pool_name for c in changes if c.action == MembershipAction.add]
 
-    @with_db
-    async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[UUID, float, int]]:
+    async def _resolve_leaderboard_pool_and_referee(self, target_pool: str) -> tuple[Pool, RefereeBase] | None:
         session = get_db()
-        target_pool = pool_name or self.leaderboard_pool
-
         row = (
             await session.execute(
                 select(Pool, Season).join(Pool.season).where(Pool.season_id == self.season_id, Pool.name == target_pool)
             )
         ).one_or_none()
         if not row:
-            return []
+            return None
 
         pool, season = row
         referee = self.get_referees(season.version).get(target_pool)
         if not referee:
+            return None
+        return pool, referee
+
+    @with_db
+    async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[UUID, float, int]]:
+        return [
+            (row.policy_version_id, row.score, row.match_count)
+            for row in await self.get_leaderboard_with_stats(pool_name=pool_name)
+        ]
+
+    @with_db
+    async def get_leaderboard_with_stats(self, pool_name: str | None = None) -> list[LeaderboardStatsRow]:
+        target_pool = pool_name or self.leaderboard_pool
+        pool_and_referee = await self._resolve_leaderboard_pool_and_referee(target_pool)
+        if not pool_and_referee:
             return []
-        return await referee.get_leaderboard(pool.id)
+        pool, referee = pool_and_referee
+        return await referee.get_leaderboard_with_stats(pool.id)
 
     @with_db
     async def get_matches(self, pool_name: str, limit: int = 50, offset: int = 0) -> list[Match]:

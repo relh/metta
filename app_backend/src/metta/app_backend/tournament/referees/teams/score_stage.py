@@ -9,7 +9,7 @@ from sqlmodel import col, select
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
 from metta.app_backend.database import get_db
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Team
-from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase
+from metta.app_backend.tournament.referees.base import LeaderboardStatsRow, MatchCounts, MatchRequest, RefereeBase
 from metta.app_backend.tournament.teams.scoring import (
     compute_policy_placement_scores,
     compute_team_average_scores,
@@ -78,12 +78,20 @@ class ScoreStageReferee(RefereeBase):
             policy_ids=output_policy_ids,
         )
         leaderboard = [(pv_id, placement_scores[pv_id][0], placement_scores[pv_id][1]) for pv_id in output_policy_ids]
-
         return sorted(leaderboard, key=lambda row: row[1])
 
-    async def get_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, int]]:
+    async def get_leaderboard_with_stats(self, pool_id: UUID) -> list[LeaderboardStatsRow]:
         leaderboard = await self._get_policy_placement_leaderboard(pool_id)
-        return [(pv_id, score, len(team_ranks)) for pv_id, score, team_ranks in leaderboard]
+        return [
+            LeaderboardStatsRow(
+                policy_version_id=pv_id,
+                score=score,
+                match_count=len(team_ranks),
+                # Placement scores are aggregate ranks across teams, so there is no per-match score stddev to report.
+                score_stddev=None,
+            )
+            for pv_id, score, team_ranks in leaderboard
+        ]
 
     async def get_leaderboard_with_team_ranks(self, pool_id: UUID) -> list[tuple[UUID, float, list[int]]]:
         return await self._get_policy_placement_leaderboard(pool_id)

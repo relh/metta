@@ -1,20 +1,35 @@
-import clsx from 'clsx'
-import Link from 'next/link'
 import { createLoader, parseAsString } from 'nuqs/server'
 
-import { StyledLink } from '@/components/StyledLink'
-import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getPlayerStages, getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 import { formatRelativeTime } from '@/utils/datetime'
 
-import { matchesRoute } from '../matches/utils'
 import { stageFlowLabel, stageLabel } from '../stageSelection'
 import { formatPolicyDisplay } from '../utils'
+import { PlayersStageScoreChart, type PolicyStageSeries } from './PlayersStageScoreChart'
+import { PlayersSortableTable, type PlayersTableRow, type PlayersTableStageCell } from './PlayersSortableTable'
+import { compareMissingLast } from './scoreSort'
 import { SubmitForm } from './SubmitForm'
 
 const parseSearchParams = createLoader({ stage: parseAsString })
+
+type PolicyStageStats = {
+  mean: number
+  stddev: number | null
+}
+
+function calculateSampleStddev(values: number[], mean: number): number | null {
+  if (values.length === 0) {
+    return null
+  }
+  if (values.length === 1) {
+    return 0
+  }
+
+  const squaredDistanceSum = values.reduce((sum, value) => sum + (value - mean) ** 2, 0)
+  return Math.sqrt(squaredDistanceSum / (values.length - 1))
+}
 
 export default async function PlayersPage({ params, searchParams }: PageProps<'/tournament/[seasonName]/players'>) {
   const { seasonName } = await params
@@ -43,74 +58,164 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
   const stageKindByPool = new Map(
     (stageContext.progress?.stage_flow ?? []).map((stage) => [stage.input_pool, stage.kind])
   )
+  const stageLabelByPool = new Map(
+    poolNames.map((poolName) => {
+      const stageFlow = stageFlowByPool.get(poolName)
+      return [poolName, stageFlow ? stageFlowLabel(stageFlow) : stageLabel(poolName)] as const
+    })
+  )
   const selectedDisplayStage = selectedStage && poolNames.includes(selectedStage) ? selectedStage : null
   const showPendingState = selectedStage !== null && selectedStageStatus === 'pending'
   const showEmptyState = policies.length === 0
   const shouldRenderPlayerTable = !showPendingState && !showEmptyState
+  const policyLabelById = new Map(policies.map((policy) => [policy.policy.id, formatPolicyDisplay(policy)]))
   const teamPageSize = 200
-  const stageScoreByPool = shouldRenderPlayerTable
+  const stageScoreStatsByPool = shouldRenderPlayerTable
     ? new Map(
         await Promise.all(
-          poolNames.map(async (poolName): Promise<readonly [string, Map<string, number>]> => {
+          poolNames.map(async (poolName): Promise<readonly [string, Map<string, PolicyStageStats>]> => {
             const stageKind = stageKindByPool.get(poolName)
-            try {
-              if (stageKind === 'team_eval') {
-                const teams: Awaited<ReturnType<typeof repo.getSeasonTeams>> = []
-                let offset = 0
-                while (true) {
-                  // Team stage leaderboard endpoint defaults to top-N results; use full team pages for ranking.
-                  const page = await repo.getSeasonTeams(seasonName, {
-                    pool_name: poolName,
-                    limit: teamPageSize,
-                    offset,
-                  })
-                  teams.push(...page)
-                  if (page.length < teamPageSize) break
-                  offset += teamPageSize
-                }
-                const totalsByPolicy = new Map<string, { sum: number; count: number }>()
-                for (const team of teams) {
-                  if (team.score === null) continue
-                  for (const cog of team.cogs) {
-                    const existing = totalsByPolicy.get(cog.policy.id)
-                    if (existing) {
-                      existing.sum += team.score
-                      existing.count += 1
-                    } else {
-                      totalsByPolicy.set(cog.policy.id, { sum: team.score, count: 1 })
-                    }
+            if (stageKind === 'team_eval') {
+              const teams: Awaited<ReturnType<typeof repo.getSeasonTeams>> = []
+              let offset = 0
+              while (true) {
+                // Team stage leaderboard endpoint defaults to top-N results; use full team pages for ranking.
+                const page = await repo.getSeasonTeams(seasonName, {
+                  pool_name: poolName,
+                  limit: teamPageSize,
+                  offset,
+                })
+                teams.push(...page)
+                if (page.length < teamPageSize) break
+                offset += teamPageSize
+              }
+              const scoresByPolicy = new Map<string, number[]>()
+              for (const team of teams) {
+                if (team.score === null) continue
+                for (const cog of team.cogs) {
+                  const scores = scoresByPolicy.get(cog.policy.id)
+                  if (scores) {
+                    scores.push(team.score)
+                  } else {
+                    scoresByPolicy.set(cog.policy.id, [team.score])
                   }
                 }
-                const averageByPolicy = new Map<string, number>()
-                for (const [policyId, totals] of totalsByPolicy) {
-                  if (totals.count > 0) averageByPolicy.set(policyId, totals.sum / totals.count)
-                }
-                return [poolName, averageByPolicy] as const
               }
-
-              const leaderboard = await repo.getSeasonStageLeaderboard(seasonName, 'policy', poolName)
-              return [poolName, new Map(leaderboard.map((entry) => [entry.policy.id, entry.score]))] as const
-            } catch {
-              return [poolName, new Map()] as const
+              const statsByPolicy = new Map<string, PolicyStageStats>()
+              for (const [policyId, scores] of scoresByPolicy) {
+                if (scores.length === 0) {
+                  continue
+                }
+                const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length
+                statsByPolicy.set(policyId, {
+                  mean,
+                  stddev: calculateSampleStddev(scores, mean),
+                })
+              }
+              return [poolName, statsByPolicy] as const
             }
+
+            const leaderboard = await repo.getSeasonStageLeaderboard(seasonName, 'policy', poolName)
+            return [
+              poolName,
+              new Map(
+                leaderboard.map((entry) => [
+                  entry.policy.id,
+                  {
+                    mean: entry.score,
+                    stddev: entry.score_stddev ?? null,
+                  },
+                ])
+              ),
+            ] as const
           })
         )
       )
-    : new Map<string, Map<string, number>>()
-  const sortedPolicies = shouldRenderPlayerTable
-    ? [...policies].sort((a, b) => {
-        for (const poolName of [...poolNames].reverse()) {
-          const aScore = stageScoreByPool.get(poolName)?.get(a.policy.id)
-          const bScore = stageScoreByPool.get(poolName)?.get(b.policy.id)
-          if (aScore === undefined && bScore === undefined) continue
-          if (aScore === undefined) return 1
-          if (bScore === undefined) return -1
-          if (aScore !== bScore) return bScore - aScore
+    : new Map<string, Map<string, PolicyStageStats>>()
+  const defaultPolicySort = (a: (typeof policies)[number], b: (typeof policies)[number]) => {
+    for (const poolName of [...poolNames].reverse()) {
+      const aScore = stageScoreStatsByPool.get(poolName)?.get(a.policy.id)?.mean
+      const bScore = stageScoreStatsByPool.get(poolName)?.get(b.policy.id)?.mean
+      const byScore = compareMissingLast(aScore, bScore)
+      if (byScore !== 0) return byScore
+    }
+    if (a.entered_at !== b.entered_at) return b.entered_at.localeCompare(a.entered_at)
+    return a.policy.id.localeCompare(b.policy.id)
+  }
+  const defaultSortedPolicies = shouldRenderPlayerTable ? [...policies].sort(defaultPolicySort) : policies
+  const chartStages = shouldRenderPlayerTable
+    ? poolNames.map((poolName) => ({
+        key: poolName,
+        label: stageLabelByPool.get(poolName) ?? poolName,
+      }))
+    : []
+  const stageColumns = shouldRenderPlayerTable
+    ? poolNames.map((poolName) => ({
+        key: poolName,
+        label: stageLabelByPool.get(poolName) ?? poolName,
+        selected: selectedDisplayStage === poolName,
+      }))
+    : []
+  const tableRows: PlayersTableRow[] = shouldRenderPlayerTable
+    ? defaultSortedPolicies.map((policy, index) => {
+        const poolStatusMap = Object.fromEntries(policy.pools.map((pool) => [pool.pool_name, pool]))
+        const stages: Record<string, PlayersTableStageCell> = Object.fromEntries(
+          poolNames.map((poolName) => {
+            const pool = poolStatusMap[poolName]
+            if (!pool) {
+              return [
+                poolName,
+                {
+                  hasPool: false,
+                  mean: null,
+                  stddev: null,
+                  completed: 0,
+                  failed: 0,
+                  pending: 0,
+                },
+              ] satisfies [string, PlayersTableStageCell]
+            }
+
+            const stageStats = stageScoreStatsByPool.get(poolName)?.get(policy.policy.id)
+            return [
+              poolName,
+              {
+                hasPool: true,
+                mean: stageStats?.mean ?? null,
+                stddev: stageStats?.stddev ?? null,
+                completed: pool.completed,
+                failed: pool.failed,
+                pending: pool.pending,
+              },
+            ] satisfies [string, PlayersTableStageCell]
+          })
+        )
+
+        return {
+          policyId: policy.policy.id,
+          policyLabel: policyLabelById.get(policy.policy.id) ?? formatPolicyDisplay(policy),
+          enteredAt: policy.entered_at,
+          enteredAtLabel: formatRelativeTime(policy.entered_at),
+          stages,
+          defaultRank: index,
         }
-        if (a.entered_at !== b.entered_at) return b.entered_at.localeCompare(a.entered_at)
-        return a.policy.id.localeCompare(b.policy.id)
       })
-    : policies
+    : []
+  const chartSeries: PolicyStageSeries[] = shouldRenderPlayerTable
+    ? tableRows.map((row) => ({
+        policyId: row.policyId,
+        policyLabel: row.policyLabel,
+        points: poolNames.map((poolName) => {
+          const stage = row.stages[poolName]
+          return {
+            stageKey: poolName,
+            mean: stage?.hasPool ? stage.mean : null,
+            stddev: stage?.hasPool ? stage.stddev : null,
+            matches: stage?.hasPool ? stage.completed : 0,
+          }
+        }),
+      }))
+    : []
 
   return (
     <div className="space-y-4">
@@ -123,80 +228,16 @@ export default async function PlayersPage({ params, searchParams }: PageProps<'/
       ) : showEmptyState ? (
         <div className="text-foreground-muted py-4">No players submitted yet</div>
       ) : (
-        <Table>
-          <TableHeader>
-            <TH>Player</TH>
-            <TH>Entered</TH>
-            {poolNames.map((poolName) => {
-              const stageFlow = stageFlowByPool.get(poolName)
-              return (
-                <TH
-                  key={poolName}
-                  className={clsx(
-                    selectedDisplayStage === poolName
-                      ? 'bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200'
-                      : ''
-                  )}
-                >
-                  {stageFlow ? stageFlowLabel(stageFlow) : stageLabel(poolName)}
-                </TH>
-              )
-            })}
-          </TableHeader>
-          <TableBody>
-            {sortedPolicies.map((policy) => {
-              const poolStatusMap = Object.fromEntries(policy.pools.map((p) => [p.pool_name, p]))
-              return (
-                <TR key={policy.policy.id}>
-                  <TD>
-                    <StyledLink href={`/policies/versions/${policy.policy.id}`} className="font-medium">
-                      {formatPolicyDisplay(policy)}
-                    </StyledLink>
-                  </TD>
-                  <TD className="text-foreground-muted text-sm">{formatRelativeTime(policy.entered_at)}</TD>
-                  {poolNames.map((poolName) => {
-                    const pool = poolStatusMap[poolName]
-                    if (!pool) {
-                      return (
-                        <TD
-                          key={poolName}
-                          className={clsx(
-                            'text-foreground-muted',
-                            selectedDisplayStage === poolName ? 'bg-blue-950/10' : ''
-                          )}
-                        >
-                          -
-                        </TD>
-                      )
-                    }
-                    const averageScore = stageScoreByPool.get(poolName)?.get(policy.policy.id)
-                    return (
-                      <TD key={poolName} className={selectedDisplayStage === poolName ? 'bg-blue-950/10' : ''}>
-                        <div className="flex flex-col gap-1.5 items-start">
-                          <span className="font-mono text-sm">
-                            {averageScore !== undefined ? averageScore.toPrecision(4) : '-'}
-                          </span>
-                          <Link
-                            href={matchesRoute(seasonName, {
-                              stage: stageContext.progress ? poolName : undefined,
-                              pool_names: stageContext.progress ? undefined : [poolName],
-                              policy_version_ids: [policy.policy.id],
-                            })}
-                            className="no-underline text-sm text-foreground-muted hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer transition-colors"
-                          >
-                            ({pool.completed} matches
-                            {pool.failed > 0 && `, ${pool.failed} failed`}
-                            {pool.pending > 0 && `, ${pool.pending} pending`})
-                          </Link>
-                        </div>
-                      </TD>
-                    )
-                  })}
-                </TR>
-              )
-            })}
-          </TableBody>
-        </Table>
+        <div className="space-y-4">
+          <PlayersStageScoreChart stages={chartStages} series={chartSeries} />
+          <PlayersSortableTable
+            seasonName={seasonName}
+            hasTournamentProgress={Boolean(stageContext.progress)}
+            showEnteredColumn={tournamentNotStarted}
+            columns={stageColumns}
+            rows={tableRows}
+          />
+        </div>
       )}
     </div>
   )

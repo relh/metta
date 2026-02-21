@@ -61,6 +61,10 @@ class LeaderboardEntry(BaseModel):
     rank: int = Field(description="1-indexed position on the leaderboard")
     policy: PolicyVersionSummary = Field(description="Identity of the ranked policy version")
     score: float = Field(description="Elo or rating score")
+    score_stddev: float | None = Field(
+        default=None,
+        description="Standard deviation of per-match policy scores under the leaderboard weighting.",
+    )
     matches: int = Field(description="Number of matches played")
 
 
@@ -382,20 +386,24 @@ async def _build_policy_leaderboard(
     *,
     pool_name: str | None = None,
 ) -> list[LeaderboardEntry]:
-    leaderboard = await commissioner.get_leaderboard(pool_name=pool_name)
+    leaderboard = await commissioner.get_leaderboard_with_stats(pool_name=pool_name)
     if not leaderboard:
         return []
 
-    pv_ids = [pv_id for pv_id, _, _ in leaderboard]
+    pv_ids = [entry.policy_version_id for entry in leaderboard]
     policy_summaries = await _load_policy_version_summaries(session, pv_ids)
     return [
         LeaderboardEntry(
             rank=i + 1,
-            policy=policy_summaries.get(pv_id, PolicyVersionSummary(id=pv_id, name=None, version=None)),
-            score=score,
-            matches=match_count,
+            policy=policy_summaries.get(
+                entry.policy_version_id,
+                PolicyVersionSummary(id=entry.policy_version_id, name=None, version=None),
+            ),
+            score=entry.score,
+            score_stddev=entry.score_stddev,
+            matches=entry.match_count,
         )
-        for i, (pv_id, score, match_count) in enumerate(leaderboard)
+        for i, entry in enumerate(leaderboard)
     ]
 
 

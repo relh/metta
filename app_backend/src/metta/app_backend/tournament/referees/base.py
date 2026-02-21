@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import NamedTuple
@@ -57,6 +58,48 @@ class ScoredMatchData(BaseModel):
     episode_tags: EpisodeTags | None = None
 
 
+class LeaderboardStatsRow(NamedTuple):
+    policy_version_id: UUID
+    score: float
+    match_count: int
+    score_stddev: float | None = None
+
+
+def compute_weighted_score_stddev(
+    policy_scores: dict[UUID, float],
+    scored_matches: list[ScoredMatchData],
+) -> dict[UUID, float | None]:
+    weighted_sq_error_sums: dict[UUID, float] = defaultdict(float)
+    weight_totals: dict[UUID, float] = defaultdict(float)
+
+    for match in scored_matches:
+        total_agents = sum(match.policy_agent_counts.values())
+        if total_agents <= 0:
+            continue
+
+        for policy_version_id, score in match.policy_scores.items():
+            if policy_version_id not in policy_scores:
+                continue
+            agent_count = match.policy_agent_counts.get(policy_version_id, 0)
+            if agent_count <= 0:
+                continue
+            weight = agent_count / total_agents
+            error = score - policy_scores[policy_version_id]
+            weighted_sq_error_sums[policy_version_id] += error * error * weight
+            weight_totals[policy_version_id] += weight
+
+    stddev_by_policy: dict[UUID, float | None] = {}
+    for policy_version_id in policy_scores:
+        total_weight = weight_totals.get(policy_version_id, 0.0)
+        if total_weight <= 0:
+            stddev_by_policy[policy_version_id] = None
+            continue
+        variance = weighted_sq_error_sums.get(policy_version_id, 0.0) / total_weight
+        stddev_by_policy[policy_version_id] = math.sqrt(max(variance, 0.0))
+
+    return stddev_by_policy
+
+
 class RefereeBase(ABC):
     description: str = ""
     scorer: Scorer = WeightedScorer()
@@ -76,6 +119,13 @@ class RefereeBase(ABC):
 
     async def get_leaderboard(self, pool_id: UUID) -> list[tuple[UUID, float, int]]:
         """Returns list of (policy_version_id, score, match_count) sorted by score descending."""
+        return [
+            (row.policy_version_id, row.score, row.match_count)
+            for row in await self.get_leaderboard_with_stats(pool_id)
+        ]
+
+    async def get_leaderboard_with_stats(self, pool_id: UUID) -> list[LeaderboardStatsRow]:
+        """Returns rows with mean score, match count, and score stddev."""
         from metta.app_backend.database import get_db  # noqa: PLC0415
 
         session = get_db()
@@ -161,5 +211,14 @@ class RefereeBase(ABC):
             return []
 
         scores = self.scorer.compute_scores(list(all_policy_ids), scored_matches)
-        results = [(pv, score, match_counts.get(pv, 0)) for pv, score in scores.items()]
-        return sorted(results, key=lambda x: x[1], reverse=True)
+        score_stddevs = compute_weighted_score_stddev(scores, scored_matches)
+        results = [
+            LeaderboardStatsRow(
+                policy_version_id=policy_version_id,
+                score=score,
+                match_count=match_counts.get(policy_version_id, 0),
+                score_stddev=score_stddevs.get(policy_version_id),
+            )
+            for policy_version_id, score in scores.items()
+        ]
+        return sorted(results, key=lambda row: row.score, reverse=True)

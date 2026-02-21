@@ -317,11 +317,16 @@ async def test_leaderboard_weighting_uses_episode_policy_num_agents(stats_repo: 
 
     async with db_session():
         leaderboard = await referee.get_leaderboard(pool.id)
+        leaderboard_with_stats = await referee.get_leaderboard_with_stats(pool.id)
 
     scores_by_pv = {pv_id: score for pv_id, score, _ in leaderboard}
+    stddev_by_pv = {row.policy_version_id: row.score_stddev for row in leaderboard_with_stats}
     # Policy A weighted score:
     # (4.5 * 2/3 + 0.0 * 1/3) / (2/3 + 1/3) => 3.0.
     assert scores_by_pv[pv_a.id] == pytest.approx(3.0)
+    # Weighted stddev for A around mean=3.0:
+    # sqrt((2/3*(4.5-3)^2 + 1/3*(0-3)^2) / (2/3+1/3)) => sqrt(4.5) ≈ 2.1213
+    assert stddev_by_pv[pv_a.id] == pytest.approx(2.1213203435596424)
 
 
 @pytest.mark.asyncio
