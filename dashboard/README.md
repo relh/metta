@@ -41,8 +41,14 @@ uv run python -m dashboard.backend.dashboard_backend.main
 
 - Standalone dashboard UI that fetches from dashboard backend directly
 - Loads dashboard data by policy-version UUID
-- Renders KPI/diagnostics/episodes and can run AI analysis
-- Includes `Roles` tab backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
+- Tabs in the UI:
+- `Overview`: policy metadata, KPI snapshot, diagnostics list, and optional AI analysis output
+- `Episodes`: per-episode table (status, reward, steps, opponent, team composition, diagnostics)
+- `Opponents`: aggregated matchup view (best/worst matchup + per-opponent summary metrics)
+- `Roles`: role percentile table backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
+- `Eval Tree`: skill-tree view in evaluation mode
+- `Cogames Diagnose`: eval skill tree focused on `cogames-diagnose` catalog/source
+- `Train Tree`: skill-tree view in training mode
 
 ### Run
 
@@ -56,11 +62,113 @@ pnpm dev
 
 - `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` (default `http://127.0.0.1:8010`)
 
-## Dev flow
+## Local development
 
-1. Start backend on `:8010`
-2. Start frontend on `:5174`
-3. Open `http://127.0.0.1:5174`
+Production uses a private RDS read replica (`main-pg-ro...`) that is not directly reachable from laptops in many
+environments (private subnets + security group ingress from EKS only).
+
+Use one of these two local modes:
+
+### Mode A: local snapshot (recommended)
+
+Best for day-to-day development. You run dashboard against local Postgres seeded from production.
+
+1. Start local Postgres:
+
+```bash
+metta observatory postgres up -d
+```
+
+2. Seed local DB from production (first run):
+
+```bash
+bash app_backend/scripts/seed_local_db.sh
+```
+
+Optional: reuse cached dump
+
+```bash
+bash app_backend/scripts/seed_local_db.sh --skip-download
+```
+
+3. Start dashboard backend (read-only URI pointed at local Postgres):
+
+```bash
+export STATS_DB_READ_ONLY_URI='postgresql://postgres:password@127.0.0.1:5432/metta'
+export DASHBOARD_DEV_AUTH_BYPASS=true
+export DASHBOARD_HOST=127.0.0.1
+export DASHBOARD_PORT=8010
+uv run python -m dashboard.backend.dashboard_backend.main
+```
+
+4. In another terminal, start dashboard frontend:
+
+```bash
+cd dashboard/frontend
+pnpm install
+NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010 pnpm dev
+```
+
+5. Open:
+
+- Frontend: `http://127.0.0.1:5174`
+- Backend docs: `http://127.0.0.1:8010/internal/docs`
+
+### Mode B: live production read-replica via EKS tunnel
+
+Use this only when you need live read-replica data locally.
+
+Prereqs:
+
+- AWS auth for account `751442549699`
+- `kubectl` access to cluster `main` / namespace `observatory`
+
+1. Read the read-only URI from AWS Secrets Manager:
+
+```bash
+export RO_URI="$(aws secretsmanager get-secret-value --secret-id observatory/readonly-db-uri --query SecretString --output text)"
+```
+
+2. Start an in-cluster TCP proxy pod to the read replica:
+
+```bash
+export RO_HOST="$(python - <<'PY' "$RO_URI"
+import sys
+from urllib.parse import urlparse
+print(urlparse(sys.argv[1]).hostname)
+PY
+)"
+kubectl -n observatory run ro-db-proxy --image=alpine/socat --restart=Never --command -- sh -c "socat TCP-LISTEN:5432,fork,reuseaddr TCP:${RO_HOST}:5432"
+kubectl -n observatory wait --for=condition=Ready pod/ro-db-proxy --timeout=120s
+```
+
+3. Port-forward the proxy to your machine (keep this terminal open):
+
+```bash
+kubectl -n observatory port-forward pod/ro-db-proxy 15432:5432
+```
+
+4. In another terminal, rewrite URI to local forwarded port and run backend:
+
+```bash
+export STATS_DB_READ_ONLY_URI="$(python - <<'PY' "$RO_URI"
+import sys
+from urllib.parse import urlparse, urlunparse
+u = urlparse(sys.argv[1])
+print(urlunparse(u._replace(netloc=f"{u.username}:{u.password}@127.0.0.1:15432")))
+PY
+)"
+export DASHBOARD_DEV_AUTH_BYPASS=true
+uv run python -m dashboard.backend.dashboard_backend.main
+```
+
+5. Start frontend the same as Mode A.
+
+6. Cleanup when done:
+
+```bash
+kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true
+```
 
 ## Production deployment
 

@@ -688,10 +688,15 @@ const TreeNodeView: FC<{
   )
 }
 
-export const SkillTreePanel: FC<{ mode: SkillTreeMode; data: DashboardResponse }> = ({ mode, data }) => {
+export const SkillTreePanel: FC<{
+  mode: SkillTreeMode
+  data: DashboardResponse
+  initialSourceFilter?: TreeSourceFilter
+  lockSourceFilter?: boolean
+}> = ({ mode, data, initialSourceFilter = 'all', lockSourceFilter = false }) => {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<TreeStatusFilter>('all')
-  const [sourceFilter, setSourceFilter] = useState<TreeSourceFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState<TreeSourceFilter>(initialSourceFilter)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [view, setView] = useState<SkillTreeView>('tree')
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set())
@@ -736,6 +741,10 @@ export const SkillTreePanel: FC<{ mode: SkillTreeMode; data: DashboardResponse }
     }
   }, [root, selectedNodeId])
 
+  useEffect(() => {
+    setSourceFilter(initialSourceFilter)
+  }, [initialSourceFilter])
+
   const onToggle = (id: string) => {
     setExpandedNodeIds((previous) => {
       const next = new Set(previous)
@@ -757,7 +766,11 @@ export const SkillTreePanel: FC<{ mode: SkillTreeMode; data: DashboardResponse }
               </option>
             ))}
           </select>
-          <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as TreeSourceFilter)}>
+          <select
+            value={sourceFilter}
+            onChange={(event) => setSourceFilter(event.target.value as TreeSourceFilter)}
+            disabled={lockSourceFilter}
+          >
             {SOURCE_FILTER_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
