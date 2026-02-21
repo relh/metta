@@ -660,6 +660,48 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/jobs/{job_id}/policy-logs': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Policy Logs
+     * @description List all policy log files for a job.
+     */
+    get: operations['list_policy_logs_jobs__job_id__policy_logs_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/jobs/{job_id}/policy-logs/{agent_idx}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Policy Log
+     * @description Get the combined log for a specific agent by index.
+     *
+     *     Returns the log content as plain text.
+     */
+    get: operations['get_policy_log_jobs__job_id__policy_logs__agent_idx__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/tournament/seasons': {
     parameters: {
       query?: never
@@ -4053,6 +4095,69 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['JobRequest']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_policy_logs_jobs__job_id__policy_logs_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        job_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': string[]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_policy_log_jobs__job_id__policy_logs__agent_idx__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        job_id: string
+        agent_idx: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': unknown
         }
       }
       /** @description Validation Error */

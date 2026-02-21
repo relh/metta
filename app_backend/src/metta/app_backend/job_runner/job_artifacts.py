@@ -39,6 +39,9 @@ def job_runtime_info_key(job_id: UUID) -> str:
     return f"{job_prefix(job_id)}/runtime_info.json"
 
 
+# Policy logs require an agent_idx parameter, so they can't use ARTIFACT_TYPES (which only
+# supports job_id -> key mappings). If ARTIFACT_TYPES gains support for parameterized
+# artifacts, these could be unified with the artifacts endpoint.
 def job_policy_log_key(job_id: UUID, agent_idx: int) -> str:
     """S3 key for a policy log file."""
     return f"{job_prefix(job_id)}/policy_agent_{agent_idx}.txt"

@@ -1,5 +1,5 @@
 'use client'
-import { FC, useCallback, useRef, useState } from 'react'
+import { FC, useCallback, useEffect, useRef, useState } from 'react'
 
 import { normalizeReplayUrl, normalizeVibescopeUrl } from '@/components/ReplayViewer'
 import { StyledLink } from '@/components/StyledLink'
@@ -243,6 +243,11 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const [showAgentStats, setShowAgentStats] = useState(false)
   const [traceLoading, setTraceLoading] = useState(false)
   const [setupTraceLoading, setSetupTraceLoading] = useState(false)
+  const [policyLogAgentIndices, setPolicyLogAgentIndices] = useState<number[]>([])
+  const [policyLogsLoaded, setPolicyLogsLoaded] = useState(false)
+  const [expandedPolicyLogs, setExpandedPolicyLogs] = useState<Record<number, string>>({})
+  const [loadingPolicyLogs, setLoadingPolicyLogs] = useState<Record<number, boolean>>({})
+  const loadingPolicyLogsRef = useRef<Record<number, boolean>>({})
 
   const policyStatsMap = new Map((job.episode?.policy_stats ?? []).map((s) => [s.policy_version_id, s]))
   const attrs = job.episode?.attributes
@@ -250,6 +255,47 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const agentStats = attrs?.stats?.agent
 
   const timeDisplay = getTimeDisplay(job)
+
+  // Load policy log file list when expanded
+  useEffect(() => {
+    if (expanded && !policyLogsLoaded && (job.status === 'completed' || job.status === 'failed')) {
+      fetch(`/api/jobs/${job.id}/policy-logs`)
+        .then((r) => r.json())
+        .then((files: string[]) => {
+          // Parse agent indices from filenames like "policy_agent_0.txt"
+          const indices = files
+            .map((f) => {
+              const match = f.match(/policy_agent_(\d+)\.txt/)
+              return match ? parseInt(match[1], 10) : null
+            })
+            .filter((i): i is number => i !== null)
+            .sort((a, b) => a - b)
+          setPolicyLogAgentIndices(indices)
+          setPolicyLogsLoaded(true)
+        })
+        .catch(() => setPolicyLogsLoaded(true))
+    }
+  }, [expanded, policyLogsLoaded, job.id, job.status])
+
+  const loadPolicyLog = useCallback(
+    async (agentIdx: number) => {
+      if (loadingPolicyLogsRef.current[agentIdx]) return
+      loadingPolicyLogsRef.current[agentIdx] = true
+      setLoadingPolicyLogs((prev) => ({ ...prev, [agentIdx]: true }))
+      try {
+        const response = await fetch(`/api/jobs/${job.id}/policy-logs/${agentIdx}`)
+        if (response.ok) {
+          const logContent = await response.text()
+          setExpandedPolicyLogs((prev) => ({ ...prev, [agentIdx]: logContent }))
+        }
+      } finally {
+        loadingPolicyLogsRef.current[agentIdx] = false
+        setLoadingPolicyLogs((prev) => ({ ...prev, [agentIdx]: false }))
+      }
+    },
+    [job.id]
+  )
+
   const openTraceViewer = useCallback(async () => {
     setTraceLoading(true)
     const handle = window.open('https://ui.perfetto.dev')
@@ -707,6 +753,33 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                       </span>
                     </LabelRow>
                   )}
+                  {policyLogAgentIndices.map((agentIdx) => {
+                    const isExpanded = expandedPolicyLogs[agentIdx] !== undefined
+                    const isLoading = loadingPolicyLogs[agentIdx]
+                    return (
+                      <LabelRow key={`policy-logs-${agentIdx}`} label={`Agent ${agentIdx} Log`}>
+                        <span className="flex gap-1.5 justify-end">
+                          <button
+                            onClick={() => {
+                              if (!isExpanded) {
+                                loadPolicyLog(agentIdx)
+                              } else {
+                                setExpandedPolicyLogs((prev) => {
+                                  const next = { ...prev }
+                                  delete next[agentIdx]
+                                  return next
+                                })
+                              }
+                            }}
+                            disabled={isLoading}
+                            className="text-blue-600 hover:underline bg-transparent border-none cursor-pointer p-0 disabled:opacity-50"
+                          >
+                            {isLoading ? 'Loading...' : isExpanded ? 'Collapse' : 'Expand'}
+                          </button>
+                        </span>
+                      </LabelRow>
+                    )
+                  })}
                   {lifecycleError && (
                     <LabelRow label="Error">
                       <span className="text-red-600 text-xs" title={lifecycleError}>
@@ -763,6 +836,27 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
           </TD>
         </TR>
       )}
+      {expanded &&
+        Object.entries(expandedPolicyLogs).map(([agentIdxStr, logContent]) => {
+          const agentIdx = parseInt(agentIdxStr, 10)
+          return (
+            <TR key={`policy-logs-panel-${agentIdx}`}>
+              <TD colSpan={8} className="!p-2">
+                <ExpansionPanel
+                  label={`Agent ${agentIdx} Log`}
+                  content={logContent || '<empty>'}
+                  onClose={() =>
+                    setExpandedPolicyLogs((prev) => {
+                      const next = { ...prev }
+                      delete next[agentIdx]
+                      return next
+                    })
+                  }
+                />
+              </TD>
+            </TR>
+          )
+        })}
     </>
   )
 }

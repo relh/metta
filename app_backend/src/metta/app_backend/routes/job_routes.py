@@ -12,6 +12,7 @@ from typing import Any, Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
+import boto3
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -27,6 +28,8 @@ from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
     job_debug_key,
     job_logs_key,
+    job_policy_log_key,
+    job_policy_log_prefix,
     job_replay_key,
     job_results_key,
     job_runtime_info_key,
@@ -580,5 +583,43 @@ def create_job_router() -> APIRouter:
                 metrics = get_job_metrics()
                 await metrics.update_running_counts(session, {job.job_type})
             return job
+
+    # Policy logs use a separate endpoint from /artifacts because they require an agent_idx
+    # parameter. See job_artifacts.py for unification notes.
+    @router.get("/{job_id}/policy-logs")
+    @timed_http_handler
+    async def list_policy_logs(job_id: UUID, _user: SoftmaxUser) -> list[str]:
+        """List all policy log files for a job."""
+        cfg = get_dispatch_config()
+        if not cfg.EVAL_S3_BUCKET:
+            raise HTTPException(status_code=501, detail="Storage not configured")
+
+        async with db_session() as session:
+            result = await session.execute(select(JobRequest).where(JobRequest.id == job_id))
+            if not result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+        def _list_logs() -> list[str]:
+            s3 = boto3.client("s3")
+            prefix = job_policy_log_prefix(job_id)
+            response = s3.list_objects_v2(Bucket=cfg.EVAL_S3_BUCKET, Prefix=prefix)
+            return [obj["Key"].split("/")[-1] for obj in response.get("Contents", [])]
+
+        return await asyncio.to_thread(_list_logs)
+
+    @router.get("/{job_id}/policy-logs/{agent_idx}")
+    @timed_http_handler
+    async def get_policy_log(job_id: UUID, agent_idx: int, _user: SoftmaxUser) -> Response:
+        """Get the combined log for a specific agent by index.
+
+        Returns the log content as plain text.
+        """
+        content, media_type = await read_job_artifact(
+            job_id,
+            key_fn=lambda jid: job_policy_log_key(jid, agent_idx),
+            media_type="text/plain",
+            artifact_label=f"policy log for agent {agent_idx}",
+        )
+        return Response(content=content, media_type=media_type)
 
     return router

@@ -494,6 +494,32 @@ export class Repo {
     return this.apiCall<EpisodeStatsResponse>(`/jobs/${jobId}/episode-stats`)
   }
 
+  // Policy logs use a separate endpoint from getJobArtifact because they require an
+  // agent index parameter. See job_artifacts.py for backend unification notes.
+  async listJobPolicyLogs(jobId: string): Promise<string[]> {
+    return this.apiCall<string[]>(`/jobs/${jobId}/policy-logs`)
+  }
+
+  async getJobPolicyLogContent(jobId: string, agentIdx: number): Promise<string> {
+    const endpoint = `/jobs/${jobId}/policy-logs/${agentIdx}`
+    this.throwIfOutage(endpoint, 'GET')
+    const startTime = performance.now()
+    let response: Response
+    try {
+      response = await fetch(`${this.baseUrl}${endpoint}`, {
+        headers: this.getHeaders(),
+      })
+    } catch (err: any) {
+      this.logRequest(endpoint, 'GET', startTime, 0, err.message)
+      throw err
+    }
+    this.logRequest(endpoint, 'GET', startTime, response.status, response.ok ? undefined : `${response.status}`)
+    if (!response.ok) {
+      await this.handleErrorResponse(response)
+    }
+    return response.text()
+  }
+
   // Tournament methods
   async getSeasons(): Promise<SeasonSummary[]> {
     return this.apiCall<SeasonSummary[]>('/tournament/seasons')
