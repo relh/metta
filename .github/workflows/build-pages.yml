@@ -78,13 +78,24 @@ jobs:
           nim c -d:emscripten packages/mettagrid/nim/mettascope/src/mettascope.nim
           ls -la packages/mettagrid/nim/mettascope/dist
 
+      - name: Detect vibescope source
+        id: vibescope_source
+        run: |
+          if [ -f packages/mettagrid/nim/vibescope/nimby.lock ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # Then build Vibescope with its dependencies
       - name: Install Vibescope Dependencies
+        if: steps.vibescope_source.outputs.present == 'true'
         run: |
           cd ..
           nimby sync -g metta/packages/mettagrid/nim/vibescope/nimby.lock
 
       - name: Build vibescope
+        if: steps.vibescope_source.outputs.present == 'true'
         run: |
           mkdir -p packages/mettagrid/nim/vibescope/dist
           nim c -d:emscripten packages/mettagrid/nim/vibescope/src/vibescope.nim
@@ -99,8 +110,10 @@ jobs:
         run: |
           mkdir -p deploy/mettascope
           cp -r packages/mettagrid/nim/mettascope/dist/* deploy/mettascope/
-          mkdir -p deploy/vibescope
-          cp -r packages/mettagrid/nim/vibescope/dist/* deploy/vibescope/
+          if [ -d packages/mettagrid/nim/vibescope/dist ]; then
+            mkdir -p deploy/vibescope
+            cp -r packages/mettagrid/nim/vibescope/dist/* deploy/vibescope/
+          fi
 
       - name: Upload artifact
         # Only upload artifact for main branch
