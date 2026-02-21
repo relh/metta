@@ -34,11 +34,11 @@ def _ensure_cogames_auth_token(login_server: str = OBSERVATORY_AUTH_SERVER_URL) 
     if authenticator.has_saved_token(login_server):
         return
 
-    token = os.environ.get("OBSERVATORY_TOKEN")
+    token = os.environ.get("STABLE_RELEASE_SERVICE_TOKEN")
     if not token:
         raise AssertionError(
-            "Missing OBSERVATORY_TOKEN and no saved cogames login token. "
-            "Set OBSERVATORY_TOKEN in the environment for submission checks."
+            "Missing STABLE_RELEASE_SERVICE_TOKEN and no saved cogames login token. "
+            "Set STABLE_RELEASE_SERVICE_TOKEN in the environment for submission checks."
         )
     authenticator.config_reader_writer.save_token(token, login_server)
 
