@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from cogames_agents.policy.scripted_agent.common.geometry import is_within_observation_shape
+
 
 @dataclass
 class Entity:
@@ -34,29 +36,29 @@ class EntityMap:
     ) -> None:
         """Update map from current observation window.
 
-        All cells in the observation window are marked as explored.
+        All observable cells in the current observation mask are marked as explored.
         Entities in the window are overwritten with fresh data.
         Entities no longer visible in the window are removed.
         """
         self._step = step
-        # Mark all cells in observation window as explored
-        for obs_r in range(2 * obs_half_height + 1):
-            for obs_c in range(2 * obs_half_width + 1):
-                r = obs_r - obs_half_height + agent_pos[0]
-                c = obs_c - obs_half_width + agent_pos[1]
-                self.explored.add((r, c))
-
-        # Remove entities in observation window that are no longer visible
-        window_min_r = agent_pos[0] - obs_half_height
-        window_max_r = agent_pos[0] + obs_half_height
-        window_min_c = agent_pos[1] - obs_half_width
-        window_max_c = agent_pos[1] + obs_half_width
+        observed_positions: set[tuple[int, int]] = set()
+        for dr in range(-obs_half_height, obs_half_height + 1):
+            for dc in range(-obs_half_width, obs_half_width + 1):
+                if not is_within_observation_shape(
+                    row_offset=dr,
+                    col_offset=dc,
+                    row_radius=obs_half_height,
+                    col_radius=obs_half_width,
+                ):
+                    continue
+                pos = (agent_pos[0] + dr, agent_pos[1] + dc)
+                self.explored.add(pos)
+                observed_positions.add(pos)
 
         to_remove = []
         for pos in self.entities:
-            if window_min_r <= pos[0] <= window_max_r and window_min_c <= pos[1] <= window_max_c:
-                if pos not in visible_entities:
-                    to_remove.append(pos)
+            if pos in observed_positions and pos not in visible_entities:
+                to_remove.append(pos)
         for pos in to_remove:
             del self.entities[pos]
 

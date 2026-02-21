@@ -20,6 +20,7 @@ import numpy as np
 from cogames_agents.policy.evolution.cogsguard.evolutionary_coordinator import (
     EvolutionaryRoleCoordinator,
 )
+from cogames_agents.policy.scripted_agent.common.geometry import is_within_observation_shape
 from cogames_agents.policy.scripted_agent.pathfinding import (
     compute_goal_cells,
     shortest_path,
@@ -623,10 +624,17 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         if s.row < 0:
             return
 
-        # Mark all observed cells as FREE and explored
-        for obs_r in range(2 * self._obs_hr + 1):
-            for obs_c in range(2 * self._obs_wr + 1):
-                r, c = obs_r - self._obs_hr + s.row, obs_c - self._obs_wr + s.col
+        # Mark only cells within the simulator's observation mask as FREE/explored.
+        for dr in range(-self._obs_hr, self._obs_hr + 1):
+            for dc in range(-self._obs_wr, self._obs_wr + 1):
+                if not is_within_observation_shape(
+                    row_offset=dr,
+                    col_offset=dc,
+                    row_radius=self._obs_hr,
+                    col_radius=self._obs_wr,
+                ):
+                    continue
+                r, c = s.row + dr, s.col + dc
                 if 0 <= r < s.map_height and 0 <= c < s.map_width:
                     s.occupancy[r][c] = CellType.FREE.value
                     s.explored[r][c] = True

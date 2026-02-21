@@ -215,6 +215,35 @@ proc obsHalfWidth*(cfg: Config): int =
 proc obsHalfHeight*(cfg: Config): int =
   cfg.config.obsHeight div 2
 
+proc withinObservationShape*(
+  rowOffset: int,
+  colOffset: int,
+  rowRadius: int,
+  colRadius: int
+): bool =
+  ## Mirror mettagrid's circular local observation mask.
+  if rowRadius == 0 and colRadius == 0:
+    return rowOffset == 0 and colOffset == 0
+  if rowRadius == 0:
+    return rowOffset == 0 and abs(colOffset) <= colRadius
+  if colRadius == 0:
+    return colOffset == 0 and abs(rowOffset) <= rowRadius
+
+  let
+    rowSq = int64(rowOffset) * int64(rowOffset)
+    colSq = int64(colOffset) * int64(colOffset)
+    rowRadiusSq = int64(rowRadius) * int64(rowRadius)
+    colRadiusSq = int64(colRadius) * int64(colRadius)
+
+  if rowRadius == colRadius:
+    let distSq = rowSq + colSq
+    if distSq <= rowRadiusSq:
+      return true
+    return rowRadius >= 2 and distSq == rowRadiusSq + 1 and
+      (abs(rowOffset) == rowRadius or abs(colOffset) == colRadius)
+
+  rowSq * colRadiusSq + colSq * rowRadiusSq <= rowRadiusSq * colRadiusSq
+
 proc parseVisible*(
   cfg: Config,
   numTokens: int,

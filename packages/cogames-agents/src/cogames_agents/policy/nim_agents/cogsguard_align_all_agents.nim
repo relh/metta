@@ -187,6 +187,8 @@ proc updateMap(agent: CogsguardAlignAllAgent, visible: Table[Location, seq[Featu
   let halfH = agent.cfg.obsHalfHeight()
   for x in -halfW .. halfW:
     for y in -halfH .. halfH:
+      if not withinObservationShape(y, x, halfH, halfW):
+        continue
       let visibleLocation = Location(x: x, y: y)
       let mapLocation = Location(x: x + agent.location.x, y: y + agent.location.y)
       agent.map[mapLocation] = visible.getOrDefault(visibleLocation, @[])

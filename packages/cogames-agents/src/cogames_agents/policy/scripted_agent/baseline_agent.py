@@ -22,6 +22,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator import Action
 from mettagrid.simulator.interface import AgentObservation
 
+from .common.geometry import is_within_observation_shape
 from .pathfinding import compute_goal_cells, shortest_path
 from .pathfinding import is_traversable as path_is_traversable
 from .pathfinding import is_within_bounds as path_is_within_bounds
@@ -285,12 +286,17 @@ class BaselineAgentPolicyImpl(StatefulPolicyImpl[SimpleAgentState]):
         if s.row < 0:
             return
 
-        # First pass: Mark ALL observed cells as FREE (will be updated to OBSTACLE below if needed)
-        # This ensures empty cells are marked as traversable
-        for obs_r in range(2 * self._obs_hr + 1):
-            for obs_c in range(2 * self._obs_wr + 1):
-                # Convert observation-relative coords to world coords
-                r, c = obs_r - self._obs_hr + s.row, obs_c - self._obs_wr + s.col
+        # Mark only cells within the simulator's observation mask as observed free space.
+        for dr in range(-self._obs_hr, self._obs_hr + 1):
+            for dc in range(-self._obs_wr, self._obs_wr + 1):
+                if not is_within_observation_shape(
+                    row_offset=dr,
+                    col_offset=dc,
+                    row_radius=self._obs_hr,
+                    col_radius=self._obs_wr,
+                ):
+                    continue
+                r, c = s.row + dr, s.col + dc
                 if 0 <= r < s.map_height and 0 <= c < s.map_width:
                     s.occupancy[r][c] = CellType.FREE.value
 

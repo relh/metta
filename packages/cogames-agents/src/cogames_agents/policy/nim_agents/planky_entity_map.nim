@@ -49,23 +49,22 @@ proc updateFromObservation*(
   step: int
 ) =
   ## Mirror Python Planky behavior:
-  ## - mark full window explored
-  ## - remove stale entities in the window
+  ## - mark currently observable cells explored
+  ## - remove stale entities in currently observable cells
   ## - upsert currently visible entities
+  var observed = initHashSet[Location]()
   for dr in -obsHalfHeight .. obsHalfHeight:
     for dc in -obsHalfWidth .. obsHalfWidth:
-      m.explored.incl(Location(x: agentPos.x + dc, y: agentPos.y + dr))
-
-  let windowMinY = agentPos.y - obsHalfHeight
-  let windowMaxY = agentPos.y + obsHalfHeight
-  let windowMinX = agentPos.x - obsHalfWidth
-  let windowMaxX = agentPos.x + obsHalfWidth
+      if not withinObservationShape(dr, dc, obsHalfHeight, obsHalfWidth):
+        continue
+      let pos = Location(x: agentPos.x + dc, y: agentPos.y + dr)
+      m.explored.incl(pos)
+      observed.incl(pos)
 
   var toRemove: seq[Location] = @[]
   for pos in m.entities.keys:
-    if pos.y >= windowMinY and pos.y <= windowMaxY and pos.x >= windowMinX and pos.x <= windowMaxX:
-      if pos notin visibleEntities:
-        toRemove.add(pos)
+    if pos in observed and pos notin visibleEntities:
+      toRemove.add(pos)
   for pos in toRemove:
     m.entities.del(pos)
 
