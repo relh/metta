@@ -93,14 +93,10 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     # Generate presigned URLs for per-agent policy logs
     assignments: list[int] = job_spec.get("assignments", [])
     policy_log_urls: dict[str, str] = {}
-    for agent_idx, policy_idx in enumerate(assignments):
-        policy_uri = original_policy_uris[policy_idx]
-        # Extract policy_version_id from metta://policy/{id} URI
-        if policy_uri.startswith("metta://policy/"):
-            pv_id = policy_uri.split("/")[-1]
-            key = job_policy_log_key(job.id, pv_id, agent_idx)
-            url = presign_operation("put", cfg.EVAL_S3_BUCKET, key, exp, endpoint)
-            policy_log_urls[str(agent_idx)] = url
+    for agent_idx in range(len(assignments)):
+        key = job_policy_log_key(job.id, agent_idx)
+        url = presign_operation("put", cfg.EVAL_S3_BUCKET, key, exp, endpoint)
+        policy_log_urls[str(agent_idx)] = url
     if policy_log_urls:
         env_vars.append(
             client.V1EnvVar(

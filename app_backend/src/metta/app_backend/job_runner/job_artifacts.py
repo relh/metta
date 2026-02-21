@@ -39,16 +39,14 @@ def job_runtime_info_key(job_id: UUID) -> str:
     return f"{job_prefix(job_id)}/runtime_info.json"
 
 
-def job_policy_log_key(job_id: UUID, policy_version_id: str, agent_idx: int) -> str:
+def job_policy_log_key(job_id: UUID, agent_idx: int) -> str:
     """S3 key for a policy log file."""
-    return f"{job_prefix(job_id)}/policy_{policy_version_id}_{agent_idx}.txt"
+    return f"{job_prefix(job_id)}/policy_agent_{agent_idx}.txt"
 
 
-def job_policy_log_prefix(job_id: UUID, policy_version_id: str | None = None) -> str:
-    """S3 prefix to list all logs for a job, optionally filtered by policy."""
-    if policy_version_id:
-        return f"{job_prefix(job_id)}/policy_{policy_version_id}_"
-    return f"{job_prefix(job_id)}/policy_"
+def job_policy_log_prefix(job_id: UUID) -> str:
+    """S3 prefix to list all policy logs for a job."""
+    return f"{job_prefix(job_id)}/policy_agent_"
 
 
 async def read_job_artifact(
