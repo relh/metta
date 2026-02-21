@@ -29,9 +29,17 @@ def is_superseded_run(cancelled_run: Any, all_runs: Sequence[Any]) -> bool:
     """
     Check if a cancelled run was superseded by a newer run.
 
-    Heuristic: If there's any newer run (whether still running or already finished)
-    on the same branch/ref that wasn't itself cancelled, we treat the older cancelled
-    run as superseded by concurrency settings.
+    Heuristic (conservative for deletion safety):
+    - If there are 2+ newer runs on the same branch, this is a concurrency chain
+      (rapid pushes) and the run is superseded — even if all newer runs are cancelled.
+    - If there is exactly 1 newer run, it must be non-cancelled (in_progress, queued,
+      or completed/failed) to count. A single newer cancelled run is ambiguous (could
+      be a manual cancel) so we conservatively keep it.
+    - Zero newer runs means genuinely cancelled (manual or other).
+
+    Note: the Discord notification action uses a simpler heuristic (any newer run =
+    superseded) because mislabeling a notification is low-cost, while mislabeling
+    for deletion is destructive.
 
     For main branch, we match any run on main (including merge_queue synthetic branches)
     since they all represent commits to the same branch.
@@ -70,15 +78,17 @@ def is_superseded_run(cancelled_run: Any, all_runs: Sequence[Any]) -> bool:
         if run.created_at > cancelled_created:
             newer_runs.append(run)
 
-    # Treat as superseded if any newer run is still running/queued, or if it completed
-    # (regardless of success) and wasn't itself cancelled. This catches the concurrency
-    # chain even when the replacement run fails due to a legitimate error.
-    has_newer_non_cancelled_run = any(
+    # Superseded if any newer run completed/is-running (simple case), or if there are
+    # multiple newer runs (concurrency chain where all may be cancelled). The multi-run
+    # check catches rapid-push chains (A→B→C all cancelled) that the old single-run
+    # filter missed. A single newer cancelled run is ambiguous (could be manual cancel)
+    # so we conservatively keep it as "not superseded" to avoid deleting manual cancels.
+    if len(newer_runs) >= 2:
+        return True
+    return any(
         run.status in ("in_progress", "queued") or (run.conclusion and run.conclusion != "cancelled")
         for run in newer_runs
     )
-
-    return len(newer_runs) > 0 and has_newer_non_cancelled_run
 
 
 def parse_workflow_identifiers(raw_input: str) -> list[str]:
