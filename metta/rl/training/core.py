@@ -10,6 +10,7 @@ from torch import Tensor
 
 from metta.rl.advantage import compute_advantage
 from metta.rl.loss.loss import Loss
+from metta.rl.loss.ppo_actor import PPOActor
 from metta.rl.training import ComponentContext, Experience, TrainingEnvironment
 from metta.rl.training.trajectory_isolation import TrajectoryIsolator
 from metta.rl.utils import add_dummy_loss_for_unused_params, ensure_sequence_metadata, forward_policy_for_training
@@ -626,6 +627,10 @@ class CoreTrainingLoop:
             with context.stopwatch("_rollout.send"):
                 td_actions3: Tensor = td["actions"]
                 td_vibe_actions3: Optional[Tensor] = td["vibe_actions"] if "vibe_actions" in td.keys() else None
+                if td_vibe_actions3 is not None:
+                    num_vibe_actions = len(env.policy_env_info.vibe_action_names)
+                    if num_vibe_actions <= 0:
+                        td_vibe_actions3 = None
                 if td_actions3.device.type == "cuda":
                     assert self._action_send_stager is not None
                     cpu_actions, ev = self._action_send_stager.to_numpy_ready_cpu(td_actions3)
@@ -813,11 +818,29 @@ class CoreTrainingLoop:
                         if mb_idx == 0:
                             mb_data["advantages_full"] = NonTensorData(advantages_full)
 
-                        if "act_log_prob" in mb_view.keys() and "act_log_prob" in td_view.keys():
+                        combined_logratio = None
+                        for loss_key in runtime_slice.cfg.losses:
+                            loss_obj = self.losses.get(loss_key)
+                            if not isinstance(loss_obj, PPOActor):
+                                continue
+                            log_prob_key = loss_obj.cfg.log_prob_key
+                            if log_prob_key not in mb_view.keys() or log_prob_key not in td_view.keys():
+                                continue
+                            old_logprob = mb_view[log_prob_key]
+                            new_logprob = td_view[log_prob_key].reshape(old_logprob.shape)
+                            logratio = new_logprob - old_logprob
+                            if combined_logratio is None:
+                                combined_logratio = logratio
+                            else:
+                                combined_logratio = combined_logratio + logratio
+                        if combined_logratio is None and (
+                            "act_log_prob" in mb_view.keys() and "act_log_prob" in td_view.keys()
+                        ):
                             old_logprob = mb_view["act_log_prob"]
                             new_logprob = td_view["act_log_prob"].reshape(old_logprob.shape)
-                            logratio = torch.clamp(new_logprob - old_logprob, -10, 10)
-                            mb_data["importance_sampling_ratio"] = logratio.exp()
+                            combined_logratio = new_logprob - old_logprob
+                        if combined_logratio is not None:
+                            mb_data["importance_sampling_ratio"] = torch.clamp(combined_logratio, -10, 10).exp()
 
                         for loss_key in runtime_slice.cfg.losses:
                             loss_obj = self.losses[loss_key]

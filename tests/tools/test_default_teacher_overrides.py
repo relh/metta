@@ -20,9 +20,9 @@ def test_teacher_ppo_begin_step_adds_ppo_train_run_gates() -> None:
     ppo_gates = [
         gate
         for gate in tool.scheduler.run_gates
-        if gate.loss_instance_name in {"ppo_actor", "ppo_critic"} and gate.phase == "train"
+        if gate.loss_instance_name in {"ppo_actor", "ppo_vibe_actor", "ppo_critic"} and gate.phase == "train"
     ]
-    assert {gate.loss_instance_name for gate in ppo_gates} == {"ppo_actor", "ppo_critic"}
+    assert {gate.loss_instance_name for gate in ppo_gates} == {"ppo_actor", "ppo_vibe_actor", "ppo_critic"}
     assert all(gate.begin_at_step == 123 for gate in ppo_gates)
 
 

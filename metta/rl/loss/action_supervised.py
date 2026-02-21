@@ -97,25 +97,88 @@ class ActionSupervised(Loss):
 
         policy_full_log_probs: Tensor = policy_td["full_log_probs"]
         policy_full_log_probs = policy_full_log_probs.reshape(minibatch.shape[0], minibatch.shape[1], -1)
-        num_actions = int(policy_full_log_probs.shape[-1])
+        num_primary_actions = int(policy_full_log_probs.shape[-1])
+        teacher_actions_raw: Tensor = minibatch["teacher_actions"].to(dtype=torch.long)
         _, valid_teacher_actions, safe_teacher_actions = safe_teacher_action_indices(
             minibatch["teacher_actions"],
-            num_actions,
+            num_primary_actions,
         )
         # get the student's logprob for the action that the teacher chose
         student_log_probs = policy_full_log_probs.gather(dim=-1, index=safe_teacher_actions.unsqueeze(-1))
         student_log_probs = student_log_probs.reshape(minibatch.shape[0], minibatch.shape[1])
 
+        primary_loss: Tensor
+        primary_nll_sum = self._zero()
         if bool(valid_teacher_actions.any()):
-            loss = -student_log_probs[valid_teacher_actions].mean() * self.cfg.action_loss_coef
+            primary_nll = -student_log_probs[valid_teacher_actions]
+            primary_nll_sum = primary_nll.sum()
+            primary_loss = primary_nll.mean() * self.cfg.action_loss_coef
+        else:
+            primary_loss = self._zero()
+
+        if bool(valid_teacher_actions.any()):
+            teacher_actions_long = teacher_actions_raw
+            teacher_actions_valid = teacher_actions_long[valid_teacher_actions]
+            counts = torch.bincount(teacher_actions_valid, minlength=num_primary_actions).to(dtype=torch.float32)
+            total_valid = counts.sum()
+            if bool(total_valid > 0):
+                probs = counts / total_valid
+                nonzero = probs > 0
+                primary_entropy = -(probs[nonzero] * probs[nonzero].log()).sum()
+            else:
+                primary_entropy = self._zero()
+
+            primary_pred_actions = policy_full_log_probs.argmax(dim=-1)
+            primary_top1_acc = (primary_pred_actions == teacher_actions_long)[valid_teacher_actions].float().mean()
+        else:
+            primary_entropy = self._zero()
+            primary_top1_acc = self._zero()
+
+        vibe_loss = self._zero()
+        vibe_nll_sum = self._zero()
+        valid_vibe_actions = torch.zeros_like(valid_teacher_actions)
+        if "vibe_full_log_probs" in policy_td.keys():
+            vibe_full_log_probs: Tensor = policy_td["vibe_full_log_probs"]
+            vibe_full_log_probs = vibe_full_log_probs.reshape(minibatch.shape[0], minibatch.shape[1], -1)
+            num_vibe_actions = int(vibe_full_log_probs.shape[-1])
+            if num_vibe_actions > 0:
+                teacher_vibe_actions = teacher_actions_raw - num_primary_actions
+                valid_vibe_actions = (teacher_vibe_actions >= 0) & (teacher_vibe_actions < num_vibe_actions)
+                safe_teacher_vibe_actions = teacher_vibe_actions.clamp(min=0, max=num_vibe_actions - 1)
+                student_vibe_log_probs = vibe_full_log_probs.gather(
+                    dim=-1,
+                    index=safe_teacher_vibe_actions.unsqueeze(-1),
+                ).reshape(minibatch.shape[0], minibatch.shape[1])
+                if bool(valid_vibe_actions.any()):
+                    vibe_nll = -student_vibe_log_probs[valid_vibe_actions]
+                    vibe_nll_sum = vibe_nll.sum()
+                    vibe_loss = vibe_nll.mean() * self.cfg.action_loss_coef
+
+        total_valid_count = valid_teacher_actions.sum() + valid_vibe_actions.sum()
+        if bool(total_valid_count > 0):
+            total_nll_sum = primary_nll_sum + vibe_nll_sum
+            loss = total_nll_sum / total_valid_count.to(dtype=torch.float32) * self.cfg.action_loss_coef
         else:
             loss = self._zero()
 
         assert self.loss_tracker is not None
         self.loss_tracker["supervised_action_loss"].append(float(loss.item()))
+        total_positions = valid_teacher_actions.numel()
         self.loss_tracker["supervised_action_label_valid_frac"].append(
-            float(valid_teacher_actions.float().mean().item())
+            float(total_valid_count.to(dtype=torch.float32).div(total_positions).item())
         )
+        if "vibe_full_log_probs" in policy_td.keys():
+            self.loss_tracker["supervised_primary_action_loss"].append(float(primary_loss.item()))
+            self.loss_tracker["supervised_vibe_action_loss"].append(float(vibe_loss.item()))
+            self.loss_tracker["supervised_primary_action_label_valid_frac"].append(
+                float(valid_teacher_actions.float().mean().item())
+            )
+            self.loss_tracker["supervised_vibe_action_label_valid_frac"].append(
+                float(valid_vibe_actions.float().mean().item())
+            )
+
+        self.loss_tracker["supervised_primary_action_top1_acc"].append(float(primary_top1_acc.item()))
+        self.loss_tracker["supervised_primary_action_entropy"].append(float(primary_entropy.item()))
 
         return loss, shared_loss_data, False
 

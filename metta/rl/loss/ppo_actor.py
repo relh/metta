@@ -18,10 +18,17 @@ class PPOActorConfig(LossConfig):
     clip_coef: float = Field(default=0.22017136216163635, gt=0, le=1.0)
     # Entropy term weight from sweep
     ent_coef: float = Field(default=0.01, ge=0)
-    # Relative weight for the vibe branch policy loss
-    vibe_loss_coef: float = Field(default=1.0, ge=0)
-    # Entropy coefficient for vibe branch
-    vibe_ent_coef: float = Field(default=0.01, ge=0)
+    # Relative weight for this actor loss
+    loss_coef: float = Field(default=1.0, ge=0)
+
+    # Actor-head routing keys so one PPOActor implementation can serve multiple heads.
+    actor_name: str = "primary"
+    log_prob_key: str = "act_log_prob"
+    entropy_key: str = "entropy"
+    importance_sampling_ratio_key: str | None = "importance_sampling_ratio"
+    allow_global_ratio_fallback: bool = True
+    replay_ratio_key: str = "ratio"
+    extra_action_keys: list[str] = Field(default_factory=list)
 
     # Normalization and clipping
     # Advantage normalization toggle
@@ -59,24 +66,22 @@ class PPOActor(Loss):
         super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
 
     def get_experience_spec(self) -> Composite:
-        spec = Composite(act_log_prob=UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32))
-        if self.env.policy_env_info.vibe_action_names:
-            spec.update(
-                Composite(
-                    vibe_actions=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.int32),
-                    vibe_act_log_prob=UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32),
-                )
-            )
+        spec = Composite(
+            **{
+                self.cfg.log_prob_key: UnboundedContinuous(shape=torch.Size([]), dtype=torch.float32),
+            }
+        )
+        for key in self.cfg.extra_action_keys:
+            if key in spec.keys():
+                continue
+            spec[key] = UnboundedDiscrete(shape=torch.Size([]), dtype=torch.int32)
         return spec
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
-        keys = {"act_log_prob", "entropy"}
-        if self.env.policy_env_info.vibe_action_names:
-            keys.update({"vibe_act_log_prob", "vibe_entropy"})
-        if policy_td is not None and "vibe_act_log_prob" not in policy_td.keys():
-            keys.discard("vibe_act_log_prob")
-            keys.discard("vibe_entropy")
-        return keys
+        if policy_td is not None:
+            if self.cfg.log_prob_key not in policy_td.keys() or self.cfg.entropy_key not in policy_td.keys():
+                return set()
+        return {self.cfg.log_prob_key, self.cfg.entropy_key}
 
     def _ppo_policy_loss(
         self,
@@ -121,12 +126,29 @@ class PPOActor(Loss):
             return self._zero(), shared_loss_data, False
 
         policy_td: TensorDict = shared_loss_data["policy_td"]
-        old_logprob: Tensor = minibatch["act_log_prob"]
-        new_logprob: Tensor = policy_td["act_log_prob"]
-        new_logprob = new_logprob.reshape(old_logprob.shape)
-        entropy: Tensor = policy_td["entropy"]
+        if self.cfg.log_prob_key not in minibatch.keys():
+            raise RuntimeError(
+                f"PPOActor[{self.cfg.actor_name}] expected minibatch['{self.cfg.log_prob_key}'], but it was missing."
+            )
+        if self.cfg.log_prob_key not in policy_td.keys():
+            raise RuntimeError(
+                f"PPOActor[{self.cfg.actor_name}] expected policy_td['{self.cfg.log_prob_key}'], but it was missing."
+            )
+        if self.cfg.entropy_key not in policy_td.keys():
+            raise RuntimeError(
+                f"PPOActor[{self.cfg.actor_name}] expected policy_td['{self.cfg.entropy_key}'], but it was missing."
+            )
 
-        importance_sampling_ratio = shared_loss_data.get("importance_sampling_ratio", None)
+        old_logprob: Tensor = minibatch[self.cfg.log_prob_key]
+        new_logprob: Tensor = policy_td[self.cfg.log_prob_key]
+        new_logprob = new_logprob.reshape(old_logprob.shape)
+        entropy: Tensor = policy_td[self.cfg.entropy_key]
+
+        importance_sampling_ratio = None
+        if self.cfg.importance_sampling_ratio_key is not None:
+            importance_sampling_ratio = shared_loss_data.get(self.cfg.importance_sampling_ratio_key, None)
+        if importance_sampling_ratio is None and self.cfg.allow_global_ratio_fallback:
+            importance_sampling_ratio = shared_loss_data.get("importance_sampling_ratio", None)
 
         adv = shared_loss_data.get("advantages_pg", None)
         if adv is None:
@@ -152,32 +174,12 @@ class PPOActor(Loss):
 
         entropy_loss = entropy.mean()
 
-        loss = pg_loss - cfg.ent_coef * entropy_loss
+        loss = cfg.loss_coef * pg_loss - cfg.ent_coef * entropy_loss
 
-        update_td = TensorDict({"ratio": importance_sampling_ratio.detach()}, batch_size=minibatch.batch_size)
-
-        if "vibe_act_log_prob" in minibatch.keys():
-            if "vibe_act_log_prob" not in policy_td.keys():
-                raise RuntimeError("PPOActor expected policy_td['vibe_act_log_prob'] when minibatch has vibe labels")
-            if "vibe_entropy" not in policy_td.keys():
-                raise RuntimeError("PPOActor expected policy_td['vibe_entropy'] when minibatch has vibe labels")
-
-            old_vibe_logprob: Tensor = minibatch["vibe_act_log_prob"]
-            new_vibe_logprob: Tensor = policy_td["vibe_act_log_prob"].reshape(old_vibe_logprob.shape)
-            vibe_pg_loss, vibe_ratio, vibe_approx_kl, vibe_clipfrac = self._ppo_policy_loss(
-                advantages=adv,
-                old_logprob=old_vibe_logprob,
-                new_logprob=new_vibe_logprob,
-            )
-            vibe_entropy = policy_td["vibe_entropy"].mean()
-            loss = loss + cfg.vibe_loss_coef * vibe_pg_loss - cfg.vibe_ent_coef * vibe_entropy
-            update_td["vibe_ratio"] = vibe_ratio.detach()
-            self.loss_tracker["vibe_policy_loss"].append(float(vibe_pg_loss.item()))
-            self.loss_tracker["vibe_entropy"].append(float(vibe_entropy.item()))
-            self.loss_tracker["vibe_approx_kl"].append(float(vibe_approx_kl.item()))
-            self.loss_tracker["vibe_clipfrac"].append(float(vibe_clipfrac.item()))
-            self.loss_tracker["vibe_importance"].append(float(vibe_ratio.mean().item()))
-            self.loss_tracker["vibe_current_logprobs"].append(float(new_vibe_logprob.mean().item()))
+        update_td = TensorDict(
+            {self.cfg.replay_ratio_key: importance_sampling_ratio.detach()},
+            batch_size=minibatch.batch_size,
+        )
 
         indices: Tensor = shared_loss_data["indices"]
         assert self.replay is not None

@@ -216,18 +216,10 @@ class PPOCritic(Loss):
             truncateds_bt = minibatch["truncateds"].reshape(old_values.shape)
             resets_bt = torch.logical_or(dones_bt > 0.5, truncateds_bt > 0.5).to(dtype=new_values.dtype)
 
-            if "act_log_prob" not in policy_td.keys():
-                raise RuntimeError("TD(λ) off-policy correction requires policy_td['act_log_prob']")
-
-            act_log_prob: Tensor = policy_td["act_log_prob"]
-            mb_actions: Tensor = minibatch["actions"]
-            old_log_prob: Tensor = minibatch["act_log_prob"]
-            logratio = torch.clamp(
-                act_log_prob.reshape(mb_actions.shape) - old_log_prob.reshape(mb_actions.shape),
-                -10,
-                10,
-            )
-            rho_bt = logratio.exp().detach()
+            rho_bt = shared_loss_data.get("importance_sampling_ratio", None)
+            if rho_bt is None:
+                raise RuntimeError("TD(λ) off-policy correction requires shared_loss_data['importance_sampling_ratio']")
+            rho_bt = rho_bt.reshape(old_values.shape).detach()
 
             rho_clip = float(self.cfg.rho_clip)
             if "teacher_mask" in minibatch.keys():

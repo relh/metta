@@ -48,6 +48,7 @@ from metta.cogworks.curriculum.curriculum import (
 from metta.rl.diff_horde.cumulants import DiffHordeCumulantsConfig
 from metta.rl.diff_horde.presets.cogsguard import resolve_cogsguard_horde_cumulants
 from metta.rl.loss.diff_horde import DiffHordeLossConfig
+from metta.rl.loss.ppo_actor import PPOActorConfig
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
@@ -69,6 +70,58 @@ DEFAULT_NUM_AGENTS = 8
 DEFAULT_MAX_STEPS = 10000
 DEFAULT_INCLUDE_EVAL_MISSIONS = False
 DEFAULT_INCLUDE_FIXED_MAPS = False
+
+
+def _overrides_disable_change_vibe(overrides: object) -> bool:
+    if not isinstance(overrides, dict):
+        return False
+    if "game.actions.change_vibe.enabled" not in overrides:
+        return False
+    return overrides["game.actions.change_vibe.enabled"] is False
+
+
+def _vibe_actions_enabled(*, training_env_cfg: TrainingEnvironmentConfig) -> bool:
+    task_gen = training_env_cfg.curriculum.task_generator
+    if _overrides_disable_change_vibe(getattr(task_gen, "overrides", None)):
+        return False
+    child_gen = getattr(task_gen, "child_generator_config", None)
+    if _overrides_disable_change_vibe(getattr(child_gen, "overrides", None)):
+        return False
+    return True
+
+
+def _wire_vibe_actor_loss(*, trainer_cfg: TrainerConfig, slice_configs: Sequence[object]) -> None:
+    if not trainer_cfg.losses.has_loss("ppo_vibe_actor"):
+        base_actor_cfg = trainer_cfg.losses["ppo_actor"]
+        base_loss_coef = float(getattr(base_actor_cfg, "loss_coef", 1.0))
+        split_loss_coef = base_loss_coef / 2.0
+        if hasattr(base_actor_cfg, "loss_coef"):
+            base_actor_cfg.loss_coef = split_loss_coef
+        trainer_cfg.losses.add_loss(
+            "ppo_vibe_actor",
+            PPOActorConfig(
+                actor_name="vibe",
+                log_prob_key="vibe_act_log_prob",
+                entropy_key="vibe_entropy",
+                loss_coef=split_loss_coef,
+                replay_ratio_key="vibe_ratio",
+                extra_action_keys=["vibe_actions"],
+            ),
+        )
+
+    for slice_cfg in slice_configs:
+        losses = getattr(slice_cfg, "losses", None)
+        if not isinstance(losses, list):
+            continue
+        if "ppo_actor" not in losses or "ppo_vibe_actor" in losses:
+            continue
+        insert_at = losses.index("ppo_actor") + 1
+        losses.insert(insert_at, "ppo_vibe_actor")
+
+
+def _sync_slice_advantage(*, trainer_cfg: TrainerConfig, slice_configs: Sequence[object]) -> None:
+    for slice_cfg in slice_configs:
+        slice_cfg.advantage = trainer_cfg.advantage
 
 
 def _with_horde_num_cumulants(policy_architecture: PolicyArchitecture, num_cumulants: int) -> PolicyArchitecture:
@@ -568,6 +621,8 @@ def train(
         evaluator=evaluator_cfg,
         policy_assets=policy_assets,
     )
+    if _vibe_actions_enabled(training_env_cfg=training_env_cfg):
+        _wire_vibe_actor_loss(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
     # Determinism is useful for debugging, but it can significantly reduce CUDA throughput.
     # Users can re-enable it via `system.torch_deterministic=true` when needed.
     tt.system.torch_deterministic = False
@@ -585,7 +640,11 @@ def train(
             teacher_cfg=teacher,
             trajectory_isolation=tt.trajectory_isolation,
         )
+        if _vibe_actions_enabled(training_env_cfg=training_env_cfg):
+            _wire_vibe_actor_loss(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
         tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    _sync_slice_advantage(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
 
     if resolved_diff_horde_cumulants is not None:
         trainer_cfg.losses.add_loss("diff_horde", DiffHordeLossConfig(cumulants=resolved_diff_horde_cumulants))

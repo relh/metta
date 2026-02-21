@@ -317,6 +317,37 @@ def test_action_supervised_skips_invalid_teacher_labels_in_rollout_and_train() -
     assert torch.isfinite(train_loss)
 
 
+def test_action_supervised_trains_vibe_head_when_teacher_emits_vibe_action_ids() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=0.0)
+    env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised")
+
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+
+    num_primary_actions = 5
+    num_vibe_actions = 3
+    # Teacher uses full action IDs where primary=[0..4], vibe=[5..7].
+    teacher_actions = torch.tensor([[5, 6, 1]], dtype=torch.long)
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict({"teacher_actions": teacher_actions}, batch_size=[1, 3]),
+            "policy_td": TensorDict(
+                {
+                    "full_log_probs": torch.zeros(1, 3, num_primary_actions, dtype=torch.float32),
+                    "vibe_full_log_probs": torch.full((1, 3, num_vibe_actions), -10.0, dtype=torch.float32),
+                },
+                batch_size=[1, 3],
+            ),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert train_loss.item() == pytest.approx(20.0 / 3.0)
+
+
 def test_eer_cloner_skips_invalid_teacher_labels_in_train() -> None:
     cfg = EERClonerConfig(action_loss_coef=1.0, r_lambda=0.0)
     env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))

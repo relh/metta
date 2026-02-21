@@ -10,6 +10,7 @@ from metta.rl.loss.eer_kickstarter import EERKickstarterConfig
 from metta.rl.loss.kickstarter import KickstarterConfig
 from metta.rl.loss.loss import LossConfig
 from metta.rl.loss.losses import LossesConfig
+from metta.rl.loss.ppo_actor import PPOActorConfig
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training.scheduler import LossRunGate, ScheduleRule
@@ -184,7 +185,10 @@ def apply_teacher_phase(
 
     if ppo_begin_step > 0:
         # Delay PPO training, but keep PPO rollout active so experience collection remains unchanged.
-        for loss_name in ("ppo_actor", "ppo_critic"):
+        ppo_losses_for_gating = [
+            name for name, loss_cfg in losses if name == "ppo_critic" or isinstance(loss_cfg, PPOActorConfig)
+        ]
+        for loss_name in ppo_losses_for_gating:
             if losses.has_loss(loss_name):
                 _gate_loss_train_begin(loss_name, begin_at_step=ppo_begin_step)
 
@@ -234,6 +238,8 @@ def apply_teacher_phase(
                 "trajectory_isolation must be provided when using sliced teacher mode. "
                 "Pass TrainTool.trajectory_isolation or create one with default_trajectory_isolation_config()"
             )
+        ppo_loss_names = ["ppo_critic"]
+        ppo_loss_names.extend(name for name, loss_cfg in losses if isinstance(loss_cfg, PPOActorConfig))
 
         _setup_trajectory_isolation(
             trajectory_isolation=trajectory_isolation,
@@ -241,6 +247,7 @@ def apply_teacher_phase(
             teacher_cfg=teacher_cfg,
             primary_policy_name=primary_policy_name,
             teacher_policy_name=teacher_policy_name,
+            ppo_loss_names=ppo_loss_names,
         )
         for loss_name in teacher_loss_names:
             _gate_loss(loss_name)
@@ -481,6 +488,7 @@ def _setup_trajectory_isolation(
     teacher_cfg: TeacherConfig,
     primary_policy_name: str,
     teacher_policy_name: str,
+    ppo_loss_names: list[str],
 ) -> None:
     ppo_proportion = 1.0 - teacher_cfg.teacher_led_proportion - teacher_cfg.student_led_proportion
     if ppo_proportion <= 0.0:
@@ -514,13 +522,13 @@ def _setup_trajectory_isolation(
             name="ppo",
             env_ratio=ppo_proportion,
             policies=[primary_policy_name],
-            losses=["ppo_critic", "ppo_actor"],
+            losses=list(ppo_loss_names),
         )
     )
 
     use_teacher_policy = family not in {"supervisor", "eer_cloner"}
     led_policies = [primary_policy_name] + ([teacher_policy_name] if use_teacher_policy else [])
-    led_losses = ["ppo_critic", "ppo_actor"] if family in {"supervisor", "kickstarter"} else []
+    led_losses = list(ppo_loss_names) if family in {"supervisor", "kickstarter"} else []
 
     if teacher_cfg.teacher_led_proportion > 0:
         slices.append(
