@@ -5,7 +5,7 @@ description: Test cogames play across renderers - headless, vibescope, and Metta
 
 # CoGames Test
 
-Run cogames play with planky across all three renderers to validate everything works.
+Run cogames play with nlanky across all three renderers to validate everything works.
 
 ## Steps
 
@@ -14,19 +14,19 @@ Run each sequentially. All use `--autostart` and 100 steps.
 ### Step 1: Headless
 
 ```bash
-uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/planky" --render=none --steps=100 --autostart
+uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/nlanky" --render=none --steps=100 --autostart
 ```
 
 ### Step 2: Vibescope
 
 ```bash
-uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/planky" --render=vibescope --steps=100 --autostart
+uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/nlanky" --render=vibescope --steps=100 --autostart
 ```
 
 ### Step 3: MettaScope
 
 ```bash
-uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/planky" --render=gui --steps=100 --autostart
+uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/nlanky" --render=gui --steps=100 --autostart
 ```
 
 ## Customization

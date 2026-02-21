@@ -23,8 +23,8 @@ cogames-agents/src/cogames_agents/policy/
 │   │   ├── role_trace.py              # Diagnostics helpers for role transitions/traces
 │   │   ├── types.py                   # CogsGuard-specific state types
 │   │   └── ...
-│   └── planky/                        # Goal-tree agent
-│       ├── policy.py                  # PlankyPolicy (short_name: "planky")
+│   └── nim_agents/                    # Nim-backed agents (nlanky, thinky, etc.)
+│       ├── agents.py                  # PlankyAgentsMultiPolicy (short_name: "nlanky")
 │       ├── goals/                     # Goal definitions per role
 │       ├── navigator.py               # Navigation system
 │       └── obs_parser.py              # Observation parser
@@ -310,7 +310,7 @@ class MyPolicyImpl(BaselineAgentPolicyImpl):
 
 ## 6. Roles and Vibes
 
-The vibe system is used by team-play agents (CogsGuard, Planky) to control agent behavior through in-game visual state.
+The vibe system is used by team-play agents (CogsGuard, nlanky) to control agent behavior through in-game visual state.
 
 ### What are vibes?
 

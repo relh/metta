@@ -115,7 +115,7 @@ class CogsguardAlignAllAgentsMultiPolicy(NimMultiAgentPolicy):
 
 
 class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
-    short_names = ["planky_nim", "nlanky"]
+    short_names = ["nlanky"]
 
     @staticmethod
     def _coerce_bool(value: object) -> bool:

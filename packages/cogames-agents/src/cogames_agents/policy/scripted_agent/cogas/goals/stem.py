@@ -43,17 +43,15 @@ class SelectRoleGoal(Goal):
         return Action(name=f"change_vibe_{role}")
 
     def _select_role(self, ctx: CogasContext) -> str:
-        """Distribute roles to match planky's defaults: 3 miners + 5 aligners.
+        """Distribute roles: 3 miners + 5 aligners.
 
         For small teams, prioritize mining since resources are needed for hearts.
-        Uses planky's exact distribution pattern, tiled across agent IDs.
+        Pattern is tiled across agent IDs.
         """
         agent_id = ctx.agent_id
 
-        # Planky's default pattern: [miner, miner, miner, aligner, aligner, aligner, aligner, aligner]
-        # Index into this pattern based on agent_id
-        planky_pattern_size = 8  # 3 miners + 5 aligners
-        pattern_index = agent_id % planky_pattern_size
+        pattern_size = 8  # 3 miners + 5 aligners
+        pattern_index = agent_id % pattern_size
 
         if pattern_index < 3:
             return "miner"

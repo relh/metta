@@ -63,7 +63,7 @@ def _importance_sampled_delta_lambda(
 def test_sliced_supervisor_runs_ppo_losses_on_teacher_slices() -> None:
     trajectory_isolation = default_trajectory_isolation_config()
     teacher_cfg = TeacherConfig(
-        policy_uri="metta://policy/planky",
+        policy_uri="metta://policy/nlanky",
         mode="scripted.supervisor.sliced",
         teacher_led_proportion=0.2,
     )

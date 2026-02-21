@@ -28,11 +28,11 @@ digraph submit {
 
 Determine the policy from args or the current branch/working directory.
 
-Run `uv run cogames policies` to list available short names. Default to `planky` if the branch touches planky files.
+Run `uv run cogames policies` to list available short names. Default to `nlanky` if the branch touches nlanky files.
 
 Derive defaults:
 
-- **name**: `<git-username>.<short_name>` (e.g., `daveey.planky`)
+- **name**: `<git-username>.<short_name>` (e.g., `daveey.nlanky`)
 - **season**: `beta-cvc` (the main active season; run `uv run cogames seasons` to list)
 
 ## Step 2: Confirm with User
@@ -75,8 +75,8 @@ Example:
 ```bash
 cd packages/cogames-agents
 uv run cogames upload \
-  -p "class=cogames_agents.policy.scripted_agent.planky.policy.PlankyPolicy" \
-  -n "daveey.planky" \
+  -p "class=cogames_agents.policy.nim_agents.agents.PlankyAgentsMultiPolicy" \
+  -n "daveey.nlanky" \
   --season beta-cvc \
   --validation-mode docker \
   --include-files src/cogames_agents \

@@ -1,16 +1,16 @@
 ---
 name: cg.play
-description: Run cogames play with planky policy and vibescope rendering
+description: Run cogames play with nlanky policy and vibescope rendering
 ---
 
 # CoGames Play
 
-Run a game with the planky policy and vibescope rendering. Starts automatically.
+Run a game with the nlanky policy and vibescope rendering. Starts automatically.
 
 ## Command
 
 ```bash
-uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/planky" --render=vibescope --autostart
+uv run cogames play --mission cogsguard_machina_1.basic --policy "metta://policy/nlanky" --render=vibescope --autostart
 ```
 
 ## Customization

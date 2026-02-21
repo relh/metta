@@ -398,7 +398,7 @@ policy/nim_agents/
 | `aligner`          | Python     | Cooperation                 |
 | `teacher`          | Python     | Curriculum learning         |
 | `pinky`            | Python     | Alignment-focused           |
-| `planky`           | Python/Nim | Navigation/gear acquisition |
+| `nlanky`           | Nim        | Navigation/gear acquisition |
 
 ---
 
@@ -1034,7 +1034,7 @@ Based on git history analysis as of January 2026:
 
 ### Highly Active
 
-1. **CogsGuard Game System** - Continuous balancing, new agent types (Pinky, Planky, Wombo), mission variants, reward
+1. **CogsGuard Game System** - Continuous balancing, new agent types (Pinky, Nlanky, Wombo), mission variants, reward
    presets, role-cycle policies. The primary game under development.
 
 2. **Tournament/Leaderboard Infrastructure** - Memory optimization, Datadog monitoring, K8s event storage, season

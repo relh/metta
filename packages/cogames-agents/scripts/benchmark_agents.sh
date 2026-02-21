@@ -27,7 +27,7 @@ AGENTS=""
 ALL_AGENTS=(
   role
   role_nim
-  planky
+  nlanky
   wombo
   baseline
   tiny_baseline

@@ -1,27 +1,6 @@
 # Submitting Policies to CoGames
 
-## Python agents (planky, etc.)
-
-```bash
-cd packages/cogames-agents
-
-cogames upload \
-  -p <short_name> \
-  --include-files src/cogames_agents \
-  --setup-script setup_script.py \
-  -n <submission-name> \
-  --dry-run
-```
-
-Example:
-
-```bash
-cogames upload -p planky --include-files src/cogames_agents --setup-script setup_script.py -n my-planky --dry-run
-```
-
-The `setup_script.py` installs `cogames` and `numpy` into the isolated venv.
-
-## Nim agents (thinky, role, alignall, race_car, nim_random)
+## Nim agents (nlanky, thinky, role, alignall, race_car, nim_random)
 
 Nim agents need a different setup script that handles nim compilation:
 

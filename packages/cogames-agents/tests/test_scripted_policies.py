@@ -50,7 +50,6 @@ POLICIES_UNDER_TEST: tuple[PolicyUnderTest, ...] = (
     PolicyUnderTest("race_car", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("role", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("alignall", requires_nim=True, supports_supervisor=True),
-    PolicyUnderTest("planky_nim", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("nlanky", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("teacher", requires_nim=True, supports_supervisor=True),
     PolicyUnderTest("starter"),

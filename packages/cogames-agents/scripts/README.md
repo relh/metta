@@ -67,7 +67,7 @@ Fast single-agent eval for development iteration (3 episodes, 500 steps by defau
 ./scripts/quick_eval.sh role
 
 # JSON output
-./scripts/quick_eval.sh planky --json
+./scripts/quick_eval.sh nlanky --json
 
 # Open in MettaScope GUI
 ./scripts/quick_eval.sh baseline --gui
@@ -108,7 +108,7 @@ Registered scripted agents (from `cogames-agents` package):
 | -------------------- | ------------------------------- |
 | `role`               | Python multi-role CogsGuard     |
 | `role_nim`           | Multi-role Nim CogsGuard policy |
-| `planky`             | Plank-focused strategy          |
+| `nlanky`             | Nim goal-tree scripted agent    |
 | `wombo`              | Alternative multi-role          |
 | `baseline`           | Standard baseline               |
 | `tiny_baseline`      | Minimal baseline                |

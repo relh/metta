@@ -1,13 +1,12 @@
-"""Planky behavior evaluation missions.
+"""Behavior evaluation missions.
 
-Small deterministic CogsGuard environments for testing the Planky goal-tree agent.
-Each mission loads a custom ASCII map from ``cogames/maps/planky_evals/`` and applies generous
-energy/resources so the agent can focus on demonstrating the target behavior.
+Small deterministic CogsGuard environments for testing scripted agents.
+Each mission loads a custom ASCII map from ``cogames_agents/evals/maps/planky_evals/``
+and applies generous energy/resources so the agent can focus on demonstrating the target behavior.
 """
 
 from __future__ import annotations
 
-import importlib.resources
 from pathlib import Path
 from typing import Dict
 
@@ -20,15 +19,7 @@ from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
 
-
-def _get_cogames_maps_dir() -> Path:
-    """Get the path to the cogames maps directory."""
-    # Use importlib.resources to locate the maps directory in the cogames package
-    with importlib.resources.as_file(importlib.resources.files("cogames").joinpath("maps")) as maps_path:
-        return Path(maps_path)
-
-
-MAPS_DIR = _get_cogames_maps_dir()
+MAPS_DIR = Path(__file__).resolve().parent / "maps"
 
 # Dummy site — each mission overrides the map via make_env().
 _PLANKY_EVALS_SITE = Site(

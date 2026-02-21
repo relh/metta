@@ -19,7 +19,7 @@ from cogames_agents.policy.scripted_registry import (
 CORE_AGENT_NAMES = [
     "role",
     "role_nim",
-    "planky",
+    "nlanky",
     "wombo",
     "teacher",
     "baseline",

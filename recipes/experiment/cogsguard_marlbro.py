@@ -250,7 +250,7 @@ def train(
     run: str | None = None,
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
-    supervisor_policy_uri: str = "metta://policy/planky",
+    supervisor_policy_uri: str = "metta://policy/nlanky",
     teacher_led_proportion: float = 0.0,
     variants: str | Sequence[str] | None = ("milestones",),
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,

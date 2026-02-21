@@ -67,10 +67,10 @@ See `skills/cg.policy-dashboard/analysis-guide.md` for:
 /cg.policy-dashboard
 
 # Specific policy version
-/cg.policy-dashboard --policy planky:v22
+/cg.policy-dashboard --policy nlanky:v22
 
 # More episodes, custom output
-/cg.policy-dashboard --policy planky:v22 --limit 200 --output ./planky_analysis.html
+/cg.policy-dashboard --policy nlanky:v22 --limit 200 --output ./nlanky_analysis.html
 
 # Local mode: analyze results from a cogames play run
 /cg.policy-dashboard --local-results ./eval_results/ --policy-name my-policy
