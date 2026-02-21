@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 
 import {
   DASHBOARD_API_BASE_URL,
@@ -227,6 +228,11 @@ export function DashboardClient() {
         <h1 style={{ marginTop: 0 }}>Standalone Dashboard</h1>
         <p style={{ marginBottom: 0 }}>
           Backend: <code>{DASHBOARD_API_BASE_URL}</code>
+        </p>
+        <p style={{ marginBottom: 0, marginTop: 8 }}>
+          <Link href="/diagnose" style={{ color: '#1f6feb', textDecoration: 'none' }}>
+            Open Cogames Diagnose Runs →
+          </Link>
         </p>
       </header>
 

@@ -19,6 +19,7 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
   const standaloneDashboardBaseUrl =
     process.env.OBSERVATORY_STANDALONE_DASHBOARD_URL?.replace(/\/$/, '') ?? 'http://localhost:5174'
   const standaloneDashboardHref = `${standaloneDashboardBaseUrl}/?policyVersionId=${encodeURIComponent(policyVersionId)}`
+  const standaloneDiagnoseHref = `${standaloneDashboardBaseUrl}/diagnose`
 
   const repo = await getRepo()
   const pvInfo = await repo.getPolicyVersion(policyVersionId)
@@ -49,7 +50,7 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
             <LinkButton href={standaloneDashboardHref} theme="secondary">
               View Dashboard
             </LinkButton>
-            <LinkButton href="/cogames-diagnose" theme="secondary">
+            <LinkButton href={standaloneDiagnoseHref} theme="secondary">
               Diagnose Skill Tree
             </LinkButton>
             <LinkButton href={`/policies/${pvInfo.policy_id}`} theme="tertiary">

@@ -4,6 +4,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
+from dashboard.backend.dashboard_backend.cogames_diagnose.router import create_cogames_diagnose_router
 from dashboard.backend.dashboard_backend.config import settings
 from dashboard.backend.dashboard_backend.database import configure_dashboard_db
 from dashboard.backend.dashboard_backend.state_page.router import create_dashboard_router
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(create_dashboard_router())
+    app.include_router(create_cogames_diagnose_router())
     app.include_router(create_role_stats_router())
 
     @app.get("/healthz", include_in_schema=False)

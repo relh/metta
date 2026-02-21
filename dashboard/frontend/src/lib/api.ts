@@ -100,6 +100,100 @@ export type DashboardRolePercentilesResponse = {
   rows: DashboardRolePercentileRow[]
 }
 
+export type DiagnoseAxis = 'stability' | 'efficiency' | 'control' | 'social_coordination'
+
+export type DiagnoseManifest = {
+  run_id: string
+  created_at: string
+  command: string
+  policy: string
+  pack_id: string
+  pack_version: string
+  stage_status: string
+  run_status: string
+  artifact_files?: string[]
+  [key: string]: unknown
+}
+
+export type DiagnoseAxisScore = {
+  axis: DiagnoseAxis
+  normalized_score: number
+  raw_score: number
+  confirmed: boolean
+  derived_metrics: {
+    reward_variance: number
+    non_zero_episode_pct: number
+    timeout_rate: number
+    mean_move_success: number
+    mean_action_failed: number
+    mean_stuck_steps: number
+    [key: string]: number
+  }
+  [key: string]: unknown
+}
+
+export type DiagnoseProbeDefinition = {
+  probe_id: string
+  axis: DiagnoseAxis
+  mission: string
+  question: string
+  validation_metric: string
+  pass_fail_threshold: string
+  [key: string]: unknown
+}
+
+export type DiagnoseProbeEvaluation = {
+  probe_id: string
+  axis: DiagnoseAxis
+  passed: boolean
+  summary: string
+  evidence_refs: string[]
+  [key: string]: unknown
+}
+
+export type DiagnoseSymptom = {
+  symptom_id: string
+  axis: DiagnoseAxis
+  severity: number
+  confidence: number
+  likely_cause: string
+  action: string
+  expected_effect: string
+  [key: string]: unknown
+}
+
+export type DiagnosePrescription = {
+  symptom_id: string
+  action: string
+  owner: string
+  validation_metric: string
+  pass_fail_threshold: string
+  [key: string]: unknown
+}
+
+export type DiagnoseDoctorNote = {
+  run_id: string
+  status: string
+  stage_status: string
+  dominant_issue: string
+  notes: string[]
+  axes: DiagnoseAxisScore[]
+  stage1_probe_catalog: DiagnoseProbeDefinition[]
+  stage1_probe_evaluations: DiagnoseProbeEvaluation[]
+  symptoms: DiagnoseSymptom[]
+  prescriptions: DiagnosePrescription[]
+  [key: string]: unknown
+}
+
+export type DiagnoseRunSummary = {
+  run_id: string
+  manifest: DiagnoseManifest | null
+}
+
+export type DiagnoseRunsResponse = {
+  runs: DiagnoseRunSummary[]
+}
+
 async function parseJsonOrThrow(response: Response) {
   const text = await response.text()
   const maybeJson = text ? JSON.parse(text) : null
@@ -145,4 +239,41 @@ export async function fetchDashboardRolePercentiles(policyVersionId: string): Pr
     }
   )
   return (await parseJsonOrThrow(response)) as DashboardRolePercentilesResponse
+}
+
+export async function fetchDiagnoseRuns(): Promise<DiagnoseRunsResponse> {
+  const response = await fetch(`${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+    cache: 'no-store',
+  })
+  return (await parseJsonOrThrow(response)) as DiagnoseRunsResponse
+}
+
+export async function fetchDiagnoseManifest(runId: string): Promise<DiagnoseManifest> {
+  const response = await fetch(
+    `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/manifest`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+    }
+  )
+  return (await parseJsonOrThrow(response)) as DiagnoseManifest
+}
+
+export async function fetchDiagnoseDoctorNote(runId: string): Promise<DiagnoseDoctorNote> {
+  const response = await fetch(
+    `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/doctor-note`,
+    {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+    }
+  )
+  return (await parseJsonOrThrow(response)) as DiagnoseDoctorNote
+}
+
+export function diagnoseArtifactUrl(runId: string, artifact: string): string {
+  return `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(artifact)}`
 }
