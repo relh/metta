@@ -26,5 +26,7 @@ jobs:
       namespace: observatory
       release: dashboard
       chart: ./devops/charts/dashboard
-      production_helm_values: |
+      production_helm_values: >-
+        --install
+        --atomic --timeout 10m
         --set datadog.env=production
