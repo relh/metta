@@ -56,16 +56,16 @@ def main(
     if authenticator.has_saved_token(AUTH_SERVERS[server]):
         token = authenticator.config_reader_writer.load_token(AUTH_SERVERS[server])
     else:
-        observatory_token = os.environ.get("OBSERVATORY_TOKEN") if server is Server.PROD else LOCAL_MACHINE_TOKEN
-        if observatory_token is not None:
-            authenticator.config_reader_writer.save_token(observatory_token, AUTH_SERVERS[server])
-            token = observatory_token
+        canary_service_token = os.environ.get("CANARY_SERVICE_TOKEN") if server is Server.PROD else LOCAL_MACHINE_TOKEN
+        if canary_service_token is not None:
+            authenticator.config_reader_writer.save_token(canary_service_token, AUTH_SERVERS[server])
+            token = canary_service_token
 
     if not token:
         raise ValueError(
-            "Observatory authentication token not set, "
+            "API service account token not set, "
             "cannot issue 'cogames login' non-interactively. "
-            "Ensure that OBSERVATORY_TOKEN is set in environment."
+            "Ensure that CANARY_SERVICE_TOKEN is set in environment."
         )
 
     login_server_args = ["--login-server", AUTH_SERVERS[server]]

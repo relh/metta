@@ -12,16 +12,16 @@ High level overview:
 
 ## Run Locally
 
-Ensure local servers are started:
-
-```
-metta observatory up
-```
-
 Ensure k8s are enabled in your Docker environment and you've ran:
 
 ```
 metta observatory local-k8s setup
+```
+
+Ensure local servers are started:
+
+```
+metta observatory up
 ```
 
 In another terminal issue the command:
@@ -33,10 +33,13 @@ uv run devops/canary/cli.py
 ## Build a test docker image
 
 ```
-docker build -f devops/canary/Dockerfile.canary_runner -t canary:dev
+docker build -f devops/canary/Dockerfile.canary_runner -t canary:dev .
 ```
 
-Optional flag `--server prod` to communicate to actual backend (not really needed if dev workflow is setup)
+Optional flag `--server prod` to communicate to actual backend (not really needed if dev workflow is setup). In order
+for prod authentication to work non-interactively in Docker - you need to set an environment variable
+`CANARY_SERVICE_TOKEN` when running the container. This token can be created in
+[Observatory Service Accounts](https://observatory.softmax-research.net/service-accounts).
 
 ## Run the test image
 

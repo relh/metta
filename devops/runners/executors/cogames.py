@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from concurrent.futures import Future
@@ -47,6 +48,8 @@ class CogamesCliExecutor(JobExecutor):
             text=True,
             bufsize=1,
             cwd=log_path.parent,
+            ## Prevent 'rich' line-wrapping JSON strings
+            env={**os.environ, "COLUMNS": "10000"},
         )
 
         output_lines: list[str] = []

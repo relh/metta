@@ -27,11 +27,6 @@ jobs:
         with:
           token: ${{ steps.ci-token.outputs.token }}
 
-      - name: Setup Environment
-        uses: ./.github/actions/setup-environment
-        with:
-          install-mode: testing
-
       - name: Create state directory
         run: mkdir -p devops/canary/state
 
@@ -45,7 +40,7 @@ jobs:
           docker run \
             --rm \
             -v "$(pwd)/devops/canary/state:/app/devops/canary/state" \
-            -e OBSERVATORY_TOKEN="${{ secrets.OBSERVATORY_TOKEN }}" \
+            -e CANARY_SERVICE_TOKEN="${{ secrets.CANARY_SERVICE_TOKEN }}" \
             canary-runner:latest --server prod
 
       - name: Send Discord notification
