@@ -502,10 +502,10 @@ def train(
         policy_architecture = PolicyArchitecture.from_spec(policy_architecture)
 
     if routed_adapter is None and policy_architecture is None:
-        # Tuned from relh.cg.adapters.0213.2_trial_0011_f83acf.
+        # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
         routed_adapter = {
             "rank": 8,
-            "trunk_lr_mult": 0.5633060229085534,
+            "trunk_lr_mult": 0.5476294593341358,
         }
 
     if isinstance(routed_adapter, dict):
@@ -536,7 +536,7 @@ def train(
             event_profiles=event_profiles,
         )
     trainer_cfg = TrainerConfig()
-    # Tuned from relh.cg.adapters.0213.2_trial_0011_f83acf.
+    # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
     trainer_cfg.sampling.method = "sequential"
     trainer_cfg.sampling.prio_alpha = 0.0
     trainer_cfg.sampling.prio_beta0 = 0.6

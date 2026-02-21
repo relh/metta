@@ -240,6 +240,15 @@ def test_train_does_not_enable_teacher_by_default() -> None:
     assert tool.scheduler is None
 
 
+def test_train_uses_best_auc_routed_adapter_defaults() -> None:
+    tool = cogsguard.train()
+    learner_arch = tool.policy_assets["learner0"].architecture
+    assert learner_arch is not None
+    assert learner_arch.cortex_routed_adapter is not None
+    assert learner_arch.cortex_routed_adapter.rank == 8
+    assert learner_arch.cortex_routed_adapter.trunk_lr_mult == pytest.approx(0.5476294593341358)
+
+
 def test_train_accepts_policy_architecture_spec_string() -> None:
     tool = cogsguard.train(
         policy_architecture="metta.agent.policies.puffer_default.PufferDefaultConfig(hidden_size=64)"
