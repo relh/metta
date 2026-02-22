@@ -66,11 +66,11 @@ def run_audit(
         role_counts: Counter[str] = Counter()
         adjacent_roles = {role: False for role in GEAR_COSTS}
 
-        collective_inv = {}
+        hub_inv = {}
         if hasattr(harness.sim, "_c_sim"):
-            collective_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
+            hub_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
         available_roles = {
-            role: all(collective_inv.get(resource, 0) >= amount for resource, amount in cost.items())
+            role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()
         }
 
@@ -118,7 +118,7 @@ def run_audit(
                     transitions=len(role_transitions),
                 )
             )
-            inventory = inventory_snapshot(collective_inv, TRACE_RESOURCES)
+            inventory = inventory_snapshot(hub_inv, TRACE_RESOURCES)
             delta = inventory_delta(previous_inventory, inventory)
             resource_trace_lines.append(
                 format_resource_trace_line(
@@ -140,7 +140,7 @@ def run_audit(
     print("Role trace")
     for line in role_trace_lines:
         print(line)
-    print("Resource trace (cogs collective)")
+    print("Resource trace (cogs hub)")
     for line in resource_trace_lines:
         print(line)
 

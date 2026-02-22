@@ -16,7 +16,7 @@ class GetGearGoal(Goal):
     """Navigate to a station to acquire gear for a role.
 
     If the team lacks resources to produce gear, the station won't give any.
-    Checks collective resources before attempting, to avoid wasting time bumping
+    Checks team hub resources before attempting, to avoid wasting time bumping
     a station that can't dispense gear.
     """
 
@@ -43,25 +43,25 @@ class GetGearGoal(Goal):
         self._bb_bump_count_key = f"{goal_name}_bump_count"
         self._bb_last_dist_key = f"{goal_name}_last_dist"
 
-    # Minimum collective resource reserve.
+    # Minimum team hub resource reserve.
     #
     # CogsGuard starts with limited resources; being too conservative here can
     # prevent most of the team from ever getting gear (and therefore influence).
     RESOURCE_RESERVE = 0
 
-    def _collective_can_afford(self, ctx: PlankyContext) -> bool:
-        """Check if the collective can afford gear while maintaining reserves."""
+    def _team_can_afford(self, ctx: PlankyContext) -> bool:
+        """Check if the team hub can afford gear while maintaining reserves."""
         if not self._gear_cost:
             return True
         s = ctx.state
-        collective = {
-            "carbon": s.collective_carbon,
-            "oxygen": s.collective_oxygen,
-            "germanium": s.collective_germanium,
-            "silicon": s.collective_silicon,
+        team_resources = {
+            "carbon": s.team_carbon,
+            "oxygen": s.team_oxygen,
+            "germanium": s.team_germanium,
+            "silicon": s.team_silicon,
         }
         # Must have cost + reserve for each resource
-        return all(collective.get(res, 0) >= amt + self.RESOURCE_RESERVE for res, amt in self._gear_cost.items())
+        return all(team_resources.get(res, 0) >= amt + self.RESOURCE_RESERVE for res, amt in self._gear_cost.items())
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
         # Satisfied if we have the gear
@@ -74,10 +74,10 @@ class GetGearGoal(Goal):
         giveup_step = ctx.blackboard.get(self._bb_giveup_step_key, -9999)
         if ctx.step - giveup_step < self.RETRY_INTERVAL:
             return True
-        # Skip if collective can't afford this gear
-        if not self._collective_can_afford(ctx):
+        # Skip if team hub can't afford this gear
+        if not self._team_can_afford(ctx):
             if ctx.trace:
-                ctx.trace.skip(self.name, "collective lacks resources")
+                ctx.trace.skip(self.name, "team hub lacks resources")
             return True
         return False
 

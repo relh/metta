@@ -277,7 +277,7 @@ class SmartRoleCoordinator:
             return self._rng_for_agent(agent_id).choice(ROLE_VIBES)
 
         structures_known = self._aggregate_structures()
-        if "hub" not in structures_known or "chest" not in structures_known:
+        if "hub" not in structures_known:
             return "scout"
 
         role_counts = self._aggregate_role_counts()
@@ -822,7 +822,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
 
         In CoGsGuard:
         - Hub/nexus = cogs-aligned
-        - Charger/supply_depot alignment comes from tags/collectives
+        - Charger/supply_depot alignment comes from team: tags
         """
         obj_lower = obj_name.lower()
         tag_lowers = [tag.lower() for tag in tags or []]
@@ -1009,7 +1009,9 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             if hub_pos is not None:
                 offset = GEAR_SEARCH_OFFSETS[(s.agent_id + s.step_count // 10) % len(GEAR_SEARCH_OFFSETS)]
                 target = (hub_pos[0] + offset[0], hub_pos[1] + offset[1])
-                return self._move_towards(s, target, reach_adjacent=True)
+                goal_cells = compute_goal_cells(s, target, True, CellType)  # type: ignore[arg-type]
+                if goal_cells:
+                    return self._move_towards(s, target, reach_adjacent=True)
 
             if DEBUG:
                 print(f"[A{s.agent_id}] GET_GEAR: No {station_name} found, exploring")
@@ -1688,7 +1690,6 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
             return s.role
 
         hub_known = s.stations.get("hub") is not None
-        chest_known = s.stations.get("chest") is not None
 
         if not hub_known:
             return Role.SCOUT
@@ -1696,9 +1697,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
         if s._pending_alignment_target is not None:
             return Role.ALIGNER
 
-        if s.step_count < self.EARLY_SCOUT_STEPS and (
-            not chest_known or len(s.structures) < self.MIN_STRUCTURES_FOR_MIDGAME
-        ):
+        if s.step_count < self.EARLY_SCOUT_STEPS and len(s.structures) < self.MIN_STRUCTURES_FOR_MIDGAME:
             return Role.SCOUT
 
         junctions = s.get_structures_by_type(StructureType.CHARGER)

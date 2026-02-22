@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class GetMinerGearGoal(GetGearGoal):
-    """Get miner gear (costs C1 O1 G3 S1 from collective).
+    """Get miner gear (costs C1 O1 G3 S1 from team hub).
 
     Miners always get gear regardless of reserves — they produce resources.
     """
@@ -28,41 +28,41 @@ class GetMinerGearGoal(GetGearGoal):
             gear_cost={"carbon": 1, "oxygen": 1, "germanium": 3, "silicon": 1},
         )
 
-    def _collective_can_afford(self, ctx: "PlankyContext") -> bool:
+    def _team_can_afford(self, ctx: "PlankyContext") -> bool:
         """Miners always get gear — they're the resource producers.
 
-        But skip if collective is already well-stocked (no need to mine).
+        But skip if team hub is already well-stocked (no need to mine).
         """
-        if _collective_resources_sufficient(ctx):
+        if _team_resources_sufficient(ctx):
             return False
         if not self._gear_cost:
             return True
         s = ctx.state
-        collective = {
-            "carbon": s.collective_carbon,
-            "oxygen": s.collective_oxygen,
-            "germanium": s.collective_germanium,
-            "silicon": s.collective_silicon,
+        team_resources = {
+            "carbon": s.team_carbon,
+            "oxygen": s.team_oxygen,
+            "germanium": s.team_germanium,
+            "silicon": s.team_silicon,
         }
         # No reserve requirement for miners — just need the cost
-        return all(collective.get(res, 0) >= amt for res, amt in self._gear_cost.items())
+        return all(team_resources.get(res, 0) >= amt for res, amt in self._gear_cost.items())
 
 
 # Resource types that can be mined
 RESOURCE_TYPES = ["carbon", "oxygen", "germanium", "silicon"]
 
-# When the collective has more than this amount of every resource, stop mining.
-COLLECTIVE_SUFFICIENT_THRESHOLD = 100
+# When the team hub has more than this amount of every resource, stop mining.
+_TEAM_SUFFICIENT_THRESHOLD = 100
 
 
-def _collective_resources_sufficient(ctx: "PlankyContext") -> bool:
-    """Return True when the collective has >COLLECTIVE_SUFFICIENT_THRESHOLD of every resource."""
+def _team_resources_sufficient(ctx: "PlankyContext") -> bool:
+    """Return True when the team hub has >_TEAM_SUFFICIENT_THRESHOLD of every resource."""
     s = ctx.state
     return (
-        s.collective_carbon > COLLECTIVE_SUFFICIENT_THRESHOLD
-        and s.collective_oxygen > COLLECTIVE_SUFFICIENT_THRESHOLD
-        and s.collective_germanium > COLLECTIVE_SUFFICIENT_THRESHOLD
-        and s.collective_silicon > COLLECTIVE_SUFFICIENT_THRESHOLD
+        s.team_carbon > _TEAM_SUFFICIENT_THRESHOLD
+        and s.team_oxygen > _TEAM_SUFFICIENT_THRESHOLD
+        and s.team_germanium > _TEAM_SUFFICIENT_THRESHOLD
+        and s.team_silicon > _TEAM_SUFFICIENT_THRESHOLD
     )
 
 
@@ -108,9 +108,9 @@ class ExploreHubGoal(Goal):
 
 
 class PickResourceGoal(Goal):
-    """Select a target resource based on collective needs.
+    """Select a target resource based on team hub needs.
 
-    Prioritizes the resource that the collective has the least of,
+    Prioritizes the resource that the team hub has the least of,
     ensuring balanced gathering for heart production.
     Re-evaluates every 50 steps to adapt to changing needs.
     """
@@ -119,8 +119,8 @@ class PickResourceGoal(Goal):
     REEVALUATE_INTERVAL = 50
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # Don't bother picking a resource if collective is well-stocked
-        if _collective_resources_sufficient(ctx):
+        # Don't bother picking a resource if team hub is well-stocked
+        if _team_resources_sufficient(ctx):
             return True
 
         if "target_resource" not in ctx.blackboard:
@@ -136,12 +136,12 @@ class PickResourceGoal(Goal):
         return True
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
-        # Get collective resource levels
-        collective = {
-            "carbon": ctx.state.collective_carbon,
-            "oxygen": ctx.state.collective_oxygen,
-            "germanium": ctx.state.collective_germanium,
-            "silicon": ctx.state.collective_silicon,
+        # Get team resource levels
+        team_resources = {
+            "carbon": ctx.state.team_carbon,
+            "oxygen": ctx.state.team_oxygen,
+            "germanium": ctx.state.team_germanium,
+            "silicon": ctx.state.team_silicon,
         }
 
         # Find resources with available extractors
@@ -156,8 +156,8 @@ class PickResourceGoal(Goal):
                 and not _extractor_recently_failed(ctx, pos)
             ]
             if usable:
-                # Score by collective amount (lower = higher priority)
-                available_resources.append((collective.get(resource, 0), resource))
+                # Score by team amount (lower = higher priority)
+                available_resources.append((team_resources.get(resource, 0), resource))
 
         if not available_resources:
             # No extractors known — pick carbon as default, MineResource will explore
@@ -167,12 +167,12 @@ class PickResourceGoal(Goal):
                 ctx.trace.activate(self.name, "no extractors known, defaulting to carbon")
             return Action(name="noop")
 
-        # Pick the resource the collective has least of (that we can mine)
+        # Pick the resource the team hub has least of (that we can mine)
         available_resources.sort()
         best_resource = available_resources[0][1]
 
         if ctx.trace:
-            ctx.trace.activate(self.name, f"need={best_resource} coll={collective}")
+            ctx.trace.activate(self.name, f"need={best_resource} team={team_resources}")
 
         ctx.blackboard["target_resource"] = best_resource
         ctx.blackboard["_target_resource_step"] = ctx.step
@@ -269,10 +269,10 @@ class MineResourceGoal(Goal):
     MAX_ATTEMPTS_PER_EXTRACTOR = 3  # Reduced from 5 - fail faster
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        # Stop mining when the collective is well-stocked
-        if _collective_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
+        # Stop mining when the team hub is well-stocked
+        if _team_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
             if ctx.trace:
-                ctx.trace.skip(self.name, "collective resources sufficient, idling")
+                ctx.trace.skip(self.name, "team resources sufficient, idling")
             return True
         return False
 

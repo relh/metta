@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class GetScoutGearGoal(GetGearGoal):
-    """Get scout gear (costs C1 O1 G1 S3 from collective)."""
+    """Get scout gear (costs C1 O1 G1 S3 from team hub)."""
 
     def __init__(self) -> None:
         super().__init__(

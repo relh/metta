@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class GetMinerGearGoal(GetGearGoal):
-    """Get miner gear (costs C1 O1 G3 S1 from collective).
+    """Get miner gear (costs C1 O1 G3 S1 from team hub).
 
     Miners always get gear regardless of reserves — they produce resources.
     """
@@ -28,41 +28,33 @@ class GetMinerGearGoal(GetGearGoal):
             gear_cost={"carbon": 1, "oxygen": 1, "germanium": 3, "silicon": 1},
         )
 
-    def _collective_can_afford(self, ctx: "CogasContext") -> bool:
-        """Miners always get gear — they're the resource producers.
-
-        But skip if collective is already well-stocked (no need to mine).
-        """
-        if _collective_resources_sufficient(ctx):
+    def _team_can_afford(self, ctx: "CogasContext") -> bool:
+        if _team_resources_sufficient(ctx):
             return False
         if not self._gear_cost:
             return True
         s = ctx.state
-        collective = {
-            "carbon": s.collective_carbon,
-            "oxygen": s.collective_oxygen,
-            "germanium": s.collective_germanium,
-            "silicon": s.collective_silicon,
+        team_resources = {
+            "carbon": s.team_carbon,
+            "oxygen": s.team_oxygen,
+            "germanium": s.team_germanium,
+            "silicon": s.team_silicon,
         }
-        # No reserve requirement for miners — just need the cost
-        return all(collective.get(res, 0) >= amt for res, amt in self._gear_cost.items())
+        return all(team_resources.get(res, 0) >= amt for res, amt in self._gear_cost.items())
 
 
-# Resource types that can be mined
 RESOURCE_TYPES = ["carbon", "oxygen", "germanium", "silicon"]
 
-# When the collective has more than this amount of every resource, stop mining.
-COLLECTIVE_SUFFICIENT_THRESHOLD = 100
+_TEAM_SUFFICIENT_THRESHOLD = 100
 
 
-def _collective_resources_sufficient(ctx: "CogasContext") -> bool:
-    """Return True when the collective has >COLLECTIVE_SUFFICIENT_THRESHOLD of every resource."""
+def _team_resources_sufficient(ctx: "CogasContext") -> bool:
     s = ctx.state
     return (
-        s.collective_carbon > COLLECTIVE_SUFFICIENT_THRESHOLD
-        and s.collective_oxygen > COLLECTIVE_SUFFICIENT_THRESHOLD
-        and s.collective_germanium > COLLECTIVE_SUFFICIENT_THRESHOLD
-        and s.collective_silicon > COLLECTIVE_SUFFICIENT_THRESHOLD
+        s.team_carbon > _TEAM_SUFFICIENT_THRESHOLD
+        and s.team_oxygen > _TEAM_SUFFICIENT_THRESHOLD
+        and s.team_germanium > _TEAM_SUFFICIENT_THRESHOLD
+        and s.team_silicon > _TEAM_SUFFICIENT_THRESHOLD
     )
 
 
@@ -118,9 +110,7 @@ class ExploreHubGoal(Goal):
         if cached_hub is not None:
             return cached_hub
 
-        # Try to find hub from entity map
-        pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-        hub = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
+        hub = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter={"alignment": ctx.my_team})
         if hub is not None:
             hub_pos, _ = hub
             ctx.blackboard["_hub_center"] = hub_pos
@@ -132,9 +122,9 @@ class ExploreHubGoal(Goal):
 
 
 class PickResourceGoal(Goal):
-    """Select a target resource based on collective needs.
+    """Select a target resource based on team hub needs.
 
-    Prioritizes the resource that the collective has the least of,
+    Prioritizes the resource that the team hub has the least of,
     ensuring balanced gathering for heart production.
     Re-evaluates every 50 steps to adapt to changing needs.
     """
@@ -143,8 +133,7 @@ class PickResourceGoal(Goal):
     REEVALUATE_INTERVAL = 50
 
     def is_satisfied(self, ctx: CogasContext) -> bool:
-        # Don't bother picking a resource if collective is well-stocked
-        if _collective_resources_sufficient(ctx):
+        if _team_resources_sufficient(ctx):
             return True
 
         if "target_resource" not in ctx.blackboard:
@@ -160,15 +149,13 @@ class PickResourceGoal(Goal):
         return True
 
     def execute(self, ctx: CogasContext) -> Optional[Action]:
-        # Get collective resource levels
-        collective = {
-            "carbon": ctx.state.collective_carbon,
-            "oxygen": ctx.state.collective_oxygen,
-            "germanium": ctx.state.collective_germanium,
-            "silicon": ctx.state.collective_silicon,
+        team_resources = {
+            "carbon": ctx.state.team_carbon,
+            "oxygen": ctx.state.team_oxygen,
+            "germanium": ctx.state.team_germanium,
+            "silicon": ctx.state.team_silicon,
         }
 
-        # Find resources with available extractors
         available_resources: list[tuple[int, str]] = []
         for resource in RESOURCE_TYPES:
             extractors = ctx.map.find(type=f"{resource}_extractor")
@@ -180,28 +167,23 @@ class PickResourceGoal(Goal):
                 and not _extractor_recently_failed(ctx, pos)
             ]
             if usable:
-                # Score by collective amount (lower = higher priority)
-                available_resources.append((collective.get(resource, 0), resource))
+                available_resources.append((team_resources.get(resource, 0), resource))
 
         if not available_resources:
-            # No extractors known — pick carbon as default, MineResource will explore
             ctx.blackboard["target_resource"] = "carbon"
             ctx.blackboard["_target_resource_step"] = ctx.step
             if ctx.trace:
                 ctx.trace.activate(self.name, "no extractors known, defaulting to carbon")
-            # Return None to immediately continue to MineResource goal
             return None
 
-        # Pick the resource the collective has least of (that we can mine)
         available_resources.sort()
         best_resource = available_resources[0][1]
 
         if ctx.trace:
-            ctx.trace.activate(self.name, f"need={best_resource} coll={collective}")
+            ctx.trace.activate(self.name, f"need={best_resource} team={team_resources}")
 
         ctx.blackboard["target_resource"] = best_resource
         ctx.blackboard["_target_resource_step"] = ctx.step
-        # Return None to immediately continue to next goal (mining)
         return None
 
 
@@ -260,8 +242,7 @@ class DepositCargoGoal(Goal):
         dist = _manhattan(ctx.state.position, depot_pos)
         if dist <= 1:
             if ctx.trace:
-                hub_dbg_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-                hubs = ctx.map.find(type_contains="hub", property_filter=hub_dbg_filter)
+                hubs = ctx.map.find(type_contains="hub", property_filter={"alignment": ctx.my_team})
                 depot_entity = ctx.map.entities.get(depot_pos)
                 print(
                     f"[deposit-debug] agent={ctx.agent_id} t={ctx.step} pos={ctx.state.position}"
@@ -309,7 +290,7 @@ class MineResourceGoal(Goal):
 
     def is_satisfied(self, ctx: CogasContext) -> bool:
         # Never satisfied - always mine or explore to avoid noops
-        # Even when collective is well-stocked, keep contributing
+        # Even when team hub is well-stocked, keep contributing
         return False
 
     def execute(self, ctx: CogasContext) -> Optional[Action]:
@@ -407,9 +388,7 @@ def _find_cogs_depot(ctx: CogasContext) -> tuple[int, int] | None:
         failed_step = ctx.blackboard.get(f"deposit_failed_{p}", -9999)
         return ctx.step - failed_step < 100
 
-    # Prioritize own team's hub
-    hub_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-    for apos, _ in ctx.map.find(type_contains="hub", property_filter=hub_filter):
+    for apos, _ in ctx.map.find(type_contains="hub", property_filter={"alignment": ctx.my_team}):
         if not recently_failed(apos):
             return apos
 

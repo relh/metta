@@ -18,7 +18,7 @@ CLIPS_CONTROL_RADIUS = 25
 
 
 class GetScramblerGearGoal(GetGearGoal):
-    """Get scrambler gear (costs C1 O3 G1 S1 from collective)."""
+    """Get scrambler gear (costs C1 O3 G1 S1 from team hub)."""
 
     def __init__(self) -> None:
         super().__init__(

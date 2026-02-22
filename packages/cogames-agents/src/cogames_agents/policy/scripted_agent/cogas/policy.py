@@ -97,7 +97,7 @@ class CogasAgentState:
         self.navigator = Navigator()
         self.blackboard: dict[str, Any] = {}
         self.step = 0
-        self.my_collective_id: int | None = None
+        self.my_team: str = "cogs"
 
 
 class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
@@ -146,17 +146,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
             step=agent_state.step,
         )
 
-        # Detect own collective_id from nearest hub (once)
-        if agent_state.my_collective_id is None:
-            hub = agent_state.entity_map.find_nearest(state.position, type_contains="hub")
-            if hub is not None:
-                _, hub_entity = hub
-                cid = hub_entity.properties.get("collective_id")
-                if cid is not None:
-                    agent_state.my_collective_id = cid
-
         # Detect useful actions by comparing state changes
-        # Useful = mined resources, deposited to collective, aligned/scrambled junction
         self._detect_useful_action(state, agent_state)
 
         # Detect failed moves: if last action was a move but position didn't change
@@ -246,7 +236,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
             action_names=self._action_names,
             agent_id=self._agent_id,
             step=agent_state.step,
-            my_collective_id=agent_state.my_collective_id,
+            my_team=agent_state.my_team,
         )
 
         # If we're stuck (many failed moves), force exploration to discover terrain
@@ -287,12 +277,11 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
                 level=self._trace_level,
             )
             print(f"[cogas] {line}")
-            # Log collective resources and entity map info
             if agent_state.step % 25 == 0 or agent_state.step == 3:
                 print(
                     f"[cogas][t={agent_state.step} a={self._agent_id}] "
-                    f"collective: C={state.collective_carbon} O={state.collective_oxygen} "
-                    f"G={state.collective_germanium} S={state.collective_silicon} "
+                    f"team: C={state.team_carbon} O={state.team_oxygen} "
+                    f"G={state.team_germanium} S={state.team_silicon} "
                     f"cargo={state.cargo_total}/{state.cargo_capacity} "
                     f"energy={state.energy}"
                 )
@@ -314,7 +303,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
 
         Useful actions:
         - Mine: cargo increased
-        - Deposit: cargo decreased AND collective increased
+        - Deposit: cargo decreased AND team hub total increased
         - Align/Scramble: heart decreased (spent on junction action)
         - Got gear: gear flag changed
         - Got heart: heart count increased
@@ -324,14 +313,11 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
         # Get previous state values
         prev_cargo = bb.get("_prev_cargo", 0)
         prev_heart = bb.get("_prev_heart", 0)
-        prev_collective_total = bb.get("_prev_collective_total", 0)
+        prev_team_total = bb.get("_prev_team_total", 0)
 
-        # Calculate current values
         current_cargo = state.cargo_total
         current_heart = state.heart
-        current_collective = (
-            state.collective_carbon + state.collective_oxygen + state.collective_germanium + state.collective_silicon
-        )
+        current_team_total = state.team_carbon + state.team_oxygen + state.team_germanium + state.team_silicon
 
         # Detect useful actions
         useful = False
@@ -343,8 +329,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
             if "_first_mine_step" not in bb:
                 bb["_first_mine_step"] = agent_state.step
 
-        # Deposited resources (cargo decreased, collective increased)
-        if current_cargo < prev_cargo and current_collective > prev_collective_total:
+        if current_cargo < prev_cargo and current_team_total > prev_team_total:
             useful = True
             # Track first deposit milestone
             if "_first_deposit_step" not in bb:
@@ -371,7 +356,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
         # Store current values for next tick comparison
         bb["_prev_cargo"] = current_cargo
         bb["_prev_heart"] = current_heart
-        bb["_prev_collective_total"] = current_collective
+        bb["_prev_team_total"] = current_team_total
 
         # Print early-game diagnostics at key steps
         if self._agent_id == 0:
@@ -382,18 +367,18 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
                     for r in ["carbon", "oxygen", "germanium", "silicon"]
                     if agent_state.entity_map.find(type=f"{r}_extractor")
                 )
-                res = f"C={state.collective_carbon} O={state.collective_oxygen}"
+                res = f"C={state.team_carbon} O={state.team_oxygen}"
                 print(f"[DIAG t=50] ext={extractors}/4 mine={first_mine} {res}")
             elif agent_state.step == 100:
                 first_mine = bb.get("_first_mine_step", "NEVER")
                 first_deposit = bb.get("_first_deposit_step", "NEVER")
-                res = f"C={state.collective_carbon} O={state.collective_oxygen}"
+                res = f"C={state.team_carbon} O={state.team_oxygen}"
                 print(f"[DIAG t=100] mine={first_mine} dep={first_deposit} {res}")
         # Agent 3 is the first aligner (agents 0,1,2 are miners per 3:5 pattern)
         if self._agent_id == 3:
             if agent_state.step == 100:
                 has_gear = state.aligner_gear
-                res = f"C={state.collective_carbon} O={state.collective_oxygen}"
+                res = f"C={state.team_carbon} O={state.team_oxygen}"
                 print(f"[ALIGNER t=100] gear={has_gear} {res}")
             elif agent_state.step == 200:
                 first_heart = bb.get("_first_heart_step", "NEVER")

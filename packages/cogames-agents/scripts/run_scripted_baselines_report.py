@@ -242,7 +242,7 @@ def _sum_agent_stat(agent_stats: list[dict[str, float]], key: str) -> float:
     return sum(float(agent.get(key, 0.0)) for agent in agent_stats)
 
 
-def _sum_collective_stat(team_stats: dict[str, Any], key: str) -> float:
+def _sum_hub_stat(team_stats: dict[str, Any], key: str) -> float:
     return float(team_stats.get(key, 0.0))
 
 
@@ -251,52 +251,52 @@ def _sum_element_stats(
     agent_stats: list[dict[str, float]],
     cogs_stats: dict[str, Any],
     agent_suffix: str,
-    collective_suffix: str,
+    hub_suffix: str,
 ) -> tuple[float, dict[str, float]]:
     per_element: dict[str, float] = {}
     for element in ELEMENTS:
         from_agent = _sum_agent_stat(agent_stats, f"{element}.{agent_suffix}")
-        from_collective = _sum_collective_stat(cogs_stats, f"{element}.{collective_suffix}")
-        per_element[element] = max(from_agent, from_collective)
+        from_hub = _sum_hub_stat(cogs_stats, f"{element}.{hub_suffix}")
+        per_element[element] = max(from_agent, from_hub)
     return sum(per_element.values()), per_element
 
 
 def _role_uptime(cogs_stats: dict[str, Any], role: str, steps: int) -> float:
-    return _sum_collective_stat(cogs_stats, f"aligned.c:{role}.held") / max(float(steps), 1.0)
+    return _sum_hub_stat(cogs_stats, f"aligned.c:{role}.held") / max(float(steps), 1.0)
 
 
 def _compute_kpis(
     role: str,
     agent_stats: list[dict[str, float]],
-    collective: dict[str, Any],
+    hub_stats: dict[str, Any],
     steps: int,
 ) -> dict[str, float]:
-    cogs = collective.get("cogs") or {}
-    clips = collective.get("clips") or {}
+    cogs = hub_stats.get("cogs") or {}
+    clips = hub_stats.get("clips") or {}
 
     total_element_gained, per_element_gain = _sum_element_stats(
         agent_stats=agent_stats,
         cogs_stats=cogs,
         agent_suffix="gained",
-        collective_suffix="deposited",
+        hub_suffix="deposited",
     )
     total_element_deposited, per_element_deposit = _sum_element_stats(
         agent_stats=agent_stats,
         cogs_stats=cogs,
         agent_suffix="deposited",
-        collective_suffix="deposited",
+        hub_suffix="deposited",
     )
 
     diversity = sum(1 for element in ELEMENTS if (per_element_gain[element] + per_element_deposit[element]) > 0.0)
 
-    aligned_junction_gained = _sum_collective_stat(cogs, "aligned.junction.gained")
-    hearts_gained = max(_sum_agent_stat(agent_stats, "heart.gained"), _sum_collective_stat(cogs, "heart.withdrawn"))
-    clips_junction_held = _sum_collective_stat(clips, "aligned.junction.held")
-    clips_junction_lost = _sum_collective_stat(clips, "aligned.junction.lost")
+    aligned_junction_gained = _sum_hub_stat(cogs, "aligned.junction.gained")
+    hearts_gained = max(_sum_agent_stat(agent_stats, "heart.gained"), _sum_hub_stat(cogs, "heart.withdrawn"))
+    clips_junction_held = _sum_hub_stat(clips, "aligned.junction.held")
+    clips_junction_lost = _sum_hub_stat(clips, "aligned.junction.lost")
     scramble_events = max(_sum_agent_stat(agent_stats, "junction.scrambled_by_agent"), clips_junction_lost)
 
     role_switch_events = sum(
-        _sum_collective_stat(cogs, f"aligned.c:{r}.gained") for r in ("miner", "scout", "aligner", "scrambler")
+        _sum_hub_stat(cogs, f"aligned.c:{r}.gained") for r in ("miner", "scout", "aligner", "scrambler")
     )
 
     kpis: dict[str, float] = {
@@ -306,7 +306,7 @@ def _compute_kpis(
         "discovery_per_step": _sum_agent_stat(agent_stats, "cell.visited") / max(steps, 1),
         "freeze_proxy": _sum_agent_stat(agent_stats, "status.max_steps_without_motion") / max(len(agent_stats), 1),
         "role_uptime": _role_uptime(cogs, role if role != "gap_filler" else "miner", steps),
-        "aligned_junction_held": _sum_collective_stat(cogs, "aligned.junction.held"),
+        "aligned_junction_held": _sum_hub_stat(cogs, "aligned.junction.held"),
         "aligned_junction_gained": aligned_junction_gained,
         "hearts_to_junction_conversion": aligned_junction_gained / max(hearts_gained, 1.0),
         "scrambled_by_agent": _sum_agent_stat(agent_stats, "junction.scrambled_by_agent"),
@@ -319,7 +319,7 @@ def _compute_kpis(
     if role == "gap_filler":
         role_coverage = 0.0
         for r in ("miner", "scout", "aligner", "scrambler"):
-            if _sum_collective_stat(cogs, f"aligned.c:{r}") > 0.0:
+            if _sum_hub_stat(cogs, f"aligned.c:{r}") > 0.0:
                 role_coverage += 1.0
         kpis["role_coverage"] = role_coverage
         kpis["role_uptime"] = max(
@@ -431,9 +431,9 @@ def _run_target_seed(target: BaselineTarget, seed: int) -> dict[str, Any]:
     )
 
     agent_stats = [dict(stats) for stats in (results.stats.get("agent") or [])]
-    collective = dict(results.stats.get("collective") or {})
+    hub_stats = dict(results.stats.get("collective") or {})
     guardrails = _compute_guardrails(agent_stats)
-    kpis = _compute_kpis(target.role, agent_stats, collective, int(results.steps))
+    kpis = _compute_kpis(target.role, agent_stats, hub_stats, int(results.steps))
     fingerprint = _fingerprint(target.role, kpis, guardrails)
 
     role_rules = ROLE_KPI_RULES.get(target.role, ())

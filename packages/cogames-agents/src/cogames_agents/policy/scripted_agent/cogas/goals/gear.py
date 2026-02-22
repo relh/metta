@@ -15,16 +15,13 @@ if TYPE_CHECKING:
 class GetGearGoal(Goal):
     """Navigate to a station to acquire gear for a role.
 
-    If the team lacks resources to produce gear, the station won't give any.
-    Checks collective resources before attempting, to avoid wasting time bumping
+    If the team hub lacks resources to produce gear, the station won't give any.
+    Checks team hub resources before attempting, to avoid wasting time bumping
     a station that can't dispense gear.
     """
 
-    # How many bump attempts at dist=1 before exploring for another route
     MAX_BUMPS_AT_STATION = 5
-    # How many total steps trying to get gear before giving up temporarily
     MAX_TOTAL_ATTEMPTS = 80
-    # How many steps to wait before trying again
     RETRY_INTERVAL = 150
 
     def __init__(
@@ -35,31 +32,27 @@ class GetGearGoal(Goal):
         gear_cost: dict[str, int] | None = None,
     ) -> None:
         self.name = goal_name
-        self._gear_attr = gear_attr  # e.g. "miner_gear"
-        self._station_type = station_type  # e.g. "miner"
+        self._gear_attr = gear_attr
+        self._station_type = station_type
         self._gear_cost = gear_cost or {}
         self._bb_attempts_key = f"{goal_name}_total_attempts"
         self._bb_giveup_step_key = f"{goal_name}_giveup_step"
         self._bb_bump_count_key = f"{goal_name}_bump_count"
         self._bb_last_dist_key = f"{goal_name}_last_dist"
 
-    # Minimum collective resource reserve — don't consume below this level
-    # Reduced from 3 to 1 for faster gear acquisition
     RESOURCE_RESERVE = 1
 
-    def _collective_can_afford(self, ctx: CogasContext) -> bool:
-        """Check if the collective can afford gear while maintaining reserves."""
+    def _team_can_afford(self, ctx: CogasContext) -> bool:
         if not self._gear_cost:
             return True
         s = ctx.state
-        collective = {
-            "carbon": s.collective_carbon,
-            "oxygen": s.collective_oxygen,
-            "germanium": s.collective_germanium,
-            "silicon": s.collective_silicon,
+        team_resources = {
+            "carbon": s.team_carbon,
+            "oxygen": s.team_oxygen,
+            "germanium": s.team_germanium,
+            "silicon": s.team_silicon,
         }
-        # Must have cost + reserve for each resource
-        return all(collective.get(res, 0) >= amt + self.RESOURCE_RESERVE for res, amt in self._gear_cost.items())
+        return all(team_resources.get(res, 0) >= amt + self.RESOURCE_RESERVE for res, amt in self._gear_cost.items())
 
     def _get_hub_center(self, ctx: CogasContext) -> tuple[int, int]:
         """Find hub center from observations, falling back to current position."""
@@ -68,9 +61,7 @@ class GetGearGoal(Goal):
         if cached_hub is not None:
             return cached_hub
 
-        # Try to find hub from entity map
-        pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
-        hub = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
+        hub = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter={"alignment": ctx.my_team})
         if hub is not None:
             hub_pos, _ = hub
             ctx.blackboard["_hub_center"] = hub_pos
@@ -90,10 +81,9 @@ class GetGearGoal(Goal):
         giveup_step = ctx.blackboard.get(self._bb_giveup_step_key, -9999)
         if ctx.step - giveup_step < self.RETRY_INTERVAL:
             return True
-        # Skip if collective can't afford this gear
-        if not self._collective_can_afford(ctx):
+        if not self._team_can_afford(ctx):
             if ctx.trace:
-                ctx.trace.skip(self.name, "collective lacks resources")
+                ctx.trace.skip(self.name, "team hub lacks resources")
             return True
         return False
 
@@ -111,8 +101,7 @@ class GetGearGoal(Goal):
                 ctx.trace.activate(self.name, "giving up after max attempts")
             return None  # Skip to next goal
 
-        # Find station by type (filter to own team if known)
-        pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
+        pf = {"alignment": ctx.my_team}
         result = ctx.map.find_nearest(ctx.state.position, type_contains=self._station_type, property_filter=pf)
         if result is None:
             # Station not discovered yet — navigate toward hub where stations are

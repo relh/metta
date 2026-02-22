@@ -146,7 +146,7 @@ def run_rollout(
     last_gear: dict[int, dict[str, int]] = {}
     gear_resource_windows = {role: 0 for role in GEAR_COSTS}
     gear_resource_windows_with_adjacent = {role: 0 for role in GEAR_COSTS}
-    last_collective_snapshot: dict[str, int] | None = None
+    last_hub_snapshot: dict[str, int] | None = None
     resource_trace_lines: list[str] = []
 
     if trace_resources and trace_resource_every <= 0:
@@ -157,11 +157,11 @@ def run_rollout(
 
     for _ in range(steps):
         harness.step(1)
-        collective_inv = {}
+        hub_inv = {}
         if hasattr(harness.sim, "_c_sim"):
-            collective_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
+            hub_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
         gear_resources_available = {
-            role: all(collective_inv.get(resource, 0) >= amount for resource, amount in cost.items())
+            role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()
         }
         for role, available in gear_resources_available.items():
@@ -386,8 +386,8 @@ def run_rollout(
         if trace_resources:
             if harness.step_count % trace_resource_every == 0:
                 if trace_resource_limit <= 0 or len(resource_trace_lines) < trace_resource_limit:
-                    snapshot = inventory_snapshot(collective_inv, TRACE_RESOURCES)
-                    delta = inventory_delta(last_collective_snapshot, snapshot)
+                    snapshot = inventory_snapshot(hub_inv, TRACE_RESOURCES)
+                    delta = inventory_delta(last_hub_snapshot, snapshot)
                     resource_trace_lines.append(
                         format_resource_trace_line(
                             step=harness.step_count,
@@ -399,7 +399,7 @@ def run_rollout(
                             available_roles=gear_resources_available,
                         )
                     )
-                    last_collective_snapshot = snapshot
+                    last_hub_snapshot = snapshot
 
     print("Cogsguard rollout sanity check")
     print(f"- steps: {steps}")
@@ -487,7 +487,7 @@ def run_rollout(
         for line in prereq_trace_lines:
             print(f"- {line}")
     if trace_resources:
-        print("Resource trace (cogs collective inventory)")
+        print("Resource trace (cogs hub inventory)")
         for line in resource_trace_lines:
             print(f"- {line}")
 

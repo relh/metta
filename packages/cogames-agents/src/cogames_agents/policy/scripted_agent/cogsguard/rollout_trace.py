@@ -7,8 +7,8 @@ from cogames.cogs_vs_clips.stations import GEAR_COSTS
 TRACE_RESOURCES = tuple(sorted({resource for costs in GEAR_COSTS.values() for resource in costs}))
 
 
-def inventory_snapshot(collective_inv: dict[str, int], resources: Iterable[str]) -> dict[str, int]:
-    return {resource: int(collective_inv.get(resource, 0)) for resource in resources}
+def inventory_snapshot(team_inv: dict[str, int], resources: Iterable[str]) -> dict[str, int]:
+    return {resource: int(team_inv.get(resource, 0)) for resource in resources}
 
 
 def inventory_delta(previous: dict[str, int] | None, current: dict[str, int]) -> dict[str, int]:

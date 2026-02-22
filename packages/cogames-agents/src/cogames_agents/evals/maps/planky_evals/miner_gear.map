@@ -1,12 +1,12 @@
 type: mettagrid.map_builder.ascii.AsciiMapBuilder.Config
 map_data: |-
-    #######
-    #.....#
-    #..@..#
-    #.....#
-    #..M..#
-    #.....#
-    #######
+    #########
+    #.......#
+    #..@....#
+    #.......#
+    #..M..&.#
+    #.......#
+    #########
 char_to_map_name:
   "#": wall
   ".": empty

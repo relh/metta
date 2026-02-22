@@ -123,7 +123,7 @@ def create_object_state(
     """Create an ObjectState from collected features.
 
     Note: Objects can have multiple tags (e.g., "wall" + "green" vibe).
-    Prefer type tags over collective tags for the primary object name.
+    Prefer type tags over team tags for the primary object name.
     """
     # Get tags list (now stored as "tags" instead of "tag")
     tags_value = features.get("tags", [])

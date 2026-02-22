@@ -1,4 +1,4 @@
-"""Stem goal — select a role based on map and collective state."""
+"""Stem goal — select a role based on map and team state."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class SelectRoleGoal(Goal):
-    """Evaluate map + collective inventory to select a role.
+    """Evaluate map + team hub inventory to select a role.
 
     Once a role is selected, the agent's goal list is replaced with
     the selected role's goal list. This is a one-time decision.

@@ -18,7 +18,7 @@ CLIPS_CONTROL_RADIUS = 25
 
 
 class GetAlignerGearGoal(GetGearGoal):
-    """Get aligner gear (costs C3 O1 G1 S1 from collective)."""
+    """Get aligner gear (costs C3 O1 G1 S1 from team hub)."""
 
     def __init__(self) -> None:
         super().__init__(

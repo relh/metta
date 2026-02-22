@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+_SKIP_PREFIXES = ("team:", "collective:")
+
 
 def select_primary_tag(tags: list[str], *, priority_objects: Optional[set[str]] = None) -> str:
     if not tags:
@@ -13,11 +15,11 @@ def select_primary_tag(tags: list[str], *, priority_objects: Optional[set[str]] 
 
     if priority_objects:
         for tag in tags:
-            if tag and not tag.startswith("collective:") and tag in priority_objects:
+            if tag and not any(tag.startswith(p) for p in _SKIP_PREFIXES) and tag in priority_objects:
                 return tag
 
     for tag in tags:
-        if tag and not tag.startswith("collective:"):
+        if tag and not any(tag.startswith(p) for p in _SKIP_PREFIXES):
             return tag
 
     for tag in tags:
@@ -27,21 +29,18 @@ def select_primary_tag(tags: list[str], *, priority_objects: Optional[set[str]] 
     return "unknown"
 
 
-def derive_alignment(
+def derive_alignment_from_tags(
     obj_name: str,
     clipped: int,
-    collective_id: Optional[int],
-    *,
-    cogs_collective_id: Optional[int],
-    clips_collective_id: Optional[int],
+    tags: list[str],
 ) -> Optional[str]:
-    if collective_id is not None:
-        if collective_id == cogs_collective_id:
+    for tag in tags:
+        if tag == "team:cogs":
             return "cogs"
-        if collective_id == clips_collective_id:
+        if tag == "team:clips":
             return "clips"
 
-    if "cogs" in obj_name:
+    if "c:" in obj_name:
         return "cogs"
     if "clips" in obj_name or clipped > 0:
         return "clips"

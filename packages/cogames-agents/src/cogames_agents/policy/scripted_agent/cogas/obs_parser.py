@@ -46,11 +46,6 @@ class ObsParser:
             if action_name.startswith("change_vibe_"):
                 self._vibe_names.append(action_name[len("change_vibe_") :])
 
-        # Collective name mapping (alphabetical: clips=0, cogs=1)
-        self._collective_names = ["clips", "cogs"]  # Alphabetical
-        self._cogs_collective_id = 1  # "cogs" is index 1 alphabetically
-        self._clips_collective_id = 0  # "clips" is index 0
-
     def parse(
         self,
         obs: AgentObservation,
@@ -84,7 +79,7 @@ class ObsParser:
         for tok in obs.tokens:
             feature_name = tok.feature.name
 
-            # Global tokens include local position and collective inventory (daveey-inv-fix)
+            # Global tokens include local position and team hub inventory
             if _is_global_token(tok):
                 if feature_name == "lp:east":
                     lp_col_offset = tok.value
@@ -99,7 +94,6 @@ class ObsParser:
                     lp_row_offset = -tok.value
                     has_position = True
                 elif feature_name.startswith("inv:"):
-                    # Collective inventory tokens are global observations
                     resource_name = feature_name[4:]
                     if ":p" in resource_name:
                         base_name, power_str = resource_name.rsplit(":p", 1)
@@ -109,6 +103,18 @@ class ObsParser:
                     else:
                         current = inv.get(resource_name, 0)
                         inv[resource_name] = current + tok.value
+                elif feature_name.startswith("team:"):
+                    resource_name = feature_name[5:]
+                    key = f"team:{resource_name}"
+                    if ":p" in resource_name:
+                        base_name, power_str = resource_name.rsplit(":p", 1)
+                        power = int(power_str)
+                        key = f"team:{base_name}"
+                        current = inv.get(key, 0)
+                        inv[key] = current + tok.value * (256**power)
+                    else:
+                        current = inv.get(key, 0)
+                        inv[key] = current + tok.value
                 continue
 
             # Center cell tokens for inventory/vibe and local position (main compatibility)
@@ -160,22 +166,19 @@ class ObsParser:
         state.scrambler_gear = inv.get("scrambler", 0) > 0
         state.vibe = self._get_vibe_name(vibe_id)
 
-        # Read collective inventory from the inv dict.
-        # Collective tokens appear as "inv:collective:<resource>" global observation tokens,
-        # parsed above into keys like "collective:carbon", "collective:oxygen", etc.
-        state.collective_carbon = inv.get("collective:carbon", 0)
-        state.collective_oxygen = inv.get("collective:oxygen", 0)
-        state.collective_germanium = inv.get("collective:germanium", 0)
-        state.collective_silicon = inv.get("collective:silicon", 0)
-        state.collective_heart = inv.get("collective:heart", 0)
-        state.collective_influence = inv.get("collective:influence", 0)
+        state.team_carbon = inv.get("team:carbon", 0)
+        state.team_oxygen = inv.get("team:oxygen", 0)
+        state.team_germanium = inv.get("team:germanium", 0)
+        state.team_silicon = inv.get("team:silicon", 0)
+        state.team_heart = inv.get("team:heart", 0)
+        state.team_influence = inv.get("team:influence", 0)
 
         # Parse visible entities
         visible_entities: dict[tuple[int, int], Entity] = {}
         position_features: dict[tuple[int, int], dict] = {}
 
         for tok in obs.tokens:
-            # Skip global tokens (already processed above for local position and collective inventory)
+            # Skip global tokens (already processed above for local position and team hub inventory)
             if _is_global_token(tok):
                 continue
 
@@ -197,7 +200,7 @@ class ObsParser:
             feature_name = tok.feature.name
             if feature_name == "tag":
                 position_features[world_pos]["tags"].append(tok.value)
-            elif feature_name in ("cooldown_remaining", "clipped", "remaining_uses", "collective"):
+            elif feature_name in ("cooldown_remaining", "clipped", "remaining_uses"):
                 position_features[world_pos]["props"][feature_name] = tok.value
             elif feature_name.startswith("inv:"):
                 inv_dict = position_features[world_pos].setdefault("inventory", {})
@@ -224,11 +227,8 @@ class ObsParser:
             props = dict(features.get("props", {}))
             inv_data = features.get("inventory")
 
-            # Alignment from collective ID
-            collective_id = props.pop("collective", None)
-            if collective_id is not None:
-                props["collective_id"] = collective_id
-            alignment = self._derive_alignment(obj_name, props.get("clipped", 0), collective_id)
+            resolved_tags = [self._tag_names.get(tid, "") for tid in tags]
+            alignment = self._derive_alignment(obj_name, props.get("clipped", 0), resolved_tags)
             if alignment:
                 props["alignment"] = alignment
 
@@ -260,9 +260,8 @@ class ObsParser:
             if tag.startswith("type:"):
                 return tag[5:]
 
-        # Non-collective tags
         for tag in resolved:
-            if tag and not tag.startswith("collective:"):
+            if tag and not tag.startswith("team:") and not tag.startswith("collective:"):
                 return tag
 
         return "unknown"
@@ -272,11 +271,11 @@ class ObsParser:
             return self._vibe_names[vibe_id]
         return "default"
 
-    def _derive_alignment(self, obj_name: str, clipped: int, collective_id: int | None) -> str | None:
-        if collective_id is not None:
-            if collective_id == self._cogs_collective_id:
+    def _derive_alignment(self, obj_name: str, clipped: int, tags: list[str]) -> str | None:
+        for tag in tags:
+            if tag == "team:cogs":
                 return "cogs"
-            elif collective_id == self._clips_collective_id:
+            if tag == "team:clips":
                 return "clips"
         if "c:" in obj_name:
             return "cogs"

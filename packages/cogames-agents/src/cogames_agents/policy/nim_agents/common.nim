@@ -602,6 +602,23 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
               continue
         else:
           inventoryBaseIds[suffix] = feature.id
+      elif feature.name.startsWith("team:"):
+        if result.inventoryTokenBase == 0:
+          result.inventoryTokenBase = int(feature.normalization)
+        let powerIndex = feature.name.rfind(":p")
+        if powerIndex != -1 and powerIndex > 5:
+          let baseName = feature.name[0 ..< powerIndex]
+          let powerStr = feature.name[powerIndex + 2 .. ^1]
+          if powerStr.len > 0 and powerStr.allCharsInSet({'0' .. '9'}):
+            let power = parseInt(powerStr)
+            if power > 0:
+              var powers = inventoryPowerIds.getOrDefault(baseName, [-1, -1])
+              if power <= 2:
+                powers[power - 1] = feature.id
+              inventoryPowerIds[baseName] = powers
+              continue
+        else:
+          inventoryBaseIds[feature.name] = feature.id
       case feature.name:
       of "agent:group":
         result.features.group = feature.id
@@ -671,17 +688,17 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.invHp = feature.id
       of "inv:solar":
         result.features.invSolar = feature.id
-      of "inv:collective:carbon":
+      of "inv:collective:carbon", "team:carbon":
         result.features.invCollectiveCarbon = feature.id
-      of "inv:collective:oxygen":
+      of "inv:collective:oxygen", "team:oxygen":
         result.features.invCollectiveOxygen = feature.id
-      of "inv:collective:germanium":
+      of "inv:collective:germanium", "team:germanium":
         result.features.invCollectiveGermanium = feature.id
-      of "inv:collective:silicon":
+      of "inv:collective:silicon", "team:silicon":
         result.features.invCollectiveSilicon = feature.id
-      of "inv:collective:heart":
+      of "inv:collective:heart", "team:heart":
         result.features.invCollectiveHeart = feature.id
-      of "inv:collective:influence":
+      of "inv:collective:influence", "team:influence":
         result.features.invCollectiveInfluence = feature.id
       of "protocol_input:energy":
         result.features.protocolInputEnergy = feature.id
@@ -747,6 +764,8 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolOutputInfluence = feature.id
       of "protocol_output:solar":
         result.features.protocolOutputSolar = feature.id
+      of "aoe_mask", "last_action_move":
+        discard
       else:
         echo "Unknown feature: ", feature.name
 
@@ -820,7 +839,7 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
       case name:
       of "agent", "type:agent":
         result.tags.agent = id
-      of "hub", "type:c:hub":
+      of "hub", "type:hub":
         result.tags.hub = id
       of "carbon_extractor", "type:carbon_extractor":
         result.tags.carbonExtractor = id

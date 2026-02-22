@@ -29,14 +29,6 @@ class ObsParser:
             if action_name.startswith("change_vibe_"):
                 self._vibe_names.append(action_name[len("change_vibe_") :])
 
-        # Collective IDs for alignment parsing.
-        #
-        # `collective` is a numeric ID emitted in observations for aligned objects.
-        # Rather than assuming a fixed ordering, infer IDs from observed cogs-owned
-        # structures (hub/gear/chest) and from clipped junctions.
-        self._cogs_collective_id: int | None = None
-        self._clips_collective_id: int | None = None
-
     def parse(
         self,
         obs: AgentObservation,
@@ -84,7 +76,7 @@ class ObsParser:
                 elif feature_name == "lp:north":
                     lp_row_offset = -tok.value
                     has_position = True
-                elif feature_name.startswith("inv:") and not feature_name.startswith("inv:collective:"):
+                elif feature_name.startswith("inv:"):
                     resource_name = feature_name[4:]
                     if ":p" in resource_name:
                         base_name, power_str = resource_name.rsplit(":p", 1)
@@ -144,59 +136,28 @@ class ObsParser:
         state.scrambler_gear = inv.get("scrambler", 0) > 0
         state.vibe = self._get_vibe_name(vibe_id)
 
-        # Read collective inventory from observation.
-        #
-        # The CogsGuard mission has historically used different encodings:
-        # - inventory-based: inv:collective:<resource> (InventoryValue obs)
-        # - stat-based legacy: stat:collective:collective.<resource>.amount (StatValue obs)
-        #
-        # Support both to keep Planky compatible across mission versions.
-        collective: dict[str, int] = {}
-
-        def add_collective(resource: str, amount: int) -> None:
-            if amount <= 0:
-                return
-            collective[resource] = collective.get(resource, 0) + amount
-
-        inv_collective_prefix = "inv:collective:"
-        stat_collective_prefix = "stat:collective:"
-        legacy_name_prefix = "collective."
-        legacy_amount_suffix = ".amount"
-
+        # Team hub inventory is exposed via team:<resource> global obs tokens.
+        team_inv: dict[str, int] = {}
         for tok in obs.tokens:
             feature_name = tok.feature.name
-
-            # InventoryValue-based collective observations.
-            if feature_name.startswith(inv_collective_prefix):
-                rest = feature_name[len(inv_collective_prefix) :]
-                power = 0
-                if ":p" in rest:
-                    rest, power_str = rest.rsplit(":p", 1)
-                    power = int(power_str)
-                if rest.startswith(legacy_name_prefix):
-                    rest = rest[len(legacy_name_prefix) :]
-                add_collective(rest, tok.value * (256**power))
+            if not feature_name.startswith("team:"):
                 continue
+            loc = tok.location
+            if loc is not None:
+                continue
+            resource_name = feature_name[5:]
+            power = 0
+            if ":p" in resource_name:
+                resource_name, power_str = resource_name.rsplit(":p", 1)
+                power = int(power_str)
+            team_inv[resource_name] = team_inv.get(resource_name, 0) + tok.value * (256**power)
 
-            # Legacy StatValue-based collective observations.
-            if feature_name.startswith(stat_collective_prefix):
-                rest = feature_name[len(stat_collective_prefix) :]
-                power = 0
-                if ":p" in rest:
-                    rest, power_str = rest.rsplit(":p", 1)
-                    power = int(power_str)
-                if rest.startswith(legacy_name_prefix):
-                    rest = rest[len(legacy_name_prefix) :]
-                if rest.endswith(legacy_amount_suffix):
-                    rest = rest[: -len(legacy_amount_suffix)]
-                add_collective(rest, tok.value * (256**power))
-
-        state.collective_carbon = collective.get("carbon", 0)
-        state.collective_oxygen = collective.get("oxygen", 0)
-        state.collective_germanium = collective.get("germanium", 0)
-        state.collective_silicon = collective.get("silicon", 0)
-        state.collective_heart = collective.get("heart", 0)
-        state.collective_influence = collective.get("influence", 0)
+        state.team_carbon = team_inv.get("carbon", 0)
+        state.team_oxygen = team_inv.get("oxygen", 0)
+        state.team_germanium = team_inv.get("germanium", 0)
+        state.team_silicon = team_inv.get("silicon", 0)
+        state.team_heart = team_inv.get("heart", 0)
+        state.team_influence = team_inv.get("influence", 0)
 
         # Parse visible entities
         visible_entities: dict[tuple[int, int], Entity] = {}
@@ -222,7 +183,7 @@ class ObsParser:
             feature_name = tok.feature.name
             if feature_name == "tag":
                 position_features[world_pos]["tags"].append(tok.value)
-            elif feature_name in ("cooldown_remaining", "clipped", "remaining_uses", "collective"):
+            elif feature_name in ("cooldown_remaining", "clipped", "remaining_uses"):
                 position_features[world_pos]["props"][feature_name] = tok.value
             elif feature_name.startswith("inv:"):
                 inv_dict = position_features[world_pos].setdefault("inventory", {})
@@ -249,10 +210,8 @@ class ObsParser:
             props = dict(features.get("props", {}))
             inv_data = features.get("inventory")
 
-            # Alignment from collective ID
-            collective_id = props.pop("collective", None)
-            self._maybe_update_collective_ids(obj_name, props.get("clipped", 0), collective_id)
-            alignment = self._derive_alignment(obj_name, props.get("clipped", 0), collective_id)
+            resolved_tags = [self._tag_names.get(tid, "") for tid in tags]
+            alignment = self._derive_alignment(obj_name, props.get("clipped", 0), resolved_tags)
             if alignment:
                 props["alignment"] = alignment
 
@@ -275,25 +234,6 @@ class ObsParser:
 
         return state, visible_entities
 
-    def _maybe_update_collective_ids(self, obj_name: str, clipped: int, collective_id: int | None) -> None:
-        if collective_id is None:
-            return
-
-        # Cogs structures always belong to the cogs collective.
-        if obj_name in {
-            "hub",
-            "miner",
-            "aligner",
-            "scrambler",
-            "scout",
-            "chest",
-        }:
-            self._cogs_collective_id = collective_id
-
-        # Clipped junctions indicate the clips collective.
-        if clipped > 0 and obj_name in {"junction", "charger"}:
-            self._clips_collective_id = collective_id
-
     def _resolve_object_name(self, tag_ids: list[int]) -> str:
         """Resolve tag IDs to an object name."""
         resolved = [self._tag_names.get(tid, "") for tid in tag_ids]
@@ -303,9 +243,8 @@ class ObsParser:
             if tag.startswith("type:"):
                 return tag[5:]
 
-        # Non-collective tags
         for tag in resolved:
-            if tag and not tag.startswith("collective:"):
+            if tag and not tag.startswith("team:") and not tag.startswith("collective:"):
                 return tag
 
         return "unknown"
@@ -315,18 +254,15 @@ class ObsParser:
             return self._vibe_names[vibe_id]
         return "default"
 
-    def _derive_alignment(self, obj_name: str, clipped: int, collective_id: int | None) -> str | None:
+    def _derive_alignment(self, obj_name: str, clipped: int, tags: list[str]) -> str | None:
+        for tag in tags:
+            if tag == "team:cogs":
+                return "cogs"
+            if tag == "team:clips":
+                return "clips"
         if "c:" in obj_name:
             return "cogs"
         if "clips" in obj_name or clipped > 0:
-            return "clips"
-        if collective_id is None:
-            return None
-        if self._cogs_collective_id is not None and collective_id == self._cogs_collective_id:
-            return "cogs"
-        if self._clips_collective_id is not None and collective_id == self._clips_collective_id:
-            return "clips"
-        if self._cogs_collective_id is not None and collective_id != self._cogs_collective_id:
             return "clips"
         return None
 

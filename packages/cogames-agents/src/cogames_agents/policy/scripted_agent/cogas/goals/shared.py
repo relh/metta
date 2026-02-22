@@ -15,38 +15,31 @@ if TYPE_CHECKING:
 class GetHeartsGoal(Goal):
     """Navigate to hub to acquire hearts.
 
-    Hearts cost 1 of each element from the collective. Skip if the
-    collective can't afford it to avoid wasting time at the hub.
+    Hearts cost 1 of each element from the team hub. Skip if the
+    hub can't afford it to avoid wasting time.
     """
 
     name = "GetHearts"
-    # Cost per heart: 1 of each element
     HEART_COST = {"carbon": 1, "oxygen": 1, "germanium": 1, "silicon": 1}
 
     def __init__(self, min_hearts: int = 1) -> None:
         self._min_hearts = min_hearts
 
-    # Minimum collective resource reserve — don't consume below this level
-    # Reduced from 3 to 1 to allow earlier heart acquisition
     RESOURCE_RESERVE = 1
 
-    def _collective_can_afford_heart(self, ctx: CogasContext) -> bool:
+    def _team_can_afford_heart(self, ctx: CogasContext) -> bool:
         s = ctx.state
         r = self.RESOURCE_RESERVE
         return (
-            s.collective_carbon >= 1 + r
-            and s.collective_oxygen >= 1 + r
-            and s.collective_germanium >= 1 + r
-            and s.collective_silicon >= 1 + r
+            s.team_carbon >= 1 + r and s.team_oxygen >= 1 + r and s.team_germanium >= 1 + r and s.team_silicon >= 1 + r
         )
 
     def is_satisfied(self, ctx: CogasContext) -> bool:
         if ctx.state.heart >= self._min_hearts:
             return True
-        # Skip if collective can't afford a heart
-        if not self._collective_can_afford_heart(ctx):
+        if not self._team_can_afford_heart(ctx):
             if ctx.trace:
-                ctx.trace.skip(self.name, "collective lacks resources for heart")
+                ctx.trace.skip(self.name, "team hub lacks resources for heart")
             return True
         return False
 
@@ -62,8 +55,7 @@ class GetHeartsGoal(Goal):
                     return _move_toward(ctx.state.position, depot_pos)
                 return ctx.navigator.get_action(ctx.state.position, depot_pos, ctx.map, reach_adjacent=True)
 
-        # Find own team's hub (primary source for hearts)
-        pf = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
+        pf = {"alignment": ctx.my_team}
         result = ctx.map.find_nearest(ctx.state.position, type_contains="hub", property_filter=pf)
         if result is None:
             return ctx.navigator.explore(ctx.state.position, ctx.map)
@@ -141,9 +133,8 @@ class FallbackMineGoal(Goal):
 def _find_deposit(ctx: "CogasContext") -> tuple[int, int] | None:
     """Find nearest cogs-aligned depot for depositing resources."""
     pos = ctx.state.position
-    hub_filter = {"collective_id": ctx.my_collective_id} if ctx.my_collective_id is not None else None
     candidates: list[tuple[int, tuple[int, int]]] = []
-    for apos, _ in ctx.map.find(type_contains="hub", property_filter=hub_filter):
+    for apos, _ in ctx.map.find(type_contains="hub", property_filter={"alignment": ctx.my_team}):
         candidates.append((_manhattan(pos, apos), apos))
     for jpos, _ in ctx.map.find(type_contains="junction", property_filter={"alignment": "cogs"}):
         candidates.append((_manhattan(pos, jpos), jpos))

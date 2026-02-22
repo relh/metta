@@ -21,7 +21,7 @@ from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 def policy_env_info() -> PolicyEnvInterface:
     return PolicyEnvInterface(
         obs_features=[],
-        tags=["collective:cogs", "collective:clips", "hub", "junction"],
+        tags=["team:cogs", "team:clips", "hub", "junction"],
         action_names=["noop", "move_north", "move_south", "move_east", "move_west"],
         vibe_action_names=[],
         num_agents=1,
@@ -51,7 +51,7 @@ def _make_state(
     )
 
 
-def test_alignment_uses_collective_tags(policy_env_info: PolicyEnvInterface) -> None:
+def test_alignment_uses_team_tags(policy_env_info: PolicyEnvInterface) -> None:
     policy = CogsguardAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.MINER)
 
     assert (
@@ -59,7 +59,7 @@ def test_alignment_uses_collective_tags(policy_env_info: PolicyEnvInterface) -> 
             "junction",
             False,
             StructureType.CHARGER,
-            tags=["collective:cogs"],
+            tags=["team:cogs"],
         )
         == "cogs"
     )
@@ -68,7 +68,7 @@ def test_alignment_uses_collective_tags(policy_env_info: PolicyEnvInterface) -> 
             "junction",
             False,
             StructureType.CHARGER,
-            tags=["collective:clips"],
+            tags=["team:clips"],
         )
         == "clips"
     )

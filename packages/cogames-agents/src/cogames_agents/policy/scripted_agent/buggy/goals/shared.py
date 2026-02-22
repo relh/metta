@@ -16,8 +16,8 @@ class GetHeartsGoal(Goal):
     """Navigate to hub to acquire hearts.
 
     In CogsGuard, hearts are obtained from the hub (withdraw if available,
-    otherwise craft if the collective has enough elements). Since Planky cannot
-    always observe the collective heart inventory directly, we primarily rely on
+    otherwise craft if the team hub has enough elements). Since Planky cannot
+    always observe the team hub heart inventory directly, we primarily rely on
     "try and back off" behavior rather than hard-gating on affordability.
     """
 
@@ -106,10 +106,10 @@ class FallbackMineGoal(Goal):
     name = "FallbackMine"
 
     def is_satisfied(self, ctx: PlankyContext) -> bool:
-        from .miner import _collective_resources_sufficient  # noqa: PLC0415
+        from .miner import _team_resources_sufficient  # noqa: PLC0415
 
-        # Stop fallback mining when collective is well-stocked
-        if _collective_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
+        # Stop fallback mining when team hub is well-stocked
+        if _team_resources_sufficient(ctx) and ctx.state.cargo_total == 0:
             return True
         return False
 

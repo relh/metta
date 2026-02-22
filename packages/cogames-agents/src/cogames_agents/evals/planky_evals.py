@@ -60,7 +60,7 @@ class _PlankyDiagnosticBase(Mission):
     Provides:
     - Custom ASCII map loading from ``planky_evals/`` directory
     - Generous energy (255 capacity + 255 regen per tick)
-    - Generous collective resources (100 of each element, 50 hearts)
+    - Generous team hub resources (100 of each element, 50 hearts)
     - Inventory seed support (per-mission starting items)
     - ``configure_env()`` hook for per-mission customization
     """
@@ -74,8 +74,8 @@ class _PlankyDiagnosticBase(Mission):
     # Per-mission inventory seed (applied to agent starting inventory)
     inventory_seed: Dict[str, int] = Field(default_factory=dict)
 
-    # Generous collective resources — must stay at or below planky's
-    # COLLECTIVE_SUFFICIENT_THRESHOLD (100) to avoid miners auto-converting to aligners.
+    # Generous team hub resources — must stay at or below the
+    # _TEAM_SUFFICIENT_THRESHOLD (100) to avoid miners auto-converting to aligners.
     wealth: int = Field(default=4)
 
     # Generous agent config
@@ -143,6 +143,7 @@ class PlankyMinerGear(_PlankyDiagnosticBase):
     description: str = "Miner navigates to miner station and gets gear."
     map_name: str = "miner_gear.map"
     max_steps: int = Field(default=100)
+    inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"miner": 1})
 
 
 class PlankyMinerExtract(_PlankyDiagnosticBase):

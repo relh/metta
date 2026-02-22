@@ -149,7 +149,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         )
 
         # Detect useful actions by comparing state changes
-        # Useful = mined resources, deposited to collective, aligned/scrambled junction
+        # Useful = mined resources, deposited to team hub, aligned/scrambled junction
         self._detect_useful_action(state, agent_state)
 
         # Detect failed moves: if last action was a move but position didn't change
@@ -267,12 +267,11 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
                 level=self._trace_level,
             )
             print(f"[buggy] {line}")
-            # Log collective resources and entity map info
             if agent_state.step % 25 == 0 or agent_state.step == 3:
                 print(
                     f"[buggy][t={agent_state.step} a={self._agent_id}] "
-                    f"collective: C={state.collective_carbon} O={state.collective_oxygen} "
-                    f"G={state.collective_germanium} S={state.collective_silicon} "
+                    f"team: C={state.team_carbon} O={state.team_oxygen} "
+                    f"G={state.team_germanium} S={state.team_silicon} "
                     f"cargo={state.cargo_total}/{state.cargo_capacity} "
                     f"energy={state.energy}"
                 )
@@ -294,7 +293,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
 
         Useful actions:
         - Mine: cargo increased
-        - Deposit: cargo decreased AND collective increased
+        - Deposit: cargo decreased AND team hub total increased
         - Align/Scramble: heart decreased (spent on junction action)
         - Got gear: gear flag changed
         - Got heart: heart count increased
@@ -304,14 +303,11 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         # Get previous state values
         prev_cargo = bb.get("_prev_cargo", 0)
         prev_heart = bb.get("_prev_heart", 0)
-        prev_collective_total = bb.get("_prev_collective_total", 0)
+        prev_team_total = bb.get("_prev_team_total", 0)
 
-        # Calculate current values
         current_cargo = state.cargo_total
         current_heart = state.heart
-        current_collective = (
-            state.collective_carbon + state.collective_oxygen + state.collective_germanium + state.collective_silicon
-        )
+        current_team_total = state.team_carbon + state.team_oxygen + state.team_germanium + state.team_silicon
 
         # Detect useful actions
         useful = False
@@ -320,8 +316,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         if current_cargo > prev_cargo:
             useful = True
 
-        # Deposited resources (cargo decreased, collective increased)
-        if current_cargo < prev_cargo and current_collective > prev_collective_total:
+        if current_cargo < prev_cargo and current_team_total > prev_team_total:
             useful = True
 
         # Got a heart (heart increased)
@@ -339,7 +334,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
         # Store current values for next tick comparison
         bb["_prev_cargo"] = current_cargo
         bb["_prev_heart"] = current_heart
-        bb["_prev_collective_total"] = current_collective
+        bb["_prev_team_total"] = current_team_total
 
 
 class BuggyPolicy(MultiAgentPolicy):

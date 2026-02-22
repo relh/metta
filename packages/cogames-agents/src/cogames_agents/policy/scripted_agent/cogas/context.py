@@ -36,13 +36,13 @@ class StateSnapshot:
     # Vibe
     vibe: str = "default"
 
-    # Collective inventory
-    collective_carbon: int = 0
-    collective_oxygen: int = 0
-    collective_germanium: int = 0
-    collective_silicon: int = 0
-    collective_heart: int = 0
-    collective_influence: int = 0
+    # Team (hub) inventory
+    team_carbon: int = 0
+    team_oxygen: int = 0
+    team_germanium: int = 0
+    team_silicon: int = 0
+    team_heart: int = 0
+    team_influence: int = 0
 
     @property
     def cargo_total(self) -> int:
@@ -65,4 +65,4 @@ class CogasContext:
     action_names: list[str]
     agent_id: int
     step: int
-    my_collective_id: Optional[int] = None
+    my_team: str = "cogs"
