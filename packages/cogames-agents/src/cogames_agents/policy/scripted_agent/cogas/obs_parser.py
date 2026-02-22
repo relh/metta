@@ -261,7 +261,7 @@ class ObsParser:
                 return tag[5:]
 
         for tag in resolved:
-            if tag and not tag.startswith("team:"):
+            if tag and not tag.startswith(("team:", "net:", "collective:")):
                 return tag
 
         return "unknown"
@@ -273,9 +273,9 @@ class ObsParser:
 
     def _derive_alignment(self, obj_name: str, clipped: int, tags: list[str]) -> str | None:
         for tag in tags:
-            if tag == "team:cogs":
+            if tag in ("team:cogs", "net:cogs", "collective:cogs"):
                 return "cogs"
-            if tag == "team:clips":
+            if tag in ("team:clips", "net:clips", "collective:clips"):
                 return "clips"
         if "c:" in obj_name:
             return "cogs"
