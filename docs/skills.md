@@ -29,6 +29,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 
 ## Skill catalog
 
+- `cb.audit-cleanup-verify`
 - `cb.cleanup-pr-sweep`
 - `cb.cleanup-refactor`
 - `cb.lint-fix`
