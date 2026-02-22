@@ -20,6 +20,7 @@ from metta.sweep.core import Distribution as D
 from metta.sweep.core import SweepParameters as SP
 from metta.sweep.core import make_sweep
 from mettagrid import MettaGridConfig
+from mettagrid.config.reward_config import inventoryReward
 
 
 def mettagrid(num_agents: int = 24) -> MettaGridConfig:
@@ -28,15 +29,17 @@ def mettagrid(num_agents: int = 24) -> MettaGridConfig:
 
     # Sparse rewards: only final objective (heart) gives reward
     # Remove all intermediate rewards
-    arena_env.game.agent.rewards.inventory["ore_red"] = 0.0
-    arena_env.game.agent.rewards.inventory["battery_red"] = 0.0
-    arena_env.game.agent.rewards.inventory["laser"] = 0.0
-    arena_env.game.agent.rewards.inventory["armor"] = 0.0
-    arena_env.game.agent.rewards.inventory["blueprint"] = 0.0
-
-    # Only heart gives reward (final objective)
-    arena_env.game.agent.rewards.inventory["heart"] = 1.0
-    arena_env.game.agent.rewards.inventory_max["heart"] = 100  # Allow accumulation
+    arena_env.game.agent.rewards.update(
+        {
+            "ore_red": inventoryReward("ore_red", weight=0.0),
+            "battery_red": inventoryReward("battery_red", weight=0.0),
+            "laser": inventoryReward("laser", weight=0.0),
+            "armor": inventoryReward("armor", weight=0.0),
+            "blueprint": inventoryReward("blueprint", weight=0.0),
+            # Only heart gives reward (final objective)
+            "heart": inventoryReward("heart", weight=1.0, max=100),  # Allow accumulation
+        }
+    )
 
     return arena_env
 
@@ -51,8 +54,8 @@ def make_curriculum(
     arena_tasks = cc.bucketed(arena_env)
 
     # Only vary heart rewards (final objective) in curriculum
-    arena_tasks.add_bucket("game.agent.rewards.inventory.heart", [0.5, 1.0, 2.0])
-    arena_tasks.add_bucket("game.agent.rewards.inventory_max.heart", [10, 50, 100])
+    arena_tasks.add_bucket("game.agent.rewards.heart.weight", [0.5, 1.0, 2.0])
+    arena_tasks.add_bucket("game.agent.rewards.heart.max", [10, 50, 100])
 
     # Enable/disable attacks for variety
     arena_tasks.add_bucket("game.actions.attack.consumed_resources.laser", [1, 100])

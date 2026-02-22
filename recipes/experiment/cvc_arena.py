@@ -20,10 +20,19 @@ from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import EvaluatorConfig, TrainingEnvironmentConfig
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.config.mettagrid_config import MettaGridConfig
+from mettagrid.config.reward_config import inventoryReward
 
 
 def mettagrid(num_agents: int = 24) -> MettaGridConfig:
     arena_env = eb.make_arena(num_agents=num_agents)
+    arena_env.game.agent.rewards.update(
+        {
+            "ore_red": inventoryReward("ore_red", weight=0.1, max=2),
+            "battery_red": inventoryReward("battery_red", weight=0, max=1),
+            "laser": inventoryReward("laser", weight=0.9, max=2),
+            "armor": inventoryReward("armor", weight=0.5, max=2),
+        }
+    )
 
     return arena_env
 
@@ -37,8 +46,8 @@ def make_curriculum(
     arena_tasks = cc.bucketed(arena_env)
 
     for item in ["ore_red", "battery_red", "laser", "armor"]:
-        arena_tasks.add_bucket(f"game.agent.rewards.inventory.{item}", [0, 0.1, 0.5, 0.9, 1.0])
-        arena_tasks.add_bucket(f"game.agent.rewards.inventory_max.{item}", [1, 2])
+        arena_tasks.add_bucket(f"game.agent.rewards.{item}.weight", [0, 0.1, 0.5, 0.9, 1.0])
+        arena_tasks.add_bucket(f"game.agent.rewards.{item}.max", [1, 2])
 
     # enable or disable attacks. we use cost instead of 'enabled'
     # to maintain action space consistency.

@@ -19,25 +19,19 @@ from metta.sim.simulation_config import SimulationConfig
 from metta.tools.eval import EvaluateTool
 from metta.tools.train import TrainTool
 from mettagrid import MettaGridConfig
+from mettagrid.config.reward_config import inventoryReward
 
 
 def make_arena_env(num_agents: int = 24) -> MettaGridConfig:
     """Create an arena environment for regret curricula."""
     arena_env = eb.make_arena(num_agents=num_agents)
 
-    arena_env.game.agent.rewards.inventory = {
-        "heart": 1,
-        "ore_red": 0.1,
-        "battery_red": 0.8,
-        "laser": 0.5,
-        "armor": 0.5,
-    }
-    arena_env.game.agent.rewards.inventory_max = {
-        "heart": 100,
-        "ore_red": 1,
-        "battery_red": 1,
-        "laser": 1,
-        "armor": 1,
+    arena_env.game.agent.rewards = {
+        "heart": inventoryReward("heart", weight=1, max=100),
+        "ore_red": inventoryReward("ore_red", weight=0.1, max=1),
+        "battery_red": inventoryReward("battery_red", weight=0.8, max=1),
+        "laser": inventoryReward("laser", weight=0.5, max=1),
+        "armor": inventoryReward("armor", weight=0.5, max=1),
     }
 
     return arena_env
@@ -46,8 +40,8 @@ def make_arena_env(num_agents: int = 24) -> MettaGridConfig:
 def _make_arena_tasks(arena_env: MettaGridConfig):
     arena_tasks = cc.bucketed(arena_env)
     for item in ["ore_red", "battery_red", "laser", "armor"]:
-        arena_tasks.add_bucket(f"game.agent.rewards.inventory.{item}", [0, 0.1, 0.5, 0.9, 1.0])
-        arena_tasks.add_bucket(f"game.agent.rewards.inventory_max.{item}", [1, 2])
+        arena_tasks.add_bucket(f"game.agent.rewards.{item}.weight", [0, 0.1, 0.5, 0.9, 1.0])
+        arena_tasks.add_bucket(f"game.agent.rewards.{item}.max", [1, 2])
     arena_tasks.add_bucket("game.actions.attack.consumed_resources.laser", [1, 100])
     return arena_tasks
 
