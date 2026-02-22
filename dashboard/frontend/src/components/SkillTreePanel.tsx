@@ -1,113 +1,89 @@
 'use client'
 
-import { FC, useEffect, useMemo, useState } from 'react'
+import { FC, useMemo, useState } from 'react'
 
-import type { DashboardResponse } from '../lib/api'
+import type { DashboardResponse, DiagnoseAxis, DiagnoseDoctorNote, DiagnoseManifest } from '../lib/api'
 
-type SkillTreeMode = 'eval' | 'train'
-type SkillNodeStatus = 'demonstrated' | 'tested' | 'observed' | 'mock' | 'missing' | 'planned'
-type SkillNodeSource = 'dashboard' | 'cogames-diagnose' | 'training'
-type SkillTreeView = 'tree' | 'matrix'
-type TreeStatusFilter = 'all' | SkillNodeStatus
-type TreeSourceFilter = 'all' | SkillNodeSource
+type CapabilityIndicator = 'yes' | 'partial' | 'no' | 'planned'
 
-type SkillTreeNode = {
+type CapabilityCard = {
   id: string
   title: string
   description: string
-  status: SkillNodeStatus
-  source: SkillNodeSource
-  evidence?: string[]
-  children?: SkillTreeNode[]
+  axis: DiagnoseAxis
+  trained: CapabilityIndicator
+  eval: CapabilityIndicator
+  evidence: string[]
 }
 
-type CoverageAxis = {
+type IndicatorFilter = 'all' | CapabilityIndicator
+
+type CapabilitySpec = {
   id: string
-  label: string
-}
-
-type CoverageCell = {
-  axisId: string
-  status: SkillNodeStatus
-  evidence: string
-}
-
-type CoverageRow = {
-  id: string
-  label: string
+  title: string
   description: string
-  source: SkillNodeSource
-  cells: CoverageCell[]
+  axis: DiagnoseAxis
+  trainingSource: string
 }
 
-const EVAL_AXES: CoverageAxis[] = [
-  { id: 'clips_on', label: 'Clips On' },
-  { id: 'clips_off', label: 'Clips Off' },
-  { id: 'cogs_set', label: 'Cogs Set' },
-  { id: 'uneven_teams', label: 'Uneven Teams' },
-  { id: 'sparse_resources', label: 'Sparse Resources' },
-  { id: 'prevalent_resources', label: 'Prevalent Resources' },
+const CAPABILITY_SPECS: CapabilitySpec[] = [
+  {
+    id: 'mining',
+    title: 'Mining',
+    description: 'Extract and bank resources with sustained throughput.',
+    axis: 'efficiency',
+    trainingSource: 'recipes/experiment/cogsguard.py::miner',
+  },
+  {
+    id: 'aligning',
+    title: 'Aligning',
+    description: 'Capture and hold junction control objectives.',
+    axis: 'control',
+    trainingSource: 'recipes/experiment/cogsguard.py::aligner',
+  },
+  {
+    id: 'scrambling',
+    title: 'Scrambling',
+    description: 'Disrupt opponent plans and force mistakes.',
+    axis: 'control',
+    trainingSource: 'planned scrambler curriculum',
+  },
+  {
+    id: 'scouting',
+    title: 'Scouting',
+    description: 'Discover routes quickly and keep mobility high.',
+    axis: 'stability',
+    trainingSource: 'recipes/experiment/cogsguard.py::scout',
+  },
+  {
+    id: 'coordination',
+    title: 'Coordination',
+    description: 'Coordinate roles under shared pressure.',
+    axis: 'social_coordination',
+    trainingSource: 'join curricula (scout/miner/aligning)',
+  },
 ]
 
-const TRAIN_AXES: CoverageAxis[] = [
-  { id: 'curriculum_defined', label: 'Curriculum' },
-  { id: 'eval_defined', label: 'Eval' },
-  { id: 'joins_defined', label: 'Joins' },
-  { id: 'variants_clips', label: 'Variants: Clips' },
-  { id: 'variants_cogs', label: 'Variants: Cogs' },
-  { id: 'variants_teams', label: 'Variants: Teams' },
-  { id: 'variants_resources', label: 'Variants: Resources' },
-]
-
-const STAGE1_AXES = [
-  {
-    id: 'stage1.axis.stability',
-    title: 'Stage-1 axis: stability',
-    description: 'Policy remains stable under pressure, with low collapse/timeout behavior.',
-  },
-  {
-    id: 'stage1.axis.efficiency',
-    title: 'Stage-1 axis: efficiency',
-    description: 'Policy executes routes/objectives with strong movement and low dead time.',
-  },
-  {
-    id: 'stage1.axis.control',
-    title: 'Stage-1 axis: control',
-    description: 'Policy captures/retargets control objectives with low wrong-target persistence.',
-  },
-  {
-    id: 'stage1.axis.social_coordination',
-    title: 'Stage-1 axis: social coordination',
-    description: 'Policy coordinates with teammates under shared constraints and interference.',
-  },
-] as const
-
-const STATUS_LABELS: Record<SkillNodeStatus, string> = {
-  demonstrated: 'Demonstrated',
-  observed: 'Observed',
-  tested: 'Tested',
-  mock: 'Mock',
+const INDICATOR_LABEL: Record<CapabilityIndicator, string> = {
+  yes: 'Yes',
+  partial: 'Partial',
+  no: 'No',
   planned: 'Planned',
-  missing: 'Missing',
 }
 
-const SOURCE_LABELS: Record<SkillNodeSource, string> = {
-  dashboard: 'Dashboard',
-  'cogames-diagnose': 'Cogames Diagnose',
-  training: 'Training',
+const AXIS_LABEL: Record<DiagnoseAxis, string> = {
+  stability: 'Stability',
+  efficiency: 'Efficiency',
+  control: 'Control',
+  social_coordination: 'Social Coordination',
 }
 
-const STATUSES: SkillNodeStatus[] = ['demonstrated', 'observed', 'tested', 'mock', 'planned', 'missing']
-const SOURCES: SkillNodeSource[] = ['dashboard', 'cogames-diagnose', 'training']
-
-const STATUS_FILTER_OPTIONS: Array<{ value: TreeStatusFilter; label: string }> = [
-  { value: 'all', label: 'All statuses' },
-  ...STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] })),
-]
-
-const SOURCE_FILTER_OPTIONS: Array<{ value: TreeSourceFilter; label: string }> = [
-  { value: 'all', label: 'All sources' },
-  ...SOURCES.map((source) => ({ value: source, label: SOURCE_LABELS[source] })),
+const INDICATOR_FILTERS: Array<{ value: IndicatorFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'yes', label: 'Yes' },
+  { value: 'partial', label: 'Partial' },
+  { value: 'planned', label: 'Planned' },
+  { value: 'no', label: 'No' },
 ]
 
 function numeric(value: unknown): number {
@@ -118,790 +94,245 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((entry) => String(entry)) : []
 }
 
-function mechanicStatuses(data: DashboardResponse): Record<string, SkillNodeStatus> {
+function formatPercent(value: number, digits = 0): string {
+  return `${(value * 100).toFixed(digits)}%`
+}
+
+function indicatorRank(value: CapabilityIndicator): number {
+  if (value === 'no') return 0
+  if (value === 'planned') return 1
+  if (value === 'partial') return 2
+  return 3
+}
+
+function strongerIndicator(left: CapabilityIndicator, right: CapabilityIndicator): CapabilityIndicator {
+  return indicatorRank(right) > indicatorRank(left) ? right : left
+}
+
+function mechanicEvalIndicators(data: DashboardResponse): Record<string, CapabilityIndicator> {
   const kpis = data.derived.kpis
   const diagnostics = asStringArray(kpis.diagnostics).join(' ').toLowerCase()
 
-  const miningSignal = numeric(kpis?.resource_efficiency_per_step) > 0.01 || numeric(kpis?.resource_retention) > 0.1
-  const aligningSignal = numeric(kpis?.junction_control_rate) > 0.12 || numeric(kpis?.alignment_stability) > 0.08
-  const scramblingSignal =
-    ['scramble', 'aggressive'].some((token) => diagnostics.includes(token)) || numeric(kpis?.profile_aggressive) > 25
-  const scoutingSignal = numeric(kpis?.move_efficiency) > 0.45 || numeric(kpis?.profile_mobile_scout) > 25
-  const coordinationSignal = Boolean(data.derived.outcome?.evidence_sufficient)
+  const mining =
+    numeric(kpis.resource_efficiency_per_step) > 0.02 || numeric(kpis.resource_retention) > 0.2 ? 'yes' : 'partial'
+
+  const aligning =
+    numeric(kpis.junction_control_rate) > 0.2 || numeric(kpis.alignment_stability) > 0.12 ? 'yes' : 'partial'
+
+  const scrambling =
+    diagnostics.includes('scramble') || diagnostics.includes('aggressive') || numeric(kpis.profile_aggressive) > 25
+      ? 'partial'
+      : 'no'
+
+  const scouting = numeric(kpis.move_efficiency) > 0.52 || numeric(kpis.profile_mobile_scout) > 25 ? 'yes' : 'partial'
+
+  const coordination = data.derived.outcome?.evidence_sufficient ? 'partial' : 'no'
 
   return {
-    mining: miningSignal ? 'demonstrated' : 'tested',
-    aligning: aligningSignal ? 'demonstrated' : 'tested',
-    scrambling: scramblingSignal ? 'tested' : 'mock',
-    scouting: scoutingSignal ? 'demonstrated' : 'tested',
-    coordination: coordinationSignal ? 'tested' : 'mock',
+    mining,
+    aligning,
+    scrambling,
+    scouting,
+    coordination,
   }
 }
 
-function evalTree(data: DashboardResponse): SkillTreeNode {
-  const kpis = data.derived.kpis
-  const failures = data.derived.failures
-  const diagnostics = asStringArray(kpis.diagnostics)
-  const mechanics = mechanicStatuses(data)
-
-  const diagnoseAxes: SkillTreeNode[] = STAGE1_AXES.map((axis) => {
-    if (axis.id.endsWith('stability')) {
-      return {
-        id: axis.id,
-        title: axis.title,
-        description: axis.description,
-        status: numeric(kpis?.move_efficiency) > 0 ? 'tested' : 'mock',
-        source: 'cogames-diagnose',
-        evidence: [
-          `move_efficiency=${numeric(kpis?.move_efficiency).toFixed(3)}`,
-          `freeze_vulnerability=${numeric(kpis?.freeze_vulnerability).toFixed(3)}`,
-        ],
-      }
-    }
-    if (axis.id.endsWith('efficiency')) {
-      return {
-        id: axis.id,
-        title: axis.title,
-        description: axis.description,
-        status: numeric(kpis?.action_success_rate) > 0 ? 'tested' : 'mock',
-        source: 'cogames-diagnose',
-        evidence: [
-          `action_success_rate=${numeric(kpis?.action_success_rate).toFixed(3)}`,
-          `resource_efficiency_per_step=${numeric(kpis?.resource_efficiency_per_step).toFixed(3)}`,
-        ],
-      }
-    }
-    if (axis.id.endsWith('control')) {
-      return {
-        id: axis.id,
-        title: axis.title,
-        description: axis.description,
-        status: numeric(kpis?.junction_control_rate) > 0 ? 'tested' : 'mock',
-        source: 'cogames-diagnose',
-        evidence: [
-          `junction_control_rate=${numeric(kpis?.junction_control_rate).toFixed(3)}`,
-          `alignment_stability=${numeric(kpis?.alignment_stability).toFixed(3)}`,
-        ],
-      }
-    }
-    return {
-      id: axis.id,
-      title: axis.title,
-      description: axis.description,
-      status: data.derived.outcome?.evidence_sufficient ? 'tested' : 'mock',
-      source: 'cogames-diagnose',
-      evidence: [
-        `outcome.verdict=${String(data.derived.outcome?.verdict ?? 'unknown')}`,
-        `outcome.evidence_sufficient=${String(Boolean(data.derived.outcome?.evidence_sufficient))}`,
-      ],
-    }
-  })
-
-  const dashboardDiagnosticNodes: SkillTreeNode[] =
-    diagnostics.length === 0
-      ? [
-          {
-            id: 'eval.dashboard.kpis.none',
-            title: 'No KPI diagnostics emitted',
-            description: 'No dashboard KPI diagnostics were emitted in current sampled episodes.',
-            status: 'tested',
-            source: 'dashboard',
-            evidence: ['kpi.diagnostics=[]'],
-          },
-        ]
-      : diagnostics.map((entry, index) => ({
-          id: `eval.dashboard.kpis.${index}`,
-          title: entry,
-          description: 'KPI-based dashboard diagnostic.',
-          status: 'observed',
-          source: 'dashboard',
-          evidence: [`diagnostic_index=${index}`],
-        }))
-
-  const failureNodes: SkillTreeNode[] = [
-    {
-      id: 'eval.dashboard.failures.timeout',
-      title: 'Timeout failures',
-      description: 'Timeout job failures in sampled window.',
-      status: numeric(failures?.timeout_failures) > 0 ? 'observed' : 'tested',
-      source: 'dashboard',
-      evidence: [`count=${numeric(failures?.timeout_failures)}`],
-    },
-    {
-      id: 'eval.dashboard.failures.oom',
-      title: 'OOM failures',
-      description: 'OOM job failures in sampled window.',
-      status: numeric(failures?.oom_failures) > 0 ? 'observed' : 'tested',
-      source: 'dashboard',
-      evidence: [`count=${numeric(failures?.oom_failures)}`],
-    },
-    {
-      id: 'eval.dashboard.failures.crash',
-      title: 'Crash failures',
-      description: 'Crash/policy error failures in sampled window.',
-      status: numeric(failures?.crash_failures) > 0 ? 'observed' : 'tested',
-      source: 'dashboard',
-      evidence: [`count=${numeric(failures?.crash_failures)}`],
-    },
-  ]
-
+function trainedIndicators(): Record<string, CapabilityIndicator> {
   return {
-    id: 'eval.root',
-    title: 'Eval Skill Tree',
-    description: 'Policy skill readiness tree from dashboard evidence plus cogames-diagnose catalogs.',
-    status: 'tested',
-    source: 'dashboard',
-    children: [
-      {
-        id: 'eval.core',
-        title: 'Core mechanics',
-        description: 'Core mechanic-level eval readiness.',
-        status: 'tested',
-        source: 'dashboard',
-        children: [
-          {
-            id: 'eval.core.mining',
-            title: 'Mining',
-            description: 'Resource extraction/deposit throughput.',
-            status: mechanics.mining,
-            source: 'dashboard',
-            evidence: [
-              `resource_efficiency_per_step=${numeric(kpis?.resource_efficiency_per_step).toFixed(3)}`,
-              `resource_retention=${numeric(kpis?.resource_retention).toFixed(3)}`,
-            ],
-          },
-          {
-            id: 'eval.core.aligning',
-            title: 'Aligning',
-            description: 'Junction control/retention behavior.',
-            status: mechanics.aligning,
-            source: 'dashboard',
-            evidence: [
-              `junction_control_rate=${numeric(kpis?.junction_control_rate).toFixed(3)}`,
-              `alignment_stability=${numeric(kpis?.alignment_stability).toFixed(3)}`,
-            ],
-          },
-          {
-            id: 'eval.core.scrambling',
-            title: 'Scrambling',
-            description: 'Enemy disruption behavior.',
-            status: mechanics.scrambling,
-            source: 'dashboard',
-            evidence: [`profile_aggressive=${numeric(kpis?.profile_aggressive).toFixed(1)}`],
-          },
-          {
-            id: 'eval.core.scouting',
-            title: 'Scouting',
-            description: 'Exploration/mobility behavior.',
-            status: mechanics.scouting,
-            source: 'dashboard',
-            evidence: [
-              `move_efficiency=${numeric(kpis?.move_efficiency).toFixed(3)}`,
-              `profile_mobile_scout=${numeric(kpis?.profile_mobile_scout).toFixed(1)}`,
-            ],
-          },
-          {
-            id: 'eval.core.coordination',
-            title: 'Coordination',
-            description: 'Cross-role coordination evidence.',
-            status: mechanics.coordination,
-            source: 'dashboard',
-            evidence: [
-              `outcome.verdict=${String(data.derived.outcome?.verdict ?? 'unknown')}`,
-              `outcome.evidence_sufficient=${String(Boolean(data.derived.outcome?.evidence_sufficient))}`,
-            ],
-          },
-        ],
-      },
-      {
-        id: 'eval.diagnose',
-        title: 'Cogames diagnose catalog',
-        description: 'Diagnose axes and probes represented in tree form.',
-        status: 'mock',
-        source: 'cogames-diagnose',
-        children: [
-          {
-            id: 'eval.diagnose.axes',
-            title: 'Stage-1 axes',
-            description: 'Stability, efficiency, control, and social coordination axes.',
-            status: 'tested',
-            source: 'cogames-diagnose',
-            children: diagnoseAxes,
-          },
-          {
-            id: 'eval.diagnose.probes',
-            title: 'Probe catalog',
-            description: 'Probe-level nodes cataloged for future direct hookup.',
-            status: 'mock',
-            source: 'cogames-diagnose',
-            children: [
-              {
-                id: 'eval.diagnose.probe.food_under_pressure',
-                title: 'Probe: food_under_pressure',
-                description: 'Stress stability when high-value resources appear under pressure.',
-                status: 'mock',
-                source: 'cogames-diagnose',
-              },
-              {
-                id: 'eval.diagnose.probe.junction_light_shift',
-                title: 'Probe: junction_light_shift',
-                description: 'Assess retarget speed when control priorities shift mid-episode.',
-                status: 'mock',
-                source: 'cogames-diagnose',
-              },
-            ],
-          },
-        ],
-      },
-      {
-        id: 'eval.dashboard',
-        title: 'Dashboard diagnostics/signals',
-        description: 'Diagnostics currently emitted by dashboard pipelines.',
-        status: diagnostics.length > 0 ? 'observed' : 'tested',
-        source: 'dashboard',
-        children: [
-          {
-            id: 'eval.dashboard.kpis',
-            title: 'KPI diagnostics',
-            description: 'Rule-based KPI diagnostics.',
-            status: diagnostics.length > 0 ? 'observed' : 'tested',
-            source: 'dashboard',
-            children: dashboardDiagnosticNodes,
-          },
-          {
-            id: 'eval.dashboard.failures',
-            title: 'Failure diagnostics',
-            description: 'Failure category diagnostics from sampled window.',
-            status:
-              numeric(failures?.timeout_failures) +
-                numeric(failures?.oom_failures) +
-                numeric(failures?.crash_failures) >
-              0
-                ? 'observed'
-                : 'tested',
-            source: 'dashboard',
-            children: failureNodes,
-          },
-        ],
-      },
-    ],
+    mining: 'yes',
+    aligning: 'yes',
+    scrambling: 'planned',
+    scouting: 'yes',
+    coordination: 'partial',
   }
 }
 
-function trainTree(): SkillTreeNode {
-  return {
-    id: 'train.root',
-    title: 'Train Skill Tree',
-    description: 'Curriculum and join coverage tree for training readiness.',
-    status: 'tested',
-    source: 'training',
-    children: [
-      {
-        id: 'train.atomic',
-        title: 'Atomic curricula',
-        description: 'Per-mechanic curricula coverage.',
-        status: 'tested',
-        source: 'training',
-        children: [
-          {
-            id: 'train.atomic.miner',
-            title: 'Miner curriculum',
-            description: 'Dedicated miner helper exists (`cogsguard.miner`).',
-            status: 'demonstrated',
-            source: 'training',
-            evidence: ['recipes/experiment/cogsguard.py::miner'],
-          },
-          {
-            id: 'train.atomic.aligner',
-            title: 'Aligner curriculum',
-            description: 'Dedicated aligner helper exists (`cogsguard.aligner`).',
-            status: 'demonstrated',
-            source: 'training',
-            evidence: ['recipes/experiment/cogsguard.py::aligner'],
-          },
-          {
-            id: 'train.atomic.scout',
-            title: 'Scout curriculum',
-            description: 'Dedicated scout helper exists (`cogsguard.scout`).',
-            status: 'demonstrated',
-            source: 'training',
-            evidence: ['recipes/experiment/cogsguard.py::scout'],
-          },
-          {
-            id: 'train.atomic.scrambler',
-            title: 'Scrambler curriculum',
-            description: 'Dedicated scrambler helper is planned in training-tree rollout.',
-            status: 'planned',
-            source: 'training',
-          },
-        ],
-      },
-      {
-        id: 'train.joins',
-        title: 'Join curricula',
-        description: 'Combinatorial joins and role-switch chains.',
-        status: 'planned',
-        source: 'training',
-        children: [
-          {
-            id: 'train.joins.scout_plus_miner',
-            title: 'Join: scout + miner',
-            description: 'Find resources, acquire gear, and execute sustained mining loop.',
-            status: 'planned',
-            source: 'training',
-          },
-          {
-            id: 'train.joins.mining_plus_aligning',
-            title: 'Join: mining + aligning',
-            description: 'Balance mining throughput with junction control pressure.',
-            status: 'planned',
-            source: 'training',
-          },
-          {
-            id: 'train.joins.role_switch',
-            title: 'Join: role-switch chains',
-            description: 'Longer chains of choose/switch/change role actions.',
-            status: 'planned',
-            source: 'training',
-          },
-        ],
-      },
-    ],
-  }
+function axisIndicator(
+  note: DiagnoseDoctorNote | null,
+  axis: DiagnoseAxis
+): { indicator: CapabilityIndicator; evidence: string } | null {
+  if (!note) return null
+  const score = (Array.isArray(note.axes) ? note.axes : []).find((entry) => entry.axis === axis)
+  if (!score) return null
+
+  const indicator = score.confirmed ? 'yes' : score.normalized_score >= 0.65 ? 'partial' : 'no'
+  const evidence = `axis ${AXIS_LABEL[axis]}=${formatPercent(score.normalized_score)} (confirmed=${String(score.confirmed)})`
+  return { indicator, evidence }
 }
 
-function flattenTree(node: SkillTreeNode): SkillTreeNode[] {
-  return [node, ...(node.children ?? []).flatMap(flattenTree)]
-}
-
-function collectNodeIds(node: SkillTreeNode): Set<string> {
-  return new Set(flattenTree(node).map((entry) => entry.id))
-}
-
-function findNodeById(node: SkillTreeNode, targetId: string): SkillTreeNode | null {
-  if (node.id === targetId) return node
-  for (const child of node.children ?? []) {
-    const found = findNodeById(child, targetId)
-    if (found) return found
-  }
-  return null
-}
-
-function filterTree(
-  node: SkillTreeNode,
-  query: string,
-  status: TreeStatusFilter,
-  source: TreeSourceFilter
-): SkillTreeNode | null {
-  const normalized = query.trim().toLowerCase()
-  const qMatch =
-    normalized.length === 0 ||
-    [node.title, node.description, ...(node.evidence ?? [])].join(' ').toLowerCase().includes(normalized)
-  const statusMatch = status === 'all' || node.status === status
-  const sourceMatch = source === 'all' || node.source === source
-  const selfMatch = qMatch && statusMatch && sourceMatch
-
-  const children = (node.children ?? [])
-    .map((child) => filterTree(child, normalized, status, source))
-    .filter((child): child is SkillTreeNode => child !== null)
-
-  if (!selfMatch && children.length === 0) return null
-
-  return {
-    ...node,
-    children,
-  }
-}
-
-function statusCounts(nodes: SkillTreeNode[]): Record<SkillNodeStatus, number> {
-  const counts: Record<SkillNodeStatus, number> = {
-    demonstrated: 0,
-    observed: 0,
-    tested: 0,
-    mock: 0,
-    planned: 0,
-    missing: 0,
-  }
-  for (const node of nodes) counts[node.status] += 1
-  return counts
-}
-
-function deriveEvalCoverageRows(data: DashboardResponse): CoverageRow[] {
-  const mechanics = mechanicStatuses(data)
-  const episodes = data.episodes
-  const sampledEpisodeCount = data.selection.sampled_episode_count
-  const hasUnevenTeams = episodes.some((episode) => {
-    const [leftRaw, rightRaw] = episode.team_composition.split('v')
-    const left = Number.parseInt(leftRaw, 10)
-    const right = Number.parseInt(rightRaw ?? '', 10)
-    return Number.isFinite(left) && Number.isFinite(right) && left !== right
-  })
-
-  function row(label: string, status: SkillNodeStatus, source: SkillNodeSource, description: string): CoverageRow {
-    return {
-      id: `eval.matrix.${label.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-      label,
-      source,
-      description,
-      cells: [
-        {
-          axisId: 'clips_on',
-          status: episodes.length > 0 ? status : 'missing',
-          evidence: episodes.length > 0 ? 'Episodes sampled.' : 'No episodes sampled.',
-        },
-        {
-          axisId: 'clips_off',
-          status: status === 'demonstrated' ? 'tested' : 'mock',
-          evidence: 'Clips-off tagging not yet wired in standalone UI.',
-        },
-        {
-          axisId: 'cogs_set',
-          status: sampledEpisodeCount > 0 ? 'tested' : 'missing',
-          evidence: sampledEpisodeCount > 0 ? `sampled_episode_count=${sampledEpisodeCount}` : 'No sampled episodes.',
-        },
-        {
-          axisId: 'uneven_teams',
-          status: hasUnevenTeams ? 'observed' : 'mock',
-          evidence: hasUnevenTeams ? 'Uneven teams observed in sample.' : 'No uneven teams observed.',
-        },
-        {
-          axisId: 'sparse_resources',
-          status: 'mock',
-          evidence: 'Sparse-resource tagging hookup pending.',
-        },
-        {
-          axisId: 'prevalent_resources',
-          status: 'mock',
-          evidence: 'Prevalent-resource tagging hookup pending.',
-        },
-      ],
-    }
-  }
-
-  return [
-    row('Mining', mechanics.mining, 'dashboard', 'Resource extraction/deposit behavior coverage.'),
-    row('Aligning', mechanics.aligning, 'dashboard', 'Junction control behavior coverage.'),
-    row('Scrambling', mechanics.scrambling, 'dashboard', 'Enemy disruption behavior coverage.'),
-    row('Scouting', mechanics.scouting, 'dashboard', 'Exploration/mobility behavior coverage.'),
-    row('Coordination', mechanics.coordination, 'cogames-diagnose', 'Cross-role social behavior coverage.'),
-  ]
-}
-
-function deriveTrainCoverageRows(): CoverageRow[] {
-  function row(
-    id: string,
-    label: string,
-    source: SkillNodeSource,
-    description: string,
-    values: Partial<Record<string, SkillNodeStatus>>
-  ): CoverageRow {
-    return {
-      id,
-      label,
-      source,
-      description,
-      cells: TRAIN_AXES.map((axis) => ({
-        axisId: axis.id,
-        status: values[axis.id] ?? 'planned',
-        evidence: axis.label,
-      })),
-    }
-  }
-
-  return [
-    row('train.matrix.miner', 'Miner', 'training', 'Miner curriculum coverage.', {
-      curriculum_defined: 'demonstrated',
-      eval_defined: 'tested',
-    }),
-    row('train.matrix.aligner', 'Aligner', 'training', 'Aligner curriculum coverage.', {
-      curriculum_defined: 'demonstrated',
-      eval_defined: 'tested',
-    }),
-    row('train.matrix.scout', 'Scout', 'training', 'Scout curriculum coverage.', {
-      curriculum_defined: 'demonstrated',
-      eval_defined: 'tested',
-    }),
-    row('train.matrix.scrambler', 'Scrambler', 'training', 'Scrambler curriculum coverage.', {
-      curriculum_defined: 'planned',
-      eval_defined: 'planned',
-    }),
-    row('train.matrix.scout_plus_miner', 'Join: Scout + Miner', 'training', 'Join curriculum coverage.', {
-      joins_defined: 'planned',
-      variants_clips: 'planned',
-      variants_cogs: 'planned',
-      variants_teams: 'planned',
-      variants_resources: 'planned',
-    }),
-  ]
-}
-
-const TreeNodeView: FC<{
-  node: SkillTreeNode
-  expandedNodeIds: Set<string>
-  onToggle: (id: string) => void
-  onSelect: (id: string) => void
-  selectedNodeId: string | null
-}> = ({ node, expandedNodeIds, onToggle, onSelect, selectedNodeId }) => {
-  const hasChildren = Boolean(node.children?.length)
-  const isExpanded = expandedNodeIds.has(node.id)
-  const isSelected = selectedNodeId === node.id
-
-  return (
-    <div className="skill-node-wrap">
-      <div className={`skill-node ${isSelected ? 'skill-node-selected' : ''}`}>
-        <div className="skill-node-head">
-          {hasChildren ? (
-            <button type="button" onClick={() => onToggle(node.id)} className="skill-toggle" aria-label="Toggle node">
-              {isExpanded ? '−' : '+'}
-            </button>
-          ) : (
-            <span className="skill-leaf-dot">•</span>
-          )}
-          <button type="button" className="skill-title-btn" onClick={() => onSelect(node.id)}>
-            {node.title}
-          </button>
-          <span className={`badge badge-status status-${node.status}`}>{STATUS_LABELS[node.status]}</span>
-          <span className="badge badge-source">{SOURCE_LABELS[node.source]}</span>
-        </div>
-        <p className="skill-desc">{node.description}</p>
-      </div>
-      {hasChildren && isExpanded ? (
-        <div className="skill-children">
-          {node.children!.map((child) => (
-            <TreeNodeView
-              key={child.id}
-              node={child}
-              expandedNodeIds={expandedNodeIds}
-              onToggle={onToggle}
-              onSelect={onSelect}
-              selectedNodeId={selectedNodeId}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
+function probeIndicator(
+  note: DiagnoseDoctorNote | null,
+  axis: DiagnoseAxis
+): { indicator: CapabilityIndicator; evidence: string } | null {
+  if (!note) return null
+  const evaluations = (Array.isArray(note.stage1_probe_evaluations) ? note.stage1_probe_evaluations : []).filter(
+    (entry) => entry.axis === axis
   )
+  if (evaluations.length === 0) return null
+
+  const passed = evaluations.filter((entry) => entry.passed).length
+  const indicator = passed === evaluations.length ? 'yes' : passed > 0 ? 'partial' : 'no'
+  return { indicator, evidence: `diagnose probes on ${AXIS_LABEL[axis]}: ${passed}/${evaluations.length} passing` }
+}
+
+function buildCapabilityCards(
+  data: DashboardResponse,
+  note: DiagnoseDoctorNote | null,
+  manifest: DiagnoseManifest | null
+): CapabilityCard[] {
+  const trained = trainedIndicators()
+  const evalFromMetrics = mechanicEvalIndicators(data)
+
+  return CAPABILITY_SPECS.map((spec) => {
+    const axisSignal = axisIndicator(note, spec.axis)
+    const probeSignal = probeIndicator(note, spec.axis)
+
+    let evalIndicator = evalFromMetrics[spec.id] ?? 'no'
+    if (axisSignal) {
+      evalIndicator = strongerIndicator(evalIndicator, axisSignal.indicator)
+    }
+    if (probeSignal) {
+      evalIndicator = probeSignal.indicator
+    }
+
+    const evidence = [
+      `training source: ${spec.trainingSource}`,
+      axisSignal?.evidence,
+      probeSignal?.evidence,
+      manifest?.run_id ? `diagnose run: ${manifest.run_id}` : null,
+    ].filter((value): value is string => Boolean(value))
+
+    return {
+      id: spec.id,
+      title: spec.title,
+      description: spec.description,
+      axis: spec.axis,
+      trained: trained[spec.id] ?? 'planned',
+      eval: evalIndicator,
+      evidence,
+    }
+  })
 }
 
 export const SkillTreePanel: FC<{
-  mode: SkillTreeMode
   data: DashboardResponse
-  initialSourceFilter?: TreeSourceFilter
-  lockSourceFilter?: boolean
-}> = ({ mode, data, initialSourceFilter = 'all', lockSourceFilter = false }) => {
+  diagnoseNote?: DiagnoseDoctorNote | null
+  diagnoseManifest?: DiagnoseManifest | null
+}> = ({ data, diagnoseNote = null, diagnoseManifest = null }) => {
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<TreeStatusFilter>('all')
-  const [sourceFilter, setSourceFilter] = useState<TreeSourceFilter>(initialSourceFilter)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [view, setView] = useState<SkillTreeView>('tree')
-  const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set())
+  const [trainedFilter, setTrainedFilter] = useState<IndicatorFilter>('all')
+  const [evalFilter, setEvalFilter] = useState<IndicatorFilter>('all')
 
-  const root = useMemo(() => (mode === 'eval' ? evalTree(data) : trainTree()), [data, mode])
-  const filteredRoot = useMemo(
-    () => filterTree(root, query, statusFilter, sourceFilter),
-    [query, root, sourceFilter, statusFilter]
-  )
-  const filteredNodes = useMemo(() => (filteredRoot ? flattenTree(filteredRoot) : []), [filteredRoot])
-  const allNodes = useMemo(() => flattenTree(root), [root])
-  const counts = useMemo(() => statusCounts(filteredNodes), [filteredNodes])
-  const totalCounts = useMemo(() => statusCounts(allNodes), [allNodes])
-  const selectedNode = useMemo(() => {
-    if (!selectedNodeId) return root
-    return findNodeById(root, selectedNodeId) ?? root
-  }, [root, selectedNodeId])
-  const missingNodes = useMemo(
-    () =>
-      allNodes
-        .filter(
-          (node) =>
-            (!node.children || node.children.length === 0) && (node.status === 'mock' || node.status === 'planned')
-        )
-        .slice(0, 14),
-    [allNodes]
+  const capabilities = useMemo(
+    () => buildCapabilityCards(data, diagnoseNote, diagnoseManifest),
+    [data, diagnoseManifest, diagnoseNote]
   )
 
-  const axes = mode === 'eval' ? EVAL_AXES : TRAIN_AXES
-  const rows = useMemo(() => {
-    const baseRows = mode === 'eval' ? deriveEvalCoverageRows(data) : deriveTrainCoverageRows()
-    return baseRows.filter((row) => {
-      const q = query.trim().toLowerCase()
-      const qMatch = q.length === 0 || [row.label, row.description].join(' ').toLowerCase().includes(q)
-      const sourceMatch = sourceFilter === 'all' || row.source === sourceFilter
-      const statusMatch = statusFilter === 'all' || row.cells.some((cell) => cell.status === statusFilter)
-      return qMatch && sourceMatch && statusMatch
+  const filtered = useMemo(() => {
+    const normalized = query.trim().toLowerCase()
+    return capabilities.filter((capability) => {
+      const queryMatch =
+        normalized.length === 0 ||
+        [capability.title, capability.description, ...capability.evidence].join(' ').toLowerCase().includes(normalized)
+      const trainedMatch = trainedFilter === 'all' || capability.trained === trainedFilter
+      const evalMatch = evalFilter === 'all' || capability.eval === evalFilter
+      return queryMatch && trainedMatch && evalMatch
     })
-  }, [data, mode, query, sourceFilter, statusFilter])
+  }, [capabilities, evalFilter, query, trainedFilter])
 
-  useEffect(() => {
-    setExpandedNodeIds(collectNodeIds(root))
-  }, [root])
-
-  useEffect(() => {
-    if (!selectedNodeId || !findNodeById(root, selectedNodeId)) {
-      setSelectedNodeId(root.id)
+  const counts = useMemo(() => {
+    const next: Record<CapabilityIndicator, number> = {
+      yes: 0,
+      partial: 0,
+      planned: 0,
+      no: 0,
     }
-  }, [root, selectedNodeId])
-
-  useEffect(() => {
-    setSourceFilter(initialSourceFilter)
-  }, [initialSourceFilter])
-
-  const onToggle = (id: string) => {
-    setExpandedNodeIds((previous) => {
-      const next = new Set(previous)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+    for (const capability of capabilities) {
+      next[capability.eval] += 1
+    }
+    return next
+  }, [capabilities])
 
   return (
     <div className="grid" style={{ gap: 12 }}>
-      <section className="card">
-        <div className="skill-controls">
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search skill nodes..." />
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as TreeStatusFilter)}>
-            {STATUS_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+      <section className="card grid" style={{ gap: 12 }}>
+        <div className="dashboard-control-head">
+          <div>
+            <h2 style={{ marginTop: 0, marginBottom: 4 }}>Capability Grid</h2>
+            <p style={{ margin: 0, color: '#6b7280' }}>
+              Unified capability view for both Eval and Train tabs. Each box tracks training coverage and eval outcomes.
+            </p>
+          </div>
+        </div>
+
+        <div className="skill-controls capability-controls">
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search capabilities and evidence..."
+          />
+          <select value={trainedFilter} onChange={(event) => setTrainedFilter(event.target.value as IndicatorFilter)}>
+            {INDICATOR_FILTERS.map((option) => (
+              <option key={`trained-${option.value}`} value={option.value}>
+                Trained: {option.label}
               </option>
             ))}
           </select>
-          <select
-            value={sourceFilter}
-            onChange={(event) => setSourceFilter(event.target.value as TreeSourceFilter)}
-            disabled={lockSourceFilter}
-          >
-            {SOURCE_FILTER_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
+          <select value={evalFilter} onChange={(event) => setEvalFilter(event.target.value as IndicatorFilter)}>
+            {INDICATOR_FILTERS.map((option) => (
+              <option key={`eval-${option.value}`} value={option.value}>
+                Eval: {option.label}
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => setView('tree')}>
-            Dendrogram
-          </button>
-          <button type="button" onClick={() => setView('matrix')}>
-            Coverage matrix
-          </button>
-          <button type="button" onClick={() => filteredRoot && setExpandedNodeIds(collectNodeIds(filteredRoot))}>
-            Expand all
-          </button>
-          <button type="button" onClick={() => filteredRoot && setExpandedNodeIds(new Set([filteredRoot.id]))}>
-            Collapse all
-          </button>
         </div>
       </section>
 
       <section className="card">
         <div className="skill-legend">
-          {STATUSES.map((status) => (
-            <span key={status} className={`badge badge-status status-${status}`}>
-              {STATUS_LABELS[status]} {counts[status]}/{totalCounts[status]}
-            </span>
-          ))}
+          <span className="badge badge-status indicator-yes">Eval Yes {counts.yes}</span>
+          <span className="badge badge-status indicator-partial">Eval Partial {counts.partial}</span>
+          <span className="badge badge-status indicator-planned">Eval Planned {counts.planned}</span>
+          <span className="badge badge-status indicator-no">Eval No {counts.no}</span>
         </div>
       </section>
 
-      {view === 'tree' ? (
-        <section className="skill-layout">
-          <div className="card">
-            {filteredRoot ? (
-              <TreeNodeView
-                node={filteredRoot}
-                expandedNodeIds={expandedNodeIds}
-                onToggle={onToggle}
-                onSelect={setSelectedNodeId}
-                selectedNodeId={selectedNodeId}
-              />
-            ) : (
-              <p style={{ margin: 0 }}>No nodes match current filters.</p>
-            )}
-          </div>
-
-          <div className="grid" style={{ gap: 12 }}>
-            <article className="card">
-              <p className="panel-label">Selected node</p>
-              <h3 style={{ marginTop: 6 }}>{selectedNode.title}</h3>
-              <p>{selectedNode.description}</p>
-              <div className="skill-legend">
-                <span className={`badge badge-status status-${selectedNode.status}`}>
-                  {STATUS_LABELS[selectedNode.status]}
-                </span>
-                <span className="badge badge-source">{SOURCE_LABELS[selectedNode.source]}</span>
+      <section className="capability-grid">
+        {filtered.length === 0 ? (
+          <article className="card">
+            <p style={{ margin: 0 }}>No capabilities match current filters.</p>
+          </article>
+        ) : (
+          filtered.map((capability) => (
+            <article key={capability.id} className="card capability-card">
+              <div className="capability-card-head">
+                <h3 style={{ margin: 0 }}>{capability.title}</h3>
+                <span className="badge badge-source">Axis: {AXIS_LABEL[capability.axis]}</span>
               </div>
-              {selectedNode.evidence && selectedNode.evidence.length > 0 ? (
-                <>
-                  <h4>Evidence</h4>
-                  <ul>
-                    {selectedNode.evidence.map((entry) => (
-                      <li key={`${selectedNode.id}-${entry}`}>
-                        <code>{entry}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-            </article>
+              <p className="capability-description">{capability.description}</p>
 
-            <article className="card">
-              <p className="panel-label">Missing diagnostics queue</p>
-              {missingNodes.length === 0 ? (
-                <p style={{ marginBottom: 0 }}>No mock/planned leaves.</p>
-              ) : (
-                <div className="grid" style={{ gap: 8 }}>
-                  {missingNodes.map((node) => (
-                    <div key={node.id} className="queue-item">
-                      <div className="queue-head">
-                        <strong>{node.title}</strong>
-                        <span className={`badge badge-status status-${node.status}`}>{STATUS_LABELS[node.status]}</span>
-                      </div>
-                      <p style={{ margin: '6px 0 0' }}>{node.description}</p>
-                    </div>
-                  ))}
+              <div className="capability-indicator-row">
+                <div className={`capability-indicator indicator-${capability.trained}`}>
+                  <span>Trained</span>
+                  <strong>{INDICATOR_LABEL[capability.trained]}</strong>
                 </div>
-              )}
-            </article>
-          </div>
-        </section>
-      ) : (
-        <section className="card">
-          <h3 style={{ marginTop: 0 }}>Coverage matrix</h3>
-          <p>Coverage across variants and curriculum/eval dimensions.</p>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Skill</th>
-                  {axes.map((axis) => (
-                    <th key={axis.id}>{axis.label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <strong>{row.label}</strong>
-                      <p style={{ margin: '6px 0 0' }}>{row.description}</p>
-                    </td>
-                    {axes.map((axis) => {
-                      const cell = row.cells.find((entry) => entry.axisId === axis.id)
-                      const status = cell?.status ?? 'missing'
-                      return (
-                        <td key={`${row.id}-${axis.id}`}>
-                          <span className={`badge badge-status status-${status}`}>{STATUS_LABELS[status]}</span>
-                          <p style={{ margin: '6px 0 0' }}>{cell?.evidence ?? 'No data'}</p>
-                        </td>
-                      )
-                    })}
-                  </tr>
+                <div className={`capability-indicator indicator-${capability.eval}`}>
+                  <span>Eval</span>
+                  <strong>{INDICATOR_LABEL[capability.eval]}</strong>
+                </div>
+              </div>
+
+              <div className="capability-evidence">
+                {capability.evidence.map((entry) => (
+                  <p key={`${capability.id}-${entry}`}>
+                    <code>{entry}</code>
+                  </p>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+              </div>
+            </article>
+          ))
+        )}
+      </section>
     </div>
   )
 }

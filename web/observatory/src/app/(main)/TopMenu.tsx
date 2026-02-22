@@ -38,6 +38,9 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           <MenuLink href="/" isActive={isPoliciesActive}>
             Policies
           </MenuLink>
+          <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
+            Policy Dashboard
+          </MenuLink>
           <MenuLink href="/tournament" isActive={pathname.startsWith('/tournament')}>
             Tournament
           </MenuLink>
@@ -46,9 +49,6 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           </MenuLink>
           <MenuLink href="/sql-query" isActive={pathname === '/sql-query'}>
             SQL Query
-          </MenuLink>
-          <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
-            Policy Dashboard
           </MenuLink>
           <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
             Smart Plugs

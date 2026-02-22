@@ -1,25 +1,64 @@
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8010'
-const AUTH_COOKIE_NAME = 'observatory_auth_token'
+const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
 
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
 
+function readAuthTokenFromCookies(): string | null {
+  if (typeof document === 'undefined') return null
+  const parts = document.cookie.split('; ')
+  for (const part of parts) {
+    if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
+    const value = part.slice(AUTH_COOKIE_NAME.length + 1).trim()
+    if (!value) return null
+    return value
+  }
+  return null
+}
+
+function getDashboardRequestHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = readAuthTokenFromCookies()
+  if (token) {
+    headers['X-Auth-Token'] = token
+  }
+  return headers
+}
+
 export type DashboardEpisode = {
   episode_id: string
+  id?: string
+  job_id?: string
+  created_at?: string | null
+  replay_url?: string | null
+  thumbnail_url?: string | null
   status: string
+  avg_reward?: number
   reward: number
   opponent_name: string
+  opponent_version?: number
   team_composition: string
   diagnostic_tags: string[]
+  error_type?: string | null
+  error_message?: string | null
   steps: number
+  metrics?: Record<string, unknown>
+  [key: string]: unknown
 }
 
 export type DashboardKpis = {
   diagnostics?: string[]
+  avg_reward?: number
   mean_reward?: number
   success_rate?: number
   failure_rate?: number
   total_episodes?: number
+  noop_rate?: number
+  reward_consistency?: number
+  reward_nonzero_pct?: number
+  vibe_change_rate?: number
+  net_alignment_rate?: number
+  hearts_to_junction_rate?: number
   resource_efficiency_per_step?: number
   resource_retention?: number
   junction_control_rate?: number
@@ -28,41 +67,289 @@ export type DashboardKpis = {
   action_success_rate?: number
   freeze_vulnerability?: number
   profile_aggressive?: number
+  profile_defensive?: number
+  profile_resource_hoarder?: number
+  profile_junction_hunter?: number
   profile_mobile_scout?: number
+  [key: string]: unknown
 }
 
 export type DashboardFailures = {
+  total_episodes?: number
+  completed_episodes?: number
+  failed_episodes?: number
+  failed_rate?: number
   timeout_failures?: number
   oom_failures?: number
   crash_failures?: number
   other_failures?: number
+  freeze_heavy_completed?: number
+  noop_heavy_completed?: number
+  [key: string]: unknown
 }
 
-export type DashboardOpponentMetric = {
+export type DashboardOutcomeSnapshot = {
+  id?: string
+  name?: string
+  version?: number
+  rank?: number | null
+  score?: number | null
+  matches?: number
+  season?: string
+  [key: string]: unknown
+}
+
+export type DashboardOutcomeDelta = {
+  rank_delta?: number | null
+  score_delta?: number | null
+  matches_delta?: number | null
+  [key: string]: unknown
+}
+
+export type DashboardOutcome = {
+  verdict?: string
+  evidence_sufficient?: boolean
+  reason?: string
+  current?: DashboardOutcomeSnapshot
+  baseline?: DashboardOutcomeSnapshot | null
+  delta?: DashboardOutcomeDelta
+  [key: string]: unknown
+}
+
+export type DashboardOpponentStats = {
   count: number
   total_reward: number
   avg_reward: number
+  avg_metrics: Record<string, number>
   strategy_profile: Record<string, number>
+  [key: string]: unknown
+}
+
+export type DashboardTeamCompStats = {
+  composition?: string
+  count?: number
+  avg_reward?: number
+  avg_move_efficiency?: number
+  avg_junction_aligned?: number
+  avg_resource_gained?: number
+  [key: string]: unknown
+}
+
+export type DashboardMatchupSlice = {
+  key?: string
+  count?: number
+  avg_reward?: number
+  delta_vs_policy?: number
+  baseline_count?: number | null
+  baseline_avg_reward?: number | null
+  delta_vs_baseline?: number | null
+  [key: string]: unknown
+}
+
+export type DashboardMatchupSummary = {
+  evidence_sufficient?: boolean
+  interaction_specific_issue?: boolean
+  reason?: string
+  current_avg_reward?: number
+  baseline_avg_reward?: number | null
+  global_reward_delta?: number | null
+  opponent_spread?: number
+  best_opponent?: string | null
+  worst_opponent?: string | null
+  composition_spread?: number
+  best_composition?: string | null
+  worst_composition?: string | null
+  opponent_slices?: DashboardMatchupSlice[]
+  composition_slices?: DashboardMatchupSlice[]
+  [key: string]: unknown
+}
+
+export type DashboardTrendPoint = {
+  id?: string
+  name?: string
+  version?: number
+  rank?: number | null
+  score?: number | null
+  matches?: number
+  has_leaderboard_data?: boolean
+  [key: string]: unknown
+}
+
+export type DashboardTrendSummary = {
+  evidence_sufficient?: boolean
+  direction?: string
+  reason?: string
+  score_delta_from_oldest?: number | null
+  rank_delta_from_oldest?: number | null
+  points?: DashboardTrendPoint[]
+  [key: string]: unknown
+}
+
+export type DashboardTrendExplorerSeries = {
+  key: string
+  label: string
+  higher_is_better?: boolean
+  direction?: string
+  reason?: string
+  values?: Array<number | null>
+  deltas?: Array<number | null>
+  [key: string]: unknown
+}
+
+export type DashboardTrendDistribution = {
+  count?: number
+  mean?: number | null
+  median?: number | null
+  p10?: number | null
+  p90?: number | null
+  [key: string]: unknown
+}
+
+export type DashboardTrendMetricOverlay = {
+  key: string
+  label?: string
+  higher_is_better?: boolean
+  current_value?: number | null
+  current_display?: string
+  team?: DashboardTrendDistribution
+  population?: DashboardTrendDistribution
+  delta_vs_team_mean?: number | null
+  delta_vs_population_mean?: number | null
+  signal?: string
+  reason?: string
+  [key: string]: unknown
+}
+
+export type DashboardSubmissionPatternGroup = {
+  code?: string
+  title?: string
+  metric_key?: string
+  severity?: string
+  count?: number
+  versions?: string[]
+  evidence?: string
+  next_action?: string
+  [key: string]: unknown
+}
+
+export type DashboardTrendExplorerSummary = {
+  evidence_sufficient?: boolean
+  selected_metric?: string
+  version_labels?: string[]
+  series?: DashboardTrendExplorerSeries[]
+  metric_overlays?: DashboardTrendMetricOverlay[]
+  submission_patterns?: DashboardSubmissionPatternGroup[]
+  [key: string]: unknown
+}
+
+export type DashboardConfidenceInterval = {
+  key?: string
+  label?: string
+  point_estimate?: number | null
+  lower?: number | null
+  upper?: number | null
+  crosses_zero?: boolean | null
+  current_samples?: number
+  baseline_samples?: number
+  interpretation?: string
+  [key: string]: unknown
+}
+
+export type DashboardConfidenceSummary = {
+  evidence_sufficient?: boolean
+  intervals?: DashboardConfidenceInterval[]
+  recommended_actions?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardPatternSignal = {
+  code?: string
+  title?: string
+  severity?: string
+  confidence?: string
+  evidence?: string
+  next_action?: string
+  [key: string]: unknown
+}
+
+export type DashboardPatternSummary = {
+  evidence_sufficient?: boolean
+  headline?: string
+  signals?: DashboardPatternSignal[]
+  [key: string]: unknown
+}
+
+export type DashboardCrashDumpSignature = {
+  signature?: string
+  count?: number
+  error_type?: string
+  example_message?: string | null
+  [key: string]: unknown
+}
+
+export type DashboardCrashDumpEntry = {
+  episode_id?: string
+  job_id?: string
+  created_at?: string | null
+  error_type?: string | null
+  error_message?: string | null
+  analysis_command?: string
+  replay_url?: string | null
+  [key: string]: unknown
+}
+
+export type DashboardCrashDumpSummary = {
+  evidence_sufficient?: boolean
+  headline?: string
+  total_failed?: number
+  signatures?: DashboardCrashDumpSignature[]
+  entries?: DashboardCrashDumpEntry[]
+  [key: string]: unknown
 }
 
 export type DashboardDerived = {
   kpis: DashboardKpis
   failures: DashboardFailures
-  opponent_metrics: Record<string, DashboardOpponentMetric>
-  outcome?: {
-    verdict?: string
-    evidence_sufficient?: boolean
-    reason?: string
-  }
+  team_comp?: DashboardTeamCompStats[]
+  opponent_metrics: Record<string, DashboardOpponentStats>
+  outcome?: DashboardOutcome
+  matchup?: DashboardMatchupSummary | null
+  trend?: DashboardTrendSummary | null
+  trend_explorer?: DashboardTrendExplorerSummary | null
+  confidence?: DashboardConfidenceSummary | null
+  patterns?: DashboardPatternSummary | null
+  crash_dump?: DashboardCrashDumpSummary | null
+  [key: string]: unknown
+}
+
+export type DashboardPolicy = {
+  id: string
+  name: string
+  version: number
+  rank?: number | null
+  score?: number | null
+  matches?: number
+  [key: string]: unknown
+}
+
+export type DashboardSelection = {
+  sampled_episode_count: number
+  limit?: number
+  offset?: number
+  ordering?: string
+  includes_failed_jobs_without_episode?: boolean
+  baseline_limit?: number | null
+  [key: string]: unknown
 }
 
 export type DashboardResponse = {
-  policy: { id: string; name: string; version: number }
+  policy: DashboardPolicy
   season: string
   generated_at: string
   episodes: DashboardEpisode[]
   derived: DashboardDerived
-  selection: { sampled_episode_count: number }
+  selection: DashboardSelection
+  [key: string]: unknown
 }
 
 export type DashboardAnalysisResponse = {
@@ -199,34 +486,41 @@ export type DiagnoseRunsResponse = {
 
 type DashboardRequestMethod = 'GET' | 'POST'
 
-async function dashboardRequest<T>(path: string, method: DashboardRequestMethod = 'GET', body?: string): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (typeof document !== 'undefined') {
-    for (const part of document.cookie.split('; ')) {
-      if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
-      const token = part.slice(AUTH_COOKIE_NAME.length + 1).trim()
-      if (token) headers['X-Auth-Token'] = token
-      break
+async function parseJsonOrThrow(response: Response): Promise<unknown> {
+  const text = await response.text()
+  let maybeJson: unknown = null
+  if (text) {
+    try {
+      maybeJson = JSON.parse(text)
+    } catch {
+      maybeJson = null
     }
   }
-
-  const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body,
-    cache: 'no-store',
-  })
-
-  const text = await response.text()
-  const maybeJson = text ? JSON.parse(text) : null
   if (!response.ok) {
+    const jsonObject =
+      maybeJson && typeof maybeJson === 'object' && !Array.isArray(maybeJson)
+        ? (maybeJson as Record<string, unknown>)
+        : null
     if (response.status === 401) {
       throw new Error('401: Failed to authenticate. Refresh Observatory login and reopen Policy Dashboard.')
     }
-    const detail = maybeJson?.detail ?? maybeJson?.message ?? response.statusText
+    if (response.status === 503) {
+      throw new Error('503: Service temporarily unavailable - please try again.')
+    }
+    const detail = jsonObject?.detail ?? jsonObject?.message ?? response.statusText
     throw new Error(`${response.status}: ${String(detail)}`)
   }
-  return maybeJson as T
+  return maybeJson
+}
+
+async function dashboardRequest<T>(path: string, method: DashboardRequestMethod = 'GET', body?: string): Promise<T> {
+  const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
+    method,
+    headers: getDashboardRequestHeaders(),
+    body,
+    cache: 'no-store',
+  })
+  return (await parseJsonOrThrow(response)) as T
 }
 
 export async function fetchDashboardData(policyVersionId: string): Promise<DashboardResponse> {

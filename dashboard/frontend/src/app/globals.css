@@ -1,6 +1,14 @@
 :root {
   color-scheme: light;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Segoe UI', 'Avenir Next', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --bg: #f9fafb;
+  --surface: #ffffff;
+  --surface-muted: #f3f4f6;
+  --ink: #111827;
+  --ink-muted: #6b7280;
+  --line: #e5e7eb;
+  --line-strong: #d1d5db;
+  --brand: #2563eb;
 }
 
 * {
@@ -9,21 +17,22 @@
 
 body {
   margin: 0;
-  background: #f6f8fb;
-  color: #10213a;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 main {
-  max-width: 1200px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 24px;
 }
 
 .card {
-  background: #fff;
-  border: 1px solid #d9e1eb;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 16px;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
 }
 
 .grid {
@@ -53,18 +62,34 @@ select,
 textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #bcc9d8;
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
+  color: var(--ink);
 }
 
 button {
-  border: 1px solid #1f6feb;
-  background: #1f6feb;
-  color: #fff;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
   border-radius: 8px;
   padding: 10px 14px;
   cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.primary-btn {
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.primary-btn:hover:not(:disabled) {
+  background: #dbeafe;
 }
 
 button:disabled {
@@ -92,21 +117,44 @@ code {
 
 .tab-row {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
 .tab-row button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  box-shadow: none;
   width: auto;
-  background: #fff;
-  color: #1f3b63;
-  border-color: #c4d4e8;
+  padding: 10px 14px;
+  margin-bottom: -1px;
 }
 
 .tab-row button.active-tab {
-  background: #1f6feb;
-  color: #fff;
-  border-color: #1f6feb;
+  background: transparent;
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.dashboard-shell {
+  padding-top: 10px;
+}
+
+.dashboard-control-card {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.dashboard-control-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 
 .skill-controls {
@@ -115,89 +163,89 @@ code {
   grid-template-columns: minmax(180px, 2fr) repeat(6, minmax(120px, 1fr));
 }
 
-.skill-controls input,
-.skill-controls select,
-.skill-controls button {
-  width: 100%;
+.capability-controls {
+  grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(160px, 1fr));
 }
 
-.skill-controls button {
-  background: #fff;
-  color: #1f3b63;
-  border-color: #c4d4e8;
-}
-
-.skill-layout {
+.capability-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
-.skill-node-wrap {
+.capability-card {
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
-.skill-node {
-  border: 1px solid #d7e2ee;
-  border-radius: 10px;
-  background: #f8fbff;
-  padding: 10px 12px;
-}
-
-.skill-node-selected {
-  border-color: #70a8f5;
-  box-shadow: 0 0 0 2px #dcecff inset;
-}
-
-.skill-node-head {
+.capability-card-head {
   display: flex;
+  justify-content: space-between;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
 }
 
-.skill-title-btn {
-  width: auto;
-  border: 0;
-  padding: 0;
-  color: #10213a;
-  background: transparent;
-  text-align: left;
-  font-weight: 650;
+.capability-description {
+  margin: 0;
+  color: var(--ink-muted);
 }
 
-.skill-title-btn:hover {
-  color: #1f6feb;
-}
-
-.skill-toggle {
-  width: 24px;
-  height: 24px;
-  border: 1px solid #c0d1e4;
-  color: #294c78;
-  border-radius: 6px;
-  background: #fff;
-  padding: 0;
-}
-
-.skill-leaf-dot {
-  width: 24px;
-  text-align: center;
-  color: #6f88a7;
-}
-
-.skill-desc {
-  margin: 8px 0 0;
-  color: #3d5d84;
-}
-
-.skill-children {
-  margin-left: 14px;
-  padding-left: 12px;
-  border-left: 2px solid #dce7f4;
+.capability-indicator-row {
   display: grid;
   gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.capability-indicator {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.capability-evidence {
+  display: grid;
+  gap: 6px;
+}
+
+.capability-evidence p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.indicator-yes {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.indicator-partial {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.indicator-planned {
+  color: #7c3aed;
+  background: #f3e8ff;
+  border-color: #d8b4fe;
+}
+
+.indicator-no {
+  color: #9f1239;
+  background: #ffe4e6;
+  border-color: #fda4af;
+}
+
+.skill-controls input,
+.skill-controls select,
+.skill-controls button {
+  width: 100%;
 }
 
 .badge {
@@ -216,68 +264,77 @@ code {
   border-color: #d8e2ef;
 }
 
-.badge-status.status-demonstrated {
-  color: #145f3a;
-  background: #daf5e7;
-  border-color: #a8e3c4;
-}
-
-.badge-status.status-observed {
-  color: #0a5e73;
-  background: #d6f2f8;
-  border-color: #a6deea;
-}
-
-.badge-status.status-tested {
-  color: #174c89;
-  background: #dcecff;
-  border-color: #b8d4fb;
-}
-
-.badge-status.status-mock {
-  color: #7a5310;
-  background: #ffefcf;
-  border-color: #f3d397;
-}
-
-.badge-status.status-planned {
-  color: #5d2f8c;
-  background: #f0e4ff;
-  border-color: #d8bcff;
-}
-
-.badge-status.status-missing {
-  color: #8f1d2f;
-  background: #ffe1e7;
-  border-color: #f6bac8;
-}
-
 .skill-legend {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.panel-label {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #5b7494;
-  font-size: 12px;
-}
-
-.queue-item {
-  border: 1px solid #d7e2ee;
-  border-radius: 8px;
-  background: #f8fbff;
-  padding: 8px 10px;
-}
-
-.queue-head {
+.diagnose-header {
   display: flex;
-  align-items: center;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.diagnose-selector-row {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnose-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.diagnose-axis-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  padding: 12px;
+}
+
+.diagnose-axis-head {
+  display: flex;
   justify-content: space-between;
   gap: 8px;
+  align-items: center;
+}
+
+.diagnose-probe-card {
+  border: 1px solid #d4dfec;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.diagnose-list-item {
+  border: 1px solid #d4dfec;
+  border-radius: 8px;
+  background: #f9fbff;
+  padding: 10px;
+}
+
+.diagnose-pass {
+  color: #176537;
+  background: #dff6e9;
+  border: 1px solid #afdcc2;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.diagnose-fail {
+  color: #8e2538;
+  background: #fde8ed;
+  border: 1px solid #f2becc;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
 }
 
 .role-grid {
@@ -340,10 +397,6 @@ code {
 @media (max-width: 1100px) {
   .skill-controls {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
-  }
-
-  .skill-layout {
-    grid-template-columns: 1fr;
   }
 
   .role-grid {

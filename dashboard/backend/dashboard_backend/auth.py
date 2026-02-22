@@ -7,12 +7,15 @@ from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from dashboard.backend.dashboard_backend.config import settings
+from metta.app_backend.models.service_accounts import TokenPrefixType
+from metta.app_backend.queries.service_account_queries import get_service_account_user
 
 
 class User(BaseModel):
     id: str
     email: str
     is_softmax_team_member: bool = Field(default=False, alias="is_softmax_team_member")
+    is_service_account_user: bool = Field(default=False)
 
 
 def _is_local_request(request: Request) -> bool:
@@ -51,6 +54,21 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
             is_softmax_team_member=True,
         )
 
+    is_service_account = any(token.startswith(prefix.value) for prefix in TokenPrefixType)
+    if is_service_account:
+        try:
+            service_account_user = await get_service_account_user(token)
+            if not service_account_user:
+                return None
+            return User(
+                id=service_account_user.id,
+                email=service_account_user.email,
+                is_softmax_team_member=service_account_user.is_softmax_team_member,
+                is_service_account_user=True,
+            )
+        except Exception:
+            return None
+
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
@@ -77,6 +95,8 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
                 )
 
             return None
+    except HTTPException:
+        raise
     except httpx.TransportError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

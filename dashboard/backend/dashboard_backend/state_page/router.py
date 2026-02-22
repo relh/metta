@@ -55,6 +55,7 @@ from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.role_percentile_queries import ROLE_METRICS, compute_policy_role_percentiles
 from metta.app_backend.replay.summarizer import parse_replay, select_replay_episodes, summarize_replay
 from metta.app_backend.route_logger import timed_http_handler
+from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.registry import SEASONS
 
 logger = logging.getLogger(__name__)
@@ -326,8 +327,8 @@ def create_dashboard_router() -> APIRouter:
                     policy_season.name if policy_season.canonical else f"{policy_season.name}:v{policy_season.version}"
                 )
                 if policy_season.name in SEASONS:
-                    commissioner = SEASONS[policy_season.name]()
-                    leaderboard = await commissioner.get_leaderboard(season_id=policy_season.id)
+                    commissioner = await build_commissioner(policy_season.name, season_id=policy_season.id)
+                    leaderboard = await commissioner.get_leaderboard()
                     leaderboard_by_policy_id = {
                         str(lb_policy_id): (rank, score, match_count)
                         for rank, (lb_policy_id, score, match_count) in enumerate(leaderboard, start=1)
