@@ -1,6 +1,7 @@
 #!/usr/bin/env -S uv run
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 from typing import Annotated, Optional
@@ -9,9 +10,18 @@ import typer
 from typer import rich_utils
 
 DEFAULT_BOXES = ("metta0", "metta1", "metta2", "metta3", "metta4")
+LOCAL_BOX = "local"
 DEFAULT_CONTAINER = "metta"
 WORKSPACE = "/workspace/metta"
 TRAIN_DIR = "/workspace/metta/train_dir"
+HOST_HELP = "Mettabox host (metta0..metta4) or local."
+FORWARDED_AWS_ENV_VARS = (
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_REGION",
+    "AWS_DEFAULT_REGION",
+)
 NVML_TROUBLESHOOT = (
     "If tmux shows 'cannot initialize NVML', the NVIDIA driver is broken inside the container. "
     "Kill/restart the container on the host (docker ps; docker kill metta; docker start metta) and retry the run."
@@ -25,36 +35,165 @@ app = typer.Typer(
 rich_utils.STYLE_HELPTEXT = ""  # don't gray out help text - https://github.com/fastapi/typer/issues/437
 
 
-def _run_local(cmd: list[str]) -> int:
-    return subprocess.run(cmd).returncode
-
-
-def _ssh(host: str, remote_cmd: str, *, tty: bool) -> int:
+def _host_cmd(host: str, remote_cmd: str, *, tty: bool = False) -> list[str]:
+    if host == LOCAL_BOX:
+        return ["bash", "-lc", remote_cmd]
     cmd = ["ssh"]
     if tty:
         cmd.append("-t")
     cmd.append(host)
     cmd.append(remote_cmd)
-    return _run_local(cmd)
+    return cmd
 
 
-def _docker_exec(container: str, command: str, *, tty: bool, use_repo: bool) -> str:
+def _ssh(host: str, remote_cmd: str, *, tty: bool) -> int:
+    return subprocess.run(_host_cmd(host, remote_cmd, tty=tty)).returncode
+
+
+def _docker_exec(
+    container: str,
+    command: str,
+    *,
+    tty: bool,
+    use_repo: bool,
+    env_file: Optional[str] = None,
+) -> str:
     if use_repo:
         command = f"cd {WORKSPACE} && {command}"
     flags = "-it" if tty else "-i"
-    return f"docker exec {flags} {shlex.quote(container)} bash -lc {shlex.quote(command)}"
+    env_file_arg = f"--env-file {shlex.quote(env_file)} " if env_file else ""
+    return f"docker exec {flags} {env_file_arg}{shlex.quote(container)} bash -lc {shlex.quote(command)}"
 
 
-def _log_candidates(run_id: str) -> list[str]:
-    return [
-        f"{TRAIN_DIR}/{run_id}.log",
-        f"{TRAIN_DIR}/{run_id}/logs/script.log",
-        f"{TRAIN_DIR}/{run_id}/logs/monitor.log",
-    ]
+def _resolve_github_token() -> Optional[str]:
+    for env_var in ("GH_TOKEN", "GITHUB_TOKEN"):
+        token = os.environ.get(env_var)
+        if token:
+            return token.strip()
+    try:
+        result = subprocess.run(["gh", "auth", "token"], check=True, capture_output=True, text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+    token = result.stdout.strip()
+    return token or None
+
+
+def _resolve_aws_env() -> dict[str, str]:
+    resolved: dict[str, str] = {}
+    for env_var in FORWARDED_AWS_ENV_VARS:
+        value = os.environ.get(env_var)
+        if value:
+            resolved[env_var] = value.strip()
+    export_cmd = ["aws", "configure", "export-credentials", "--format", "env-no-export"]
+    profile = os.environ.get("AWS_PROFILE")
+    if profile:
+        export_cmd.extend(["--profile", profile])
+    try:
+        result = subprocess.run(export_cmd, check=True, capture_output=True, text=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        exported: dict[str, str] = {}
+    else:
+        exported = {}
+        for line in result.stdout.splitlines():
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if key in FORWARDED_AWS_ENV_VARS:
+                exported[key] = value.strip().strip("'").strip('"')
+    env_has_pair = "AWS_ACCESS_KEY_ID" in resolved and "AWS_SECRET_ACCESS_KEY" in resolved
+    exported_has_pair = "AWS_ACCESS_KEY_ID" in exported and "AWS_SECRET_ACCESS_KEY" in exported
+
+    if (
+        env_has_pair
+        and exported_has_pair
+        and exported.get("AWS_SESSION_TOKEN")
+        and not resolved.get("AWS_SESSION_TOKEN")
+    ):
+        chosen = exported.copy()
+    elif env_has_pair:
+        chosen = resolved.copy()
+    elif exported_has_pair:
+        chosen = exported.copy()
+    else:
+        chosen = {}
+
+    if not chosen:
+        return {}
+
+    for region_key in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+        if region_key not in chosen:
+            if region_key in resolved:
+                chosen[region_key] = resolved[region_key]
+            elif region_key in exported:
+                chosen[region_key] = exported[region_key]
+    return chosen
+
+
+def _build_forwarded_env(*, forward_gh_token: bool, forward_aws_creds: bool) -> dict[str, str]:
+    forwarded_env: dict[str, str] = {}
+    if forward_gh_token:
+        token = _resolve_github_token()
+        if token:
+            forwarded_env["GITHUB_TOKEN"] = token
+            forwarded_env["GH_TOKEN"] = token
+    if forward_aws_creds:
+        forwarded_env.update(_resolve_aws_env())
+    return forwarded_env
+
+
+def _create_remote_env_file(host: str, forwarded_env: dict[str, str]) -> Optional[str]:
+    if not forwarded_env:
+        return None
+    remote_cmd = (
+        'tmp=$(mktemp /tmp/mettabox-env.XXXXXX) && cat > "$tmp" && chmod 600 "$tmp" && echo "__ENV_FILE__:$tmp"'
+    )
+    lines: list[str] = []
+    for key, value in sorted(forwarded_env.items()):
+        if "\n" in value:
+            raise typer.BadParameter(f"Forwarded env var {key} contains a newline and cannot be forwarded safely.")
+        lines.append(f"{key}={value}")
+    payload = "\n".join(lines) + "\n"
+    result = subprocess.run(_host_cmd(host, remote_cmd), check=False, input=payload, text=True, capture_output=True)
+    if result.returncode != 0:
+        if result.stdout:
+            typer.echo(result.stdout, err=True)
+        if result.stderr:
+            typer.echo(result.stderr, err=True)
+        raise typer.Exit(result.returncode)
+    for line in result.stdout.splitlines():
+        if line.startswith("__ENV_FILE__:"):
+            return line.split(":", 1)[1]
+    raise typer.BadParameter(f"Failed to create remote env file on {host}.")
+
+
+def _docker_exec_with_cleanup(
+    host: str,
+    container: str,
+    command: str,
+    *,
+    tty: bool,
+    use_repo: bool,
+    forwarded_env: dict[str, str],
+) -> int:
+    env_file = _create_remote_env_file(host, forwarded_env)
+    docker_cmd = _docker_exec(container, command, tty=tty, use_repo=use_repo, env_file=env_file)
+    if env_file is None:
+        remote_cmd = docker_cmd
+    else:
+        remote_cmd = f"{docker_cmd}; rc=$?; rm -f {shlex.quote(env_file)}; exit $rc"
+    return _ssh(host, remote_cmd, tty=tty)
 
 
 def _resolve_log_path_cmd(run_id: str) -> str:
-    candidates = " ".join(shlex.quote(path) for path in _log_candidates(run_id))
+    candidates = " ".join(
+        shlex.quote(path)
+        for path in (
+            f"{TRAIN_DIR}/{run_id}.log",
+            f"{TRAIN_DIR}/{run_id}/logs/script.log",
+            f"{TRAIN_DIR}/{run_id}/logs/monitor.log",
+        )
+    )
     run_label = shlex.quote(run_id)
     return (
         'LOG_PATH=""; '
@@ -65,13 +204,6 @@ def _resolve_log_path_cmd(run_id: str) -> str:
         f'echo "No log found for run_id={run_label}" >&2; exit 1; '
         "fi"
     )
-
-
-def _extract_run_id(tool_args: list[str]) -> Optional[str]:
-    for arg in tool_args:
-        if arg.startswith("run="):
-            return arg.split("=", 1)[1]
-    return None
 
 
 def _resolve_hosts(host: Optional[str], all_hosts: bool) -> list[str]:
@@ -119,31 +251,53 @@ def list_boxes() -> None:
     """List known mettabox hosts."""
     for host in DEFAULT_BOXES:
         typer.echo(host)
+    typer.echo(LOCAL_BOX)
 
 
 @app.command()
 def exec(
-    host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
+    host: Annotated[str, typer.Argument(help=HOST_HELP)],
     cmd: Annotated[list[str], typer.Argument(help="Command to run inside the container.")],
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
     tty: Annotated[bool, typer.Option("--tty/--no-tty", help="Allocate a TTY for interactive commands")] = False,
     no_cd: Annotated[bool, typer.Option("--no-cd", help="Skip cd to /workspace/metta before running")] = False,
+    forward_gh_token: Annotated[
+        bool,
+        typer.Option(
+            "--forward-gh-token/--no-forward-gh-token",
+            help="Forward local GH_TOKEN/GITHUB_TOKEN (or gh auth token) into container env for this command.",
+        ),
+    ] = True,
+    forward_aws_creds: Annotated[
+        bool,
+        typer.Option(
+            "--forward-aws-creds/--no-forward-aws-creds",
+            help="Forward local AWS credentials into container env for this command.",
+        ),
+    ] = True,
 ) -> None:
     if not cmd:
         raise typer.BadParameter("Command required after '--'.")
     command = shlex.join(cmd)
-    remote_cmd = _docker_exec(container, command, tty=tty, use_repo=not no_cd)
-    raise typer.Exit(_ssh(host, remote_cmd, tty=tty))
+    forwarded_env = _build_forwarded_env(forward_gh_token=forward_gh_token, forward_aws_creds=forward_aws_creds)
+    raise typer.Exit(
+        _docker_exec_with_cleanup(
+            host,
+            container,
+            command,
+            tty=tty,
+            use_repo=not no_cd,
+            forwarded_env=forwarded_env,
+        )
+    )
 
 
 @app.command()
 def run(
-    host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
+    host: Annotated[str, typer.Argument(help=HOST_HELP)],
     tool_args: Annotated[
         list[str],
-        typer.Argument(
-            help="Args passed to tools/run.py (do not include 'python tools/run.py' or 'uv run ./tools/run.py')."
-        ),
+        typer.Argument(help="Args passed to tools/run.py."),
     ],
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
     tmux: Annotated[bool, typer.Option("--tmux/--no-tmux", help="Run inside tmux")] = True,
@@ -156,34 +310,32 @@ def run(
         ),
     ] = None,
     attach: Annotated[bool, typer.Option("--attach", help="Attach to tmux after launch")] = False,
+    forward_gh_token: Annotated[
+        bool,
+        typer.Option(
+            "--forward-gh-token/--no-forward-gh-token",
+            help="Forward local GH_TOKEN/GITHUB_TOKEN (or gh auth token) into container env for this run.",
+        ),
+    ] = True,
+    forward_aws_creds: Annotated[
+        bool,
+        typer.Option(
+            "--forward-aws-creds/--no-forward-aws-creds",
+            help="Forward local AWS credentials into container env for this run.",
+        ),
+    ] = True,
 ) -> None:
     """Launch a tools/run.py job in tmux.
 
     Troubleshooting: If tmux shows 'cannot initialize NVML', the NVIDIA driver is broken inside the container.
     Kill/restart the container on the host (docker ps; docker kill metta; docker start metta) and retry the run.
     """
-    prefixes = (
-        ("uv", "run", "./tools/run.py"),
-        ("uv", "run", "tools/run.py"),
-        ("python", "./tools/run.py"),
-        ("python", "tools/run.py"),
-        ("python3", "./tools/run.py"),
-        ("python3", "tools/run.py"),
-        ("./tools/run.py",),
-        ("tools/run.py",),
-    )
-    stripped_prefix: Optional[tuple[str, ...]] = None
-    for prefix in prefixes:
-        if tool_args[: len(prefix)] == list(prefix):
-            tool_args = tool_args[len(prefix) :]
-            stripped_prefix = prefix
-            break
-    if stripped_prefix:
-        typer.echo(f"Note: stripped leading {' '.join(stripped_prefix)!r}; mettabox CLI already wraps tools/run.py.")
     if not tool_args:
         raise typer.BadParameter("Tools args required after '--'.")
     run_cmd = shlex.join(["uv", "run", "./tools/run.py", *tool_args])
-    session_name = session or _extract_run_id(tool_args) or "metta-run"
+    forwarded_env = _build_forwarded_env(forward_gh_token=forward_gh_token, forward_aws_creds=forward_aws_creds)
+    run_id = next((arg.split("=", 1)[1] for arg in tool_args if arg.startswith("run=")), None)
+    session_name = session or run_id or "metta-run"
     tty = attach
     if tmux:
         cmd = _tmux_run_cmd(run_cmd, session_name, attach=attach)
@@ -192,16 +344,21 @@ def run(
             raise typer.BadParameter("--attach requires --tmux.")
         cmd = run_cmd
 
-    docker_cmd = _docker_exec(container, cmd, tty=tty, use_repo=True)
-    raise typer.Exit(_ssh(host, docker_cmd, tty=tty))
-
-
-app.command("launch")(run)
+    raise typer.Exit(
+        _docker_exec_with_cleanup(
+            host,
+            container,
+            cmd,
+            tty=tty,
+            use_repo=True,
+            forwarded_env=forwarded_env,
+        )
+    )
 
 
 @app.command()
 def runs(
-    host: Annotated[Optional[str], typer.Argument(help="Mettabox host (metta0..metta4).")] = None,
+    host: Annotated[Optional[str], typer.Argument(help=HOST_HELP)] = None,
     all_hosts: Annotated[bool, typer.Option("--all", help="List runs on all mettaboxes")] = False,
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
     pattern: Annotated[str, typer.Option("--pattern", "-p", help="Grep pattern for run processes")] = "tools/run.py",
@@ -218,7 +375,7 @@ def runs(
 
 @app.command()
 def tmux(
-    host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
+    host: Annotated[str, typer.Argument(help=HOST_HELP)],
     session: Annotated[Optional[str], typer.Argument(help="Session name to attach (optional)")] = None,
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
 ) -> None:
@@ -235,7 +392,7 @@ def tmux(
 
 @app.command()
 def instrument(
-    host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
+    host: Annotated[str, typer.Argument(help=HOST_HELP)],
     run_id: Annotated[str, typer.Argument(help="Run ID (used for train_dir/<run_id>.log).")],
     lines: Annotated[int, typer.Option("--lines", "-n", help="Number of log lines to show before following")] = 200,
     follow: Annotated[bool, typer.Option("--follow/--no-follow", help="Follow log output")] = True,
@@ -267,7 +424,7 @@ def instrument(
 
 @app.command()
 def progress(
-    host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
+    host: Annotated[str, typer.Argument(help=HOST_HELP)],
     run_id: Annotated[str, typer.Argument(help="Run ID (used for train_dir/<run_id> logs).")],
     lines: Annotated[int, typer.Option("--lines", "-n", help="Fallback tail lines if no progress block found")] = 200,
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
@@ -288,7 +445,7 @@ def progress(
 
 @app.command()
 def audit(
-    host: Annotated[Optional[str], typer.Argument(help="Mettabox host (metta0..metta4).")] = None,
+    host: Annotated[Optional[str], typer.Argument(help=HOST_HELP)] = None,
     all_hosts: Annotated[bool, typer.Option("--all", help="Audit all mettaboxes")] = False,
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
 ) -> None:
@@ -314,7 +471,7 @@ def audit(
 
 @app.command()
 def profile(
-    host: Annotated[str, typer.Argument(help="Mettabox host (metta0..metta4).")],
+    host: Annotated[str, typer.Argument(help=HOST_HELP)],
     container: Annotated[str, typer.Option("--container", "-c", help="Docker container name")] = DEFAULT_CONTAINER,
 ) -> None:
     cmd = " && ".join(
@@ -331,7 +488,7 @@ def profile(
 @app.command("sky-status")
 def sky_status() -> None:
     """Show SkyPilot sandboxes (local command)."""
-    raise typer.Exit(_run_local(["uv", "run", "sky", "status"]))
+    raise typer.Exit(subprocess.run(["uv", "run", "sky", "status"]).returncode)
 
 
 def main() -> None:

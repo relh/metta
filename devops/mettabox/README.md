@@ -5,6 +5,7 @@ Utilities for running and inspecting jobs inside mettabox docker containers.
 Assumptions (from recent usage):
 
 - Hosts: `metta0`..`metta4` reachable via SSH.
+- Host alias: use `local` when already SSH'd into the target mettabox and you want to run without SSH hop.
 - Container name: `metta`.
 - Repo path: `/workspace/metta`.
 - Logs: `/workspace/metta/train_dir/<run_id>.log`.
@@ -17,6 +18,9 @@ Assumptions (from recent usage):
 
 # Launch a run in tmux
 ./devops/mettabox/cli.py run metta1 -- train arena run=my_run trainer.total_timesteps=100000
+
+# Already on the target mettabox host (SSH'd in): run locally (no SSH hop)
+./devops/mettabox/cli.py run local -- train arena run=my_run trainer.total_timesteps=100000
 
 # If the container already has tmux running (for example started via devops/mettabox/docker.sh),
 # `run` will create a new tmux window in the existing session and (optionally) attach.
@@ -42,6 +46,24 @@ Assumptions (from recent usage):
 # Resource snapshot
 ./devops/mettabox/cli.py profile metta3
 ```
+
+## GitHub Token Forwarding
+
+`run` and `exec` forward your local GitHub token into the container command environment by default.
+
+- Source order: `GH_TOKEN`, then `GITHUB_TOKEN`, then `gh auth token`.
+- Exported remotely as both `GH_TOKEN` and `GITHUB_TOKEN`.
+- Forwarded via a temporary remote `--env-file` to avoid putting token values in command argv.
+- Disable per command with `--no-forward-gh-token`.
+
+## AWS Credential Forwarding
+
+`run` and `exec` also forward AWS credentials by default for S3/secrets workflows.
+
+- Source order: local AWS env vars first, then `aws configure export-credentials`.
+- Credential keypair source is selected atomically (no mixing access key + secret across sources).
+- Exported vars: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_DEFAULT_REGION`.
+- Disable per command with `--no-forward-aws-creds`.
 
 ## Log discovery
 
