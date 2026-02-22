@@ -5,18 +5,29 @@ import { FC, useMemo, useState } from 'react'
 import type { DashboardResponse, DiagnoseAxis, DiagnoseDoctorNote, DiagnoseManifest } from '../lib/api'
 
 type CapabilityIndicator = 'yes' | 'partial' | 'no' | 'planned'
+type CapabilitySource =
+  | 'capability_eval'
+  | 'cogames_axis'
+  | 'cogames_probe'
+  | 'cogames_symptom'
+  | 'kpi_diagnostic'
+  | 'instrumentation'
+  | 'behavior_slice'
 
 type CapabilityCard = {
   id: string
   title: string
   description: string
   axis: DiagnoseAxis
+  source: CapabilitySource
+  score: number
   trained: CapabilityIndicator
   eval: CapabilityIndicator
   evidence: string[]
 }
 
 type IndicatorFilter = 'all' | CapabilityIndicator
+type SourceFilter = 'all' | CapabilitySource
 
 type CapabilitySpec = {
   id: string
@@ -71,12 +82,24 @@ const INDICATOR_LABEL: Record<CapabilityIndicator, string> = {
   planned: 'Planned',
 }
 
+const SOURCE_LABEL: Record<CapabilitySource, string> = {
+  capability_eval: 'Capability Eval',
+  cogames_axis: 'Diagnose Axis',
+  cogames_probe: 'Diagnose Probe',
+  cogames_symptom: 'Diagnose Symptom',
+  kpi_diagnostic: 'KPI Diagnostic',
+  instrumentation: 'Instrumentation',
+  behavior_slice: 'Behavior Slice',
+}
+
 const AXIS_LABEL: Record<DiagnoseAxis, string> = {
   stability: 'Stability',
   efficiency: 'Efficiency',
   control: 'Control',
   social_coordination: 'Social Coordination',
 }
+
+const AXIS_ORDER: DiagnoseAxis[] = ['stability', 'efficiency', 'control', 'social_coordination']
 
 const INDICATOR_FILTERS: Array<{ value: IndicatorFilter; label: string }> = [
   { value: 'all', label: 'All' },
@@ -94,39 +117,95 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((entry) => String(entry)) : []
 }
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : []
+}
+
 function formatPercent(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`
 }
 
-function indicatorRank(value: CapabilityIndicator): number {
-  if (value === 'no') return 0
-  if (value === 'planned') return 1
-  if (value === 'partial') return 2
-  return 3
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
 }
 
-function strongerIndicator(left: CapabilityIndicator, right: CapabilityIndicator): CapabilityIndicator {
-  return indicatorRank(right) > indicatorRank(left) ? right : left
+function normalizeRange(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value) || max <= min) return 0
+  return clamp01((value - min) / (max - min))
 }
 
-function mechanicEvalIndicators(data: DashboardResponse): Record<string, CapabilityIndicator> {
+function scoreToIndicator(score: number): CapabilityIndicator {
+  if (score >= 0.75) return 'yes'
+  if (score >= 0.4) return 'partial'
+  return 'no'
+}
+
+function slug(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+  return normalized.replace(/^-+|-+$/g, '') || 'scenario'
+}
+
+function inferAxisFromText(value: string): DiagnoseAxis {
+  const text = value.toLowerCase()
+  if (
+    text.includes('resource') ||
+    text.includes('mine') ||
+    text.includes('miner') ||
+    text.includes('efficiency') ||
+    text.includes('retention')
+  ) {
+    return 'efficiency'
+  }
+  if (
+    text.includes('align') ||
+    text.includes('junction') ||
+    text.includes('control') ||
+    text.includes('scramble') ||
+    text.includes('aggression')
+  ) {
+    return 'control'
+  }
+  if (
+    text.includes('social') ||
+    text.includes('coordination') ||
+    text.includes('team') ||
+    text.includes('pair') ||
+    text.includes('self_play')
+  ) {
+    return 'social_coordination'
+  }
+  return 'stability'
+}
+
+function mechanicEvalScores(data: DashboardResponse): Record<string, number> {
   const kpis = data.derived.kpis
   const diagnostics = asStringArray(kpis.diagnostics).join(' ').toLowerCase()
 
-  const mining =
-    numeric(kpis.resource_efficiency_per_step) > 0.02 || numeric(kpis.resource_retention) > 0.2 ? 'yes' : 'partial'
+  const mining = Math.max(
+    normalizeRange(numeric(kpis.resource_efficiency_per_step), 0.0, 0.04),
+    normalizeRange(numeric(kpis.resource_retention), 0.0, 0.5)
+  )
 
-  const aligning =
-    numeric(kpis.junction_control_rate) > 0.2 || numeric(kpis.alignment_stability) > 0.12 ? 'yes' : 'partial'
+  const aligning = Math.max(
+    normalizeRange(numeric(kpis.junction_control_rate), 0.0, 0.4),
+    normalizeRange(numeric(kpis.alignment_stability), 0.0, 0.24)
+  )
 
-  const scrambling =
-    diagnostics.includes('scramble') || diagnostics.includes('aggressive') || numeric(kpis.profile_aggressive) > 25
-      ? 'partial'
-      : 'no'
+  const scramblingSignals = [
+    diagnostics.includes('scramble') || diagnostics.includes('aggressive') ? 0.65 : 0,
+    normalizeRange(numeric(kpis.profile_aggressive), 0, 50),
+  ]
+  const scrambling = Math.max(...scramblingSignals)
 
-  const scouting = numeric(kpis.move_efficiency) > 0.52 || numeric(kpis.profile_mobile_scout) > 25 ? 'yes' : 'partial'
+  const scouting = Math.max(
+    normalizeRange(numeric(kpis.move_efficiency), 0.35, 0.75),
+    normalizeRange(numeric(kpis.profile_mobile_scout), 0, 50)
+  )
 
-  const coordination = data.derived.outcome?.evidence_sufficient ? 'partial' : 'no'
+  const coordination = data.derived.outcome?.evidence_sufficient ? 0.6 : 0.2
 
   return {
     mining,
@@ -150,46 +229,63 @@ function trainedIndicators(): Record<string, CapabilityIndicator> {
 function axisIndicator(
   note: DiagnoseDoctorNote | null,
   axis: DiagnoseAxis
-): { indicator: CapabilityIndicator; evidence: string } | null {
+): { indicator: CapabilityIndicator; score: number; evidence: string } | null {
   if (!note) return null
-  const score = (Array.isArray(note.axes) ? note.axes : []).find((entry) => entry.axis === axis)
+  const score = asArray<NonNullable<DiagnoseDoctorNote['axes']>[number]>(note.axes).find((entry) => entry.axis === axis)
   if (!score) return null
 
-  const indicator = score.confirmed ? 'yes' : score.normalized_score >= 0.65 ? 'partial' : 'no'
+  const normalized = clamp01(numeric(score.normalized_score))
+  const indicator = score.confirmed ? 'yes' : normalized >= 0.4 ? 'partial' : 'no'
   const evidence = `axis ${AXIS_LABEL[axis]}=${formatPercent(score.normalized_score)} (confirmed=${String(score.confirmed)})`
-  return { indicator, evidence }
+  return { indicator, score: normalized, evidence }
 }
 
 function probeIndicator(
   note: DiagnoseDoctorNote | null,
   axis: DiagnoseAxis
-): { indicator: CapabilityIndicator; evidence: string } | null {
+): { indicator: CapabilityIndicator; score: number; evidence: string } | null {
   if (!note) return null
-  const evaluations = (Array.isArray(note.stage1_probe_evaluations) ? note.stage1_probe_evaluations : []).filter(
-    (entry) => entry.axis === axis
-  )
+  const evaluations = asArray<NonNullable<DiagnoseDoctorNote['stage1_probe_evaluations']>[number]>(
+    note.stage1_probe_evaluations
+  ).filter((entry) => entry.axis === axis)
   if (evaluations.length === 0) return null
 
   const passed = evaluations.filter((entry) => entry.passed).length
+  const score = passed / evaluations.length
   const indicator = passed === evaluations.length ? 'yes' : passed > 0 ? 'partial' : 'no'
-  return { indicator, evidence: `diagnose probes on ${AXIS_LABEL[axis]}: ${passed}/${evaluations.length} passing` }
+  return {
+    indicator,
+    score,
+    evidence: `diagnose probes on ${AXIS_LABEL[axis]}: ${passed}/${evaluations.length} passing`,
+  }
 }
 
-function buildCapabilityCards(
+function buildCapabilityEvalCards(
   data: DashboardResponse,
   note: DiagnoseDoctorNote | null,
   manifest: DiagnoseManifest | null
 ): CapabilityCard[] {
   const trained = trainedIndicators()
-  const evalFromMetrics = mechanicEvalIndicators(data)
+  const evalFromMetrics = mechanicEvalScores(data)
 
   return CAPABILITY_SPECS.map((spec) => {
     const axisSignal = axisIndicator(note, spec.axis)
     const probeSignal = probeIndicator(note, spec.axis)
 
-    let evalIndicator = evalFromMetrics[spec.id] ?? 'no'
+    const baseScore = clamp01(evalFromMetrics[spec.id] ?? 0)
+    let evalScore = baseScore
+
     if (axisSignal) {
-      evalIndicator = strongerIndicator(evalIndicator, axisSignal.indicator)
+      evalScore = Math.max(evalScore, axisSignal.score)
+    }
+    if (probeSignal) {
+      // Probe outcomes are direct scenario checks and should override heuristic/base scoring.
+      evalScore = probeSignal.score
+    }
+
+    let evalIndicator = scoreToIndicator(evalScore)
+    if (axisSignal?.indicator === 'yes') {
+      evalIndicator = 'yes'
     }
     if (probeSignal) {
       evalIndicator = probeSignal.indicator
@@ -197,6 +293,7 @@ function buildCapabilityCards(
 
     const evidence = [
       `training source: ${spec.trainingSource}`,
+      `score: ${formatPercent(evalScore, 0)}`,
       axisSignal?.evidence,
       probeSignal?.evidence,
       manifest?.run_id ? `diagnose run: ${manifest.run_id}` : null,
@@ -207,10 +304,207 @@ function buildCapabilityCards(
       title: spec.title,
       description: spec.description,
       axis: spec.axis,
+      source: 'capability_eval',
+      score: evalScore,
       trained: trained[spec.id] ?? 'planned',
       eval: evalIndicator,
       evidence,
     }
+  })
+}
+
+function buildKpiDiagnosticCards(data: DashboardResponse): CapabilityCard[] {
+  const diagnostics = asStringArray(data.derived.kpis.diagnostics)
+  return diagnostics.map((entry) => ({
+    id: `kpi-diagnostic-${slug(entry)}`,
+    title: `KPI Diagnostic: ${entry}`,
+    description: 'State-page diagnostic signal emitted from sampled episodes.',
+    axis: inferAxisFromText(entry),
+    source: 'kpi_diagnostic',
+    score: 0.2,
+    trained: 'planned',
+    eval: 'no',
+    evidence: ['score: 20%', 'triggered by dashboard KPI diagnostic stream'],
+  }))
+}
+
+function buildInstrumentationCards(data: DashboardResponse): CapabilityCard[] {
+  const checks = asArray<NonNullable<NonNullable<DashboardResponse['derived']['instrumentation']>['checks']>[number]>(
+    data.derived.instrumentation?.checks
+  )
+  return checks.map((check) => {
+    const coverage = clamp01(numeric(check.coverage))
+    const status = String(check.status ?? '').toLowerCase()
+    const evalIndicator =
+      status === 'pass'
+        ? 'yes'
+        : status === 'partial'
+          ? 'partial'
+          : status === 'missing'
+            ? 'no'
+            : scoreToIndicator(coverage)
+    const key = String(check.key ?? 'check')
+    return {
+      id: `instrumentation-${slug(key)}`,
+      title: `Instrumentation: ${key}`,
+      description: `Coverage check for ${String(check.kind ?? 'signal')} instrumentation.`,
+      axis: inferAxisFromText(`${key} ${String(check.kind ?? '')}`),
+      source: 'instrumentation',
+      score: coverage,
+      trained: 'planned',
+      eval: evalIndicator,
+      evidence: [
+        `score: ${formatPercent(coverage, 0)}`,
+        `${String(check.present_count ?? 0)}/${String(check.total_count ?? 0)} coverage`,
+        String(check.message ?? '-'),
+      ],
+    }
+  })
+}
+
+function buildBehaviorSliceCards(data: DashboardResponse): CapabilityCard[] {
+  const counts = new Map<string, number>()
+  for (const episode of data.episodes) {
+    const seen = new Set<string>()
+    for (const tag of asStringArray(episode.diagnostic_tags)) {
+      if (seen.has(tag)) continue
+      seen.add(tag)
+      counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    }
+    if (episode.raw_tags && typeof episode.raw_tags === 'object' && !Array.isArray(episode.raw_tags)) {
+      for (const [key, value] of Object.entries(episode.raw_tags)) {
+        const tag = `${key}=${String(value)}`
+        if (seen.has(tag)) continue
+        seen.add(tag)
+        counts.set(tag, (counts.get(tag) ?? 0) + 1)
+      }
+    }
+  }
+
+  const episodeCount = data.episodes.length
+  const rows = [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+  return rows.slice(0, 64).map(([tag, count]) => {
+    const score = episodeCount > 0 ? clamp01(count / episodeCount) : 0
+    return {
+      id: `behavior-slice-${slug(tag)}`,
+      title: `Behavior Slice: ${tag}`,
+      description: 'Observed episode-tag slice from diagnostic and raw tags.',
+      axis: inferAxisFromText(tag),
+      source: 'behavior_slice',
+      score,
+      trained: 'planned',
+      eval: scoreToIndicator(score),
+      evidence: [
+        `score: ${formatPercent(score, 0)}`,
+        `${count}/${episodeCount} sampled episodes`,
+        'score tracks coverage, not win quality',
+      ],
+    }
+  })
+}
+
+function buildDiagnoseAxisCards(note: DiagnoseDoctorNote | null, manifest: DiagnoseManifest | null): CapabilityCard[] {
+  const axisById = new Map(
+    asArray<NonNullable<DiagnoseDoctorNote['axes']>[number]>(note?.axes).map(
+      (axisScore) => [axisScore.axis, axisScore] as const
+    )
+  )
+  return AXIS_ORDER.map((axis) => {
+    const axisScore = axisById.get(axis)
+    const hasData = Boolean(axisScore)
+    const score = hasData ? clamp01(numeric(axisScore?.normalized_score)) : 0
+    const evalIndicator = !hasData ? 'planned' : axisScore?.confirmed ? 'yes' : scoreToIndicator(score)
+    return {
+      id: `diagnose-axis-${axis}`,
+      title: `Diagnose Axis: ${AXIS_LABEL[axis]}`,
+      description: 'Canonical Stage-1 axis coverage from cogames diagnose.',
+      axis,
+      source: 'cogames_axis',
+      score,
+      trained: 'planned',
+      eval: evalIndicator,
+      evidence: [
+        `score: ${formatPercent(score, 0)}`,
+        hasData
+          ? `confirmed=${String(axisScore?.confirmed)} raw_score=${String(axisScore?.raw_score ?? '-')}`
+          : 'no axis score emitted for selected diagnose run',
+        manifest?.run_id ? `diagnose run: ${manifest.run_id}` : 'no diagnose run selected',
+      ],
+    }
+  })
+}
+
+function buildDiagnoseProbeCards(note: DiagnoseDoctorNote | null): CapabilityCard[] {
+  if (!note) return []
+  const catalog = asArray<NonNullable<DiagnoseDoctorNote['stage1_probe_catalog']>[number]>(note.stage1_probe_catalog)
+  const evaluations = new Map(
+    asArray<NonNullable<DiagnoseDoctorNote['stage1_probe_evaluations']>[number]>(note.stage1_probe_evaluations).map(
+      (entry) => [entry.probe_id, entry]
+    )
+  )
+  return catalog.map((probe) => {
+    const evaluation = evaluations.get(probe.probe_id)
+    const score = evaluation ? (evaluation.passed ? 1 : 0) : 0
+    return {
+      id: `diagnose-probe-${slug(probe.probe_id)}`,
+      title: `Diagnose Probe: ${probe.probe_id}`,
+      description: probe.question,
+      axis: probe.axis,
+      source: 'cogames_probe',
+      score,
+      trained: 'planned',
+      eval: evaluation ? scoreToIndicator(score) : 'planned',
+      evidence: [
+        `score: ${formatPercent(score, 0)}`,
+        `${probe.validation_metric} · ${probe.pass_fail_threshold}`,
+        evaluation?.summary ? String(evaluation.summary) : 'probe not evaluated in selected run',
+      ],
+    }
+  })
+}
+
+function buildDiagnoseSymptomCards(note: DiagnoseDoctorNote | null): CapabilityCard[] {
+  if (!note) return []
+  const symptoms = asArray<NonNullable<DiagnoseDoctorNote['symptoms']>[number]>(note.symptoms)
+  return symptoms.map((symptom) => {
+    const severity = clamp01(numeric(symptom.severity))
+    const score = 1 - severity
+    return {
+      id: `diagnose-symptom-${slug(symptom.symptom_id)}`,
+      title: `Diagnose Symptom: ${symptom.symptom_id}`,
+      description: String(symptom.likely_cause),
+      axis: symptom.axis,
+      source: 'cogames_symptom',
+      score,
+      trained: 'planned',
+      eval: scoreToIndicator(score),
+      evidence: [
+        `score: ${formatPercent(score, 0)} (inverse severity)`,
+        `confidence: ${formatPercent(clamp01(numeric(symptom.confidence)), 0)}`,
+        `action: ${String(symptom.action)}`,
+      ],
+    }
+  })
+}
+
+function buildCapabilityCards(
+  data: DashboardResponse,
+  note: DiagnoseDoctorNote | null,
+  manifest: DiagnoseManifest | null
+): CapabilityCard[] {
+  const allCards = [
+    ...buildCapabilityEvalCards(data, note, manifest),
+    ...buildDiagnoseAxisCards(note, manifest),
+    ...buildDiagnoseProbeCards(note),
+    ...buildDiagnoseSymptomCards(note),
+    ...buildKpiDiagnosticCards(data),
+    ...buildInstrumentationCards(data),
+    ...buildBehaviorSliceCards(data),
+  ]
+
+  return allCards.sort((left, right) => {
+    if (left.source !== right.source) return SOURCE_LABEL[left.source].localeCompare(SOURCE_LABEL[right.source])
+    return left.title.localeCompare(right.title)
   })
 }
 
@@ -222,11 +516,20 @@ export const SkillTreePanel: FC<{
   const [query, setQuery] = useState('')
   const [trainedFilter, setTrainedFilter] = useState<IndicatorFilter>('all')
   const [evalFilter, setEvalFilter] = useState<IndicatorFilter>('all')
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
 
   const capabilities = useMemo(
     () => buildCapabilityCards(data, diagnoseNote, diagnoseManifest),
     [data, diagnoseManifest, diagnoseNote]
   )
+
+  const sourceOptions = useMemo(() => {
+    const options = new Set<CapabilitySource>()
+    for (const capability of capabilities) {
+      options.add(capability.source)
+    }
+    return [...options].sort((left, right) => SOURCE_LABEL[left].localeCompare(SOURCE_LABEL[right]))
+  }, [capabilities])
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -236,9 +539,10 @@ export const SkillTreePanel: FC<{
         [capability.title, capability.description, ...capability.evidence].join(' ').toLowerCase().includes(normalized)
       const trainedMatch = trainedFilter === 'all' || capability.trained === trainedFilter
       const evalMatch = evalFilter === 'all' || capability.eval === evalFilter
-      return queryMatch && trainedMatch && evalMatch
+      const sourceMatch = sourceFilter === 'all' || capability.source === sourceFilter
+      return queryMatch && trainedMatch && evalMatch && sourceMatch
     })
-  }, [capabilities, evalFilter, query, trainedFilter])
+  }, [capabilities, evalFilter, query, sourceFilter, trainedFilter])
 
   const counts = useMemo(() => {
     const next: Record<CapabilityIndicator, number> = {
@@ -253,6 +557,11 @@ export const SkillTreePanel: FC<{
     return next
   }, [capabilities])
 
+  const averageScore = useMemo(() => {
+    if (capabilities.length === 0) return 0
+    return capabilities.reduce((total, capability) => total + capability.score, 0) / capabilities.length
+  }, [capabilities])
+
   return (
     <div className="grid" style={{ gap: 12 }}>
       <section className="card grid" style={{ gap: 12 }}>
@@ -260,9 +569,12 @@ export const SkillTreePanel: FC<{
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 4 }}>Capability Grid</h2>
             <p style={{ margin: 0, color: '#6b7280' }}>
-              Unified capability view for both Eval and Train tabs. Each box tracks training coverage and eval outcomes.
+              Canonical diagnosis inventory: capabilities + Cogames diagnose + instrumentation + behavior slices.
             </p>
           </div>
+          <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+            scenarios: <code>{capabilities.length}</code> · avg score <code>{formatPercent(averageScore, 0)}</code>
+          </p>
         </div>
 
         <div className="skill-controls capability-controls">
@@ -282,6 +594,14 @@ export const SkillTreePanel: FC<{
             {INDICATOR_FILTERS.map((option) => (
               <option key={`eval-${option.value}`} value={option.value}>
                 Eval: {option.label}
+              </option>
+            ))}
+          </select>
+          <select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value as SourceFilter)}>
+            <option value="all">Source: All</option>
+            {sourceOptions.map((source) => (
+              <option key={`source-${source}`} value={source}>
+                Source: {SOURCE_LABEL[source]}
               </option>
             ))}
           </select>
@@ -307,7 +627,9 @@ export const SkillTreePanel: FC<{
             <article key={capability.id} className="card capability-card">
               <div className="capability-card-head">
                 <h3 style={{ margin: 0 }}>{capability.title}</h3>
-                <span className="badge badge-source">Axis: {AXIS_LABEL[capability.axis]}</span>
+                <span className="badge badge-source">
+                  {SOURCE_LABEL[capability.source]} · {AXIS_LABEL[capability.axis]}
+                </span>
               </div>
               <p className="capability-description">{capability.description}</p>
 
@@ -319,6 +641,10 @@ export const SkillTreePanel: FC<{
                 <div className={`capability-indicator indicator-${capability.eval}`}>
                   <span>Eval</span>
                   <strong>{INDICATOR_LABEL[capability.eval]}</strong>
+                </div>
+                <div className={`capability-indicator indicator-${capability.eval}`}>
+                  <span>Score</span>
+                  <strong>{formatPercent(capability.score, 0)}</strong>
                 </div>
               </div>
 
