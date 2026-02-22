@@ -7,6 +7,7 @@ import { Spinner } from '@/components/Spinner'
 import { UserDisplay } from '@/components/UserDisplay'
 import { TasksTable } from '@/EvalTasks/TasksTable'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
+import { buildPolicyDashboardPath } from '@/lib/policy-dashboard'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate } from '@/utils/datetime'
 import { formatPolicyVersion } from '@/utils/format'
@@ -16,10 +17,8 @@ import { PolicyVersionTournamentMembershipsCard } from './PolicyVersionTournamen
 
 export default async function PolicyVersionPage(props: PageProps<'/policies/versions/[policyVersionId]'>) {
   const { policyVersionId } = await props.params
-  const standaloneDashboardBaseUrl =
-    process.env.OBSERVATORY_STANDALONE_DASHBOARD_URL?.replace(/\/$/, '') ?? 'http://localhost:5174'
-  const standaloneDashboardHref = `${standaloneDashboardBaseUrl}/?policyVersionId=${encodeURIComponent(policyVersionId)}`
-  const standaloneDiagnoseHref = `${standaloneDashboardBaseUrl}/diagnose`
+  const standaloneDashboardHref = buildPolicyDashboardPath({ policyVersionId })
+  const standaloneDiagnoseHref = buildPolicyDashboardPath({ policyVersionId, tab: 'cogames_diagnose' })
 
   const repo = await getRepo()
   const pvInfo = await repo.getPolicyVersion(policyVersionId)

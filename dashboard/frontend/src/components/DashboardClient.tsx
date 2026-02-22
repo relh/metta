@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 
 import {
   DASHBOARD_API_BASE_URL,
@@ -15,14 +14,22 @@ import {
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab =
-  | 'overview'
-  | 'episodes'
-  | 'opponents'
-  | 'roles'
-  | 'eval_tree'
-  | 'cogames_diagnose'
-  | 'train_tree'
+type DashboardTab = 'overview' | 'episodes' | 'opponents' | 'roles' | 'eval_tree' | 'cogames_diagnose' | 'train_tree'
+
+const DASHBOARD_TABS: DashboardTab[] = [
+  'overview',
+  'episodes',
+  'opponents',
+  'roles',
+  'eval_tree',
+  'cogames_diagnose',
+  'train_tree',
+]
+
+function parseDashboardTab(value: string | null): DashboardTab | null {
+  if (!value) return null
+  return DASHBOARD_TABS.find((tab) => tab === value) ?? null
+}
 
 type OpponentSummaryRow = {
   opponent: string
@@ -50,6 +57,17 @@ export function DashboardClient() {
   const [roleLoading, setRoleLoading] = useState(false)
   const [roleError, setRoleError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
+
+  const activateTab = useCallback((tab: DashboardTab) => {
+    setActiveTab(tab)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get('tab') !== tab) {
+        url.searchParams.set('tab', tab)
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+      }
+    }
+  }, [])
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
   const diagnostics = useMemo(() => {
@@ -216,7 +234,12 @@ export function DashboardClient() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const initialPolicyVersionId = new URLSearchParams(window.location.search).get('policyVersionId')?.trim()
+    const params = new URLSearchParams(window.location.search)
+    const initialPolicyVersionId = params.get('policyVersionId')?.trim()
+    const initialTab = parseDashboardTab(params.get('tab'))
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
     if (!initialPolicyVersionId) return
     setPolicyVersionId(initialPolicyVersionId)
     void loadDashboardData(initialPolicyVersionId)
@@ -228,11 +251,6 @@ export function DashboardClient() {
         <h1 style={{ marginTop: 0 }}>Standalone Dashboard</h1>
         <p style={{ marginBottom: 0 }}>
           Backend: <code>{DASHBOARD_API_BASE_URL}</code>
-        </p>
-        <p style={{ marginBottom: 0, marginTop: 8 }}>
-          <Link href="/diagnose" style={{ color: '#1f6feb', textDecoration: 'none' }}>
-            Open Cogames Diagnose Runs →
-          </Link>
         </p>
       </header>
 
@@ -262,47 +280,51 @@ export function DashboardClient() {
       {data && (
         <>
           <section className="card tab-row">
-            <button type="button" onClick={() => setActiveTab('overview')} className={activeTab === 'overview' ? 'active-tab' : ''}>
+            <button
+              type="button"
+              onClick={() => activateTab('overview')}
+              className={activeTab === 'overview' ? 'active-tab' : ''}
+            >
               Overview
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('episodes')}
+              onClick={() => activateTab('episodes')}
               className={activeTab === 'episodes' ? 'active-tab' : ''}
             >
               Episodes
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('opponents')}
+              onClick={() => activateTab('opponents')}
               className={activeTab === 'opponents' ? 'active-tab' : ''}
             >
               Opponents
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('roles')}
+              onClick={() => activateTab('roles')}
               className={activeTab === 'roles' ? 'active-tab' : ''}
             >
               Roles
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('eval_tree')}
+              onClick={() => activateTab('eval_tree')}
               className={activeTab === 'eval_tree' ? 'active-tab' : ''}
             >
               Eval Tree
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('cogames_diagnose')}
+              onClick={() => activateTab('cogames_diagnose')}
               className={activeTab === 'cogames_diagnose' ? 'active-tab' : ''}
             >
               Cogames Diagnose
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('train_tree')}
+              onClick={() => activateTab('train_tree')}
               className={activeTab === 'train_tree' ? 'active-tab' : ''}
             >
               Train Tree
@@ -468,7 +490,9 @@ export function DashboardClient() {
             </>
           )}
 
-          {activeTab === 'roles' && <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />}
+          {activeTab === 'roles' && (
+            <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />
+          )}
           {activeTab === 'eval_tree' && <SkillTreePanel mode="eval" data={data} />}
           {activeTab === 'cogames_diagnose' && (
             <SkillTreePanel mode="eval" data={data} initialSourceFilter="cogames-diagnose" lockSourceFilter />

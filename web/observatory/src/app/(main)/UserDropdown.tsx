@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation'
 import { FC, useCallback } from 'react'
 
-import { AUTH_COOKIE_NAME } from '@/auth/constants'
+import { clearAuthCookies } from '@/auth/browser'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { useDebugPanelVisible } from '@/lib/debug/useDebugPanelVisible'
 
@@ -11,7 +11,7 @@ export const UserDropdown: FC<{ currentUser: string; devMode: boolean }> = ({ cu
   const { isVisible: debugPanelVisible, toggle: toggleDebugPanel } = useDebugPanelVisible()
 
   const signOut = useCallback(() => {
-    document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0`
+    clearAuthCookies()
     router.replace('/auth/login')
   }, [router])
 

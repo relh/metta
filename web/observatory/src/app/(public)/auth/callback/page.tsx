@@ -2,6 +2,7 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
+import { writeAuthCookieToken } from '@/auth/browser'
 import { sanitizeRedirectPath } from '@/utils/redirect'
 
 import { validateToken } from './actions'
@@ -18,7 +19,6 @@ export default function AuthCallback() {
       }
     | { type: 'error'; message: string }
   >({ type: 'processing' })
-  const [errorMessage, setErrorMessage] = useState<string>('')
 
   useEffect(() => {
     const token = searchParams.get('token')
@@ -28,9 +28,9 @@ export default function AuthCallback() {
       return
     }
 
-    async function processToken() {
+    async function processToken(authToken: string) {
       // Validate token and check team membership before storing
-      const validation = await validateToken(token!)
+      const validation = await validateToken(authToken)
 
       if (!validation.valid) {
         setStatus({ type: 'error', message: validation.error ?? 'Invalid or expired token' })
@@ -45,7 +45,7 @@ export default function AuthCallback() {
       // Token is valid and user is a team member - store the cookie
       // TODO - use HttpOnly cookie, avoid direct calls to observatory backend from browsers
       // must match AUTH_COOKIE_NAME
-      document.cookie = `observatory_auth_token=${token}; path=/`
+      writeAuthCookieToken(authToken)
       setStatus({ type: 'success' })
 
       setTimeout(() => {
@@ -53,7 +53,7 @@ export default function AuthCallback() {
       }, 2000)
     }
 
-    processToken()
+    processToken(token)
   }, [searchParams, router])
 
   return (

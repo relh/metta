@@ -1,7 +1,29 @@
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8010'
+const AUTH_COOKIE_NAME = 'observatory_auth_token'
 
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
+
+function readAuthTokenFromCookies(): string | null {
+  if (typeof document === 'undefined') return null
+  const parts = document.cookie.split('; ')
+  for (const part of parts) {
+    if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
+    const value = part.slice(AUTH_COOKIE_NAME.length + 1).trim()
+    if (!value) return null
+    return value
+  }
+  return null
+}
+
+function getDashboardRequestHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  const token = readAuthTokenFromCookies()
+  if (token) {
+    headers['X-Auth-Token'] = token
+  }
+  return headers
+}
 
 export type DashboardEpisode = {
   id?: string
@@ -198,6 +220,9 @@ async function parseJsonOrThrow(response: Response) {
   const text = await response.text()
   const maybeJson = text ? JSON.parse(text) : null
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('401: Failed to authenticate. Refresh Observatory login and reopen Policy Dashboard.')
+    }
     const detail = maybeJson?.detail ?? maybeJson?.message ?? response.statusText
     throw new Error(`${response.status}: ${String(detail)}`)
   }
@@ -209,7 +234,7 @@ export async function fetchDashboardData(policyVersionId: string): Promise<Dashb
     `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/data`,
     {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getDashboardRequestHeaders(),
       cache: 'no-store',
     }
   )
@@ -221,7 +246,7 @@ export async function fetchDashboardAnalysis(policyVersionId: string): Promise<D
     `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/analysis`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getDashboardRequestHeaders(),
       body: '{}',
       cache: 'no-store',
     }
@@ -229,12 +254,14 @@ export async function fetchDashboardAnalysis(policyVersionId: string): Promise<D
   return (await parseJsonOrThrow(response)) as DashboardAnalysisResponse
 }
 
-export async function fetchDashboardRolePercentiles(policyVersionId: string): Promise<DashboardRolePercentilesResponse> {
+export async function fetchDashboardRolePercentiles(
+  policyVersionId: string
+): Promise<DashboardRolePercentilesResponse> {
   const response = await fetch(
     `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/role-percentiles`,
     {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getDashboardRequestHeaders(),
       cache: 'no-store',
     }
   )
@@ -244,7 +271,7 @@ export async function fetchDashboardRolePercentiles(policyVersionId: string): Pr
 export async function fetchDiagnoseRuns(): Promise<DiagnoseRunsResponse> {
   const response = await fetch(`${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs`, {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getDashboardRequestHeaders(),
     cache: 'no-store',
   })
   return (await parseJsonOrThrow(response)) as DiagnoseRunsResponse
@@ -255,7 +282,7 @@ export async function fetchDiagnoseManifest(runId: string): Promise<DiagnoseMani
     `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/manifest`,
     {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getDashboardRequestHeaders(),
       cache: 'no-store',
     }
   )
@@ -267,7 +294,7 @@ export async function fetchDiagnoseDoctorNote(runId: string): Promise<DiagnoseDo
     `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/doctor-note`,
     {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getDashboardRequestHeaders(),
       cache: 'no-store',
     }
   )
