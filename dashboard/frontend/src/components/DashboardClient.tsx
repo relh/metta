@@ -16,19 +16,20 @@ import { SkillTreePanel } from './SkillTreePanel'
 
 type DashboardTab = 'overview' | 'episodes' | 'opponents' | 'roles' | 'eval_tree' | 'cogames_diagnose' | 'train_tree'
 
-const DASHBOARD_TABS: DashboardTab[] = [
-  'overview',
-  'episodes',
-  'opponents',
-  'roles',
-  'eval_tree',
-  'cogames_diagnose',
-  'train_tree',
+const DASHBOARD_TAB_OPTIONS: Array<{ tab: DashboardTab; label: string }> = [
+  { tab: 'overview', label: 'Overview' },
+  { tab: 'episodes', label: 'Episodes' },
+  { tab: 'opponents', label: 'Opponents' },
+  { tab: 'roles', label: 'Roles' },
+  { tab: 'eval_tree', label: 'Eval Tree' },
+  { tab: 'cogames_diagnose', label: 'Cogames Diagnose' },
+  { tab: 'train_tree', label: 'Train Tree' },
 ]
 
 function parseDashboardTab(value: string | null): DashboardTab | null {
   if (!value) return null
-  return DASHBOARD_TABS.find((tab) => tab === value) ?? null
+  const matching = DASHBOARD_TAB_OPTIONS.find((option) => option.tab === value)
+  return matching?.tab ?? null
 }
 
 type OpponentSummaryRow = {
@@ -280,55 +281,16 @@ export function DashboardClient() {
       {data && (
         <>
           <section className="card tab-row">
-            <button
-              type="button"
-              onClick={() => activateTab('overview')}
-              className={activeTab === 'overview' ? 'active-tab' : ''}
-            >
-              Overview
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('episodes')}
-              className={activeTab === 'episodes' ? 'active-tab' : ''}
-            >
-              Episodes
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('opponents')}
-              className={activeTab === 'opponents' ? 'active-tab' : ''}
-            >
-              Opponents
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('roles')}
-              className={activeTab === 'roles' ? 'active-tab' : ''}
-            >
-              Roles
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('eval_tree')}
-              className={activeTab === 'eval_tree' ? 'active-tab' : ''}
-            >
-              Eval Tree
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('cogames_diagnose')}
-              className={activeTab === 'cogames_diagnose' ? 'active-tab' : ''}
-            >
-              Cogames Diagnose
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('train_tree')}
-              className={activeTab === 'train_tree' ? 'active-tab' : ''}
-            >
-              Train Tree
-            </button>
+            {DASHBOARD_TAB_OPTIONS.map(({ tab, label }) => (
+              <button
+                key={tab}
+                type="button"
+                onClick={() => activateTab(tab)}
+                className={activeTab === tab ? 'active-tab' : ''}
+              >
+                {label}
+              </button>
+            ))}
           </section>
 
           {activeTab === 'overview' && (

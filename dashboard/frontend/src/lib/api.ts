@@ -229,76 +229,54 @@ async function parseJsonOrThrow(response: Response) {
   return maybeJson
 }
 
+type DashboardRequestMethod = 'GET' | 'POST'
+
+async function dashboardRequest<T>(path: string, method: DashboardRequestMethod = 'GET', body?: string): Promise<T> {
+  const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
+    method,
+    headers: getDashboardRequestHeaders(),
+    body,
+    cache: 'no-store',
+  })
+  return (await parseJsonOrThrow(response)) as T
+}
+
 export async function fetchDashboardData(policyVersionId: string): Promise<DashboardResponse> {
-  const response = await fetch(
-    `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/data`,
-    {
-      method: 'GET',
-      headers: getDashboardRequestHeaders(),
-      cache: 'no-store',
-    }
+  return await dashboardRequest<DashboardResponse>(
+    `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/data`
   )
-  return (await parseJsonOrThrow(response)) as DashboardResponse
 }
 
 export async function fetchDashboardAnalysis(policyVersionId: string): Promise<DashboardAnalysisResponse> {
-  const response = await fetch(
-    `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/analysis`,
-    {
-      method: 'POST',
-      headers: getDashboardRequestHeaders(),
-      body: '{}',
-      cache: 'no-store',
-    }
+  return await dashboardRequest<DashboardAnalysisResponse>(
+    `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/analysis`,
+    'POST',
+    '{}'
   )
-  return (await parseJsonOrThrow(response)) as DashboardAnalysisResponse
 }
 
 export async function fetchDashboardRolePercentiles(
   policyVersionId: string
 ): Promise<DashboardRolePercentilesResponse> {
-  const response = await fetch(
-    `${DASHBOARD_API_BASE_URL}/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/role-percentiles`,
-    {
-      method: 'GET',
-      headers: getDashboardRequestHeaders(),
-      cache: 'no-store',
-    }
+  return await dashboardRequest<DashboardRolePercentilesResponse>(
+    `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/role-percentiles`
   )
-  return (await parseJsonOrThrow(response)) as DashboardRolePercentilesResponse
 }
 
 export async function fetchDiagnoseRuns(): Promise<DiagnoseRunsResponse> {
-  const response = await fetch(`${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs`, {
-    method: 'GET',
-    headers: getDashboardRequestHeaders(),
-    cache: 'no-store',
-  })
-  return (await parseJsonOrThrow(response)) as DiagnoseRunsResponse
+  return await dashboardRequest<DiagnoseRunsResponse>('/dashboard/v1/cogames-diagnose/runs')
 }
 
 export async function fetchDiagnoseManifest(runId: string): Promise<DiagnoseManifest> {
-  const response = await fetch(
-    `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/manifest`,
-    {
-      method: 'GET',
-      headers: getDashboardRequestHeaders(),
-      cache: 'no-store',
-    }
+  return await dashboardRequest<DiagnoseManifest>(
+    `/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/manifest`
   )
-  return (await parseJsonOrThrow(response)) as DiagnoseManifest
 }
 
 export async function fetchDiagnoseDoctorNote(runId: string): Promise<DiagnoseDoctorNote> {
-  const response = await fetch(
-    `${DASHBOARD_API_BASE_URL}/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/doctor-note`,
-    {
-      method: 'GET',
-      headers: getDashboardRequestHeaders(),
-      cache: 'no-store',
-    }
+  return await dashboardRequest<DiagnoseDoctorNote>(
+    `/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/doctor-note`
   )
-  return (await parseJsonOrThrow(response)) as DiagnoseDoctorNote
 }
 
 export function diagnoseArtifactUrl(runId: string, artifact: string): string {

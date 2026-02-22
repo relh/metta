@@ -2,11 +2,7 @@
 
 import { useMemo } from 'react'
 
-import type {
-  DashboardRoleMetricDef,
-  DashboardRolePercentilesResponse,
-  DashboardRolePercentileRow,
-} from '../lib/api'
+import type { DashboardRoleMetricDef, DashboardRolePercentilesResponse, DashboardRolePercentileRow } from '../lib/api'
 
 type MetricDetail = {
   key: string
@@ -55,13 +51,16 @@ function parseRows(
     const metricMap = isObject(details.metrics) ? details.metrics : {}
     const defsForRole = definitions[row.role] ?? []
     const orderedMetricKeys =
-      defsForRole.length > 0 ? defsForRole.map((def) => def.key) : Object.keys(metricMap).sort((a, b) => a.localeCompare(b))
+      defsForRole.length > 0
+        ? defsForRole.map((def) => def.key)
+        : Object.keys(metricMap).sort((a, b) => a.localeCompare(b))
+    const metricDefsByKey = new Map(defsForRole.map((definition) => [definition.key, definition]))
 
     const metrics: MetricDetail[] = orderedMetricKeys
       .map((metricKey) => {
         const metricDetails = metricMap[metricKey]
         if (!isObject(metricDetails)) return null
-        const fallbackDef = defsForRole.find((def) => def.key === metricKey)
+        const fallbackDef = metricDefsByKey.get(metricKey)
 
         return {
           key: metricKey,
@@ -93,6 +92,15 @@ function parseRows(
   })
 }
 
+function RolePercentilesMessageCard({ message, color }: { message: string; color?: string }) {
+  return (
+    <section className="card">
+      <h2 style={{ marginTop: 0 }}>Role Percentiles</h2>
+      <p style={{ marginBottom: 0, color }}>{message}</p>
+    </section>
+  )
+}
+
 export function RolePercentilesPanel({
   roleData,
   loading,
@@ -108,29 +116,16 @@ export function RolePercentilesPanel({
   }, [roleData])
 
   if (loading) {
-    return (
-      <section className="card">
-        <h2 style={{ marginTop: 0 }}>Role Percentiles</h2>
-        <p style={{ marginBottom: 0 }}>Loading role percentile metrics...</p>
-      </section>
-    )
+    return <RolePercentilesMessageCard message="Loading role percentile metrics..." />
   }
 
   if (error) {
-    return (
-      <section className="card">
-        <h2 style={{ marginTop: 0 }}>Role Percentiles</h2>
-        <p style={{ marginBottom: 0, color: '#b42318' }}>{error}</p>
-      </section>
-    )
+    return <RolePercentilesMessageCard message={error} color="#b42318" />
   }
 
   if (parsedRows.length === 0) {
     return (
-      <section className="card">
-        <h2 style={{ marginTop: 0 }}>Role Percentiles</h2>
-        <p style={{ marginBottom: 0 }}>No role percentile data is available for this policy in the selected pool.</p>
-      </section>
+      <RolePercentilesMessageCard message="No role percentile data is available for this policy in the selected pool." />
     )
   }
 
@@ -147,7 +142,10 @@ export function RolePercentilesPanel({
               <p className="role-card-title">{ROLE_LABELS[row.role] ?? row.role}</p>
               <p className={`role-card-value ${percentileClass(row.percentile)}`}>P{row.percentile.toFixed(1)}</p>
               <div className="role-progress">
-                <div className="role-progress-bar" style={{ width: `${Math.max(0, Math.min(row.percentile, 100))}%` }} />
+                <div
+                  className="role-progress-bar"
+                  style={{ width: `${Math.max(0, Math.min(row.percentile, 100))}%` }}
+                />
               </div>
             </div>
           ))}

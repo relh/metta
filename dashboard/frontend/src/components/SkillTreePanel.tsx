@@ -147,64 +147,57 @@ function mechanicStatuses(data: DashboardResponse): Record<string, SkillNodeStat
   }
 }
 
+function diagnoseAxisDetails(data: DashboardResponse, axisId: string): Pick<SkillTreeNode, 'status' | 'evidence'> {
+  const kpis = data.derived?.kpis
+  if (axisId.endsWith('stability')) {
+    return {
+      status: numeric(kpis?.move_efficiency) > 0 ? 'tested' : 'mock',
+      evidence: [
+        `move_efficiency=${numeric(kpis?.move_efficiency).toFixed(3)}`,
+        `freeze_vulnerability=${numeric(kpis?.freeze_vulnerability).toFixed(3)}`,
+      ],
+    }
+  }
+  if (axisId.endsWith('efficiency')) {
+    return {
+      status: numeric(kpis?.action_success_rate) > 0 ? 'tested' : 'mock',
+      evidence: [
+        `action_success_rate=${numeric(kpis?.action_success_rate).toFixed(3)}`,
+        `resource_efficiency_per_step=${numeric(kpis?.resource_efficiency_per_step).toFixed(3)}`,
+      ],
+    }
+  }
+  if (axisId.endsWith('control')) {
+    return {
+      status: numeric(kpis?.junction_control_rate) > 0 ? 'tested' : 'mock',
+      evidence: [
+        `junction_control_rate=${numeric(kpis?.junction_control_rate).toFixed(3)}`,
+        `alignment_stability=${numeric(kpis?.alignment_stability).toFixed(3)}`,
+      ],
+    }
+  }
+  return {
+    status: data.derived?.outcome?.evidence_sufficient ? 'tested' : 'mock',
+    evidence: [
+      `outcome.verdict=${String(data.derived?.outcome?.verdict ?? 'unknown')}`,
+      `outcome.evidence_sufficient=${String(Boolean(data.derived?.outcome?.evidence_sufficient))}`,
+    ],
+  }
+}
+
 function evalTree(data: DashboardResponse): SkillTreeNode {
   const kpis = data.derived?.kpis
   const failures = data.derived?.failures
   const diagnostics = asStringArray(kpis?.diagnostics)
   const mechanics = mechanicStatuses(data)
 
-  const diagnoseAxes: SkillTreeNode[] = STAGE1_AXES.map((axis) => {
-    if (axis.id.endsWith('stability')) {
-      return {
-        id: axis.id,
-        title: axis.title,
-        description: axis.description,
-        status: numeric(kpis?.move_efficiency) > 0 ? 'tested' : 'mock',
-        source: 'cogames-diagnose',
-        evidence: [
-          `move_efficiency=${numeric(kpis?.move_efficiency).toFixed(3)}`,
-          `freeze_vulnerability=${numeric(kpis?.freeze_vulnerability).toFixed(3)}`,
-        ],
-      }
-    }
-    if (axis.id.endsWith('efficiency')) {
-      return {
-        id: axis.id,
-        title: axis.title,
-        description: axis.description,
-        status: numeric(kpis?.action_success_rate) > 0 ? 'tested' : 'mock',
-        source: 'cogames-diagnose',
-        evidence: [
-          `action_success_rate=${numeric(kpis?.action_success_rate).toFixed(3)}`,
-          `resource_efficiency_per_step=${numeric(kpis?.resource_efficiency_per_step).toFixed(3)}`,
-        ],
-      }
-    }
-    if (axis.id.endsWith('control')) {
-      return {
-        id: axis.id,
-        title: axis.title,
-        description: axis.description,
-        status: numeric(kpis?.junction_control_rate) > 0 ? 'tested' : 'mock',
-        source: 'cogames-diagnose',
-        evidence: [
-          `junction_control_rate=${numeric(kpis?.junction_control_rate).toFixed(3)}`,
-          `alignment_stability=${numeric(kpis?.alignment_stability).toFixed(3)}`,
-        ],
-      }
-    }
-    return {
-      id: axis.id,
-      title: axis.title,
-      description: axis.description,
-      status: data.derived?.outcome?.evidence_sufficient ? 'tested' : 'mock',
-      source: 'cogames-diagnose',
-      evidence: [
-        `outcome.verdict=${String(data.derived?.outcome?.verdict ?? 'unknown')}`,
-        `outcome.evidence_sufficient=${String(Boolean(data.derived?.outcome?.evidence_sufficient))}`,
-      ],
-    }
-  })
+  const diagnoseAxes: SkillTreeNode[] = STAGE1_AXES.map((axis) => ({
+    id: axis.id,
+    title: axis.title,
+    description: axis.description,
+    source: 'cogames-diagnose',
+    ...diagnoseAxisDetails(data, axis.id),
+  }))
 
   const dashboardDiagnosticNodes: SkillTreeNode[] =
     diagnostics.length === 0
@@ -382,7 +375,10 @@ function evalTree(data: DashboardResponse): SkillTreeNode {
             title: 'Failure diagnostics',
             description: 'Failure category diagnostics from sampled window.',
             status:
-              numeric(failures?.timeout_failures) + numeric(failures?.oom_failures) + numeric(failures?.crash_failures) > 0
+              numeric(failures?.timeout_failures) +
+                numeric(failures?.oom_failures) +
+                numeric(failures?.crash_failures) >
+              0
                 ? 'observed'
                 : 'tested',
             source: 'dashboard',
@@ -493,7 +489,12 @@ function findNodeById(node: SkillTreeNode, targetId: string): SkillTreeNode | nu
   return null
 }
 
-function filterTree(node: SkillTreeNode, query: string, status: TreeStatusFilter, source: TreeSourceFilter): SkillTreeNode | null {
+function filterTree(
+  node: SkillTreeNode,
+  query: string,
+  status: TreeStatusFilter,
+  source: TreeSourceFilter
+): SkillTreeNode | null {
   const normalized = query.trim().toLowerCase()
   const qMatch =
     normalized.length === 0 ||
@@ -702,7 +703,10 @@ export const SkillTreePanel: FC<{
   const [expandedNodeIds, setExpandedNodeIds] = useState<Set<string>>(new Set())
 
   const root = useMemo(() => (mode === 'eval' ? evalTree(data) : trainTree()), [data, mode])
-  const filteredRoot = useMemo(() => filterTree(root, query, statusFilter, sourceFilter), [query, root, sourceFilter, statusFilter])
+  const filteredRoot = useMemo(
+    () => filterTree(root, query, statusFilter, sourceFilter),
+    [query, root, sourceFilter, statusFilter]
+  )
   const filteredNodes = useMemo(() => (filteredRoot ? flattenTree(filteredRoot) : []), [filteredRoot])
   const allNodes = useMemo(() => flattenTree(root), [root])
   const counts = useMemo(() => statusCounts(filteredNodes), [filteredNodes])
@@ -714,7 +718,10 @@ export const SkillTreePanel: FC<{
   const missingNodes = useMemo(
     () =>
       allNodes
-        .filter((node) => (!node.children || node.children.length === 0) && (node.status === 'mock' || node.status === 'planned'))
+        .filter(
+          (node) =>
+            (!node.children || node.children.length === 0) && (node.status === 'mock' || node.status === 'planned')
+        )
         .slice(0, 14),
     [allNodes]
   )
@@ -837,7 +844,9 @@ export const SkillTreePanel: FC<{
               <h3 style={{ marginTop: 6 }}>{selectedNode.title}</h3>
               <p>{selectedNode.description}</p>
               <div className="skill-legend">
-                <span className={`badge badge-status status-${selectedNode.status}`}>{statusLabel(selectedNode.status)}</span>
+                <span className={`badge badge-status status-${selectedNode.status}`}>
+                  {statusLabel(selectedNode.status)}
+                </span>
                 <span className="badge badge-source">{sourceLabel(selectedNode.source)}</span>
               </div>
               {selectedNode.evidence && selectedNode.evidence.length > 0 ? (
