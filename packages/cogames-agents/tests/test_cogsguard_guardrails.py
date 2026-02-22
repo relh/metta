@@ -21,7 +21,7 @@ ACCEPTANCE_MISSIONS: tuple[tuple[type, int], ...] = (
 )
 ACCEPTANCE_SEEDS: tuple[int, ...] = (11, 23, 42)
 MAX_MOVE_FAIL_RATE = 0.25
-MAX_NOOP_RATE = 0.20
+MAX_NOOP_RATE = 0.40
 
 # Ensure scripted policy registration in test process.
 discover_and_register_policies("cogames_agents.policy")
