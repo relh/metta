@@ -36,7 +36,15 @@ import { CogamesDiagnosePanel } from './CogamesDiagnosePanel'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab = 'overview' | 'episodes' | 'opponents' | 'health' | 'roles' | 'capabilities' | 'cogames_diagnose'
+type DashboardTab =
+  | 'overview'
+  | 'analysis'
+  | 'episodes'
+  | 'opponents'
+  | 'health'
+  | 'roles'
+  | 'capabilities'
+  | 'cogames_diagnose'
 
 type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
@@ -44,6 +52,7 @@ type SortDir = 'asc' | 'desc'
 
 const DASHBOARD_TABS: DashboardTab[] = [
   'overview',
+  'analysis',
   'episodes',
   'opponents',
   'health',
@@ -928,14 +937,6 @@ export function DashboardClient() {
           <button type="button" className="primary-btn" onClick={onLoad} disabled={loading || !policyVersionId.trim()}>
             {loading ? 'Loading...' : 'Load dashboard data'}
           </button>
-          <button
-            type="button"
-            className="primary-btn"
-            onClick={onRunAnalysis}
-            disabled={analysisLoading || !policyVersionId.trim() || !data}
-          >
-            {analysisLoading ? 'Running analysis...' : 'Run diagnostics analysis'}
-          </button>
         </div>
         {error && (
           <p style={{ margin: 0, color: '#b42318' }}>
@@ -973,6 +974,13 @@ export function DashboardClient() {
               className={activeTab === 'overview' ? 'active-tab' : ''}
             >
               Overview
+            </button>
+            <button
+              type="button"
+              onClick={() => activateTab('analysis')}
+              className={activeTab === 'analysis' ? 'active-tab' : ''}
+            >
+              AI Analysis
             </button>
             <button
               type="button"
@@ -1248,51 +1256,6 @@ export function DashboardClient() {
                 <a href={feedbackUrl} target="_blank" rel="noreferrer">
                   Open dashboard feedback issue
                 </a>
-              </section>
-
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>AI Analysis</h2>
-                {!analysis && !analysisLoading && (
-                  <div style={{ display: 'grid', gap: 8 }}>
-                    <p style={{ margin: 0, color: '#455a78' }}>
-                      Run diagnostics analysis to generate a natural-language summary.
-                    </p>
-                    <div>
-                      <button type="button" onClick={onRunAnalysis} disabled={analysisLoading}>
-                        Run AI Analysis
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {analysisLoading && <p style={{ margin: 0 }}>Running diagnostics analysis...</p>}
-                {analysis && (
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
-                        {showAnalysis ? 'Hide analysis' : 'Show analysis'}
-                      </button>
-                      <button type="button" onClick={onRunAnalysis} disabled={analysisLoading}>
-                        Re-run
-                      </button>
-                    </div>
-                    <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                      Data sources: {analysis.data_sources.join(', ') || '-'}
-                    </p>
-                    {showAnalysis && (
-                      <div
-                        style={{
-                          border: '1px solid #d9e1eb',
-                          borderRadius: 10,
-                          padding: 12,
-                          background: '#f8fbff',
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
-                        {analysis.analysis}
-                      </div>
-                    )}
-                  </div>
-                )}
               </section>
 
               <section className="card">
@@ -1608,6 +1571,57 @@ export function DashboardClient() {
                 </section>
               )}
             </>
+          )}
+
+          {activeTab === 'analysis' && (
+            <section className="card">
+              <h2 style={{ marginTop: 0 }}>AI Analysis</h2>
+              {!analysis && !analysisLoading && (
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <p style={{ margin: 0, color: '#455a78' }}>
+                    Run diagnostics analysis to generate a natural-language summary.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={onRunAnalysis}
+                      disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
+                    >
+                      Run diagnostics analysis
+                    </button>
+                  </div>
+                </div>
+              )}
+              {analysisLoading && <p style={{ margin: 0 }}>Running diagnostics analysis...</p>}
+              {analysis && (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
+                      {showAnalysis ? 'Hide analysis' : 'Show analysis'}
+                    </button>
+                    <button type="button" onClick={onRunAnalysis} disabled={analysisLoading}>
+                      Re-run diagnostics analysis
+                    </button>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                    Data sources: {analysis.data_sources.join(', ') || '-'}
+                  </p>
+                  {showAnalysis && (
+                    <div
+                      style={{
+                        border: '1px solid #d9e1eb',
+                        borderRadius: 10,
+                        padding: 12,
+                        background: '#f8fbff',
+                        whiteSpace: 'pre-wrap',
+                      }}
+                    >
+                      {analysis.analysis}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
           )}
 
           {activeTab === 'episodes' && (
@@ -2233,6 +2247,7 @@ export function DashboardClient() {
               noteError={diagnoseNoteError}
               manifest={diagnoseManifest}
               replayLookupByRef={replayLookupByRef}
+              policyVersionId={data?.policy?.id ? String(data.policy.id) : null}
             />
           )}
         </>

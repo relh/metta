@@ -79,6 +79,7 @@ export const CogamesDiagnosePanel: FC<{
   noteError: string | null
   manifest: DiagnoseManifest | null
   replayLookupByRef: Record<string, string>
+  policyVersionId: string | null
 }> = ({
   runs,
   loading,
@@ -90,6 +91,7 @@ export const CogamesDiagnosePanel: FC<{
   noteError,
   manifest,
   replayLookupByRef,
+  policyVersionId,
 }) => {
   const probeEvaluations = useMemo(() => {
     if (!note) return []
@@ -169,6 +171,11 @@ export const CogamesDiagnosePanel: FC<{
     return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')
   }, [axisScores])
 
+  const diagnoseCommand = useMemo(() => {
+    if (!policyVersionId) return null
+    return `uv run cogames diagnose "metta://policy/${policyVersionId}" --mission-set cogsguard_evals`
+  }, [policyVersionId])
+
   return (
     <div className="grid" style={{ gap: 12 }}>
       <section className="card">
@@ -192,7 +199,18 @@ export const CogamesDiagnosePanel: FC<{
             <strong>Error:</strong> {error}
           </p>
         ) : runs.length === 0 ? (
-          <p style={{ margin: 0 }}>No diagnose runs found yet. Run your CLI flow and refresh this tab.</p>
+          <div className="grid" style={{ gap: 8 }}>
+            <p style={{ margin: 0 }}>No diagnose runs found yet. Run this locally, then refresh this tab:</p>
+            {diagnoseCommand ? (
+              <div className="diagnose-list-item">
+                <code>{diagnoseCommand}</code>
+              </div>
+            ) : (
+              <p style={{ margin: 0, color: '#546b8a' }}>
+                Load a policy in the dashboard first so we can generate a UUID-scoped diagnose command.
+              </p>
+            )}
+          </div>
         ) : (
           <div className="diagnose-selector-row">
             <label style={{ display: 'grid', gap: 6 }}>
