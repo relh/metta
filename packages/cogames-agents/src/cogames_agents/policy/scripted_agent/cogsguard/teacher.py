@@ -136,9 +136,7 @@ class CogsguardTeacherPolicy(MultiAgentPolicy):
         role_action_ids = []
         for vibe_name in role_vibes:
             action_name = f"change_vibe_{vibe_name}"
-            action_id = self._action_name_to_index.get(action_name)
-            if action_id is not None:
-                role_action_ids.append(action_id)
+            role_action_ids.append(self._action_name_to_index[action_name])
         return role_action_ids
 
     def _reset_episode_state(self) -> None:

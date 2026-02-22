@@ -122,11 +122,38 @@ def test_scripted_policies_work_as_supervisors(policy: PolicyUnderTest, simulato
 
     env = MettaGridPufferEnv(simulator, env_config, supervisor_policy_spec=PolicySpec(class_path=policy.reference))
     try:
+
+        def assert_split_action_supervisor_outputs() -> None:
+            teacher_actions = env.teacher_actions
+            assert teacher_actions.shape == (env_config.game.num_agents,)
+
+            num_primary_actions = len(env._policy_env_info.action_names)
+            num_vibe_actions = len(env._policy_env_info.vibe_action_names)
+            full_action_count = num_primary_actions + num_vibe_actions
+
+            teacher_actions_i64 = teacher_actions.astype(np.int64, copy=False)
+            assert bool((teacher_actions_i64 >= 0).all())
+            assert bool((teacher_actions_i64 < full_action_count).all())
+
+            # For vibe labels, env.vibe_actions must contain simulator action ids
+            # mapped from split-action vibe indices.
+            expected_vibe_actions = np.zeros_like(teacher_actions, dtype=np.int32)
+            if num_vibe_actions > 0:
+                assert env._sim is not None
+                vibe_action_ids_by_index = np.array(
+                    [env._sim.action_names.index(name) for name in env._policy_env_info.vibe_action_names],
+                    dtype=np.int32,
+                )
+                vibe_mask = teacher_actions_i64 >= num_primary_actions
+                vibe_indices = teacher_actions_i64[vibe_mask] - num_primary_actions
+                expected_vibe_actions[vibe_mask] = vibe_action_ids_by_index[vibe_indices]
+
+            np.testing.assert_array_equal(env.vibe_actions, expected_vibe_actions)
+
         observations, _ = env.reset(seed=123)
         assert observations.shape[0] == env_config.game.num_agents
 
-        teacher_actions = env.teacher_actions
-        assert teacher_actions.shape == (env_config.game.num_agents,)
+        assert_split_action_supervisor_outputs()
 
         assert env._sim is not None
         noop_idx = env._sim.action_names.index("noop")
@@ -137,6 +164,7 @@ def test_scripted_policies_work_as_supervisors(policy: PolicyUnderTest, simulato
         assert rewards.shape == (env_config.game.num_agents,)
         assert terminals.shape == (env_config.game.num_agents,)
         assert truncations.shape == (env_config.game.num_agents,)
+        assert_split_action_supervisor_outputs()
     finally:
         env.close()
 

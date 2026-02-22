@@ -74,7 +74,10 @@ def test_supervised_loss_uses_scripted_teacher_actions() -> None:
         loss = ActionSupervised(
             policy,
             SimpleNamespace(),
-            SimpleNamespace(),
+            SimpleNamespace(
+                single_action_space=policy_env_info.action_space,
+                policy_env_info=policy_env_info,
+            ),
             torch.device("cpu"),
             "supervisor",
             loss_cfg,
@@ -95,6 +98,7 @@ def test_supervised_loss_uses_scripted_teacher_actions() -> None:
         student_td = TensorDict(
             {
                 "actions": torch.zeros(num_agents, dtype=torch.long),
+                "vibe_actions": torch.zeros(num_agents, dtype=torch.long),
                 "teacher_actions": teacher_actions,
                 "act_log_prob": torch.zeros(num_agents, dtype=torch.float32),
                 "full_log_probs": torch.zeros((num_agents, int(policy_env_info.action_space.n)), dtype=torch.float32),

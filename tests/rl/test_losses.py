@@ -9,6 +9,8 @@ import torch
 from tensordict import TensorDict
 from torchrl.data import Composite, UnboundedDiscrete
 
+from metta.agent.components.actor import ActorHeadConfig
+from metta.agent.policies.cnn_shared_critic import CnnSharedCriticConfig
 from metta.agent.policy import Policy
 from metta.rl.loss.action_supervised import ActionSupervisedConfig
 from metta.rl.loss.cmpo import CMPOConfig
@@ -16,6 +18,7 @@ from metta.rl.loss.eer_cloner import EERClonerConfig
 from metta.rl.loss.loss import Loss
 from metta.rl.loss.stable_latent import StableLatentStateConfig
 from metta.rl.training.trajectory_isolation import TrajectoryIsolationSliceConfig
+from mettagrid.config.id_map import ObservationFeatureSpec
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 try:
@@ -113,6 +116,17 @@ def _build_shared_td(latent: torch.Tensor, dones: torch.Tensor | None = None) ->
     mb_content["dones"] = dones
     minibatch = TensorDict(mb_content, batch_size=[segments, horizon])
     return TensorDict({"policy_td": policy_td, "sampled_mb": minibatch}, batch_size=[])
+
+
+def _policy_env_info_stub(
+    *,
+    action_names: list[str] | None = None,
+    vibe_action_names: list[str] | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        action_names=action_names or ["noop", "a", "b", "c", "d"],
+        vibe_action_names=vibe_action_names or [],
+    )
 
 
 def test_stable_latent_state_loss_basic_penalty(stable_latent_loss: Loss) -> None:
@@ -280,12 +294,72 @@ def test_cmpo_state_dict_with_prior_model() -> None:
 
 def test_action_supervised_skips_invalid_teacher_labels_in_rollout_and_train() -> None:
     cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
-    env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))
+    env = SimpleNamespace(
+        total_parallel_agents=3,
+        single_action_space=gym_spaces.Discrete(5),
+        policy_env_info=_policy_env_info_stub(
+            action_names=["noop", "a", "b", "c", "d"],
+            vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        ),
+    )
     loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised")
 
     context = SimpleNamespace(
         current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
     )
+    student_td = TensorDict(
+        {
+            "teacher_actions": torch.tensor([1, 99, 2], dtype=torch.long),
+            "actions": torch.tensor([0, 0, 0], dtype=torch.int32),
+            "vibe_actions": torch.tensor([0, 0, 0], dtype=torch.int32),
+            "full_log_probs": torch.zeros(3, 5, dtype=torch.float32),
+            "vibe_full_log_probs": torch.zeros(3, 2, dtype=torch.float32),
+            "act_log_prob": torch.zeros(3, dtype=torch.float32),
+            "vibe_act_log_prob": torch.zeros(3, dtype=torch.float32),
+        },
+        batch_size=[3],
+    )
+    rollout_td = TensorDict({"primary": student_td}, batch_size=[])
+
+    loss.run_rollout_preprocess(rollout_td, context)
+    loss.run_rollout_postprocess(rollout_td, context)
+
+    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([1, 0, 2], dtype=np.int32))
+    np.testing.assert_array_equal(student_td["vibe_actions"].cpu().numpy(), np.array([0, 0, 0], dtype=np.int32))
+    np.testing.assert_array_equal(student_td["teacher_mask"].cpu().numpy(), np.array([True, False, True]))
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict(
+                {"teacher_actions": torch.tensor([[1, 99, 2]], dtype=torch.long)},
+                batch_size=[1, 3],
+            ),
+            "policy_td": TensorDict(
+                {
+                    "full_log_probs": torch.zeros(1, 3, 5, dtype=torch.float32),
+                    "vibe_full_log_probs": torch.zeros(1, 3, 2, dtype=torch.float32),
+                },
+                batch_size=[1, 3],
+            ),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)
+
+
+def test_action_supervised_allows_envs_without_vibe_actions() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
+    env = SimpleNamespace(
+        total_parallel_agents=3,
+        single_action_space=gym_spaces.Discrete(5),
+        policy_env_info=_policy_env_info_stub(vibe_action_names=[]),
+    )
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised")
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+
     student_td = TensorDict(
         {
             "teacher_actions": torch.tensor([1, 99, 2], dtype=torch.long),
@@ -296,12 +370,8 @@ def test_action_supervised_skips_invalid_teacher_labels_in_rollout_and_train() -
         batch_size=[3],
     )
     rollout_td = TensorDict({"primary": student_td}, batch_size=[])
-
     loss.run_rollout_preprocess(rollout_td, context)
     loss.run_rollout_postprocess(rollout_td, context)
-
-    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([1, 0, 2], dtype=np.int32))
-    np.testing.assert_array_equal(student_td["teacher_mask"].cpu().numpy(), np.array([True, False, True]))
 
     shared_loss_data = TensorDict(
         {
@@ -309,7 +379,10 @@ def test_action_supervised_skips_invalid_teacher_labels_in_rollout_and_train() -
                 {"teacher_actions": torch.tensor([[1, 99, 2]], dtype=torch.long)},
                 batch_size=[1, 3],
             ),
-            "policy_td": TensorDict({"full_log_probs": torch.zeros(1, 3, 5, dtype=torch.float32)}, batch_size=[1, 3]),
+            "policy_td": TensorDict(
+                {"full_log_probs": torch.zeros(1, 3, 5, dtype=torch.float32)},
+                batch_size=[1, 3],
+            ),
         },
         batch_size=[],
     )
@@ -317,40 +390,13 @@ def test_action_supervised_skips_invalid_teacher_labels_in_rollout_and_train() -
     assert torch.isfinite(train_loss)
 
 
-def test_action_supervised_trains_vibe_head_when_teacher_emits_vibe_action_ids() -> None:
-    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=0.0)
-    env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))
-    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised")
-
-    context = SimpleNamespace(
-        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
-    )
-
-    num_primary_actions = 5
-    num_vibe_actions = 3
-    # Teacher uses full action IDs where primary=[0..4], vibe=[5..7].
-    teacher_actions = torch.tensor([[5, 6, 1]], dtype=torch.long)
-
-    shared_loss_data = TensorDict(
-        {
-            "sampled_mb": TensorDict({"teacher_actions": teacher_actions}, batch_size=[1, 3]),
-            "policy_td": TensorDict(
-                {
-                    "full_log_probs": torch.zeros(1, 3, num_primary_actions, dtype=torch.float32),
-                    "vibe_full_log_probs": torch.full((1, 3, num_vibe_actions), -10.0, dtype=torch.float32),
-                },
-                batch_size=[1, 3],
-            ),
-        },
-        batch_size=[],
-    )
-    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
-    assert train_loss.item() == pytest.approx(20.0 / 3.0)
-
-
 def test_eer_cloner_skips_invalid_teacher_labels_in_train() -> None:
     cfg = EERClonerConfig(action_loss_coef=1.0, r_lambda=0.0)
-    env = SimpleNamespace(total_parallel_agents=3, single_action_space=gym_spaces.Discrete(5))
+    env = SimpleNamespace(
+        total_parallel_agents=3,
+        single_action_space=gym_spaces.Discrete(5),
+        policy_env_info=_policy_env_info_stub(),
+    )
     loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "eer_cloner")
 
     context = SimpleNamespace(
@@ -368,3 +414,262 @@ def test_eer_cloner_skips_invalid_teacher_labels_in_train() -> None:
     )
     train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
     assert torch.isfinite(train_loss)
+
+
+def test_action_supervised_decodes_split_teacher_labels_into_core_and_vibe() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
+    env = SimpleNamespace(
+        total_parallel_agents=3,
+        single_action_space=gym_spaces.Discrete(3),
+        policy_env_info=_policy_env_info_stub(
+            action_names=["noop", "move_north", "move_south"],
+            vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        ),
+    )
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised_split")
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+
+    student_td = TensorDict(
+        {
+            "teacher_actions": torch.tensor([1, 3, 4], dtype=torch.long),
+            "actions": torch.tensor([0, 0, 0], dtype=torch.int32),
+            "vibe_actions": torch.tensor([0, 0, 0], dtype=torch.int32),
+            "full_log_probs": torch.zeros(3, 3, dtype=torch.float32),
+            "vibe_full_log_probs": torch.zeros(3, 2, dtype=torch.float32),
+            "act_log_prob": torch.zeros(3, dtype=torch.float32),
+            "vibe_act_log_prob": torch.zeros(3, dtype=torch.float32),
+        },
+        batch_size=[3],
+    )
+    rollout_td = TensorDict({"primary": student_td}, batch_size=[])
+    loss.run_rollout_preprocess(rollout_td, context)
+    loss.run_rollout_postprocess(rollout_td, context)
+
+    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([1, 0, 0], dtype=np.int32))
+    np.testing.assert_array_equal(student_td["vibe_actions"].cpu().numpy(), np.array([0, 0, 1], dtype=np.int32))
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict(
+                {"teacher_actions": torch.tensor([[1, 3, 4]], dtype=torch.long)},
+                batch_size=[1, 3],
+            ),
+            "policy_td": TensorDict(
+                {
+                    "full_log_probs": torch.zeros(1, 3, 3, dtype=torch.float32),
+                    "vibe_full_log_probs": torch.zeros(1, 3, 2, dtype=torch.float32),
+                },
+                batch_size=[1, 3],
+            ),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)
+    assert loss.loss_tracker["supervised_action_label_valid_frac"][-1] == pytest.approx(1.0)
+    assert loss.loss_tracker["supervised_vibe_action_label_valid_frac"][-1] == pytest.approx(2.0 / 3.0)
+
+
+def test_action_supervised_noops_vibes_when_policy_has_no_vibe_outputs() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
+    env = SimpleNamespace(
+        total_parallel_agents=1,
+        single_action_space=gym_spaces.Discrete(3),
+        policy_env_info=_policy_env_info_stub(
+            action_names=["noop", "move_north", "move_south"],
+            vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        ),
+    )
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised_split")
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+
+    student_td = TensorDict(
+        {
+            "teacher_actions": torch.tensor([3], dtype=torch.long),
+            "actions": torch.tensor([2], dtype=torch.int32),
+            "full_log_probs": torch.zeros(1, 3, dtype=torch.float32),
+            "act_log_prob": torch.zeros(1, dtype=torch.float32),
+        },
+        batch_size=[1],
+    )
+    rollout_td = TensorDict({"primary": student_td}, batch_size=[])
+    loss.run_rollout_preprocess(rollout_td, context)
+    loss.run_rollout_postprocess(rollout_td, context)
+
+    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([0], dtype=np.int32))
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict(
+                {"teacher_actions": torch.tensor([[3]], dtype=torch.long)},
+                batch_size=[1, 1],
+            ),
+            "policy_td": TensorDict(
+                {"full_log_probs": torch.zeros(1, 1, 3, dtype=torch.float32)},
+                batch_size=[1, 1],
+            ),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)
+    assert loss.loss_tracker["supervised_vibe_action_loss"][-1] == pytest.approx(0.0)
+    assert loss.loss_tracker["supervised_vibe_action_label_valid_frac"][-1] == pytest.approx(0.0)
+
+
+def test_action_supervised_preserves_full_teacher_labels_for_vibe_training() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
+    env = SimpleNamespace(
+        total_parallel_agents=1,
+        single_action_space=gym_spaces.Discrete(3),
+        policy_env_info=_policy_env_info_stub(
+            action_names=["noop", "move_north", "move_south"],
+            vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        ),
+    )
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised_split")
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+
+    full_teacher_action = torch.tensor([4], dtype=torch.long)
+    student_td = TensorDict(
+        {
+            "teacher_actions": full_teacher_action.clone(),
+            "actions": torch.tensor([0], dtype=torch.int32),
+            "vibe_actions": torch.tensor([0], dtype=torch.int32),
+            "full_log_probs": torch.zeros(1, 3, dtype=torch.float32),
+            "vibe_full_log_probs": torch.zeros(1, 2, dtype=torch.float32),
+            "act_log_prob": torch.zeros(1, dtype=torch.float32),
+            "vibe_act_log_prob": torch.zeros(1, dtype=torch.float32),
+        },
+        batch_size=[1],
+    )
+    rollout_td = TensorDict({"primary": student_td}, batch_size=[])
+    loss.run_rollout_preprocess(rollout_td, context)
+    loss.run_rollout_postprocess(rollout_td, context)
+
+    assert int(student_td["teacher_actions"].item()) == 4
+    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([0], dtype=np.int32))
+    np.testing.assert_array_equal(student_td["vibe_actions"].cpu().numpy(), np.array([1], dtype=np.int32))
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict(
+                {"teacher_actions": student_td["teacher_actions"].reshape(1, 1)},
+                batch_size=[1, 1],
+            ),
+            "policy_td": TensorDict(
+                {
+                    "full_log_probs": torch.zeros(1, 1, 3, dtype=torch.float32),
+                    "vibe_full_log_probs": torch.zeros(1, 1, 2, dtype=torch.float32),
+                },
+                batch_size=[1, 1],
+            ),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)
+    assert loss.loss_tracker["supervised_action_label_valid_frac"][-1] == pytest.approx(1.0)
+    assert loss.loss_tracker["supervised_vibe_action_label_valid_frac"][-1] == pytest.approx(1.0)
+
+
+def test_action_supervised_treats_transport_encoded_teacher_labels_as_invalid() -> None:
+    cfg = ActionSupervisedConfig(action_loss_coef=1.0, teacher_led_proportion=1.0)
+    env = SimpleNamespace(
+        total_parallel_agents=2,
+        single_action_space=gym_spaces.Discrete(3),
+        policy_env_info=_policy_env_info_stub(
+            action_names=["noop", "move_north", "move_south"],
+            vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        ),
+    )
+    loss = cfg.create(DummyPolicy(), SimpleNamespace(), env, torch.device("cpu"), "action_supervised_split")
+    context = SimpleNamespace(
+        current_slice_cfg=TrajectoryIsolationSliceConfig(name="default", env_ratio=1.0, policies=["primary"])
+    )
+
+    # Label 4 is a valid full-id vibe label (change_vibe_junction), while 8 is a transport-encoded id.
+    teacher_actions = torch.tensor([4, 8], dtype=torch.long)
+    student_td = TensorDict(
+        {
+            "teacher_actions": teacher_actions.clone(),
+            "actions": torch.tensor([0, 0], dtype=torch.int32),
+            "vibe_actions": torch.tensor([0, 0], dtype=torch.int32),
+            "full_log_probs": torch.zeros(2, 3, dtype=torch.float32),
+            "vibe_full_log_probs": torch.zeros(2, 2, dtype=torch.float32),
+            "act_log_prob": torch.zeros(2, dtype=torch.float32),
+            "vibe_act_log_prob": torch.zeros(2, dtype=torch.float32),
+        },
+        batch_size=[2],
+    )
+    rollout_td = TensorDict({"primary": student_td}, batch_size=[])
+    loss.run_rollout_preprocess(rollout_td, context)
+    loss.run_rollout_postprocess(rollout_td, context)
+
+    np.testing.assert_array_equal(student_td["actions"].cpu().numpy(), np.array([0, 0], dtype=np.int32))
+    np.testing.assert_array_equal(student_td["vibe_actions"].cpu().numpy(), np.array([1, 0], dtype=np.int32))
+
+    shared_loss_data = TensorDict(
+        {
+            "sampled_mb": TensorDict({"teacher_actions": teacher_actions.reshape(1, 2)}, batch_size=[1, 2]),
+            "policy_td": TensorDict(
+                {
+                    "full_log_probs": torch.zeros(1, 2, 3, dtype=torch.float32),
+                    "vibe_full_log_probs": torch.zeros(1, 2, 2, dtype=torch.float32),
+                },
+                batch_size=[1, 2],
+            ),
+        },
+        batch_size=[],
+    )
+    train_loss, _, _ = loss.run_train(shared_loss_data, context, 0)
+    assert torch.isfinite(train_loss)
+    assert loss.loss_tracker["supervised_action_label_valid_frac"][-1] == pytest.approx(0.5)
+    assert loss.loss_tracker["supervised_vibe_action_label_valid_frac"][-1] == pytest.approx(0.5)
+
+
+def test_cnn_shared_critic_auto_wires_vibe_head_in_split_action_env() -> None:
+    env_info = PolicyEnvInterface(
+        obs_features=[ObservationFeatureSpec(id=0, name="agent:group", normalization=10.0)],
+        tags=["agent"],
+        action_names=["noop", "move_north", "move_south"],
+        vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        num_agents=1,
+        observation_shape=(200, 3),
+        egocentric_shape=(11, 11),
+    )
+    cfg = CnnSharedCriticConfig()
+    cfg.make_policy(env_info)
+
+    assert cfg.action_probs_config.vibe_in_key == "vibe_logits"
+    assert any(
+        isinstance(component, ActorHeadConfig)
+        and component.action_space == "vibe"
+        and component.out_key == "vibe_logits"
+        for component in cfg.components
+    )
+
+
+def test_cnn_shared_critic_without_vibes_omits_vibe_head() -> None:
+    env_info = PolicyEnvInterface(
+        obs_features=[ObservationFeatureSpec(id=0, name="agent:group", normalization=10.0)],
+        tags=["agent"],
+        action_names=["noop", "move_north", "move_south"],
+        vibe_action_names=[],
+        num_agents=1,
+        observation_shape=(200, 3),
+        egocentric_shape=(11, 11),
+    )
+    cfg = CnnSharedCriticConfig()
+    cfg.make_policy(env_info)
+
+    assert cfg.action_probs_config.vibe_in_key is None
+    assert not any(
+        isinstance(component, ActorHeadConfig) and component.action_space == "vibe" for component in cfg.components
+    )

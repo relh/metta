@@ -1359,7 +1359,7 @@ class CogsguardPolicy(MultiAgentPolicy):
         self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
         action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
         self._action_name_to_index = {name: idx for idx, name in enumerate(action_names)}
-        self._noop_action_value = dtype_actions.type(self._action_name_to_index.get("noop", 0))
+        self._noop_action_value = dtype_actions.type(self._action_name_to_index["noop"])
 
         def _parse_flag(value: object) -> bool:
             if isinstance(value, bool):
@@ -1458,7 +1458,7 @@ class CogsguardPolicy(MultiAgentPolicy):
         for agent_id in range(num_agents):
             obs = self._raw_obs_to_agent_obs(agent_id, raw_observations[agent_id])
             action = self.agent_policy(agent_id).step(obs)
-            action_index = self._action_name_to_index.get(action.name, self._noop_action_value)
+            action_index = self._action_name_to_index[action.name]
             raw_actions[agent_id] = dtype_actions.type(action_index)
 
     def _raw_obs_to_agent_obs(self, agent_id: int, raw_obs: np.ndarray) -> AgentObservation:

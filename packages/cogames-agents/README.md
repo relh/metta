@@ -56,6 +56,16 @@ The `recipes.experiment.scripted_agents` recipe accepts the same scripted policy
 - See `docs/scripted-agent-registry.md` for the canonical short-name list.
 - Teacher wrapper: `teacher` (`teacher_nim`) forces an initial role/vibe, then delegates to the Nim policy.
 
+## Supervisor action contract
+
+When used as supervisors, `cogames-agents` policies emit split-action labels in one canonical space:
+
+- Primary actions: `[0, len(action_names))`
+- Vibe actions: `[len(action_names), len(action_names) + len(vibe_action_names))`
+
+This matches `PolicyEnvInterface` action ordering (`[*action_names, *vibe_action_names]`) and the `MettaGridPufferEnv`
+split-action supervisor path.
+
 ## Docs
 
 - `docs/mettaboxes.md` (mettabox usage guide)

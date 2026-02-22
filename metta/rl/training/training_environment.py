@@ -318,6 +318,9 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
             actions = actions.astype(dtype_actions, copy=False)
         payload: np.ndarray = actions
         if vibe_actions is not None:
+            num_vibe_actions = len(self._policy_env_info.vibe_action_names)
+            if num_vibe_actions <= 0:
+                raise ValueError("Received vibe actions, but environment has no configured vibe action space")
             if vibe_actions.dtype != dtype_actions:
                 vibe_actions = vibe_actions.astype(dtype_actions, copy=False)
             if actions.shape != vibe_actions.shape:
@@ -326,9 +329,6 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
                     f"got core={actions.shape} vibe={vibe_actions.shape}"
                 )
             num_non_vibe_actions = len(self._policy_env_info.action_names)
-            num_vibe_actions = len(self._policy_env_info.vibe_action_names)
-            if num_vibe_actions <= 0:
-                raise ValueError("Received vibe actions, but environment has no configured vibe action space")
             if num_non_vibe_actions <= 0:
                 raise ValueError("Environment has no non-vibe actions to pair with vibe actions")
 
