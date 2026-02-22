@@ -60,6 +60,7 @@ from metta.app_backend.replay.summarizer import parse_replay, select_replay_epis
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.registry import SEASONS
+from metta.app_backend.tournament.settings import DEFAULT_SEASON as TOURNAMENT_DEFAULT_SEASON
 
 logger = logging.getLogger(__name__)
 
@@ -185,9 +186,32 @@ async def _select_role_pool_for_policy(session: Any, policy_version_id: UUID) ->
 
 
 async def _candidate_role_pools_for_policy(session: Any, policy_version_id: UUID) -> list[Pool]:
+    season_query = (
+        select(Season)
+        .where(col(Season.name) == TOURNAMENT_DEFAULT_SEASON)
+        .order_by(
+            col(Season.canonical).desc(),
+            col(Season.version).desc(),
+            col(Season.created_at).desc(),
+        )
+        .limit(1)
+    )
+    default_season = (await session.execute(season_query)).scalars().first()
+    default_season_pools: list[Pool] = []
+    if default_season is not None:
+        default_pool_query = (
+            select(Pool).where(Pool.season_id == default_season.id).order_by(col(Pool.created_at).desc())
+        )
+        default_season_pools = list((await session.execute(default_pool_query)).scalars().all())
+
+    preferred_names = _preferred_pool_names_for_season(TOURNAMENT_DEFAULT_SEASON)
+    ordered_default_pools: list[Pool] = []
+    if default_season_pools:
+        for preferred_name in preferred_names:
+            ordered_default_pools.extend(pool for pool in default_season_pools if pool.name == preferred_name)
+        ordered_default_pools.extend(pool for pool in default_season_pools if pool not in ordered_default_pools)
+
     selected = await _select_role_pool_for_policy(session, policy_version_id)
-    if selected is None:
-        return []
 
     pool_query = (
         select(Pool)
@@ -197,8 +221,19 @@ async def _candidate_role_pools_for_policy(session: Any, policy_version_id: UUID
     )
     pools = (await session.execute(pool_query)).scalars().all()
 
-    deduped: list[Pool] = [selected]
-    seen_pool_ids = {selected.id}
+    deduped: list[Pool] = []
+    seen_pool_ids: set[UUID] = set()
+
+    for pool in ordered_default_pools:
+        if pool.id in seen_pool_ids:
+            continue
+        seen_pool_ids.add(pool.id)
+        deduped.append(pool)
+
+    if selected is not None and selected.id not in seen_pool_ids:
+        seen_pool_ids.add(selected.id)
+        deduped.append(selected)
+
     for pool in pools:
         if pool.id in seen_pool_ids:
             continue

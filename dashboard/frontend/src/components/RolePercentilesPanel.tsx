@@ -42,6 +42,19 @@ function percentileClass(percentile: number): string {
   return 'percentile-low'
 }
 
+function roleSortIndex(role: string): number {
+  return ROLE_ORDER.indexOf(role as (typeof ROLE_ORDER)[number])
+}
+
+function compareRoleNames(leftRole: string, rightRole: string): number {
+  const leftIndex = roleSortIndex(leftRole)
+  const rightIndex = roleSortIndex(rightRole)
+  if (leftIndex === -1 && rightIndex === -1) return leftRole.localeCompare(rightRole)
+  if (leftIndex === -1) return 1
+  if (rightIndex === -1) return -1
+  return leftIndex - rightIndex
+}
+
 function parseRows(
   rows: DashboardRolePercentileRow[],
   definitions: Record<string, DashboardRoleMetricDef[]>
@@ -49,7 +62,7 @@ function parseRows(
   const parsedRows = rows.map((row) => {
     const details = isObject(row.details) ? row.details : {}
     const metricMap = isObject(details.metrics) ? details.metrics : {}
-    const defsForRole = definitions[row.role]
+    const defsForRole = definitions[row.role] ?? []
     const metrics: MetricDetail[] = defsForRole
       .map((definition) => {
         const metricDetails = metricMap[definition.key]
@@ -76,20 +89,13 @@ function parseRows(
     }
   })
 
-  return parsedRows.sort((left, right) => {
-    const leftIndex = ROLE_ORDER.indexOf(left.role as (typeof ROLE_ORDER)[number])
-    const rightIndex = ROLE_ORDER.indexOf(right.role as (typeof ROLE_ORDER)[number])
-    if (leftIndex === -1 && rightIndex === -1) return left.role.localeCompare(right.role)
-    if (leftIndex === -1) return 1
-    if (rightIndex === -1) return -1
-    return leftIndex - rightIndex
-  })
+  return parsedRows.sort((left, right) => compareRoleNames(left.role, right.role))
 }
 
 function RolePercentilesMessageCard({ message, color }: { message: string; color?: string }) {
   return (
     <section className="card">
-      <h2 style={{ marginTop: 0 }}>Role Percentiles</h2>
+      <h2 style={{ marginTop: 0 }}>Parses</h2>
       <p style={{ marginBottom: 0, color }}>{message}</p>
     </section>
   )
@@ -109,8 +115,25 @@ export function RolePercentilesPanel({
     return parseRows(roleData.rows, roleData.roles)
   }, [roleData])
 
+  const parseMetricRows = useMemo(() => {
+    if (!roleData?.roles) return []
+    const entries = Object.entries(roleData.roles)
+    entries.sort((left, right) => compareRoleNames(left[0], right[0]))
+
+    return entries
+      .map(([role, definitions]) => {
+        const keys = definitions.map((definition) => definition.key)
+        if (keys.length === 0) return null
+        return {
+          role,
+          keys,
+        }
+      })
+      .filter((entry): entry is { role: string; keys: string[] } => entry !== null)
+  }, [roleData])
+
   if (loading) {
-    return <RolePercentilesMessageCard message="Loading role percentile metrics..." />
+    return <RolePercentilesMessageCard message="Loading parse percentile metrics..." />
   }
 
   if (error) {
@@ -119,17 +142,29 @@ export function RolePercentilesPanel({
 
   if (parsedRows.length === 0) {
     return (
-      <RolePercentilesMessageCard message="No role percentile data is available for this policy in the selected pool." />
+      <RolePercentilesMessageCard message="No parse percentile data is available for this policy in the selected pool." />
     )
   }
 
   return (
     <section className="grid" style={{ gap: 12 }}>
       <article className="card">
-        <h2 style={{ marginTop: 0 }}>Role Percentile Summary</h2>
+        <h2 style={{ marginTop: 0 }}>Parse Percentile Summary</h2>
         <p style={{ marginTop: 0, color: '#405a7d' }}>
-          {roleData?.pool_name ? `Pool: ${roleData.pool_name}` : 'Pool: unknown'} | Roles scored: {parsedRows.length}
+          {roleData?.pool_name ? `Pool: ${roleData.pool_name}` : 'Pool: unknown'} | Parses scored: {parsedRows.length}
         </p>
+        <p style={{ marginTop: 0, marginBottom: 8, fontSize: 12, color: '#4b617f' }}>
+          Parses are backend percentile ranks computed from role-defining shaped metrics, plus deaths for every role.
+        </p>
+        {parseMetricRows.length > 0 && (
+          <div style={{ display: 'grid', gap: 4, marginBottom: 10 }}>
+            {parseMetricRows.map((row) => (
+              <p key={row.role} style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                <strong>{ROLE_LABELS[row.role] ?? row.role}:</strong> {row.keys.join(', ')}
+              </p>
+            ))}
+          </div>
+        )}
         <div className="role-grid">
           {parsedRows.map((row) => (
             <div key={row.role} className="role-card">
@@ -148,7 +183,7 @@ export function RolePercentilesPanel({
 
       {parsedRows.map((row) => (
         <article key={row.role} className="card">
-          <h3 style={{ marginTop: 0 }}>{ROLE_LABELS[row.role] ?? row.role} Metrics</h3>
+          <h3 style={{ marginTop: 0 }}>{ROLE_LABELS[row.role] ?? row.role} Parse Metrics</h3>
           {row.metrics.length === 0 ? (
             <p style={{ marginBottom: 0 }}>No metric breakdown was returned for this role.</p>
           ) : (

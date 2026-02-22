@@ -38,13 +38,13 @@ import { SkillTreePanel } from './SkillTreePanel'
 
 type DashboardTab =
   | 'overview'
-  | 'analysis'
   | 'episodes'
   | 'opponents'
   | 'health'
   | 'roles'
   | 'capabilities'
   | 'cogames_diagnose'
+  | 'analysis'
 
 type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
@@ -52,13 +52,13 @@ type SortDir = 'asc' | 'desc'
 
 const DASHBOARD_TABS: DashboardTab[] = [
   'overview',
-  'analysis',
   'episodes',
   'opponents',
   'health',
   'roles',
   'capabilities',
   'cogames_diagnose',
+  'analysis',
 ]
 
 const OPPONENT_COLORS = [
@@ -236,19 +236,19 @@ function kpiSeverity(
 function severityStyle(severity: 'good' | 'warn' | 'bad'): CSSProperties {
   if (severity === 'good') {
     return {
-      borderColor: '#b7ebc6',
-      background: '#effaf3',
+      borderColor: 'var(--kpi-good-border)',
+      background: 'var(--kpi-good-bg)',
     }
   }
   if (severity === 'bad') {
     return {
-      borderColor: '#f5b6c0',
-      background: '#fff1f3',
+      borderColor: 'var(--kpi-bad-border)',
+      background: 'var(--kpi-bad-bg)',
     }
   }
   return {
-    borderColor: '#f4d58d',
-    background: '#fff8e9',
+    borderColor: 'var(--kpi-warn-border)',
+    background: 'var(--kpi-warn-bg)',
   }
 }
 
@@ -390,11 +390,19 @@ function KPIStatCard({
 }) {
   return (
     <article className="card" style={{ padding: 12, borderWidth: 2, ...severityStyle(severity) }}>
-      <p style={{ margin: 0, fontSize: 12, letterSpacing: 0.3, textTransform: 'uppercase', color: '#455a78' }}>
+      <p
+        style={{
+          margin: 0,
+          fontSize: 12,
+          letterSpacing: 0.3,
+          textTransform: 'uppercase',
+          color: 'var(--kpi-label-ink)',
+        }}
+      >
         {label}
       </p>
       <p style={{ margin: '6px 0 0', fontSize: 24, fontWeight: 700 }}>{value}</p>
-      {detail && <p style={{ margin: '6px 0 0', fontSize: 12, color: '#4b617f' }}>{detail}</p>}
+      {detail && <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--kpi-detail-ink)' }}>{detail}</p>}
     </article>
   )
 }
@@ -926,14 +934,17 @@ export function DashboardClient() {
             backend: <code>{DASHBOARD_API_BASE_URL}</code>
           </p>
         </div>
-        <label htmlFor="policy-version-id">Policy version id</label>
-        <input
-          id="policy-version-id"
-          placeholder="UUID"
-          value={policyVersionId}
-          onChange={(event) => setPolicyVersionId(event.target.value)}
-        />
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <div className="dashboard-policy-row">
+          <label htmlFor="policy-version-id" className="dashboard-policy-label">
+            Policy version id:
+          </label>
+          <input
+            id="policy-version-id"
+            className="dashboard-policy-input"
+            placeholder="UUID"
+            value={policyVersionId}
+            onChange={(event) => setPolicyVersionId(event.target.value)}
+          />
           <button type="button" className="primary-btn" onClick={onLoad} disabled={loading || !policyVersionId.trim()}>
             {loading ? 'Loading...' : 'Load dashboard data'}
           </button>
@@ -977,13 +988,6 @@ export function DashboardClient() {
             </button>
             <button
               type="button"
-              onClick={() => activateTab('analysis')}
-              className={activeTab === 'analysis' ? 'active-tab' : ''}
-            >
-              AI Analysis
-            </button>
-            <button
-              type="button"
               onClick={() => activateTab('episodes')}
               className={activeTab === 'episodes' ? 'active-tab' : ''}
             >
@@ -1008,7 +1012,7 @@ export function DashboardClient() {
               onClick={() => activateTab('roles')}
               className={activeTab === 'roles' ? 'active-tab' : ''}
             >
-              Roles
+              Parses
             </button>
             <button
               type="button"
@@ -1023,6 +1027,13 @@ export function DashboardClient() {
               className={activeTab === 'cogames_diagnose' ? 'active-tab' : ''}
             >
               Cogames Diagnose
+            </button>
+            <button
+              type="button"
+              onClick={() => activateTab('analysis')}
+              className={activeTab === 'analysis' ? 'active-tab' : ''}
+            >
+              AI Analysis
             </button>
           </section>
 
@@ -1368,7 +1379,7 @@ export function DashboardClient() {
                         </p>
 
                         {selectedTrendOverlay && (
-                          <div className="card" style={{ background: '#f8fbff' }}>
+                          <div className="card" style={{ background: 'var(--panel-soft-bg-1)' }}>
                             <p style={{ marginTop: 0, marginBottom: 8 }}>
                               Team vs Population Overlay ({selectedTrendOverlay.signal ?? 'insufficient'})
                             </p>
@@ -1453,7 +1464,7 @@ export function DashboardClient() {
                         )}
 
                         {selectedTrendPatternGroups.length > 0 && (
-                          <div className="card" style={{ background: '#f4f8ff' }}>
+                          <div className="card" style={{ background: 'var(--panel-soft-bg-2)' }}>
                             <h3 style={{ marginTop: 0 }}>Cross-Submission Pattern Groups</h3>
                             <div style={{ display: 'grid', gap: 8 }}>
                               {selectedTrendPatternGroups.map((group) => (
@@ -1542,21 +1553,21 @@ export function DashboardClient() {
                       <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
                         {(patterns.signals ?? []).map((signal) => {
                           const severity = String(signal.severity ?? 'info')
-                          const style: CSSProperties =
+                          const severityClass =
                             severity === 'high'
-                              ? { background: '#fff1f3', borderColor: '#f5b6c0' }
+                              ? 'pattern-signal-high'
                               : severity === 'warn'
-                                ? { background: '#fff8e9', borderColor: '#f4d58d' }
-                                : { background: '#eef6ff', borderColor: '#bfd8ff' }
+                                ? 'pattern-signal-warn'
+                                : 'pattern-signal-info'
                           return (
                             <article
                               key={String(signal.code ?? signal.title ?? 'signal')}
-                              className="card"
-                              style={{ padding: 12, ...style }}
+                              className={`card pattern-signal-card ${severityClass}`}
+                              style={{ padding: 12 }}
                             >
                               <p style={{ marginTop: 0, marginBottom: 6 }}>
                                 <strong>{String(signal.title ?? signal.code ?? 'Signal')}</strong>{' '}
-                                <span style={{ fontSize: 12, color: '#4b617f' }}>
+                                <span className="pattern-signal-meta" style={{ fontSize: 12 }}>
                                   ({String(signal.confidence ?? 'unknown')} confidence)
                                 </span>
                               </p>
@@ -1609,10 +1620,10 @@ export function DashboardClient() {
                   {showAnalysis && (
                     <div
                       style={{
-                        border: '1px solid #d9e1eb',
+                        border: '1px solid var(--panel-soft-border)',
                         borderRadius: 10,
                         padding: 12,
-                        background: '#f8fbff',
+                        background: 'var(--panel-soft-bg-1)',
                         whiteSpace: 'pre-wrap',
                       }}
                     >

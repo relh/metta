@@ -22,6 +22,42 @@
   --probe-border: #d4dfec;
   --probe-bg: #ffffff;
   --list-item-bg: #f9fbff;
+  --signal-high-bg: #fff1f3;
+  --signal-high-border: #f5b6c0;
+  --signal-warn-bg: #fff8e9;
+  --signal-warn-border: #f4d58d;
+  --signal-info-bg: #eef6ff;
+  --signal-info-border: #bfd8ff;
+  --signal-meta-ink: #4b617f;
+  --kpi-good-bg: #effaf3;
+  --kpi-good-border: #b7ebc6;
+  --kpi-warn-bg: #fff8e9;
+  --kpi-warn-border: #f4d58d;
+  --kpi-bad-bg: #fff1f3;
+  --kpi-bad-border: #f5b6c0;
+  --kpi-label-ink: #455a78;
+  --kpi-detail-ink: #4b617f;
+  --panel-soft-bg-1: #f8fbff;
+  --panel-soft-bg-2: #f4f8ff;
+  --panel-soft-border: #d9e1eb;
+  --indicator-yes-ink: #166534;
+  --indicator-yes-bg: #dcfce7;
+  --indicator-yes-border: #86efac;
+  --indicator-partial-ink: #1d4ed8;
+  --indicator-partial-bg: #dbeafe;
+  --indicator-partial-border: #93c5fd;
+  --indicator-planned-ink: #7c3aed;
+  --indicator-planned-bg: #f3e8ff;
+  --indicator-planned-border: #d8b4fe;
+  --indicator-no-ink: #9f1239;
+  --indicator-no-bg: #ffe4e6;
+  --indicator-no-border: #fda4af;
+  --diagnose-pass-ink: #176537;
+  --diagnose-pass-bg: #dff6e9;
+  --diagnose-pass-border: #afdcc2;
+  --diagnose-fail-ink: #8e2538;
+  --diagnose-fail-bg: #fde8ed;
+  --diagnose-fail-border: #f2becc;
   --role-card-border: #d8e3ef;
   --role-card-bg: #f7faff;
   --role-progress-bg: #dde7f3;
@@ -51,6 +87,42 @@
   --probe-border: #334155;
   --probe-bg: #0f172a;
   --list-item-bg: #111827;
+  --signal-high-bg: #3b111d;
+  --signal-high-border: #7f1d38;
+  --signal-warn-bg: #3a2a10;
+  --signal-warn-border: #725318;
+  --signal-info-bg: #102743;
+  --signal-info-border: #1e4f84;
+  --signal-meta-ink: #93c5fd;
+  --kpi-good-bg: #0f2f22;
+  --kpi-good-border: #1e5d43;
+  --kpi-warn-bg: #3a2a10;
+  --kpi-warn-border: #725318;
+  --kpi-bad-bg: #3b111d;
+  --kpi-bad-border: #7f1d38;
+  --kpi-label-ink: #d7e5fc;
+  --kpi-detail-ink: #bfd3f6;
+  --panel-soft-bg-1: #102743;
+  --panel-soft-bg-2: #0f2038;
+  --panel-soft-border: #2b4565;
+  --indicator-yes-ink: #bbf7d0;
+  --indicator-yes-bg: #0f2f22;
+  --indicator-yes-border: #1e5d43;
+  --indicator-partial-ink: #bfdbfe;
+  --indicator-partial-bg: #102743;
+  --indicator-partial-border: #1e4f84;
+  --indicator-planned-ink: #e9d5ff;
+  --indicator-planned-bg: #2f194a;
+  --indicator-planned-border: #5b21b6;
+  --indicator-no-ink: #fecdd3;
+  --indicator-no-bg: #3b111d;
+  --indicator-no-border: #7f1d38;
+  --diagnose-pass-ink: #bbf7d0;
+  --diagnose-pass-bg: #0f2f22;
+  --diagnose-pass-border: #1e5d43;
+  --diagnose-fail-ink: #fecdd3;
+  --diagnose-fail-bg: #3b111d;
+  --diagnose-fail-border: #7f1d38;
   --role-card-border: #334155;
   --role-card-bg: #111827;
   --role-progress-bg: #374151;
@@ -81,6 +153,42 @@
     --probe-border: #334155;
     --probe-bg: #0f172a;
     --list-item-bg: #111827;
+    --signal-high-bg: #3b111d;
+    --signal-high-border: #7f1d38;
+    --signal-warn-bg: #3a2a10;
+    --signal-warn-border: #725318;
+    --signal-info-bg: #102743;
+    --signal-info-border: #1e4f84;
+    --signal-meta-ink: #93c5fd;
+    --kpi-good-bg: #0f2f22;
+    --kpi-good-border: #1e5d43;
+    --kpi-warn-bg: #3a2a10;
+    --kpi-warn-border: #725318;
+    --kpi-bad-bg: #3b111d;
+    --kpi-bad-border: #7f1d38;
+    --kpi-label-ink: #d7e5fc;
+    --kpi-detail-ink: #bfd3f6;
+    --panel-soft-bg-1: #102743;
+    --panel-soft-bg-2: #0f2038;
+    --panel-soft-border: #2b4565;
+    --indicator-yes-ink: #bbf7d0;
+    --indicator-yes-bg: #0f2f22;
+    --indicator-yes-border: #1e5d43;
+    --indicator-partial-ink: #bfdbfe;
+    --indicator-partial-bg: #102743;
+    --indicator-partial-border: #1e4f84;
+    --indicator-planned-ink: #e9d5ff;
+    --indicator-planned-bg: #2f194a;
+    --indicator-planned-border: #5b21b6;
+    --indicator-no-ink: #fecdd3;
+    --indicator-no-bg: #3b111d;
+    --indicator-no-border: #7f1d38;
+    --diagnose-pass-ink: #bbf7d0;
+    --diagnose-pass-bg: #0f2f22;
+    --diagnose-pass-border: #1e5d43;
+    --diagnose-fail-ink: #fecdd3;
+    --diagnose-fail-bg: #3b111d;
+    --diagnose-fail-border: #7f1d38;
     --role-card-border: #334155;
     --role-card-bg: #111827;
     --role-progress-bg: #374151;
@@ -206,6 +314,7 @@ code {
   background: transparent;
   color: var(--ink-muted);
   box-shadow: none;
+  flex: 0 0 auto;
   width: auto;
   padding: 10px 14px;
   margin-bottom: -1px;
@@ -232,6 +341,30 @@ code {
   gap: 12px;
   align-items: flex-start;
   flex-wrap: wrap;
+}
+
+.dashboard-policy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-policy-label {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.dashboard-policy-input {
+  width: auto;
+  flex: 1 1 420px;
+  min-width: 240px;
+}
+
+.dashboard-policy-row .primary-btn {
+  width: auto;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .skill-controls {
@@ -283,6 +416,12 @@ code {
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  overflow: hidden;
+  line-height: 1.2;
+}
+
+.capability-indicator strong {
+  white-space: nowrap;
 }
 
 .capability-evidence {
@@ -295,28 +434,52 @@ code {
   font-size: 12px;
 }
 
+.pattern-signal-card {
+  background: var(--signal-info-bg);
+  border-color: var(--signal-info-border);
+}
+
+.pattern-signal-high {
+  background: var(--signal-high-bg);
+  border-color: var(--signal-high-border);
+}
+
+.pattern-signal-warn {
+  background: var(--signal-warn-bg);
+  border-color: var(--signal-warn-border);
+}
+
+.pattern-signal-info {
+  background: var(--signal-info-bg);
+  border-color: var(--signal-info-border);
+}
+
+.pattern-signal-meta {
+  color: var(--signal-meta-ink);
+}
+
 .indicator-yes {
-  color: #166534;
-  background: #dcfce7;
-  border-color: #86efac;
+  color: var(--indicator-yes-ink);
+  background: var(--indicator-yes-bg);
+  border-color: var(--indicator-yes-border);
 }
 
 .indicator-partial {
-  color: #1d4ed8;
-  background: #dbeafe;
-  border-color: #93c5fd;
+  color: var(--indicator-partial-ink);
+  background: var(--indicator-partial-bg);
+  border-color: var(--indicator-partial-border);
 }
 
 .indicator-planned {
-  color: #7c3aed;
-  background: #f3e8ff;
-  border-color: #d8b4fe;
+  color: var(--indicator-planned-ink);
+  background: var(--indicator-planned-bg);
+  border-color: var(--indicator-planned-border);
 }
 
 .indicator-no {
-  color: #9f1239;
-  background: #ffe4e6;
-  border-color: #fda4af;
+  color: var(--indicator-no-ink);
+  background: var(--indicator-no-bg);
+  border-color: var(--indicator-no-border);
 }
 
 .skill-controls input,
@@ -397,18 +560,18 @@ code {
 }
 
 .diagnose-pass {
-  color: #176537;
-  background: #dff6e9;
-  border: 1px solid #afdcc2;
+  color: var(--diagnose-pass-ink);
+  background: var(--diagnose-pass-bg);
+  border: 1px solid var(--diagnose-pass-border);
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 11px;
 }
 
 .diagnose-fail {
-  color: #8e2538;
-  background: #fde8ed;
-  border: 1px solid #f2becc;
+  color: var(--diagnose-fail-ink);
+  background: var(--diagnose-fail-bg);
+  border: 1px solid var(--diagnose-fail-border);
   border-radius: 999px;
   padding: 2px 8px;
   font-size: 11px;
