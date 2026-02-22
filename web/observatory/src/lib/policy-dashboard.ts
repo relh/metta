@@ -2,19 +2,19 @@ export type PolicyDashboardTab =
   | 'overview'
   | 'episodes'
   | 'opponents'
+  | 'health'
   | 'roles'
-  | 'eval_tree'
+  | 'capabilities'
   | 'cogames_diagnose'
-  | 'train_tree'
 
 const POLICY_DASHBOARD_TABS: PolicyDashboardTab[] = [
   'overview',
   'episodes',
   'opponents',
+  'health',
   'roles',
-  'eval_tree',
+  'capabilities',
   'cogames_diagnose',
-  'train_tree',
 ]
 
 type PolicyDashboardPathArgs = {

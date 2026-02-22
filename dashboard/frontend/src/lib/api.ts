@@ -279,6 +279,101 @@ export type DashboardPatternSummary = {
   [key: string]: unknown
 }
 
+export type DashboardUnsupportedIssue = {
+  code?: string
+  severity?: string
+  message?: string
+  affected_count?: number
+  total_count?: number
+  recommended_action?: string
+  [key: string]: unknown
+}
+
+export type DashboardUnsupportedSummary = {
+  has_unsupported_state?: boolean
+  issues?: DashboardUnsupportedIssue[]
+  [key: string]: unknown
+}
+
+export type DashboardInstrumentationCheck = {
+  key?: string
+  kind?: string
+  required?: boolean
+  present_count?: number
+  total_count?: number
+  coverage?: number
+  status?: string
+  message?: string
+  [key: string]: unknown
+}
+
+export type DashboardInstrumentationSummary = {
+  template_version?: string
+  min_coverage_threshold?: number
+  compliant?: boolean
+  score?: number
+  checks?: DashboardInstrumentationCheck[]
+  recommended_actions?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardStatsInventoryField = {
+  key?: string
+  kind?: string
+  present_count?: number
+  total_count?: number
+  coverage?: number
+  [key: string]: unknown
+}
+
+export type DashboardStatsInventorySummary = {
+  total_episodes?: number
+  completed_episodes?: number
+  failed_episodes?: number
+  distinct_metric_keys?: number
+  distinct_tag_keys?: number
+  top_metric_keys?: DashboardStatsInventoryField[]
+  top_tag_keys?: DashboardStatsInventoryField[]
+  notes?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardActionSummary = {
+  rollout_recommendation?: string
+  headline?: string
+  actions?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardOrchestrationExperimentHook = {
+  id?: string
+  priority?: number
+  title?: string
+  objective?: string
+  rationale?: string
+  actions?: string[]
+  acceptance_checks?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardOrchestrationPayloadTemplate = {
+  template_version?: string
+  policy_version_id?: string
+  rollout_gate?: string
+  mode?: string
+  experiment_ids?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardOrchestrationSummary = {
+  evidence_sufficient?: boolean
+  mode?: string
+  headline?: string
+  experiments?: DashboardOrchestrationExperimentHook[]
+  payload_template?: DashboardOrchestrationPayloadTemplate
+  [key: string]: unknown
+}
+
 export type DashboardCrashDumpSignature = {
   signature?: string
   count?: number
@@ -318,6 +413,11 @@ export type DashboardDerived = {
   trend_explorer?: DashboardTrendExplorerSummary | null
   confidence?: DashboardConfidenceSummary | null
   patterns?: DashboardPatternSummary | null
+  unsupported?: DashboardUnsupportedSummary | null
+  instrumentation?: DashboardInstrumentationSummary | null
+  stats_inventory?: DashboardStatsInventorySummary | null
+  actions?: DashboardActionSummary | null
+  orchestration?: DashboardOrchestrationSummary | null
   crash_dump?: DashboardCrashDumpSummary | null
   [key: string]: unknown
 }

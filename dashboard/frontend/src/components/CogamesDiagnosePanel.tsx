@@ -11,6 +11,7 @@ import type {
 } from '../lib/api'
 
 const AXIS_ORDER: DiagnoseAxis[] = ['stability', 'efficiency', 'control', 'social_coordination']
+const CORE_STAGE1_AXES: DiagnoseAxis[] = ['stability', 'efficiency', 'control']
 
 const AXIS_LABEL: Record<DiagnoseAxis, string> = {
   stability: 'Stability',
@@ -31,6 +32,42 @@ function formatDateTime(value: string | null | undefined): string {
   return date.toLocaleString()
 }
 
+function parseRefCandidates(reference: string): string[] {
+  const trimmed = reference.trim()
+  if (!trimmed) return []
+  const candidates = new Set<string>([trimmed])
+  const patterns = [
+    /(episode[_\s-]?id|episode)\s*[:=#]\s*([0-9A-Za-z-]+)/i,
+    /(job[_\s-]?id|job)\s*[:=#]\s*([0-9A-Za-z-]+)/i,
+    /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i,
+  ]
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern)
+    if (!match) continue
+    const candidate = match[2] ?? match[1]
+    if (candidate) candidates.add(candidate)
+  }
+  return [...candidates]
+}
+
+function replayUrlForEvidenceRef(reference: string, lookup: Record<string, string>): string | null {
+  if (/^https?:\/\//i.test(reference)) return reference
+  for (const candidate of parseRefCandidates(reference)) {
+    if (lookup[candidate]) return lookup[candidate]
+  }
+  return null
+}
+
+function radarPoint(index: number, total: number, normalized: number, size = 220): { x: number; y: number } {
+  const radius = (size / 2) * Math.max(0, Math.min(1, normalized))
+  const angle = (Math.PI * 2 * index) / total - Math.PI / 2
+  const center = size / 2
+  return {
+    x: center + radius * Math.cos(angle),
+    y: center + radius * Math.sin(angle),
+  }
+}
+
 export const CogamesDiagnosePanel: FC<{
   runs: DiagnoseRunSummary[]
   loading: boolean
@@ -41,7 +78,19 @@ export const CogamesDiagnosePanel: FC<{
   noteLoading: boolean
   noteError: string | null
   manifest: DiagnoseManifest | null
-}> = ({ runs, loading, error, selectedRunId, onSelectRun, note, noteLoading, noteError, manifest }) => {
+  replayLookupByRef: Record<string, string>
+}> = ({
+  runs,
+  loading,
+  error,
+  selectedRunId,
+  onSelectRun,
+  note,
+  noteLoading,
+  noteError,
+  manifest,
+  replayLookupByRef,
+}) => {
   const probeEvaluations = useMemo(() => {
     if (!note) return []
     return Array.isArray(note.stage1_probe_evaluations) ? note.stage1_probe_evaluations : []
@@ -79,6 +128,47 @@ export const CogamesDiagnosePanel: FC<{
     return new Map(axes.map((entry) => [entry.axis, entry]))
   }, [note])
 
+  const coreAxisChecks = useMemo(() => {
+    return CORE_STAGE1_AXES.map((axis) => {
+      const score = axisScores.get(axis)
+      return { axis, confirmed: Boolean(score?.confirmed) }
+    })
+  }, [axisScores])
+
+  const stage1GateReady = useMemo(() => coreAxisChecks.every((check) => check.confirmed), [coreAxisChecks])
+
+  const hasReplayEvidence = useMemo(() => {
+    for (const evaluation of probeEvaluations) {
+      const refs = Array.isArray(evaluation.evidence_refs) ? evaluation.evidence_refs : []
+      for (const reference of refs) {
+        if (/^https?:\/\//i.test(reference)) return true
+        if (replayUrlForEvidenceRef(reference, replayLookupByRef)) return true
+      }
+    }
+    return false
+  }, [probeEvaluations, replayLookupByRef])
+
+  const stage2GateReady = stage1GateReady && hasReplayEvidence
+
+  const stageStatus = String(manifest?.stage_status ?? note?.stage_status ?? '-')
+  const runStatus = String(manifest?.run_status ?? note?.status ?? '-')
+  const stageStatusLower = stageStatus.toLowerCase()
+  const runStatusLower = runStatus.toLowerCase()
+  const stage2Reached = stageStatusLower.includes('stage2') || stageStatusLower.includes('social')
+  const runInvalid =
+    runStatusLower.includes('invalid') ||
+    runStatusLower.includes('incomplete') ||
+    (!stage2GateReady && (stageStatusLower.includes('complete') || stage2Reached))
+
+  const radarPolygon = useMemo(() => {
+    const points = AXIS_ORDER.map((axis, index) => {
+      const score = axisScores.get(axis)
+      const normalized = score && Number.isFinite(score.normalized_score) ? score.normalized_score : 0
+      return radarPoint(index, AXIS_ORDER.length, normalized)
+    })
+    return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')
+  }, [axisScores])
+
   return (
     <div className="grid" style={{ gap: 12 }}>
       <section className="card">
@@ -86,7 +176,8 @@ export const CogamesDiagnosePanel: FC<{
           <div>
             <h2 style={{ marginTop: 0, marginBottom: 4 }}>Cogames Diagnose</h2>
             <p style={{ margin: 0, color: '#546b8a' }}>
-              CLI-run diagnostics from <code>outputs/cogames-diagnose</code>. Probe outcomes feed Eval Tree boxes.
+              CLI-run diagnostics from <code>outputs/cogames-diagnose</code>. Stage-1 confirms signals, then Stage-2
+              social checks finalize prescriptions.
             </p>
           </div>
           <code>{manifest?.run_id ?? selectedRunId ?? 'no-run-selected'}</code>
@@ -119,10 +210,10 @@ export const CogamesDiagnosePanel: FC<{
                 policy: <strong>{manifest?.policy ?? '-'}</strong>
               </span>
               <span>
-                stage: <strong>{manifest?.stage_status ?? note?.stage_status ?? '-'}</strong>
+                stage: <strong>{stageStatus}</strong>
               </span>
               <span>
-                status: <strong>{manifest?.run_status ?? note?.status ?? '-'}</strong>
+                status: <strong>{runStatus}</strong>
               </span>
               <span>created: {formatDateTime(manifest?.created_at)}</span>
             </div>
@@ -142,24 +233,127 @@ export const CogamesDiagnosePanel: FC<{
         </section>
       ) : note ? (
         <>
+          <section className="card" style={{ display: 'grid', gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Stage Gating + Validity</h3>
+            <div className="grid two">
+              <article className="diagnose-list-item">
+                <p style={{ marginTop: 0, marginBottom: 6 }}>
+                  <strong>Stage-1 Core Signals</strong>
+                </p>
+                <p style={{ margin: '0 0 6px', fontSize: 13 }}>
+                  {stage1GateReady ? (
+                    <span className="diagnose-pass">Ready for Stage-2</span>
+                  ) : (
+                    <span className="diagnose-fail">Not ready for Stage-2</span>
+                  )}
+                </p>
+                <ul style={{ margin: 0 }}>
+                  {coreAxisChecks.map((check) => (
+                    <li key={check.axis}>
+                      {AXIS_LABEL[check.axis]}: {check.confirmed ? 'confirmed' : 'missing'}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+              <article className="diagnose-list-item">
+                <p style={{ marginTop: 0, marginBottom: 6 }}>
+                  <strong>Run Validity (Required Pack)</strong>
+                </p>
+                <p style={{ margin: '0 0 6px', fontSize: 13 }}>
+                  {runInvalid ? (
+                    <span className="diagnose-fail">Invalid/Incomplete</span>
+                  ) : (
+                    <span className="diagnose-pass">Valid</span>
+                  )}
+                </p>
+                <ul style={{ margin: 0 }}>
+                  <li>Replay evidence: {hasReplayEvidence ? 'present' : 'missing'}</li>
+                  <li>Stage-2 reached: {stage2Reached ? 'yes' : 'no'}</li>
+                  <li>Stage-2 gate status: {stage2GateReady ? 'pass' : 'blocked'}</li>
+                </ul>
+              </article>
+            </div>
+          </section>
+
+          <section className="card" style={{ display: 'grid', gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Spider Chart + Stage-1 Axes</h3>
+            <div className="grid two">
+              <article className="diagnose-list-item">
+                <svg width="220" height="220" viewBox="0 0 220 220" role="img" aria-label="Axis spider chart">
+                  <title>Diagnose axis radar</title>
+                  {[0.25, 0.5, 0.75, 1].map((level) => {
+                    const ring = AXIS_ORDER.map((_, index) => radarPoint(index, AXIS_ORDER.length, level))
+                      .map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
+                      .join(' ')
+                    return (
+                      <polygon
+                        key={level}
+                        points={ring}
+                        fill="none"
+                        stroke="var(--line)"
+                        strokeWidth={1}
+                        strokeDasharray={level === 1 ? undefined : '3 3'}
+                      />
+                    )
+                  })}
+                  {AXIS_ORDER.map((axis, index) => {
+                    const edge = radarPoint(index, AXIS_ORDER.length, 1)
+                    return (
+                      <line key={axis} x1={110} y1={110} x2={edge.x} y2={edge.y} stroke="var(--line)" strokeWidth={1} />
+                    )
+                  })}
+                  <polygon points={radarPolygon} fill="rgba(37, 99, 235, 0.25)" stroke="#2563eb" strokeWidth={2} />
+                  {AXIS_ORDER.map((axis, index) => {
+                    const labelPoint = radarPoint(index, AXIS_ORDER.length, 1.08)
+                    return (
+                      <text
+                        key={`${axis}-label`}
+                        x={labelPoint.x}
+                        y={labelPoint.y}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        style={{ fontSize: 11, fill: 'var(--ink-muted)' }}
+                      >
+                        {AXIS_LABEL[axis]}
+                      </text>
+                    )
+                  })}
+                </svg>
+              </article>
+              <article className="grid" style={{ gap: 8 }}>
+                {AXIS_ORDER.map((axis) => {
+                  const score = axisScores.get(axis)
+                  return (
+                    <div key={axis} className="diagnose-list-item">
+                      <div className="diagnose-axis-head">
+                        <strong>{AXIS_LABEL[axis]}</strong>
+                        <span>{score?.confirmed ? 'confirmed' : 'not confirmed'}</span>
+                      </div>
+                      <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+                        normalized={score ? formatPct(score.normalized_score, 0) : 'n/a'}
+                      </p>
+                    </div>
+                  )
+                })}
+              </article>
+            </div>
+          </section>
+
           <section className="card">
-            <h3 style={{ marginTop: 0 }}>Stage-1 Axes</h3>
+            <h3 style={{ marginTop: 0 }}>Probe Outcomes + Evidence</h3>
             <div className="grid two">
               {AXIS_ORDER.map((axis) => {
-                const score = axisScores.get(axis)
                 const probesForAxis = probeCatalog.filter((probe) => probe.axis === axis)
                 return (
                   <article key={axis} className="diagnose-axis-card">
                     <div className="diagnose-axis-head">
                       <strong>{AXIS_LABEL[axis]}</strong>
-                      <span>{score?.confirmed ? 'Mastered' : 'Needs Work'}</span>
+                      <span>{probesForAxis.length} probes</span>
                     </div>
-                    <p style={{ margin: '8px 0', color: '#546b8a' }}>
-                      normalized={score ? formatPct(score.normalized_score, 0) : 'n/a'}
-                    </p>
-                    <div className="grid" style={{ gap: 8 }}>
+                    <div className="grid" style={{ gap: 8, marginTop: 8 }}>
                       {probesForAxis.map((probe) => {
                         const evaluation = evalByProbe.get(probe.probe_id)
+                        const evidence = Array.isArray(evaluation?.evidence_refs) ? evaluation.evidence_refs : []
                         return (
                           <div key={probe.probe_id} className="diagnose-probe-card">
                             <div className="diagnose-axis-head">
@@ -175,6 +369,23 @@ export const CogamesDiagnosePanel: FC<{
                             {evaluation?.summary ? (
                               <p style={{ margin: '6px 0 0', fontSize: 12, color: '#546b8a' }}>{evaluation.summary}</p>
                             ) : null}
+                            {evidence.length > 0 && (
+                              <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+                                {evidence.map((reference) => {
+                                  const replayUrl = replayUrlForEvidenceRef(reference, replayLookupByRef)
+                                  return (
+                                    <div key={`${probe.probe_id}-${reference}`} style={{ fontSize: 12 }}>
+                                      <code>{reference}</code>{' '}
+                                      {replayUrl ? (
+                                        <a href={replayUrl} target="_blank" rel="noreferrer">
+                                          replay
+                                        </a>
+                                      ) : null}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
                         )
                       })}

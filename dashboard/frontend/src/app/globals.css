@@ -4,11 +4,88 @@
   --bg: #f9fafb;
   --surface: #ffffff;
   --surface-muted: #f3f4f6;
+  --surface-emphasis: #f8fafc;
   --ink: #111827;
   --ink-muted: #6b7280;
   --line: #e5e7eb;
   --line-strong: #d1d5db;
+  --line-soft: #e4eaf1;
   --brand: #2563eb;
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.06);
+  --primary-btn-bg: #eff6ff;
+  --primary-btn-bg-hover: #dbeafe;
+  --primary-btn-border: #93c5fd;
+  --primary-btn-ink: #1d4ed8;
+  --badge-source-ink: #4c6789;
+  --badge-source-bg: #eef3fa;
+  --badge-source-border: #d8e2ef;
+  --probe-border: #d4dfec;
+  --probe-bg: #ffffff;
+  --list-item-bg: #f9fbff;
+  --role-card-border: #d8e3ef;
+  --role-card-bg: #f7faff;
+  --role-progress-bg: #dde7f3;
+  --role-progress-bar: #2f6fd8;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #030712;
+  --surface: #111827;
+  --surface-muted: #1f2937;
+  --surface-emphasis: #0f172a;
+  --ink: #f3f4f6;
+  --ink-muted: #9ca3af;
+  --line: #374151;
+  --line-strong: #4b5563;
+  --line-soft: #374151;
+  --brand: #60a5fa;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --primary-btn-bg: #0f1f3e;
+  --primary-btn-bg-hover: #152b52;
+  --primary-btn-border: #2f4f88;
+  --primary-btn-ink: #bfdbfe;
+  --badge-source-ink: #bfdbfe;
+  --badge-source-bg: #1e293b;
+  --badge-source-border: #334155;
+  --probe-border: #334155;
+  --probe-bg: #0f172a;
+  --list-item-bg: #111827;
+  --role-card-border: #334155;
+  --role-card-bg: #111827;
+  --role-progress-bg: #374151;
+  --role-progress-bar: #60a5fa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #030712;
+    --surface: #111827;
+    --surface-muted: #1f2937;
+    --surface-emphasis: #0f172a;
+    --ink: #f3f4f6;
+    --ink-muted: #9ca3af;
+    --line: #374151;
+    --line-strong: #4b5563;
+    --line-soft: #374151;
+    --brand: #60a5fa;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --primary-btn-bg: #0f1f3e;
+    --primary-btn-bg-hover: #152b52;
+    --primary-btn-border: #2f4f88;
+    --primary-btn-ink: #bfdbfe;
+    --badge-source-ink: #bfdbfe;
+    --badge-source-bg: #1e293b;
+    --badge-source-border: #334155;
+    --probe-border: #334155;
+    --probe-bg: #0f172a;
+    --list-item-bg: #111827;
+    --role-card-border: #334155;
+    --role-card-bg: #111827;
+    --role-progress-bg: #374151;
+    --role-progress-bar: #60a5fa;
+  }
 }
 
 * {
@@ -32,7 +109,7 @@ main {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 16px;
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+  box-shadow: var(--shadow-card);
 }
 
 .grid {
@@ -83,13 +160,13 @@ button:hover:not(:disabled) {
 }
 
 .primary-btn {
-  border-color: #93c5fd;
-  color: #1d4ed8;
-  background: #eff6ff;
+  border-color: var(--primary-btn-border);
+  color: var(--primary-btn-ink);
+  background: var(--primary-btn-bg);
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #dbeafe;
+  background: var(--primary-btn-bg-hover);
 }
 
 button:disabled {
@@ -105,7 +182,7 @@ table {
 
 th,
 td {
-  border-bottom: 1px solid #e4eaf1;
+  border-bottom: 1px solid var(--line-soft);
   padding: 8px;
   text-align: left;
   vertical-align: top;
@@ -259,9 +336,9 @@ code {
 }
 
 .badge-source {
-  color: #4c6789;
-  background: #eef3fa;
-  border-color: #d8e2ef;
+  color: var(--badge-source-ink);
+  background: var(--badge-source-bg);
+  border-color: var(--badge-source-border);
 }
 
 .skill-legend {
@@ -306,16 +383,16 @@ code {
 }
 
 .diagnose-probe-card {
-  border: 1px solid #d4dfec;
+  border: 1px solid var(--probe-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--probe-bg);
   padding: 10px;
 }
 
 .diagnose-list-item {
-  border: 1px solid #d4dfec;
+  border: 1px solid var(--probe-border);
   border-radius: 8px;
-  background: #f9fbff;
+  background: var(--list-item-bg);
   padding: 10px;
 }
 
@@ -344,9 +421,9 @@ code {
 }
 
 .role-card {
-  border: 1px solid #d8e3ef;
+  border: 1px solid var(--role-card-border);
   border-radius: 10px;
-  background: #f7faff;
+  background: var(--role-card-bg);
   padding: 10px 12px;
 }
 
@@ -355,7 +432,7 @@ code {
   font-size: 12px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #4b6488;
+  color: var(--ink-muted);
 }
 
 .role-card-value {
@@ -368,14 +445,14 @@ code {
   margin-top: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #dde7f3;
+  background: var(--role-progress-bg);
   overflow: hidden;
 }
 
 .role-progress-bar {
   height: 100%;
   border-radius: 999px;
-  background: #2f6fd8;
+  background: var(--role-progress-bar);
 }
 
 .percentile-top {

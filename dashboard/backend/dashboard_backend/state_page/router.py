@@ -33,6 +33,7 @@ from dashboard.backend.dashboard_backend.state_page.diagnostics import (
     EpisodeSelectionMetadata,
     FailureSummary,
     PolicyInfo,
+    compute_action_summary,
     compute_confidence_summary,
     compute_crash_dump_summary,
     compute_derived_metrics,
@@ -40,8 +41,10 @@ from dashboard.backend.dashboard_backend.state_page.diagnostics import (
     compute_instrumentation_validation,
     compute_matchup_summary,
     compute_opponent_metrics,
+    compute_orchestration_hooks,
     compute_outcome_summary,
     compute_pattern_extraction_summary,
+    compute_stats_inventory_summary,
     compute_team_comp_analysis,
     compute_trend_explorer_summary,
     compute_unsupported_state,
@@ -486,6 +489,7 @@ def create_dashboard_router() -> APIRouter:
         )
         unsupported_summary = compute_unsupported_state(dashboard_episodes)
         instrumentation_summary = compute_instrumentation_validation(dashboard_episodes)
+        stats_inventory_summary = compute_stats_inventory_summary(dashboard_episodes)
         confidence_summary = compute_confidence_summary(
             dashboard_episodes,
             baseline_dashboard_episodes,
@@ -520,6 +524,16 @@ def create_dashboard_router() -> APIRouter:
             trend_explorer_summary,
             unsupported_summary,
         )
+        action_summary = compute_action_summary(outcome_summary, failure_summary)
+        orchestration_summary = compute_orchestration_hooks(
+            policy_info,
+            outcome_summary,
+            failure_summary,
+            action_summary,
+            matchup_summary,
+            confidence_summary,
+            pattern_summary,
+        )
 
         return DashboardResponse(
             policy=policy_info,
@@ -533,9 +547,14 @@ def create_dashboard_router() -> APIRouter:
                 opponent_metrics=opponent_stats,
                 outcome=outcome_summary,
                 failures=failure_summary,
+                unsupported=unsupported_summary,
+                instrumentation=instrumentation_summary,
+                stats_inventory=stats_inventory_summary,
+                actions=action_summary,
                 crash_dump=crash_dump_summary,
                 matchup=matchup_summary,
                 confidence=confidence_summary,
+                orchestration=orchestration_summary,
                 trend=trend_summary,
                 trend_explorer=trend_explorer_summary,
                 patterns=pattern_summary,

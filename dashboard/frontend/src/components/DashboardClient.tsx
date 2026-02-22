@@ -4,19 +4,24 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'r
 
 import {
   DASHBOARD_API_BASE_URL,
+  type DashboardActionSummary,
   type DashboardAnalysisResponse,
   type DashboardConfidenceSummary,
   type DashboardEpisode,
   type DashboardFailures,
+  type DashboardInstrumentationSummary,
   type DashboardMatchupSlice,
   type DashboardMatchupSummary,
+  type DashboardOrchestrationSummary,
   type DashboardPatternSummary,
   type DashboardResponse,
   type DashboardRolePercentilesResponse,
+  type DashboardStatsInventorySummary,
   type DashboardTeamCompStats,
   type DashboardTrendExplorerSummary,
   type DashboardTrendPoint,
   type DashboardTrendSummary,
+  type DashboardUnsupportedSummary,
   type DiagnoseDoctorNote,
   type DiagnoseManifest,
   type DiagnoseRunSummary,
@@ -59,6 +64,8 @@ const OPPONENT_COLORS = [
   '#f97316',
   '#6366f1',
 ]
+
+const DASHBOARD_FEEDBACK_ISSUE_URL = 'https://github.com/Metta-AI/metta/issues/new'
 
 const SORT_HEADER_BUTTON_STYLE: CSSProperties = {
   background: 'transparent',
@@ -311,6 +318,56 @@ function asMatchup(value: unknown): DashboardMatchupSummary | null {
   return value as DashboardMatchupSummary
 }
 
+function asUnsupported(value: unknown): DashboardUnsupportedSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as DashboardUnsupportedSummary
+}
+
+function asInstrumentation(value: unknown): DashboardInstrumentationSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as DashboardInstrumentationSummary
+}
+
+function asStatsInventory(value: unknown): DashboardStatsInventorySummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as DashboardStatsInventorySummary
+}
+
+function asActions(value: unknown): DashboardActionSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as DashboardActionSummary
+}
+
+function asOrchestration(value: unknown): DashboardOrchestrationSummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as DashboardOrchestrationSummary
+}
+
+function buildDashboardFeedbackUrl(
+  payload: {
+    policyVersionId: string
+    policyLabel: string
+    activeTab: string
+    dashboardUrl: string
+    generatedAt: string
+  } | null
+): string {
+  if (!payload) return DASHBOARD_FEEDBACK_ISSUE_URL
+  const title = `[Policy Dashboard] ${payload.policyLabel} (${payload.policyVersionId})`
+  const body = [
+    '## Summary',
+    '<describe the issue or request>',
+    '',
+    '## Dashboard Context',
+    `- Policy version ID: ${payload.policyVersionId}`,
+    `- Policy: ${payload.policyLabel}`,
+    `- Active tab: ${payload.activeTab}`,
+    `- Generated at: ${payload.generatedAt}`,
+    `- Dashboard URL: ${payload.dashboardUrl}`,
+  ].join('\n')
+  return `${DASHBOARD_FEEDBACK_ISSUE_URL}?${new URLSearchParams({ title, body }).toString()}`
+}
+
 function KPIStatCard({
   label,
   value,
@@ -388,6 +445,11 @@ export function DashboardClient() {
   const trendExplorer = useMemo(() => asTrendExplorer(data?.derived?.trend_explorer), [data])
   const confidence = useMemo(() => asConfidence(data?.derived?.confidence), [data])
   const patterns = useMemo(() => asPattern(data?.derived?.patterns), [data])
+  const unsupported = useMemo(() => asUnsupported(data?.derived?.unsupported), [data])
+  const instrumentation = useMemo(() => asInstrumentation(data?.derived?.instrumentation), [data])
+  const statsInventory = useMemo(() => asStatsInventory(data?.derived?.stats_inventory), [data])
+  const actionSummary = useMemo(() => asActions(data?.derived?.actions), [data])
+  const orchestration = useMemo(() => asOrchestration(data?.derived?.orchestration), [data])
 
   const opponentRows = useMemo<OpponentSummaryRow[]>(() => {
     const metrics = data?.derived?.opponent_metrics
@@ -517,6 +579,51 @@ export function DashboardClient() {
     [episodeSort, episodeSortDir, filteredEpisodes]
   )
 
+  const topTagStats = useMemo(() => {
+    const counts = new Map<string, number>()
+    const updateCount = (tag: string) => {
+      if (!tag) return
+      counts.set(tag, (counts.get(tag) ?? 0) + 1)
+    }
+    for (const episode of episodes) {
+      const seen = new Set<string>()
+      for (const tag of asStringArray(episode.diagnostic_tags)) {
+        if (seen.has(tag)) continue
+        seen.add(tag)
+        updateCount(tag)
+      }
+      if (episode.raw_tags && typeof episode.raw_tags === 'object' && !Array.isArray(episode.raw_tags)) {
+        for (const [key, value] of Object.entries(episode.raw_tags)) {
+          const tag = `${key}=${String(value)}`
+          if (seen.has(tag)) continue
+          seen.add(tag)
+          updateCount(tag)
+        }
+      }
+    }
+    return [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, 24)
+      .map(([tag, count]) => ({
+        tag,
+        count,
+        coverage: episodes.length > 0 ? count / episodes.length : 0,
+      }))
+  }, [episodes])
+
+  const replayLookupByRef = useMemo(() => {
+    const lookup: Record<string, string> = {}
+    for (const episode of episodes) {
+      if (!episode.replay_url) continue
+      const replayUrl = String(episode.replay_url)
+      const episodeId = String(episode.episode_id ?? episode.id ?? '').trim()
+      if (episodeId) lookup[episodeId] = replayUrl
+      const jobId = String(episode.job_id ?? '').trim()
+      if (jobId) lookup[jobId] = replayUrl
+    }
+    return lookup
+  }, [episodes])
+
   const teamCompRows = useMemo(() => asTeamCompRows(data?.derived?.team_comp), [data])
   const trendPoints = useMemo(() => asTrendPoints(trend?.points), [trend])
 
@@ -546,6 +653,18 @@ export function DashboardClient() {
     }
     return trendExplorer.submission_patterns.filter((pattern) => pattern.metric_key === selectedTrendSeries.key)
   }, [selectedTrendSeries, trendExplorer])
+
+  const feedbackUrl = useMemo(() => {
+    if (!data) return DASHBOARD_FEEDBACK_ISSUE_URL
+    const dashboardUrl = typeof window === 'undefined' ? '/policy-dashboard' : window.location.href
+    return buildDashboardFeedbackUrl({
+      policyVersionId: String(data.policy?.id ?? ''),
+      policyLabel: `${String(data.policy?.name ?? 'unknown')} v${String(data.policy?.version ?? '?')}`,
+      activeTab,
+      dashboardUrl,
+      generatedAt: String(data.generated_at ?? '-'),
+    })
+  }, [activeTab, data])
 
   useEffect(() => {
     if (trendSeries.length === 0) return
@@ -986,6 +1105,149 @@ export function DashboardClient() {
                     ))}
                   </ul>
                 )}
+              </section>
+
+              {(unsupported || instrumentation) && (
+                <section className="card" style={{ display: 'grid', gap: 10 }}>
+                  <h2 style={{ margin: 0 }}>Data Quality Gates</h2>
+                  {unsupported?.has_unsupported_state ? (
+                    <div className="grid" style={{ gap: 8 }}>
+                      <p style={{ margin: 0, color: '#b42318' }}>
+                        Unsupported-state warnings detected ({(unsupported.issues ?? []).length}).
+                      </p>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Issue</th>
+                              <th>Severity</th>
+                              <th>Coverage</th>
+                              <th>Next Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(unsupported.issues ?? []).map((issue) => (
+                              <tr key={String(issue.code ?? issue.message ?? 'unsupported')}>
+                                <td>{String(issue.message ?? issue.code ?? '-')}</td>
+                                <td>{String(issue.severity ?? 'warn')}</td>
+                                <td>
+                                  {String(toFiniteNumber(issue.affected_count) ?? 0)}/
+                                  {String(toFiniteNumber(issue.total_count) ?? 0)}
+                                </td>
+                                <td>{String(issue.recommended_action ?? '-')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ margin: 0 }}>Unsupported-state checks are clean for the sampled episode set.</p>
+                  )}
+
+                  {instrumentation && (
+                    <div className="grid" style={{ gap: 8 }}>
+                      <p style={{ margin: 0 }}>
+                        Instrumentation: <strong>{instrumentation.compliant ? 'compliant' : 'incomplete'}</strong> ·
+                        score <code>{formatPercent(toFiniteNumber(instrumentation.score), 0)}</code> · template{' '}
+                        <code>{String(instrumentation.template_version ?? '-')}</code>
+                      </p>
+                      {(instrumentation.checks ?? []).length > 0 && (
+                        <details>
+                          <summary>Instrumentation Checks ({(instrumentation.checks ?? []).length})</summary>
+                          <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Key</th>
+                                  <th>Kind</th>
+                                  <th>Status</th>
+                                  <th>Coverage</th>
+                                  <th>Message</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(instrumentation.checks ?? []).map((check) => (
+                                  <tr key={String(check.key ?? 'check')}>
+                                    <td>
+                                      <code>{String(check.key ?? '-')}</code>
+                                    </td>
+                                    <td>{String(check.kind ?? '-')}</td>
+                                    <td>{String(check.status ?? '-')}</td>
+                                    <td>{formatPercent(toFiniteNumber(check.coverage), 0)}</td>
+                                    <td>{String(check.message ?? '-')}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {actionSummary && (
+                <section className="card" style={{ display: 'grid', gap: 8 }}>
+                  <h2 style={{ margin: 0 }}>Next Actions</h2>
+                  <p style={{ margin: 0 }}>
+                    <strong>{String(actionSummary.headline ?? 'No action summary available.')}</strong>
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    Rollout gate: <code>{String(actionSummary.rollout_recommendation ?? '-')}</code>
+                  </p>
+                  {(actionSummary.actions ?? []).length > 0 && (
+                    <ul style={{ margin: 0 }}>
+                      {(actionSummary.actions ?? []).map((action) => (
+                        <li key={action}>{action}</li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
+              {orchestration && (
+                <section className="card" style={{ display: 'grid', gap: 8 }}>
+                  <h2 style={{ margin: 0 }}>Experiment Orchestration</h2>
+                  <p style={{ margin: 0 }}>
+                    {String(orchestration.headline ?? '-')} · mode <code>{String(orchestration.mode ?? '-')}</code>
+                  </p>
+                  {(orchestration.experiments ?? []).length > 0 && (
+                    <div className="grid" style={{ gap: 8 }}>
+                      {(orchestration.experiments ?? []).map((experiment) => (
+                        <article key={String(experiment.id ?? 'exp')} className="diagnose-list-item">
+                          <p style={{ marginTop: 0, marginBottom: 4 }}>
+                            <strong>
+                              P{String(toFiniteNumber(experiment.priority) ?? 0)} {String(experiment.title ?? '-')}
+                            </strong>
+                          </p>
+                          <p style={{ margin: '0 0 6px', fontSize: 13 }}>{String(experiment.objective ?? '-')}</p>
+                          <p style={{ margin: '0 0 6px', fontSize: 12, color: '#546b8a' }}>
+                            {String(experiment.rationale ?? '-')}
+                          </p>
+                          {(experiment.actions ?? []).length > 0 && (
+                            <ul style={{ margin: 0 }}>
+                              {(experiment.actions ?? []).map((action) => (
+                                <li key={action}>{action}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              <section className="card">
+                <h2 style={{ marginTop: 0 }}>Feedback</h2>
+                <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
+                  Report dashboard bugs/features with policy+tab context prefilled.
+                </p>
+                <a href={feedbackUrl} target="_blank" rel="noreferrer">
+                  Open dashboard feedback issue
+                </a>
               </section>
 
               <section className="card">
@@ -1785,6 +2047,60 @@ export function DashboardClient() {
                 />
               </section>
 
+              {(statsInventory || topTagStats.length > 0) && (
+                <section className="card" style={{ display: 'grid', gap: 10 }}>
+                  <h2 style={{ margin: 0 }}>Tag + Instrumentation Inventory</h2>
+                  {statsInventory && (
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+                      <span>
+                        Distinct metrics:{' '}
+                        <code>{String(toFiniteNumber(statsInventory.distinct_metric_keys) ?? 0)}</code>
+                      </span>
+                      <span>
+                        Distinct tags: <code>{String(toFiniteNumber(statsInventory.distinct_tag_keys) ?? 0)}</code>
+                      </span>
+                      <span>
+                        Episodes:{' '}
+                        <code>{String(toFiniteNumber(statsInventory.total_episodes) ?? episodes.length)}</code>
+                      </span>
+                    </div>
+                  )}
+                  {topTagStats.length > 0 ? (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Behavior Slice (Tag)</th>
+                            <th>Count</th>
+                            <th>Coverage</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topTagStats.map((row) => (
+                            <tr key={row.tag}>
+                              <td>
+                                <code>{row.tag}</code>
+                              </td>
+                              <td>{row.count}</td>
+                              <td>{formatPercent(row.coverage, 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p style={{ margin: 0 }}>No diagnostic/raw tags found in sampled episodes.</p>
+                  )}
+                  {(statsInventory?.notes ?? []).length > 0 && (
+                    <ul style={{ margin: 0 }}>
+                      {(statsInventory?.notes ?? []).map((note) => (
+                        <li key={note}>{note}</li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
               <section className="card">
                 <h2 style={{ marginTop: 0 }}>Failed Episodes ({failedEpisodes.length})</h2>
                 {failedEpisodes.length === 0 ? (
@@ -1916,6 +2232,7 @@ export function DashboardClient() {
               noteLoading={diagnoseNoteLoading}
               noteError={diagnoseNoteError}
               manifest={diagnoseManifest}
+              replayLookupByRef={replayLookupByRef}
             />
           )}
         </>

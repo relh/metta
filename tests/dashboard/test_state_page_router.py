@@ -123,6 +123,13 @@ def test_dashboard_data_builds_commissioner_with_season_id(
     assert response.status_code == 200
     assert calls[0] == ("beta-teams-large", season_id)
     assert calls[1] == ("get_leaderboard", None)
+    payload = response.json()
+    derived = payload["derived"]
+    assert "unsupported" in derived
+    assert "instrumentation" in derived
+    assert "stats_inventory" in derived
+    assert "actions" in derived
+    assert "orchestration" in derived
 
 
 def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:

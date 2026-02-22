@@ -408,9 +408,14 @@ class DashboardDerived(BaseModel):
     opponent_metrics: dict[str, OpponentStats]
     outcome: OutcomeSummary | None = None
     failures: FailureSummary
+    unsupported: UnsupportedStateSummary | None = None
+    instrumentation: InstrumentationValidationSummary | None = None
+    stats_inventory: StatsInventorySummary | None = None
+    actions: ActionSummary | None = None
     crash_dump: CrashDumpSummary | None = None
     matchup: MatchupSummary | None = None
     confidence: ConfidenceSummary | None = None
+    orchestration: OrchestrationHookSummary | None = None
     trend: VersionTrendSummary | None = None
     trend_explorer: TrendExplorerSummary | None = None
     patterns: PatternExtractionSummary | None = None
