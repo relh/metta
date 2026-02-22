@@ -59,10 +59,7 @@ class EERCloner(Loss):
         return Composite(teacher_actions=UnboundedDiscrete(shape=torch.Size([]), dtype=torch.long))
 
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
-        primary_policy_name = self._primary_policy_name()
-        student_td = td.get(primary_policy_name, None)
-        if student_td is None:
-            return
+        student_td = td[self._primary_policy_name()]
 
         # --- Reward Shaping ---
         # td["rewards"] contains R_{t-1}. We want to add r_lambda * log(pi_teacher(A_{t-1}|S_{t-1})).

@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 
 class EERKickstarterConfig(LossConfig):
-    policy: str = Field(default="primary")
     teacher: str = Field(default="teacher")
     action_loss_coef: float = Field(default=0.6, ge=0, le=1.0)
     value_loss_coef: float = Field(default=1.0, ge=0, le=1.0)
@@ -85,9 +84,8 @@ class EERKickstarter(Loss):
         )
 
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
-        teacher_td = td.get(self.cfg.teacher, None)
-        primary_policy_name = self._primary_policy_name()
-        student_td = td.get(primary_policy_name, None)
+        teacher_td = td[self.cfg.teacher]
+        student_td = td[self._primary_policy_name()]
 
         with torch.no_grad():
             # Store teacher outputs for action and value losses

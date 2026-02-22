@@ -8,8 +8,7 @@ from torch import Tensor
 from torchrl.data import Composite, UnboundedContinuous, UnboundedDiscrete
 
 from metta.rl.loss.loss import Loss, LossConfig
-from metta.rl.policy_assets import PolicyAssetRegistry
-from metta.rl.training import ComponentContext, TrainingEnvironment
+from metta.rl.training import ComponentContext
 
 # Keep: heavy module + manages circular dependency (loss <-> trainer)
 if TYPE_CHECKING:
@@ -49,20 +48,6 @@ class Kickstarter(Loss):
 
     cfg: "KickstarterConfig"
 
-    __slots__ = ("teacher_policy",)
-
-    def __init__(
-        self,
-        policy_assets: PolicyAssetRegistry,
-        trainer_cfg: "TrainerConfig",
-        env: TrainingEnvironment,
-        device: torch.device,
-        instance_name: str,
-        cfg: "KickstarterConfig",
-    ):
-        super().__init__(policy_assets, trainer_cfg, env, device, instance_name, cfg)
-        self.teacher_policy = policy_assets.get(cfg.teacher)
-
     def get_experience_spec(self) -> Composite:
         # Get action space size for logits shape
         act_space = self.env.single_action_space
@@ -79,17 +64,16 @@ class Kickstarter(Loss):
         )
 
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
-        teacher_td = td.get(self.cfg.teacher, None)
-        primary_policy_name = self._primary_policy_name()
-        student_td = td.get(primary_policy_name, None)
+        teacher_td = td[self.cfg.teacher]
+        student_td = td[self._primary_policy_name()]
         # move teacher's logits and values to the student's td, under the keys listed in our experience spec.
         # we only pass the student_td to the buffer for saving by key listed in the experience spec.
-        student_td.set("teacher_logits", teacher_td.get("logits"))
-        student_td.set("teacher_values", teacher_td.get("values"))
-
+        student_td["teacher_logits"] = teacher_td["logits"]
+        student_td["teacher_values"] = teacher_td["values"]
         forced = bool(torch.rand(1, device=student_td.device) < self.cfg.teacher_led_proportion)
-        teacher_mask = torch.full(student_td.batch_size, forced, dtype=torch.bool, device=student_td.device)
-        student_td["teacher_mask"] = teacher_mask
+        student_td["teacher_mask"] = torch.full(
+            student_td.batch_size, forced, dtype=torch.bool, device=student_td.device
+        )
         if forced:
             teacher_actions = teacher_td["actions"]
             student_td["actions"] = teacher_actions.to(dtype=student_td["actions"].dtype)
@@ -110,25 +94,22 @@ class Kickstarter(Loss):
 
         student_td: TensorDict = shared_loss_data["policy_td"].reshape(B * TT)
 
-        # action loss
-        temperature = self.cfg.temperature
-        teacher_logits: Tensor = minibatch["teacher_logits"]
-        teacher_logits = teacher_logits.to(dtype=torch.float32).reshape(B * TT, -1).detach()
+        teacher_logits: Tensor = minibatch["teacher_logits"].reshape(B * TT, -1)
         student_logits: Tensor = student_td["logits"]
-        student_logits = student_logits.to(dtype=torch.float32)
-        teacher_log_probs = F.log_softmax(teacher_logits / temperature, dim=-1).detach()
-        student_log_probs = F.log_softmax(student_logits / temperature, dim=-1)
+        teacher_value: Tensor = minibatch["teacher_values"].reshape(B * TT)
+        student_value: Tensor = student_td["values"]
+        teacher_logits_f32 = teacher_logits.to(dtype=torch.float32).detach()
+        student_logits_f32 = student_logits.to(dtype=torch.float32)
+        teacher_log_probs = F.log_softmax(teacher_logits_f32 / self.cfg.temperature, dim=-1).detach()
+        student_log_probs = F.log_softmax(student_logits_f32 / self.cfg.temperature, dim=-1)
         student_probs = torch.exp(student_log_probs)
-        ks_action_loss = (temperature**2) * (
+        ks_action_loss = (self.cfg.temperature**2) * (
             (student_probs * (student_log_probs - teacher_log_probs)).sum(dim=-1).mean()
         )
 
-        # value loss
-        teacher_value: Tensor = minibatch["teacher_values"]
-        teacher_value = teacher_value.to(dtype=torch.float32).reshape(B * TT).detach()
-        student_value: Tensor = student_td["values"]
-        student_value = student_value.to(dtype=torch.float32)
-        ks_value_loss = ((teacher_value.detach() - student_value) ** 2).mean()
+        teacher_value_f32 = teacher_value.to(dtype=torch.float32).detach()
+        student_value_f32 = student_value.to(dtype=torch.float32)
+        ks_value_loss = ((teacher_value_f32 - student_value_f32) ** 2).mean()
 
         loss = ks_action_loss * self.cfg.action_loss_coef + ks_value_loss * self.cfg.value_loss_coef
 

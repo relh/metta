@@ -154,7 +154,6 @@ def apply_teacher_phase(
         family=mode_parts.family,
         is_sliced=is_sliced,
         teacher_cfg=teacher_cfg,
-        primary_policy_name=primary_policy_name,
         teacher_policy_name=teacher_policy_name,
     )
     if not is_sliced:
@@ -394,64 +393,57 @@ def _select_teacher_loss_cfg(
     family: DistillFamily,
     is_sliced: bool,
     teacher_cfg: TeacherConfig,
-    primary_policy_name: str,
     teacher_policy_name: str,
 ) -> list[str]:
     """Instantiate and add the teacher loss config to losses if not already present."""
-    loss_names: list[str] = []
 
     def _add_if_missing(name: str, cfg: LossConfig) -> None:
         if losses.has_loss(name):
             return
         losses.add_loss(name, cfg)
 
-    if family == "supervisor" and not is_sliced:
-        _add_if_missing("supervisor", ActionSupervisedConfig(teacher_led_proportion=teacher_cfg.teacher_led_proportion))
-        loss_names.append("supervisor")
-    elif family == "supervisor" and is_sliced:
-        _add_if_missing("teacher_led", ActionSupervisedConfig(teacher_led_proportion=1.0))
-        _add_if_missing("student_led", ActionSupervisedConfig(teacher_led_proportion=0.0))
-        loss_names.extend(["teacher_led", "student_led"])
-    elif family == "eer_kickstarter" and not is_sliced:
-        _add_if_missing(
-            "eer_kickstarter",
-            EERKickstarterConfig(policy=primary_policy_name, teacher=teacher_policy_name),
-        )
-        loss_names.append("eer_kickstarter")
-    elif family == "eer_kickstarter" and is_sliced:
-        _add_if_missing("teacher_led", EERKickstarterConfig(policy=primary_policy_name, teacher=teacher_policy_name))
-        _add_if_missing("student_led", EERKickstarterConfig(policy=primary_policy_name, teacher=teacher_policy_name))
-        loss_names.extend(["teacher_led", "student_led"])
-    elif family == "kickstarter" and not is_sliced:
-        _add_if_missing(
-            "kickstarter",
-            KickstarterConfig(
-                teacher=teacher_policy_name,
-                teacher_led_proportion=teacher_cfg.teacher_led_proportion,
-            ),
-        )
-        loss_names.append("kickstarter")
-    elif family == "kickstarter" and is_sliced:
-        _add_if_missing(
-            "teacher_led",
-            KickstarterConfig(teacher=teacher_policy_name, teacher_led_proportion=1.0),
-        )
-        _add_if_missing(
-            "student_led",
-            KickstarterConfig(teacher=teacher_policy_name, teacher_led_proportion=0.0),
-        )
-        loss_names.extend(["teacher_led", "student_led"])
-    elif family == "eer_cloner" and not is_sliced:
-        _add_if_missing("eer_cloner", EERClonerConfig())
-        loss_names.append("eer_cloner")
-    elif family == "eer_cloner" and is_sliced:
-        _add_if_missing("teacher_led", EERClonerConfig())
-        _add_if_missing("student_led", EERClonerConfig())
-        loss_names.extend(["teacher_led", "student_led"])
+    if not is_sliced:
+        if family == "supervisor":
+            _add_if_missing(
+                "supervisor",
+                ActionSupervisedConfig(teacher_led_proportion=teacher_cfg.teacher_led_proportion),
+            )
+            return ["supervisor"]
+        if family == "eer_kickstarter":
+            _add_if_missing("eer_kickstarter", EERKickstarterConfig(teacher=teacher_policy_name))
+            return ["eer_kickstarter"]
+        if family == "kickstarter":
+            _add_if_missing(
+                "kickstarter",
+                KickstarterConfig(
+                    teacher=teacher_policy_name,
+                    teacher_led_proportion=teacher_cfg.teacher_led_proportion,
+                ),
+            )
+            return ["kickstarter"]
+        if family == "eer_cloner":
+            _add_if_missing("eer_cloner", EERClonerConfig())
+            return ["eer_cloner"]
+        raise ValueError(f"Unsupported teacher mode family '{family}' with sliced={is_sliced}")
+
+    if family == "supervisor":
+        teacher_loss_cfg = ActionSupervisedConfig(teacher_led_proportion=1.0)
+        student_loss_cfg = ActionSupervisedConfig(teacher_led_proportion=0.0)
+    elif family == "eer_kickstarter":
+        teacher_loss_cfg = EERKickstarterConfig(teacher=teacher_policy_name)
+        student_loss_cfg = EERKickstarterConfig(teacher=teacher_policy_name)
+    elif family == "kickstarter":
+        teacher_loss_cfg = KickstarterConfig(teacher=teacher_policy_name, teacher_led_proportion=1.0)
+        student_loss_cfg = KickstarterConfig(teacher=teacher_policy_name, teacher_led_proportion=0.0)
+    elif family == "eer_cloner":
+        teacher_loss_cfg = EERClonerConfig()
+        student_loss_cfg = EERClonerConfig()
     else:
         raise ValueError(f"Unsupported teacher mode family '{family}' with sliced={is_sliced}")
 
-    return loss_names
+    _add_if_missing("teacher_led", teacher_loss_cfg)
+    _add_if_missing("student_led", student_loss_cfg)
+    return ["teacher_led", "student_led"]
 
 
 def _ensure_teacher_policy_asset(

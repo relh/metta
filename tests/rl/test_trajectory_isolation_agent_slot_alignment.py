@@ -234,13 +234,15 @@ def test_build_rollout_policy_batches_single_slice_fast_path() -> None:
 
     batches = isolator.build_rollout_policy_batches()
     assert len(batches) == 1
-    assert batches[0].stitched_td is policy_td
+    assert batches[0].stitched_td is not policy_td
+    assert torch.equal(batches[0].stitched_td["agent_slot_ids"], policy_td["agent_slot_ids"])
 
     batches[0].stitched_td["actions"] = torch.zeros(2, dtype=torch.int32)
     isolator.apply_rollout_policy_batch(batches[0])
     updated = isolator._slice_tds_rollout_step["default"]["learner0"]
-    assert updated is batches[0].stitched_td
+    assert updated is not policy_td
     assert "actions" in updated.keys()
+    assert torch.equal(updated["actions"], torch.zeros(2, dtype=torch.int32))
 
 
 def test_writeback_rollout_tds_uses_direct_mode_for_compatible_shapes() -> None:

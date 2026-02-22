@@ -1,10 +1,12 @@
 from types import SimpleNamespace
 
+import pytest
 import torch
 from tensordict import TensorDict
 
 from metta.rl.advantage import td_lambda_reverse_scan
 from metta.rl.loss.kickstarter import Kickstarter, KickstarterConfig
+from metta.rl.loss.logit_kickstarter import LogitKickstarter, LogitKickstarterConfig
 from metta.rl.loss.ppo_actor import PPOActorConfig
 from metta.rl.loss.ppo_critic import PPOCriticConfig
 from metta.rl.training.teacher import (
@@ -135,16 +137,27 @@ def test_sliced_kickstarter_runs_ppo_losses_on_teacher_slices() -> None:
     assert teacher_slice.policies == ["learner0", "teacher"]
 
 
-def test_kickstarter_forced_actions_record_behavior_logprob() -> None:
+@pytest.mark.parametrize(
+    ("instance_name", "loss_cls", "cfg_cls"),
+    [
+        ("kickstarter", Kickstarter, KickstarterConfig),
+        ("logit_kickstarter", LogitKickstarter, LogitKickstarterConfig),
+    ],
+)
+def test_teacher_forced_actions_record_behavior_logprob(
+    instance_name: str,
+    loss_cls: type[Kickstarter] | type[LogitKickstarter],
+    cfg_cls: type[KickstarterConfig] | type[LogitKickstarterConfig],
+) -> None:
     env = SimpleNamespace(single_action_space=gym_spaces.Discrete(5))
     registry = _PolicyRegistry(_ToyPolicy())
-    loss = Kickstarter(
+    loss = loss_cls(
         registry,
         SimpleNamespace(),
         env,
         torch.device("cpu"),
-        "kickstarter",
-        KickstarterConfig(teacher="teacher", teacher_led_proportion=1.0),
+        instance_name,
+        cfg_cls(teacher="teacher", teacher_led_proportion=1.0),
     )
 
     num_agents = 3

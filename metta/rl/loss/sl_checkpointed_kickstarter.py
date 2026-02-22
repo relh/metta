@@ -54,13 +54,6 @@ class SLCheckpointedKickstarter(Loss):
     __slots__ = (
         "teacher_policy",
         "teacher_policy_spec",
-        "temperature",
-        "teacher_uri",
-        "_base_teacher_uri",
-        "_checkpointed_interval",
-        "_epochs_per_checkpoint",
-        "_terminating_epoch",
-        "_final_checkpoint",
     )
 
     def __init__(
@@ -73,13 +66,6 @@ class SLCheckpointedKickstarter(Loss):
         cfg: "SLCheckpointedKickstarterConfig",
     ) -> None:
         super().__init__(policy_assets, trainer_cfg, vec_env, device, instance_name, cfg)
-        self.temperature = self.cfg.temperature
-        self.teacher_uri = self.cfg.teacher_uri
-        self._base_teacher_uri = self.cfg.teacher_uri  # Store original URI for checkpoint reloading
-        self._checkpointed_interval = self.cfg.checkpointed_interval
-        self._epochs_per_checkpoint = self.cfg.epochs_per_checkpoint
-        self._terminating_epoch = self.cfg.terminating_epoch
-        self._final_checkpoint = self.cfg.final_checkpoint
         self.teacher_policy = load_teacher_policy(self.env, policy_uri=self.cfg.teacher_uri, device=self.device)
 
         self.teacher_policy_spec = self.teacher_policy.get_agent_experience_spec()
@@ -100,11 +86,11 @@ class SLCheckpointedKickstarter(Loss):
         context: ComponentContext,
         mb_idx: int,
     ) -> tuple[Tensor, TensorDict, bool]:
-        if context.epoch % self._epochs_per_checkpoint == 0:
-            epoch = (context.epoch // self._epochs_per_checkpoint + 1) * self._checkpointed_interval
+        if context.epoch % self.cfg.epochs_per_checkpoint == 0:
+            epoch = (context.epoch // self.cfg.epochs_per_checkpoint + 1) * self.cfg.checkpointed_interval
             self.load_teacher_policy(epoch)
-        elif context.epoch == self._terminating_epoch:
-            self.load_teacher_policy(self._final_checkpoint)
+        elif context.epoch == self.cfg.terminating_epoch:
+            self.load_teacher_policy(self.cfg.final_checkpoint)
 
         minibatch = cast(TensorDict, shared_loss_data["sampled_mb"])
 
@@ -114,22 +100,22 @@ class SLCheckpointedKickstarter(Loss):
 
         student_td = cast(TensorDict, shared_loss_data["policy_td"]).reshape(B * TT)
 
-        temperature = self.temperature
-        teacher_logits = teacher_td["logits"].to(dtype=torch.float32)
-        student_logits = student_td["logits"].to(dtype=torch.float32)
-
-        teacher_log_probs = F.log_softmax(teacher_logits / temperature, dim=-1).detach()
-        student_log_probs = F.log_softmax(student_logits / temperature, dim=-1)
+        teacher_logits = teacher_td["logits"]
+        student_logits = student_td["logits"]
+        teacher_value = teacher_td["values"]
+        student_value = student_td["values"]
+        teacher_logits_f32 = teacher_logits.to(dtype=torch.float32).detach()
+        student_logits_f32 = student_logits.to(dtype=torch.float32)
+        teacher_log_probs = F.log_softmax(teacher_logits_f32 / self.cfg.temperature, dim=-1).detach()
+        student_log_probs = F.log_softmax(student_logits_f32 / self.cfg.temperature, dim=-1)
         student_probs = torch.exp(student_log_probs)
-
-        ks_action_loss = (temperature**2) * (
+        ks_action_loss = (self.cfg.temperature**2) * (
             (student_probs * (student_log_probs - teacher_log_probs)).sum(dim=-1).mean()
         )
 
-        # Value loss
-        student_value = student_td["values"].to(dtype=torch.float32)
-        teacher_value = teacher_td["values"].to(dtype=torch.float32).detach()
-        ks_value_loss = ((teacher_value.detach() - student_value) ** 2).mean()
+        teacher_value_f32 = teacher_value.to(dtype=torch.float32).detach()
+        student_value_f32 = student_value.to(dtype=torch.float32)
+        ks_value_loss = ((teacher_value_f32 - student_value_f32) ** 2).mean()
 
         loss = ks_action_loss * self.cfg.action_loss_coef + ks_value_loss * self.cfg.value_loss_coef
 
@@ -142,7 +128,7 @@ class SLCheckpointedKickstarter(Loss):
 
     def load_teacher_policy(self, checkpointed_epoch: int) -> None:
         """Load the teacher policy from a specific checkpoint."""
-        new_uri = checkpoint_uri_for_epoch(self._base_teacher_uri, checkpointed_epoch)
+        new_uri = checkpoint_uri_for_epoch(self.cfg.teacher_uri, checkpointed_epoch)
         self.teacher_policy = load_teacher_policy(
             self.env,
             policy_uri=new_uri,

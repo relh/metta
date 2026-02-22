@@ -61,9 +61,9 @@ def ensure_sequence_metadata(
     device = _infer_tensordict_device(td)
     batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, batch_size, time_steps, cache=cache)
     if needs_batch:
-        td.set("batch", batch_tensor)
+        td.set("batch", batch_tensor.clone())
     if needs_bptt:
-        td.set("bptt", bptt_tensor)
+        td.set("bptt", bptt_tensor.clone())
 
 
 def set_sequence_metadata(
@@ -80,8 +80,8 @@ def set_sequence_metadata(
     """
     device = _infer_tensordict_device(td)
     batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, batch_size, time_steps, cache=cache)
-    td.set("batch", batch_tensor)
-    td.set("bptt", bptt_tensor)
+    td.set("batch", batch_tensor.clone())
+    td.set("bptt", bptt_tensor.clone())
 
 
 def prepare_policy_forward_td(
@@ -105,8 +105,8 @@ def prepare_policy_forward_td(
 
     device = _infer_tensordict_device(td)
     batch_tensor, bptt_tensor = _get_policy_metadata_tensors(device, B, TT)
-    td.set("batch", batch_tensor)
-    td.set("bptt", bptt_tensor)
+    td.set("batch", batch_tensor.clone())
+    td.set("bptt", bptt_tensor.clone())
 
     return td, B, TT
 

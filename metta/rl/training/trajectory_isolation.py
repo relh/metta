@@ -307,11 +307,13 @@ class TrajectoryIsolationSliceRuntime:
             return None, None
 
         slice_mask = self.env_mask[training_env_id]
-
-        base_td = td[slice_mask]
-        if base_td.batch_size.numel() == 0:
+        row_indices = torch.nonzero(slice_mask, as_tuple=False).flatten()
+        if row_indices.numel() == 0:
             return None, None
-        set_sequence_metadata(base_td, batch_size=base_td.batch_size.numel(), time_steps=1)
+
+        # Force concrete row selection so every key shares the same sliced leading dimension.
+        base_td = td[row_indices].clone()
+        set_sequence_metadata(base_td, batch_size=int(row_indices.numel()), time_steps=1)
         slice_td = TensorDict({}, batch_size=base_td.batch_size, device=base_td.device)
         for policy_name in self.cfg.policies:
             # Keep policy containers independent while sharing immutable rollout inputs.
@@ -628,11 +630,7 @@ class TrajectoryIsolator(TrainerComponent):
                 continue
 
             split_sizes = [int(td.shape[0]) for td in tds_with_policy]
-            if len(tds_with_policy) == 1:
-                # Fast path: avoid cat/split churn when the policy serves a single active slice.
-                stitched_td = tds_with_policy[0]
-            else:
-                stitched_td = torch.cat(tds_with_policy, dim=0)
+            stitched_td = torch.cat(tds_with_policy, dim=0).clone()
             set_sequence_metadata(stitched_td, batch_size=stitched_td.batch_size.numel(), time_steps=1)
             batches.append(
                 RolloutPolicyBatch(
@@ -646,13 +644,6 @@ class TrajectoryIsolator(TrainerComponent):
 
     def apply_rollout_policy_batch(self, batch: RolloutPolicyBatch) -> None:
         """Split a stitched policy TensorDict back into slice-specific TensorDicts."""
-        if len(batch.slices) == 1:
-            runtime_slice = batch.slices[0]
-            updated_td = batch.stitched_td
-            set_sequence_metadata(updated_td, batch_size=updated_td.batch_size.numel(), time_steps=1)
-            self._slice_tds_rollout_step[runtime_slice.name].set(batch.policy_name, updated_td)
-            return
-
         split_tds = batch.stitched_td.split(batch.split_sizes, dim=0)
         for runtime_slice, updated_td in zip(batch.slices, split_tds, strict=True):
             set_sequence_metadata(updated_td, batch_size=updated_td.batch_size.numel(), time_steps=1)

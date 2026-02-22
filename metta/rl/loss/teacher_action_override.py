@@ -78,8 +78,7 @@ class TeacherActionOverride(Loss):
         )
 
     def run_rollout_postprocess(self, td: TensorDict, context: ComponentContext) -> None:
-        primary_policy_name = context.current_slice_cfg.primary_policy
-        student_td = td.get(primary_policy_name, None)
+        student_td = td[context.current_slice_cfg.primary_policy]
         teacher_actions, valid_teacher_actions = teacher_action_indices_and_valid_mask(
             student_td["teacher_actions"],
             self.num_actions,
