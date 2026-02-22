@@ -6,6 +6,17 @@ details alongside the implementations.
 Teaching-friendly scripted agents for CoGames evaluation and ablation studies, plus a tiny demo policy and the CogsGuard
 team-play scripted policy.
 
+## Development Model
+
+This package contains **canonical, released versions** of scripted policies only. All active policy development happens
+in the separate [co_gas rig](https://github.com/Metta-AI/co_gas) (`cogas-agents` package, module `cogas_agents`).
+
+When a policy is stable and ready for broader use, it gets promoted here as a canonical release under the
+`cogames_agents` module name.
+
+**Do not** add experimental or in-development policies directly to this package. Work in the co_gas rig first, then
+promote when ready.
+
 ## Overview
 
 This package provides the CogsGuard team-play policy, two progressively capable scripted agents, and one tiny demo
