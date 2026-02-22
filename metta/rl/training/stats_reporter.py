@@ -193,7 +193,8 @@ class StatsReporter(TrainerComponent):
         context.stats_reporter = self
         if self._wandb_run is not None:
             setup_wandb_metrics(self._wandb_run)
-            log_model_parameters(self.context.policy, self._wandb_run)
+            for policy in self.context.policy_assets.policies.values():
+                log_model_parameters(policy, self._wandb_run)
 
     @property
     def state(self) -> StatsReporterState:
@@ -216,7 +217,6 @@ class StatsReporter(TrainerComponent):
         agent_step: int,
         losses_stats: dict[str, float],
         experience: Any,
-        policy: Any,
         timer: Timer | None,
         trainer_cfg: Any,
         optimizer: torch.optim.Optimizer | None,
@@ -228,7 +228,6 @@ class StatsReporter(TrainerComponent):
                 losses_stats=losses_stats,
                 experience=experience,
                 trainer_cfg=trainer_cfg,
-                policy=policy,
                 agent_step=agent_step,
                 epoch=epoch,
                 timer=timer,
@@ -282,16 +281,22 @@ class StatsReporter(TrainerComponent):
         Args:
         """
         ctx = self.context
+        trainable_policy_names: list[str] = []
+        for name, cfg in ctx.policy_assets.configs.items():
+            if cfg.trainable and cfg.optimizer is not None:
+                trainable_policy_names.append(name)
+        optimizer = None
+        if len(trainable_policy_names) == 1:
+            optimizer = getattr(ctx.policy_assets.get(trainable_policy_names[0]), "optimizer", None)
 
         self.report_epoch(
             epoch=ctx.epoch,
             agent_step=ctx.agent_step,
             losses_stats=ctx.latest_losses_stats,
             experience=ctx.experience,
-            policy=ctx.policy,
             timer=ctx.stopwatch,
             trainer_cfg=ctx.config,
-            optimizer=getattr(ctx.policy, "optimizer", None),
+            optimizer=optimizer,
         )
 
     def on_training_complete(self) -> None:
@@ -357,7 +362,6 @@ class StatsReporter(TrainerComponent):
         losses_stats: dict[str, float],
         experience: Any,
         trainer_cfg: Any,
-        policy: Any,
         agent_step: int,
         epoch: int,
         timer: Any,
@@ -423,7 +427,7 @@ class StatsReporter(TrainerComponent):
         timing_info: dict[str, Any],
         agent_step: int,
     ) -> None:
-        """Emit per-epoch timing metrics matching legacy WandbLogger behavior."""
+        """Emit per-epoch timing metrics for wandb payloads."""
         lap_times = timing_info.get("lap_times")
         if not isinstance(lap_times, dict):
             lap_times = {}

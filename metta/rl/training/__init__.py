@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     )
     from metta.rl.training.update_epochs_tuner import UpdateEpochAutoTuner
     from metta.rl.training.wandb_aborter import WandbAborter, WandbAborterConfig
-    from metta.rl.training.wandb_logger import WandbLogger
 
 _EXPORTS: dict[str, tuple[str, str | None]] = {
     "Checkpointer": ("metta.rl.training.checkpointer", "Checkpointer"),
@@ -75,7 +74,6 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "VectorizedTrainingEnvironment": ("metta.rl.training.training_environment", "VectorizedTrainingEnvironment"),
     "WandbAborter": ("metta.rl.training.wandb_aborter", "WandbAborter"),
     "WandbAborterConfig": ("metta.rl.training.wandb_aborter", "WandbAborterConfig"),
-    "WandbLogger": ("metta.rl.training.wandb_logger", "WandbLogger"),
     "UpdateEpochAutoTuner": ("metta.rl.training.update_epochs_tuner", "UpdateEpochAutoTuner"),
 }
 
@@ -114,7 +112,6 @@ __all__ = [
     "VectorizedTrainingEnvironment",
     "WandbAborter",
     "WandbAborterConfig",
-    "WandbLogger",
     "UpdateEpochAutoTuner",
 ]
 

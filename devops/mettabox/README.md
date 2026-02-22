@@ -63,6 +63,8 @@ Assumptions (from recent usage):
 - Source order: local AWS env vars first, then `aws configure export-credentials`.
 - Credential keypair source is selected atomically (no mixing access key + secret across sources).
 - Exported vars: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_DEFAULT_REGION`.
+- If credential forwarding is enabled but no local keypair can be resolved, the CLI prints a warning with the reason
+  (for example an invalid `AWS_PROFILE`) so failures are visible before container-side auth falls back.
 - Disable per command with `--no-forward-aws-creds`.
 
 ## Log discovery

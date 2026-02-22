@@ -58,11 +58,11 @@ class Checkpointer(TrainerComponent):
         super().register(context)
         if not self._policy_name:
             raise ValueError("Checkpointer requires policy_name when using multi-policy assets")
-        latest_uris = getattr(context, "latest_policy_uris", None)
-        if latest_uris is None:
-            latest_uris = {}
-            context.latest_policy_uris = latest_uris
-        latest_uris[self._policy_name] = self.get_latest_policy_uri()
+        if self._policy_getter is None:
+            raise ValueError("Checkpointer requires policy_getter when registered as a trainer component")
+        context.latest_policy_uris[self._policy_name] = (
+            self._checkpoint_manager.get_latest_checkpoint() or self._latest_policy_uri
+        )
 
     def load_or_create_policy(
         self,
@@ -159,9 +159,6 @@ class Checkpointer(TrainerComponent):
         if needs_spec:
             policy_spec_from_uri(normalized_uri)
 
-    def get_latest_policy_uri(self) -> Optional[str]:
-        return self._checkpoint_manager.get_latest_checkpoint() or self._latest_policy_uri
-
     def on_epoch_end(self, epoch: int) -> None:
         if not self._distributed.should_checkpoint():
             return
@@ -173,9 +170,8 @@ class Checkpointer(TrainerComponent):
         self._save_policy(self.context.epoch)
 
     def _save_policy(self, epoch: int) -> None:
-        policy = self._policy_getter() if self._policy_getter is not None else self.context.policy
-        if policy is None:
-            raise RuntimeError("Checkpointer requires a policy instance to save checkpoints.")
+        assert self._policy_getter is not None, "policy_getter is required after register()"
+        policy = self._policy_getter()
         if self._policy_architecture is None:
             raise ValueError("Cannot save policy checkpoint without policy_architecture")
 
@@ -199,11 +195,7 @@ class Checkpointer(TrainerComponent):
             optimizer.train()
 
         self._latest_policy_uri = uri
-        latest_uris = getattr(self.context, "latest_policy_uris", None)
-        if latest_uris is None:
-            latest_uris = {}
-            self.context.latest_policy_uris = latest_uris
-        latest_uris[self._policy_name] = uri
+        self.context.latest_policy_uris[self._policy_name] = uri
         self.context.latest_saved_policy_epoch = epoch
 
         # Log latest checkpoint URI to wandb if available

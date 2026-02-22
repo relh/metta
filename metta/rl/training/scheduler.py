@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence
 
 import numpy as np
 from pydantic import Field
@@ -107,8 +107,8 @@ class ScheduleRule(Config):
     def _read_metric(self, ctx) -> Optional[float]:
         if not self.metric_key:
             return None
-        stats_reporter = getattr(ctx, "stats_reporter", None)
-        if stats_reporter is None or getattr(stats_reporter, "state", None) is None:
+        stats_reporter = ctx.stats_reporter
+        if stats_reporter is None:
             return None
         values = stats_reporter.state.rollout_stats.get(self.metric_key)
         if not values:
@@ -145,8 +145,8 @@ class ScheduleRule(Config):
 
     # -------------- main apply --------------
     def apply(self, *, obj: object, ctx) -> None:
-        epoch = getattr(ctx, "epoch", 0)
-        agent_step = getattr(ctx, "agent_step", 0)
+        epoch = ctx.epoch
+        agent_step = ctx.agent_step
         mode = self.mode or ("metric" if self.metric_key else "progress")
         if mode == "metric":
             self._apply_metric(obj=obj, ctx=ctx)
@@ -271,10 +271,7 @@ class LossScheduler(TrainerComponent):
         epoch = self.context.epoch
         agent_step = self.context.agent_step
         # 1) Apply run gates for the requested phase
-        gates = getattr(self.context, "loss_run_gates", None)
-        if gates is None:
-            gates = {}
-            self.context.loss_run_gates = gates
+        gates = self.context.loss_run_gates
 
         # OR-combine semantics across gates for the same loss/phase.
         # Re-initialize per apply call to False iff there exists at least one gate
@@ -309,19 +306,15 @@ class LossScheduler(TrainerComponent):
                     sup_off = True
                     break
             if sup_off:
-                env_obj = getattr(self.context, "env", None)
-                driver = getattr(getattr(env_obj, "vecenv", None), "driver_env", None)
+                driver = getattr(self.context.env.vecenv, "driver_env", None)
                 if driver and hasattr(driver, "disable_supervisor"):
                     driver.disable_supervisor()
-                te_cfg = getattr(getattr(self.context, "config", None), "training_env", None)
-                if te_cfg:
-                    te_cfg.supervisor_policy_uri = None
+                self.context.config.training_env.supervisor_policy_uri = None
 
         # 2) Apply unified rules (trainer + policy assets)
-        policy_assets = getattr(self.context, "policy_assets", None)
-        policy_asset_target = _PolicyAssetRuleTarget(getattr(policy_assets, "configs", None))
+        policy_asset_target = {"policy_assets": self.context.policy_assets.configs}
         for rule in self.config.rules:
-            if rule.target_path.startswith("policy_assets") and policy_asset_target.policy_assets is not None:
+            if rule.target_path.startswith("policy_assets"):
                 rule.apply(obj=policy_asset_target, ctx=self.context)
                 continue
             rule.apply(obj=self.context.config, ctx=self.context)
@@ -351,31 +344,26 @@ class LossScheduler(TrainerComponent):
         self.apply(phase="rollout")
 
     # ----------------- Experience key management -----------------
-    def _active_rollout_loss_names(self) -> Iterable[str]:
-        """Return loss instance names that are active for rollout in the current epoch."""
-        gates = getattr(self.context, "loss_run_gates", None) or {}
-        for loss_name in self.context.losses.keys():
-            entry = gates.get(loss_name)
-            if not entry:
-                # No gates configured for this loss; default to active.
-                yield loss_name
-                continue
-            if bool(entry.get("rollout", True)):
-                yield loss_name
-
     def _update_experience_store_keys_for_rollout(self) -> None:
         """Update experience buffer to only require keys for active rollout losses."""
         context = self.context
-        experience = getattr(context, "experience", None)
-        if experience is None:
-            return
+        experience = context.experience
 
-        # Always include policy experience spec keys.
-        policy_spec = context.policy.get_agent_experience_spec()
-        active_keys: set[Any] = set(policy_spec.keys(include_nested=True, leaves_only=True))
+        active_keys: set[Any] = set()
+        for policy_name, policy_cfg in context.policy_assets.configs.items():
+            if not policy_cfg.trainable:
+                continue
+            policy_spec = context.policy_assets.get(policy_name).get_agent_experience_spec()
+            active_keys.update(policy_spec.keys(include_nested=True, leaves_only=True))
+        if not active_keys:
+            raise RuntimeError("No trainable policy experience specs available for rollout.")
 
         # Include spec keys from losses that are active for rollout this epoch.
-        for loss_name in self._active_rollout_loss_names():
+        gates = self.context.loss_run_gates
+        for loss_name in context.losses.keys():
+            entry = gates.get(loss_name)
+            if entry and entry.get("rollout") is False:
+                continue
             loss = context.losses.get(loss_name)
             if loss is None:
                 continue
@@ -384,27 +372,17 @@ class LossScheduler(TrainerComponent):
 
         active_keys.update(experience.required_store_keys())
 
-        # If for some reason no keys were found, fall back to writing all keys.
-        if not active_keys:
-            experience.reset_store_keys()
-            return
-
         experience.set_store_keys(active_keys)
 
     def _sync_optimizer_from_config(self) -> None:
-        policy_assets = getattr(self.context, "policy_assets", None)
-        configs = getattr(policy_assets, "configs", None)
-        policies = getattr(policy_assets, "policies", None)
-        if not configs or not policies:
-            return
+        configs = self.context.policy_assets.configs
+        policies = self.context.policy_assets.policies
 
         for policy_name, asset_cfg in configs.items():
-            optimizer_cfg = getattr(asset_cfg, "optimizer", None)
+            optimizer_cfg = asset_cfg.optimizer
             if optimizer_cfg is None:
                 continue
-            policy = policies.get(policy_name)
-            if policy is None:
-                continue
+            policy = policies[policy_name]
             optimizer = getattr(policy, "optimizer", None)
             if optimizer is None:
                 continue
@@ -431,11 +409,6 @@ class LossScheduler(TrainerComponent):
             for key, value in params.items():
                 if hasattr(optimizer, key):
                     setattr(optimizer, key, value)
-
-
-class _PolicyAssetRuleTarget:
-    def __init__(self, policy_assets) -> None:
-        self.policy_assets = policy_assets
 
 
 def _set_attr_path(obj: object, path: str, value: Any) -> None:

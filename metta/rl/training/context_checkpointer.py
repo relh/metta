@@ -43,10 +43,19 @@ class ContextCheckpointer(TrainerComponent):
         payload: Optional[Dict[str, Any]] = None
 
         if self._distributed.is_master():
-            if self._has_multiple_trainable_policies(context):
-                logger.info("Skipping trainer state restore for multi-policy training; using recipe defaults.")
+            trainable_policy_names = [
+                policy_name
+                for policy_name, cfg in context.policy_assets.configs.items()
+                if cfg.trainable and cfg.optimizer is not None
+            ]
+            if len(trainable_policy_names) != 1:
+                logger.info(
+                    "Skipping trainer state restore for %d trainable policies; using recipe defaults.",
+                    len(trainable_policy_names),
+                )
             else:
-                raw = self._checkpoint_manager.load_trainer_state(context.latest_policy_uri())
+                policy_name = trainable_policy_names[0]
+                raw = self._checkpoint_manager.load_trainer_state(context.latest_policy_uris.get(policy_name))
                 if raw:
                     logger.info(
                         "Restoring trainer state from epoch=%s agent_step=%s", raw.get("epoch"), raw.get("agent_step")
@@ -101,13 +110,11 @@ class ContextCheckpointer(TrainerComponent):
 
         loss_states = payload.get("loss_states") or {}
         context.state.loss_states = loss_states
-        losses = getattr(context, "losses", None)
-        if losses:
-            for name, loss in losses.items():
-                stored = loss_states.get(name)
-                if stored is None:
-                    continue
-                loss.load_state_dict(stored, strict=False)
+        for name, loss in context.losses.items():
+            stored = loss_states.get(name)
+            if stored is None:
+                continue
+            loss.load_state_dict(stored, strict=False)
         context.state.loss_states = {}
 
         context.timing_baseline = {
@@ -115,21 +122,14 @@ class ContextCheckpointer(TrainerComponent):
             "wall_time": wall_time_baseline,
         }
 
-    def _has_multiple_trainable_policies(self, context: ComponentContext) -> bool:
-        policy_assets = getattr(context, "policy_assets", None)
-        configs = getattr(policy_assets, "configs", {}) if policy_assets is not None else {}
-        trainable = [cfg for cfg in configs.values() if cfg.trainable and cfg.optimizer is not None]
-        return len(trainable) > 1
-
     def _restore_policy_optimizers(self, context: ComponentContext) -> None:
-        policy_assets = getattr(context, "policy_assets", None)
-        configs = getattr(policy_assets, "configs", {}) if policy_assets is not None else {}
-        policies = getattr(policy_assets, "policies", {}) if policy_assets is not None else {}
+        configs = context.policy_assets.configs
+        policies = context.policy_assets.policies
 
         optimizer_payload = None
         if self._distributed.is_master():
             optimizer_payload = {}
-            latest_uris = getattr(context, "latest_policy_uris", {}) or {}
+            latest_uris = context.latest_policy_uris
             for policy_name, cfg in configs.items():
                 if not cfg.trainable:
                     continue
@@ -144,16 +144,15 @@ class ContextCheckpointer(TrainerComponent):
         if not optimizer_payload:
             return
 
-        if isinstance(policies, dict):
-            for policy_name, opt_state in optimizer_payload.items():
-                policy = policies.get(policy_name)
-                optimizer = getattr(policy, "optimizer", None) if policy is not None else None
-                if optimizer is None:
-                    continue
-                try:
-                    optimizer.load_state_dict(opt_state)
-                except (ValueError, KeyError) as exc:  # pragma: no cover
-                    logger.warning("Failed to load optimizer state for policy[%s]: %s", policy_name, exc)
+        for policy_name, opt_state in optimizer_payload.items():
+            policy = policies[policy_name]
+            optimizer = getattr(policy, "optimizer", None)
+            if optimizer is None:
+                continue
+            try:
+                optimizer.load_state_dict(opt_state)
+            except (ValueError, KeyError) as exc:  # pragma: no cover
+                logger.warning("Failed to load optimizer state for policy[%s]: %s", policy_name, exc)
 
     # ------------------------------------------------------------------
     # Callback entry-points
@@ -181,11 +180,7 @@ class ContextCheckpointer(TrainerComponent):
             logger.debug("Unable to capture stopwatch state: %s", exc)
             context.state.stopwatch_state = None
 
-        losses = getattr(context, "losses", None)
-        if losses:
-            context.state.loss_states = {name: loss.state_dict() for name, loss in losses.items()}
-        else:
-            context.state.loss_states = {}
+        context.state.loss_states = {name: loss.state_dict() for name, loss in context.losses.items()}
 
         # Capture curriculum state
         if context.curriculum is not None:

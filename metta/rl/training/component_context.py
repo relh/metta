@@ -63,7 +63,7 @@ class ComponentContext:
         self,
         *,
         state: TrainerState,
-        policy_assets: Any | None = None,
+        policy_assets: Any,
         device: torch.device,
         env: TrainingEnvironment,
         experience: Experience,
@@ -85,8 +85,6 @@ class ComponentContext:
         self.distributed = distributed
         self.curriculum = curriculum
         self.run_name = run_name
-        self._default_policy = None
-        self._default_policy_name = None
 
         self.timing_baseline = {"agent_step": 0, "wall_time": 0.0}
 
@@ -112,25 +110,6 @@ class ComponentContext:
     # ------------------------------------------------------------------
     # Epoch / step tracking
     # ------------------------------------------------------------------
-    @property
-    def policy(self) -> Any | None:
-        # keeping this as part of context for backwards compatibility - remove once components read from policy_assets
-        if self._default_policy is not None:
-            return self._default_policy
-
-        policy_assets = self.policy_assets
-        if policy_assets is None:
-            return None
-        policies = getattr(policy_assets, "policies", {}) or {}
-        if not policies:
-            return None
-
-        trainable = [name for name in policies.keys() if policy_assets.get_config(name).trainable]
-        policy_name = trainable[0] if trainable else next(iter(policies.keys()))
-        self._default_policy_name = policy_name
-        self._default_policy = policy_assets.get(policy_name)
-        return self._default_policy
-
     @property
     def epoch(self) -> int:
         return self.state.epoch
@@ -168,17 +147,6 @@ class ComponentContext:
     @property
     def latest_policy_uris(self) -> Dict[str, Optional[str]]:
         return self.state.latest_policy_uris
-
-    def latest_policy_uri(self) -> Optional[str]:
-        """Return a policy URI only when unambiguous.
-
-        This exists for backwards compatibility with single-policy evaluators.
-        If multiple policies have checkpoints, callers should select explicitly.
-        """
-        uris = {k: v for k, v in self.state.latest_policy_uris.items() if v}
-        if len(uris) == 1:
-            return next(iter(uris.values()))
-        return None
 
     @property
     def latest_saved_policy_epoch(self) -> int:

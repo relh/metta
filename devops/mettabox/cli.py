@@ -78,7 +78,7 @@ def _resolve_github_token() -> Optional[str]:
     return token or None
 
 
-def _resolve_aws_env() -> dict[str, str]:
+def _resolve_aws_env() -> tuple[dict[str, str], Optional[str]]:
     resolved: dict[str, str] = {}
     for env_var in FORWARDED_AWS_ENV_VARS:
         value = os.environ.get(env_var)
@@ -88,10 +88,19 @@ def _resolve_aws_env() -> dict[str, str]:
     profile = os.environ.get("AWS_PROFILE")
     if profile:
         export_cmd.extend(["--profile", profile])
+    export_error: Optional[str] = None
     try:
         result = subprocess.run(export_cmd, check=True, capture_output=True, text=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
+    except FileNotFoundError:
+        exported = {}
+        export_error = "aws CLI not found while resolving forwarded credentials."
+    except subprocess.CalledProcessError as exc:
         exported: dict[str, str] = {}
+        stderr = (exc.stderr or exc.stdout or "").strip()
+        if stderr:
+            export_error = stderr.splitlines()[0]
+        else:
+            export_error = f"aws configure export-credentials exited with {exc.returncode}."
     else:
         exported = {}
         for line in result.stdout.splitlines():
@@ -119,7 +128,17 @@ def _resolve_aws_env() -> dict[str, str]:
         chosen = {}
 
     if not chosen:
-        return {}
+        problems: list[str] = []
+        if profile:
+            problems.append(f"AWS_PROFILE={profile!r}")
+        if export_error:
+            problems.append(export_error)
+        if resolved and not env_has_pair:
+            missing = [key for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY") if key not in resolved]
+            problems.append(f"incomplete AWS env vars (missing {', '.join(missing)})")
+        if not problems:
+            problems.append("no AWS credential source produced AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY")
+        return {}, "; ".join(problems)
 
     for region_key in ("AWS_REGION", "AWS_DEFAULT_REGION"):
         if region_key not in chosen:
@@ -127,7 +146,7 @@ def _resolve_aws_env() -> dict[str, str]:
                 chosen[region_key] = resolved[region_key]
             elif region_key in exported:
                 chosen[region_key] = exported[region_key]
-    return chosen
+    return chosen, None
 
 
 def _build_forwarded_env(*, forward_gh_token: bool, forward_aws_creds: bool) -> dict[str, str]:
@@ -138,7 +157,16 @@ def _build_forwarded_env(*, forward_gh_token: bool, forward_aws_creds: bool) -> 
             forwarded_env["GITHUB_TOKEN"] = token
             forwarded_env["GH_TOKEN"] = token
     if forward_aws_creds:
-        forwarded_env.update(_resolve_aws_env())
+        aws_env, aws_issue = _resolve_aws_env()
+        forwarded_env.update(aws_env)
+        if not aws_env and aws_issue:
+            typer.echo(
+                "Warning: --forward-aws-creds is enabled, but no local AWS credentials were forwarded "
+                f"({aws_issue}). The container may fall back to stale/expired credentials. "
+                "Set a valid AWS_PROFILE (or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY locally), "
+                "or pass --no-forward-aws-creds.",
+                err=True,
+            )
     return forwarded_env
 
 

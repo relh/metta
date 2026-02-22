@@ -340,7 +340,3 @@ class ClipsCurriculumConfig(CurriculumConfig):
                     )
 
         return [PerformanceUpdater()]
-
-
-# Keep old name as alias for backwards compatibility
-ClipsCurriculum = ClipsCurriculumConfig

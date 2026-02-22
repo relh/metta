@@ -280,38 +280,43 @@ class Evaluator(TrainerComponent):
         if not self.should_evaluate(epoch):
             return
 
-        policy_uri: str | None = None
-        configs = self.context.policy_assets.configs if self.context.policy_assets is not None else {}
-        if configs:
-            trainable = [name for name, cfg in configs.items() if cfg.trainable and cfg.optimizer is not None]
-            if len(trainable) > 1:
+        trainable_policy_names = [
+            name
+            for name, cfg in self.context.policy_assets.configs.items()
+            if cfg.trainable and cfg.optimizer is not None
+        ]
+        if not trainable_policy_names:
+            logger.warning("Evaluator: skipping epoch %s because no trainable policies are available", epoch)
+            return
+
+        policy_name = self._config.policy_name
+        if policy_name is not None:
+            if policy_name not in trainable_policy_names:
+                logger.warning(
+                    "Evaluator: skipping epoch %s because policy_name=%s is not trainable. Trainable policies: %s",
+                    epoch,
+                    policy_name,
+                    trainable_policy_names,
+                )
+                return
+        else:
+            if len(trainable_policy_names) != 1:
                 logger.warning(
                     "Evaluator: skipping epoch %s because multiple trainable policies are available: %s",
                     epoch,
-                    trainable,
+                    trainable_policy_names,
                 )
                 return
-            if len(trainable) == 1:
-                policy_name = trainable[0]
-                if self._config.policy_name and self._config.policy_name != policy_name:
-                    logger.info(
-                        "Evaluator: ignoring policy_name=%s because only trainable policy is %s",
-                        self._config.policy_name,
-                        policy_name,
-                    )
-                policy_uri = self.context.latest_policy_uris.get(policy_name)
-            else:
-                logger.warning("Evaluator: skipping epoch %s because no trainable policies are available", epoch)
-                return
-        else:
-            if self._config.policy_name:
-                policy_uri = self.context.latest_policy_uris.get(self._config.policy_name)
-            else:
-                # Backwards-compatible single-policy behaviour: only evaluate when unambiguous.
-                policy_uri = self.context.latest_policy_uri()
+            policy_name = trainable_policy_names[0]
+
+        policy_uri = self.context.latest_policy_uris.get(policy_name)
 
         if not policy_uri:
-            logger.warning("Evaluator: skipping epoch %s because no unambiguous policy checkpoint is available", epoch)
+            logger.warning(
+                "Evaluator: skipping epoch %s because no checkpoint is available for policy %s",
+                epoch,
+                policy_name,
+            )
             return
 
         curriculum: Curriculum | None = getattr(self.context.env, "_curriculum", None)
