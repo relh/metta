@@ -373,7 +373,7 @@ def compute_derived_metrics(episodes: list[EpisodeData]) -> DerivedMetrics:
     junction_total = junction_aligned + junction_scrambled
     junction_control_rate = safe_div(junction_aligned, junction_total)
 
-    # From collective stats (if available in agent metrics)
+    # From team stats (if available in agent metrics)
     aligned_gained = get("aligned.junction.gained", junction_aligned)
     aligned_lost = get("aligned.junction.lost")
     aligned_held = get("aligned.junction.held")
@@ -642,12 +642,12 @@ def result_to_episode_data(
     agent_stats = stats.get("agent", [])
     metrics = aggregate_agent_metrics(agent_stats, len(assignments), policy_index, assignments)
 
-    # Extract collective stats with namespace prefix
-    collective_stats = stats.get("collective", {})
-    if isinstance(collective_stats, dict):
-        for key, value in collective_stats.items():
+    # Extract team stats with namespace prefix
+    team_stats = stats.get("team", {})
+    if isinstance(team_stats, dict):
+        for key, value in team_stats.items():
             if value is not None and isinstance(value, (int, float)):
-                metrics[f"collective.{key}"] = value
+                metrics[f"team.{key}"] = value
 
     # Extract game stats with namespace prefix
     game_stats = stats.get("game", {})

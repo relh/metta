@@ -132,11 +132,11 @@ async def build_dashboard_episodes(
                         if value is not None and isinstance(value, (int, float)):
                             metrics[key] = metrics.get(key, 0) + value
 
-        collective_stats = stats.get("collective", {})
-        if isinstance(collective_stats, dict):
-            for key, value in collective_stats.items():
+        team_stats = stats.get("team", {})
+        if isinstance(team_stats, dict):
+            for key, value in team_stats.items():
                 if value is not None and isinstance(value, (int, float)):
-                    metrics[f"collective.{key}"] = value
+                    metrics[f"team.{key}"] = value
 
         game_stats = stats.get("game", {})
         if isinstance(game_stats, dict):

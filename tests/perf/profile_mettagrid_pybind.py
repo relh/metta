@@ -176,7 +176,6 @@ def measure_pybind_overhead(
             "actions",
             "on_tick",
             "aoe",
-            "collectives",
             "observations",
             "rewards",
             "truncation",

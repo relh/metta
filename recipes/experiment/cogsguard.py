@@ -664,9 +664,9 @@ def train(
             if "diff_horde" not in target_slice.losses:
                 target_slice.losses.append("diff_horde")
 
-    tt.stats_reporter.progress_metric = "env_collective/cogs/aligned.junction.held"
+    tt.stats_reporter.progress_metric = "env_team/cogs/aligned.junction.held"
     tt.stats_reporter.default_zero_metrics = tt.stats_reporter.default_zero_metrics + (
-        "env_collective/cogs/aligned.junction.held",
+        "env_team/cogs/aligned.junction.held",
     )
     return tt
 
@@ -1044,7 +1044,7 @@ def sweep(
         recipe="recipes.experiment.cogsguard",
         train_entrypoint="train_sweep",
         eval_entrypoint="evaluate_stub",
-        metric_key="env_collective/cogs/aligned.junction.held",
+        metric_key="env_team/cogs/aligned.junction.held",
         search_space=parameters,
         cost_key="metric/total_time",
         max_trials=max_trials,

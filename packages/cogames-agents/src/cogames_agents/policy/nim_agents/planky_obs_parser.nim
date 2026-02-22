@@ -50,22 +50,22 @@ proc resolveObjectName(parser: ObsParser, tagIds: seq[int]): string =
       let tag = parser.tagNames[tid]
       if tag.startsWith("type:"):
         return tag[5 .. ^1]
-  # Otherwise: non-collective tags
+  # Otherwise: non-team tags
   for tid in tagIds:
     if tid >= 0 and tid < parser.tagNames.len:
       let tag = parser.tagNames[tid]
-      if tag.len > 0 and not tag.startsWith("collective:"):
+      if tag.len > 0 and not tag.startsWith("team:"):
         return tag
   "unknown"
 
-proc deriveAlignment(objName: string, clipped: int, collectiveId: int): Alignment =
-  # collectiveId is -1 when unknown.
-  if collectiveId != -1:
-    # Alphabetical: clips=0, cogs=1
-    if collectiveId == 1:
-      return alCogs
-    if collectiveId == 0:
-      return alClips
+proc deriveAlignment(objName: string, clipped: int, tagNames: seq[string], tagIds: seq[int]): Alignment =
+  for tid in tagIds:
+    if tid >= 0 and tid < tagNames.len:
+      let tag = tagNames[tid]
+      if tag == "team:cogs" or tag == "cogs":
+        return alCogs
+      if tag == "team:clips" or tag == "clips":
+        return alClips
   if "c:" in objName:
     return alCogs
   if "clips" in objName or clipped > 0:
@@ -133,14 +133,14 @@ proc parse*(
   let vibeId = cfg.getVibe(visible, Location(x: 0, y: 0))
   s.vibe = parser.getVibeName(vibeId)
 
-  # Collective inventory (global inv tokens are also mapped to (0,0)).
-  s.collectiveCarbon = cfg.getInventory(visible, cfg.features.invCollectiveCarbon)
-  s.collectiveOxygen = cfg.getInventory(visible, cfg.features.invCollectiveOxygen)
-  s.collectiveGermanium = cfg.getInventory(visible, cfg.features.invCollectiveGermanium)
-  s.collectiveSilicon = cfg.getInventory(visible, cfg.features.invCollectiveSilicon)
+  # Team inventory (global inv tokens are also mapped to (0,0)).
+  s.teamCarbon = cfg.getInventory(visible, cfg.features.invTeamCarbon)
+  s.teamOxygen = cfg.getInventory(visible, cfg.features.invTeamOxygen)
+  s.teamGermanium = cfg.getInventory(visible, cfg.features.invTeamGermanium)
+  s.teamSilicon = cfg.getInventory(visible, cfg.features.invTeamSilicon)
   # Optional; keep 0 if missing.
-  s.collectiveHeart = cfg.getInventory(visible, cfg.features.invCollectiveHeart)
-  s.collectiveInfluence = cfg.getInventory(visible, cfg.features.invCollectiveInfluence)
+  s.teamHeart = cfg.getInventory(visible, cfg.features.invTeamHeart)
+  s.teamInfluence = cfg.getInventory(visible, cfg.features.invTeamInfluence)
 
   var ents = initTable[Location, Entity]()
 
@@ -150,7 +150,6 @@ proc parse*(
       continue
 
     var tagIds: seq[int] = @[]
-    var collectiveId = -1
     var clipped = 0
     var remainingUses = 999
     var invByName = initTable[string, int]()
@@ -158,8 +157,6 @@ proc parse*(
     for fv in feats:
       if fv.featureId == cfg.features.tag:
         tagIds.add(fv.value)
-      elif fv.featureId == cfg.features.collective:
-        collectiveId = fv.value
       elif fv.featureId == cfg.features.clipped:
         clipped = fv.value
       elif fv.featureId == cfg.features.remainingUses:
@@ -195,12 +192,11 @@ proc parse*(
         invAmount += v
 
     let absPos = Location(x: s.position.x + relLoc.x, y: s.position.y + relLoc.y)
-    let alignment = deriveAlignment(objName, clipped, collectiveId)
+    let alignment = deriveAlignment(objName, clipped, parser.tagNames, tagIds)
 
     ents[absPos] = Entity(
       kind: objName,
       alignment: alignment,
-      collectiveId: collectiveId,
       clipped: clipped,
       remainingUses: remainingUses,
       inventoryAmount: invAmount,

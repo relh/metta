@@ -1,12 +1,16 @@
 """Shared test fixtures for metta tests."""
 
+from typing import Literal
+
 import pytest
 
+_ScopeName = Literal["session", "package", "module", "class", "function"]
 
-def docker_client_fixture():
+
+def docker_client_fixture(scope: _ScopeName = "class"):
     """Factory function that creates the docker_client fixture."""
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope=scope)
     def docker_client():
         try:
             # Keep local optional import

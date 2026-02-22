@@ -212,10 +212,10 @@ SHAPED_REWARD_ALIGNMENT_RULES: dict[str, dict[str, set[str]]] = {
             "silicon_gained",
         },
         "resource_deposit": {
-            "collective_carbon_deposited",
-            "collective_oxygen_deposited",
-            "collective_germanium_deposited",
-            "collective_silicon_deposited",
+            "team_carbon_deposited",
+            "team_oxygen_deposited",
+            "team_germanium_deposited",
+            "team_silicon_deposited",
         },
     },
     "scout": {"exploration": {"cell_visited"}},
@@ -244,6 +244,33 @@ def _sum_agent_stat(agent_stats: list[dict[str, float]], key: str) -> float:
 
 def _sum_hub_stat(team_stats: dict[str, Any], key: str) -> float:
     return float(team_stats.get(key, 0.0))
+
+
+def _extract_numeric_stats(scope: dict[str, Any]) -> dict[str, float]:
+    return {
+        str(raw_key): float(raw_value) for raw_key, raw_value in scope.items() if isinstance(raw_value, (int, float))
+    }
+
+
+def _extract_team_stats(stats: dict[str, Any]) -> dict[str, dict[str, float]]:
+    scope = stats.get("team")
+    if not isinstance(scope, dict):
+        return {"cogs": {}, "clips": {}}
+
+    cogs_scope = scope.get("cogs")
+    clips_scope = scope.get("clips")
+    if isinstance(cogs_scope, dict) or isinstance(clips_scope, dict):
+        return {
+            "cogs": _extract_numeric_stats(cogs_scope or {}),
+            "clips": _extract_numeric_stats(clips_scope or {}),
+        }
+
+    # Single-team episodes expose a flat team stats map.
+    flat_scope = _extract_numeric_stats(scope)
+    if flat_scope:
+        return {"cogs": flat_scope, "clips": {}}
+
+    return {"cogs": {}, "clips": {}}
 
 
 def _sum_element_stats(
@@ -431,7 +458,7 @@ def _run_target_seed(target: BaselineTarget, seed: int) -> dict[str, Any]:
     )
 
     agent_stats = [dict(stats) for stats in (results.stats.get("agent") or [])]
-    hub_stats = dict(results.stats.get("collective") or {})
+    hub_stats = _extract_team_stats(results.stats)
     guardrails = _compute_guardrails(agent_stats)
     kpis = _compute_kpis(target.role, agent_stats, hub_stats, int(results.steps))
     fingerprint = _fingerprint(target.role, kpis, guardrails)

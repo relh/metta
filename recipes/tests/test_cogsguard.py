@@ -120,20 +120,6 @@ class TestCogsguardEnvironment:
         for element in CvCConfig.ELEMENTS:
             assert f"{element}_extractor" in objects
 
-    def test_collectives_configured(self) -> None:
-        """Test that collectives are properly configured."""
-        env_config = cogsguard.make_env(num_agents=4, max_steps=100)
-
-        # collectives is a dict[str, CollectiveConfig]
-        collective_names = list(env_config.game.collectives.keys())
-        assert "cogs" in collective_names
-        assert "clips" in collective_names
-
-        # Check cogs collective has initial resources
-        cogs = env_config.game.collectives["cogs"]
-        for element in CvCConfig.ELEMENTS:
-            assert cogs.inventory.initial.get(element, 0) > 0
-
 
 class TestCogsguardCurriculum:
     """Test cogsguard curriculum configuration."""

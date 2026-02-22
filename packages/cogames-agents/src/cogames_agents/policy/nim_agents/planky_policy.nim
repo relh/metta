@@ -37,7 +37,7 @@ type
     goals: seq[Goal]
     lastEpisodePct: int
     stepInEpisode: int
-    myCollectiveId: Option[int]
+    myTeamId: Option[int]
     convertToScramblerAtStep: int
     infosJson: string
 
@@ -162,7 +162,7 @@ proc newPlankyAgent(agentId: int, envJson: string, role: string): PlankyAgent =
     goals: makeGoalList(role),
     lastEpisodePct: -1,
     stepInEpisode: 0,
-    myCollectiveId: none(int),
+    myTeamId: none(int),
     convertToScramblerAtStep: -1,
     infosJson: "",
   )
@@ -286,13 +286,15 @@ proc stepOneImpl(
     step=agent.stepInEpisode
   )
 
-  # Detect own collectiveId once (from nearest hub).
-  if agent.myCollectiveId.isNone:
+  # Detect own team once (from nearest hub alignment).
+  if agent.myTeamId.isNone:
     let hub = agent.map.findNearest(state.position, kindContains="hub")
     if hub.isSome:
       let (_, ent) = hub.get()
-      if ent.collectiveId != -1:
-        agent.myCollectiveId = some(ent.collectiveId)
+      if ent.alignment == alCogs:
+        agent.myTeamId = some(1)
+      elif ent.alignment == alClips:
+        agent.myTeamId = some(0)
 
   # Failed-move detection (mirrors Python Planky).
   let lastWasMove = agent.bb.bools.getOrDefault("_last_was_move", false)
@@ -318,18 +320,17 @@ proc stepOneImpl(
       agent.assignedRole = "scrambler"
       agent.bb.strs["change_role"] = "scrambler"
 
-    # Miner -> aligner when collective is well-stocked and miner is idle.
+    # Miner -> aligner when team is well-stocked and miner is idle.
     if state.vibe == "miner" and state.cargoTotal() == 0:
-      if state.collectiveCarbon > 100 and state.collectiveOxygen > 100 and state.collectiveGermanium > 100 and state.collectiveSilicon > 100:
+      if state.teamCarbon > 100 and state.teamOxygen > 100 and state.teamGermanium > 100 and state.teamSilicon > 100:
         agent.bb.strs["change_role"] = "aligner"
 
     # Aligner -> miner when can't afford gear or hearts (and aligner is idle).
     if state.vibe == "aligner" and (not state.alignerGear) and state.heart == 0:
       let canAffordGear =
-        # Aligner gear costs C3 O1 G1 S1 with reserve=1.
-        state.collectiveCarbon >= 4 and state.collectiveOxygen >= 2 and state.collectiveGermanium >= 2 and state.collectiveSilicon >= 2
+        state.teamCarbon >= 4 and state.teamOxygen >= 2 and state.teamGermanium >= 2 and state.teamSilicon >= 2
       let canAffordHearts =
-        state.collectiveCarbon >= 2 and state.collectiveOxygen >= 2 and state.collectiveGermanium >= 2 and state.collectiveSilicon >= 2
+        state.teamCarbon >= 2 and state.teamOxygen >= 2 and state.teamGermanium >= 2 and state.teamSilicon >= 2
       if not canAffordGear and not canAffordHearts:
         agent.bb.strs["change_role"] = "miner"
 
@@ -382,7 +383,7 @@ proc stepOneImpl(
     nav: agent.nav,
     agentId: agent.agentId,
     step: agent.stepInEpisode,
-    myCollectiveId: agent.myCollectiveId,
+    myTeamId: agent.myTeamId,
   )
 
   # If we're stuck, force exploration to refresh the map / break loops.

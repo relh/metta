@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-_SKIP_PREFIXES = ("team:", "collective:")
+_SKIP_PREFIXES = ("team:",)
 
 
 def select_primary_tag(tags: list[str], *, priority_objects: Optional[set[str]] = None) -> str:

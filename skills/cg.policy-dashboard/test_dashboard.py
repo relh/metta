@@ -576,14 +576,14 @@ def test_opponent_metrics_serialization():
     assert result["derived"]["opponent_metrics"]["bot-a"]["count"] == 2
 
 
-def test_collective_stat_ingestion():
-    """Test that collective stats are ingested with 'collective.' prefix."""
+def test_team_stat_ingestion():
+    """Test that team stats are ingested with 'team.' prefix."""
     result = {
         "rewards": [10.0, 12.0],
         "steps": 5000,
         "stats": {
             "game": {},
-            "collective": {
+            "team": {
                 "carbon.deposited": 200.0,
                 "aligned.junction.held": 500.0,
             },
@@ -597,14 +597,13 @@ def test_collective_stat_ingestion():
 
     episode = result_to_episode_data(
         result_dict=result,
-        episode_id="test-coll",
+        episode_id="test-team",
         assignments=assignments,
         policy_index=0,
     )
 
-    assert episode.metrics["collective.carbon.deposited"] == 200.0
-    assert episode.metrics["collective.aligned.junction.held"] == 500.0
-    # Agent metrics should still be present
+    assert episode.metrics["team.carbon.deposited"] == 200.0
+    assert episode.metrics["team.aligned.junction.held"] == 500.0
     assert episode.metrics["action.move.success"] == 220.0
 
 
@@ -648,7 +647,7 @@ def test_high_low_comparison_metrics():
     # The string 'junction.aligned' will appear as part of 'junction.aligned_by_agent' which is fine
     # Find junction.aligned that is NOT followed by _by_agent
     bare_refs = re.findall(r"junction\.aligned(?!_by_agent)", html)
-    # Filter out any that are in aligned.junction (collective stats key)
+    # Filter out any that are in aligned.junction (team stats key)
     bare_refs = [r for r in bare_refs if r == "junction.aligned"]
     assert len(bare_refs) == 0, f"Found bare junction.aligned references: {bare_refs}"
 
@@ -923,8 +922,8 @@ def main():
         test_zero_count_detection,
         test_opponent_metrics_serialization,
         test_high_low_comparison_metrics,
-        # Phase 6 - collective/game stats
-        test_collective_stat_ingestion,
+        # Phase 6 - team/game stats
+        test_team_stat_ingestion,
         test_game_stat_ingestion,
         # Bug regression tests
         test_alignment_stability_formula,

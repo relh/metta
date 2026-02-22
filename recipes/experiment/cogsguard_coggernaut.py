@@ -83,7 +83,7 @@ def _require_gear_for_hearts(env: MettaGridConfig) -> None:
     """Add a gear filter to hub heart-withdrawal handlers.
 
     Agents must hold any gear before they can pick up hearts.  This prevents
-    random early hub-spam from draining collective resources via heart
+    random early hub-spam from draining team resources via heart
     manufacturing before agents have bought gear.
     """
     gear_filter = actorHasAnyOf(CvCConfig.GEAR)

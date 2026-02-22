@@ -12,7 +12,7 @@ const
   JunctionAoeRange = 10
   HpSafetyMargin = 10
 
-  CollectiveSufficientThreshold = 100
+  TeamSufficientThreshold = 100
 
 type
   PlankyContext* = object
@@ -22,7 +22,7 @@ type
     nav*: Navigator
     agentId*: int
     step*: int
-    myCollectiveId*: Option[int]
+    myTeamId*: Option[int]
 
   Goal* = ref object of RootObj
 
@@ -53,12 +53,12 @@ proc hasRoleGear(s: StateSnapshot, role: string): bool =
   of "scrambler": s.scramblerGear
   else: false
 
-proc collectiveResourcesSufficient(ctx: PlankyContext): bool =
+proc teamResourcesSufficient(ctx: PlankyContext): bool =
   let s = ctx.state
-  s.collectiveCarbon > CollectiveSufficientThreshold and
-    s.collectiveOxygen > CollectiveSufficientThreshold and
-    s.collectiveGermanium > CollectiveSufficientThreshold and
-    s.collectiveSilicon > CollectiveSufficientThreshold
+  s.teamCarbon > TeamSufficientThreshold and
+    s.teamOxygen > TeamSufficientThreshold and
+    s.teamGermanium > TeamSufficientThreshold and
+    s.teamSilicon > TeamSufficientThreshold
 
 proc moveToward(current, target: Location): NavAction =
   let dr = target.y - current.y
@@ -176,11 +176,11 @@ const
   GearMaxTotalAttempts = 80
   GearRetryInterval = 150
 
-proc collectiveCanAffordGear(g: GetGearGoal, s: StateSnapshot): bool =
-  (s.collectiveCarbon >= g.costC + g.reserve) and
-    (s.collectiveOxygen >= g.costO + g.reserve) and
-    (s.collectiveGermanium >= g.costG + g.reserve) and
-    (s.collectiveSilicon >= g.costS + g.reserve)
+proc teamCanAffordGear(g: GetGearGoal, s: StateSnapshot): bool =
+  (s.teamCarbon >= g.costC + g.reserve) and
+    (s.teamOxygen >= g.costO + g.reserve) and
+    (s.teamGermanium >= g.costG + g.reserve) and
+    (s.teamSilicon >= g.costS + g.reserve)
 
 method name*(g: GetGearGoal): string =
   g.goalName
@@ -198,7 +198,7 @@ method isSatisfied*(g: GetGearGoal, ctx: var PlankyContext): bool =
   if ctx.step - giveupStep < GearRetryInterval:
     return true
 
-  if not collectiveCanAffordGear(g, ctx.state):
+  if not teamCanAffordGear(g, ctx.state):
     return true
 
   false
@@ -218,11 +218,7 @@ method execute*(g: GetGearGoal, ctx: var PlankyContext): Option[NavAction] =
     ctx.bb[].ints[bumpKey] = 0
     return none(NavAction)
 
-  let station =
-    if ctx.myCollectiveId.isSome:
-      ctx.map.findNearest(ctx.state.position, kindContains=g.stationType, collectiveId=ctx.myCollectiveId)
-    else:
-      ctx.map.findNearest(ctx.state.position, kindContains=g.stationType)
+  let station = ctx.map.findNearest(ctx.state.position, kindContains=g.stationType, alignment=alCogs)
 
   if station.isNone:
     let stationArea = Location(x: SpawnCol, y: SpawnRow + 5)
@@ -371,17 +367,17 @@ const
   PickBelowMeanThreshold = 0.10
   PickMinMeanForBottleneck = 30.0
 
-proc collectiveAmount(s: StateSnapshot, res: string): int =
+proc teamAmount(s: StateSnapshot, res: string): int =
   case res
-  of "carbon": s.collectiveCarbon
-  of "oxygen": s.collectiveOxygen
-  of "germanium": s.collectiveGermanium
-  of "silicon": s.collectiveSilicon
+  of "carbon": s.teamCarbon
+  of "oxygen": s.teamOxygen
+  of "germanium": s.teamGermanium
+  of "silicon": s.teamSilicon
   else: 0
 
 method isSatisfied*(g: PickResourceGoal, ctx: var PlankyContext): bool =
   discard g
-  if collectiveResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
+  if teamResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
     return true
 
   if not ctx.bb[].strs.hasKey("target_resource"):
@@ -391,13 +387,13 @@ method isSatisfied*(g: PickResourceGoal, ctx: var PlankyContext): bool =
   # Critical re-evaluation: any resource < 20 and not currently targeting it.
   var criticallyLow: seq[string] = @[]
   for r in ResourceTypes:
-    if collectiveAmount(ctx.state, r) < PickCriticalThreshold:
+    if teamAmount(ctx.state, r) < PickCriticalThreshold:
       criticallyLow.add(r)
   if criticallyLow.len > 0 and currentTarget notin criticallyLow:
     # Switch to lowest critically-low resource.
     var lowest = criticallyLow[0]
     for r in criticallyLow:
-      if collectiveAmount(ctx.state, r) < collectiveAmount(ctx.state, lowest):
+      if teamAmount(ctx.state, r) < teamAmount(ctx.state, lowest):
         lowest = r
     ctx.bb[].strs.del("target_resource")
     ctx.bb[].strs["_bottleneck_target"] = lowest
@@ -405,20 +401,20 @@ method isSatisfied*(g: PickResourceGoal, ctx: var PlankyContext): bool =
 
   # Bottleneck switching.
   let meanCount =
-    (ctx.state.collectiveCarbon + ctx.state.collectiveOxygen + ctx.state.collectiveGermanium + ctx.state.collectiveSilicon).float / 4.0
+    (ctx.state.teamCarbon + ctx.state.teamOxygen + ctx.state.teamGermanium + ctx.state.teamSilicon).float / 4.0
   if meanCount >= PickMinMeanForBottleneck:
-    let targetAmount = collectiveAmount(ctx.state, currentTarget).float
+    let targetAmount = teamAmount(ctx.state, currentTarget).float
     let aboveMeanLimit = meanCount * (1.0 + PickAboveMeanThreshold)
     let belowMeanLimit = meanCount * (1.0 - PickBelowMeanThreshold)
     if targetAmount > aboveMeanLimit:
       var bottlenecks: seq[string] = @[]
       for r in ResourceTypes:
-        if collectiveAmount(ctx.state, r).float < belowMeanLimit:
+        if teamAmount(ctx.state, r).float < belowMeanLimit:
           bottlenecks.add(r)
       if bottlenecks.len > 0:
         var lowestB = bottlenecks[0]
         for r in bottlenecks:
-          if collectiveAmount(ctx.state, r) < collectiveAmount(ctx.state, lowestB):
+          if teamAmount(ctx.state, r) < teamAmount(ctx.state, lowestB):
             lowestB = r
         ctx.bb[].strs["_bottleneck_target"] = lowestB
         ctx.bb[].strs.del("target_resource")
@@ -454,7 +450,7 @@ method execute*(g: PickResourceGoal, ctx: var PlankyContext): Option[NavAction] 
       usable = true
       break
     if usable:
-      available.add((collectiveAmount(ctx.state, r), r))
+      available.add((teamAmount(ctx.state, r), r))
 
   if available.len == 0:
     ctx.bb[].strs["target_resource"] = "carbon"
@@ -463,7 +459,7 @@ method execute*(g: PickResourceGoal, ctx: var PlankyContext): Option[NavAction] 
 
   var below: seq[(int, string)] = @[]
   for (amt, r) in available:
-    if amt < CollectiveSufficientThreshold:
+    if amt < TeamSufficientThreshold:
       below.add((amt, r))
   if below.len > 0:
     below.sort(proc(a, b: (int, string)): int = cmp(a[0], b[0]))
@@ -492,12 +488,7 @@ proc findCogsDepot(ctx: PlankyContext): Option[Location] =
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
 
-  let hubs =
-    if ctx.myCollectiveId.isSome:
-      ctx.map.find(kindContains="hub", collectiveId=ctx.myCollectiveId)
-    else:
-      ctx.map.find(kindContains="hub")
-  for (hpos, _) in hubs:
+  for (hpos, _) in ctx.map.find(kindContains="hub", alignment=alCogs):
     if recentlyFailed(hpos):
       continue
     let d = manhattan(pos, hpos)
@@ -603,7 +594,7 @@ proc findExtractor(ctx: PlankyContext, resource: string): Option[Location] =
 
 method isSatisfied*(g: MineResourceGoal, ctx: var PlankyContext): bool =
   discard g
-  if collectiveResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
+  if teamResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
     return true
   false
 
@@ -667,11 +658,11 @@ const
   HeartCooldownSteps = 30
   HeartReserve = 1
 
-proc collectiveCanAffordHeart(s: StateSnapshot): bool =
-  s.collectiveCarbon >= 1 + HeartReserve and
-    s.collectiveOxygen >= 1 + HeartReserve and
-    s.collectiveGermanium >= 1 + HeartReserve and
-    s.collectiveSilicon >= 1 + HeartReserve
+proc teamCanAffordHeart(s: StateSnapshot): bool =
+  s.teamCarbon >= 1 + HeartReserve and
+    s.teamOxygen >= 1 + HeartReserve and
+    s.teamGermanium >= 1 + HeartReserve and
+    s.teamSilicon >= 1 + HeartReserve
 
 method isSatisfied*(g: GetHeartsGoal, ctx: var PlankyContext): bool =
   if ctx.state.heart >= g.minHearts:
@@ -680,7 +671,7 @@ method isSatisfied*(g: GetHeartsGoal, ctx: var PlankyContext): bool =
     if ctx.bb[].ints.hasKey("_heart_cooldown_until"):
       ctx.bb[].ints.del("_heart_cooldown_until")
     return true
-  if not collectiveCanAffordHeart(ctx.state):
+  if not teamCanAffordHeart(ctx.state):
     return true
   let cooldownUntil = ctx.bb[].ints.getOrDefault("_heart_cooldown_until", 0)
   if ctx.step < cooldownUntil:
@@ -689,11 +680,7 @@ method isSatisfied*(g: GetHeartsGoal, ctx: var PlankyContext): bool =
 
 method execute*(g: GetHeartsGoal, ctx: var PlankyContext): Option[NavAction] =
   discard g
-  let hub =
-    if ctx.myCollectiveId.isSome:
-      ctx.map.findNearest(ctx.state.position, kindContains="hub", collectiveId=ctx.myCollectiveId)
-    else:
-      ctx.map.findNearest(ctx.state.position, kindContains="hub")
+  let hub = ctx.map.findNearest(ctx.state.position, kindContains="hub", alignment=alCogs)
   if hub.isNone:
     return some(ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId)))
 
@@ -716,12 +703,7 @@ proc findDeposit(ctx: PlankyContext): Option[Location] =
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
 
-  let hubs =
-    if ctx.myCollectiveId.isSome:
-      ctx.map.find(kindContains="hub", collectiveId=ctx.myCollectiveId)
-    else:
-      ctx.map.find(kindContains="hub")
-  for (hpos, _) in hubs:
+  for (hpos, _) in ctx.map.find(kindContains="hub", alignment=alCogs):
     let d = manhattan(pos, hpos)
     if d < bestDist:
       bestDist = d
@@ -751,7 +733,7 @@ method isSatisfied*(g: EmergencyMineGoal, ctx: var PlankyContext): bool =
     return true
 
   let s = ctx.state
-  let resources = [s.collectiveCarbon, s.collectiveOxygen, s.collectiveGermanium, s.collectiveSilicon]
+  let resources = [s.teamCarbon, s.teamOxygen, s.teamGermanium, s.teamSilicon]
   var minRes = resources[0]
   for r in resources:
     if r < minRes:
@@ -779,7 +761,7 @@ method execute*(g: EmergencyMineGoal, ctx: var PlankyContext): Option[NavAction]
   let s = ctx.state
   var lowest = "carbon"
   for r in ResourceTypes:
-    if collectiveAmount(s, r) < collectiveAmount(s, lowest):
+    if teamAmount(s, r) < teamAmount(s, lowest):
       lowest = r
 
   var target: Option[Location] = none(Location)
@@ -832,7 +814,7 @@ method name*(g: FallbackMineGoal): string =
 
 method isSatisfied*(g: FallbackMineGoal, ctx: var PlankyContext): bool =
   discard g
-  if collectiveResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
+  if teamResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
     return true
   false
 

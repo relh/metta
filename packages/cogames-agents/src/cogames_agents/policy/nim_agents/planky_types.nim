@@ -22,12 +22,12 @@ type
 
     vibe*: string
 
-    collectiveCarbon*: int
-    collectiveOxygen*: int
-    collectiveGermanium*: int
-    collectiveSilicon*: int
-    collectiveHeart*: int
-    collectiveInfluence*: int
+    teamCarbon*: int
+    teamOxygen*: int
+    teamGermanium*: int
+    teamSilicon*: int
+    teamHeart*: int
+    teamInfluence*: int
 
   Blackboard* = object
     ints*: Table[string, int]

@@ -25,8 +25,8 @@ from metta.app_backend.test_support.client_adapter import (
 )
 from metta.common.tests_support import docker_client_fixture
 
-# Register the docker_client fixture
-docker_client = docker_client_fixture()
+# Register the docker_client fixture (session-scoped so postgres_container can depend on it)
+docker_client = docker_client_fixture(scope="session")
 
 
 def pytest_configure(config: pytest.Config):
@@ -36,8 +36,9 @@ def pytest_configure(config: pytest.Config):
 
 
 @pytest.fixture(scope="session")
-def postgres_container():
+def postgres_container(docker_client):
     """Create a PostgreSQL container for testing (session-scoped for performance)."""
+    _ = docker_client
     container = PostgresContainer(
         image="postgres:17",
         username="test_user",

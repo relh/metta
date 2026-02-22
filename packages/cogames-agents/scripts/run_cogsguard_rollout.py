@@ -159,7 +159,7 @@ def run_rollout(
         harness.step(1)
         hub_inv = {}
         if hasattr(harness.sim, "_c_sim"):
-            hub_inv = harness.sim._c_sim.get_collective_inventories().get("cogs", {})
+            hub_inv = harness.sim._c_sim.get_team_inventories().get("cogs", {})
         gear_resources_available = {
             role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()

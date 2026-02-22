@@ -23,8 +23,8 @@ def test_resolve_cogsguard_horde_cumulants_builds_junction_specs() -> None:
 
     specs_by_name = {spec.name: spec for spec in cfg.specs}
     assert set(specs_by_name) == {"cogs_junction_now", "clips_junction_now"}
-    assert specs_by_name["cogs_junction_now"].key == "env_collective/cogs/aligned.junction"
-    assert specs_by_name["clips_junction_now"].key == "env_collective/clips/aligned.junction"
+    assert specs_by_name["cogs_junction_now"].key == "env_team/cogs/aligned.junction"
+    assert specs_by_name["clips_junction_now"].key == "env_team/clips/aligned.junction"
 
 
 def test_resolve_cogsguard_horde_cumulants_deduplicates_variant_names() -> None:
@@ -57,7 +57,7 @@ def test_resolve_cogsguard_horde_cumulants_all_alias_includes_all_concrete_varia
             "roles",
             "cortex_core",
             "economy_agent",
-            "economy_collective",
+            "economy_team",
             "tempo",
             "junction_events",
             "economy_flow",

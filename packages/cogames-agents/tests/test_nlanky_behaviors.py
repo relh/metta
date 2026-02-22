@@ -138,7 +138,7 @@ def test_nlanky_aligner_avoids_enemy_aoe() -> None:
     assert stats["steps"] > 0
 
 
-@pytest.mark.xfail(reason="aoe_mask needs collective-based friend/enemy detection; nlanky can't find enemies")
+@pytest.mark.xfail(reason="aoe_mask needs team-based friend/enemy detection; nlanky can't find enemies")
 def test_nlanky_scrambler_scrambles_junction() -> None:
     stats = run_nlanky_episode(PlankyScramblerTarget, max_steps=300, roles={"scrambler": 1})
     agent_stats = stats["stats"].get("agent", [])

@@ -11,7 +11,6 @@ type
   Entity* = object
     kind*: string
     alignment*: Alignment
-    collectiveId*: int # -1 if unknown/unset
     clipped*: int
     remainingUses*: int
     inventoryAmount*: int # -1 when unknown/not applicable
@@ -77,15 +76,12 @@ proc find*(
   m: EntityMap,
   kind: string = "",
   kindContains: string = "",
-  collectiveId: Option[int] = none(int),
   alignment: Alignment = alNone
 ): seq[(Location, Entity)] =
   for pos, ent in m.entities:
     if kind.len > 0 and ent.kind != kind:
       continue
     if kindContains.len > 0 and kindContains notin ent.kind:
-      continue
-    if collectiveId.isSome and ent.collectiveId != collectiveId.get():
       continue
     if alignment != alNone and ent.alignment != alignment:
       continue
@@ -96,11 +92,10 @@ proc findNearest*(
   fromPos: Location,
   kind: string = "",
   kindContains: string = "",
-  collectiveId: Option[int] = none(int),
   alignment: Alignment = alNone,
   maxDist: Option[int] = none(int)
 ): Option[(Location, Entity)] =
-  let matches = m.find(kind=kind, kindContains=kindContains, collectiveId=collectiveId, alignment=alignment)
+  let matches = m.find(kind=kind, kindContains=kindContains, alignment=alignment)
   if matches.len == 0:
     return none((Location, Entity))
 

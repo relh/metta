@@ -29,7 +29,7 @@ def test_teacher_ppo_begin_step_adds_ppo_train_run_gates() -> None:
 def test_cogsguard_diff_horde_wires_loss_architecture_and_slice() -> None:
     tool = cogsguard.train(
         diff_horde_cumulants={
-            "territory_now": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction"},
+            "territory_now": {"kind": "info_scalar", "key": "env_team/cogs/aligned.junction"},
             "core2": {"kind": "td_key", "key": "core", "slice": "0:2"},
         }
     )
@@ -105,8 +105,8 @@ def test_cogsguard_horde_variants_wire_diff_horde() -> None:
     diff_horde_cfg = tool.trainer.losses["diff_horde"]
     assert diff_horde_cfg.cumulants.num_cumulants == 6
     assert diff_horde_cfg.cumulants.required_info_keys() >= {
-        "env_collective/cogs/aligned.junction",
-        "env_collective/clips/aligned.junction",
+        "env_team/cogs/aligned.junction",
+        "env_team/clips/aligned.junction",
         "agent/hp.amount",
         "agent/energy.amount",
     }
@@ -132,7 +132,7 @@ def test_cogsguard_horde_variants_merge_with_explicit_cumulants() -> None:
     tool = cogsguard.train(
         horde_variants=["junctions"],
         diff_horde_cumulants={
-            "cogs_junction_now": {"kind": "info_scalar", "key": "env_collective/cogs/aligned.junction.held"},
+            "cogs_junction_now": {"kind": "info_scalar", "key": "env_team/cogs/aligned.junction.held"},
             "core2": {"kind": "td_key", "key": "core", "slice": "0:2"},
         },
     )
@@ -142,5 +142,5 @@ def test_cogsguard_horde_variants_merge_with_explicit_cumulants() -> None:
 
     assert "clips_junction_now" in specs_by_name
     assert "core2" in specs_by_name
-    assert specs_by_name["cogs_junction_now"].key == "env_collective/cogs/aligned.junction.held"
+    assert specs_by_name["cogs_junction_now"].key == "env_team/cogs/aligned.junction.held"
     assert cumulants.num_cumulants == 4

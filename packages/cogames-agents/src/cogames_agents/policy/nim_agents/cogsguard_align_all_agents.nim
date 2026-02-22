@@ -92,9 +92,9 @@ proc getTagNames(cfg: Config, features: seq[FeatureValue]): HashSet[string] =
         result.incl(cfg.config.tags[feature.value])
 
 proc getAlignment(tagNames: HashSet[string], clipped: int): int =
-  if "collective:cogs" in tagNames or "cogs" in tagNames:
+  if "team:cogs" in tagNames or "cogs" in tagNames:
     return 1
-  if "collective:clips" in tagNames or "clips" in tagNames:
+  if "team:clips" in tagNames or "clips" in tagNames:
     return -1
   if clipped > 0:
     return -1

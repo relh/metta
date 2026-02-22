@@ -261,7 +261,7 @@ class ObsParser:
                 return tag[5:]
 
         for tag in resolved:
-            if tag and not tag.startswith("team:") and not tag.startswith("collective:"):
+            if tag and not tag.startswith("team:"):
                 return tag
 
         return "unknown"

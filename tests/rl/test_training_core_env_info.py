@@ -22,13 +22,13 @@ class _FakeLoss:
 
 def test_tensorize_requested_env_info_flattens_nested_payloads() -> None:
     info_rows = [
-        {"env_collective": {"cogs": {"aligned.junction.held": 1.25}}},
-        {"env_collective": {"cogs": {"aligned.junction.held": 2.75}}},
+        {"env_team": {"cogs": {"aligned.junction.held": 1.25}}},
+        {"env_team": {"cogs": {"aligned.junction.held": 2.75}}},
     ]
 
     env_info_td = _tensorize_requested_env_info(
         info_rows=info_rows,
-        requested_keys={"env_collective/cogs/aligned.junction.held"},
+        requested_keys={"env_team/cogs/aligned.junction.held"},
         batch_size=2,
         num_env_rows=2,
         agents_per_env=1,
@@ -36,7 +36,7 @@ def test_tensorize_requested_env_info_flattens_nested_payloads() -> None:
     )
 
     torch.testing.assert_close(
-        env_info_td["env_collective/cogs/aligned.junction.held"],
+        env_info_td["env_team/cogs/aligned.junction.held"],
         torch.tensor([1.25, 2.75], dtype=torch.float32),
     )
 
@@ -182,11 +182,11 @@ def test_tensorize_requested_env_info_supports_agent_keys_dict_payload() -> None
 
 
 def test_tensorize_requested_env_info_supports_env_prefix_alias() -> None:
-    info_rows = [{"collective": {"cogs": {"aligned.junction.held": 1.25}}}]
+    info_rows = [{"team": {"cogs": {"aligned.junction.held": 1.25}}}]
 
     env_info_td = _tensorize_requested_env_info(
         info_rows=info_rows,
-        requested_keys={"env_collective/cogs/aligned.junction.held"},
+        requested_keys={"env_team/cogs/aligned.junction.held"},
         batch_size=1,
         num_env_rows=1,
         agents_per_env=1,
@@ -194,7 +194,7 @@ def test_tensorize_requested_env_info_supports_env_prefix_alias() -> None:
     )
 
     torch.testing.assert_close(
-        env_info_td["env_collective/cogs/aligned.junction.held"],
+        env_info_td["env_team/cogs/aligned.junction.held"],
         torch.tensor([1.25], dtype=torch.float32),
     )
 
@@ -232,7 +232,7 @@ def test_tensorize_requested_env_info_single_agent_reads_embedded_agent_rows() -
 
 
 def test_resolve_missing_env_info_scalar_default_returns_none_when_losses_strict() -> None:
-    losses = {"strict": _FakeLoss({"env_collective/cogs/aligned.junction"}, None)}
+    losses = {"strict": _FakeLoss({"env_team/cogs/aligned.junction"}, None)}
 
     default = _resolve_missing_env_info_scalar_default(losses=losses, context=object())
 
@@ -241,7 +241,7 @@ def test_resolve_missing_env_info_scalar_default_returns_none_when_losses_strict
 
 def test_resolve_missing_env_info_scalar_default_returns_numeric_default_when_consistent() -> None:
     losses = {
-        "one": _FakeLoss({"env_collective/cogs/aligned.junction"}, 0.0),
+        "one": _FakeLoss({"env_team/cogs/aligned.junction"}, 0.0),
         "two": _FakeLoss({"agent/reward_step"}, 0.0),
     }
 
@@ -252,7 +252,7 @@ def test_resolve_missing_env_info_scalar_default_returns_numeric_default_when_co
 
 def test_resolve_missing_env_info_scalar_default_raises_on_conflict() -> None:
     losses = {
-        "strict": _FakeLoss({"env_collective/cogs/aligned.junction"}, None),
+        "strict": _FakeLoss({"env_team/cogs/aligned.junction"}, None),
         "default": _FakeLoss({"agent/reward_step"}, 0.0),
     }
 

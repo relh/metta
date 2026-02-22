@@ -118,7 +118,6 @@ type
     cooldownRemaining*: int
     clipped*: int
     remainingUses*: int
-    collective*: int
     lpEast*: int
     lpWest*: int
     lpNorth*: int
@@ -140,12 +139,12 @@ type
     invInfluence*: int
     invHp*: int
     invSolar*: int
-    invCollectiveCarbon*: int
-    invCollectiveOxygen*: int
-    invCollectiveGermanium*: int
-    invCollectiveSilicon*: int
-    invCollectiveHeart*: int
-    invCollectiveInfluence*: int
+    invTeamCarbon*: int
+    invTeamOxygen*: int
+    invTeamGermanium*: int
+    invTeamSilicon*: int
+    invTeamHeart*: int
+    invTeamInfluence*: int
 
     protocolInputEnergy*: int
     protocolInputCarbon*: int
@@ -644,8 +643,6 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.clipped = feature.id
       of "remaining_uses":
         result.features.remainingUses = feature.id
-      of "collective":
-        result.features.collective = feature.id
       of "lp:east":
         result.features.lpEast = feature.id
       of "lp:west":
@@ -688,18 +685,18 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.invHp = feature.id
       of "inv:solar":
         result.features.invSolar = feature.id
-      of "inv:collective:carbon", "team:carbon":
-        result.features.invCollectiveCarbon = feature.id
-      of "inv:collective:oxygen", "team:oxygen":
-        result.features.invCollectiveOxygen = feature.id
-      of "inv:collective:germanium", "team:germanium":
-        result.features.invCollectiveGermanium = feature.id
-      of "inv:collective:silicon", "team:silicon":
-        result.features.invCollectiveSilicon = feature.id
-      of "inv:collective:heart", "team:heart":
-        result.features.invCollectiveHeart = feature.id
-      of "inv:collective:influence", "team:influence":
-        result.features.invCollectiveInfluence = feature.id
+      of "team:carbon":
+        result.features.invTeamCarbon = feature.id
+      of "team:oxygen":
+        result.features.invTeamOxygen = feature.id
+      of "team:germanium":
+        result.features.invTeamGermanium = feature.id
+      of "team:silicon":
+        result.features.invTeamSilicon = feature.id
+      of "team:heart":
+        result.features.invTeamHeart = feature.id
+      of "team:influence":
+        result.features.invTeamInfluence = feature.id
       of "protocol_input:energy":
         result.features.protocolInputEnergy = feature.id
       of "protocol_input:carbon":
@@ -934,7 +931,7 @@ proc drawMap*(cfg: Config, map: Table[Location, seq[FeatureValue]], seen: HashSe
 proc getTag*(cfg: Config, map: Table[Location, seq[FeatureValue]], location: Location): int =
   ## Get the type id of the location in the map.
   if location in map:
-    # Prefer a "type:*" tag when multiple tags are present (e.g. collective + type).
+    # Prefer a "type:*" tag when multiple tags are present (e.g. team + type).
     for featureValue in map[location]:
       if featureValue.featureId == cfg.features.tag:
         if featureValue.value >= 0 and featureValue.value < cfg.config.tags.len:
