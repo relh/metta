@@ -26,20 +26,12 @@ const DASHBOARD_TAB_OPTIONS: Array<{ tab: DashboardTab; label: string }> = [
   { tab: 'train_tree', label: 'Train Tree' },
 ]
 
-function parseDashboardTab(value: string | null): DashboardTab | null {
-  if (!value) return null
-  const matching = DASHBOARD_TAB_OPTIONS.find((option) => option.tab === value)
-  return matching?.tab ?? null
-}
-
 type OpponentSummaryRow = {
   opponent: string
   count: number
-  completed: number
   avgReward: number | null
   totalReward: number | null
   bestProfile: string | null
-  source: 'derived' | 'episodes'
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -70,89 +62,41 @@ export function DashboardClient() {
     }
   }, [])
 
-  const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
-  const diagnostics = useMemo(() => {
-    const maybe = data?.derived?.kpis?.diagnostics
-    return Array.isArray(maybe) ? maybe : []
-  }, [data])
+  const episodes = data ? data.episodes : []
+  const diagnostics = data ? (data.derived.kpis.diagnostics ?? []) : []
   const opponentRows = useMemo<OpponentSummaryRow[]>(() => {
-    const rawOpponentMetrics = data?.derived?.opponent_metrics
-    if (rawOpponentMetrics && typeof rawOpponentMetrics === 'object' && !Array.isArray(rawOpponentMetrics)) {
-      const rows: OpponentSummaryRow[] = []
-      for (const [opponent, raw] of Object.entries(rawOpponentMetrics)) {
-        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue
-        const record = raw as Record<string, unknown>
-        const count = Number(record.count ?? 0)
-        if (!Number.isFinite(count) || count <= 0) continue
+    if (!data) return []
+    const rawOpponentMetrics = data.derived.opponent_metrics
+    const rows: OpponentSummaryRow[] = Object.entries(rawOpponentMetrics).flatMap(([opponent, record]) => {
+      if (record.count <= 0) return []
 
-        const avgReward = toFiniteNumber(record.avg_reward)
-        const totalReward = toFiniteNumber(record.total_reward)
-        const strategyProfileRaw = record.strategy_profile
-        let bestProfile: string | null = null
-        if (strategyProfileRaw && typeof strategyProfileRaw === 'object' && !Array.isArray(strategyProfileRaw)) {
-          let bestLabel: string | null = null
-          let bestScore = Number.NEGATIVE_INFINITY
-          for (const [label, score] of Object.entries(strategyProfileRaw)) {
-            const numericScore = toFiniteNumber(score)
-            if (numericScore === null) continue
-            if (numericScore > bestScore) {
-              bestScore = numericScore
-              bestLabel = label
-            }
-          }
-          bestProfile = bestLabel
-        }
+      const topProfile = Object.entries(record.strategy_profile).reduce<[string | null, number]>(
+        (best, entry) => (entry[1] > best[1] ? [entry[0], entry[1]] : best),
+        [null, Number.NEGATIVE_INFINITY]
+      )[0]
 
-        rows.push({
+      return [
+        {
           opponent,
-          count,
-          completed: count,
-          avgReward,
-          totalReward,
-          bestProfile,
-          source: 'derived',
-        })
-      }
-      if (rows.length > 0) {
-        return rows.sort((a, b) => b.count - a.count || a.opponent.localeCompare(b.opponent))
-      }
-    }
-
-    const fallback = new Map<string, { count: number; completed: number; rewardTotal: number; rewardCount: number }>()
-    for (const episode of episodes) {
-      const opponent = String(episode.opponent_name ?? 'unknown')
-      const row = fallback.get(opponent) ?? { count: 0, completed: 0, rewardTotal: 0, rewardCount: 0 }
-      row.count += 1
-      const status = String(episode.status ?? '')
-      const reward = toFiniteNumber(episode.reward ?? episode.avg_reward)
-      if (status === 'completed') {
-        row.completed += 1
-        if (reward !== null) {
-          row.rewardTotal += reward
-          row.rewardCount += 1
-        }
-      }
-      fallback.set(opponent, row)
-    }
-    const rows: OpponentSummaryRow[] = [...fallback.entries()].map(([opponent, row]) => ({
-      opponent,
-      count: row.count,
-      completed: row.completed,
-      avgReward: row.rewardCount > 0 ? row.rewardTotal / row.rewardCount : null,
-      totalReward: row.rewardCount > 0 ? row.rewardTotal : null,
-      bestProfile: null,
-      source: 'episodes',
-    }))
+          count: record.count,
+          avgReward: toFiniteNumber(record.avg_reward),
+          totalReward: toFiniteNumber(record.total_reward),
+          bestProfile: topProfile,
+        },
+      ]
+    })
     return rows.sort((a, b) => b.count - a.count || a.opponent.localeCompare(b.opponent))
-  }, [data, episodes])
+  }, [data])
   const bestWorstOpponents = useMemo(() => {
-    const withReward = opponentRows.filter((row) => row.avgReward !== null)
+    const withReward = opponentRows.filter(
+      (row): row is OpponentSummaryRow & { avgReward: number } => row.avgReward !== null
+    )
     if (withReward.length === 0) return null
     let best = withReward[0]
     let worst = withReward[0]
     for (const row of withReward) {
-      if ((row.avgReward ?? Number.NEGATIVE_INFINITY) > (best.avgReward ?? Number.NEGATIVE_INFINITY)) best = row
-      if ((row.avgReward ?? Number.POSITIVE_INFINITY) < (worst.avgReward ?? Number.POSITIVE_INFINITY)) worst = row
+      if (row.avgReward > best.avgReward) best = row
+      if (row.avgReward < worst.avgReward) worst = row
     }
     return { best, worst }
   }, [opponentRows])
@@ -185,16 +129,13 @@ export function DashboardClient() {
     }
   }, [])
 
-  const onLoad = async () => {
-    await loadDashboardData(policyVersionId)
-  }
-
   const onRunAnalysis = async () => {
-    if (!policyVersionId.trim()) return
+    const trimmedPolicyVersionId = policyVersionId.trim()
+    if (!trimmedPolicyVersionId) return
     setError(null)
     setAnalysisLoading(true)
     try {
-      const response = await fetchDashboardAnalysis(policyVersionId.trim())
+      const response = await fetchDashboardAnalysis(trimmedPolicyVersionId)
       setAnalysis(response)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -206,14 +147,14 @@ export function DashboardClient() {
 
   useEffect(() => {
     if (activeTab !== 'roles') return
-    const loadedPolicyVersionId = data?.policy?.id
+    const loadedPolicyVersionId = data?.policy.id
     if (!loadedPolicyVersionId) return
 
     let cancelled = false
     setRoleLoading(true)
     setRoleError(null)
 
-    void fetchDashboardRolePercentiles(String(loadedPolicyVersionId))
+    void fetchDashboardRolePercentiles(loadedPolicyVersionId)
       .then((response) => {
         if (cancelled) return
         setRolePercentiles(response)
@@ -231,15 +172,15 @@ export function DashboardClient() {
     return () => {
       cancelled = true
     }
-  }, [activeTab, data?.policy?.id, data?.generated_at])
+  }, [activeTab, data?.policy.id, data?.generated_at])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const initialPolicyVersionId = params.get('policyVersionId')?.trim()
-    const initialTab = parseDashboardTab(params.get('tab'))
-    if (initialTab) {
-      setActiveTab(initialTab)
+    const initialTabValue = params.get('tab')
+    if (initialTabValue && DASHBOARD_TAB_OPTIONS.some((option) => option.tab === initialTabValue)) {
+      setActiveTab(initialTabValue as DashboardTab)
     }
     if (!initialPolicyVersionId) return
     setPolicyVersionId(initialPolicyVersionId)
@@ -264,7 +205,11 @@ export function DashboardClient() {
           onChange={(event) => setPolicyVersionId(event.target.value)}
         />
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <button type="button" onClick={onLoad} disabled={loading || !policyVersionId.trim()}>
+          <button
+            type="button"
+            onClick={() => void loadDashboardData(policyVersionId)}
+            disabled={loading || !policyVersionId.trim()}
+          >
             {loading ? 'Loading...' : 'Load dashboard data'}
           </button>
           <button type="button" onClick={onRunAnalysis} disabled={analysisLoading || !policyVersionId.trim() || !data}>
@@ -298,13 +243,11 @@ export function DashboardClient() {
               <section className="grid two">
                 <article className="card">
                   <h2 style={{ marginTop: 0 }}>Policy</h2>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(data.policy ?? {}, null, 2)}</pre>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(data.policy, null, 2)}</pre>
                 </article>
                 <article className="card">
                   <h2 style={{ marginTop: 0 }}>KPI Snapshot</h2>
-                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                    {JSON.stringify(data.derived?.kpis ?? {}, null, 2)}
-                  </pre>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{JSON.stringify(data.derived.kpis, null, 2)}</pre>
                 </article>
               </section>
 
@@ -355,16 +298,14 @@ export function DashboardClient() {
                     </thead>
                     <tbody>
                       {episodes.slice(0, 200).map((episode) => {
-                        const id = String(episode.episode_id ?? episode.id ?? '')
-                        const status = String(episode.status ?? '')
-                        const rewardNumber = toFiniteNumber(episode.reward ?? episode.avg_reward)
+                        const id = episode.episode_id
+                        const status = episode.status
+                        const rewardNumber = toFiniteNumber(episode.reward)
                         const reward = rewardNumber === null ? '' : rewardNumber.toFixed(3)
-                        const steps = String(episode.steps ?? '')
-                        const opponent = String(episode.opponent_name ?? '')
-                        const teamComposition = String(episode.team_composition ?? '')
-                        const tags = Array.isArray(episode.diagnostic_tags)
-                          ? episode.diagnostic_tags.map((value) => String(value)).join(', ')
-                          : ''
+                        const steps = String(episode.steps)
+                        const opponent = episode.opponent_name
+                        const teamComposition = episode.team_composition
+                        const tags = episode.diagnostic_tags.join(', ')
 
                         return (
                           <tr key={id}>
@@ -395,7 +336,7 @@ export function DashboardClient() {
                   {bestWorstOpponents?.best ? (
                     <p style={{ marginBottom: 0 }}>
                       <strong>{bestWorstOpponents.best.opponent}</strong>{' '}
-                      <span>(avg reward {bestWorstOpponents.best.avgReward?.toFixed(3)})</span>
+                      <span>(avg reward {bestWorstOpponents.best.avgReward.toFixed(3)})</span>
                     </p>
                   ) : (
                     <p style={{ marginBottom: 0 }}>No matchup reward data yet.</p>
@@ -406,7 +347,7 @@ export function DashboardClient() {
                   {bestWorstOpponents?.worst ? (
                     <p style={{ marginBottom: 0 }}>
                       <strong>{bestWorstOpponents.worst.opponent}</strong>{' '}
-                      <span>(avg reward {bestWorstOpponents.worst.avgReward?.toFixed(3)})</span>
+                      <span>(avg reward {bestWorstOpponents.worst.avgReward.toFixed(3)})</span>
                     </p>
                   ) : (
                     <p style={{ marginBottom: 0 }}>No matchup reward data yet.</p>
@@ -425,11 +366,9 @@ export function DashboardClient() {
                         <tr>
                           <th>Opponent</th>
                           <th>Episodes</th>
-                          <th>Completed</th>
                           <th>Avg Reward</th>
                           <th>Total Reward</th>
                           <th>Top Profile</th>
-                          <th>Source</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -437,11 +376,9 @@ export function DashboardClient() {
                           <tr key={row.opponent}>
                             <td>{row.opponent}</td>
                             <td>{row.count}</td>
-                            <td>{row.completed}</td>
                             <td>{row.avgReward === null ? '' : row.avgReward.toFixed(3)}</td>
                             <td>{row.totalReward === null ? '' : row.totalReward.toFixed(3)}</td>
                             <td>{row.bestProfile ?? ''}</td>
-                            <td>{row.source}</td>
                           </tr>
                         ))}
                       </tbody>

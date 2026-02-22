@@ -4,36 +4,14 @@ const AUTH_COOKIE_NAME = 'observatory_auth_token'
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
 
-function readAuthTokenFromCookies(): string | null {
-  if (typeof document === 'undefined') return null
-  const parts = document.cookie.split('; ')
-  for (const part of parts) {
-    if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
-    const value = part.slice(AUTH_COOKIE_NAME.length + 1).trim()
-    if (!value) return null
-    return value
-  }
-  return null
-}
-
-function getDashboardRequestHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = readAuthTokenFromCookies()
-  if (token) {
-    headers['X-Auth-Token'] = token
-  }
-  return headers
-}
-
 export type DashboardEpisode = {
-  id?: string
-  status?: string
-  avg_reward?: number
-  reward?: number
-  opponent_name?: string
-  team_composition?: string
-  diagnostic_tags?: string[]
-  [key: string]: unknown
+  episode_id: string
+  status: string
+  reward: number
+  opponent_name: string
+  team_composition: string
+  diagnostic_tags: string[]
+  steps: number
 }
 
 export type DashboardKpis = {
@@ -51,7 +29,6 @@ export type DashboardKpis = {
   freeze_vulnerability?: number
   profile_aggressive?: number
   profile_mobile_scout?: number
-  [key: string]: unknown
 }
 
 export type DashboardFailures = {
@@ -59,29 +36,33 @@ export type DashboardFailures = {
   oom_failures?: number
   crash_failures?: number
   other_failures?: number
-  [key: string]: unknown
+}
+
+export type DashboardOpponentMetric = {
+  count: number
+  total_reward: number
+  avg_reward: number
+  strategy_profile: Record<string, number>
 }
 
 export type DashboardDerived = {
-  kpis?: DashboardKpis
-  failures?: DashboardFailures
+  kpis: DashboardKpis
+  failures: DashboardFailures
+  opponent_metrics: Record<string, DashboardOpponentMetric>
   outcome?: {
     verdict?: string
     evidence_sufficient?: boolean
     reason?: string
-    [key: string]: unknown
   }
-  [key: string]: unknown
 }
 
 export type DashboardResponse = {
-  policy?: { id?: string; name?: string; version?: number }
-  season?: string
-  generated_at?: string
-  episodes?: DashboardEpisode[]
-  derived?: DashboardDerived
-  selection?: { sampled_episode_count?: number; [key: string]: unknown }
-  [key: string]: unknown
+  policy: { id: string; name: string; version: number }
+  season: string
+  generated_at: string
+  episodes: DashboardEpisode[]
+  derived: DashboardDerived
+  selection: { sampled_episode_count: number }
 }
 
 export type DashboardAnalysisResponse = {
@@ -216,7 +197,26 @@ export type DiagnoseRunsResponse = {
   runs: DiagnoseRunSummary[]
 }
 
-async function parseJsonOrThrow(response: Response) {
+type DashboardRequestMethod = 'GET' | 'POST'
+
+async function dashboardRequest<T>(path: string, method: DashboardRequestMethod = 'GET', body?: string): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (typeof document !== 'undefined') {
+    for (const part of document.cookie.split('; ')) {
+      if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
+      const token = part.slice(AUTH_COOKIE_NAME.length + 1).trim()
+      if (token) headers['X-Auth-Token'] = token
+      break
+    }
+  }
+
+  const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
+    method,
+    headers,
+    body,
+    cache: 'no-store',
+  })
+
   const text = await response.text()
   const maybeJson = text ? JSON.parse(text) : null
   if (!response.ok) {
@@ -226,19 +226,7 @@ async function parseJsonOrThrow(response: Response) {
     const detail = maybeJson?.detail ?? maybeJson?.message ?? response.statusText
     throw new Error(`${response.status}: ${String(detail)}`)
   }
-  return maybeJson
-}
-
-type DashboardRequestMethod = 'GET' | 'POST'
-
-async function dashboardRequest<T>(path: string, method: DashboardRequestMethod = 'GET', body?: string): Promise<T> {
-  const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
-    method,
-    headers: getDashboardRequestHeaders(),
-    body,
-    cache: 'no-store',
-  })
-  return (await parseJsonOrThrow(response)) as T
+  return maybeJson as T
 }
 
 export async function fetchDashboardData(policyVersionId: string): Promise<DashboardResponse> {

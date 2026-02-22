@@ -40,23 +40,6 @@ type CoverageRow = {
   cells: CoverageCell[]
 }
 
-const STATUS_FILTER_OPTIONS: Array<{ value: TreeStatusFilter; label: string }> = [
-  { value: 'all', label: 'All statuses' },
-  { value: 'demonstrated', label: 'Demonstrated' },
-  { value: 'observed', label: 'Observed' },
-  { value: 'tested', label: 'Tested' },
-  { value: 'mock', label: 'Mock' },
-  { value: 'planned', label: 'Planned' },
-  { value: 'missing', label: 'Missing' },
-]
-
-const SOURCE_FILTER_OPTIONS: Array<{ value: TreeSourceFilter; label: string }> = [
-  { value: 'all', label: 'All sources' },
-  { value: 'dashboard', label: 'Dashboard' },
-  { value: 'cogames-diagnose', label: 'Cogames Diagnose' },
-  { value: 'training', label: 'Training' },
-]
-
 const EVAL_AXES: CoverageAxis[] = [
   { id: 'clips_on', label: 'Clips On' },
   { id: 'clips_off', label: 'Clips Off' },
@@ -99,6 +82,34 @@ const STAGE1_AXES = [
   },
 ] as const
 
+const STATUS_LABELS: Record<SkillNodeStatus, string> = {
+  demonstrated: 'Demonstrated',
+  observed: 'Observed',
+  tested: 'Tested',
+  mock: 'Mock',
+  planned: 'Planned',
+  missing: 'Missing',
+}
+
+const SOURCE_LABELS: Record<SkillNodeSource, string> = {
+  dashboard: 'Dashboard',
+  'cogames-diagnose': 'Cogames Diagnose',
+  training: 'Training',
+}
+
+const STATUSES: SkillNodeStatus[] = ['demonstrated', 'observed', 'tested', 'mock', 'planned', 'missing']
+const SOURCES: SkillNodeSource[] = ['dashboard', 'cogames-diagnose', 'training']
+
+const STATUS_FILTER_OPTIONS: Array<{ value: TreeStatusFilter; label: string }> = [
+  { value: 'all', label: 'All statuses' },
+  ...STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] })),
+]
+
+const SOURCE_FILTER_OPTIONS: Array<{ value: TreeSourceFilter; label: string }> = [
+  { value: 'all', label: 'All sources' },
+  ...SOURCES.map((source) => ({ value: source, label: SOURCE_LABELS[source] })),
+]
+
 function numeric(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
@@ -107,36 +118,16 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.map((entry) => String(entry)) : []
 }
 
-function includesAny(input: string, tokens: string[]): boolean {
-  const lowered = input.toLowerCase()
-  return tokens.some((token) => lowered.includes(token))
-}
-
-function statusLabel(status: SkillNodeStatus): string {
-  if (status === 'demonstrated') return 'Demonstrated'
-  if (status === 'observed') return 'Observed'
-  if (status === 'tested') return 'Tested'
-  if (status === 'mock') return 'Mock'
-  if (status === 'planned') return 'Planned'
-  return 'Missing'
-}
-
-function sourceLabel(source: SkillNodeSource): string {
-  if (source === 'dashboard') return 'Dashboard'
-  if (source === 'cogames-diagnose') return 'Cogames Diagnose'
-  return 'Training'
-}
-
 function mechanicStatuses(data: DashboardResponse): Record<string, SkillNodeStatus> {
-  const kpis = data.derived?.kpis
-  const diagnostics = asStringArray(kpis?.diagnostics).join(' ').toLowerCase()
+  const kpis = data.derived.kpis
+  const diagnostics = asStringArray(kpis.diagnostics).join(' ').toLowerCase()
 
   const miningSignal = numeric(kpis?.resource_efficiency_per_step) > 0.01 || numeric(kpis?.resource_retention) > 0.1
   const aligningSignal = numeric(kpis?.junction_control_rate) > 0.12 || numeric(kpis?.alignment_stability) > 0.08
   const scramblingSignal =
-    includesAny(diagnostics, ['scramble', 'aggressive']) || numeric(kpis?.profile_aggressive) > 25
+    ['scramble', 'aggressive'].some((token) => diagnostics.includes(token)) || numeric(kpis?.profile_aggressive) > 25
   const scoutingSignal = numeric(kpis?.move_efficiency) > 0.45 || numeric(kpis?.profile_mobile_scout) > 25
-  const coordinationSignal = Boolean(data.derived?.outcome?.evidence_sufficient)
+  const coordinationSignal = Boolean(data.derived.outcome?.evidence_sufficient)
 
   return {
     mining: miningSignal ? 'demonstrated' : 'tested',
@@ -147,57 +138,64 @@ function mechanicStatuses(data: DashboardResponse): Record<string, SkillNodeStat
   }
 }
 
-function diagnoseAxisDetails(data: DashboardResponse, axisId: string): Pick<SkillTreeNode, 'status' | 'evidence'> {
-  const kpis = data.derived?.kpis
-  if (axisId.endsWith('stability')) {
-    return {
-      status: numeric(kpis?.move_efficiency) > 0 ? 'tested' : 'mock',
-      evidence: [
-        `move_efficiency=${numeric(kpis?.move_efficiency).toFixed(3)}`,
-        `freeze_vulnerability=${numeric(kpis?.freeze_vulnerability).toFixed(3)}`,
-      ],
-    }
-  }
-  if (axisId.endsWith('efficiency')) {
-    return {
-      status: numeric(kpis?.action_success_rate) > 0 ? 'tested' : 'mock',
-      evidence: [
-        `action_success_rate=${numeric(kpis?.action_success_rate).toFixed(3)}`,
-        `resource_efficiency_per_step=${numeric(kpis?.resource_efficiency_per_step).toFixed(3)}`,
-      ],
-    }
-  }
-  if (axisId.endsWith('control')) {
-    return {
-      status: numeric(kpis?.junction_control_rate) > 0 ? 'tested' : 'mock',
-      evidence: [
-        `junction_control_rate=${numeric(kpis?.junction_control_rate).toFixed(3)}`,
-        `alignment_stability=${numeric(kpis?.alignment_stability).toFixed(3)}`,
-      ],
-    }
-  }
-  return {
-    status: data.derived?.outcome?.evidence_sufficient ? 'tested' : 'mock',
-    evidence: [
-      `outcome.verdict=${String(data.derived?.outcome?.verdict ?? 'unknown')}`,
-      `outcome.evidence_sufficient=${String(Boolean(data.derived?.outcome?.evidence_sufficient))}`,
-    ],
-  }
-}
-
 function evalTree(data: DashboardResponse): SkillTreeNode {
-  const kpis = data.derived?.kpis
-  const failures = data.derived?.failures
-  const diagnostics = asStringArray(kpis?.diagnostics)
+  const kpis = data.derived.kpis
+  const failures = data.derived.failures
+  const diagnostics = asStringArray(kpis.diagnostics)
   const mechanics = mechanicStatuses(data)
 
-  const diagnoseAxes: SkillTreeNode[] = STAGE1_AXES.map((axis) => ({
-    id: axis.id,
-    title: axis.title,
-    description: axis.description,
-    source: 'cogames-diagnose',
-    ...diagnoseAxisDetails(data, axis.id),
-  }))
+  const diagnoseAxes: SkillTreeNode[] = STAGE1_AXES.map((axis) => {
+    if (axis.id.endsWith('stability')) {
+      return {
+        id: axis.id,
+        title: axis.title,
+        description: axis.description,
+        status: numeric(kpis?.move_efficiency) > 0 ? 'tested' : 'mock',
+        source: 'cogames-diagnose',
+        evidence: [
+          `move_efficiency=${numeric(kpis?.move_efficiency).toFixed(3)}`,
+          `freeze_vulnerability=${numeric(kpis?.freeze_vulnerability).toFixed(3)}`,
+        ],
+      }
+    }
+    if (axis.id.endsWith('efficiency')) {
+      return {
+        id: axis.id,
+        title: axis.title,
+        description: axis.description,
+        status: numeric(kpis?.action_success_rate) > 0 ? 'tested' : 'mock',
+        source: 'cogames-diagnose',
+        evidence: [
+          `action_success_rate=${numeric(kpis?.action_success_rate).toFixed(3)}`,
+          `resource_efficiency_per_step=${numeric(kpis?.resource_efficiency_per_step).toFixed(3)}`,
+        ],
+      }
+    }
+    if (axis.id.endsWith('control')) {
+      return {
+        id: axis.id,
+        title: axis.title,
+        description: axis.description,
+        status: numeric(kpis?.junction_control_rate) > 0 ? 'tested' : 'mock',
+        source: 'cogames-diagnose',
+        evidence: [
+          `junction_control_rate=${numeric(kpis?.junction_control_rate).toFixed(3)}`,
+          `alignment_stability=${numeric(kpis?.alignment_stability).toFixed(3)}`,
+        ],
+      }
+    }
+    return {
+      id: axis.id,
+      title: axis.title,
+      description: axis.description,
+      status: data.derived.outcome?.evidence_sufficient ? 'tested' : 'mock',
+      source: 'cogames-diagnose',
+      evidence: [
+        `outcome.verdict=${String(data.derived.outcome?.verdict ?? 'unknown')}`,
+        `outcome.evidence_sufficient=${String(Boolean(data.derived.outcome?.evidence_sufficient))}`,
+      ],
+    }
+  })
 
   const dashboardDiagnosticNodes: SkillTreeNode[] =
     diagnostics.length === 0
@@ -309,8 +307,8 @@ function evalTree(data: DashboardResponse): SkillTreeNode {
             status: mechanics.coordination,
             source: 'dashboard',
             evidence: [
-              `outcome.verdict=${String(data.derived?.outcome?.verdict ?? 'unknown')}`,
-              `outcome.evidence_sufficient=${String(Boolean(data.derived?.outcome?.evidence_sufficient))}`,
+              `outcome.verdict=${String(data.derived.outcome?.verdict ?? 'unknown')}`,
+              `outcome.evidence_sufficient=${String(Boolean(data.derived.outcome?.evidence_sufficient))}`,
             ],
           },
         ],
@@ -530,12 +528,11 @@ function statusCounts(nodes: SkillTreeNode[]): Record<SkillNodeStatus, number> {
 
 function deriveEvalCoverageRows(data: DashboardResponse): CoverageRow[] {
   const mechanics = mechanicStatuses(data)
-  const episodes = Array.isArray(data.episodes) ? data.episodes : []
+  const episodes = data.episodes
+  const sampledEpisodeCount = data.selection.sampled_episode_count
   const hasUnevenTeams = episodes.some((episode) => {
-    const composition = episode.team_composition
-    if (typeof composition !== 'string' || !composition.includes('v')) return false
-    const [leftRaw, rightRaw] = composition.split('v')
-    const left = Number.parseInt(leftRaw ?? '', 10)
+    const [leftRaw, rightRaw] = episode.team_composition.split('v')
+    const left = Number.parseInt(leftRaw, 10)
     const right = Number.parseInt(rightRaw ?? '', 10)
     return Number.isFinite(left) && Number.isFinite(right) && left !== right
   })
@@ -559,11 +556,8 @@ function deriveEvalCoverageRows(data: DashboardResponse): CoverageRow[] {
         },
         {
           axisId: 'cogs_set',
-          status: numeric(data.selection?.sampled_episode_count) > 0 ? 'tested' : 'missing',
-          evidence:
-            numeric(data.selection?.sampled_episode_count) > 0
-              ? `sampled_episode_count=${numeric(data.selection?.sampled_episode_count)}`
-              : 'No sampled episodes.',
+          status: sampledEpisodeCount > 0 ? 'tested' : 'missing',
+          evidence: sampledEpisodeCount > 0 ? `sampled_episode_count=${sampledEpisodeCount}` : 'No sampled episodes.',
         },
         {
           axisId: 'uneven_teams',
@@ -666,8 +660,8 @@ const TreeNodeView: FC<{
           <button type="button" className="skill-title-btn" onClick={() => onSelect(node.id)}>
             {node.title}
           </button>
-          <span className={`badge badge-status status-${node.status}`}>{statusLabel(node.status)}</span>
-          <span className="badge badge-source">{sourceLabel(node.source)}</span>
+          <span className={`badge badge-status status-${node.status}`}>{STATUS_LABELS[node.status]}</span>
+          <span className="badge badge-source">{SOURCE_LABELS[node.source]}</span>
         </div>
         <p className="skill-desc">{node.description}</p>
       </div>
@@ -801,24 +795,11 @@ export const SkillTreePanel: FC<{
 
       <section className="card">
         <div className="skill-legend">
-          <span className="badge badge-status status-demonstrated">
-            Demonstrated {counts.demonstrated}/{totalCounts.demonstrated}
-          </span>
-          <span className="badge badge-status status-observed">
-            Observed {counts.observed}/{totalCounts.observed}
-          </span>
-          <span className="badge badge-status status-tested">
-            Tested {counts.tested}/{totalCounts.tested}
-          </span>
-          <span className="badge badge-status status-mock">
-            Mock {counts.mock}/{totalCounts.mock}
-          </span>
-          <span className="badge badge-status status-planned">
-            Planned {counts.planned}/{totalCounts.planned}
-          </span>
-          <span className="badge badge-status status-missing">
-            Missing {counts.missing}/{totalCounts.missing}
-          </span>
+          {STATUSES.map((status) => (
+            <span key={status} className={`badge badge-status status-${status}`}>
+              {STATUS_LABELS[status]} {counts[status]}/{totalCounts[status]}
+            </span>
+          ))}
         </div>
       </section>
 
@@ -845,9 +826,9 @@ export const SkillTreePanel: FC<{
               <p>{selectedNode.description}</p>
               <div className="skill-legend">
                 <span className={`badge badge-status status-${selectedNode.status}`}>
-                  {statusLabel(selectedNode.status)}
+                  {STATUS_LABELS[selectedNode.status]}
                 </span>
-                <span className="badge badge-source">{sourceLabel(selectedNode.source)}</span>
+                <span className="badge badge-source">{SOURCE_LABELS[selectedNode.source]}</span>
               </div>
               {selectedNode.evidence && selectedNode.evidence.length > 0 ? (
                 <>
@@ -873,7 +854,7 @@ export const SkillTreePanel: FC<{
                     <div key={node.id} className="queue-item">
                       <div className="queue-head">
                         <strong>{node.title}</strong>
-                        <span className={`badge badge-status status-${node.status}`}>{statusLabel(node.status)}</span>
+                        <span className={`badge badge-status status-${node.status}`}>{STATUS_LABELS[node.status]}</span>
                       </div>
                       <p style={{ margin: '6px 0 0' }}>{node.description}</p>
                     </div>
@@ -909,7 +890,7 @@ export const SkillTreePanel: FC<{
                       const status = cell?.status ?? 'missing'
                       return (
                         <td key={`${row.id}-${axis.id}`}>
-                          <span className={`badge badge-status status-${status}`}>{statusLabel(status)}</span>
+                          <span className={`badge badge-status status-${status}`}>{STATUS_LABELS[status]}</span>
                           <p style={{ margin: '6px 0 0' }}>{cell?.evidence ?? 'No data'}</p>
                         </td>
                       )

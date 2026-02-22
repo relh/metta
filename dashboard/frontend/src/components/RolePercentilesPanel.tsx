@@ -49,27 +49,21 @@ function parseRows(
   const parsedRows = rows.map((row) => {
     const details = isObject(row.details) ? row.details : {}
     const metricMap = isObject(details.metrics) ? details.metrics : {}
-    const defsForRole = definitions[row.role] ?? []
-    const orderedMetricKeys =
-      defsForRole.length > 0
-        ? defsForRole.map((def) => def.key)
-        : Object.keys(metricMap).sort((a, b) => a.localeCompare(b))
-    const metricDefsByKey = new Map(defsForRole.map((definition) => [definition.key, definition]))
-
-    const metrics: MetricDetail[] = orderedMetricKeys
-      .map((metricKey) => {
-        const metricDetails = metricMap[metricKey]
+    const defsForRole = definitions[row.role]
+    const metrics: MetricDetail[] = defsForRole
+      .map((definition) => {
+        const metricDetails = metricMap[definition.key]
         if (!isObject(metricDetails)) return null
-        const fallbackDef = metricDefsByKey.get(metricKey)
+        const higherIsBetter =
+          typeof metricDetails.higher_is_better === 'boolean'
+            ? metricDetails.higher_is_better
+            : definition.higher_is_better
 
         return {
-          key: metricKey,
+          key: definition.key,
           avg: asFiniteNumber(metricDetails.avg),
           percentile: asFiniteNumber(metricDetails.percentile),
-          higherIsBetter:
-            typeof metricDetails.higher_is_better === 'boolean'
-              ? metricDetails.higher_is_better
-              : (fallbackDef?.higher_is_better ?? true),
+          higherIsBetter,
           samples: asFiniteNumber(metricDetails.samples),
         }
       })
