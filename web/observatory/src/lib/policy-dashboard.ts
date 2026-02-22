@@ -1,25 +1,15 @@
-export type PolicyDashboardTab =
-  | 'overview'
-  | 'episodes'
-  | 'opponents'
-  | 'health'
-  | 'roles'
-  | 'capabilities'
-  | 'cogames_diagnose'
-
-const POLICY_DASHBOARD_TABS: PolicyDashboardTab[] = [
-  'overview',
-  'episodes',
-  'opponents',
-  'health',
-  'roles',
-  'capabilities',
-  'cogames_diagnose',
-]
+export type PolicyDashboardTab = string
 
 type PolicyDashboardPathArgs = {
   policyVersionId?: string | null
-  tab?: PolicyDashboardTab
+  tab?: PolicyDashboardTab | null
+}
+
+function normalizeDashboardTab(value: string | null | undefined): PolicyDashboardTab | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  return trimmed
 }
 
 export function buildPolicyDashboardPath({ policyVersionId, tab }: PolicyDashboardPathArgs = {}): string {
@@ -30,8 +20,9 @@ export function buildPolicyDashboardPath({ policyVersionId, tab }: PolicyDashboa
     if (trimmed) params.set('policyVersionId', trimmed)
   }
 
-  if (tab) {
-    params.set('tab', tab)
+  const normalizedTab = normalizeDashboardTab(tab)
+  if (normalizedTab) {
+    params.set('tab', normalizedTab)
   }
 
   const query = params.toString()
@@ -49,14 +40,14 @@ export function buildEmbeddedPolicyDashboardUrl(
     if (trimmed) url.searchParams.set('policyVersionId', trimmed)
   }
 
-  if (tab) {
-    url.searchParams.set('tab', tab)
+  const normalizedTab = normalizeDashboardTab(tab)
+  if (normalizedTab) {
+    url.searchParams.set('tab', normalizedTab)
   }
 
   return url.toString()
 }
 
 export function parsePolicyDashboardTab(value: string | null | undefined): PolicyDashboardTab | undefined {
-  if (!value) return undefined
-  return POLICY_DASHBOARD_TABS.find((tab) => tab === value)
+  return normalizeDashboardTab(value)
 }

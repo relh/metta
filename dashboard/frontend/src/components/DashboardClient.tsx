@@ -32,6 +32,7 @@ import {
   fetchDashboardData,
   fetchDashboardRolePercentiles,
 } from '../lib/api'
+import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
 import { CogamesDiagnosePanel } from './CogamesDiagnosePanel'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
@@ -1603,7 +1604,12 @@ export function DashboardClient() {
                   </div>
                 </div>
               )}
-              {analysisLoading && <p style={{ margin: 0 }}>Running diagnostics analysis...</p>}
+              {analysisLoading && (
+                <AnalysisLoadingQuips
+                  policyName={String(data?.policy?.name ?? 'policy')}
+                  opponentStats={data?.derived?.opponent_metrics ?? {}}
+                />
+              )}
               {analysis && (
                 <div style={{ display: 'grid', gap: 10 }}>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1617,19 +1623,26 @@ export function DashboardClient() {
                   <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
                     Data sources: {analysis.data_sources.join(', ') || '-'}
                   </p>
-                  {showAnalysis && (
-                    <div
-                      style={{
-                        border: '1px solid var(--panel-soft-border)',
-                        borderRadius: 10,
-                        padding: 12,
-                        background: 'var(--panel-soft-bg-1)',
-                        whiteSpace: 'pre-wrap',
-                      }}
-                    >
-                      {analysis.analysis}
-                    </div>
-                  )}
+                  {showAnalysis &&
+                    (data ? (
+                      <AnalysisRichText
+                        text={analysis.analysis}
+                        episodes={episodes}
+                        opponentStats={data.derived.opponent_metrics}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          border: '1px solid var(--panel-soft-border)',
+                          borderRadius: 10,
+                          padding: 12,
+                          background: 'var(--panel-soft-bg-1)',
+                          whiteSpace: 'pre-wrap',
+                        }}
+                      >
+                        {analysis.analysis}
+                      </div>
+                    ))}
                 </div>
               )}
             </section>
