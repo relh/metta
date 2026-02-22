@@ -172,13 +172,53 @@ async def _select_role_pool_for_policy(session: Any, policy_version_id: UUID) ->
         return None
 
     newest_season = pool_rows[0][1]
-    season_pools = [pool for pool, season in pool_rows if season.id == newest_season.id]
+    newest_season_pools = [pool for pool, season in pool_rows if season.id == newest_season.id]
     preferred_names = _preferred_pool_names_for_season(newest_season.name)
     for preferred_name in preferred_names:
-        for pool in season_pools:
+        for pool in newest_season_pools:
             if pool.name == preferred_name:
                 return pool
-    return season_pools[0]
+    return newest_season_pools[0]
+
+
+async def _candidate_role_pools_for_policy(session: Any, policy_version_id: UUID) -> list[Pool]:
+    selected = await _select_role_pool_for_policy(session, policy_version_id)
+    if selected is None:
+        return []
+
+    pool_query = (
+        select(Pool)
+        .join(PoolPlayer, PoolPlayer.pool_id == Pool.id)  # pyright: ignore[reportArgumentType]
+        .where(PoolPlayer.policy_version_id == policy_version_id)
+        .order_by(col(Pool.created_at).desc())
+    )
+    pools = (await session.execute(pool_query)).scalars().all()
+
+    deduped: list[Pool] = [selected]
+    seen_pool_ids = {selected.id}
+    for pool in pools:
+        if pool.id in seen_pool_ids:
+            continue
+        seen_pool_ids.add(pool.id)
+        deduped.append(pool)
+    return deduped
+
+
+async def _select_role_pool_and_rows(
+    session: Any,
+    policy_version_id: UUID,
+) -> tuple[Pool | None, list[Any]]:
+    candidate_pools = await _candidate_role_pools_for_policy(session, policy_version_id)
+    if not candidate_pools:
+        return None, []
+
+    fallback_pool = candidate_pools[0]
+    for pool in candidate_pools:
+        rows = await compute_policy_role_percentiles(pool.id, policy_version_id)
+        if rows:
+            return pool, rows
+
+    return fallback_pool, []
 
 
 async def _build_sorted_dashboard_episodes(
@@ -623,7 +663,7 @@ def create_dashboard_router() -> APIRouter:
         roles = _role_metric_definitions()
 
         async with db_session(read_only=True) as session:
-            preferred_pool = await _select_role_pool_for_policy(session, pv_id)
+            preferred_pool, rows = await _select_role_pool_and_rows(session, pv_id)
 
         if preferred_pool is None:
             return DashboardRolePercentilesResponse(
@@ -633,7 +673,6 @@ def create_dashboard_router() -> APIRouter:
                 rows=[],
             )
 
-        rows = await compute_policy_role_percentiles(preferred_pool.id, pv_id)
         return DashboardRolePercentilesResponse(
             pool_id=preferred_pool.id,
             pool_name=preferred_pool.name,

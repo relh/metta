@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -122,3 +123,82 @@ def test_dashboard_data_builds_commissioner_with_season_id(
     assert response.status_code == 200
     assert calls[0] == ("beta-teams-large", season_id)
     assert calls[1] == ("get_leaderboard", None)
+
+
+def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:
+    policy_version_id = uuid4()
+    first_pool_id = uuid4()
+    second_pool_id = uuid4()
+
+    fake_policy_version = SimpleNamespace(
+        id=policy_version_id,
+        version=3,
+        policy_id=uuid4(),
+        policy=SimpleNamespace(name="gimpy"),
+    )
+    first_pool = SimpleNamespace(id=first_pool_id, name="competition")
+    second_pool = SimpleNamespace(id=second_pool_id, name="qualifying")
+
+    async def fake_require_policy_version(_policy_version_id: str) -> tuple[Any, Any]:
+        return policy_version_id, fake_policy_version
+
+    @asynccontextmanager
+    async def fake_db_session(*, read_only: bool = False) -> Any:
+        assert read_only
+        yield SimpleNamespace()
+
+    async def fake_candidate_role_pools_for_policy(_session: Any, _policy_version_id: Any) -> list[Any]:
+        return [first_pool, second_pool]
+
+    async def fake_compute_policy_role_percentiles(pool_id: Any, _policy_version_id: Any) -> list[Any]:
+        if pool_id == first_pool_id:
+            return []
+        return [
+            SimpleNamespace(
+                role="miner",
+                percentile=77.0,
+                details={
+                    "metrics": {
+                        "miner.gained": {
+                            "avg": 4.2,
+                            "percentile": 77.0,
+                            "higher_is_better": True,
+                            "samples": 12,
+                            "source_names": ["miner.gained"],
+                            "source_metrics": {"miner.gained": {"avg": 4.2, "samples": 12}},
+                        }
+                    },
+                    "overall_percentile": 77.0,
+                },
+                updated_at=datetime.now(UTC),
+            )
+        ]
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._require_policy_version",
+        fake_require_policy_version,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.db_session",
+        fake_db_session,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._candidate_role_pools_for_policy",
+        fake_candidate_role_pools_for_policy,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.compute_policy_role_percentiles",
+        fake_compute_policy_role_percentiles,
+    )
+
+    app = FastAPI()
+    app.include_router(create_dashboard_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get(f"/dashboard/v1/policies/versions/{policy_version_id}/role-percentiles")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pool_id"] == str(second_pool_id)
+    assert body["pool_name"] == "qualifying"
+    assert len(body["rows"]) == 1
+    assert body["rows"][0]["role"] == "miner"
