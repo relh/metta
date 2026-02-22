@@ -16,11 +16,17 @@ function readAuthTokenFromCookies(): string | null {
   return null
 }
 
-function getDashboardRequestHeaders(): Record<string, string> {
+function getDashboardRequestHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   const token = readAuthTokenFromCookies()
   if (token) {
     headers['X-Auth-Token'] = token
+  }
+  if (extraHeaders) {
+    for (const [key, value] of Object.entries(extraHeaders)) {
+      if (!value) continue
+      headers[key] = value
+    }
   }
   return headers
 }
@@ -613,10 +619,15 @@ async function parseJsonOrThrow(response: Response): Promise<unknown> {
   return maybeJson
 }
 
-async function dashboardRequest<T>(path: string, method: DashboardRequestMethod = 'GET', body?: string): Promise<T> {
+async function dashboardRequest<T>(
+  path: string,
+  method: DashboardRequestMethod = 'GET',
+  body?: string,
+  extraHeaders?: Record<string, string>
+): Promise<T> {
   const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
     method,
-    headers: getDashboardRequestHeaders(),
+    headers: getDashboardRequestHeaders(extraHeaders),
     body,
     cache: 'no-store',
   })
@@ -629,11 +640,16 @@ export async function fetchDashboardData(policyVersionId: string): Promise<Dashb
   )
 }
 
-export async function fetchDashboardAnalysis(policyVersionId: string): Promise<DashboardAnalysisResponse> {
+export async function fetchDashboardAnalysis(
+  policyVersionId: string,
+  anthropicApiKey?: string | null
+): Promise<DashboardAnalysisResponse> {
+  const key = anthropicApiKey?.trim()
   return await dashboardRequest<DashboardAnalysisResponse>(
     `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/analysis`,
     'POST',
-    '{}'
+    '{}',
+    key ? { 'X-Anthropic-Api-Key': key } : undefined
   )
 }
 

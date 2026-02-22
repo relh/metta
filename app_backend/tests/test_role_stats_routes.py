@@ -163,15 +163,15 @@ async def test_role_percentiles_404_when_pool_has_no_role_metrics(test_client: T
     assert response.status_code == 404
 
 
-def test_role_definitions_include_deaths(test_client: TestClient) -> None:
+def test_role_definitions_include_death(test_client: TestClient) -> None:
     response = test_client.get("/stats/roles/definitions")
     assert response.status_code == 200
     body = response.json()
     for role in ("miner", "scout", "scrambler", "aligner"):
         role_metrics = body["roles"][role]
-        deaths = next((metric for metric in role_metrics if metric["key"] == "deaths"), None)
-        assert deaths is not None
-        assert len(deaths["source_names"]) > 0
+        death = next((metric for metric in role_metrics if metric["key"] == "death"), None)
+        assert death is not None
+        assert death["source_names"] == ["death"]
 
 
 def test_role_definitions_use_single_canonical_source_names(test_client: TestClient) -> None:
@@ -197,8 +197,8 @@ async def test_missing_metric_samples_are_excluded_from_percentiles(test_client:
             (1, "miner.gained", 5.0),
             (2, "miner.gained", 1.0),
             (3, "miner.gained", 1.0),
-            (0, "deaths", 3.0),
-            (1, "deaths", 3.0),
+            (0, "death", 3.0),
+            (1, "death", 3.0),
         ],
     )
 
@@ -210,8 +210,8 @@ async def test_missing_metric_samples_are_excluded_from_percentiles(test_client:
     assert miner_row1["percentile"] == pytest.approx(100.0)
     assert miner_row2["percentile"] == pytest.approx(0.0)
 
-    assert miner_row1["details"]["metrics"]["deaths"]["samples"] == 2
-    assert "deaths" not in miner_row2["details"]["metrics"]
+    assert miner_row1["details"]["metrics"]["death"]["samples"] == 2
+    assert "death" not in miner_row2["details"]["metrics"]
 
 
 @pytest.mark.asyncio

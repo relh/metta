@@ -53,11 +53,11 @@ type SortDir = 'asc' | 'desc'
 
 const DASHBOARD_TABS: DashboardTab[] = [
   'overview',
-  'episodes',
-  'opponents',
-  'health',
-  'roles',
   'capabilities',
+  'roles',
+  'opponents',
+  'episodes',
+  'health',
   'cogames_diagnose',
   'analysis',
 ]
@@ -100,7 +100,12 @@ type OpponentSummaryRow = {
 
 function parseDashboardTab(value: string | null): DashboardTab | null {
   if (!value) return null
-  return DASHBOARD_TABS.find((tab) => tab === value) ?? null
+  const normalized = value.trim().toLowerCase()
+  const canonical =
+    normalized === 'ai_analysis' || normalized === 'ai-analysis' || normalized === 'aianalysis'
+      ? 'analysis'
+      : normalized
+  return DASHBOARD_TABS.find((tab) => tab === canonical) ?? null
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -259,6 +264,12 @@ function formatTrendValue(value: number | null | undefined, metricKey: string): 
   return value.toFixed(3)
 }
 
+function isAnalysisKeyMissingError(message: string | null): boolean {
+  if (!message) return false
+  const lower = message.toLowerCase()
+  return lower.includes('anthropic_api_key') || lower.includes('x-anthropic-api-key')
+}
+
 function bestStrategyLabel(strategyProfile: Record<string, number> | null): string | null {
   if (!strategyProfile) return null
   let bestLabel: string | null = null
@@ -413,6 +424,8 @@ export function DashboardClient() {
   const [loading, setLoading] = useState(false)
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
+  const [analysisApiKey, setAnalysisApiKey] = useState('')
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [analysis, setAnalysis] = useState<DashboardAnalysisResponse | null>(null)
   const [rolePercentiles, setRolePercentiles] = useState<DashboardRolePercentilesResponse | null>(null)
@@ -696,6 +709,7 @@ export function DashboardClient() {
     if (!trimmedPolicyVersionId) return
 
     setError(null)
+    setAnalysisError(null)
     setAnalysis(null)
     setRolePercentiles(null)
     setRoleError(null)
@@ -725,15 +739,15 @@ export function DashboardClient() {
 
   const onRunAnalysis = async () => {
     if (!policyVersionId.trim()) return
-    setError(null)
+    setAnalysisError(null)
     setAnalysisLoading(true)
     try {
-      const response = await fetchDashboardAnalysis(policyVersionId.trim())
+      const response = await fetchDashboardAnalysis(policyVersionId.trim(), analysisApiKey)
       setAnalysis(response)
       setShowAnalysis(true)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      setError(message)
+      setAnalysisError(message)
     } finally {
       setAnalysisLoading(false)
     }
@@ -928,8 +942,12 @@ export function DashboardClient() {
       <section className="card dashboard-control-card grid" style={{ gap: 12 }}>
         <div className="dashboard-control-head">
           <div>
-            <h1 style={{ marginTop: 0, marginBottom: 4 }}>Policy Dashboard</h1>
-            <p style={{ margin: 0, color: '#586f8f' }}>Performance, diagnose, and skill-tree evaluation in one view.</p>
+            <h1 className="dashboard-title-line">
+              <span>Policy Dashboard</span>
+              <span className="dashboard-title-subline">
+                Performance, diagnose, and skill-tree evaluation in one view.
+              </span>
+            </h1>
           </div>
           <p style={{ margin: 0, color: '#6f86a6', fontSize: 12 }}>
             backend: <code>{DASHBOARD_API_BASE_URL}</code>
@@ -989,24 +1007,10 @@ export function DashboardClient() {
             </button>
             <button
               type="button"
-              onClick={() => activateTab('episodes')}
-              className={activeTab === 'episodes' ? 'active-tab' : ''}
+              onClick={() => activateTab('capabilities')}
+              className={activeTab === 'capabilities' ? 'active-tab' : ''}
             >
-              Episodes
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('opponents')}
-              className={activeTab === 'opponents' ? 'active-tab' : ''}
-            >
-              Opponents
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('health')}
-              className={activeTab === 'health' ? 'active-tab' : ''}
-            >
-              Health
+              Capabilities
             </button>
             <button
               type="button"
@@ -1017,24 +1021,38 @@ export function DashboardClient() {
             </button>
             <button
               type="button"
-              onClick={() => activateTab('capabilities')}
-              className={activeTab === 'capabilities' ? 'active-tab' : ''}
+              onClick={() => activateTab('opponents')}
+              className={activeTab === 'opponents' ? 'active-tab' : ''}
             >
-              Capabilities
+              Opponents
+            </button>
+            <button
+              type="button"
+              onClick={() => activateTab('episodes')}
+              className={activeTab === 'episodes' ? 'active-tab' : ''}
+            >
+              Episodes
+            </button>
+            <button
+              type="button"
+              onClick={() => activateTab('health')}
+              className={activeTab === 'health' ? 'active-tab' : ''}
+            >
+              Health
             </button>
             <button
               type="button"
               onClick={() => activateTab('cogames_diagnose')}
               className={activeTab === 'cogames_diagnose' ? 'active-tab' : ''}
             >
-              Cogames Diagnose
+              Diagnose
             </button>
             <button
               type="button"
               onClick={() => activateTab('analysis')}
               className={activeTab === 'analysis' ? 'active-tab' : ''}
             >
-              AI Analysis
+              Analysis
             </button>
           </section>
 
@@ -1587,21 +1605,52 @@ export function DashboardClient() {
 
           {activeTab === 'analysis' && (
             <section className="card">
-              <h2 style={{ marginTop: 0 }}>AI Analysis</h2>
-              {!analysis && !analysisLoading && (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  <p style={{ margin: 0, color: '#455a78' }}>
-                    Run diagnostics analysis to generate a natural-language summary.
+              <h2 style={{ marginTop: 0 }}>Analysis</h2>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+                <p style={{ margin: 0, color: '#455a78' }}>
+                  Run diagnostics analysis to generate a natural-language summary.
+                </p>
+                <label style={{ display: 'grid', gap: 6, maxWidth: 560 }}>
+                  Anthropic API key (optional, bring your own)
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder="sk-ant-..."
+                    value={analysisApiKey}
+                    onChange={(event) => setAnalysisApiKey(event.target.value)}
+                  />
+                </label>
+                <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                  Key is sent only with this analysis request as <code>X-Anthropic-Api-Key</code>; it is not persisted.
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    onClick={onRunAnalysis}
+                    disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
+                  >
+                    {analysis ? 'Re-run diagnostics analysis' : 'Run diagnostics analysis'}
+                  </button>
+                </div>
+              </div>
+              {analysisError && (
+                <div className="card" style={{ padding: 12, borderColor: '#fecdca', background: '#fff7f6' }}>
+                  <p style={{ marginTop: 0, marginBottom: 6, color: '#b42318' }}>
+                    <strong>Analysis unavailable:</strong> {analysisError}
                   </p>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={onRunAnalysis}
-                      disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
-                    >
-                      Run diagnostics analysis
-                    </button>
-                  </div>
+                  {isAnalysisKeyMissingError(analysisError) && (
+                    <p style={{ margin: 0, fontSize: 13, color: '#6b2c2c' }}>
+                      No shared key is configured for this backend. Bring your own key above, or run your own backend
+                      with <code>ANTHROPIC_API_KEY</code> exported.
+                    </p>
+                  )}
+                </div>
+              )}
+              {!analysis && !analysisLoading && (
+                <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+                  <p style={{ margin: 0, color: '#546b8a' }}>
+                    No analysis generated yet for this session. Run the action above when ready.
+                  </p>
                 </div>
               )}
               {analysisLoading && (
@@ -1615,9 +1664,6 @@ export function DashboardClient() {
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
                       {showAnalysis ? 'Hide analysis' : 'Show analysis'}
-                    </button>
-                    <button type="button" onClick={onRunAnalysis} disabled={analysisLoading}>
-                      Re-run diagnostics analysis
                     </button>
                   </div>
                   <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>

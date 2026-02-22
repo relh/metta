@@ -142,7 +142,7 @@ export function RolePercentilesPanel({
 
   if (parsedRows.length === 0) {
     return (
-      <RolePercentilesMessageCard message="No parse percentile data is available for this policy in the selected pool." />
+      <RolePercentilesMessageCard message="No parse percentile data yet for this policy in the selected pool. This is expected on read-only/new environments until percentile backfill runs." />
     )
   }
 

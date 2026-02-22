@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from dashboard.backend.dashboard_backend.state_page.router import create_dashboard_router
@@ -209,3 +209,44 @@ def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:
     assert body["pool_name"] == "qualifying"
     assert len(body["rows"]) == 1
     assert body["rows"][0]["role"] == "miner"
+
+
+def test_dashboard_analysis_requires_env_or_request_api_key(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.settings.ANTHROPIC_API_KEY",
+        None,
+    )
+
+    app = FastAPI()
+    app.include_router(create_dashboard_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.post(f"/dashboard/v1/policies/versions/{uuid4()}/analysis")
+    assert response.status_code == 500
+    assert "Provide X-Anthropic-Api-Key" in response.json()["detail"]
+
+
+def test_dashboard_analysis_accepts_request_scoped_api_key(monkeypatch: Any) -> None:
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.settings.ANTHROPIC_API_KEY",
+        None,
+    )
+
+    async def fake_require_policy_version(_policy_version_id: str) -> tuple[Any, Any]:
+        raise HTTPException(status_code=418, detail="request-key-path-reached")
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._require_policy_version",
+        fake_require_policy_version,
+    )
+
+    app = FastAPI()
+    app.include_router(create_dashboard_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.post(
+        f"/dashboard/v1/policies/versions/{uuid4()}/analysis",
+        headers={"X-Anthropic-Api-Key": "sk-ant-test"},
+    )
+    assert response.status_code == 418
+    assert response.json()["detail"] == "request-key-path-reached"

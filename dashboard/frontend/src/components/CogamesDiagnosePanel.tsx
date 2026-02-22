@@ -181,7 +181,7 @@ export const CogamesDiagnosePanel: FC<{
       <section className="card">
         <div className="diagnose-header">
           <div>
-            <h2 style={{ marginTop: 0, marginBottom: 4 }}>Cogames Diagnose</h2>
+            <h2 style={{ marginTop: 0, marginBottom: 4 }}>Diagnose</h2>
             <p style={{ margin: 0, color: '#546b8a' }}>
               CLI-run diagnostics from <code>outputs/cogames-diagnose</code>. Stage-1 confirms signals, then Stage-2
               social checks finalize prescriptions.
@@ -200,7 +200,10 @@ export const CogamesDiagnosePanel: FC<{
           </p>
         ) : runs.length === 0 ? (
           <div className="grid" style={{ gap: 8 }}>
-            <p style={{ margin: 0 }}>No diagnose runs found yet. Run this locally, then refresh this tab:</p>
+            <p style={{ margin: 0 }}>
+              No diagnose runs found yet. This is expected unless diagnose artifacts were generated/imported for this
+              environment. Run this locally, then refresh this tab:
+            </p>
             {diagnoseCommand ? (
               <div className="diagnose-list-item">
                 <code>{diagnoseCommand}</code>

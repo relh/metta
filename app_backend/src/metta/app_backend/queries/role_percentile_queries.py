@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 
 from metta.app_backend.database import get_db, with_db
-from metta.app_backend.models.episodes import Episode, EpisodeAgentMetric, EpisodeJob, EpisodePolicy
+from metta.app_backend.models.episodes import Episode, EpisodeAgentMetric, EpisodeJob
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Match, MatchStatus
 
@@ -44,7 +44,7 @@ class RolePercentileRow:
     updated_at: datetime
 
 
-DEATH_SOURCE_NAMES = ("deaths",)
+DEATH_SOURCE_NAMES = ("death",)
 
 ROLE_METRICS: dict[str, list[RoleMetric]] = {
     "miner": [
@@ -57,7 +57,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
         RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=False),
-        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+        RoleMetric("death", DEATH_SOURCE_NAMES, higher_is_better=False),
     ],
     "scout": [
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=True),
@@ -65,7 +65,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
         RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=False),
-        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+        RoleMetric("death", DEATH_SOURCE_NAMES, higher_is_better=False),
     ],
     "scrambler": [
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=True),
@@ -78,7 +78,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
         RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=False),
-        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+        RoleMetric("death", DEATH_SOURCE_NAMES, higher_is_better=False),
     ],
     "aligner": [
         RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=True),
@@ -91,7 +91,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
-        RoleMetric("deaths", DEATH_SOURCE_NAMES, higher_is_better=False),
+        RoleMetric("death", DEATH_SOURCE_NAMES, higher_is_better=False),
     ],
 }
 
@@ -128,84 +128,56 @@ def _pool_episode_internal_ids(pool_id: UUID):
     )
 
 
-def _pool_policy_version_ids(pool_id: UUID):
-    pool_episodes = _pool_episode_internal_ids(pool_id)
-    return (
-        select(EpisodePolicy.policy_version_id)
-        .join(Episode, Episode.id == EpisodePolicy.episode_id)
-        .join(pool_episodes, pool_episodes.c.episode_internal_id == Episode.internal_id)
-        .distinct()
-    )
-
-
 async def _metric_percentiles(
     pool_id: UUID,
     metric: RoleMetric,
 ) -> list[dict[str, Any]]:
     session = get_db()
+    source_name = metric.source_names[0]
     pool_episodes = _pool_episode_internal_ids(pool_id)
     stmt = (
         select(
             PolicyVersion.id.label("policy_version_id"),
-            EpisodeAgentMetric.metric_name.label("metric_name"),
             func.avg(EpisodeAgentMetric.value).label("avg_value"),
             func.count().label("sample_count"),
         )
         .select_from(EpisodeAgentMetric)
         .join(pool_episodes, pool_episodes.c.episode_internal_id == EpisodeAgentMetric.episode_internal_id)
         .join(PolicyVersion, PolicyVersion.internal_id == EpisodeAgentMetric.pv_internal_id)
-        .where(EpisodeAgentMetric.metric_name.in_(metric.source_names))
-        .group_by(PolicyVersion.id, EpisodeAgentMetric.metric_name)
+        .where(EpisodeAgentMetric.metric_name == source_name)
+        .group_by(PolicyVersion.id)
     )
     rows = (await session.execute(stmt)).mappings().all()
     if not rows:
         # If the metric is absent for the entire pool, it should not affect role scoring.
         return []
 
-    pool_policies = _pool_policy_version_ids(pool_id)
-    all_policy_ids = set(await session.scalars(pool_policies))
-
-    per_policy: dict[UUID, dict[str, Any]] = {
-        pv_id: {"weighted_total": 0.0, "samples": 0, "source_metrics": {}} for pv_id in all_policy_ids
-    }
-
-    for row in rows:
-        pv_id: UUID = row["policy_version_id"]
-        data = per_policy[pv_id]
-        avg_value = float(row["avg_value"])
-        sample_count = int(row["sample_count"])
-        source_name = str(row["metric_name"])
-        data["weighted_total"] += avg_value * sample_count
-        data["samples"] += sample_count
-        data["source_metrics"][source_name] = {
-            "avg": avg_value,
-            "samples": sample_count,
+    by_policy = {
+        row["policy_version_id"]: {
+            "avg_value": float(row["avg_value"]),
+            "sample_count": int(row["sample_count"]),
         }
-
-    if not per_policy:
-        return []
-
-    values = {
-        pv_id: float(data["weighted_total"]) / float(data["samples"])
-        for pv_id, data in per_policy.items()
-        if int(data["samples"]) > 0
+        for row in rows
     }
-    if not values:
-        return []
-
+    values = {pv_id: data["avg_value"] for pv_id, data in by_policy.items()}
     all_values = list(values.values())
     results: list[dict[str, Any]] = []
     for pv_id, value in values.items():
-        data = per_policy[pv_id]
+        sample_count = int(by_policy[pv_id]["sample_count"])
         percentile = _percentile_rank(value, all_values, metric.higher_is_better)
 
         results.append(
             {
                 "policy_version_id": pv_id,
                 "avg_value": float(value),
-                "sample_count": int(data["samples"]),
+                "sample_count": sample_count,
                 "percentile": float(percentile),
-                "source_metrics": data["source_metrics"],
+                "source_metrics": {
+                    source_name: {
+                        "avg": float(value),
+                        "samples": sample_count,
+                    }
+                },
             }
         )
     return results

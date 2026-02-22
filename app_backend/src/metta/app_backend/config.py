@@ -15,7 +15,7 @@ DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST: tuple[str, ...] = (
     "cell.visited",
     "junction.scrambled_by_agent",
     "junction.aligned_by_agent",
-    "deaths",
+    "death",
 )
 
 

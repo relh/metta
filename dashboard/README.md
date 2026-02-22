@@ -42,13 +42,14 @@ uv run python -m dashboard.backend.dashboard_backend.main
 - Standalone dashboard UI that fetches from dashboard backend directly
 - Loads dashboard data by policy-version UUID
 - Tabs in the UI:
-- `Overview`: policy metadata, KPI snapshot, diagnostics list, and optional AI analysis output
-- `Episodes`: per-episode table (status, reward, steps, opponent, team composition, diagnostics)
-- `Opponents`: aggregated matchup view (best/worst matchup + per-opponent summary metrics)
-- `Roles`: role percentile table backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
-- `Eval Tree`: skill-tree view in evaluation mode
-- `Cogames Diagnose`: eval skill tree focused on `cogames-diagnose` catalog/source
-- `Train Tree`: skill-tree view in training mode
+  - `Overview`: policy metadata, KPI snapshot, diagnostics, quality gates, rollout actions
+  - `Capabilities`: unified capability grid with diagnose evidence overlays
+  - `Parses`: role-percentile table backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
+  - `Opponents`: matchup diagnosis and opponent/composition slice tables
+  - `Episodes`: per-episode filters/export, replay links, and diagnostics tags
+  - `Health`: failure and crash-dump summaries, tag/instrumentation inventory
+  - `Diagnose`: run selector, stage gating, spider chart, probes, symptoms, prescriptions
+  - `Analysis`: AI-generated narrative with replay/opponent inline enrichments
 
 ### Run
 
@@ -183,3 +184,32 @@ Backend requires `STATS_DB_READ_ONLY_URI`, provisioned as the `dashboard-backend
 source URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (temporarily managed outside
 Terraform per `devops/tf/observatory/readonly_db.tf`), and runtime startup checks enforce non-writer + read-replica
 invariants.
+
+## Analysis Key Strategy (BYO)
+
+- The dashboard backend supports two key sources for AI Analysis:
+  - Request-scoped header: `X-Anthropic-Api-Key` (preferred for BYO usage)
+  - Backend env var: `ANTHROPIC_API_KEY` (optional fallback)
+- We do not require a shared deployed key. Users can bring their own key per request from the UI Analysis tab.
+- For local/self-hosted backend usage, exporting `ANTHROPIC_API_KEY` still works.
+
+## Live Smoke Scripts
+
+- Fast API-level smoke:
+
+```bash
+dashboard/scripts/live_api_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
+```
+
+Optional env:
+
+- `DASHBOARD_API_BASE_URL` (defaults to deployed API)
+- `DASHBOARD_AUTH_TOKEN` or `OBSERVATORY_AUTH_TOKEN` (if not using `~/.metta/config.yaml`)
+- `DASHBOARD_ANTHROPIC_API_KEY` (optional BYO key for analysis check)
+
+- Full UI smoke with captured auth storage state:
+
+```bash
+dashboard/scripts/capture_observatory_storage_state.sh
+dashboard/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
+```

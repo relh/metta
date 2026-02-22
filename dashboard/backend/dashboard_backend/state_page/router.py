@@ -9,7 +9,7 @@ from typing import Any, Sequence
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
@@ -598,10 +598,22 @@ def create_dashboard_router() -> APIRouter:
 
     @router.post("/{policy_version_id}/analysis")
     @timed_http_handler
-    async def get_dashboard_analysis(policy_version_id: str, user: SoftmaxUser) -> DashboardAnalysisResponse:
+    async def get_dashboard_analysis(
+        policy_version_id: str,
+        request: Request,
+        user: SoftmaxUser,
+    ) -> DashboardAnalysisResponse:
         """Run Claude AI analysis on computed dashboard data."""
-        if not settings.ANTHROPIC_API_KEY:
-            raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+        request_api_key = request.headers.get("X-Anthropic-Api-Key", "").strip()
+        anthropic_api_key = request_api_key or settings.ANTHROPIC_API_KEY
+        if not anthropic_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Analysis unavailable: no Anthropic API key configured. "
+                    "Provide X-Anthropic-Api-Key, or run backend with ANTHROPIC_API_KEY exported."
+                ),
+            )
 
         now = time.time()
         user_key = user.email or str(user.id)
@@ -685,7 +697,7 @@ def create_dashboard_router() -> APIRouter:
 
         try:
             analysis_text = await request_anthropic_message(
-                api_key=settings.ANTHROPIC_API_KEY,
+                api_key=anthropic_api_key,
                 prompt=prompt,
                 model="claude-sonnet-4-5-20250929",
                 max_tokens=2500,

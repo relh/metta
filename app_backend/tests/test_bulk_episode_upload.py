@@ -346,7 +346,7 @@ class TestBulkEpisodeUpload:
         insert_agent_policy(conn, episode_id, pv_id_str, 0)
         insert_agent_metric(conn, episode_id, 0, "reward", 5.0)
         insert_agent_metric(conn, episode_id, 0, "miner.gained", 2.0)
-        insert_agent_metric(conn, episode_id, 0, "deaths", 1.0)
+        insert_agent_metric(conn, episode_id, 0, "death", 1.0)
         insert_agent_metric(conn, episode_id, 0, "steps", 100.0)
         insert_agent_metric(conn, episode_id, 0, "custom_metric", 42.0)
 
@@ -368,6 +368,6 @@ class TestBulkEpisodeUpload:
 
             assert "reward" in metric_names
             assert "miner.gained" in metric_names
-            assert "deaths" in metric_names
+            assert "death" in metric_names
             assert "steps" not in metric_names
             assert "custom_metric" not in metric_names
