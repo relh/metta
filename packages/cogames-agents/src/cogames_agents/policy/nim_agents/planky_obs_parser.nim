@@ -22,10 +22,6 @@ type
     featureNameById: Table[int, string] # feature_id -> feature name
 
 proc newObsParser*(cfg: Config): ObsParser =
-  var vibeNames: seq[string] = @[]
-  # Prefer config-derived vibe names (from change_vibe_* actions).
-  vibeNames = cfg.vibeNames
-
   var featureNameById = initTable[int, string]()
   for f in cfg.config.obsFeatures:
     featureNameById[f.id] = f.name
@@ -34,7 +30,8 @@ proc newObsParser*(cfg: Config): ObsParser =
     obsHr: cfg.config.obsHeight div 2,
     obsWr: cfg.config.obsWidth div 2,
     tagNames: cfg.config.tags,
-    vibeNames: vibeNames,
+    # Prefer config-derived vibe names (from change_vibe_* actions).
+    vibeNames: cfg.vibeNames,
     featureNameById: featureNameById,
   )
 
@@ -58,17 +55,21 @@ proc resolveObjectName(parser: ObsParser, tagIds: seq[int]): string =
         return tag
   "unknown"
 
-proc deriveAlignment(objName: string, clipped: int, tagNames: seq[string], tagIds: seq[int]): Alignment =
+proc deriveAlignment(objName: string, clipped: int, aoeMask: int, tagNames: seq[string], tagIds: seq[int]): Alignment =
   for tid in tagIds:
     if tid >= 0 and tid < tagNames.len:
       let tag = tagNames[tid]
-      if tag == "team:cogs" or tag == "cogs":
+      if tag == "team:cogs":
         return alCogs
-      if tag == "team:clips" or tag == "clips":
+      if tag == "team:clips":
         return alClips
   if "c:" in objName:
     return alCogs
   if "clips" in objName or clipped > 0:
+    return alClips
+  if aoeMask == 1:
+    return alCogs
+  if aoeMask == 2:
     return alClips
   alNone
 
@@ -79,37 +80,10 @@ proc parse*(
   step: int,
   lastPos: Option[Location] = none(Location)
 ): tuple[state: StateSnapshot, visibleEntities: Table[Location, Entity]] {.raises: [].} =
+  discard lastPos
   var s: StateSnapshot
-  # Local position from lp:* tokens (global tokens are mapped to (0,0)).
-  var hasPos = false
-  var colOffset = 0
-  var rowOffset = 0
-  let east = cfg.getFeature(visible, cfg.features.lpEast)
-  if east != -1:
-    colOffset = east
-    hasPos = true
-  let west = cfg.getFeature(visible, cfg.features.lpWest)
-  if west != -1:
-    colOffset = -west
-    hasPos = true
-  let south = cfg.getFeature(visible, cfg.features.lpSouth)
-  if south != -1:
-    rowOffset = south
-    hasPos = true
-  let north = cfg.getFeature(visible, cfg.features.lpNorth)
-  if north != -1:
-    rowOffset = -north
-    hasPos = true
-
-  if hasPos:
-    s.position = Location(x: SpawnCol + colOffset, y: SpawnRow + rowOffset)
-  else:
-    # Fallback to last known position if lp:* tokens are missing.
-    # This keeps navigation stable in environments where lp tokens can flicker.
-    if lastPos.isSome:
-      s.position = lastPos.get()
-    else:
-      s.position = Location(x: SpawnCol, y: SpawnRow)
+  let lpOffset = cfg.getLocalPositionOffset(visible)
+  s.position = Location(x: SpawnCol + lpOffset.x, y: SpawnRow + lpOffset.y)
 
   # Inventory (center cell)
   s.energy = cfg.getInventory(visible, cfg.features.invEnergy)
@@ -151,16 +125,13 @@ proc parse*(
 
     var tagIds: seq[int] = @[]
     var clipped = 0
+    var aoeMask = 0
     var remainingUses = 999
     var invByName = initTable[string, int]()
 
     for fv in feats:
       if fv.featureId == cfg.features.tag:
         tagIds.add(fv.value)
-      elif fv.featureId == cfg.features.clipped:
-        clipped = fv.value
-      elif fv.featureId == cfg.features.remainingUses:
-        remainingUses = fv.value
       else:
         # Best-effort per-cell inventory reconstruction (extractor inventories).
         let fname = parser.featureNameById.getOrDefault(fv.featureId, "")
@@ -178,6 +149,20 @@ proc parse*(
           else:
             invByName[suffix] = invByName.getOrDefault(suffix, 0) + fv.value
 
+    if cfg.features.clipped != 0:
+      clipped = featureValueAt(feats, cfg.features.clipped)
+      if clipped == -1:
+        clipped = 0
+    if cfg.features.aoeMask != 0:
+      # Guard optional aoe_mask explicitly so missing configs never read feature id 0.
+      aoeMask = featureValueAt(feats, cfg.features.aoeMask)
+      if aoeMask == -1:
+        aoeMask = 0
+    if cfg.features.remainingUses != 0:
+      remainingUses = featureValueAt(feats, cfg.features.remainingUses)
+      if remainingUses == -1:
+        remainingUses = 999
+
     if tagIds.len == 0:
       continue
 
@@ -192,7 +177,7 @@ proc parse*(
         invAmount += v
 
     let absPos = Location(x: s.position.x + relLoc.x, y: s.position.y + relLoc.y)
-    let alignment = deriveAlignment(objName, clipped, parser.tagNames, tagIds)
+    let alignment = deriveAlignment(objName, clipped, aoeMask, parser.tagNames, tagIds)
 
     ents[absPos] = Entity(
       kind: objName,

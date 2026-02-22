@@ -75,15 +75,6 @@ proc stationTagForRole(roleName: string): string =
   # Standardized tag used by current CogsGuard maps.
   "type:c:" & roleName
 
-proc featureValue(
-  features: seq[FeatureValue],
-  featureId: int
-): int =
-  for feature in features:
-    if feature.featureId == featureId:
-      return feature.value
-  return -1
-
 proc getTagNames(cfg: Config, features: seq[FeatureValue]): HashSet[string] =
   result = initHashSet[string]()
   for feature in features:
@@ -91,12 +82,16 @@ proc getTagNames(cfg: Config, features: seq[FeatureValue]): HashSet[string] =
       if feature.value >= 0 and feature.value < cfg.config.tags.len:
         result.incl(cfg.config.tags[feature.value])
 
-proc getAlignment(tagNames: HashSet[string], clipped: int): int =
-  if "team:cogs" in tagNames or "cogs" in tagNames:
+proc getAlignment(tagNames: HashSet[string], clipped: int, aoeMask: int): int =
+  if "team:cogs" in tagNames:
     return 1
-  if "team:clips" in tagNames or "clips" in tagNames:
+  if "team:clips" in tagNames:
     return -1
   if clipped > 0:
+    return -1
+  if aoeMask == 1:
+    return 1
+  if aoeMask == 2:
     return -1
   return 0
 
@@ -115,8 +110,9 @@ proc updateDiscoveries(agent: CogsguardAlignAllAgent, visible: Table[Location, s
       continue
 
     let absoluteLoc = Location(x: location.x + agent.location.x, y: location.y + agent.location.y)
-    let clipped = featureValue(features, agent.cfg.features.clipped)
-    let alignment = getAlignment(tagNames, clipped)
+    let clipped = featureValueAt(features, agent.cfg.features.clipped)
+    let aoeMask = featureValueAt(features, agent.cfg.features.aoeMask)
+    let alignment = getAlignment(tagNames, clipped, aoeMask)
 
     for tagName in tagNames.items:
       for stationName in StationTags.items:
@@ -138,50 +134,18 @@ proc updateDiscoveries(agent: CogsguardAlignAllAgent, visible: Table[Location, s
               locations.add(absoluteLoc)
             agent.extractors[resource] = locations
 
-            let remaining = featureValue(features, agent.cfg.features.remainingUses)
+            let remaining = featureValueAt(features, agent.cfg.features.remainingUses)
             if remaining != -1:
               agent.extractorRemaining[absoluteLoc] = remaining
 
 proc updateMap(agent: CogsguardAlignAllAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
-  # Prefer lp:* (local position) observations when available.
-  var hasLp = false
-  var colOffset = 0
-  var rowOffset = 0
-  let east = agent.cfg.getFeature(visible, agent.cfg.features.lpEast)
-  if east != -1:
-    colOffset = east
-    hasLp = true
-  let west = agent.cfg.getFeature(visible, agent.cfg.features.lpWest)
-  if west != -1:
-    colOffset = -west
-    hasLp = true
-  let south = agent.cfg.getFeature(visible, agent.cfg.features.lpSouth)
-  if south != -1:
-    rowOffset = south
-    hasLp = true
-  let north = agent.cfg.getFeature(visible, agent.cfg.features.lpNorth)
-  if north != -1:
-    rowOffset = -north
-    hasLp = true
+  # Use lp:* (local position) observations as the authoritative position signal.
+  let lpOffset = agent.cfg.getLocalPositionOffset(visible)
 
   if agent.map.len == 0:
     agent.map = initTable[Location, seq[FeatureValue]]()
-    agent.location = Location(x: 0, y: 0)
 
-  if hasLp:
-    agent.location = Location(x: colOffset, y: rowOffset)
-  else:
-    var newLocation = agent.location
-    let lastAction = agent.cfg.getLastAction(visible)
-    if lastAction == agent.cfg.actions.moveNorth:
-      newLocation.y -= 1
-    elif lastAction == agent.cfg.actions.moveSouth:
-      newLocation.y += 1
-    elif lastAction == agent.cfg.actions.moveWest:
-      newLocation.x -= 1
-    elif lastAction == agent.cfg.actions.moveEast:
-      newLocation.x += 1
-    agent.location = newLocation
+  agent.location = lpOffset
 
   let halfW = agent.cfg.obsHalfWidth()
   let halfH = agent.cfg.obsHalfHeight()

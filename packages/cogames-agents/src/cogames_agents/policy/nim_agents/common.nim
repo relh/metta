@@ -122,6 +122,8 @@ type
     lpWest*: int
     lpNorth*: int
     lpSouth*: int
+    lastActionMove*: int
+    aoeMask*: int
     agentId*: int
     invEnergy*: int
     invCarbon*: int
@@ -651,6 +653,10 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.lpNorth = feature.id
       of "lp:south":
         result.features.lpSouth = feature.id
+      of "last_action_move":
+        result.features.lastActionMove = feature.id
+      of "aoe_mask":
+        result.features.aoeMask = feature.id
       of "agent_id":
         result.features.agentId = feature.id
       of "inv:energy":
@@ -761,8 +767,6 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
         result.features.protocolOutputInfluence = feature.id
       of "protocol_output:solar":
         result.features.protocolOutputSolar = feature.id
-      of "aoe_mask", "last_action_move":
-        discard
       else:
         echo "Unknown feature: ", feature.name
 
@@ -954,9 +958,43 @@ proc getFeature*(
       return featureValue.value
   return -1
 
+proc featureValueAt*(features: seq[FeatureValue], featureId: int): int =
+  ## Get a feature value from one cell's token list.
+  if featureId == 0:
+    return -1
+  for feature in features:
+    if feature.featureId == featureId:
+      return feature.value
+  return -1
+
 proc getLastAction*(cfg: Config, visible: Table[Location, seq[FeatureValue]]): int =
   ## Get the last action of the visible map.
   cfg.getFeature(visible, cfg.features.lastAction)
+
+proc getLocalPositionOffset*(cfg: Config, visible: Table[Location, seq[FeatureValue]]): Location =
+  ## Return lp:* offset (relative to spawn) from the canonical mettagrid tokens.
+  doAssert cfg.features.lpEast != 0 and cfg.features.lpWest != 0 and
+    cfg.features.lpNorth != 0 and cfg.features.lpSouth != 0,
+    "Expected lp:* observation features to be configured"
+
+  var
+    colOffset = 0
+    rowOffset = 0
+
+  let east = cfg.getFeature(visible, cfg.features.lpEast)
+  if east != -1:
+    colOffset = east
+  let west = cfg.getFeature(visible, cfg.features.lpWest)
+  if west != -1:
+    colOffset = -west
+  let south = cfg.getFeature(visible, cfg.features.lpSouth)
+  if south != -1:
+    rowOffset = south
+  let north = cfg.getFeature(visible, cfg.features.lpNorth)
+  if north != -1:
+    rowOffset = -north
+
+  Location(x: colOffset, y: rowOffset)
 
 proc getEpisodeCompletionPct*(cfg: Config, visible: Table[Location, seq[FeatureValue]]): int =
   ## Get episode completion percent, or -1 when the feature is unavailable.

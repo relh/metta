@@ -162,15 +162,6 @@ proc updateEpisodeState(agent: CogsguardAgent, episodePct: int) =
 
   agent.lastEpisodePct = episodePct
 
-proc featureValue(
-  features: seq[FeatureValue],
-  featureId: int
-): int =
-  for feature in features:
-    if feature.featureId == featureId:
-      return feature.value
-  return -1
-
 proc getTagNames(cfg: Config, features: seq[FeatureValue]): HashSet[string] =
   result = initHashSet[string]()
   for feature in features:
@@ -178,10 +169,14 @@ proc getTagNames(cfg: Config, features: seq[FeatureValue]): HashSet[string] =
       if feature.value >= 0 and feature.value < cfg.config.tags.len:
         result.incl(cfg.config.tags[feature.value])
 
-proc getAlignment(tagNames: HashSet[string]): int =
+proc getAlignment(tagNames: HashSet[string], aoeMask: int): int =
   if "team:cogs" in tagNames:
     return 1
   if "team:clips" in tagNames:
+    return -1
+  if aoeMask == 1:
+    return 1
+  if aoeMask == 2:
     return -1
   return 0
 
@@ -200,7 +195,8 @@ proc updateDiscoveries(agent: CogsguardAgent, visible: Table[Location, seq[Featu
       continue
 
     let absoluteLoc = Location(x: location.x + agent.location.x, y: location.y + agent.location.y)
-    let alignment = getAlignment(tagNames)
+    let aoeMask = featureValueAt(features, agent.cfg.features.aoeMask)
+    let alignment = getAlignment(tagNames, aoeMask)
 
     for tagName in tagNames.items:
       for stationName in StationTags.items:
@@ -222,57 +218,19 @@ proc updateDiscoveries(agent: CogsguardAgent, visible: Table[Location, seq[Featu
               locations.add(absoluteLoc)
             agent.extractors[resource] = locations
 
-            let remaining = featureValue(features, agent.cfg.features.remainingUses)
+            let remaining = featureValueAt(features, agent.cfg.features.remainingUses)
             if remaining != -1:
               agent.extractorRemaining[absoluteLoc] = remaining
 
 proc updateMap(agent: CogsguardAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
-  # Prefer lp:* (local position) observations when available. These give an
-  # absolute offset from a stable spawn position, which is more robust than
-  # inferring position from last_action + bump checks.
-  var hasLp = false
-  var colOffset = 0
-  var rowOffset = 0
-  let east = agent.cfg.getFeature(visible, agent.cfg.features.lpEast)
-  if east != -1:
-    colOffset = east
-    hasLp = true
-  let west = agent.cfg.getFeature(visible, agent.cfg.features.lpWest)
-  if west != -1:
-    colOffset = -west
-    hasLp = true
-  let south = agent.cfg.getFeature(visible, agent.cfg.features.lpSouth)
-  if south != -1:
-    rowOffset = south
-    hasLp = true
-  let north = agent.cfg.getFeature(visible, agent.cfg.features.lpNorth)
-  if north != -1:
-    rowOffset = -north
-    hasLp = true
+  # Use lp:* (local position) observations as the authoritative position signal.
+  let offset = agent.cfg.getLocalPositionOffset(visible)
 
   if agent.map.len == 0:
     agent.map = initTable[Location, seq[FeatureValue]]()
-    if hasLp:
-      # Mirror Python Planky: treat spawn as an arbitrary stable origin so world
-      # coords are positive and consistent across episodes.
-      agent.location = Location(x: 100 + colOffset, y: 100 + rowOffset)
-    else:
-      agent.location = Location(x: 0, y: 0)
-  elif hasLp:
-    agent.location = Location(x: 100 + colOffset, y: 100 + rowOffset)
-  else:
-    # Fallback: infer from last action when lp:* isn't available.
-    var newLocation = agent.location
-    let lastAction = agent.cfg.getLastAction(visible)
-    if lastAction == agent.cfg.actions.moveNorth:
-      newLocation.y -= 1
-    elif lastAction == agent.cfg.actions.moveSouth:
-      newLocation.y += 1
-    elif lastAction == agent.cfg.actions.moveWest:
-      newLocation.x -= 1
-    elif lastAction == agent.cfg.actions.moveEast:
-      newLocation.x += 1
-    agent.location = newLocation
+  # Mirror Python Planky: treat spawn as an arbitrary stable origin so world
+  # coords are positive and consistent across episodes.
+  agent.location = Location(x: 100 + offset.x, y: 100 + offset.y)
 
   # Update global map and seen set from the egocentric window.
   let halfW = agent.cfg.obsHalfWidth()

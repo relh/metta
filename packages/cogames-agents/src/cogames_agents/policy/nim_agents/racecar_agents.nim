@@ -133,44 +133,8 @@ proc newRaceCarAgent*(agentId: int, environmentConfig: string): RaceCarAgent =
 
 proc updateMap(agent: RaceCarAgent, visible: Table[Location, seq[FeatureValue]]) {.measure.} =
   ## Update the big map with the small visible map.
-
-  # Prefer lp:* (local position) observations when available.
-  var hasLp = false
-  var colOffset = 0
-  var rowOffset = 0
-  let east = agent.cfg.getFeature(visible, agent.cfg.features.lpEast)
-  if east != -1:
-    colOffset = east
-    hasLp = true
-  let west = agent.cfg.getFeature(visible, agent.cfg.features.lpWest)
-  if west != -1:
-    colOffset = -west
-    hasLp = true
-  let south = agent.cfg.getFeature(visible, agent.cfg.features.lpSouth)
-  if south != -1:
-    rowOffset = south
-    hasLp = true
-  let north = agent.cfg.getFeature(visible, agent.cfg.features.lpNorth)
-  if north != -1:
-    rowOffset = -north
-    hasLp = true
-
-  if agent.map.len == 0:
-    agent.location = Location(x: 0, y: 0)
-  if hasLp:
-    agent.location = Location(x: colOffset, y: rowOffset)
-  else:
-    var newLocation = agent.location
-    let lastAction = agent.cfg.getLastAction(visible)
-    if lastAction == agent.cfg.actions.moveNorth:
-      newLocation.y -= 1
-    elif lastAction == agent.cfg.actions.moveSouth:
-      newLocation.y += 1
-    elif lastAction == agent.cfg.actions.moveWest:
-      newLocation.x -= 1
-    elif lastAction == agent.cfg.actions.moveEast:
-      newLocation.x += 1
-    agent.location = newLocation
+  let lpOffset = agent.cfg.getLocalPositionOffset(visible)
+  agent.location = lpOffset
 
   let halfW = agent.cfg.obsHalfWidth()
   let halfH = agent.cfg.obsHalfHeight()
