@@ -390,7 +390,7 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
         self._obs_wr = policy_env_info.obs_width // 2
 
         # Action lookup
-        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
+        self._action_names = policy_env_info.all_action_names
         self._action_set = set(self._action_names)
         self._vibe_names = [
             name[len("change_vibe_") :] for name in self._action_names if name.startswith("change_vibe_")
@@ -1357,8 +1357,7 @@ class CogsguardPolicy(MultiAgentPolicy):
         self._agent_policies: dict[int, StatefulAgentPolicy[CogsguardAgentState]] = {}
         self._smart_role_coordinator = SmartRoleCoordinator(policy_env_info.num_agents)
         self._feature_by_id = {feature.id: feature for feature in policy_env_info.obs_features}
-        action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
-        self._action_name_to_index = {name: idx for idx, name in enumerate(action_names)}
+        self._action_name_to_index = policy_env_info.action_name_to_flat_index
         self._noop_action_value = dtype_actions.type(self._action_name_to_index["noop"])
 
         def _parse_flag(value: object) -> bool:
@@ -1380,6 +1379,7 @@ class CogsguardPolicy(MultiAgentPolicy):
         )
         self._evolutionary_hooks_configured = False
 
+        action_names = policy_env_info.all_action_names
         available_vibes = {name[len("change_vibe_") :] for name in action_names if name.startswith("change_vibe_")}
         role_vibes = [vibe for vibe in ["scrambler", "aligner", "miner", "scout"] if vibe in available_vibes]
 

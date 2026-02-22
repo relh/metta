@@ -345,6 +345,7 @@ class VectorizedTrainingEnvironment(TrainingEnvironment):
                     f"expected [0,{num_vibe_actions}), got min={vibe_actions_i64.min()} max={vibe_actions_i64.max()}"
                 )
 
-            payload_i64 = actions_i64 + num_non_vibe_actions * (vibe_actions_i64 + 1)
+            # Combined-index encoding: val = N_primary + primary * N_vibe + vibe
+            payload_i64 = num_non_vibe_actions + actions_i64 * num_vibe_actions + vibe_actions_i64
             payload = payload_i64.astype(dtype_actions, copy=False)
         self._vecenv.send(payload)

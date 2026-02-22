@@ -116,7 +116,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
         self._policy_env_info = policy_env_info
         self._role = role
         self._obs_parser = ObsParser(policy_env_info)
-        self._action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
+        self._action_names = policy_env_info.all_action_names
 
         # Tracing
         self._trace_enabled = trace_enabled
@@ -415,8 +415,7 @@ class CogasPolicy(MultiAgentPolicy):
     ) -> None:
         super().__init__(policy_env_info, device=device)
         self._feature_by_id = {f.id: f for f in policy_env_info.obs_features}
-        action_names = [*policy_env_info.action_names, *policy_env_info.vibe_action_names]
-        self._action_name_to_index = {name: idx for idx, name in enumerate(action_names)}
+        self._action_name_to_index = policy_env_info.action_name_to_flat_index
         self._noop_action_value = dtype_actions.type(self._action_name_to_index["noop"])
 
         # Tracing

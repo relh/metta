@@ -25,7 +25,7 @@ class ObsParser:
 
         # Derive vibe names from action names
         self._vibe_names: list[str] = []
-        for action_name in [*policy_env_info.action_names, *policy_env_info.vibe_action_names]:
+        for action_name in policy_env_info.all_action_names:
             if action_name.startswith("change_vibe_"):
                 self._vibe_names.append(action_name[len("change_vibe_") :])
 

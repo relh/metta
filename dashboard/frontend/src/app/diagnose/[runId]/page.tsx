@@ -64,11 +64,19 @@ export default async function DiagnoseRunPage({ params }: { params: Promise<{ ru
   const probeEvals = Array.isArray(doctorNote.stage1_probe_evaluations) ? doctorNote.stage1_probe_evaluations : []
   const notes = Array.isArray(doctorNote.notes) ? doctorNote.notes : []
 
-  const axisScores = Object.fromEntries(axes.map((axis) => [axis.axis, axis])) as Partial<Record<DiagnoseAxis, DiagnoseAxisScore>>
+  const axisScores = Object.fromEntries(axes.map((axis) => [axis.axis, axis])) as Partial<
+    Record<DiagnoseAxis, DiagnoseAxisScore>
+  >
   const probesByAxis = byAxis(probes)
-  const evalByProbeId = new Map<string, DiagnoseProbeEvaluation>(probeEvals.map((evaluation) => [evaluation.probe_id, evaluation]))
+  const evalByProbeId = new Map<string, DiagnoseProbeEvaluation>(
+    probeEvals.map((evaluation) => [evaluation.probe_id, evaluation])
+  )
   const artifactFiles = Array.isArray(manifest?.artifact_files) ? manifest.artifact_files : []
-  const artifactList = ['manifest.json', 'doctor_note.json', ...artifactFiles.filter((artifact) => artifact !== 'manifest.json' && artifact !== 'doctor_note.json')]
+  const artifactList = [
+    'manifest.json',
+    'doctor_note.json',
+    ...artifactFiles.filter((artifact) => artifact !== 'manifest.json' && artifact !== 'doctor_note.json'),
+  ]
 
   return (
     <main className="grid" style={{ gap: 16 }}>
@@ -197,7 +205,10 @@ export default async function DiagnoseRunPage({ params }: { params: Promise<{ ru
           ) : (
             <div className="grid" style={{ gap: 10 }}>
               {prescriptions.map((rx: DiagnosePrescription, idx: number) => (
-                <div key={`${rx.symptom_id}-${idx}`} style={{ border: '1px solid #d9e1eb', borderRadius: 8, padding: 10 }}>
+                <div
+                  key={`${rx.symptom_id}-${idx}`}
+                  style={{ border: '1px solid #d9e1eb', borderRadius: 8, padding: 10 }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <strong>{rx.symptom_id}</strong>
                     <span>{rx.owner}</span>
