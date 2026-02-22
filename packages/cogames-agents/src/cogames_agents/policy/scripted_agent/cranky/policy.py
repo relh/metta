@@ -1,8 +1,8 @@
 """
 Cogas Policy — goal-tree scripted agent.
 
-CogasBrain coordinates per-agent state and goal evaluation.
-CogasPolicy is the multi-agent wrapper with URI-based role distribution.
+CrankyBrain coordinates per-agent state and goal evaluation.
+CrankyPolicy is the multi-agent wrapper with URI-based role distribution.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def _make_goal_list(role: str) -> list[Goal]:
         return []
 
 
-class CogasAgentState:
+class CrankyAgentState:
     """Persistent state for a Cogas agent across ticks."""
 
     def __init__(self, agent_id: int, role: str, goals: list[Goal]) -> None:
@@ -100,7 +100,7 @@ class CogasAgentState:
         self.my_team: str = "cogs"
 
 
-class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
+class CrankyBrain(StatefulPolicyImpl[CrankyAgentState]):
     """Per-agent coordinator that owns state and evaluates the goal tree."""
 
     def __init__(
@@ -123,15 +123,15 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
         self._trace_level = trace_level
         self._trace_agent = trace_agent  # -1 = trace all
 
-    def initial_agent_state(self) -> CogasAgentState:
+    def initial_agent_state(self) -> CrankyAgentState:
         goals = _make_goal_list(self._role)
-        return CogasAgentState(
+        return CrankyAgentState(
             agent_id=self._agent_id,
             role=self._role,
             goals=goals,
         )
 
-    def step_with_state(self, obs: AgentObservation, agent_state: CogasAgentState) -> tuple[Action, CogasAgentState]:
+    def step_with_state(self, obs: AgentObservation, agent_state: CrankyAgentState) -> tuple[Action, CrankyAgentState]:
         agent_state.step += 1
 
         # Parse observation
@@ -291,14 +291,14 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
 
         return action, agent_state
 
-    def _should_trace(self, agent_state: CogasAgentState) -> bool:
+    def _should_trace(self, agent_state: CrankyAgentState) -> bool:
         if not self._trace_enabled:
             return False
         if self._trace_agent >= 0 and self._agent_id != self._trace_agent:
             return False
         return True
 
-    def _detect_useful_action(self, state: StateSnapshot, agent_state: CogasAgentState) -> None:
+    def _detect_useful_action(self, state: StateSnapshot, agent_state: CrankyAgentState) -> None:
         """Detect if a useful action occurred by comparing state changes.
 
         Useful actions:
@@ -386,7 +386,7 @@ class CogasBrain(StatefulPolicyImpl[CogasAgentState]):
                 print(f"[ALIGNER t=200] first_heart={first_heart} first_junction={first_junction}")
 
 
-class CogasPolicy(MultiAgentPolicy):
+class CrankyPolicy(MultiAgentPolicy):
     """Multi-agent goal-tree policy with URI-based role distribution.
 
     URI parameters:
@@ -394,7 +394,7 @@ class CogasPolicy(MultiAgentPolicy):
         ?trace=1&trace_level=2&trace_agent=0     — tracing
     """
 
-    short_names = ["cogas"]
+    short_names = ["cranky"]
 
     def __init__(
         self,
@@ -456,13 +456,13 @@ class CogasPolicy(MultiAgentPolicy):
         if self._trace_enabled:
             print(f"[cogas] Role distribution ({num_teams} teams): {self._role_distribution}")
 
-        self._agent_policies: dict[int, StatefulAgentPolicy[CogasAgentState]] = {}
+        self._agent_policies: dict[int, StatefulAgentPolicy[CrankyAgentState]] = {}
 
-    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[CogasAgentState]:
+    def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[CrankyAgentState]:
         if agent_id not in self._agent_policies:
             role = self._role_distribution[agent_id] if agent_id < len(self._role_distribution) else "default"
 
-            brain = CogasBrain(
+            brain = CrankyBrain(
                 policy_env_info=self._policy_env_info,
                 agent_id=agent_id,
                 role=role,

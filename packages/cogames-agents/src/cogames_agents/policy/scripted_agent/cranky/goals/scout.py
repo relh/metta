@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from cogames_agents.policy.scripted_agent.cogas.goal import Goal
+from cogames_agents.policy.scripted_agent.cranky.goal import Goal
 from mettagrid.simulator import Action
 
 from .gear import GetGearGoal
 
 if TYPE_CHECKING:
-    from cogames_agents.policy.scripted_agent.cogas.context import CogasContext
+    from cogames_agents.policy.scripted_agent.cranky.context import CogasContext
 
 
 class GetScoutGearGoal(GetGearGoal):

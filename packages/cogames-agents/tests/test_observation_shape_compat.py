@@ -3,9 +3,9 @@ from __future__ import annotations
 import pytest
 from cogames_agents.policy.scripted_agent.buggy.entity_map import Entity as BuggyEntity
 from cogames_agents.policy.scripted_agent.buggy.entity_map import EntityMap as BuggyEntityMap
-from cogames_agents.policy.scripted_agent.cogas.entity_map import Entity as CogasEntity
-from cogames_agents.policy.scripted_agent.cogas.entity_map import EntityMap as CogasEntityMap
 from cogames_agents.policy.scripted_agent.common.geometry import is_within_observation_shape
+from cogames_agents.policy.scripted_agent.cranky.entity_map import Entity as CrankyEntity
+from cogames_agents.policy.scripted_agent.cranky.entity_map import EntityMap as CrankyEntityMap
 
 
 def test_observation_shape_3x3_excludes_diagonals() -> None:
@@ -29,7 +29,7 @@ def test_observation_shape_11x11_has_three_wide_cardinal_tip() -> None:
 @pytest.mark.parametrize(
     ("entity_map", "entity"),
     [
-        (CogasEntityMap(), CogasEntity),
+        (CrankyEntityMap(), CrankyEntity),
         (BuggyEntityMap(), BuggyEntity),
     ],
 )
