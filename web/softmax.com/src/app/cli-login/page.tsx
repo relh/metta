@@ -63,6 +63,9 @@ export default async function CliLoginPage({
       email: true,
       institution: true,
       profileCompleted: true,
+      tosVersion: true,
+      consentServiceUpdates: true,
+      consentMarketing: true,
     },
   });
 
@@ -75,6 +78,9 @@ export default async function CliLoginPage({
     email: dbUser?.email ?? session.user.email ?? "",
     institution: dbUser?.institution ?? "",
     profileCompleted: dbUser?.profileCompleted ?? false,
+    tosVersion: dbUser?.tosVersion ?? null,
+    consentServiceUpdates: dbUser?.consentServiceUpdates ?? false,
+    consentMarketing: dbUser?.consentMarketing ?? false,
   };
 
   return (

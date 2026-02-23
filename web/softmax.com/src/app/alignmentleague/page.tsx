@@ -36,6 +36,9 @@ export default async function AlignmentLeaguePage() {
           email: true,
           institution: true,
           profileCompleted: true,
+          tosVersion: true,
+          consentServiceUpdates: true,
+          consentMarketing: true,
         },
       })
     : null;
@@ -113,6 +116,10 @@ export default async function AlignmentLeaguePage() {
                     email: dbUser?.email ?? session.user?.email ?? "",
                     institution: dbUser?.institution ?? "",
                     profileCompleted: false,
+                    tosVersion: dbUser?.tosVersion ?? null,
+                    consentServiceUpdates:
+                      dbUser?.consentServiceUpdates ?? false,
+                    consentMarketing: dbUser?.consentMarketing ?? false,
                   }}
                 />
               </div>
@@ -130,6 +137,9 @@ export default async function AlignmentLeaguePage() {
                   email: dbUser?.email ?? session.user?.email ?? "",
                   institution: dbUser?.institution ?? "",
                   profileCompleted: true,
+                  tosVersion: dbUser?.tosVersion ?? null,
+                  consentServiceUpdates: dbUser?.consentServiceUpdates ?? false,
+                  consentMarketing: dbUser?.consentMarketing ?? false,
                 }}
               />
             </div>

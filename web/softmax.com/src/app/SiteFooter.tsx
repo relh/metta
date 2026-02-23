@@ -11,6 +11,8 @@ export const SiteFooter: FC = () => {
         <A href="mailto:contact@softmax.com">contact@softmax.com</A>
       </p>
       <p className="my-1">
+        <A href="/terms">Terms of Service</A>
+        {" · "}
         <A href="/privacy">Privacy Policy</A>
       </p>
     </footer>

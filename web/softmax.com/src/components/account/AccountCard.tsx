@@ -5,6 +5,8 @@ import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
+import { CURRENT_TOS_VERSION } from "@/lib/tos";
+
 import { Button } from "../Button";
 
 type AccountCardProps = {
@@ -13,6 +15,9 @@ type AccountCardProps = {
     email: string | null;
     institution: string | null;
     profileCompleted: boolean;
+    tosVersion: string | null;
+    consentServiceUpdates: boolean;
+    consentMarketing: boolean;
   };
 };
 
@@ -21,15 +26,23 @@ type StoredValues = {
   email: string;
   institution: string;
   hasAcceptedTos: boolean;
+  consentServiceUpdates: boolean;
+  consentMarketing: boolean;
 };
 
 export function AccountCard({ user }: AccountCardProps) {
   const router = useRouter();
+
+  const needsReConsent =
+    user.tosVersion !== null && user.tosVersion !== CURRENT_TOS_VERSION;
+
   const initialValuesRef = useRef<StoredValues>({
     name: user.name ?? "",
     email: user.email ?? "",
     institution: user.institution ?? "",
-    hasAcceptedTos: user.profileCompleted ?? false,
+    hasAcceptedTos: user.tosVersion === CURRENT_TOS_VERSION,
+    consentServiceUpdates: user.consentServiceUpdates,
+    consentMarketing: user.consentMarketing,
   });
   const successFlashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -41,6 +54,12 @@ export function AccountCard({ user }: AccountCardProps) {
   const [hasAcceptedTos, setHasAcceptedTos] = useState(
     initialValuesRef.current.hasAcceptedTos,
   );
+  const [consentServiceUpdates, setConsentServiceUpdates] = useState(
+    initialValuesRef.current.consentServiceUpdates,
+  );
+  const [consentMarketing, setConsentMarketing] = useState(
+    initialValuesRef.current.consentMarketing,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -50,7 +69,9 @@ export function AccountCard({ user }: AccountCardProps) {
       name: user.name ?? "",
       email: user.email ?? "",
       institution: user.institution ?? "",
-      hasAcceptedTos: user.profileCompleted ?? false,
+      hasAcceptedTos: user.tosVersion === CURRENT_TOS_VERSION,
+      consentServiceUpdates: user.consentServiceUpdates,
+      consentMarketing: user.consentMarketing,
     };
 
     const prev = initialValuesRef.current;
@@ -58,15 +79,26 @@ export function AccountCard({ user }: AccountCardProps) {
       nextValues.name !== prev.name ||
       nextValues.email !== prev.email ||
       nextValues.institution !== prev.institution ||
-      nextValues.hasAcceptedTos !== prev.hasAcceptedTos
+      nextValues.hasAcceptedTos !== prev.hasAcceptedTos ||
+      nextValues.consentServiceUpdates !== prev.consentServiceUpdates ||
+      nextValues.consentMarketing !== prev.consentMarketing
     ) {
       initialValuesRef.current = nextValues;
       setName(nextValues.name);
       setEmail(nextValues.email);
       setInstitution(nextValues.institution);
       setHasAcceptedTos(nextValues.hasAcceptedTos);
+      setConsentServiceUpdates(nextValues.consentServiceUpdates);
+      setConsentMarketing(nextValues.consentMarketing);
     }
-  }, [user.name, user.email, user.institution, user.profileCompleted]);
+  }, [
+    user.name,
+    user.email,
+    user.institution,
+    user.tosVersion,
+    user.consentServiceUpdates,
+    user.consentMarketing,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -86,7 +118,9 @@ export function AccountCard({ user }: AccountCardProps) {
     name !== initialValuesRef.current.name ||
     email !== initialValuesRef.current.email ||
     institution !== initialValuesRef.current.institution ||
-    hasAcceptedTos !== initialValuesRef.current.hasAcceptedTos;
+    hasAcceptedTos !== initialValuesRef.current.hasAcceptedTos ||
+    consentServiceUpdates !== initialValuesRef.current.consentServiceUpdates ||
+    consentMarketing !== initialValuesRef.current.consentMarketing;
 
   const tosLocked = initialValuesRef.current.hasAcceptedTos;
 
@@ -129,6 +163,8 @@ export function AccountCard({ user }: AccountCardProps) {
           email,
           institution,
           hasAcceptedTos,
+          consentServiceUpdates,
+          consentMarketing,
         }),
       });
 
@@ -148,6 +184,9 @@ export function AccountCard({ user }: AccountCardProps) {
           email: string | null;
           institution: string | null;
           profileCompleted: boolean;
+          tosVersion: string | null;
+          consentServiceUpdates: boolean;
+          consentMarketing: boolean;
         };
       };
 
@@ -155,7 +194,9 @@ export function AccountCard({ user }: AccountCardProps) {
         name: data.user.name ?? "",
         email: data.user.email ?? "",
         institution: data.user.institution ?? "",
-        hasAcceptedTos: data.user.profileCompleted,
+        hasAcceptedTos: data.user.tosVersion === CURRENT_TOS_VERSION,
+        consentServiceUpdates: data.user.consentServiceUpdates,
+        consentMarketing: data.user.consentMarketing,
       };
 
       initialValuesRef.current = updatedValues;
@@ -163,6 +204,8 @@ export function AccountCard({ user }: AccountCardProps) {
       setEmail(updatedValues.email);
       setInstitution(updatedValues.institution);
       setHasAcceptedTos(updatedValues.hasAcceptedTos);
+      setConsentServiceUpdates(updatedValues.consentServiceUpdates);
+      setConsentMarketing(updatedValues.consentMarketing);
       setError(null);
       if (data.user.profileCompleted) {
         setShowSuccess(true);
@@ -187,6 +230,13 @@ export function AccountCard({ user }: AccountCardProps) {
 
   return (
     <div className="rounded-2xl border border-[#d8d2bf] bg-[#fffef8] p-8">
+      {needsReConsent && (
+        <div className="mb-6 rounded-lg border border-[#c9a825] bg-[#fef9e7] px-3 py-2 text-sm text-[#7a6c14]">
+          We&apos;ve updated our Terms of Service. Please review and accept to
+          keep your profile current.
+        </div>
+      )}
+
       {error ? (
         <div className="mb-6 rounded-lg border border-[#d9534f] bg-[#f9eaea] px-3 py-2 text-sm text-[#a94442]">
           {error}
@@ -260,31 +310,79 @@ export function AccountCard({ user }: AccountCardProps) {
           />
         </fieldset>
 
-        <label className="flex items-start gap-3 text-left text-sm leading-6 text-[#0e2758]">
-          <input
-            type="checkbox"
-            checked={hasAcceptedTos || tosLocked}
-            onChange={(event) => {
-              if (tosLocked) return;
-              setHasAcceptedTos(event.target.checked);
-              clearErrorAndSuccess();
-            }}
-            disabled={tosLocked}
-            className="mt-1 h-4 w-4 rounded border border-[#d8d2bf] text-[#0e2758] focus:ring-[#0e2758] disabled:cursor-not-allowed disabled:border-[#b7b2a3] disabled:text-[#8590aa]"
-          />
-          <span className={tosLocked ? "text-[#4a5f8c]" : undefined}>
-            I have read and agree to the{" "}
-            <a
-              href="/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-[#1a3875] underline"
-            >
-              Terms & Privacy Policy
-            </a>
-            .
-          </span>
-        </label>
+        {/* Required consent */}
+        <div className="space-y-2 border-t border-[#d8d2bf] pt-4">
+          <p className="text-xs font-semibold tracking-wide text-[#0e2758] uppercase">
+            required
+          </p>
+          <label className="flex items-start gap-3 text-left text-sm leading-6 text-[#0e2758]">
+            <input
+              type="checkbox"
+              checked={hasAcceptedTos || tosLocked}
+              onChange={(event) => {
+                if (tosLocked) return;
+                setHasAcceptedTos(event.target.checked);
+                clearErrorAndSuccess();
+              }}
+              disabled={tosLocked}
+              className="mt-1 h-4 w-4 rounded border border-[#d8d2bf] text-[#0e2758] focus:ring-[#0e2758] disabled:cursor-not-allowed disabled:border-[#b7b2a3] disabled:text-[#8590aa]"
+            />
+            <span className={tosLocked ? "text-[#4a5f8c]" : undefined}>
+              I agree to the{" "}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#1a3875] underline"
+              >
+                Terms of Service
+              </a>
+              {" and "}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-[#1a3875] underline"
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        </div>
+
+        {/* Optional communication preferences */}
+        <div className="space-y-2 border-t border-[#d8d2bf] pt-4">
+          <p className="text-xs font-semibold tracking-wide text-[#0e2758] uppercase">
+            stay in touch (optional)
+          </p>
+          <label className="flex items-start gap-3 text-left text-sm leading-6 text-[#0e2758]">
+            <input
+              type="checkbox"
+              checked={consentServiceUpdates}
+              onChange={(event) => {
+                setConsentServiceUpdates(event.target.checked);
+                clearErrorAndSuccess();
+              }}
+              className="mt-1 h-4 w-4 rounded border border-[#d8d2bf] text-[#0e2758] focus:ring-[#0e2758]"
+            />
+            <span>
+              Send me service updates (competition results, account activity)
+            </span>
+          </label>
+          <label className="flex items-start gap-3 text-left text-sm leading-6 text-[#0e2758]">
+            <input
+              type="checkbox"
+              checked={consentMarketing}
+              onChange={(event) => {
+                setConsentMarketing(event.target.checked);
+                clearErrorAndSuccess();
+              }}
+              className="mt-1 h-4 w-4 rounded border border-[#d8d2bf] text-[#0e2758] focus:ring-[#0e2758]"
+            />
+            <span>Send me news about new offerings from Softmax</span>
+          </label>
+        </div>
 
         <div className="flex flex-wrap justify-between gap-3 pt-2">
           <Button
@@ -311,7 +409,7 @@ export function AccountCard({ user }: AccountCardProps) {
           >
             {profileComplete
               ? "Your profile is complete."
-              : "Complete all fields and confirm the Terms to finish your profile."}
+              : "Complete all fields and accept the Terms to finish your profile."}
           </p>
         )}
       </form>

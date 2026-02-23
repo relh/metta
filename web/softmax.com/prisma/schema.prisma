@@ -23,7 +23,16 @@ model User {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  machineTokens MachineToken[]
+  // Consent tracking — denormalized from ConsentRecord for fast reads on
+  // every gated page load. Always written in the same $transaction as the
+  // corresponding ConsentRecord insert, so they cannot drift.
+  tosAcceptedAt         DateTime?
+  tosVersion            String?
+  consentServiceUpdates Boolean   @default(false)
+  consentMarketing      Boolean   @default(false)
+
+  machineTokens  MachineToken[]
+  consentRecords ConsentRecord[]
 }
 
 model MachineToken {
@@ -81,6 +90,20 @@ model Authenticator {
   user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([userId, credentialID])
+}
+
+model ConsentRecord {
+  id          String   @id @default(cuid(2))
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType String // "tos" | "comms_service" | "comms_marketing"
+  granted     Boolean
+  version     String? // for ToS: version string; null for comms
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, consentType])
 }
 
 model GitHubTeamMember {
