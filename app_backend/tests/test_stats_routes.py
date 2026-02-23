@@ -1,4 +1,5 @@
 import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +12,7 @@ from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
 from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.test_support.client_adapter import get_user_headers
+from mettagrid.runner.episode_runner import MAX_POLICY_SIZE_BYTES
 
 
 @pytest.mark.asyncio
@@ -603,3 +605,34 @@ async def test_visibility_versions_for_policy_filtered(
     assert body["total_count"] == 2
     pv_ids = {e["id"] for e in body["entries"]}
     assert pv_ids == {str(pv1_id), str(pv2_id)}
+
+
+# --- Policy Size Enforcement Tests ---
+
+
+@pytest.mark.asyncio
+async def test_complete_upload_rejects_oversized_policy(
+    test_client: TestClient, regular_headers: dict[str, str]
+) -> None:
+    """Completion endpoint returns 413 and deletes the S3 object when actual size exceeds limit."""
+    oversized = MAX_POLICY_SIZE_BYTES + 1024
+
+    mock_s3 = AsyncMock()
+    mock_s3.head_object.return_value = {"ContentLength": oversized}
+    mock_s3.delete_object.return_value = {}
+
+    mock_session = MagicMock()
+    mock_client_cm = AsyncMock()
+    mock_client_cm.__aenter__.return_value = mock_s3
+    mock_session.client.return_value = mock_client_cm
+
+    with patch("aioboto3.Session", return_value=mock_session):
+        response = test_client.post(
+            "/stats/policies/submit/complete",
+            json={"upload_id": str(uuid.uuid4()), "name": "test-policy"},
+            headers=regular_headers,
+        )
+
+    assert response.status_code == 413
+    assert "Policy too large" in response.json()["detail"]
+    mock_s3.delete_object.assert_called_once()
