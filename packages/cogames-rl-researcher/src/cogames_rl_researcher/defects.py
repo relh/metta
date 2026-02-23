@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
+import subprocess
+import time
 import uuid
 from collections import Counter
 from datetime import UTC, datetime
@@ -53,6 +56,36 @@ class DefectBacklog(BaseModel):
     top_signatures: list[DefectBacklogItem]
 
 
+class DefectFixPlanItem(BaseModel):
+    priority: int
+    defect_id: str
+    likely_owner: str
+    command: str
+    proposed_fix: str
+    reason: str
+
+
+class DefectFixPlan(BaseModel):
+    generated_at: datetime
+    source_defects_path: str
+    open_defects: int
+    items: list[DefectFixPlanItem]
+
+
+class DefectFixAttempt(BaseModel):
+    attempt_id: str
+    defect_id: str
+    command: str
+    started_at: datetime
+    ended_at: datetime
+    duration_seconds: float
+    return_code: int | None
+    timed_out: bool
+    status: Literal["success", "failed"]
+    stdout_log: str
+    stderr_log: str
+
+
 class DefectIntakeConfig(BaseModel):
     store_dir: Path = Path("./artifacts/ai_researcher/defects")
 
@@ -82,6 +115,14 @@ def _defects_path(store_dir: Path) -> Path:
 
 def _backlog_path(store_dir: Path) -> Path:
     return store_dir / "defect_backlog.json"
+
+
+def _fix_plan_path(store_dir: Path) -> Path:
+    return store_dir / "defect_fix_plan.json"
+
+
+def _fix_attempts_path(store_dir: Path) -> Path:
+    return store_dir / "fix_attempts.jsonl"
 
 
 def load_crash_defects(store_dir: Path) -> list[CrashDefect]:
@@ -131,6 +172,32 @@ def build_defect_backlog(store_dir: Path) -> DefectBacklog:
     return backlog
 
 
+def build_defect_fix_plan(store_dir: Path, *, max_items: int = 5) -> DefectFixPlan:
+    defects = load_crash_defects(store_dir)
+    candidates = [defect for defect in defects if defect.status == "open"]
+    candidates_sorted = sorted(candidates, key=lambda item: item.submitted_at, reverse=True)
+    items = [
+        DefectFixPlanItem(
+            priority=index,
+            defect_id=defect.defect_id,
+            likely_owner=defect.likely_owner,
+            command=defect.command,
+            proposed_fix=defect.proposed_fix,
+            reason=f"status={defect.status}; submitted_at={defect.submitted_at.isoformat()}",
+        )
+        for index, defect in enumerate(candidates_sorted[:max_items], start=1)
+    ]
+    plan = DefectFixPlan(
+        generated_at=_utc_now(),
+        source_defects_path=str(_defects_path(store_dir)),
+        open_defects=len(candidates),
+        items=items,
+    )
+    store_dir.mkdir(parents=True, exist_ok=True)
+    _fix_plan_path(store_dir).write_text(json.dumps(plan.model_dump(mode="json"), indent=2) + "\n", encoding="utf-8")
+    return plan
+
+
 def submit_crash_defect(
     *,
     store_dir: Path,
@@ -165,6 +232,7 @@ def submit_crash_defect(
     defects.append(defect)
     _write_crash_defects(store_dir, defects)
     build_defect_backlog(store_dir)
+    build_defect_fix_plan(store_dir)
     return defect
 
 
@@ -177,8 +245,74 @@ def set_defect_status(*, store_dir: Path, defect_id: str, status: DefectStatus) 
         defects[index] = updated
         _write_crash_defects(store_dir, defects)
         build_defect_backlog(store_dir)
+        build_defect_fix_plan(store_dir)
         return updated
     raise ValueError(f"Defect not found: {defect_id}")
+
+
+def validate_defect_fix(
+    *,
+    store_dir: Path,
+    defect_id: str,
+    fix_command: str,
+    timeout_seconds: int = 900,
+    mark_fixed_on_success: bool = False,
+) -> DefectFixAttempt:
+    defects = load_crash_defects(store_dir)
+    matching = [defect for defect in defects if defect.defect_id == defect_id]
+    if not matching:
+        raise ValueError(f"Defect not found: {defect_id}")
+
+    attempts_dir = store_dir / "fix_attempt_logs"
+    attempts_dir.mkdir(parents=True, exist_ok=True)
+
+    started_at = _utc_now()
+    started_mono = time.monotonic()
+    attempt_id = f"fix-attempt-{started_at.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+    stdout_log = attempts_dir / f"{attempt_id}.stdout.log"
+    stderr_log = attempts_dir / f"{attempt_id}.stderr.log"
+
+    argv = shlex.split(fix_command)
+    timed_out = False
+    with stdout_log.open("w", encoding="utf-8") as stdout_sink, stderr_log.open("w", encoding="utf-8") as stderr_sink:
+        process = subprocess.Popen(argv, stdout=stdout_sink, stderr=stderr_sink, text=True)  # noqa: S603
+        while process.poll() is None:
+            time.sleep(0.2)
+            if time.monotonic() - started_mono > float(timeout_seconds):
+                process.kill()
+                timed_out = True
+                break
+        process.wait()
+        return_code = process.returncode
+        if timed_out:
+            stderr_sink.write(f"fix validation timed out after {timeout_seconds} seconds\n")
+
+    ended_at = _utc_now()
+    attempt = DefectFixAttempt(
+        attempt_id=attempt_id,
+        defect_id=defect_id,
+        command=fix_command,
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_seconds=max(ended_at.timestamp() - started_at.timestamp(), 0.0),
+        return_code=return_code,
+        timed_out=timed_out,
+        status="success" if (not timed_out and return_code == 0) else "failed",
+        stdout_log=str(stdout_log),
+        stderr_log=str(stderr_log),
+    )
+
+    store_dir.mkdir(parents=True, exist_ok=True)
+    with _fix_attempts_path(store_dir).open("a", encoding="utf-8") as sink:
+        sink.write(json.dumps(attempt.model_dump(mode="json")) + "\n")
+
+    if attempt.status == "success" and mark_fixed_on_success:
+        set_defect_status(store_dir=store_dir, defect_id=defect_id, status="fixed")
+    else:
+        build_defect_backlog(store_dir)
+        build_defect_fix_plan(store_dir)
+
+    return attempt
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -202,6 +336,18 @@ def _build_parser() -> argparse.ArgumentParser:
     status.add_argument("--status", choices=["open", "triaged", "fixed", "dismissed"], required=True)
 
     subparsers.add_parser("backlog", help="Regenerate backlog summary")
+    subparsers.add_parser("fix-plan", help="Regenerate ranked defect fix plan")
+
+    validate = subparsers.add_parser("validate-fix", help="Run a fix command for a defect and record validation")
+    validate.add_argument("--defect-id", required=True)
+    validate.add_argument("--fix-command", required=True)
+    validate.add_argument("--timeout-seconds", type=int, default=900)
+    validate.add_argument(
+        "--mark-fixed-on-success",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Mark the defect fixed only when validation command exits successfully",
+    )
 
     return parser
 
@@ -234,6 +380,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"defect_id={defect.defect_id}")
         print(f"status={defect.status}")
         return 0
+
+    if args.action == "fix-plan":
+        plan = build_defect_fix_plan(store_dir)
+        print(f"open_defects={plan.open_defects}")
+        print(f"items={len(plan.items)}")
+        print(f"output={_fix_plan_path(store_dir)}")
+        return 0
+
+    if args.action == "validate-fix":
+        attempt = validate_defect_fix(
+            store_dir=store_dir,
+            defect_id=args.defect_id,
+            fix_command=args.fix_command,
+            timeout_seconds=args.timeout_seconds,
+            mark_fixed_on_success=args.mark_fixed_on_success,
+        )
+        print(f"attempt_id={attempt.attempt_id}")
+        print(f"status={attempt.status}")
+        print(f"timed_out={attempt.timed_out}")
+        print(f"return_code={attempt.return_code}")
+        return 0 if attempt.status == "success" else 1
 
     backlog = build_defect_backlog(store_dir)
     print(f"total_defects={backlog.total_defects}")

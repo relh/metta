@@ -15,7 +15,8 @@ Run the startup loop:
 
 Startup writes `docs_digest.json` from CoGames docs each run. Use `--allow-interactive-login` to allow browser-based
 auth recovery in local/manual runs. Gate checks are enforced by default; pass `--no-enforce-gates` to allow non-passing
-runs to exit zero. Use `--researcher-profile neophyte` for stricter reliability/coverage gate budgets.
+runs to exit zero. Use `--researcher-profile neophyte` for stricter reliability/coverage gate budgets and documented
+happy-path workflow enforcement.
 
 ## Resume Workflow
 
@@ -42,6 +43,26 @@ Opt into swarm planning during resume (still optional):
   --emit-swarm-plan \
   --swarm-workers 4
 ```
+
+Resume pulls in submitted crash-defect backlog actions by default. Disable this with `--no-defect-fix-actions`.
+
+## Pickup Workflow
+
+Run pickup as a runnable diagnose/scrimmage shadow workflow:
+
+```bash
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_pickup.py \
+  --policy class=greedy \
+  --pool class=random \
+  --pool class=greedy \
+  --mission cogsguard_machina_1.basic
+```
+
+Artifacts are written under `./artifacts/ai_researcher/<timestamp>_pickup/` and include:
+
+- `pickup_result.json`
+- `pickup_diagnosis.md`
+- `replays/`
 
 ## Actor/Critic Workflow
 
@@ -142,6 +163,26 @@ Regenerate backlog summary:
   backlog
 ```
 
+Generate a ranked fix plan from open/triaged defects:
+
+```bash
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
+  --store-dir ./artifacts/ai_researcher/defects \
+  fix-plan
+```
+
+Validate a proposed fix command for a specific defect:
+
+```bash
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
+  --store-dir ./artifacts/ai_researcher/defects \
+  validate-fix \
+  --defect-id defect-20260223-120000-abcd1234 \
+  --fix-command "uv run pytest packages/cogames-rl-researcher/tests/test_resume.py -q"
+```
+
+Pass `--mark-fixed-on-success` when you want successful validation to set defect status to `fixed`.
+
 Artifacts are written under `./artifacts/ai_researcher/<timestamp>/` and include:
 
 - `audit_bundle.json`
@@ -153,12 +194,14 @@ Artifacts are written under `./artifacts/ai_researcher/<timestamp>/` and include
 - `escalation_plan.json` (escalation guidance based on gate outcomes/history)
 - `actor_critic_report.json` (resume/analysis, including significance assessment for deltas)
 - `fix_pack_plan.json` (auto-proposed fix packs derived from log-mined failure signatures)
+- `defect_fix_plan.json` (ranked next fixes from crash defect backlog)
 - `swarm_plan.json` (optional swarm planner)
 - `coverage_pack.json` (submit-coverage expansion summary with experiment-family breadth metrics)
 - `coverage_tuning_plan.json` (ranked next variant pack proposal)
 - `research_command_summary.json` (single-command training + submission orchestration status)
 - `log_mining_report.json` + `log_mining_report.md` (mined cogames failure signatures by agent)
-- `defects/crash_defects.jsonl` + `defects/defect_backlog.json` (crowd defect intake + backlog)
+- `defects/crash_defects.jsonl` + `defects/defect_backlog.json` + `defects/defect_fix_plan.json`
+- `defects/fix_attempts.jsonl` + `defects/fix_attempt_logs/*` (fix validation attempts)
 - `steps/*.stdout.log` and `steps/*.stderr.log`
 - `replays/`
 
@@ -169,6 +212,7 @@ uv run pytest packages/cogames-rl-researcher/tests/test_startup.py -q
 uv run pytest packages/cogames-rl-researcher/tests/test_resume.py -q
 uv run pytest packages/cogames-rl-researcher/tests/test_actor_critic.py -q
 uv run pytest packages/cogames-rl-researcher/tests/test_swarm.py -q
+uv run pytest packages/cogames-rl-researcher/tests/test_pickup.py -q
 uv run pytest packages/cogames-rl-researcher/tests/test_coverage.py -q
 uv run pytest packages/cogames-rl-researcher/tests/test_coverage_tuning.py -q
 ```

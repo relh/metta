@@ -255,6 +255,17 @@ class AuditBundle(BaseModel):
     diagnosis: Diagnosis
 
 
+def _neophyte_startup_happy_path_violations(config: StartupConfig) -> list[str]:
+    violations: list[str] = []
+    if not config.run_upload:
+        violations.append("run_upload must remain enabled for neophyte profile")
+    if not config.run_submit:
+        violations.append("run_submit must remain enabled for neophyte profile")
+    if not config.run_leaderboard:
+        violations.append("run_leaderboard must remain enabled for neophyte profile")
+    return violations
+
+
 class _StreamCapture:
     def __init__(self, stream_name: str, stream, output_path: Path, last_output_lock: threading.Lock):
         self._stream_name = stream_name
@@ -1223,6 +1234,31 @@ def run_startup(config: StartupConfig) -> AuditBundle:
     step_specs = _select_startup_steps(config, step_catalog)
 
     if run_status == "success":
+        neophyte_violations = _neophyte_startup_happy_path_violations(config)
+        if config.researcher_profile == "neophyte" and neophyte_violations:
+            step_results.append(
+                _synthetic_step_result(
+                    step_name="neophyte_happy_path_guard",
+                    attempt=1,
+                    command=["internal", "neophyte-happy-path-guard"],
+                    status="failed",
+                    return_code=1,
+                    steps_dir=steps_dir,
+                    stderr_text="\n".join(neophyte_violations) + "\n",
+                )
+            )
+            incidents.append(
+                ReaperIncident(
+                    timestamp=_utc_now(),
+                    step_name="neophyte_happy_path_guard",
+                    incident_type="escalation",
+                    message="Neophyte profile must use documented happy-path startup workflow",
+                    recovery_attempt=1,
+                )
+            )
+            run_status = "failed"
+
+    if run_status == "success":
         steps_status, executed_steps, step_incidents = _execute_steps(
             config=config,
             steps=step_specs,
@@ -1439,7 +1475,7 @@ def _build_history_comparison(
         for item in selected
     ]
 
-    baseline = selected[0] if len(selected) > 1 else None
+    baseline = selected[-2] if len(selected) > 1 else None
     rank_delta: int | None = None
     reliability_delta: float | None = None
     friction_delta: float | None = None
@@ -1572,6 +1608,15 @@ def _build_escalation_plan(bundle: AuditBundle, gates: GateEvaluation) -> Escala
             )
         )
 
+    if "reliability_trend" in failing_gate_ids or "friction_trend" in failing_gate_ids:
+        actions.append(
+            EscalationAction(
+                priority=len(actions) + 1,
+                action="Revert latest unstable experiment and rerun baseline stability pack",
+                reason="Reliability/friction trend gate regression detected against baseline history.",
+            )
+        )
+
     if should_escalate:
         actions.append(
             EscalationAction(
@@ -1667,6 +1712,42 @@ def _evaluate_gates(bundle: AuditBundle) -> GateEvaluation:
             message=(
                 f"failed_invocations={bundle.friction_index.failed_invocations}, "
                 f"max_allowed={policy.max_failed_invocations}"
+            ),
+        ),
+        GateCheck(
+            gate_id="reliability_trend",
+            status=(
+                "pass"
+                if (
+                    bundle.history_comparison is None
+                    or bundle.history_comparison.baseline_run_id is None
+                    or bundle.history_comparison.reliability_delta is None
+                    or bundle.history_comparison.reliability_delta >= 0.0
+                )
+                else "fail"
+            ),
+            message=(
+                "baseline=n/a"
+                if bundle.history_comparison is None or bundle.history_comparison.baseline_run_id is None
+                else f"reliability_delta={bundle.history_comparison.reliability_delta:+.2f}"
+            ),
+        ),
+        GateCheck(
+            gate_id="friction_trend",
+            status=(
+                "pass"
+                if (
+                    bundle.history_comparison is None
+                    or bundle.history_comparison.baseline_run_id is None
+                    or bundle.history_comparison.friction_delta is None
+                    or bundle.history_comparison.friction_delta <= 0.0
+                )
+                else "fail"
+            ),
+            message=(
+                "baseline=n/a"
+                if bundle.history_comparison is None or bundle.history_comparison.baseline_run_id is None
+                else f"friction_delta={bundle.history_comparison.friction_delta:+.2f}"
             ),
         ),
     ]

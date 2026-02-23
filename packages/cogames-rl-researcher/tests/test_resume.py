@@ -185,13 +185,52 @@ def test_resume_can_override_researcher_profile(tmp_path: Path, monkeypatch) -> 
     resumed_bundle, _ = run_resume(
         ResumeConfig(
             source=Path(startup_bundle.run_dir),
-            run_leaderboard=False,
-            include_missing_submit=False,
+            run_leaderboard=True,
             researcher_profile="neophyte",
         )
     )
 
     assert resumed_bundle.config.researcher_profile == "neophyte"
+
+
+def test_resume_neophyte_profile_rejects_non_happy_path_overrides(tmp_path: Path, monkeypatch) -> None:
+    fake_cogames = tmp_path / "fake_cogames.py"
+    _write_fake_cogames(fake_cogames)
+
+    state_path = tmp_path / "state.json"
+    monkeypatch.setenv("FAKE_COGAMES_STATE", str(state_path))
+
+    startup_bundle = run_startup(
+        StartupConfig(
+            policy="metta://policy/role_py",
+            policy_name="test-policy",
+            season="beta-cogsguard",
+            mission="cogsguard_arena.basic",
+            episodes=1,
+            steps=50,
+            output_root=tmp_path / "artifacts",
+            cogames_bin=str(fake_cogames),
+            detect_idle_seconds=10,
+            max_step_seconds=30,
+            run_submit=False,
+            run_leaderboard=False,
+        )
+    )
+
+    resumed_bundle, _ = run_resume(
+        ResumeConfig(
+            source=Path(startup_bundle.run_dir),
+            researcher_profile="neophyte",
+            force_scrimmage=True,
+            emit_swarm_plan=True,
+        )
+    )
+
+    assert resumed_bundle.status == "failed"
+    guard_step = next(step for step in resumed_bundle.steps if step.step_name == "neophyte_happy_path_guard")
+    assert guard_step.status == "failed"
+    assert "force-* resume overrides are not allowed for neophyte profile" in guard_step.stderr_tail
+    assert not (Path(resumed_bundle.run_dir) / "swarm_plan.json").exists()
 
 
 def test_resume_uses_log_mining_for_fix_pack_actions(tmp_path: Path, monkeypatch) -> None:

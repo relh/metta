@@ -19,9 +19,13 @@ from cogames_rl_researcher.coverage_tuning import (
 from cogames_rl_researcher.defects import (
     CrashDefect,
     DefectBacklog,
+    DefectFixAttempt,
+    DefectFixPlan,
     build_defect_backlog,
+    build_defect_fix_plan,
     set_defect_status,
     submit_crash_defect,
+    validate_defect_fix,
 )
 from cogames_rl_researcher.log_mining import (
     LogMiningConfig,
@@ -29,6 +33,7 @@ from cogames_rl_researcher.log_mining import (
     mine_cogames_failures,
     run_log_mining_service,
 )
+from cogames_rl_researcher.pickup import PickupConfig, PickupResult, run_pickup
 from cogames_rl_researcher.research_command import (
     ResearchCommandConfig,
     ResearchCommandSummary,
@@ -55,12 +60,19 @@ __all__ = [
     "run_log_mining_service",
     "CrashDefect",
     "DefectBacklog",
+    "DefectFixPlan",
+    "DefectFixAttempt",
     "submit_crash_defect",
     "set_defect_status",
     "build_defect_backlog",
+    "build_defect_fix_plan",
+    "validate_defect_fix",
     "ResearchCommandConfig",
     "ResearchCommandSummary",
     "run_research_command",
+    "PickupConfig",
+    "PickupResult",
+    "run_pickup",
     "ActorCriticReport",
     "FixPackProposal",
     "LogMiningContext",

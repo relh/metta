@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from cogames_rl_researcher.actor_critic import FixPackProposal, analyze_actor_critic
+from cogames_rl_researcher.defects import DefectFixPlanItem, build_defect_fix_plan
 from cogames_rl_researcher.log_mining import LogMiningReport
 from cogames_rl_researcher.startup import (
     AuditBundle,
@@ -35,6 +36,7 @@ from cogames_rl_researcher.startup import (
     _parse_successful_step_output_json,
     _run_docs_readthrough_step,
     _summarize_step_failures,
+    _synthetic_step_result,
     _timestamp_slug,
     _utc_now,
     _write_daily_report,
@@ -77,12 +79,31 @@ class ResumeConfig(BaseModel):
     swarm_max_tasks_per_worker: int = Field(default=1, ge=1)
     enforce_gates: bool = True
     log_mining_report: Path | None = None
+    include_defect_fix_actions: bool = True
 
 
 class RankedNextAction(BaseModel):
     rank: int
     action: str
     reason: str
+
+
+def _neophyte_resume_happy_path_violations(config: ResumeConfig) -> list[str]:
+    violations: list[str] = []
+    if config.force_scrimmage or config.force_dry_run or config.force_upload or config.force_submit:
+        violations.append("force-* resume overrides are not allowed for neophyte profile")
+    if (
+        not config.include_missing_scrimmage
+        or not config.include_missing_dry_run
+        or not config.include_missing_upload
+        or not config.include_missing_submit
+    ):
+        violations.append("skip-missing-* resume toggles are not allowed for neophyte profile")
+    if not config.run_leaderboard:
+        violations.append("run_leaderboard must remain enabled for neophyte profile")
+    if config.emit_swarm_plan:
+        violations.append("emit_swarm_plan is not allowed for neophyte profile")
+    return violations
 
 
 def _resolve_bundle_path(source: Path) -> Path:
@@ -246,6 +267,19 @@ def _fix_pack_actions(fix_pack_proposals: list[FixPackProposal], *, max_actions:
     return actions
 
 
+def _defect_fix_actions(plan_items: list[DefectFixPlanItem], *, max_actions: int = 2) -> list[RankedNextAction]:
+    actions: list[RankedNextAction] = []
+    for item in plan_items[:max_actions]:
+        actions.append(
+            RankedNextAction(
+                rank=len(actions) + 1,
+                action=f"Validate defect fix for {item.defect_id}: {item.command}",
+                reason=f"{item.proposed_fix} ({item.reason})",
+            )
+        )
+    return actions
+
+
 def _merge_ranked_actions(
     primary: list[RankedNextAction],
     secondary: list[RankedNextAction],
@@ -289,6 +323,33 @@ def run_resume(config: ResumeConfig) -> tuple[AuditBundle, list[RankedNextAction
     step_results: list[StepResult] = [docs_step_result]
     incidents: list[ReaperIncident] = []
     run_status: RunStatus = "success" if docs_step_result.status == "success" else "failed"
+    if run_status == "success":
+        neophyte_violations = (
+            _neophyte_resume_happy_path_violations(config) if effective_config.researcher_profile == "neophyte" else []
+        )
+        if neophyte_violations:
+            step_results.append(
+                _synthetic_step_result(
+                    step_name="neophyte_happy_path_guard",
+                    attempt=1,
+                    command=["internal", "neophyte-happy-path-guard"],
+                    status="failed",
+                    return_code=1,
+                    steps_dir=steps_dir,
+                    stderr_text="\n".join(neophyte_violations) + "\n",
+                )
+            )
+            incidents.append(
+                ReaperIncident(
+                    timestamp=_utc_now(),
+                    step_name="neophyte_happy_path_guard",
+                    incident_type="escalation",
+                    message="Neophyte profile must use documented happy-path resume workflow",
+                    recovery_attempt=1,
+                )
+            )
+            run_status = "failed"
+
     if run_status == "success":
         run_status, executed_steps, step_incidents = _execute_steps(
             config=effective_config,
@@ -403,9 +464,20 @@ def run_resume(config: ResumeConfig) -> tuple[AuditBundle, list[RankedNextAction
         log_mining_report_path=str(log_mining_report_path) if log_mining_report_path is not None else None,
     )
 
+    defect_fix_actions: list[RankedNextAction] = []
+    if config.include_defect_fix_actions:
+        defect_store = effective_config.output_root / "defects"
+        defect_fix_plan = build_defect_fix_plan(defect_store, max_items=5)
+        if defect_fix_plan.items:
+            _write_json(run_dir / "defect_fix_plan.json", defect_fix_plan)
+        defect_fix_actions = _defect_fix_actions(defect_fix_plan.items)
+
     ranked_actions = _merge_ranked_actions(
-        _fix_pack_actions(actor_critic_report.fix_pack_proposals),
-        ranked_actions,
+        defect_fix_actions,
+        _merge_ranked_actions(
+            _fix_pack_actions(actor_critic_report.fix_pack_proposals),
+            ranked_actions,
+        ),
     )
     if ranked_actions:
         diagnosis.next_experiment_proposal = ranked_actions[0].action
@@ -424,7 +496,7 @@ def run_resume(config: ResumeConfig) -> tuple[AuditBundle, list[RankedNextAction
         )
 
     swarm_plan = None
-    if config.emit_swarm_plan:
+    if config.emit_swarm_plan and run_status == "success":
         swarm_plan = build_swarm_plan(
             actor_critic_report,
             SwarmConfig(
@@ -515,6 +587,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow browser-based login refresh when auth failures are detected",
     )
     parser.add_argument("--log-mining-report", default=None, help="Optional log_mining_report.json path")
+    parser.add_argument(
+        "--no-defect-fix-actions",
+        action="store_true",
+        help="Disable next-action suggestions generated from submitted defect backlog",
+    )
     return parser
 
 
@@ -556,6 +633,7 @@ def main(argv: list[str] | None = None) -> int:
         allow_interactive_login=args.allow_interactive_login,
         enforce_gates=args.enforce_gates,
         log_mining_report=Path(args.log_mining_report) if args.log_mining_report else None,
+        include_defect_fix_actions=not args.no_defect_fix_actions,
     )
 
     bundle, ranked_actions = run_resume(config)
@@ -564,8 +642,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"leaderboard_rank={bundle.leaderboard_rank}")
     if ranked_actions:
         print(f"next_action={ranked_actions[0].action}")
-    if config.emit_swarm_plan:
-        print(f"swarm_plan={Path(bundle.run_dir) / 'swarm_plan.json'}")
+    swarm_plan_path = Path(bundle.run_dir) / "swarm_plan.json"
+    if swarm_plan_path.exists():
+        print(f"swarm_plan={swarm_plan_path}")
     if bundle.gates is not None:
         print(f"gates_status={bundle.gates.overall_status}")
 

@@ -103,6 +103,12 @@ if cmd == \"leaderboard\":
     print(json.dumps(payload))
     sys.exit(0)
 
+if cmd == \"pickup\":
+    state[\"pickup_count\"] = state.get(\"pickup_count\", 0) + 1
+    state_path.write_text(json.dumps(state))
+    print(\"pickup complete\")
+    sys.exit(0)
+
 print(f\"unknown command: {cmd}\", file=sys.stderr)
 sys.exit(1)
 """
@@ -386,3 +392,74 @@ def test_startup_noninteractive_mode_fails_without_saved_token(tmp_path: Path, m
     login_step = next(step for step in bundle.steps if step.step_name == "login_auth_check")
     assert login_step.status == "failed"
     assert "No saved CoGames login token found for non-interactive mode" in login_step.stderr_tail
+
+
+def test_startup_neophyte_profile_rejects_non_happy_path_config(tmp_path: Path, monkeypatch) -> None:
+    fake_cogames = tmp_path / "fake_cogames.py"
+    _write_fake_cogames(fake_cogames)
+
+    state_path = tmp_path / "state.json"
+    monkeypatch.setenv("FAKE_COGAMES_STATE", str(state_path))
+
+    bundle = run_startup(
+        StartupConfig(
+            policy="metta://policy/role_py",
+            policy_name="test-policy",
+            output_root=tmp_path / "artifacts",
+            cogames_bin=str(fake_cogames),
+            run_submit=False,
+            researcher_profile="neophyte",
+        )
+    )
+
+    assert bundle.status == "failed"
+    guard_step = next(step for step in bundle.steps if step.step_name == "neophyte_happy_path_guard")
+    assert guard_step.status == "failed"
+    assert "run_submit must remain enabled for neophyte profile" in guard_step.stderr_tail
+    assert bundle.gates is not None
+    assert bundle.gates.overall_status == "fail"
+
+
+def test_startup_trend_gates_fail_when_reliability_and_friction_regress(tmp_path: Path, monkeypatch) -> None:
+    fake_cogames = tmp_path / "fake_cogames.py"
+    _write_fake_cogames(fake_cogames)
+
+    output_root = tmp_path / "artifacts"
+
+    monkeypatch.setenv("FAKE_COGAMES_STATE", str(tmp_path / "state_baseline.json"))
+    baseline = run_startup(
+        StartupConfig(
+            policy="metta://policy/role_py",
+            policy_name="test-policy",
+            season="beta-cogsguard",
+            output_root=output_root,
+            cogames_bin=str(fake_cogames),
+            allow_interactive_login=True,
+        )
+    )
+    assert baseline.gates is not None
+    assert baseline.gates.overall_status == "pass"
+
+    monkeypatch.setenv("FAKE_COGAMES_STATE", str(tmp_path / "state_regressed.json"))
+    monkeypatch.setenv("FAKE_AUTH_FAIL_ONCE", "1")
+    regressed = run_startup(
+        StartupConfig(
+            policy="metta://policy/role_py",
+            policy_name="test-policy",
+            season="beta-cogsguard",
+            output_root=output_root,
+            cogames_bin=str(fake_cogames),
+            allow_interactive_login=True,
+        )
+    )
+
+    assert regressed.history_comparison is not None
+    assert regressed.history_comparison.baseline_run_id == baseline.run_id
+    assert regressed.history_comparison.reliability_delta is not None
+    assert regressed.history_comparison.reliability_delta < 0.0
+    assert regressed.history_comparison.friction_delta is not None
+    assert regressed.history_comparison.friction_delta > 0.0
+    assert regressed.gates is not None
+    gate_map = {check.gate_id: check.status for check in regressed.gates.checks}
+    assert gate_map["reliability_trend"] == "fail"
+    assert gate_map["friction_trend"] == "fail"
