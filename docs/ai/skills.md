@@ -53,6 +53,7 @@ Shared skills live in `skills/`:
 - `pr.context`
 - `pr.context-cool`
 - `pr.cool`
+- `pr.fix-author-prs`
 - `pr.fix-branch`
 - `pr.fix-ci`
 - `pr.fix-comments`

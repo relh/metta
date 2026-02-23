@@ -61,6 +61,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `pr.context`
 - `pr.context-cool`
 - `pr.cool`
+- `pr.fix-author-prs`
 - `pr.fix-branch`
 - `pr.fix-branch.team`
 - `pr.fix-ci`
