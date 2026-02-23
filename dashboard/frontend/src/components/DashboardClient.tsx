@@ -102,11 +102,7 @@ type OpponentSummaryRow = {
 function parseDashboardTab(value: string | null): DashboardTab | null {
   if (!value) return null
   const normalized = value.trim().toLowerCase()
-  const canonical =
-    normalized === 'ai_analysis' || normalized === 'ai-analysis' || normalized === 'aianalysis'
-      ? 'analysis'
-      : normalized
-  return DASHBOARD_TABS.find((tab) => tab === canonical) ?? null
+  return DASHBOARD_TABS.includes(normalized as DashboardTab) ? (normalized as DashboardTab) : null
 }
 
 function toFiniteNumber(value: unknown): number | null {
