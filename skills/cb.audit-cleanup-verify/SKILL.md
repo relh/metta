@@ -13,6 +13,9 @@ args: <focus_path> [smoke_cmd] [mettabox_host=metta3]
 Run a focused cleanup loop for one slice (`training`, `dashboard`, `agent`, etc.): simplify meaningfully, keep scope
 tight, and prove runtime behavior after cleanup.
 
+Primary objective: net simplification in the focus path (lower LOC, fewer helper layers), with explicit removal of
+backwards-compatibility and shim code.
+
 **Announce at start:** "Running audit-cleanup-verify for `<focus_path>`: cleanup pass, then runtime verification."
 
 ## The Process
@@ -27,7 +30,7 @@ digraph audit_cleanup_verify {
   align [label="Step 3: Diff/PR Alignment"];
   verify [label="Step 4: Local + Remote Verification"];
   fix [label="Step 5: Fix regressions/perf issues"];
-  ship [label="Step 6: Submit + CI/comment check"];
+  ship [label="Step 6: Submit + PR polish + CI/comment check"];
 
   scope -> cleanup -> align -> verify;
   verify -> fix [label="failures or regressions"];
@@ -56,16 +59,20 @@ git diff --stat "$BASE"...HEAD -- "$FOCUS"
 
 Use `cb.cleanup-refactor` patterns only inside `FOCUS`.
 
-- Delete backcompat shims/aliases/fallbacks.
-- Remove one-use helpers and unnecessary indirection.
+- Delete backcompat shims/aliases/fallbacks and update all callsites to the new path.
+- Remove one-use helpers and bad indirection layers (pass-through wrappers, alias helpers, unnecessary adapters).
+- Reduce LOC in `FOCUS` whenever possible; net LOC should stay flat or decrease unless a regression fix requires extra
+  lines.
 - Keep behavior unchanged.
+- Do not keep dual old/new paths.
 
 ```bash
-rg -n "shim|compat|fallback|one_use|except Exception|dict.get\\(" "$FOCUS"
+rg -n "shim|compat|backward|legacy|alias|fallback|one_use|except Exception|dict.get\\(" "$FOCUS"
+git diff --numstat "$BASE"...HEAD -- "$FOCUS" | awk '{add+=$1; del+=$2} END {print "Net LOC delta (add-del):", add-del}'
 git diff --shortstat "$BASE"...HEAD -- "$FOCUS"
 ```
 
-Aim for net simplification (fewer branches/helpers) unless a regression fix requires an increase.
+Aim for net simplification (fewer branches/helpers/layers and lower LOC) unless a regression fix requires an increase.
 
 ## Step 3: Diff/PR Alignment
 
@@ -74,9 +81,11 @@ Ensure current diff still matches PR intent.
 ```bash
 git diff "$BASE"...HEAD -- "$FOCUS"
 git diff --name-only "$BASE"...HEAD
+rg -n "shim|compat|backward|legacy|fallbacks?" "$FOCUS"
 ```
 
-Use `cb.review-main` and refresh PR title/body via `pr.summary` if scope changed.
+Use `cb.review-main` and refresh PR title/body via `pr.summary` if scope changed. If shim/compat hits remain, remove
+them or document why they are not code-path backcompat.
 
 ## Step 4: Local + Remote Verification
 
@@ -94,7 +103,7 @@ or no-teacher equivalent).
 
 If runtime fails or SPS regresses materially, apply a focused fix and loop back to Step 2.
 
-## Step 6: Submit + CI/Comments Check
+## Step 6: Submit + PR Polish + CI/Comments Check
 
 Before submit, run `cb.lint-fix`. Then submit and verify CI/comments are clean:
 
@@ -104,6 +113,20 @@ gt modify --no-interactive || gt create -m "refactor: cleanup <focus_path>"
 gt submit --no-interactive
 ```
 
+Then run the bop-it shipping/polish step for this diff:
+
+- Preferred: use `cf.bop-it` ship behavior for title/body polish.
+- Minimum required: run `pr.summary`, then set a clear PR title and a plain-English PR body (what changed, why, and
+  verification).
+
+```bash
+# Draft title/body from diff
+# Use Skill tool: skill="pr.summary"
+
+# Ensure final PR text is human-readable and scoped
+gh pr edit --title "<clear cleanup title>" --body "<plain-English summary + verification>"
+```
+
 Use `pr.check-ci` and address actionable comments before finalizing.
 
 ## Quick Reference
@@ -111,10 +134,11 @@ Use `pr.check-ci` and address actionable comments before finalizing.
 | Need              | Action                                         |
 | ----------------- | ---------------------------------------------- |
 | Focused cleanup   | `cb.cleanup-refactor` + `rg` in `<focus_path>` |
+| Net LOC down      | `git diff --numstat` delta (target `<= 0`)     |
 | Scope truth       | merge-base diff and `cb.review-main`           |
 | Runtime proof     | local pytest + smoke run command               |
 | Remote confidence | `do.mettabox-ops` run + SPS comparison         |
-| Ship cleanly      | `cb.lint-fix`, submit, then `pr.check-ci`      |
+| Ship cleanly      | lint + submit + PR plain-English polish + CI   |
 
 ## Integration
 
@@ -124,6 +148,7 @@ Use `pr.check-ci` and address actionable comments before finalizing.
 - `cb.review-main` for diff audit against `origin/main`
 - `do.mettabox-ops` for remote run/SPS verification
 - `cb.lint-fix`, `pr.summary`, `pr.submit`, `pr.check-ci`
+- `cf.bop-it` ship/polish behavior for clean PR title/body
 
 **Called by:**
 
