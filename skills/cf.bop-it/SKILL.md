@@ -11,6 +11,9 @@ description:
 
 A single, repeatable loop for shipping a feature request: plan it, test it, build it, review it, and publish a PR.
 
+Always prefer PR-relevant work: run only the smallest set of skills/commands needed for the files and systems touched by
+the current diff.
+
 **Announce at start:** "I’m using cf.bop-it: I’ll take this feature from plan to a PR, with tests and lint passing."
 
 ## Step 1: Plan It (Acceptance Criteria + Approach)
@@ -38,7 +41,11 @@ Use a merge-base diff against `origin/main` and look for:
 - missing tests or missing negative cases
 - cleanup opportunities that shrink the diff
 
-If helpful, invoke:
+Run `cb.review-main` only when it is relevant (for example: broad diff, cross-package behavior, risky logic changes, or
+explicit review request). For narrow local changes, do a direct manual merge-base diff review without invoking extra
+skills.
+
+If needed, invoke:
 
 ```
 Use Skill tool: skill="cb.review-main"
@@ -46,15 +53,18 @@ Use Skill tool: skill="cb.review-main"
 
 ## Step 5: Lint It (Never Skip)
 
-```
-Use Skill tool: skill="cb.lint-fix"
-```
+Run lint only for touched scope first (package/app-local lint commands). Use `cb.lint-fix` only when:
+
+- local lint commands are unavailable/incomplete for the touched scope
+- the PR touches multiple lint domains and centralized lint fix is the most relevant path
+- user explicitly asks for repo-wide lint fixing
 
 ## Step 6: Run It (Tests)
 
-```
-Use Skill tool: skill="t.run-tests"
-```
+Run tests relevant to changed files first (closest unit/integration tests).
+
+Use `t.run-tests` only when the PR scope is broad, failures are unclear, or user requests full progressive test
+coverage.
 
 ## Step 7: Ship It (Commit, Push, PR)
 
@@ -90,15 +100,14 @@ gh pr merge --auto --squash
 
 ## Quick Reference
 
-| Bop It step | Skill / Command               | Output       |
-| ----------- | ----------------------------- | ------------ |
-| Plan it     | (criteria + scratch plan)     | clear scope  |
-| Test it     | add failing tests             | red          |
-| Do it       | implement minimal change      | green        |
-| Review it   | `cb.review-main`              | issues list  |
-| Lint it     | `cb.lint-fix`                 | lint clean   |
-| Run it      | `t.run-tests`                 | tests clean  |
-| Ship it     | `pr.summary` + `gh pr create` | published PR |
+| Bop It step | Default action                | Escalate skill (only if relevant) |
+| ----------- | ----------------------------- | --------------------------------- |
+| Plan it     | criteria + smallest slice     | n/a                               |
+| Test it     | nearest failing tests first   | `t.run-tests`                     |
+| Do it       | minimal implementation        | n/a                               |
+| Review it   | manual merge-base diff review | `cb.review-main`                  |
+| Lint it     | scope-local lint commands     | `cb.lint-fix`                     |
+| Ship it     | `pr.summary` + `gh pr create` | n/a                               |
 
 ## Integration
 
