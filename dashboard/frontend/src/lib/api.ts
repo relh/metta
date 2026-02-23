@@ -458,6 +458,12 @@ export type DashboardResponse = {
   [key: string]: unknown
 }
 
+export type DashboardDefaultPolicyVersionResponse = {
+  policy_version_id: string | null
+  season: string | null
+  [key: string]: unknown
+}
+
 export type DashboardAnalysisResponse = {
   analysis: string
   data_sources: string[]
@@ -638,6 +644,10 @@ export async function fetchDashboardData(policyVersionId: string): Promise<Dashb
   return await dashboardRequest<DashboardResponse>(
     `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/data`
   )
+}
+
+export async function fetchDashboardDefaultPolicyVersion(): Promise<DashboardDefaultPolicyVersionResponse> {
+  return await dashboardRequest<DashboardDefaultPolicyVersionResponse>('/dashboard/v1/policies/versions/default')
 }
 
 export async function fetchDashboardAnalysis(

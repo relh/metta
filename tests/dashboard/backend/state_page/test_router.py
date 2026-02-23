@@ -41,6 +41,88 @@ class _FakeSession:
         return self._results.pop(0)
 
 
+def test_default_policy_version_returns_top_leaderboard_entry(monkeypatch: Any) -> None:
+    season_id = uuid4()
+    winner_policy_version_id = uuid4()
+    fake_season = SimpleNamespace(
+        id=season_id,
+        name="beta-teams-large",
+        canonical=True,
+        version=7,
+    )
+
+    calls: list[tuple[str, Any]] = []
+
+    class _FakeCommissioner:
+        async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[Any, float, int]]:
+            calls.append(("get_leaderboard", pool_name))
+            return [
+                (winner_policy_version_id, 42.0, 12),
+            ]
+
+    async def fake_build_commissioner(season_name: str, *, season_id: Any) -> _FakeCommissioner:
+        calls.append((season_name, season_id))
+        return _FakeCommissioner()
+
+    @asynccontextmanager
+    async def fake_db_session(*, read_only: bool = False) -> Any:
+        assert read_only
+        session = _FakeSession([_ExecuteResult(scalar=fake_season)])
+        yield session
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.build_commissioner",
+        fake_build_commissioner,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.db_session",
+        fake_db_session,
+    )
+
+    app = FastAPI()
+    app.include_router(create_dashboard_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get("/dashboard/v1/policies/versions/default")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["policy_version_id"] == str(winner_policy_version_id)
+    assert body["season"] == "beta-teams-large"
+    assert calls[0] == ("beta-teams-large", season_id)
+    assert calls[1] == ("get_leaderboard", None)
+
+
+def test_default_policy_version_returns_none_when_default_season_missing(monkeypatch: Any) -> None:
+    async def fake_build_commissioner(_season_name: str, *, season_id: Any) -> Any:
+        del season_id
+        raise AssertionError("build_commissioner should not be called when no default season exists")
+
+    @asynccontextmanager
+    async def fake_db_session(*, read_only: bool = False) -> Any:
+        assert read_only
+        session = _FakeSession([_ExecuteResult(scalar=None)])
+        yield session
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.build_commissioner",
+        fake_build_commissioner,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.db_session",
+        fake_db_session,
+    )
+
+    app = FastAPI()
+    app.include_router(create_dashboard_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get("/dashboard/v1/policies/versions/default")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["policy_version_id"] is None
+    assert body["season"] is None
+
+
 def test_dashboard_data_builds_commissioner_with_season_id(
     monkeypatch: Any,
 ) -> None:

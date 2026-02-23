@@ -30,6 +30,7 @@ import {
   fetchDiagnoseRuns,
   fetchDashboardAnalysis,
   fetchDashboardData,
+  fetchDashboardDefaultPolicyVersion,
   fetchDashboardRolePercentiles,
 } from '../lib/api'
 import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
@@ -936,10 +937,30 @@ export function DashboardClient() {
     const initialTab = parseDashboardTab(params.get('tab'))
 
     if (initialTab) setActiveTab(initialTab)
-    if (!initialPolicyVersionId) return
 
-    setPolicyVersionId(initialPolicyVersionId)
-    void loadDashboardData(initialPolicyVersionId)
+    let cancelled = false
+    const initialize = async () => {
+      if (initialPolicyVersionId) {
+        setPolicyVersionId(initialPolicyVersionId)
+        await loadDashboardData(initialPolicyVersionId)
+        return
+      }
+
+      try {
+        const response = await fetchDashboardDefaultPolicyVersion()
+        const defaultPolicyVersionId = response.policy_version_id?.trim()
+        if (!defaultPolicyVersionId || cancelled) return
+        setPolicyVersionId(defaultPolicyVersionId)
+        await loadDashboardData(defaultPolicyVersionId)
+      } catch {
+        // Leave manual entry as fallback when default lookup is unavailable.
+      }
+    }
+
+    void initialize()
+    return () => {
+      cancelled = true
+    }
   }, [loadDashboardData])
 
   const kpis = data?.derived?.kpis

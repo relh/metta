@@ -98,6 +98,44 @@ class DashboardRolePercentilesResponse(BaseModel):
     rows: list[RolePercentileRow]
 
 
+class DashboardDefaultPolicyVersionResponse(BaseModel):
+    policy_version_id: str | None
+    season: str | None
+
+
+async def _latest_default_season(session: Any) -> Season | None:
+    season_query = (
+        select(Season)
+        .where(col(Season.name) == TOURNAMENT_DEFAULT_SEASON)
+        .order_by(
+            col(Season.canonical).desc(),
+            col(Season.version).desc(),
+            col(Season.created_at).desc(),
+        )
+        .limit(1)
+    )
+    return (await session.execute(season_query)).scalar_one_or_none()
+
+
+def _season_display_name(season: Season) -> str:
+    return season.name if season.canonical else f"{season.name}:v{season.version}"
+
+
+async def _default_winner_policy_version_id(session: Any) -> tuple[str | None, str | None]:
+    season = await _latest_default_season(session)
+    if season is None:
+        return None, None
+    season_name = _season_display_name(season)
+    if season.name not in SEASONS:
+        return None, season_name
+
+    commissioner = await build_commissioner(season.name, season_id=season.id)
+    leaderboard = await commissioner.get_leaderboard()
+    if not leaderboard:
+        return None, season_name
+    return str(leaderboard[0][0]), season_name
+
+
 async def _require_policy_version(policy_version_id: str) -> tuple[UUID, Any]:
     try:
         pv_id = UUID(policy_version_id)
@@ -366,6 +404,14 @@ async def _fetch_and_summarize_replays(episode_ids: list[str], policy_version_id
 
 def create_dashboard_router() -> APIRouter:
     router = APIRouter(prefix="/dashboard/v1/policies/versions", tags=["dashboard"])
+
+    @router.get("/default")
+    @timed_http_handler
+    async def get_default_policy_version(user: SoftmaxUser) -> DashboardDefaultPolicyVersionResponse:
+        del user
+        async with db_session(read_only=True) as session:
+            policy_version_id, season = await _default_winner_policy_version_id(session)
+        return DashboardDefaultPolicyVersionResponse(policy_version_id=policy_version_id, season=season)
 
     @router.get("/{policy_version_id}/data")
     @timed_http_handler
