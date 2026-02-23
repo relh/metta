@@ -55,9 +55,15 @@ cogames upload class=my_policy.MyPolicy --name "my-agent-v2" -n my-name
 cogames upload class=my_policy.MyPolicy --include-files ./utils.py -n my-name
 ```
 
+## Limits
+
+- **Max upload size**: 500 MB. The server checks the actual S3 object size after upload and rejects oversized
+  submissions with HTTP 413. The constant is defined in `mettagrid.runner.episode_runner.MAX_POLICY_SIZE_BYTES`.
+
 ## Success Criteria
 
 1. User can upload a valid Python policy implementing MultiAgentPolicy
 2. User receives a policy ID they can use with `cogames submit`
 3. Invalid policies are rejected with actionable error messages
 4. Validation runs the policy for 10 steps in an isolated environment before upload
+5. Oversized uploads (>500 MB) are rejected with a clear error message
