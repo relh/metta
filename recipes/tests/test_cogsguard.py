@@ -226,8 +226,8 @@ def test_train_does_not_enable_teacher_by_default() -> None:
     assert tool.scheduler is None
 
 
-def test_train_uses_best_auc_routed_adapter_defaults() -> None:
-    tool = cogsguard.train()
+def test_train_sweep_mode_uses_best_auc_routed_adapter_defaults() -> None:
+    tool = cogsguard.train(sweep_mode=True)
     learner_arch = tool.policy_assets["learner0"].architecture
     assert learner_arch is not None
     assert learner_arch.cortex_routed_adapter is not None

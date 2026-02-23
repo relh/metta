@@ -72,6 +72,28 @@ DEFAULT_INCLUDE_EVAL_MISSIONS = False
 DEFAULT_INCLUDE_FIXED_MAPS = False
 
 
+# Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
+_TUNED_PARAMS = {
+    # Routed Adapter
+    "routed_adapter.rank": 8,
+    "routed_adapter.trunk_lr_mult": 0.5476294593341358,
+    # Trainer Config
+    "trainer.sampling.method": "sequential",
+    "trainer.sampling.prio_alpha": 0.0,
+    "trainer.sampling.prio_beta0": 0.6,
+    "trainer.advantage.gae_lambda": 0.9354159832000732,
+    "trainer.advantage.gamma": 0.9986186027526855,
+    "trainer.optimizer.learning_rate": 0.00737503357231617,
+    "trainer.optimizer.momentum": 0.9794994592666626,
+    "trainer.optimizer.weight_decay": 0.3,
+    "trainer.optimizer.eps": 6.686864253424574e-06,
+    "trainer.optimizer.warmup_steps": 500,
+    "trainer.losses.ppo_actor.clip_coef": 0.36670681834220886,
+    "trainer.losses.ppo_actor.ent_coef": 0.02566424384713173,
+    "trainer.losses.ppo_critic.vf_coef": 1.4647305011749268,
+}
+
+
 def _overrides_disable_change_vibe(overrides: object) -> bool:
     if not isinstance(overrides, dict):
         return False
@@ -501,11 +523,11 @@ def train(
     if isinstance(policy_architecture, str):
         policy_architecture = PolicyArchitecture.from_spec(policy_architecture)
 
-    if routed_adapter is None and policy_architecture is None:
+    if sweep_mode and routed_adapter is None and policy_architecture is None:
         # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
         routed_adapter = {
-            "rank": 8,
-            "trunk_lr_mult": 0.5476294593341358,
+            "rank": _TUNED_PARAMS["routed_adapter.rank"],
+            "trunk_lr_mult": _TUNED_PARAMS["routed_adapter.trunk_lr_mult"],
         }
 
     if isinstance(routed_adapter, dict):
@@ -536,20 +558,21 @@ def train(
             event_profiles=event_profiles,
         )
     trainer_cfg = TrainerConfig()
-    # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
-    trainer_cfg.sampling.method = "sequential"
-    trainer_cfg.sampling.prio_alpha = 0.0
-    trainer_cfg.sampling.prio_beta0 = 0.6
-    trainer_cfg.advantage.gae_lambda = 0.9354159832000732
-    trainer_cfg.advantage.gamma = 0.9986186027526855
-    trainer_cfg.optimizer.learning_rate = 0.00737503357231617
-    trainer_cfg.optimizer.momentum = 0.9794994592666626
-    trainer_cfg.optimizer.weight_decay = 0.3
-    trainer_cfg.optimizer.eps = 6.686864253424574e-06
-    trainer_cfg.optimizer.warmup_steps = 500
-    trainer_cfg.losses.ppo_actor.clip_coef = 0.36670681834220886
-    trainer_cfg.losses.ppo_actor.ent_coef = 0.02566424384713173
-    trainer_cfg.losses.ppo_critic.vf_coef = 1.4647305011749268
+    if sweep_mode:
+        # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
+        trainer_cfg.sampling.method = _TUNED_PARAMS["trainer.sampling.method"]
+        trainer_cfg.sampling.prio_alpha = _TUNED_PARAMS["trainer.sampling.prio_alpha"]
+        trainer_cfg.sampling.prio_beta0 = _TUNED_PARAMS["trainer.sampling.prio_beta0"]
+        trainer_cfg.advantage.gae_lambda = _TUNED_PARAMS["trainer.advantage.gae_lambda"]
+        trainer_cfg.advantage.gamma = _TUNED_PARAMS["trainer.advantage.gamma"]
+        trainer_cfg.optimizer.learning_rate = _TUNED_PARAMS["trainer.optimizer.learning_rate"]
+        trainer_cfg.optimizer.momentum = _TUNED_PARAMS["trainer.optimizer.momentum"]
+        trainer_cfg.optimizer.weight_decay = _TUNED_PARAMS["trainer.optimizer.weight_decay"]
+        trainer_cfg.optimizer.eps = _TUNED_PARAMS["trainer.optimizer.eps"]
+        trainer_cfg.optimizer.warmup_steps = _TUNED_PARAMS["trainer.optimizer.warmup_steps"]
+        trainer_cfg.losses.ppo_actor.clip_coef = _TUNED_PARAMS["trainer.losses.ppo_actor.clip_coef"]
+        trainer_cfg.losses.ppo_actor.ent_coef = _TUNED_PARAMS["trainer.losses.ppo_actor.ent_coef"]
+        trainer_cfg.losses.ppo_critic.vf_coef = _TUNED_PARAMS["trainer.losses.ppo_critic.vf_coef"]
     training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
@@ -954,88 +977,95 @@ def sweep(
         {"variants": list(variants)},
         {"trainer.total_timesteps": 3_000_000_000},
         SP.param(
+            "policy_assets.learner0.architecture.cortex_routed_adapter.trunk_lr_mult",
+            D.LOG_NORMAL,
+            min=0.1,
+            max=10.0,
+            search_center=_TUNED_PARAMS["routed_adapter.trunk_lr_mult"],
+        ),
+        SP.param(
             "trainer.optimizer.learning_rate",
             D.LOG_NORMAL,
             min=1e-4,
             max=3e-2,
-            search_center=0.00737503357231617,
+            search_center=_TUNED_PARAMS["trainer.optimizer.learning_rate"],
         ),
         SP.param(
             "trainer.optimizer.momentum",
             D.UNIFORM,
             min=0.90,
             max=0.995,
-            search_center=0.9794994592666626,
+            search_center=_TUNED_PARAMS["trainer.optimizer.momentum"],
         ),
         SP.param(
             "trainer.optimizer.weight_decay",
             D.LOG_NORMAL,
             min=1e-4,
             max=0.30,
-            search_center=0.3,
+            search_center=_TUNED_PARAMS["trainer.optimizer.weight_decay"],
         ),
         SP.param(
             "trainer.optimizer.eps",
             D.LOG_NORMAL,
             min=1e-8,
             max=1e-4,
-            search_center=6.686864253424574e-06,
+            search_center=_TUNED_PARAMS["trainer.optimizer.eps"],
         ),
         SP.param(
             "trainer.optimizer.warmup_steps",
             D.INT_UNIFORM,
             min=500,
             max=5000,
-            search_center=500,
+            search_center=_TUNED_PARAMS["trainer.optimizer.warmup_steps"],
         ),
         SP.param(
             "trainer.sampling.prio_alpha",
             D.UNIFORM,
             min=0.0,
             max=1.0,
-            search_center=0.0,
+            search_center=_TUNED_PARAMS["trainer.sampling.prio_alpha"],
         ),
         SP.param(
             "trainer.sampling.prio_beta0",
             D.UNIFORM,
             min=0.0,
             max=1.0,
-            search_center=0.6,
+            search_center=_TUNED_PARAMS["trainer.sampling.prio_beta0"],
         ),
         SP.param(
             "trainer.advantage.gamma",
             D.UNIFORM,
             min=0.99,
             max=0.9999,
-            search_center=0.9986186027526855,
+            search_center=_TUNED_PARAMS["trainer.advantage.gamma"],
         ),
         SP.param(
             "trainer.advantage.gae_lambda",
             D.UNIFORM,
             min=0.80,
             max=0.99,
-            search_center=0.9354159832000732,
+            search_center=_TUNED_PARAMS["trainer.advantage.gae_lambda"],
         ),
         SP.param(
             "trainer.losses.ppo_actor.clip_coef",
             D.UNIFORM,
             min=0.10,
             max=0.60,
-            search_center=0.36670681834220886,
+            search_center=_TUNED_PARAMS["trainer.losses.ppo_actor.clip_coef"],
         ),
         SP.param(
             "trainer.losses.ppo_actor.ent_coef",
             D.LOG_NORMAL,
             min=1e-4,
             max=2e-1,
-            search_center=0.02566424384713173,
+            search_center=_TUNED_PARAMS["trainer.losses.ppo_actor.ent_coef"],
         ),
         SP.param(
             "trainer.losses.ppo_critic.vf_coef",
             D.UNIFORM,
             min=0.50,
             max=2.50,
-            search_center=1.4647305011749268,
+            search_center=_TUNED_PARAMS["trainer.losses.ppo_critic.vf_coef"],
         ),
     ]
 
