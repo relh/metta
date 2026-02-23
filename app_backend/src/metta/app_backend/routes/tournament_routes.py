@@ -810,13 +810,13 @@ def create_tournament_router() -> APIRouter:
             query = query.where(col(Pool.name).in_(pool_names))
 
         if policy_version_ids:
-            for pv_id in policy_version_ids:
-                subq = (
-                    select(MatchPlayer.match_id)
-                    .join(MatchPlayer.pool_player)
-                    .where(PoolPlayer.policy_version_id == pv_id)
-                )
-                query = query.where(col(Match.id).in_(subq))
+            # Use OR logic: matches containing ANY of the specified policy versions
+            subq = (
+                select(MatchPlayer.match_id)
+                .join(MatchPlayer.pool_player)
+                .where(col(PoolPlayer.policy_version_id).in_(policy_version_ids))
+            )
+            query = query.where(col(Match.id).in_(subq))
 
         query = (
             query.order_by(col(Match.created_at).desc())

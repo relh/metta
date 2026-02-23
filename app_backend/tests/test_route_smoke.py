@@ -88,6 +88,65 @@ async def seed_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
 
 
 @pytest_asyncio.fixture
+async def seed_or_logic_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
+    """Fixture for testing OR logic in policy_version_ids filter.
+
+    Creates a season with two separate policies, each having its own match.
+    Used to verify that filtering by multiple policy_version_ids returns
+    matches containing ANY of them (OR logic), not ALL of them (AND logic).
+    """
+    async with db_session() as session:
+        # Use "test-season" because it's a registered season name (in beta_test.py commissioner)
+        season = Season(name="test-season", canonical=True)
+        session.add(season)
+        await session.flush()
+
+        pool = Pool(season_id=season.id, name="test-pool")
+        session.add(pool)
+        await session.flush()
+
+        # Create two separate policies
+        policy_a = Policy(name=f"policy-a-{uuid4().hex[:8]}", user_id="test-user")
+        policy_b = Policy(name=f"policy-b-{uuid4().hex[:8]}", user_id="test-user")
+        session.add(policy_a)
+        session.add(policy_b)
+        await session.flush()
+
+        pv_a = PolicyVersion(policy_id=policy_a.id, version=1)
+        pv_b = PolicyVersion(policy_id=policy_b.id, version=1)
+        session.add(pv_a)
+        session.add(pv_b)
+        await session.flush()
+
+        pp_a = PoolPlayer(pool_id=pool.id, policy_version_id=pv_a.id)
+        pp_b = PoolPlayer(pool_id=pool.id, policy_version_id=pv_b.id)
+        session.add(pp_a)
+        session.add(pp_b)
+        await session.flush()
+
+        # Create match containing ONLY policy A
+        match_a = Match(pool_id=pool.id, assignments=[0], status=MatchStatus.completed)
+        session.add(match_a)
+        await session.flush()
+        session.add(MatchPlayer(match_id=match_a.id, pool_player_id=pp_a.id, policy_index=0, score=1.0))
+
+        # Create match containing ONLY policy B
+        match_b = Match(pool_id=pool.id, assignments=[0], status=MatchStatus.completed)
+        session.add(match_b)
+        await session.flush()
+        session.add(MatchPlayer(match_id=match_b.id, pool_player_id=pp_b.id, policy_index=0, score=2.0))
+        await session.flush()
+
+        return {
+            "season_name": season.name,
+            "pv_a_id": str(pv_a.id),
+            "pv_b_id": str(pv_b.id),
+            "match_a_id": str(match_a.id),
+            "match_b_id": str(match_b.id),
+        }
+
+
+@pytest_asyncio.fixture
 async def seed_teams_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
     async with db_session() as session:
         initial_fields = SEASONS["beta-teams-large"].get_initial_season_fields()
@@ -188,6 +247,35 @@ class TestTournamentRouteSmoke:
         assert isinstance(data, list)
         if data:
             assert "score_stddev" in data[0]
+
+    @pytest.mark.asyncio
+    async def test_get_matches_policy_version_ids_uses_or_logic(
+        self, test_client: TestClient, softmax_headers: dict, seed_or_logic_season: dict
+    ):
+        """Verify that filtering by multiple policy_version_ids uses OR logic.
+
+        When a user has multiple policy versions (e.g. v1, v2, v3), the matches
+        endpoint should return matches containing ANY of those versions, not
+        matches containing ALL of them (which would typically be zero).
+        """
+        # Query for matches containing EITHER policy A OR policy B
+        # With OR logic: should return 2 matches
+        # With AND logic (bug): would return 0 matches
+        r = test_client.get(
+            f"/tournament/seasons/{seed_or_logic_season['season_name']}/matches"
+            f"?include_hidden=true"
+            f"&policy_version_ids={seed_or_logic_season['pv_a_id']}"
+            f"&policy_version_ids={seed_or_logic_season['pv_b_id']}",
+            headers=softmax_headers,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data) == 2, "policy_version_ids filter should use OR logic, returning matches with ANY policy"
+
+        # Verify we got both matches
+        match_ids = {m["id"] for m in data}
+        assert seed_or_logic_season["match_a_id"] in match_ids
+        assert seed_or_logic_season["match_b_id"] in match_ids
 
 
 class TestEpisodeRouteSmoke:
