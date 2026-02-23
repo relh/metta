@@ -20,7 +20,7 @@ from metta.games.hunger.seasons import (
     season_events,
 )
 from metta.games.hunger.stations import (
-    INITIAL_PLANT_HP,
+    INITIAL_PLANT_FOOD,
     plant_config,
     predator_station_config,
     prey_station_config,
@@ -238,30 +238,30 @@ class TestPlantHarvest:
         h = HungerTestHarness.create_single(
             station_name="plant",
             station_cfg=plant_config(),
-            agent_initial={"scout": 1, "hp": 0},
+            agent_initial={"scout": 1, "food": 0},
         )
         h.move_agent_east()
-        assert h.inv().get("hp", 0) == INITIAL_PLANT_HP
+        assert h.inv().get("food", 0) == INITIAL_PLANT_FOOD
         h.close()
 
     def test_predator_cannot_harvest(self):
         h = HungerTestHarness.create_single(
             station_name="plant",
             station_cfg=plant_config(),
-            agent_initial={"scrambler": 1, "hp": 0},
+            agent_initial={"scrambler": 1, "food": 0},
         )
         h.move_agent_east()
-        assert h.inv().get("hp", 0) == 0
+        assert h.inv().get("food", 0) == 0
         h.close()
 
     def test_gearless_cannot_harvest(self):
         h = HungerTestHarness.create_single(
             station_name="plant",
             station_cfg=plant_config(),
-            agent_initial={"hp": 0},
+            agent_initial={"food": 0},
         )
         h.move_agent_east()
-        assert h.inv().get("hp", 0) == 0
+        assert h.inv().get("food", 0) == 0
         h.close()
 
 
@@ -326,32 +326,32 @@ class TestScramblerScoutInteraction:
 
     def test_predator_steals_food_from_prey(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "hp": 0},
-            agent1_initial={"scout": 1, "hp": 50, "egg": 1},
+            agent0_initial={"scrambler": 1, "food": 0},
+            agent1_initial={"scout": 1, "food": 50, "egg": 1},
         )
         h.move_agent_east()
         # Predator should have prey's food (up to cap)
-        assert h.inv(0).get("hp", 0) == 50
+        assert h.inv(0).get("food", 0) == 50
         # Prey should have no food
-        assert h.inv(1).get("hp", 0) == 0
+        assert h.inv(1).get("food", 0) == 0
         h.close()
 
     def test_predator_takes_all_food_capped(self):
         """Predator's food is capped at inventory max."""
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "hp": 80},
-            agent1_initial={"scout": 1, "hp": 50, "egg": 1},
+            agent0_initial={"scrambler": 1, "food": 80},
+            agent1_initial={"scout": 1, "food": 50, "egg": 1},
         )
         h.move_agent_east()
         # Predator can only hold up to their limit
-        pred_food = h.inv(0).get("hp", 0)
+        pred_food = h.inv(0).get("food", 0)
         assert pred_food >= 80  # at least kept what they had
         h.close()
 
     def test_prey_loses_egg_when_tagged(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "hp": 0},
-            agent1_initial={"scout": 1, "hp": 50, "egg": 1},
+            agent0_initial={"scrambler": 1, "food": 0},
+            agent1_initial={"scout": 1, "food": 50, "egg": 1},
         )
         h.move_agent_east()
         assert h.inv(1).get("egg", 0) == 0
@@ -359,12 +359,12 @@ class TestScramblerScoutInteraction:
 
     def test_prey_without_egg_still_loses_food(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "hp": 0},
-            agent1_initial={"scout": 1, "hp": 30},
+            agent0_initial={"scrambler": 1, "food": 0},
+            agent1_initial={"scout": 1, "food": 30},
         )
         h.move_agent_east()
-        assert h.inv(0).get("hp", 0) == 30
-        assert h.inv(1).get("hp", 0) == 0
+        assert h.inv(0).get("food", 0) == 30
+        assert h.inv(1).get("food", 0) == 0
         h.close()
 
 
@@ -378,8 +378,8 @@ class TestScramblerScramblerInteraction:
 
     def test_both_predators_lose_egg(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "hp": 20, "egg": 1},
-            agent1_initial={"scrambler": 1, "hp": 20, "egg": 1},
+            agent0_initial={"scrambler": 1, "food": 20, "egg": 1},
+            agent1_initial={"scrambler": 1, "food": 20, "egg": 1},
         )
         h.move_agent_east()
         assert h.inv(0).get("egg", 0) == 0
@@ -388,27 +388,27 @@ class TestScramblerScramblerInteraction:
 
     def test_no_food_transfer_between_predators(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "hp": 10, "egg": 1},
-            agent1_initial={"scrambler": 1, "hp": 40, "egg": 1},
+            agent0_initial={"scrambler": 1, "food": 10, "egg": 1},
+            agent1_initial={"scrambler": 1, "food": 40, "egg": 1},
         )
         h.move_agent_east()
         # Food should not change (no withdraw in predator-predator handler)
-        assert h.inv(0).get("hp", 0) == 10
-        assert h.inv(1).get("hp", 0) == 40
+        assert h.inv(0).get("food", 0) == 10
+        assert h.inv(1).get("food", 0) == 40
         h.close()
 
     def test_prey_cannot_tag_predator(self):
         """Prey walking onto predator should not trigger any combat handler."""
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scout": 1, "hp": 20, "egg": 1},
-            agent1_initial={"scrambler": 1, "hp": 40, "egg": 1},
+            agent0_initial={"scout": 1, "food": 20, "egg": 1},
+            agent1_initial={"scrambler": 1, "food": 40, "egg": 1},
         )
         h.move_agent_east()
         # Nothing should happen — prey has no offensive handlers
         assert h.inv(0).get("egg", 0) == 1
         assert h.inv(1).get("egg", 0) == 1
-        assert h.inv(0).get("hp", 0) == 20
-        assert h.inv(1).get("hp", 0) == 40
+        assert h.inv(0).get("food", 0) == 20
+        assert h.inv(1).get("food", 0) == 40
         h.close()
 
 
@@ -422,42 +422,42 @@ class TestFoodDrain:
 
     def test_food_drains_over_time(self):
         events = {
-            "hp_drain": EventConfig(
-                name="hp_drain",
+            "food_drain": EventConfig(
+                name="food_drain",
                 target_query=query(typeTag("agent")),
                 timesteps=periodic(start=0, period=FOOD_DRAIN_PERIOD, end=100),
-                mutations=[updateTarget({"hp": -1})],
+                mutations=[updateTarget({"food": -1})],
             ),
         }
         h = HungerTestHarness.create_event_test(
             num_agents=1,
-            agent_initial={"hp": 50},
+            agent_initial={"food": 50},
             events=events,
             max_steps=100,
         )
         # Step enough times for several drain events
         h.step(FOOD_DRAIN_PERIOD * 5)
-        food = h.inv().get("hp", 0)
+        food = h.inv().get("food", 0)
         assert food < 50, f"Food should have drained, got {food}"
         h.close()
 
     def test_food_cannot_go_below_zero(self):
         events = {
-            "hp_drain": EventConfig(
-                name="hp_drain",
+            "food_drain": EventConfig(
+                name="food_drain",
                 target_query=query(typeTag("agent")),
                 timesteps=periodic(start=0, period=1, end=100),
-                mutations=[updateTarget({"hp": -1})],
+                mutations=[updateTarget({"food": -1})],
             ),
         }
         h = HungerTestHarness.create_event_test(
             num_agents=1,
-            agent_initial={"hp": 3},
+            agent_initial={"food": 3},
             events=events,
             max_steps=100,
         )
         h.step(20)
-        food = h.inv().get("hp", 0)
+        food = h.inv().get("food", 0)
         assert food == 0, f"Food should not go below 0, got {food}"
         h.close()
 
@@ -476,13 +476,13 @@ class TestStarvationCheck:
                 name="starvation_check",
                 target_query=query(typeTag("agent")),
                 timesteps=periodic(start=0, period=STARVATION_CHECK_PERIOD, end=100),
-                filters=[targetHas({"egg": 1}), isNot(targetHas({"hp": 1}))],
+                filters=[targetHas({"egg": 1}), isNot(targetHas({"food": 1}))],
                 mutations=[updateTarget({"egg": -1})],
             ),
         }
         h = HungerTestHarness.create_event_test(
             num_agents=1,
-            agent_initial={"hp": 0, "egg": 1},
+            agent_initial={"food": 0, "egg": 1},
             events=events,
             max_steps=100,
         )
@@ -496,13 +496,13 @@ class TestStarvationCheck:
                 name="starvation_check",
                 target_query=query(typeTag("agent")),
                 timesteps=periodic(start=0, period=STARVATION_CHECK_PERIOD, end=100),
-                filters=[targetHas({"egg": 1}), isNot(targetHas({"hp": 1}))],
+                filters=[targetHas({"egg": 1}), isNot(targetHas({"food": 1}))],
                 mutations=[updateTarget({"egg": -1})],
             ),
         }
         h = HungerTestHarness.create_event_test(
             num_agents=1,
-            agent_initial={"hp": 50, "egg": 1},
+            agent_initial={"food": 50, "egg": 1},
             events=events,
             max_steps=100,
         )
@@ -666,13 +666,13 @@ class TestPlantRegen:
                 name="test_drop",
                 target_query=query(typeTag("plant")),
                 timesteps=[5],
-                mutations=[updateTarget({"hp": 10})],
+                mutations=[updateTarget({"food": 10})],
                 max_targets=10,
             ),
         }
 
         plant_obj = plant_config()
-        empty_plant = plant_obj.model_copy(update={"inventory": InventoryConfig(initial={"hp": 0})})
+        empty_plant = plant_obj.model_copy(update={"inventory": InventoryConfig(initial={"food": 0})})
 
         h = HungerTestHarness.create_event_test(
             num_agents=1,
@@ -685,7 +685,7 @@ class TestPlantRegen:
 
         grid_objects = h.simulation.grid_objects()
         plants = [obj for obj in grid_objects.values() if "plant" in obj.get("type_name", "")]
-        assert any(obj.get("inventory", {}).get("hp", 0) > 0 for obj in plants) or len(plants) == 0
+        assert any(obj.get("inventory", {}).get("food", 0) > 0 for obj in plants) or len(plants) == 0
         h.close()
 
 
@@ -709,7 +709,7 @@ class TestSeasonEvents:
         assert "egg_drop" in events
         assert "egg_hatch" in events
         # Food drain
-        assert "hp_drain" in events
+        assert "food_drain" in events
         # Starvation
         assert "starvation_check" in events
 
@@ -722,8 +722,8 @@ class TestSeasonEvents:
 
     def test_summer_drops_more_than_winter(self):
         events = season_events(max_steps=5000, num_cogs=40, num_plants=160)
-        summer_hp = events["summer_food_drop"].mutations[0].deltas["hp"]
-        winter_hp = events["winter_food_drop"].mutations[0].deltas["hp"]
+        summer_hp = events["summer_food_drop"].mutations[0].deltas["food"]
+        winter_hp = events["winter_food_drop"].mutations[0].deltas["food"]
         assert summer_hp > winter_hp
 
     def test_drop_targets_10pct_of_plants(self):
@@ -751,6 +751,6 @@ class TestSeasonEvents:
     def test_food_scales_with_num_cogs(self):
         events_small = season_events(max_steps=5000, num_cogs=10, num_plants=160)
         events_large = season_events(max_steps=5000, num_cogs=80, num_plants=160)
-        small_hp = events_small["summer_food_drop"].mutations[0].deltas["hp"]
-        large_hp = events_large["summer_food_drop"].mutations[0].deltas["hp"]
+        small_hp = events_small["summer_food_drop"].mutations[0].deltas["food"]
+        large_hp = events_large["summer_food_drop"].mutations[0].deltas["food"]
         assert large_hp > small_hp

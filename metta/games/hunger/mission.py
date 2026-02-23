@@ -10,7 +10,7 @@ from metta.games.hunger.config import HungerConfig
 from metta.games.hunger.seasons import season_events
 from metta.games.hunger.stations import plant_config, predator_station_config, prey_station_config, wall_config
 from mettagrid.config.action_config import ActionsConfig, MoveActionConfig, NoopActionConfig
-from mettagrid.config.mettagrid_config import GameConfig, MettaGridConfig
+from mettagrid.config.mettagrid_config import GameConfig, MettaGridConfig, RenderConfig
 from mettagrid.config.obs_config import ObsConfig
 from mettagrid.map_builder.map_builder import AnyMapBuilderConfig
 
@@ -52,6 +52,7 @@ class HungerMission(CoGameMission):
                 num_cogs=num,
                 num_plants=HungerConfig.estimate_num_plants(num),
             ),
+            render=RenderConfig(hud1="food"),
         )
         env = MettaGridConfig(game=game)
         env = env.model_copy(deep=True)

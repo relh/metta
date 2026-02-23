@@ -2,7 +2,7 @@
 
 
 class HungerConfig:
-    RESOURCES = ["hp", "scrambler", "scout", "egg", "kid", "energy", "solar"]
+    RESOURCES = ["food", "scrambler", "scout", "egg", "kid", "energy", "solar"]
     GEAR = ["scrambler", "scout"]
     PLANT_DENSITY = 0.016
     MAP_WIDTH = 88

@@ -56,7 +56,7 @@ def season_events(
     num_cogs: int,
     num_plants: int,
 ) -> dict[str, EventConfig]:
-    """Generate all seasonal, day/night, hp drain, and egg lifecycle events.
+    """Generate all seasonal, day/night, food drain, and egg lifecycle events.
 
     Food balance: total drain per season = num_cogs * (SEASON_LENGTH / FOOD_DRAIN_PERIOD).
     Each season replenishes a percentage of that drain via 5 drops targeting 10% of plants.
@@ -89,14 +89,14 @@ def season_events(
         pct = SEASON_FOOD_PCT[season_name]
         total_food = pct * drain_per_season
         food_per_drop = total_food / DROPS_PER_SEASON
-        hp_per_plant = max(1, round(food_per_drop / plants_per_drop))
+        food_per_plant = max(1, round(food_per_drop / plants_per_drop))
 
         timesteps = _drop_timesteps(offset, num_years)
         events[f"{season_name}_food_drop"] = EventConfig(
             name=f"{season_name}_food_drop",
             target_query=plant_query,
             timesteps=timesteps,
-            mutations=[updateTarget({"hp": hp_per_plant}), addTag("team:cogs_green")],
+            mutations=[updateTarget({"food": food_per_plant}), addTag("team:cogs_green")],
             max_targets=plants_per_drop,
         )
 
@@ -121,20 +121,20 @@ def season_events(
         mutations=[updateTarget({"egg": -1}), updateTarget({"kid": 1})],
     )
 
-    # --- HP drain (continuous) ---
-    events["hp_drain"] = EventConfig(
-        name="hp_drain",
+    # --- Food drain (continuous) ---
+    events["food_drain"] = EventConfig(
+        name="food_drain",
         target_query=agent_query,
         timesteps=periodic(start=0, period=FOOD_DRAIN_PERIOD, end=max_steps),
-        mutations=[updateTarget({"hp": -1})],
+        mutations=[updateTarget({"food": -1})],
     )
 
-    # --- Starvation check: agents with egg but no hp lose the egg ---
+    # --- Starvation check: agents with egg but no food lose the egg ---
     events["starvation_check"] = EventConfig(
         name="starvation_check",
         target_query=agent_query,
         timesteps=periodic(start=0, period=STARVATION_CHECK_PERIOD, end=max_steps),
-        filters=[targetHas({"egg": 1}), isNot(targetHas({"hp": 1}))],
+        filters=[targetHas({"egg": 1}), isNot(targetHas({"food": 1}))],
         mutations=[updateTarget({"egg": -1})],
     )
 

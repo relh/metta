@@ -21,7 +21,7 @@ def agent_config(max_steps: int) -> AgentConfig:
         inventory=InventoryConfig(
             limits={
                 "gear": ResourceLimitsConfig(min=1, max=1, resources=HungerConfig.GEAR),
-                "hp": ResourceLimitsConfig(min=100, resources=["hp"]),
+                "food": ResourceLimitsConfig(min=100, resources=["food"]),
                 "egg": ResourceLimitsConfig(min=1, resources=["egg"]),
                 "kid": ResourceLimitsConfig(min=100, resources=["kid"]),
                 "energy": ResourceLimitsConfig(
@@ -35,12 +35,12 @@ def agent_config(max_steps: int) -> AgentConfig:
                     modifiers={"scout": 2},
                 ),
             },
-            initial={"hp": 20, "energy": 100, "solar": 1},
+            initial={"food": 20, "energy": 100, "solar": 1},
         ),
         on_use_handlers={
             "scrambler_hunts_scout": Handler(
                 filters=[actorHas({"scrambler": 1}), targetHas({"scout": 1})],
-                mutations=[withdraw({"hp": 9999}), updateTarget({"egg": -1})],
+                mutations=[withdraw({"food": 9999}), updateTarget({"egg": -1})],
             ),
             "scrambler_tags_scrambler": Handler(
                 filters=[actorHas({"scrambler": 1}), targetHas({"scrambler": 1})],
