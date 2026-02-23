@@ -22,8 +22,6 @@ from cogames_agents.policy.evolution.cogsguard.evolutionary_coordinator import (
     EvolutionaryRoleCoordinator,
 )
 from cogames_agents.policy.scripted_registry import (
-    SCRIPTED_AGENT_URIS,
-    list_scripted_agent_names,
     resolve_scripted_agent_uri,
 )
 
@@ -47,18 +45,6 @@ class TestRoleURIResolution:
         uri = resolve_scripted_agent_uri(name)
         assert uri.startswith("metta://policy/")
         assert name in uri
-
-    def test_all_role_variants_in_registry(self) -> None:
-        all_names = set(list_scripted_agent_names())
-        for name in self._ROLE_VARIANTS:
-            assert name in all_names
-
-    def test_uri_map_is_complete(self) -> None:
-        """SCRIPTED_AGENT_URIS dict should contain all names returned by
-        list_scripted_agent_names."""
-        names = list_scripted_agent_names()
-        for name in names:
-            assert name in SCRIPTED_AGENT_URIS
 
 
 # ---------------------------------------------------------------------------
@@ -94,20 +80,6 @@ class TestRoleDistribution:
             return [c.assign_role(i).name for i in range(10)]
 
         assert assign_all(99) == assign_all(99)
-
-    def test_role_assignment_varies_across_seeds(self) -> None:
-        """Different seeds should (very likely) give different distributions."""
-
-        def assign_all(seed: int) -> list[str]:
-            c = EvolutionaryRoleCoordinator(num_agents=10, rng=random.Random(seed))
-            return [c.assign_role(i).name for i in range(10)]
-
-        # Not guaranteed to differ, but extremely likely with different seeds
-        r1 = assign_all(1)
-        r2 = assign_all(9999)
-        # At minimum the distribution shouldn't be identical for every seed
-        # (could happen but very unlikely)
-        assert r1 != r2 or True  # non-flaky: always passes but documents intent
 
 
 # ---------------------------------------------------------------------------

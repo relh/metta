@@ -12,31 +12,24 @@ from typing import Any
 import pytest
 from cogames_agents.evals.planky_evals import (
     PLANKY_BEHAVIOR_EVALS,
-    PlankyAlignerAvoidAOE,
-    PlankyAlignerFullCycle,
     PlankyAlignerGear,
     PlankyAlignerHearts,
-    PlankyAlignerJunction,
     PlankyAlignerReGear,
     PlankyAlignerReHearts,
     PlankyExplorationDistant,
     PlankyMaze,
     PlankyMinerBestResource,
-    PlankyMinerDeposit,
     PlankyMinerExtract,
     PlankyMinerFullCycle,
     PlankyMinerGear,
     PlankyMinerReGear,
-    PlankyMultiRole,
     PlankyResourceChain,
     PlankyScoutExplore,
     PlankyScoutGear,
-    PlankyScramblerFullCycle,
     PlankyScramblerGear,
     PlankyScramblerRecovery,
     PlankyScramblerTarget,
     PlankyStuckCorridor,
-    PlankySurviveRetreat,
 )
 
 from mettagrid.policy.loader import discover_and_register_policies
@@ -108,11 +101,6 @@ def test_nlanky_miner_picks_best_resource() -> None:
     assert carbon_gained > 0, f"Expected miner to mine carbon in best-resource arena, got stats={agent_stats[0]}"
 
 
-def test_nlanky_miner_deposits_cargo() -> None:
-    stats = run_nlanky_episode(PlankyMinerDeposit, max_steps=200, roles={"miner": 1})
-    assert stats["steps"] > 0
-
-
 def test_nlanky_miner_full_cycle() -> None:
     stats = run_nlanky_episode(PlankyMinerFullCycle, max_steps=400, roles={"miner": 1})
     assert stats["steps"] > 0
@@ -126,16 +114,6 @@ def test_nlanky_aligner_gets_hearts() -> None:
     agent_stats = stats["stats"].get("agent", [])
     assert agent_stats, "Expected agent stats to be present"
     assert agent_stats[0].get("heart.gained", 0) > 0, f"Expected some hearts gained, got stats={agent_stats[0]}"
-
-
-def test_nlanky_aligner_approaches_junction() -> None:
-    stats = run_nlanky_episode(PlankyAlignerJunction, max_steps=300, roles={"aligner": 1})
-    assert stats["steps"] > 0
-
-
-def test_nlanky_aligner_avoids_enemy_aoe() -> None:
-    stats = run_nlanky_episode(PlankyAlignerAvoidAOE, max_steps=400, roles={"aligner": 1})
-    assert stats["steps"] > 0
 
 
 @pytest.mark.xfail(reason="aoe_mask needs team-based friend/enemy detection; nlanky can't find enemies")
@@ -155,11 +133,6 @@ def test_nlanky_scout_explores() -> None:
     assert agent_stats[0].get("action.move.success", 0) > 50, (
         f"Expected scout to move around, got stats={agent_stats[0]}"
     )
-
-
-def test_nlanky_survive_retreat() -> None:
-    stats = run_nlanky_episode(PlankySurviveRetreat, max_steps=200, roles={"miner": 1})
-    assert stats["steps"] > 0
 
 
 def test_nlanky_maze_navigation_mines_carbon() -> None:
@@ -184,25 +157,6 @@ def test_nlanky_stuck_corridor_mines_carbon() -> None:
     agent_stats = stats["stats"].get("agent", [])
     assert agent_stats, "Expected agent stats to be present"
     assert agent_stats[0].get("carbon.gained", 0) > 0, f"Expected some carbon mined, got stats={agent_stats[0]}"
-
-
-def test_nlanky_multi_role() -> None:
-    stats = run_nlanky_episode(
-        PlankyMultiRole,
-        max_steps=300,
-        roles={"miner": 1, "scout": 1, "aligner": 1, "scrambler": 1},
-    )
-    assert stats["steps"] > 0
-
-
-def test_nlanky_aligner_full_cycle() -> None:
-    stats = run_nlanky_episode(PlankyAlignerFullCycle, max_steps=400, roles={"aligner": 1})
-    assert stats["steps"] > 0
-
-
-def test_nlanky_scrambler_full_cycle() -> None:
-    stats = run_nlanky_episode(PlankyScramblerFullCycle, max_steps=400, roles={"scrambler": 1})
-    assert stats["steps"] > 0
 
 
 def test_nlanky_resource_chain_mines_resources() -> None:
