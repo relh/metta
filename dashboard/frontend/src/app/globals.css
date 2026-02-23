@@ -401,12 +401,13 @@ code {
 .capability-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
 }
 
 .capability-card {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .capability-card-head {
@@ -417,9 +418,20 @@ code {
   flex-wrap: wrap;
 }
 
+.capability-card-head > * {
+  min-width: 0;
+}
+
+.capability-card .badge-source {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .capability-description {
   margin: 0;
   color: var(--ink-muted);
+  overflow-wrap: anywhere;
 }
 
 .capability-indicator-row {
@@ -457,6 +469,11 @@ code {
 .capability-evidence p {
   margin: 0;
   font-size: 12px;
+}
+
+.capability-evidence code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .pattern-signal-card {
