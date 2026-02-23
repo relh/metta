@@ -395,7 +395,7 @@ code {
 }
 
 .capability-controls {
-  grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(160px, 1fr));
+  grid-template-columns: minmax(260px, 2fr) repeat(3, minmax(150px, 1fr));
 }
 
 .capability-grid {
@@ -443,6 +443,10 @@ code {
 
 .capability-indicator strong {
   white-space: nowrap;
+}
+
+.capability-indicator-trained {
+  grid-column: 1 / -1;
 }
 
 .capability-evidence {
@@ -657,6 +661,10 @@ code {
 
 @media (max-width: 1100px) {
   .skill-controls {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .capability-controls {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 

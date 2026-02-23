@@ -566,11 +566,11 @@ export const SkillTreePanel: FC<{
     <div className="grid" style={{ gap: 12 }}>
       <section className="card grid" style={{ gap: 12 }}>
         <div className="dashboard-control-head">
-          <div>
-            <h2 style={{ marginTop: 0, marginBottom: 4 }}>Capability Grid</h2>
-            <p style={{ margin: 0, color: '#6b7280' }}>
+          <div className="dashboard-title-line">
+            <h2 style={{ margin: 0 }}>Capability Grid</h2>
+            <span className="dashboard-title-subline">
               Canonical diagnosis inventory: capabilities + Cogames diagnose + instrumentation + behavior slices.
-            </p>
+            </span>
           </div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
             scenarios: <code>{capabilities.length}</code> · avg score <code>{formatPercent(averageScore, 0)}</code>
@@ -634,10 +634,6 @@ export const SkillTreePanel: FC<{
               <p className="capability-description">{capability.description}</p>
 
               <div className="capability-indicator-row">
-                <div className={`capability-indicator indicator-${capability.trained}`}>
-                  <span>Trained</span>
-                  <strong>{INDICATOR_LABEL[capability.trained]}</strong>
-                </div>
                 <div className={`capability-indicator indicator-${capability.eval}`}>
                   <span>Eval</span>
                   <strong>{INDICATOR_LABEL[capability.eval]}</strong>
@@ -645,6 +641,10 @@ export const SkillTreePanel: FC<{
                 <div className={`capability-indicator indicator-${capability.eval}`}>
                   <span>Score</span>
                   <strong>{formatPercent(capability.score, 0)}</strong>
+                </div>
+                <div className={`capability-indicator capability-indicator-trained indicator-${capability.trained}`}>
+                  <span>Trained</span>
+                  <strong>{INDICATOR_LABEL[capability.trained]}</strong>
                 </div>
               </div>
 

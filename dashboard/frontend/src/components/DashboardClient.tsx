@@ -1,6 +1,6 @@
 'use client'
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   DASHBOARD_API_BASE_URL,
@@ -431,6 +431,7 @@ export function DashboardClient() {
   const [rolePercentiles, setRolePercentiles] = useState<DashboardRolePercentilesResponse | null>(null)
   const [roleLoading, setRoleLoading] = useState(false)
   const [roleError, setRoleError] = useState<string | null>(null)
+  const rolePercentilesCacheRef = useRef<Map<string, DashboardRolePercentilesResponse>>(new Map())
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
 
   const [statusFilter, setStatusFilter] = useState<EpisodeStatusFilter>('all')
@@ -794,14 +795,28 @@ export function DashboardClient() {
     if (activeTab !== 'roles') return
     const loadedPolicyVersionId = data?.policy?.id
     if (!loadedPolicyVersionId) return
+    const policyVersionKey = String(loadedPolicyVersionId)
+    const generatedAt = typeof data?.generated_at === 'string' ? data.generated_at : ''
+    const cacheKey = generatedAt ? `${policyVersionKey}:${generatedAt}` : null
+
+    const cachedPercentiles = cacheKey ? rolePercentilesCacheRef.current.get(cacheKey) : undefined
+    if (cacheKey && cachedPercentiles !== undefined) {
+      setRolePercentiles(cachedPercentiles)
+      setRoleLoading(false)
+      setRoleError(null)
+      return
+    }
 
     let cancelled = false
     setRoleLoading(true)
     setRoleError(null)
 
-    void fetchDashboardRolePercentiles(String(loadedPolicyVersionId))
+    void fetchDashboardRolePercentiles(policyVersionKey)
       .then((response) => {
         if (cancelled) return
+        if (cacheKey) {
+          rolePercentilesCacheRef.current.set(cacheKey, response)
+        }
         setRolePercentiles(response)
       })
       .catch((err: unknown) => {
@@ -1279,16 +1294,6 @@ export function DashboardClient() {
               )}
 
               <section className="card">
-                <h2 style={{ marginTop: 0 }}>Feedback</h2>
-                <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
-                  Report dashboard bugs/features with policy+tab context prefilled.
-                </p>
-                <a href={feedbackUrl} target="_blank" rel="noreferrer">
-                  Open dashboard feedback issue
-                </a>
-              </section>
-
-              <section className="card">
                 <h2 style={{ marginTop: 0 }}>Team Composition</h2>
                 {teamCompRows.length === 0 ? (
                   <p style={{ marginBottom: 0 }}>No team composition data available.</p>
@@ -1600,16 +1605,28 @@ export function DashboardClient() {
                   )}
                 </section>
               )}
+
+              <section className="card">
+                <h2 style={{ marginTop: 0 }}>Feedback</h2>
+                <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
+                  Report dashboard bugs/features with policy+tab context prefilled.
+                </p>
+                <a href={feedbackUrl} target="_blank" rel="noreferrer">
+                  Open dashboard feedback issue
+                </a>
+              </section>
             </>
           )}
 
           {activeTab === 'analysis' && (
             <section className="card">
-              <h2 style={{ marginTop: 0 }}>Analysis</h2>
-              <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
-                <p style={{ margin: 0, color: '#455a78' }}>
+              <div className="dashboard-title-line" style={{ marginBottom: 10 }}>
+                <h2 style={{ margin: 0 }}>Analysis</h2>
+                <span className="dashboard-title-subline">
                   Run diagnostics analysis to generate a natural-language summary.
-                </p>
+                </span>
+              </div>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
                 <label style={{ display: 'grid', gap: 6, maxWidth: 560 }}>
                   Anthropic API key (optional, bring your own)
                   <input

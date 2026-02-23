@@ -15,6 +15,9 @@ from pydantic import BaseModel, Field
 
 from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     RESOURCES,
+    metric_presence_aliases,
+    metric_present,
+    metric_value,
     safe_div,
 )
 from dashboard.backend.dashboard_backend.state_page.kpi_math import (
@@ -483,8 +486,8 @@ def compute_episode_diagnostic_tags(episode: DashboardEpisode) -> list[str]:
                 tags.append("crash")
         return tags
 
-    aligned = float(metrics.get("junction.aligned_by_agent", 0))
-    scrambled = float(metrics.get("junction.scrambled_by_agent", 0))
+    aligned = metric_value(metrics, "junction.aligned_by_agent")
+    scrambled = metric_value(metrics, "junction.scrambled_by_agent")
     mined = sum(float(metrics.get(f"{resource}.gained", 0)) for resource in RESOURCES)
     noop = float(metrics.get("action.noop.success", 0))
     total_action_success = sum(
@@ -589,13 +592,17 @@ def compute_unsupported_state(episodes: list[DashboardEpisode]) -> UnsupportedSt
         "junction.scrambled_by_agent",
     ]
     for metric_key in required_metric_keys:
-        missing_metric = sum(1 for episode in completed if metric_key not in episode.metrics)
+        aliases = metric_presence_aliases(metric_key)
+        missing_metric = sum(1 for episode in completed if not metric_present(episode.metrics, metric_key))
         if missing_metric > 0:
+            alias_note = ""
+            if len(aliases) > 1:
+                alias_note = f" (aliases: {', '.join(f'`{alias}`' for alias in aliases[1:])})"
             issues.append(
                 UnsupportedIssue(
                     code=f"missing_metric::{metric_key}",
                     severity="warn",
-                    message=f"Metric `{metric_key}` is missing in part of the sample.",
+                    message=f"Metric `{metric_key}`{alias_note} is missing in part of the sample.",
                     affected_count=missing_metric,
                     total_count=len(completed),
                     recommended_action=(
@@ -639,13 +646,17 @@ def compute_instrumentation_validation(
         )
 
     def add_metric_check(metric_key: str) -> None:
-        present = sum(1 for episode in completed if metric_key in episode.metrics)
+        aliases = metric_presence_aliases(metric_key)
+        present = sum(1 for episode in completed if metric_present(episode.metrics, metric_key))
+        alias_note = ""
+        if len(aliases) > 1:
+            alias_note = f" (aliases: {', '.join(f'`{alias}`' for alias in aliases[1:])})"
         append_check(
             metric_key,
             "metric",
             present,
             completed_total,
-            f"Metric `{metric_key}` coverage across completed episodes.",
+            f"Metric `{metric_key}`{alias_note} coverage across completed episodes.",
         )
 
     def add_tag_check(tag_key: str) -> None:
@@ -1457,7 +1468,7 @@ def compute_derived_metrics(episodes: list[DashboardEpisode]) -> DerivedMetrics:
     n_episodes = len(completed) or 1
 
     def get(key: str, default: float = 0.0) -> float:
-        return totals.get(key, default)
+        return metric_value(totals, key, default)
 
     # Efficiency KPIs
     move_success = get("action.move.success")
@@ -1684,7 +1695,7 @@ def compute_diagnostics(
     ]
     zero_capabilities = []
     for metric in capability_metrics:
-        if all(e.metrics.get(metric, 0) == 0 for e in completed):
+        if all(metric_value(e.metrics, metric) == 0 for e in completed):
             zero_capabilities.append(metric)
     if zero_capabilities:
         names = ", ".join(zero_capabilities)
@@ -1704,12 +1715,12 @@ def compute_team_comp_analysis(episodes: list[DashboardEpisode]) -> list[TeamCom
         n = len(eps)
         avg_reward = sum(e.reward for e in eps) / n
 
-        total_move_success = sum(e.metrics.get("action.move.success", 0) for e in eps)
-        total_move_failed = sum(e.metrics.get("action.move.failed", 0) for e in eps)
+        total_move_success = sum(metric_value(e.metrics, "action.move.success") for e in eps)
+        total_move_failed = sum(metric_value(e.metrics, "action.move.failed") for e in eps)
         total_move = total_move_success + total_move_failed
         move_eff = total_move_success / total_move if total_move > 0 else 0
 
-        avg_junction = sum(e.metrics.get("junction.aligned_by_agent", 0) for e in eps) / n
+        avg_junction = sum(metric_value(e.metrics, "junction.aligned_by_agent") for e in eps) / n
         avg_resource = sum(sum(e.metrics.get(f"{r}.gained", 0) for r in RESOURCES) for e in eps) / n
 
         result.append(
@@ -1746,11 +1757,11 @@ def compute_opponent_metrics(episodes: list[DashboardEpisode]) -> dict[str, Oppo
         avg_metrics = {k: v / n for k, v in summed_metrics.items()}
 
         m = avg_metrics
-        move_s = m.get("action.move.success", 0)
+        move_s = metric_value(m, "action.move.success")
         noop = m.get("action.noop.success", 0)
         vibe = m.get("action.change_vibe.success", 0)
-        j_aligned = m.get("junction.aligned_by_agent", 0)
-        j_scrambled = m.get("junction.scrambled_by_agent", 0)
+        j_aligned = metric_value(m, "junction.aligned_by_agent")
+        j_scrambled = metric_value(m, "junction.scrambled_by_agent")
         total_amount = sum(m.get(f"{r}.amount", 0) for r in RESOURCES)
         move_eff = kpi_move_efficiency(m)
         j_control = kpi_junction_control_rate(m)
@@ -2433,11 +2444,11 @@ def _build_episode_snapshot(episode: DashboardEpisode) -> dict[str, Any]:
         "comp": episode.team_composition,
         "r": round(episode.reward, 2),
         "steps": episode.steps,
-        "mv_s": round(metrics.get("action.move.success", 0)),
-        "mv_f": round(metrics.get("action.move.failed", 0)),
+        "mv_s": round(metric_value(metrics, "action.move.success")),
+        "mv_f": round(metric_value(metrics, "action.move.failed")),
         "noop": round(metrics.get("action.noop.success", 0)),
         "frz": round(metrics.get("status.frozen.ticks", 0)),
-        "j_aln": round(metrics.get("junction.aligned_by_agent", 0)),
+        "j_aln": round(metric_value(metrics, "junction.aligned_by_agent")),
         "replay_url": episode.replay_url,
     }
 
@@ -2452,7 +2463,7 @@ def compute_episode_logs(completed: list[DashboardEpisode]) -> dict[str, Any]:
     if episode_count >= 5:
         mean_reward = sum(rewards) / episode_count
         for metric in _CORRELATION_METRICS:
-            values = [episode.metrics.get(metric, 0.0) for episode in completed]
+            values = [metric_value(episode.metrics, metric) for episode in completed]
             mean_value = sum(values) / episode_count
             covariance = sum((rewards[i] - mean_reward) * (values[i] - mean_value) for i in range(episode_count))
             reward_variance = sum((reward - mean_reward) ** 2 for reward in rewards)

@@ -180,14 +180,14 @@ export const CogamesDiagnosePanel: FC<{
     <div className="grid" style={{ gap: 12 }}>
       <section className="card">
         <div className="diagnose-header">
-          <div>
-            <h2 style={{ marginTop: 0, marginBottom: 4 }}>Diagnose</h2>
-            <p style={{ margin: 0, color: '#546b8a' }}>
+          <div className="dashboard-title-line">
+            <h2 style={{ margin: 0 }}>Diagnose</h2>
+            <span className="dashboard-title-subline">
               CLI-run diagnostics from <code>outputs/cogames-diagnose</code>. Stage-1 confirms signals, then Stage-2
               social checks finalize prescriptions.
-            </p>
+            </span>
+            <code>{manifest?.run_id ?? selectedRunId ?? 'no-run-selected'}</code>
           </div>
-          <code>{manifest?.run_id ?? selectedRunId ?? 'no-run-selected'}</code>
         </div>
       </section>
 

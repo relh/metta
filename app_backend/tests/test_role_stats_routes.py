@@ -174,14 +174,15 @@ def test_role_definitions_include_death(test_client: TestClient) -> None:
         assert death["source_names"] == ["death"]
 
 
-def test_role_definitions_use_single_canonical_source_names(test_client: TestClient) -> None:
+def test_role_definitions_use_non_empty_unique_source_names(test_client: TestClient) -> None:
     response = test_client.get("/stats/roles/definitions")
     assert response.status_code == 200
     body = response.json()
     for role in ("miner", "scout", "scrambler", "aligner"):
         role_metrics = body["roles"][role]
         for metric in role_metrics:
-            assert len(metric["source_names"]) == 1
+            assert len(metric["source_names"]) >= 1
+            assert len(metric["source_names"]) == len(set(metric["source_names"]))
 
 
 @pytest.mark.asyncio

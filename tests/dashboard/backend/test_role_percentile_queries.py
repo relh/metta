@@ -21,31 +21,38 @@ class _FakeExecuteResult:
 
 
 class _FakeSession:
-    def __init__(self, rows: list[dict[str, object]], policy_ids: list[object]) -> None:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
         self._rows = rows
-        self._policy_ids = policy_ids
 
     async def execute(self, _query: object) -> _FakeExecuteResult:
         return _FakeExecuteResult(self._rows)
 
-    async def scalars(self, _query: object) -> list[object]:
-        return self._policy_ids
-
 
 @pytest.mark.asyncio
-async def test_metric_percentiles_uses_canonical_metric(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_metric_percentiles_uses_first_available_alias_source(monkeypatch: pytest.MonkeyPatch) -> None:
     policy_a = uuid4()
     policy_b = uuid4()
     rows = [
         {
             "policy_version_id": policy_a,
-            "metric_name": "death",
-            "avg_value": 2.0,
-            "sample_count": 10,
+            "metric_name": "germanium.lost",
+            "avg_value": 6.0,
+            "sample_count": 5,
         },
-        {"policy_version_id": policy_b, "avg_value": 4.0, "sample_count": 7},
+        {
+            "policy_version_id": policy_a,
+            "metric_name": "germanium.deposited",
+            "avg_value": 2.0,
+            "sample_count": 5,
+        },
+        {
+            "policy_version_id": policy_b,
+            "metric_name": "germanium.lost",
+            "avg_value": 1.0,
+            "sample_count": 4,
+        },
     ]
-    session = _FakeSession(rows=rows, policy_ids=[policy_a, policy_b])
+    session = _FakeSession(rows=rows)
 
     monkeypatch.setattr(rpq, "get_db", lambda: session)
     monkeypatch.setattr(
@@ -53,17 +60,26 @@ async def test_metric_percentiles_uses_canonical_metric(monkeypatch: pytest.Monk
         "_pool_episode_internal_ids",
         lambda _pool_id: select(literal(1).label("episode_internal_id")).subquery("pool_episodes"),
     )
-    metric = rpq.RoleMetric("death", ("death",), higher_is_better=False)
+    metric = rpq.RoleMetric(
+        "germanium.deposited",
+        ("germanium.deposited", "germanium.lost"),
+        higher_is_better=True,
+    )
     results = await rpq._metric_percentiles(uuid4(), metric)
     by_policy = {row["policy_version_id"]: row for row in results}
 
     assert by_policy[policy_a]["avg_value"] == 2.0
-    assert by_policy[policy_a]["sample_count"] == 10
-    assert by_policy[policy_a]["source_metrics"] == {"death": {"avg": 2.0, "samples": 10}}
+    assert by_policy[policy_a]["sample_count"] == 5
+    assert by_policy[policy_a]["source_metrics"] == {
+        "germanium.lost": {"avg": 6.0, "samples": 5},
+        "germanium.deposited": {"avg": 2.0, "samples": 5},
+    }
+    assert by_policy[policy_a]["percentile"] == pytest.approx(100.0)
 
-    assert by_policy[policy_b]["avg_value"] == 4.0
-    assert by_policy[policy_b]["sample_count"] == 7
-    assert by_policy[policy_b]["source_metrics"] == {"death": {"avg": 4.0, "samples": 7}}
+    assert by_policy[policy_b]["avg_value"] == 1.0
+    assert by_policy[policy_b]["sample_count"] == 4
+    assert by_policy[policy_b]["source_metrics"] == {"germanium.lost": {"avg": 1.0, "samples": 4}}
+    assert by_policy[policy_b]["percentile"] == pytest.approx(0.0)
 
 
 def test_role_metric_catalog_keeps_miner_deposits_and_death_metric() -> None:
@@ -78,6 +94,9 @@ def test_role_metric_catalog_keeps_miner_deposits_and_death_metric() -> None:
     ]:
         assert key in miner_keys
 
+    germanium_metric = next(metric for metric in rpq.ROLE_METRICS["miner"] if metric.key == "germanium.deposited")
+    assert germanium_metric.source_names == ("germanium.deposited", "germanium.lost")
+
     death_metric = next(metric for metric in rpq.ROLE_METRICS["miner"] if metric.key == "death")
     assert death_metric.source_names == ("death",)
 
@@ -85,3 +104,5 @@ def test_role_metric_catalog_keeps_miner_deposits_and_death_metric() -> None:
 def test_episode_agent_metric_allowlist_uses_canonical_death_metric() -> None:
     assert "death" in DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
     assert "deaths" not in DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
+    assert "germanium.lost" in DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
+    assert "germanium.deposited" in DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST

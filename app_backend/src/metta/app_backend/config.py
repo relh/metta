@@ -4,6 +4,12 @@ from pydantic_settings import BaseSettings
 DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST: tuple[str, ...] = (
     "reward",
     "miner.gained",
+    # Hub-based deposit flows now emit per-agent resource ".lost" in most paths;
+    # keep legacy ".deposited" names for older episodes.
+    "germanium.lost",
+    "silicon.lost",
+    "carbon.lost",
+    "oxygen.lost",
     "germanium.deposited",
     "silicon.deposited",
     "carbon.deposited",
@@ -13,7 +19,9 @@ DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST: tuple[str, ...] = (
     "scrambler.gained",
     "aligner.gained",
     "cell.visited",
+    "junction.scrambled",
     "junction.scrambled_by_agent",
+    "junction.aligned",
     "junction.aligned_by_agent",
     "death",
 )

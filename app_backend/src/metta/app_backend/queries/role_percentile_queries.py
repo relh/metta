@@ -49,10 +49,10 @@ DEATH_SOURCE_NAMES = ("death",)
 ROLE_METRICS: dict[str, list[RoleMetric]] = {
     "miner": [
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=True),
-        RoleMetric("germanium.deposited", ("germanium.deposited",), higher_is_better=True),
-        RoleMetric("silicon.deposited", ("silicon.deposited",), higher_is_better=True),
-        RoleMetric("carbon.deposited", ("carbon.deposited",), higher_is_better=True),
-        RoleMetric("oxygen.deposited", ("oxygen.deposited",), higher_is_better=True),
+        RoleMetric("germanium.deposited", ("germanium.deposited", "germanium.lost"), higher_is_better=True),
+        RoleMetric("silicon.deposited", ("silicon.deposited", "silicon.lost"), higher_is_better=True),
+        RoleMetric("carbon.deposited", ("carbon.deposited", "carbon.lost"), higher_is_better=True),
+        RoleMetric("oxygen.deposited", ("oxygen.deposited", "oxygen.lost"), higher_is_better=True),
         RoleMetric("heart.gained", ("heart.gained",), higher_is_better=False),
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
@@ -71,7 +71,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=True),
         RoleMetric(
             "junction.scrambled",
-            ("junction.scrambled_by_agent",),
+            ("junction.scrambled_by_agent", "junction.scrambled"),
             higher_is_better=True,
         ),
         RoleMetric("heart.gained", ("heart.gained",), higher_is_better=True),
@@ -84,7 +84,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=True),
         RoleMetric(
             "junction.aligned",
-            ("junction.aligned_by_agent",),
+            ("junction.aligned_by_agent", "junction.aligned"),
             higher_is_better=True,
         ),
         RoleMetric("heart.gained", ("heart.gained",), higher_is_better=True),
@@ -99,8 +99,10 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
 def _validate_role_metrics(role_metrics: dict[str, list[RoleMetric]]) -> None:
     for role, metrics in role_metrics.items():
         for metric in metrics:
-            if len(metric.source_names) != 1:
-                raise ValueError(f"Role metric {role}.{metric.key} must have exactly one canonical source metric name")
+            if len(metric.source_names) == 0:
+                raise ValueError(f"Role metric {role}.{metric.key} must declare at least one source metric name")
+            if len(set(metric.source_names)) != len(metric.source_names):
+                raise ValueError(f"Role metric {role}.{metric.key} has duplicate source metric names")
 
 
 _validate_role_metrics(ROLE_METRICS)
@@ -133,37 +135,60 @@ async def _metric_percentiles(
     metric: RoleMetric,
 ) -> list[dict[str, Any]]:
     session = get_db()
-    source_name = metric.source_names[0]
     pool_episodes = _pool_episode_internal_ids(pool_id)
     stmt = (
         select(
             PolicyVersion.id.label("policy_version_id"),
+            EpisodeAgentMetric.metric_name.label("metric_name"),
             func.avg(EpisodeAgentMetric.value).label("avg_value"),
             func.count().label("sample_count"),
         )
         .select_from(EpisodeAgentMetric)
         .join(pool_episodes, pool_episodes.c.episode_internal_id == EpisodeAgentMetric.episode_internal_id)
         .join(PolicyVersion, PolicyVersion.internal_id == EpisodeAgentMetric.pv_internal_id)
-        .where(EpisodeAgentMetric.metric_name == source_name)
-        .group_by(PolicyVersion.id)
+        .where(EpisodeAgentMetric.metric_name.in_(metric.source_names))
+        .group_by(PolicyVersion.id, EpisodeAgentMetric.metric_name)
     )
     rows = (await session.execute(stmt)).mappings().all()
     if not rows:
         # If the metric is absent for the entire pool, it should not affect role scoring.
         return []
 
-    by_policy = {
-        row["policy_version_id"]: {
-            "avg_value": float(row["avg_value"]),
-            "sample_count": int(row["sample_count"]),
+    by_policy: dict[UUID, dict[str, Any]] = {}
+    for row in rows:
+        pv_id = row["policy_version_id"]
+        source_name = str(row["metric_name"])
+        avg_value = float(row["avg_value"])
+        sample_count = int(row["sample_count"])
+
+        policy_bucket = by_policy.setdefault(
+            pv_id,
+            {
+                "source_metrics": {},
+            },
+        )
+        policy_bucket["source_metrics"][source_name] = {
+            "avg": avg_value,
+            "samples": sample_count,
         }
-        for row in rows
-    }
-    values = {pv_id: data["avg_value"] for pv_id, data in by_policy.items()}
+
+    selected_source_by_policy: dict[UUID, tuple[float, int]] = {}
+    for pv_id, data in by_policy.items():
+        source_metrics = data["source_metrics"]
+        selected_source = next((source for source in metric.source_names if source in source_metrics), None)
+        if selected_source is None:
+            continue
+        selected_avg = float(source_metrics[selected_source]["avg"])
+        selected_samples = int(source_metrics[selected_source]["samples"])
+        if selected_samples <= 0:
+            continue
+        selected_source_by_policy[pv_id] = (selected_avg, selected_samples)
+
+    values = {pv_id: avg for pv_id, (avg, _samples) in selected_source_by_policy.items()}
     all_values = list(values.values())
     results: list[dict[str, Any]] = []
     for pv_id, value in values.items():
-        sample_count = int(by_policy[pv_id]["sample_count"])
+        sample_count = int(selected_source_by_policy[pv_id][1])
         percentile = _percentile_rank(value, all_values, metric.higher_is_better)
 
         results.append(
@@ -172,12 +197,7 @@ async def _metric_percentiles(
                 "avg_value": float(value),
                 "sample_count": sample_count,
                 "percentile": float(percentile),
-                "source_metrics": {
-                    source_name: {
-                        "avg": float(value),
-                        "samples": sample_count,
-                    }
-                },
+                "source_metrics": by_policy[pv_id]["source_metrics"],
             }
         )
     return results
