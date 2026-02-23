@@ -34,6 +34,11 @@ class JobMetrics:
             description="Cumulative job compute cost",
             unit="USD",
         )
+        self._episode_length_histogram = meter.create_histogram(
+            "episode.length",
+            description="Number of environment steps in a completed episode",
+            unit="1",
+        )
         self._running_counts: dict[str, int] = {}
         self._outstanding_counts: dict[tuple[str, str], int] = {}
         meter.create_observable_gauge(
@@ -58,6 +63,12 @@ class JobMetrics:
         del options
         snapshot = dict(self._outstanding_counts)
         return [Observation(count, {"job_type": jt, "status": st}) for (jt, st), count in snapshot.items()]
+
+    def record_episode_length(self, steps: int, job_type: str) -> None:
+        self._episode_length_histogram.record(
+            steps,
+            attributes={"job_type": job_type},
+        )
 
     def _record_stage_duration(
         self,

@@ -391,6 +391,51 @@ class TestDatadogMonitor:
         assert "@webhook-Discord" in m["message"]
 
 
+# ── Episode-length histogram ──────────────────────────────────────────
+
+
+def _make_episode_metrics():
+    """Create a JobMetrics instance with instrumented episode-length histogram."""
+    metrics = JobMetrics()
+    recorded: list[dict] = []
+    orig_record = metrics._episode_length_histogram.record
+
+    def capture_record(amount, attributes=None, context=None):
+        recorded.append({"amount": amount, "attributes": attributes})
+        orig_record(amount, attributes=attributes, context=context)
+
+    metrics._episode_length_histogram.record = capture_record  # type: ignore[assignment]
+    return metrics, recorded
+
+
+class TestEpisodeLengthEmission:
+    def test_record_episode_length_emits_histogram(self):
+        """A single call should record exactly one data point with correct value and attributes."""
+        metrics, recorded = _make_episode_metrics()
+        metrics.record_episode_length(500, job_type="episode")
+
+        assert len(recorded) == 1
+        assert recorded[0]["amount"] == 500
+        assert recorded[0]["attributes"] == {"job_type": "episode"}
+
+    def test_multiple_episodes_accumulate(self):
+        """Multiple calls should each produce a separate data point."""
+        metrics, recorded = _make_episode_metrics()
+        for steps in [100, 200, 300]:
+            metrics.record_episode_length(steps, job_type="episode")
+
+        assert len(recorded) == 3
+        assert [r["amount"] for r in recorded] == [100, 200, 300]
+
+    def test_zero_steps(self):
+        """Zero-step episodes should still be recorded (degenerate but valid)."""
+        metrics, recorded = _make_episode_metrics()
+        metrics.record_episode_length(0, job_type="episode")
+
+        assert len(recorded) == 1
+        assert recorded[0]["amount"] == 0
+
+
 # ── Integration: multiple jobs accumulate cost ──────────────────────────
 
 

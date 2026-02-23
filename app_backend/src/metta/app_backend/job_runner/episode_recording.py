@@ -13,6 +13,7 @@ from metta.app_backend.episode_stats_db import (
 )
 from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.models.job_request import JobRequestUpdate
+from metta.app_backend.otel.job_metrics import get_job_metrics
 from mettagrid.runner.types import PureSingleEpisodeResult, SingleEpisodeJob
 from mettagrid.util.file import http_url
 
@@ -114,6 +115,8 @@ def record_job_episode(
         results=results,
         stats_client=stats_client,
     )
+
+    get_job_metrics().record_episode_length(results.steps, job_type="episode")
 
     final_result = {**(result_data or {}), "episode_id": str(episode_id)}
     stats_client.update_job(job_id, JobRequestUpdate(result=final_result))

@@ -77,6 +77,8 @@ spec:
           value: "http://$(HOST_IP):4318"
         - name: OTEL_EXPORTER_OTLP_PROTOCOL
           value: "http/protobuf"
+        - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+          value: "http://$(HOST_IP):4318/v1/metrics"
         - name: OTEL_TRACES_ENABLED
           value: "true"
         - name: OTEL_SERVICE_NAME
