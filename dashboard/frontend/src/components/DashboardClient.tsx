@@ -1088,7 +1088,11 @@ export function DashboardClient() {
             <>
               <section
                 className="grid"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 220px))',
+                  justifyContent: 'center',
+                  gap: 10,
+                }}
               >
                 <KPIStatCard
                   label="Avg Reward"
