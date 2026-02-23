@@ -12,24 +12,7 @@ from .entity_map import Entity
 
 if TYPE_CHECKING:
     from mettagrid.policy.policy_env_interface import PolicyEnvInterface
-    from mettagrid.simulator.interface import AgentObservation, ObservationToken
-
-# GLOBAL_LOCATION marker (0xFE) indicates global observations (not tied to grid position)
-_GLOBAL_LOCATION_BYTE = 0xFE
-
-
-def _is_global_token(tok: ObservationToken) -> bool:
-    """Check if token is a global observation (not tied to grid position).
-
-    Backwards-compatible: uses is_global property if available (daveey-inv-fix),
-    otherwise checks raw location byte directly (main).
-    """
-    # Use getattr to avoid type error - is_global exists on daveey-inv-fix but not main
-    is_global = getattr(tok, "is_global", None)
-    if is_global is not None:
-        return is_global
-    # Fallback: check raw location byte for GLOBAL_LOCATION marker
-    return tok.raw_token[0] == _GLOBAL_LOCATION_BYTE
+    from mettagrid.simulator.interface import AgentObservation
 
 
 class ObsParser:
@@ -68,8 +51,6 @@ class ObsParser:
         inv: dict[str, int] = {}
         vibe_id = 0
         # Local position tokens: lp:east/west for col offset, lp:north/south for row offset
-        # On daveey-inv-fix: these are GLOBAL tokens (at GLOBAL_LOCATION = 0xFE)
-        # On main: these appear at the center cell position
         lp_col_offset = 0  # east is positive, west is negative
         lp_row_offset = 0  # south is positive, north is negative
         has_position = False
@@ -80,7 +61,7 @@ class ObsParser:
             feature_name = tok.feature.name
 
             # Global tokens include local position and team hub inventory
-            if _is_global_token(tok):
+            if tok.is_global:
                 if feature_name == "lp:east":
                     lp_col_offset = tok.value
                     has_position = True
@@ -117,9 +98,9 @@ class ObsParser:
                         inv[key] = current + tok.value
                 continue
 
-            # Center cell tokens for inventory/vibe and local position (main compatibility)
+            # Center cell tokens for inventory/vibe and local position
             if tok.row() == center_r and tok.col() == center_c:
-                # Local position tokens at center cell (main branch)
+                # Local position tokens at center cell
                 if feature_name == "lp:east":
                     lp_col_offset = tok.value
                     has_position = True
@@ -179,7 +160,7 @@ class ObsParser:
 
         for tok in obs.tokens:
             # Skip global tokens (already processed above for local position and team hub inventory)
-            if _is_global_token(tok):
+            if tok.is_global:
                 continue
 
             obs_r, obs_c = tok.row(), tok.col()
