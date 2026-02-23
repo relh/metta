@@ -679,6 +679,29 @@ def cmd_report_env_details():
         info(f"Git Commit: {commit}")
 
 
+@app.command(
+    name="play",
+    help="Play a game interactively (e.g. metta play hunger)",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def cmd_play(
+    game: Annotated[str, typer.Argument(help="Game to play (e.g. hunger)")],
+    ctx: typer.Context,
+):
+    """Play a registered game via the recipe system."""
+    cmd = [
+        sys.executable,
+        str(get_repo_root() / "tools" / "run.py"),
+        "game.play",
+        f"game={game}",
+        *ctx.args,
+    ]
+    try:
+        subprocess.run(cmd, cwd=get_repo_root(), check=True)
+    except subprocess.CalledProcessError as e:
+        raise typer.Exit(e.returncode) from e
+
+
 @app.command(name="gridworks", help="Start the Gridworks web UI", context_settings={"allow_extra_args": True})
 def cmd_gridworks(ctx: typer.Context):
     cmd = ["./web/gridworks/start.py", *ctx.args]
