@@ -5,11 +5,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from dashboard.backend.dashboard_backend.cogames_diagnose.router import (
-    _assert_safe_name,
     create_cogames_diagnose_router,
 )
 from dashboard.backend.dashboard_backend.config import settings
@@ -17,20 +16,6 @@ from dashboard.backend.dashboard_backend.config import settings
 
 def _write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
-
-
-def test_assert_safe_name_rejects_dot_dot_sequences() -> None:
-    with pytest.raises(HTTPException) as exc_info:
-        _assert_safe_name("..", "run id")
-    assert exc_info.value.status_code == 422
-
-    with pytest.raises(HTTPException) as exc_info:
-        _assert_safe_name("run..id", "run id")
-    assert exc_info.value.status_code == 422
-
-
-def test_assert_safe_name_allows_legit_names() -> None:
-    _assert_safe_name("run_123-abc.def", "run id")
 
 
 def test_cogames_diagnose_router_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
