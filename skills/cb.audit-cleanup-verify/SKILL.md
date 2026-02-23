@@ -16,6 +16,9 @@ tight, and prove runtime behavior after cleanup.
 Primary objective: net simplification in the focus path (lower LOC, fewer helper layers), with explicit removal of
 backwards-compatibility and shim code.
 
+This is a cleanup-scoped variant of bop-it: it is not done at green tests. It is done when the change is committed,
+pushed, and opened as a PR with a sensible title/body, then the repo is returned to `main`.
+
 **Announce at start:** "Running audit-cleanup-verify for `<focus_path>`: cleanup pass, then runtime verification."
 
 ## The Process
@@ -30,12 +33,14 @@ digraph audit_cleanup_verify {
   align [label="Step 3: Diff/PR Alignment"];
   verify [label="Step 4: Local + Remote Verification"];
   fix [label="Step 5: Fix regressions/perf issues"];
-  ship [label="Step 6: Submit + PR polish + CI/comment check"];
+  ship [label="Step 6: Commit + Push + Open PR + CI/comment check"];
+  finish [label="Step 7: Return to main"];
 
   scope -> cleanup -> align -> verify;
   verify -> fix [label="failures or regressions"];
   fix -> cleanup;
   verify -> ship [label="green"];
+  ship -> finish [label="PR opened"];
 }
 ```
 
@@ -103,14 +108,32 @@ or no-teacher equivalent).
 
 If runtime fails or SPS regresses materially, apply a focused fix and loop back to Step 2.
 
-## Step 6: Submit + PR Polish + CI/Comments Check
+## Step 6: Commit + Push + Open PR + CI/Comments Check
 
-Before submit, run `cb.lint-fix`. Then submit and verify CI/comments are clean:
+Before shipping, run `cb.lint-fix`.
+
+Completion criteria for this step:
+
+- Changes committed on a dedicated branch (not `main`)
+- Branch pushed to remote
+- PR opened with a clear cleanup-focused title and plain-English body
+- CI status checked and actionable comments addressed (or documented)
+
+Graphite flow:
 
 ```bash
 git add -A
 gt modify --no-interactive || gt create -m "refactor: cleanup <focus_path>"
 gt submit --no-interactive
+```
+
+GitHub fallback flow (if Graphite tooling is unavailable):
+
+```bash
+git add -A
+git commit -m "refactor: cleanup <focus_path>"
+git push -u origin "$(git branch --show-current)"
+gh pr create --base main --title "refactor: cleanup <focus_path>" --body "<plain-English summary + verification>"
 ```
 
 Then run the bop-it shipping/polish step for this diff:
@@ -129,6 +152,16 @@ gh pr edit --title "<clear cleanup title>" --body "<plain-English summary + veri
 
 Use `pr.check-ci` and address actionable comments before finalizing.
 
+## Step 7: Return to `main`
+
+After the PR is open and checks are inspected, return local workspace to `main`:
+
+```bash
+git checkout main
+```
+
+If the skill created a worktree, finish with `wt.cleanup` after returning to `main`.
+
 ## Quick Reference
 
 | Need              | Action                                         |
@@ -138,7 +171,7 @@ Use `pr.check-ci` and address actionable comments before finalizing.
 | Scope truth       | merge-base diff and `cb.review-main`           |
 | Runtime proof     | local pytest + smoke run command               |
 | Remote confidence | `do.mettabox-ops` run + SPS comparison         |
-| Ship cleanly      | lint + submit + PR plain-English polish + CI   |
+| Ship cleanly      | lint + commit + push + PR polish + CI + `main` |
 
 ## Integration
 
