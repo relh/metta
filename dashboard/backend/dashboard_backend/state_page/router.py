@@ -288,13 +288,12 @@ async def _select_role_pool_and_rows(
     if not candidate_pools:
         return None, []
 
-    fallback_pool = candidate_pools[0]
     for pool in candidate_pools:
         rows = await compute_policy_role_percentiles(pool.id, policy_version_id)
         if rows:
             return pool, rows
 
-    return fallback_pool, []
+    return candidate_pools[0], []
 
 
 async def _build_sorted_dashboard_episodes(
