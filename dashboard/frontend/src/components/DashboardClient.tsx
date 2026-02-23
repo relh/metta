@@ -620,18 +620,10 @@ export function DashboardClient() {
     }
     for (const episode of episodes) {
       const seen = new Set<string>()
-      for (const tag of asStringArray(episode.diagnostic_tags)) {
+      for (const tag of asStringArray(episode.behavior_tags)) {
         if (seen.has(tag)) continue
         seen.add(tag)
         updateCount(tag)
-      }
-      if (episode.raw_tags && typeof episode.raw_tags === 'object' && !Array.isArray(episode.raw_tags)) {
-        for (const [key, value] of Object.entries(episode.raw_tags)) {
-          const tag = `${key}=${String(value)}`
-          if (seen.has(tag)) continue
-          seen.add(tag)
-          updateCount(tag)
-        }
       }
     }
     return [...counts.entries()]

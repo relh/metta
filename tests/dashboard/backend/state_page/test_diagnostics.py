@@ -3,6 +3,7 @@ from __future__ import annotations
 from dashboard.backend.dashboard_backend.state_page.diagnostics import (
     DashboardEpisode,
     compute_derived_metrics,
+    compute_episode_behavior_tags,
     compute_instrumentation_validation,
     compute_unsupported_state,
 )
@@ -62,3 +63,25 @@ def test_compute_derived_metrics_reads_alias_metric_values() -> None:
     assert derived.move_efficiency == 1.0
     assert derived.junction_control_rate == 0.8
     assert derived.noop_rate == 0.2
+
+
+def test_compute_episode_behavior_tags_filters_non_behavior_raw_tags() -> None:
+    episode = _episode_with_alias_metrics()
+    episode.diagnostic_tags = ["did_mine=true", "did_align=true"]
+    episode.raw_tags.update(
+        {
+            "assignments": "[0, 0, 1, 1, 1, 1, 1, 1]",
+            "match_type": "pairing",
+            "job_id": "02ee30ca-f0cb-4bcf-a1c4-1511139780d6",
+            "team_id": "1234",
+        }
+    )
+
+    behavior_tags = compute_episode_behavior_tags(episode)
+
+    assert behavior_tags == [
+        "did_mine=true",
+        "did_align=true",
+        "assignments=[0, 0, 1, 1, 1, 1, 1, 1]",
+        "match_type=pairing",
+    ]

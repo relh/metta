@@ -59,6 +59,7 @@ class DashboardEpisode(BaseModel):
     steps: int = 0
     raw_tags: dict[str, str] = Field(default_factory=dict)
     diagnostic_tags: list[str] = Field(default_factory=list)
+    behavior_tags: list[str] = Field(default_factory=list)
     metrics: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -519,6 +520,35 @@ def compute_episode_diagnostic_tags(episode: DashboardEpisode) -> list[str]:
         tags.append("reward_tier=high")
     else:
         tags.append("reward_tier=mid")
+
+    return tags
+
+
+_MEANINGFUL_BEHAVIOR_RAW_TAG_KEYS: tuple[str, ...] = (
+    "assignments",
+    "match_type",
+    "game",
+    "team_size",
+)
+
+
+def compute_episode_behavior_tags(episode: DashboardEpisode) -> list[str]:
+    tags: list[str] = []
+    seen: set[str] = set()
+
+    def add_tag(tag: str) -> None:
+        if not tag or tag in seen:
+            return
+        seen.add(tag)
+        tags.append(tag)
+
+    for tag in episode.diagnostic_tags:
+        add_tag(tag)
+
+    for key in _MEANINGFUL_BEHAVIOR_RAW_TAG_KEYS:
+        raw_value = episode.raw_tags.get(key)
+        if raw_value:
+            add_tag(f"{key}={raw_value}")
 
     return tags
 

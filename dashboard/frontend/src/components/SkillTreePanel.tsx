@@ -366,18 +366,10 @@ function buildBehaviorSliceCards(data: DashboardResponse): CapabilityCard[] {
   const counts = new Map<string, number>()
   for (const episode of data.episodes) {
     const seen = new Set<string>()
-    for (const tag of asStringArray(episode.diagnostic_tags)) {
+    for (const tag of asStringArray(episode.behavior_tags)) {
       if (seen.has(tag)) continue
       seen.add(tag)
       counts.set(tag, (counts.get(tag) ?? 0) + 1)
-    }
-    if (episode.raw_tags && typeof episode.raw_tags === 'object' && !Array.isArray(episode.raw_tags)) {
-      for (const [key, value] of Object.entries(episode.raw_tags)) {
-        const tag = `${key}=${String(value)}`
-        if (seen.has(tag)) continue
-        seen.add(tag)
-        counts.set(tag, (counts.get(tag) ?? 0) + 1)
-      }
     }
   }
 
@@ -388,7 +380,7 @@ function buildBehaviorSliceCards(data: DashboardResponse): CapabilityCard[] {
     return {
       id: `behavior-slice-${slug(tag)}`,
       title: `Behavior Slice: ${tag}`,
-      description: 'Observed episode-tag slice from diagnostic and raw tags.',
+      description: 'Observed episode-tag slice from curated behavior tags.',
       axis: inferAxisFromText(tag),
       source: 'behavior_slice',
       score,

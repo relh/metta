@@ -45,6 +45,7 @@ export type DashboardEpisode = {
   opponent_version?: number
   team_composition: string
   diagnostic_tags: string[]
+  behavior_tags?: string[]
   error_type?: string | null
   error_message?: string | null
   steps: number

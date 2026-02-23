@@ -4,7 +4,11 @@ import ast
 from typing import Any, Sequence
 from uuid import UUID
 
-from dashboard.backend.dashboard_backend.state_page.diagnostics import DashboardEpisode, compute_episode_diagnostic_tags
+from dashboard.backend.dashboard_backend.state_page.diagnostics import (
+    DashboardEpisode,
+    compute_episode_behavior_tags,
+    compute_episode_diagnostic_tags,
+)
 from metta.app_backend.models.job_request import JobStatus
 from metta.app_backend.queries import policy_queries
 
@@ -169,6 +173,7 @@ async def build_dashboard_episodes(
             metrics=metrics,
         )
         dashboard_ep.diagnostic_tags = compute_episode_diagnostic_tags(dashboard_ep)
+        dashboard_ep.behavior_tags = compute_episode_behavior_tags(dashboard_ep)
         dashboard_episodes.append(dashboard_ep)
 
     for job in unique_policy_jobs:
@@ -195,6 +200,7 @@ async def build_dashboard_episodes(
             metrics={},
         )
         failed_dashboard_episode.diagnostic_tags = compute_episode_diagnostic_tags(failed_dashboard_episode)
+        failed_dashboard_episode.behavior_tags = compute_episode_behavior_tags(failed_dashboard_episode)
         dashboard_episodes.append(failed_dashboard_episode)
 
     return dashboard_episodes
