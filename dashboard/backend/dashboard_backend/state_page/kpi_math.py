@@ -6,13 +6,12 @@ RESOURCES = ["carbon", "heart", "oxygen", "silicon", "germanium"]
 
 # Dashboard metrics historically used canonical per-agent keys. Some runs now
 # surface equivalent values under simplified names; treat those as aliases.
-_VALUE_METRIC_ALIASES: dict[str, tuple[str, ...]] = {
+_METRIC_ALIASES: dict[str, tuple[str, ...]] = {
     "action.move.success": ("action.move.success", "action.move"),
     "action.move.failed": ("action.move.failed",),
     "junction.aligned_by_agent": ("junction.aligned_by_agent", "junction.aligned"),
     "junction.scrambled_by_agent": ("junction.scrambled_by_agent", "junction.scrambled"),
 }
-_PRESENCE_METRIC_ALIASES: dict[str, tuple[str, ...]] = {**_VALUE_METRIC_ALIASES}
 
 
 def safe_div(a: float, b: float, default: float = 0.0) -> float:
@@ -20,7 +19,7 @@ def safe_div(a: float, b: float, default: float = 0.0) -> float:
 
 
 def metric_value(metrics: Mapping[str, float], key: str, default: float = 0.0) -> float:
-    aliases = _VALUE_METRIC_ALIASES.get(key, (key,))
+    aliases = _METRIC_ALIASES.get(key, (key,))
     for alias in aliases:
         value = metrics.get(alias)
         if isinstance(value, (int, float)):
@@ -29,12 +28,12 @@ def metric_value(metrics: Mapping[str, float], key: str, default: float = 0.0) -
 
 
 def metric_present(metrics: Mapping[str, float], key: str) -> bool:
-    aliases = _PRESENCE_METRIC_ALIASES.get(key, (key,))
+    aliases = _METRIC_ALIASES.get(key, (key,))
     return any(alias in metrics for alias in aliases)
 
 
 def metric_presence_aliases(key: str) -> tuple[str, ...]:
-    return _PRESENCE_METRIC_ALIASES.get(key, (key,))
+    return _METRIC_ALIASES.get(key, (key,))
 
 
 def action_success_total(metrics: Mapping[str, float]) -> float:

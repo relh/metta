@@ -329,7 +329,7 @@ def _agent_indices_from_tags(tags: dict[str, str], policy_version_id: str, num_a
             if policy_version_id in pv_ids_list:
                 policy_index = pv_ids_list.index(policy_version_id)
                 return [i for i, a in enumerate(assignments) if a == policy_index]
-        except Exception:
+        except (SyntaxError, TypeError, ValueError, AttributeError):
             logger.debug("Failed to parse assignment tags for agent index resolution")
 
     return list(range(num_agents // 2)) if num_agents > 0 else []

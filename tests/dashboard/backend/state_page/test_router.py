@@ -9,7 +9,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from dashboard.backend.dashboard_backend.state_page.router import create_dashboard_router
+from dashboard.backend.dashboard_backend.state_page.router import _agent_indices_from_tags, create_dashboard_router
 
 
 class _ScalarsResult:
@@ -39,6 +39,24 @@ class _FakeSession:
     async def execute(self, _query: Any) -> _ExecuteResult:
         assert self._results, "Unexpected query execution"
         return self._results.pop(0)
+
+
+def test_agent_indices_from_tags_falls_back_for_unparseable_assignments() -> None:
+    tags = {
+        "assignments": "3",
+        "policy_version_ids": "['policy-a']",
+    }
+
+    assert _agent_indices_from_tags(tags, "policy-a", 6) == [0, 1, 2]
+
+
+def test_agent_indices_from_tags_falls_back_for_non_indexable_policy_ids() -> None:
+    tags = {
+        "assignments": "[0, 1, 0, 1]",
+        "policy_version_ids": "{'policy-a', 'policy-b'}",
+    }
+
+    assert _agent_indices_from_tags(tags, "policy-a", 6) == [0, 1, 2]
 
 
 def test_default_policy_version_returns_top_leaderboard_entry(monkeypatch: Any) -> None:

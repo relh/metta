@@ -4,7 +4,7 @@ from typing import Annotated, Optional
 
 import httpx
 from fastapi import Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from dashboard.backend.dashboard_backend.config import settings
 from metta.app_backend.models.service_accounts import TokenPrefixType
@@ -14,8 +14,8 @@ from metta.app_backend.queries.service_account_queries import get_service_accoun
 class User(BaseModel):
     id: str
     email: str
-    is_softmax_team_member: bool = Field(default=False, alias="is_softmax_team_member")
-    is_service_account_user: bool = Field(default=False)
+    is_softmax_team_member: bool = False
+    is_service_account_user: bool = False
 
 
 def _is_local_request(request: Request) -> bool:
