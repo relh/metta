@@ -1,8 +1,7 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel)"
 
 CONFIG_FILE="$HOME/.metta/config.yaml"
 
@@ -24,7 +23,7 @@ if ! check_cmd uv; then
     exit 1
 fi
 
-if ! uv run --active metta run githooks pre-push; then
+if ! uv run --project "$REPO_ROOT" --no-sync metta run githooks pre-push; then
     exit 1
 fi
 
