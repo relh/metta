@@ -707,7 +707,14 @@ def _role_progress_metric(
 
     Returns (metric_key, display_label).
     """
-    names = set(normalize_variant_names(variants))
+    names: set[str] = set()
+    for name in normalize_variant_names(variants):
+        # Keep metric labels aligned with apply_reward_variants, which canonicalizes
+        # milestones_2:<factor> to the base reward variant name.
+        if name.startswith("milestones_2:"):
+            names.add("milestones_2")
+            continue
+        names.add(name)
     suffix = ".".join(v for v in AVAILABLE_REWARD_VARIANTS if v != "objective" and v in names)
     label = f"cogsguard_{layout}.basic"
     if suffix:
