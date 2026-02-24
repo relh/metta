@@ -1,8 +1,11 @@
+import asyncio
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
+import boto3
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -14,9 +17,15 @@ from sqlmodel import col, select
 # pyright: reportArgumentType=false
 # SQLModel's Relationship() returns the target type, not SQLAlchemy's InstrumentedAttribute,
 # causing false positives on join() and selectinload() calls.
-from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
+from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser, User
 from metta.app_backend.database import db_session
-from metta.app_backend.job_runner.job_artifacts import job_logs_key, read_job_artifact
+from metta.app_backend.job_runner.config import get_dispatch_config
+from metta.app_backend.job_runner.job_artifacts import (
+    job_logs_key,
+    job_policy_log_key,
+    job_policy_log_prefix,
+    read_job_artifact,
+)
 from metta.app_backend.models.episodes import Episode, EpisodeJob
 from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest
 from metta.app_backend.models.policies import Policy, PolicyVersion
@@ -50,6 +59,12 @@ from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
 from metta.app_backend.tournament.stage_stats import build_stage_stats_row, load_stage_stats_counts
 
 logger = logging.getLogger(__name__)
+
+
+def _agent_idx_from_filename(filename: str) -> int | None:
+    """Extract agent index from a policy log filename like 'policy_agent_3.txt'."""
+    m = re.match(r"policy_agent_(\d+)\.txt", filename)
+    return int(m.group(1)) if m else None
 
 
 async def get_session():
@@ -905,31 +920,24 @@ def create_tournament_router() -> APIRouter:
 
         return _match_response(m, season_name, episode_id_str, error, episode=episode_resp)
 
-    MATCH_ARTIFACT_TYPES = {"logs": (job_logs_key, "text/plain")}
-
-    @router.get("/matches/{match_id}/{policy_version_id}/artifacts/{artifact_type}")
-    @timed_http_handler
-    async def get_match_artifact(
+    async def _load_match_and_verify_policy_ownership(
+        session: AsyncSession,
         match_id: UUID,
         policy_version_id: UUID,
-        artifact_type: str,
-        user: ExternalUser,
-        session: AsyncSession = Depends(get_session),
-    ) -> Response:
-        if artifact_type not in MATCH_ARTIFACT_TYPES:
-            raise HTTPException(status_code=400, detail=f"Unknown artifact type: {artifact_type}")
+        user: User,
+    ) -> tuple[Match, MatchPlayer]:
+        """Load a match and verify the user owns the specified policy.
 
+        Returns the match and the MatchPlayer for the specified policy.
+        """
         match = (
             await session.execute(
                 select(Match)
                 .where(Match.id == match_id)
                 .options(
                     selectinload(Match.players)
-                    .raiseload("*")
                     .selectinload(MatchPlayer.pool_player)
-                    .raiseload("*")
                     .selectinload(PoolPlayer.policy_version)
-                    .raiseload("*")
                     .selectinload(PolicyVersion.policy)
                     .raiseload("*"),
                     raiseload("*"),
@@ -947,9 +955,91 @@ def create_tournament_router() -> APIRouter:
         if pv_player.pool_player.policy_version.policy.user_id != user.id:
             raise HTTPException(status_code=403, detail="You do not own this policy")
 
+        return match, pv_player
+
+    MATCH_ARTIFACT_TYPES = {"logs": (job_logs_key, "text/plain")}
+
+    @router.get("/matches/{match_id}/{policy_version_id}/artifacts/{artifact_type}")
+    @timed_http_handler
+    async def get_match_artifact(
+        match_id: UUID,
+        policy_version_id: UUID,
+        artifact_type: str,
+        user: ExternalUser,
+        session: AsyncSession = Depends(get_session),
+    ) -> Response:
+        if artifact_type not in MATCH_ARTIFACT_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unknown artifact type: {artifact_type}")
+
+        match, _ = await _load_match_and_verify_policy_ownership(session, match_id, policy_version_id, user)
+
         key_fn, media_type = MATCH_ARTIFACT_TYPES[artifact_type]
         content, content_type = await read_job_artifact(match.job_id, key_fn, media_type, artifact_label=artifact_type)
         return Response(content=content, media_type=content_type)
+
+    @router.get("/matches/{match_id}/{policy_version_id}/policy-logs")
+    @timed_http_handler
+    async def list_match_policy_logs(
+        match_id: UUID,
+        policy_version_id: UUID,
+        user: ExternalUser,
+        session: AsyncSession = Depends(get_session),
+    ) -> list[str]:
+        """List policy log files for a specific policy in a match.
+
+        Returns filenames for agents running the specified policy.
+        """
+        match, pv_player = await _load_match_and_verify_policy_ownership(session, match_id, policy_version_id, user)
+
+        # Find agent indices that run this policy
+        owned_agents = {
+            agent_idx
+            for agent_idx, policy_position in enumerate(match.assignments)
+            if policy_position == pv_player.policy_index
+        }
+
+        cfg = get_dispatch_config()
+        if not cfg.EVAL_S3_BUCKET:
+            raise HTTPException(status_code=501, detail="Storage not configured")
+
+        def _list_logs() -> list[str]:
+            s3 = boto3.client("s3")
+            prefix = job_policy_log_prefix(match.job_id)
+            response = s3.list_objects_v2(Bucket=cfg.EVAL_S3_BUCKET, Prefix=prefix)
+            return [
+                obj["Key"].split("/")[-1]
+                for obj in response.get("Contents", [])
+                if _agent_idx_from_filename(obj["Key"].split("/")[-1]) in owned_agents
+            ]
+
+        return await asyncio.to_thread(_list_logs)
+
+    @router.get("/matches/{match_id}/{policy_version_id}/policy-logs/{agent_idx}")
+    @timed_http_handler
+    async def get_match_policy_log(
+        match_id: UUID,
+        policy_version_id: UUID,
+        agent_idx: int,
+        user: ExternalUser,
+        session: AsyncSession = Depends(get_session),
+    ) -> Response:
+        """Get the policy log for a specific agent in a match.
+
+        The agent must be running the specified policy.
+        """
+        match, pv_player = await _load_match_and_verify_policy_ownership(session, match_id, policy_version_id, user)
+
+        # Verify this agent runs the specified policy
+        if agent_idx >= len(match.assignments) or match.assignments[agent_idx] != pv_player.policy_index:
+            raise HTTPException(status_code=403, detail=f"Agent {agent_idx} does not run the specified policy")
+
+        content, media_type = await read_job_artifact(
+            match.job_id,
+            key_fn=lambda jid: job_policy_log_key(jid, agent_idx),
+            media_type="text/plain",
+            artifact_label=f"policy log for agent {agent_idx}",
+        )
+        return Response(content=content, media_type=media_type)
 
     @router.post("/seasons/{season_name}/submissions")
     @timed_http_handler

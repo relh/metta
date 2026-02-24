@@ -5,12 +5,14 @@ These catch SQLAlchemy loader chain errors (e.g. raiseload("*") misuse)
 that only surface at request time.
 """
 
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
+from metta.app_backend.auth import User
 from metta.app_backend.database import db_session
 from metta.app_backend.models.episodes import Episode, EpisodeJob, EpisodeTag
 from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, JobStatus, JobType
@@ -25,6 +27,7 @@ from metta.app_backend.models.tournament import (
     Team,
     TeamPolicyVersion,
 )
+from metta.app_backend.test_support.client_adapter import get_user_headers
 from metta.app_backend.tournament.registry import SEASONS
 
 
@@ -276,6 +279,73 @@ class TestTournamentRouteSmoke:
         match_ids = {m["id"] for m in data}
         assert seed_or_logic_season["match_a_id"] in match_ids
         assert seed_or_logic_season["match_b_id"] in match_ids
+
+    @pytest.mark.asyncio
+    async def test_list_match_policy_logs_owner(self, test_client: TestClient, seed_season: dict):
+        """Policy owner can list their policy logs in a match."""
+        owner_headers = get_user_headers(User(id="test-user", email="test@example.com", is_softmax_team_member=False))
+        files = ["policy_agent_0.txt"]
+        with patch("boto3.client") as mock_boto:
+            mock_s3 = MagicMock()
+            mock_s3.list_objects_v2.return_value = {"Contents": [{"Key": f"jobs/xxx/{f}"} for f in files]}
+            mock_boto.return_value = mock_s3
+
+            r = test_client.get(
+                f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs",
+                headers=owner_headers,
+            )
+
+        assert r.status_code == 200
+        assert r.json() == files
+
+    @pytest.mark.asyncio
+    async def test_get_match_policy_log_owner(self, test_client: TestClient, seed_season: dict):
+        """Policy owner can get a specific agent's policy log."""
+        owner_headers = get_user_headers(User(id="test-user", email="test@example.com", is_softmax_team_member=False))
+        with patch("boto3.client") as mock_boto:
+            mock_s3 = MagicMock()
+            mock_s3.get_object.return_value = {"Body": MagicMock(read=lambda: b"test log content")}
+            mock_boto.return_value = mock_s3
+
+            r = test_client.get(
+                f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs/0",
+                headers=owner_headers,
+            )
+
+        assert r.status_code == 200
+        assert r.text == "test log content"
+
+    @pytest.mark.asyncio
+    async def test_match_policy_logs_forbidden_for_non_owner(
+        self, test_client: TestClient, regular_headers: dict, seed_season: dict
+    ):
+        """Non-owner gets 403 when accessing another user's policy logs."""
+        r = test_client.get(
+            f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs",
+            headers=regular_headers,
+        )
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_match_policy_logs_forbidden_for_softmax_non_owner(
+        self, test_client: TestClient, softmax_headers: dict, seed_season: dict
+    ):
+        """Softmax team members get 403 when accessing another user's policy logs."""
+        r = test_client.get(
+            f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs",
+            headers=softmax_headers,
+        )
+        assert r.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_get_match_policy_log_wrong_agent_forbidden(self, test_client: TestClient, seed_season: dict):
+        """Requesting a log for an agent that doesn't run the specified policy returns 403."""
+        owner_headers = get_user_headers(User(id="test-user", email="test@example.com", is_softmax_team_member=False))
+        r = test_client.get(
+            f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs/99",
+            headers=owner_headers,
+        )
+        assert r.status_code == 403
 
 
 class TestEpisodeRouteSmoke:

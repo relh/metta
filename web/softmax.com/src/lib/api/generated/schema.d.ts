@@ -385,6 +385,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/tournament/matches/{match_id}/{policy_version_id}/policy-logs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Match Policy Logs
+     * @description List policy log files for a specific policy in a match.
+     *
+     *     Returns filenames for agents running the specified policy.
+     */
+    get: operations["list_match_policy_logs_tournament_matches__match_id___policy_version_id__policy_logs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/tournament/matches/{match_id}/{policy_version_id}/policy-logs/{agent_idx}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Match Policy Log
+     * @description Get the policy log for a specific agent in a match.
+     *
+     *     The agent must be running the specified policy.
+     */
+    get: operations["get_match_policy_log_tournament_matches__match_id___policy_version_id__policy_logs__agent_idx__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/tournament/seasons/{season_name}/submissions": {
     parameters: {
       query?: never;
@@ -2221,6 +2265,71 @@ export interface operations {
         match_id: string;
         policy_version_id: string;
         artifact_type: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_match_policy_logs_tournament_matches__match_id___policy_version_id__policy_logs_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        match_id: string;
+        policy_version_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": string[];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_match_policy_log_tournament_matches__match_id___policy_version_id__policy_logs__agent_idx__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        match_id: string;
+        policy_version_id: string;
+        agent_idx: number;
       };
       cookie?: never;
     };
