@@ -102,11 +102,13 @@ class Navigator:
     def _goal_cells(self, target: tuple[int, int], map: EntityMap, adj: bool) -> list[tuple[int, int]]:
         if not adj:
             return [target]
-        return [
-            (target[0] + dr, target[1] + dc)
-            for dr, dc in MOVE_DELTAS.values()
-            if not map.is_wall((target[0] + dr, target[1] + dc))
-        ]
+        goals: list[tuple[int, int]] = []
+        for dr, dc in MOVE_DELTAS.values():
+            cell = (target[0] + dr, target[1] + dc)
+            if map.is_wall(cell) or map.is_structure(cell) or map.has_agent(cell):
+                continue
+            goals.append(cell)
+        return goals
 
     def _astar(
         self,
