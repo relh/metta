@@ -76,7 +76,7 @@ def main(
 
     # Ensure cogames authenticated
     login = Job(
-        name="login",
+        name="canary_login",
         cmd=["cogames", "login", *login_server_args],
         executor=local_exec,
         timeout_s=20,
@@ -87,7 +87,7 @@ def main(
     # isolated venv can load it without needing cogames installed. Skip local
     # validation because the canary tests server-side validation.
     upload_good = Job(
-        name="upload_good",
+        name="canary_upload_good_policy",
         cmd=[
             "cogames",
             "upload",
@@ -102,7 +102,7 @@ def main(
             *servers_args,
         ],
         executor=local_exec,
-        dependencies=["login"],
+        dependencies=["canary_login"],
         timeout_s=300,
     )
     runner.add_job(upload_good)
@@ -110,7 +110,7 @@ def main(
     # Upload bad policy: noop with an invalid kwarg that will cause a TypeError
     # in the episode runner, producing a failed submission.
     upload_bad = Job(
-        name="upload_bad",
+        name="canary_upload_bad_policy",
         cmd=[
             "cogames",
             "upload",
@@ -127,7 +127,7 @@ def main(
             *servers_args,
         ],
         executor=local_exec,
-        dependencies=["login"],
+        dependencies=["canary_login"],
         timeout_s=300,
     )
     runner.add_job(upload_bad)
@@ -135,7 +135,7 @@ def main(
     # Check failed submissions list for existence of the bad policy
     # Will be polled until a JobStatus is returned before a deadline
     check_failed_submissions = Job(
-        name="check_failed_submissions",
+        name="canary_check_failed_policy_submissions",
         cmd=[
             "cogames",
             "submissions",
@@ -145,7 +145,7 @@ def main(
             *servers_args,
         ],
         executor=cogames_exec,
-        dependencies=["upload_bad"],
+        dependencies=["canary_upload_bad_policy"],
         metadata={"expected_subjob_status": "failed"},
         timeout_s=2400,
     )
@@ -154,7 +154,7 @@ def main(
     # Check successful submissions list for existence of good policy
     # Will be polled until a JobStatus is returned before a deadline
     check_successful_submissions = Job(
-        name="check_successful_submissions",
+        name="canary_check_successful_policy_submissions",
         cmd=[
             "cogames",
             "submissions",
@@ -164,7 +164,7 @@ def main(
             *servers_args,
         ],
         executor=cogames_exec,
-        dependencies=["upload_good"],
+        dependencies=["canary_upload_good_policy"],
         metadata={"expected_subjob_status": "completed"},
         timeout_s=2400,
     )
