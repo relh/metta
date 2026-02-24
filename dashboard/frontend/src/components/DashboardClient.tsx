@@ -161,6 +161,10 @@ function runLikelyMatchesPolicy(run: DiagnoseRunSummary, policy: DashboardRespon
   )
 }
 
+function episodeIdentifier(episode: DashboardEpisode): string {
+  return String(episode.episode_id ?? episode.id ?? `${episode.job_id ?? 'ep'}-${episode.created_at ?? ''}`)
+}
+
 function metricNumber(episode: DashboardEpisode, key: string): number {
   const metrics = episode.metrics
   if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)) return 0
@@ -290,6 +294,87 @@ function opponentColorMap(names: string[]): Record<string, string> {
   return map
 }
 
+function episodeTagTokens(episode: DashboardEpisode): string[] {
+  const tokens = new Set<string>()
+  for (const tag of asStringArray(episode.diagnostic_tags)) {
+    tokens.add(tag.toLowerCase())
+  }
+  for (const tag of asStringArray(episode.behavior_tags)) {
+    tokens.add(tag.toLowerCase())
+  }
+  const rawTags = episode.raw_tags
+  if (rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags)) {
+    for (const [key, value] of Object.entries(rawTags)) {
+      tokens.add(`${key}=${String(value)}`.toLowerCase())
+    }
+  }
+  return [...tokens]
+}
+
+type TagFilterClause = {
+  term: string
+  negate: boolean
+}
+
+function parseStructuredTagQuery(query: string): TagFilterClause[][] | null {
+  const normalized = query.trim().toLowerCase()
+  const hasOperators = normalized.includes('&&') || normalized.includes('||')
+  const isUnaryNegation = normalized.startsWith('!')
+  if (!hasOperators && !isUnaryNegation) return null
+
+  const orGroups = normalized
+    .split('||')
+    .map((group) => group.trim())
+    .filter(Boolean)
+
+  if (orGroups.length === 0) return null
+
+  const parsed = orGroups
+    .map((group) =>
+      group
+        .split('&&')
+        .map((rawClause) => rawClause.trim())
+        .filter(Boolean)
+        .map((rawClause) => {
+          const negate = rawClause.startsWith('!')
+          const term = negate ? rawClause.slice(1).trim() : rawClause
+          return { term, negate }
+        })
+        .filter((clause) => clause.term.length > 0)
+    )
+    .filter((group) => group.length > 0)
+
+  return parsed.length > 0 ? parsed : null
+}
+
+function normalizeTagTerm(value: string): string {
+  return value.toLowerCase().replaceAll('/', '_').replaceAll('-', '_').trim()
+}
+
+function matchesTagQuery(episode: DashboardEpisode, query: string): boolean {
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) return true
+
+  const tokens = episodeTagTokens(episode)
+  const hasTerm = (term: string) => {
+    const normalizedTerm = normalizeTagTerm(term)
+    return tokens.some((token) => {
+      if (token === term || token.includes(term)) return true
+      const normalizedToken = normalizeTagTerm(token)
+      return normalizedToken === normalizedTerm || normalizedToken.includes(normalizedTerm)
+    })
+  }
+  const structured = parseStructuredTagQuery(trimmed)
+  if (!structured) {
+    const normalized = normalizeTagTerm(trimmed)
+    return tokens.some((token) => token.includes(trimmed) || normalizeTagTerm(token).includes(normalized))
+  }
+
+  return structured.some((group) =>
+    group.every((clause) => (clause.negate ? !hasTerm(clause.term) : hasTerm(clause.term)))
+  )
+}
+
 function asTeamCompRows(value: unknown): DashboardTeamCompStats[] {
   if (!Array.isArray(value)) return []
   return value
@@ -368,21 +453,25 @@ function buildDashboardFeedbackUrl(
     activeTab: string
     dashboardUrl: string
     generatedAt: string
+    activeMetric: string | null
+    selectedEpisodeId: string | null
+    tagQuery: string
   } | null
 ): string {
   if (!payload) return DASHBOARD_FEEDBACK_ISSUE_URL
-  const title = `[Policy Dashboard] ${payload.policyLabel} (${payload.policyVersionId})`
-  const body = [
-    '## Summary',
-    '<describe the issue or request>',
-    '',
-    '## Dashboard Context',
+  const contextLines = [
     `- Policy version ID: ${payload.policyVersionId}`,
     `- Policy: ${payload.policyLabel}`,
     `- Active tab: ${payload.activeTab}`,
     `- Generated at: ${payload.generatedAt}`,
     `- Dashboard URL: ${payload.dashboardUrl}`,
-  ].join('\n')
+  ]
+  if (payload.activeMetric) contextLines.push(`- Selected metric: ${payload.activeMetric}`)
+  if (payload.selectedEpisodeId) contextLines.push(`- Selected episode ID: ${payload.selectedEpisodeId}`)
+  if (payload.tagQuery.trim()) contextLines.push(`- Tag query: ${payload.tagQuery.trim()}`)
+
+  const title = `[Policy Dashboard] ${payload.policyLabel} (${payload.policyVersionId})`
+  const body = ['## Summary', '<describe the issue or request>', '', '## Dashboard Context', ...contextLines].join('\n')
   return `${DASHBOARD_FEEDBACK_ISSUE_URL}?${new URLSearchParams({ title, body }).toString()}`
 }
 
@@ -434,6 +523,7 @@ export function DashboardClient() {
   const [statusFilter, setStatusFilter] = useState<EpisodeStatusFilter>('all')
   const [replayOnly, setReplayOnly] = useState(false)
   const [tagQuery, setTagQuery] = useState('')
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [episodeSort, setEpisodeSort] = useState<EpisodeSortKey>('reward')
   const [episodeSortDir, setEpisodeSortDir] = useState<SortDir>('desc')
 
@@ -583,23 +673,10 @@ export function DashboardClient() {
   }, [opponentRows])
 
   const filteredEpisodes = useMemo(() => {
-    const query = tagQuery.trim().toLowerCase()
     return episodes.filter((episode) => {
       if (statusFilter !== 'all' && episode.status !== statusFilter) return false
       if (replayOnly && !episode.replay_url) return false
-      if (!query) return true
-
-      const diagnosticTags = asStringArray(episode.diagnostic_tags)
-      const rawTags = episode.raw_tags
-      const keyValueTags: string[] = []
-      if (rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags)) {
-        for (const [key, value] of Object.entries(rawTags)) {
-          keyValueTags.push(`${key}=${String(value)}`)
-        }
-      }
-
-      const haystack = [...diagnosticTags, ...keyValueTags].join(' ').toLowerCase()
-      return haystack.includes(query)
+      return matchesTagQuery(episode, tagQuery)
     })
   }, [episodes, replayOnly, statusFilter, tagQuery])
 
@@ -678,14 +755,18 @@ export function DashboardClient() {
   const feedbackUrl = useMemo(() => {
     if (!data) return DASHBOARD_FEEDBACK_ISSUE_URL
     const dashboardUrl = typeof window === 'undefined' ? '/policy-dashboard' : window.location.href
+    const selectedMetric = selectedTrendSeries?.key ?? selectedTrendMetric
     return buildDashboardFeedbackUrl({
       policyVersionId: String(data.policy?.id ?? ''),
       policyLabel: `${String(data.policy?.name ?? 'unknown')} v${String(data.policy?.version ?? '?')}`,
       activeTab,
       dashboardUrl,
       generatedAt: String(data.generated_at ?? '-'),
+      activeMetric: selectedMetric,
+      selectedEpisodeId,
+      tagQuery,
     })
-  }, [activeTab, data])
+  }, [activeTab, data, selectedEpisodeId, selectedTrendMetric, selectedTrendSeries?.key, tagQuery])
 
   useEffect(() => {
     if (trendSeries.length === 0) return
@@ -708,6 +789,7 @@ export function DashboardClient() {
     try {
       const response = await fetchDashboardData(trimmedPolicyVersionId)
       setData(response)
+      setSelectedEpisodeId(null)
       if (typeof window !== 'undefined') {
         const url = new URL(window.location.href)
         if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
@@ -779,6 +861,42 @@ export function DashboardClient() {
     anchor.click()
     URL.revokeObjectURL(url)
   }
+
+  const onExportBundle = () => {
+    if (!data || typeof window === 'undefined') return
+
+    const payload = {
+      exported_at: new Date().toISOString(),
+      dashboard_data: data,
+      ui_context: {
+        active_tab: activeTab,
+        selected_metric: selectedTrendSeries?.key ?? selectedTrendMetric,
+        selected_episode_id: selectedEpisodeId,
+        filters: {
+          status: statusFilter,
+          replay_only: replayOnly,
+          tag_query: tagQuery,
+        },
+        sort: { key: episodeSort, direction: episodeSortDir },
+      },
+      filtered_episode_ids: sortedEpisodes.map((episode) => episodeIdentifier(episode)),
+      filtered_episode_count: sortedEpisodes.length,
+    }
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `dashboard-${String(data.policy?.name ?? 'policy')}-v${String(data.policy?.version ?? 'x')}-bundle.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  useEffect(() => {
+    if (!selectedEpisodeId) return
+    if (filteredEpisodes.some((episode) => episodeIdentifier(episode) === selectedEpisodeId)) return
+    setSelectedEpisodeId(null)
+  }, [filteredEpisodes, selectedEpisodeId])
 
   useEffect(() => {
     if (activeTab !== 'roles') return
@@ -1638,7 +1756,8 @@ export function DashboardClient() {
               <section className="card">
                 <h2 style={{ marginTop: 0 }}>Feedback</h2>
                 <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
-                  Report dashboard bugs/features with policy+tab context prefilled.
+                  Report dashboard bugs/features with policy, tab, metric, filter, and selected-episode context
+                  prefilled.
                 </p>
                 <a href={feedbackUrl} target="_blank" rel="noreferrer">
                   Open dashboard feedback issue
@@ -1759,10 +1878,14 @@ export function DashboardClient() {
                   <label style={{ display: 'grid', gap: 6 }}>
                     Tag Search
                     <input
-                      placeholder="e.g. reward_tier=high"
+                      placeholder="e.g. did_align=false && stalled_noop_heavy=true"
                       value={tagQuery}
                       onChange={(event) => setTagQuery(event.target.value)}
                     />
+                    <span style={{ fontSize: 12, color: '#4b617f' }}>
+                      Supports AND/OR expressions with <code>&amp;&amp;</code>/<code>||</code>. Use <code>!</code> for
+                      negation.
+                    </span>
                   </label>
                 </div>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1781,6 +1904,7 @@ export function DashboardClient() {
                       setStatusFilter('all')
                       setReplayOnly(false)
                       setTagQuery('')
+                      setSelectedEpisodeId(null)
                       setEpisodeSort('reward')
                       setEpisodeSortDir('desc')
                     }}
@@ -1790,6 +1914,12 @@ export function DashboardClient() {
                   <button type="button" onClick={onExportEpisodes}>
                     Export filtered JSON
                   </button>
+                  <button type="button" onClick={onExportBundle}>
+                    Export full bundle JSON
+                  </button>
+                  <span style={{ fontSize: 12, color: '#4b617f' }}>
+                    Feedback episode: <code>{selectedEpisodeId ?? '-'}</code>
+                  </span>
                   <span style={{ marginLeft: 'auto', fontSize: 12, color: '#4b617f' }}>
                     {sortedEpisodes.length}/{episodes.length} rows • order: {String(data.selection?.ordering ?? 'n/a')}{' '}
                     • limit: {String(data.selection?.limit ?? 'n/a')}
@@ -1865,18 +1995,20 @@ export function DashboardClient() {
                           <th>Status</th>
                           <th>Replay</th>
                           <th>Diagnostics</th>
+                          <th>Feedback Context</th>
                         </tr>
                       </thead>
                       <tbody>
                         {sortedEpisodes.slice(0, 200).map((episode) => {
-                          const id = String(
-                            episode.episode_id ?? episode.id ?? `${episode.job_id ?? 'ep'}-${episode.created_at ?? ''}`
-                          )
+                          const id = episodeIdentifier(episode)
                           const reward = toFiniteNumber(episode.reward ?? episode.avg_reward)
                           const noop = episodeNoopRate(episode)
                           const tags = asStringArray(episode.diagnostic_tags)
                           return (
-                            <tr key={id}>
+                            <tr
+                              key={id}
+                              style={id === selectedEpisodeId ? { background: 'var(--panel-soft-bg-1)' } : undefined}
+                            >
                               <td>
                                 <code>{formatDateTime(episode.created_at)}</code>
                               </td>
@@ -1913,6 +2045,15 @@ export function DashboardClient() {
                                 )}
                               </td>
                               <td style={{ maxWidth: 360 }}>{tags.join(', ') || '-'}</td>
+                              <td>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedEpisodeId(id)}
+                                  disabled={id === selectedEpisodeId}
+                                >
+                                  {id === selectedEpisodeId ? 'Selected' : 'Use'}
+                                </button>
+                              </td>
                             </tr>
                           )
                         })}
