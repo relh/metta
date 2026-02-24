@@ -98,6 +98,15 @@ def test_nested_config_overrides_applied(invoke_run_tool):
     assert "Tool nested.another_field: 999" in output
 
 
+def test_literal_none_override_is_applied_as_string(invoke_run_tool):
+    """Verify `field=none` can target Literal fields that include the string "none"."""
+    result = invoke_run_tool("mypackage.tools.LiteralNoneTool", "render=none")
+
+    assert result.returncode == 0
+    output = result.stdout + result.stderr
+    assert "render=none" in output
+
+
 def test_function_params_passed_to_invoke(invoke_run_tool):
     """Verify function parameters are bound and passed to invoke() as args."""
     result = invoke_run_tool(

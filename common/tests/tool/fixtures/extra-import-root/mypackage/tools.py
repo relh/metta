@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import Field
 
 from metta.common.tool import Tool
@@ -58,4 +60,15 @@ class EffectiveConfigTool(Tool):
 
     def invoke(self, args: dict[str, str]) -> int | None:
         print(f"x={self.x}")
+        return 0
+
+
+class LiteralNoneTool(Tool):
+    """Tool for regression testing string literal 'none' overrides."""
+
+    render: Literal["gui", "none"] = "gui"
+
+    def invoke(self, args: dict[str, str]) -> int | None:
+        _ = args
+        print(f"render={self.render}")
         return 0

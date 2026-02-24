@@ -104,8 +104,10 @@ def parse_value(value_str: str) -> Any:
 
     if lower in {"true", "false"}:
         return lower == "true"
-    if lower in {"null", "none"}:
+    if lower == "null":
         return None
+    if lower == "none":
+        return "none"
 
     # Try to parse JSON containers
     if (value_str.startswith("{") and value_str.endswith("}")) or (

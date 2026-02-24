@@ -39,6 +39,11 @@ def test_parse_value_types():
     # Floats
     assert parse_value("3.14") == 3.14
 
+    # Null-like values: reserve JSON `null` for Python None; keep `none` as a literal string
+    assert parse_value("null") is None
+    assert parse_value("none") == "none"
+    assert parse_value("None") == "none"
+
     # Strings remain strings when not parseable
     assert parse_value("hello") == "hello"
     assert parse_value("42abc") == "42abc"
