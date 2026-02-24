@@ -23,17 +23,13 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v5
 
-    - name: Setup Environment
-      uses: ./.github/actions/setup-environment
-      with:
-        install-mode: minimal
-        extra-dependencies: |
-          requests>=2.31.0
-          rich
+    - name: Install webhook dependencies
+      run: python -m pip install --disable-pip-version-check "requests>=2.31.0"
+      shell: bash
 
     - name: Post to Discord
       run: |
-        uv run ${{ github.action_path }}/discord_webhook.py
+        python ${{ github.action_path }}/discord_webhook.py
       shell: bash
       env:
         DISCORD_WEBHOOK_URL: ${{ inputs.webhook-url }}
