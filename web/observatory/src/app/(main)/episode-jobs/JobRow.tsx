@@ -120,6 +120,11 @@ function fmt(v: number | null | undefined): string {
   return v.toFixed(4)
 }
 
+function formatCost(cost: number): string {
+  if (cost < 0.01) return `$${cost.toFixed(4)}`
+  return `$${cost.toFixed(2)}`
+}
+
 const ExpandDownloadRow: FC<{ label: string; data: unknown; show: boolean; onToggle: () => void }> = ({
   label,
   data,
@@ -234,6 +239,9 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
   const actualRunnerVersion = normalizeRunnerImageRef(actualRunnerImageId ?? actualRunnerImage)
   const gitCommit = job.result?.git_commit as string | undefined
   const instanceType = job.result?.instance_type as string | undefined
+  const capacityType = job.result?.capacity_type as string | undefined
+  const rawCost = job.result?.cost_usd
+  const costUsd = typeof rawCost === 'number' ? rawCost : undefined
   const lifecycleError = job.error
   const [expanded, setExpanded] = useState(false)
   const [showSpec, setShowSpec] = useState(false)
@@ -507,6 +515,9 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
         <TD>
           <div className="text-xs">{timeDisplay.primary}</div>
           {timeDisplay.secondary && <div className="text-foreground-muted text-[10px]">{timeDisplay.secondary}</div>}
+          {costUsd != null && costUsd > 0 && (
+            <div className="text-foreground-muted text-[10px]">{formatCost(costUsd)} cost</div>
+          )}
         </TD>
         <TD>
           <div className="flex items-center gap-0 text-xs flex-wrap">
@@ -569,7 +580,15 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
                   )}
                   {instanceType && (
                     <LabelRow label="Instance">
-                      <span className="font-mono text-xs">{instanceType}</span>
+                      <span className="font-mono text-xs">
+                        {instanceType}
+                        {capacityType && <span className="text-foreground-muted"> ({capacityType})</span>}
+                      </span>
+                    </LabelRow>
+                  )}
+                  {costUsd != null && costUsd > 0 && (
+                    <LabelRow label="Cost">
+                      <span className="font-mono text-xs">{formatCost(costUsd)}</span>
                     </LabelRow>
                   )}
                   {requestedRunnerVersion && (

@@ -23,6 +23,7 @@ from sqlmodel import Session, create_engine, select
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.config import settings
+from metta.app_backend.ec2_pricing import get_instance_hourly_cost
 from metta.app_backend.health_server import start_health_server, update_heartbeat
 from metta.app_backend.job_runner.config import (
     LABEL_APP,
@@ -40,6 +41,7 @@ from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.app_backend.models.k8s_events import K8sEvent
+from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from mettagrid.runner.types import PureSingleEpisodeResult, RuntimeInfo, SingleEpisodeJob
@@ -525,16 +527,41 @@ def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
         return RuntimeInfo()
 
 
-def _build_result_metadata(event_data: dict, core_v1: client.CoreV1Api, job_id: UUID) -> dict[str, Any]:
-    """Build metadata persisted on job results for both success and failure paths."""
+def _build_result_metadata(
+    event_data: dict,
+    core_v1: client.CoreV1Api,
+    job_id: UUID,
+    *,
+    dispatched_at: datetime | None = None,
+    running_at: datetime | None = None,
+) -> dict[str, Any]:
+    """Build metadata persisted on job results for both success and failure paths.
+
+    Cost is computed from the earlier of dispatched_at/running_at to capture pod
+    startup time (node provisioning, image pull) which is also billable.
+    """
+    now = datetime.now(UTC)
     result_data: dict[str, Any] = {}
     runner_image, runner_image_id = _get_runner_images_from_event(event_data)
     if runner_image:
         result_data["runner_image"] = runner_image
     if runner_image_id:
         result_data["runner_image_id"] = runner_image_id
-    result_data.update(_get_node_pricing_info(event_data, core_v1))
+    pricing_info = _get_node_pricing_info(event_data, core_v1)
+    result_data.update(pricing_info)
     result_data.update(_read_runtime_info(job_id).model_dump(exclude_none=True))
+    instance_type = pricing_info.get("instance_type")
+    capacity_type = pricing_info.get("capacity_type")
+    cost_start = dispatched_at or running_at
+    if cost_start and instance_type:
+        cost_per_pod_hour = get_instance_hourly_cost(
+            instance_type, capacity_type, region=get_dispatch_config().EVAL_CLUSTER_REGION
+        )
+        cost = compute_job_cost(cost_start, now, cost_per_pod_hour)
+        if cost is not None:
+            result_data["cost_usd"] = round(cost, 6)
+        elif cost_per_pod_hour <= 0:
+            logger.warning(f"No pricing data for job {job_id} instance_type={instance_type}")
     return result_data
 
 
@@ -596,7 +623,13 @@ def _handle_pod_succeeded(
         return
 
     try:
-        result_data = _build_result_metadata(event_data, core_v1, job_id)
+        result_data = _build_result_metadata(
+            event_data,
+            core_v1,
+            job_id,
+            dispatched_at=job_request.dispatched_at,
+            running_at=job_request.running_at,
+        )
 
         job = SingleEpisodeJob.model_validate(job_request.job)
         replay_uri = copy_replay_to_public(job_id)
@@ -635,6 +668,16 @@ def _process_event(
             if job_name:
                 _delete_k8s_job(batch_v1, job_name)
         elif phase == "Failed":
+            # Deduplication: check if job is already in terminal state
+            job_request = stats_client.get_job(job_id)
+            if job_request.status in (JobStatus.completed, JobStatus.failed):
+                logger.info(f"Job {job_id} already {job_request.status.value}, skipping failed event (pod {pod_name})")
+                capture_pod_logs(core_v1, pod_name, job_id)
+                job_name = _get_job_name_from_event(event_data)
+                if job_name:
+                    _delete_k8s_job(batch_v1, job_name)
+                return
+
             # Capture logs first so they're available for extraction
             capture_pod_logs(core_v1, pod_name, job_id)
 
@@ -647,7 +690,13 @@ def _process_event(
             error_type = _classify_error(error)
 
             # Capture runner/runtime info for failed jobs too (parse failures happen before results upload).
-            fail_result = _build_result_metadata(event_data, core_v1, job_id)
+            fail_result = _build_result_metadata(
+                event_data,
+                core_v1,
+                job_id,
+                dispatched_at=job_request.dispatched_at,
+                running_at=job_request.running_at,
+            )
 
             _update_job_status(
                 stats_client,

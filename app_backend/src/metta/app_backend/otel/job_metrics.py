@@ -15,6 +15,27 @@ from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.otel.metrics import init_meter_provider
 
 
+def compute_job_cost(
+    start_at: datetime | None,
+    end_at: datetime,
+    cost_per_pod_hour: float,
+) -> float | None:
+    """Compute job cost in USD from duration and hourly rate.
+
+    start_at should be dispatched_at (includes pod startup) or running_at.
+    Returns None if cost cannot be determined (missing start_at, zero rate,
+    or non-positive duration from clock skew).
+    """
+    if cost_per_pod_hour <= 0 or start_at is None:
+        return None
+    s = start_at.replace(tzinfo=UTC) if start_at.tzinfo is None else start_at
+    e = end_at.replace(tzinfo=UTC) if end_at.tzinfo is None else end_at
+    duration_hours = (e - s).total_seconds() / 3600
+    if duration_hours <= 0:
+        return None
+    return duration_hours * cost_per_pod_hour
+
+
 class JobMetrics:
     def __init__(self) -> None:
         init_meter_provider()
@@ -98,7 +119,7 @@ class JobMetrics:
         job: JobRequest,
         transition_time: datetime,
         error_type: Optional[str],
-        cost_per_pod_hour: float = 0.0,
+        cost_usd: float | None = None,
     ) -> None:
         self._state_transition_counter.add(
             1,
@@ -114,17 +135,13 @@ class JobMetrics:
         elif from_status == JobStatus.dispatched:
             # Reconciliation can mark dispatched -> completed/failed without a running phase.
             self._record_stage_duration("dispatched", job.dispatched_at, transition_time, job.job_type)
+            # Pod failed during startup (never reached running). Node was still billable.
+            if cost_usd is not None and cost_usd > 0:
+                self._cost_counter.add(cost_usd, attributes={"job_type": job.job_type.value})
         elif from_status == JobStatus.running:
             self._record_stage_duration("running", job.running_at, transition_time, job.job_type)
-            if cost_per_pod_hour > 0 and job.running_at is not None:
-                running_at = job.running_at.replace(tzinfo=UTC) if job.running_at.tzinfo is None else job.running_at
-                t_time = transition_time.replace(tzinfo=UTC) if transition_time.tzinfo is None else transition_time
-                duration_hours = (t_time - running_at).total_seconds() / 3600
-                if duration_hours > 0:
-                    self._cost_counter.add(
-                        duration_hours * cost_per_pod_hour,
-                        attributes={"job_type": job.job_type.value},
-                    )
+            if cost_usd is not None and cost_usd > 0:
+                self._cost_counter.add(cost_usd, attributes={"job_type": job.job_type.value})
 
     async def update_running_counts(self, session: AsyncSession, job_types: set[JobType]) -> None:
         if not job_types:

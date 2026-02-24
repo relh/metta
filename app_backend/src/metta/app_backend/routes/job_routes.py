@@ -22,7 +22,6 @@ from sqlmodel import col, select
 
 from metta.app_backend.auth import SoftmaxUser
 from metta.app_backend.database import db_session
-from metta.app_backend.ec2_pricing import get_instance_hourly_cost
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
@@ -289,7 +288,6 @@ def create_job_router() -> APIRouter:
                 job=job_request,
                 transition_time=result.time,
                 error_type=job_request.error_type,
-                cost_per_pod_hour=0.0,
             )
             await metrics.update_running_counts(session, {job.job_type for job in job_requests})
             return [job_request.id for job_request in job_requests]
@@ -561,10 +559,9 @@ def create_job_router() -> APIRouter:
             if request.status is not None and previous_status is not None and transition_time is not None:
                 metrics = get_job_metrics()
                 result_data = job.result or {}
-                cost_per_pod_hour = get_instance_hourly_cost(
-                    result_data.get("instance_type"),
-                    result_data.get("capacity_type"),
-                    region=get_dispatch_config().EVAL_CLUSTER_REGION,
+                raw_cost = result_data.get("cost_usd")
+                stored_cost = (
+                    raw_cost if isinstance(raw_cost, (int, float)) and not isinstance(raw_cost, bool) else None
                 )
                 metrics.record_transition(
                     previous_status,
@@ -572,7 +569,7 @@ def create_job_router() -> APIRouter:
                     job,
                     transition_time,
                     job.error_type,
-                    cost_per_pod_hour=cost_per_pod_hour,
+                    cost_usd=stored_cost,
                 )
 
             await session.commit()
