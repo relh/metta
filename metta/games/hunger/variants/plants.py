@@ -1,4 +1,4 @@
-"""Plants variant: adds plants (harvest requires scout/herbivore). Use seasons variant for food drops."""
+"""Plant variant: adds plant objects (harvest requires herbivore). Use seasons variant for food drops."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from cogames.core import CoGameMissionVariant
 from mettagrid.config.filter.filter import isNot
 from mettagrid.config.handler_config import Handler, actorHas, targetHas, withdraw
 from mettagrid.config.mettagrid_config import GridObjectConfig, InventoryConfig, MettaGridConfig
+from mettagrid.config.render_config import RenderAsset
 
 INITIAL_PLANT_FOOD = 1
 MAX_PLANT_FOOD = 100
@@ -14,42 +15,45 @@ MAP_WIDTH = 88
 MAP_HEIGHT = 88
 
 
-class PlantsVariant(CoGameMissionVariant):
-    """Add plants: scatter on map, hub placement. Harvest requires scout (herbivore)."""
+class PlantVariant(CoGameMissionVariant):
+    """Add plant objects: scatter on map, hub placement. Harvest requires herbivore."""
 
-    name: str = "plants"
-    description: str = "Plants scatter the map. Herbivores (scouts) harvest for food."
+    name: str = "plant"
+    description: str = "Plant objects scatter the map. Herbivores harvest for food."
     depends_on: list[str] = ["food"]
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
-        env.game.objects["plants"] = plants_config()
+        env.game.objects["plant"] = plant_config()
+        env.game.render.assets["plant"] = [
+            RenderAsset(asset="junction.working", resources=["food"]),
+            RenderAsset(asset="junction"),
+        ]
 
         instance = getattr(env.game.map_builder, "instance", None)
         if instance is not None:
             instance.building_coverage = PLANT_DENSITY
-            instance.building_names = ["plants"]
-            instance.building_weights = {"plants": 1.0}
+            instance.building_names = ["plant"]
+            instance.building_weights = {"plant": 1.0}
             if instance.hub is not None:
-                instance.hub.hub_object = "plants"
+                instance.hub.hub_object = "plant"
                 instance.hub.corner_bundle = "custom"
-                instance.hub.corner_objects = ["plants", "plants", "plants", "plants"]
+                instance.hub.corner_objects = ["plant", "plant", "plant", "plant"]
                 instance.hub.cross_bundle = "custom"
-                instance.hub.cross_objects = ["plants", "plants", "plants", "plants"]
+                instance.hub.cross_objects = ["plant", "plant", "plant", "plant"]
 
 
-def plants_config() -> GridObjectConfig:
-    """Plant with harvest handlers. Requires scout (herbivore) gear."""
+def plant_config() -> GridObjectConfig:
+    """Plant with harvest handlers. Requires herbivore gear."""
     return GridObjectConfig(
-        name="plants",
-        render_name="junction",
+        name="plant",
         inventory=InventoryConfig(initial={"food": INITIAL_PLANT_FOOD}, default_limit=MAX_PLANT_FOOD),
         on_use_handlers={
             "harvest_last": Handler(
-                filters=[actorHas({"scout": 1}), isNot(targetHas({"food": 2}))],
+                filters=[actorHas({"herbivore": 1}), isNot(targetHas({"food": 2}))],
                 mutations=[withdraw({"food": 100})],
             ),
             "harvest": Handler(
-                filters=[actorHas({"scout": 1})],
+                filters=[actorHas({"herbivore": 1})],
                 mutations=[withdraw({"food": 100})],
             ),
         },

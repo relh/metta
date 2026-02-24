@@ -20,21 +20,21 @@ class HungerState:
     food: int = 20
     energy: int = 100
     solar: int = 1
-    scrambler: int = 0
-    scout: int = 0
+    carnivore: int = 0
+    herbivore: int = 0
     egg: int = 0
 
     @property
     def has_gear(self) -> bool:
-        return self.scrambler > 0 or self.scout > 0
+        return self.carnivore > 0 or self.herbivore > 0
 
     @property
     def is_predator(self) -> bool:
-        return self.scrambler > 0
+        return self.carnivore > 0
 
     @property
     def is_prey(self) -> bool:
-        return self.scout > 0
+        return self.herbivore > 0
 
 
 class ObsParser:
@@ -82,8 +82,8 @@ class ObsParser:
         state.food = inv.get("food", 20)
         state.energy = inv.get("energy", 100)
         state.solar = inv.get("solar", 1)
-        state.scrambler = inv.get("scrambler", 0)
-        state.scout = inv.get("scout", 0)
+        state.carnivore = inv.get("carnivore", 0)
+        state.herbivore = inv.get("herbivore", 0)
         state.egg = inv.get("egg", 0)
 
         # Second pass: extract visible entities

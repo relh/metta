@@ -8,7 +8,7 @@ from metta.games.hunger.variants.full import FullVariant
 from metta.games.hunger.variants.herbivore import HerbivoreVariant
 from metta.games.hunger.variants.kids import KidsVariant
 from metta.games.hunger.variants.multi_year import MultiYear5Variant, MultiYear10Variant
-from metta.games.hunger.variants.plants import PlantsVariant
+from metta.games.hunger.variants.plants import PlantVariant
 from metta.games.hunger.variants.seasons import SeasonsVariant
 from metta.games.hunger.variants.solar import SolarVariant
 
@@ -18,7 +18,7 @@ VARIANTS = [
     FoodVariant(),
     FullVariant(),
     KidsVariant(),
-    PlantsVariant(),
+    PlantVariant(),
     HerbivoreVariant(),
     SeasonsVariant(),
     SolarVariant(),

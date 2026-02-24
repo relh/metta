@@ -10,7 +10,7 @@ from metta.games.hunger.variants.carnivore import CarnivoreVariant
 from metta.games.hunger.variants.herbivore import herbivore_station_config
 from metta.games.hunger.variants.plants import (
     INITIAL_PLANT_FOOD,
-    plants_config,
+    plant_config,
 )
 from metta.games.hunger.variants.seasons import (
     DROP_TARGET_PCT,
@@ -42,14 +42,14 @@ from mettagrid.map_builder.ascii import AsciiMapBuilder
 from mettagrid.simulator import Simulation
 
 BASE_RESOURCES = ["food", "egg", "kid"]
-RESOURCES_WITH_HERBIVORE = BASE_RESOURCES + ["energy", "scout"]
-RESOURCES_WITH_CARNIVORE = BASE_RESOURCES + ["energy", "scout", "scrambler"]
+RESOURCES_WITH_HERBIVORE = BASE_RESOURCES + ["energy", "herbivore"]
+RESOURCES_WITH_CARNIVORE = BASE_RESOURCES + ["energy", "herbivore", "carnivore"]
 
 
 def _hunger_limits(resources: list[str] | None = None) -> dict[str, ResourceLimitsConfig]:
     """Permissive resource limits for testing."""
     res = resources or BASE_RESOURCES
-    gear_res = [r for r in res if r in ("scout", "scrambler")]
+    gear_res = [r for r in res if r in ("herbivore", "carnivore")]
     return {
         "all": ResourceLimitsConfig(min=10000, max=10000, resources=res),
         "gear": ResourceLimitsConfig(min=1, max=1, resources=gear_res),
@@ -71,22 +71,22 @@ def _test_agent(
 
 def _agent_with_carnivores(max_steps: int = 100) -> AgentConfig:
     """Agent config with carnivore handlers for carnivore-herbivore tests."""
-    limits = _hunger_limits(BASE_RESOURCES + ["scrambler"])
-    limits["gear"] = ResourceLimitsConfig(min=1, max=1, resources=["scrambler", "scout"])
+    limits = _hunger_limits(BASE_RESOURCES + ["carnivore"])
+    limits["gear"] = ResourceLimitsConfig(min=1, max=1, resources=["carnivore", "herbivore"])
     limits["energy"] = ResourceLimitsConfig(
         min=100,
         resources=["energy"],
-        modifiers={"scrambler": 400, "scout": 100},
+        modifiers={"carnivore": 400, "herbivore": 100},
     )
     return AgentConfig(
         inventory=InventoryConfig(initial={}, limits=limits),
         on_use_handlers={
-            "scrambler_hunts_scout": Handler(
-                filters=[actorHas({"scrambler": 1}), targetHas({"scout": 1})],
+            "carnivore_hunts_herbivore": Handler(
+                filters=[actorHas({"carnivore": 1}), targetHas({"herbivore": 1})],
                 mutations=[withdraw({"food": 9999}), updateTarget({"egg": -1})],
             ),
-            "scrambler_tags_scrambler": Handler(
-                filters=[actorHas({"scrambler": 1}), targetHas({"scrambler": 1})],
+            "carnivore_tags_carnivore": Handler(
+                filters=[actorHas({"carnivore": 1}), targetHas({"carnivore": 1})],
                 mutations=[updateActor({"egg": -1}), updateTarget({"egg": -1})],
             ),
         },
@@ -155,9 +155,9 @@ class HungerTestHarness:
     ) -> "HungerTestHarness":
         """5x5 map: agent0 at (1,2), agent1 at (2,2). Agent0 moves east onto agent1."""
         res = resources or BASE_RESOURCES
-        carn_agent = _agent_with_carnivores(max_steps=100) if "scrambler" in res else None
+        carn_agent = _agent_with_carnivores(max_steps=100) if "carnivore" in res else None
         # Both agents need carnivore handlers: when A moves onto B, B's onUse runs (target's handlers).
-        use_carn = carn_agent and ("scrambler" in (agent0_initial or {}) or "scrambler" in (agent1_initial or {}))
+        use_carn = carn_agent and ("carnivore" in (agent0_initial or {}) or "carnivore" in (agent1_initial or {}))
         agent0 = carn_agent if use_carn else _test_agent(resources=res)
         agent1 = carn_agent if use_carn else _test_agent(resources=res)
 
@@ -275,9 +275,9 @@ class TestPlantHarvest:
 
     def test_herbivore_harvests_food(self):
         h = HungerTestHarness.create_single(
-            station_name="plants",
-            station_cfg=plants_config(),
-            agent_initial={"scout": 1, "food": 0},
+            station_name="plant",
+            station_cfg=plant_config(),
+            agent_initial={"herbivore": 1, "food": 0},
             resources=RESOURCES_WITH_HERBIVORE,
         )
         h.move_agent_east()
@@ -286,9 +286,9 @@ class TestPlantHarvest:
 
     def test_carnivore_cannot_harvest(self):
         h = HungerTestHarness.create_single(
-            station_name="plants",
-            station_cfg=plants_config(),
-            agent_initial={"scrambler": 1, "food": 0},
+            station_name="plant",
+            station_cfg=plant_config(),
+            agent_initial={"carnivore": 1, "food": 0},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -296,10 +296,10 @@ class TestPlantHarvest:
         h.close()
 
     def test_gearless_cannot_harvest(self):
-        """Without scout gear, cannot harvest scout-only plant."""
+        """Without herbivore gear, cannot harvest herbivore-only plant."""
         h = HungerTestHarness.create_single(
-            station_name="plants",
-            station_cfg=plants_config(),
+            station_name="plant",
+            station_cfg=plant_config(),
             agent_initial={"food": 0},
             resources=RESOURCES_WITH_HERBIVORE,
         )
@@ -323,7 +323,7 @@ class TestGearStations:
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
-        assert h.inv().get("scrambler", 0) == 1
+        assert h.inv().get("carnivore", 0) == 1
         h.close()
 
     def test_get_herbivore_gear(self):
@@ -333,7 +333,7 @@ class TestGearStations:
             resources=RESOURCES_WITH_HERBIVORE,
         )
         h.move_agent_east()
-        assert h.inv().get("scout", 0) == 1
+        assert h.inv().get("herbivore", 0) == 1
         h.close()
 
     def test_cannot_change_gear_carnivore_to_herbivore(self):
@@ -341,12 +341,12 @@ class TestGearStations:
         h = HungerTestHarness.create_single(
             station_name="herbivore_station",
             station_cfg=herbivore_station_config(),
-            agent_initial={"scrambler": 1},
+            agent_initial={"carnivore": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
-        assert h.inv().get("scrambler", 0) == 1
-        assert h.inv().get("scout", 0) == 0
+        assert h.inv().get("carnivore", 0) == 1
+        assert h.inv().get("herbivore", 0) == 0
         h.close()
 
     def test_cannot_change_gear_herbivore_to_carnivore(self):
@@ -354,12 +354,12 @@ class TestGearStations:
         h = HungerTestHarness.create_single(
             station_name="carnivore_station",
             station_cfg=CarnivoreVariant.carnivore_station_config(),
-            agent_initial={"scout": 1},
+            agent_initial={"herbivore": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
-        assert h.inv().get("scout", 0) == 1
-        assert h.inv().get("scrambler", 0) == 0
+        assert h.inv().get("herbivore", 0) == 1
+        assert h.inv().get("carnivore", 0) == 0
         h.close()
 
 
@@ -368,13 +368,13 @@ class TestGearStations:
 # ===========================================================================
 
 
-class TestScramblerScoutInteraction:
+class TestCarnivoreHerbivoreInteraction:
     """Predator tags prey: steals all food, prey loses egg."""
 
     def test_predator_steals_food_from_prey(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "food": 0},
-            agent1_initial={"scout": 1, "food": 50, "egg": 1},
+            agent0_initial={"carnivore": 1, "food": 0},
+            agent1_initial={"herbivore": 1, "food": 50, "egg": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -387,8 +387,8 @@ class TestScramblerScoutInteraction:
     def test_carnivore_takes_all_food_capped(self):
         """Carnivore's food is capped at inventory max."""
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "food": 80},
-            agent1_initial={"scout": 1, "food": 50, "egg": 1},
+            agent0_initial={"carnivore": 1, "food": 80},
+            agent1_initial={"herbivore": 1, "food": 50, "egg": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -399,8 +399,8 @@ class TestScramblerScoutInteraction:
 
     def test_herbivore_loses_egg_when_tagged(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "food": 0},
-            agent1_initial={"scout": 1, "food": 50, "egg": 1},
+            agent0_initial={"carnivore": 1, "food": 0},
+            agent1_initial={"herbivore": 1, "food": 50, "egg": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -409,8 +409,8 @@ class TestScramblerScoutInteraction:
 
     def test_herbivore_without_egg_still_loses_food(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "food": 0},
-            agent1_initial={"scout": 1, "food": 30},
+            agent0_initial={"carnivore": 1, "food": 0},
+            agent1_initial={"herbivore": 1, "food": 30},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -424,13 +424,13 @@ class TestScramblerScoutInteraction:
 # ===========================================================================
 
 
-class TestScramblerScramblerInteraction:
+class TestCarnivoreCarnivoreInteraction:
     """Carnivore tags carnivore: both lose egg."""
 
     def test_both_carnivores_lose_egg(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "food": 20, "egg": 1},
-            agent1_initial={"scrambler": 1, "food": 20, "egg": 1},
+            agent0_initial={"carnivore": 1, "food": 20, "egg": 1},
+            agent1_initial={"carnivore": 1, "food": 20, "egg": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -440,8 +440,8 @@ class TestScramblerScramblerInteraction:
 
     def test_no_food_transfer_between_carnivores(self):
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scrambler": 1, "food": 10, "egg": 1},
-            agent1_initial={"scrambler": 1, "food": 40, "egg": 1},
+            agent0_initial={"carnivore": 1, "food": 10, "egg": 1},
+            agent1_initial={"carnivore": 1, "food": 40, "egg": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -453,8 +453,8 @@ class TestScramblerScramblerInteraction:
     def test_herbivore_cannot_tag_carnivore(self):
         """Herbivore walking onto carnivore should not trigger any combat handler."""
         h = HungerTestHarness.create_two_agents(
-            agent0_initial={"scout": 1, "food": 20, "egg": 1},
-            agent1_initial={"scrambler": 1, "food": 40, "egg": 1},
+            agent0_initial={"herbivore": 1, "food": 20, "egg": 1},
+            agent1_initial={"carnivore": 1, "food": 40, "egg": 1},
             resources=RESOURCES_WITH_CARNIVORE,
         )
         h.move_agent_east()
@@ -720,14 +720,14 @@ class TestPlantRegen:
         events = {
             "test_drop": EventConfig(
                 name="test_drop",
-                target_query=query(typeTag("plants")),
+                target_query=query(typeTag("plant")),
                 timesteps=[5],
                 mutations=[updateTarget({"food": 10})],
                 max_targets=10,
             ),
         }
 
-        plant_obj = plants_config()
+        plant_obj = plant_config()
         empty_plant = plant_obj.model_copy(update={"inventory": InventoryConfig(initial={"food": 0})})
 
         h = HungerTestHarness.create_event_test(
@@ -735,12 +735,12 @@ class TestPlantRegen:
             agent_initial={},
             events=events,
             max_steps=100,
-            objects={"plants": empty_plant},
+            objects={"plant": empty_plant},
         )
         h.step(10)
 
         grid_objects = h.simulation.grid_objects()
-        plants = [obj for obj in grid_objects.values() if "plants" in obj.get("type_name", "")]
+        plants = [obj for obj in grid_objects.values() if "plant" in obj.get("type_name", "")]
         assert any(obj.get("inventory", {}).get("food", 0) > 0 for obj in plants) or len(plants) == 0
         h.close()
 
@@ -754,7 +754,7 @@ class TestSeasonEvents:
     """Test events from variant pipeline (plants + kids)."""
 
     def test_generates_expected_events(self):
-        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plant", "seasons", "kids"])
         events = env.game.events
         # Seasonal food drops (seasons variant)
         for season in SEASON_FOOD_PCT:
@@ -768,7 +768,7 @@ class TestSeasonEvents:
         assert "starvation_check" in events
 
     def test_five_drops_per_season(self):
-        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plant", "seasons", "kids"])
         events = env.game.events
         for season in SEASON_FOOD_PCT:
             timesteps = events[f"{season}_food_drop"].timesteps
@@ -776,14 +776,14 @@ class TestSeasonEvents:
             assert len(timesteps) == DROPS_PER_SEASON * 5
 
     def test_summer_drops_more_than_winter(self):
-        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plant", "seasons", "kids"])
         events = env.game.events
         summer_hp = events["summer_food_drop"].mutations[0].deltas["food"]
         winter_hp = events["winter_food_drop"].mutations[0].deltas["food"]
         assert summer_hp > winter_hp
 
     def test_drop_targets_10pct_of_plants(self):
-        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plant", "seasons", "kids"])
         events = env.game.events
         num_plants = max(1, round(88 * 88 * 0.016 + 40))  # plants variant's _estimate_num_plants(40)
         expected = max(1, round(num_plants * DROP_TARGET_PCT))
@@ -791,7 +791,7 @@ class TestSeasonEvents:
             assert events[f"{season}_food_drop"].max_targets == expected
 
     def test_egg_drop_fires_at_fall_starts(self):
-        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plant", "seasons", "kids"])
         egg_drop_times = env.game.events["egg_drop"].timesteps
         # 5 years = 5 egg drops
         assert len(egg_drop_times) == 5
@@ -799,15 +799,15 @@ class TestSeasonEvents:
             assert t == i * YEAR_LENGTH + SEASON_LENGTH
 
     def test_egg_hatch_fires_at_spring_starts(self):
-        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env = make_game("hunger", num_agents=40, max_steps=5000, variants=["plant", "seasons", "kids"])
         egg_hatch_times = env.game.events["egg_hatch"].timesteps
         assert len(egg_hatch_times) == 5
         for i, t in enumerate(egg_hatch_times):
             assert t == i * YEAR_LENGTH + 3 * SEASON_LENGTH
 
     def test_food_scales_with_num_cogs(self):
-        env_small = make_game("hunger", num_agents=10, max_steps=5000, variants=["plants", "seasons", "kids"])
-        env_large = make_game("hunger", num_agents=80, max_steps=5000, variants=["plants", "seasons", "kids"])
+        env_small = make_game("hunger", num_agents=10, max_steps=5000, variants=["plant", "seasons", "kids"])
+        env_large = make_game("hunger", num_agents=80, max_steps=5000, variants=["plant", "seasons", "kids"])
         small_hp = env_small.game.events["summer_food_drop"].mutations[0].deltas["food"]
         large_hp = env_large.game.events["summer_food_drop"].mutations[0].deltas["food"]
         assert large_hp > small_hp

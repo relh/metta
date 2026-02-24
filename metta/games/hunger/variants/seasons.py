@@ -1,4 +1,4 @@
-"""Seasons variant: seasonal food drops that replenish plants."""
+"""Seasons variant: seasonal food drops that replenish plant objects."""
 
 from __future__ import annotations
 
@@ -38,18 +38,18 @@ def _drop_timesteps(season_offset: int, num_years: int) -> list[int]:
 
 
 def _estimate_num_plants(num_agents: int) -> int:
-    """Estimate total plants from map params. Used for food balance math."""
+    """Estimate total plant objects from map params. Used for food balance math."""
     from_buildings = int(MAP_WIDTH * MAP_HEIGHT * PLANT_DENSITY)
     from_hub = num_agents  # roughly 1 hub plant per agent spawn
     return from_buildings + from_hub
 
 
 class SeasonsVariant(CoGameMissionVariant):
-    """Add seasonal food drops that replenish plants. Requires plant variant."""
+    """Add seasonal food drops that replenish plant objects. Requires plant variant."""
 
     name: str = "seasons"
-    description: str = "Seasonal food drops replenish plants (summer/fall/winter/spring)."
-    depends_on: list[str] = ["plants"]
+    description: str = "Seasonal food drops replenish plant objects (summer/fall/winter/spring)."
+    depends_on: list[str] = ["plant"]
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
         num_cogs = len(env.game.agents)
@@ -58,7 +58,7 @@ class SeasonsVariant(CoGameMissionVariant):
         num_years = max_steps // YEAR_LENGTH
 
         drain_per_season = num_cogs * (SEASON_LENGTH // FOOD_DRAIN_PERIOD)
-        plant_query = query(typeTag("plants"))
+        plant_query = query(typeTag("plant"))
         plants_per_drop = max(1, round(num_plants * DROP_TARGET_PCT))
 
         for season_name, offset in [

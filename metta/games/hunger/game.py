@@ -20,6 +20,7 @@ from mettagrid.config.mettagrid_config import (
     WallConfig,
 )
 from mettagrid.config.obs_config import GlobalObsConfig, ObsConfig
+from mettagrid.config.render_config import RenderConfig
 from mettagrid.mapgen.mapgen import MapGen
 from mettagrid.mapgen.scenes.base_hub import BaseHub
 
@@ -68,6 +69,11 @@ class HungerGame(CoGameMission):
             objects={
                 "wall": WallConfig(name="wall"),
             },
+            render=RenderConfig(
+                assets={
+                    "agent": [],
+                },
+            ),
         )
         return MettaGridConfig(game=game)
 
@@ -75,7 +81,7 @@ class HungerGame(CoGameMission):
     def _map(num_agents: int) -> CoGameSite:
         return CoGameSite(
             name="hunger_arena",
-            description="Hunger arena. Add variants=plants, herbivore, or carnivore.",
+            description="Hunger arena. Add variants=plant, herbivore, or carnivore.",
             map_builder=MapGen.Config(
                 width=88,
                 height=88,

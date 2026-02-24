@@ -2,7 +2,7 @@
 
 Each agent randomly chooses carnivore or herbivore role, picks up the corresponding
 gear, then executes role-specific behavior:
-  - Herbivore: harvest plants, flee from carnivores
+  - Herbivore: harvest plant objects, flee from carnivores
   - Carnivore: hunt herbivores, avoid other carnivores (to protect egg)
 """
 
@@ -39,7 +39,7 @@ SPAWN_POS = (100, 100)
 
 def _herbivore_goals() -> list[Goal]:
     return [
-        GetGearGoal("herbivore_station", "scout"),
+        GetGearGoal("herbivore_station", "herbivore"),
         FleeGoal(),
         HarvestGoal(),
         ExploreGoal(),
@@ -48,7 +48,7 @@ def _herbivore_goals() -> list[Goal]:
 
 def _carnivore_goals() -> list[Goal]:
     return [
-        GetGearGoal("carnivore_station", "scrambler"),
+        GetGearGoal("carnivore_station", "carnivore"),
         AvoidPredatorGoal(),
         HuntGoal(),
         ExploreGoal(),

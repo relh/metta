@@ -22,7 +22,7 @@ def test_reach_adjacent_avoids_blocked_adjacent_goal_cells() -> None:
 
 
 def test_egg_events_include_first_year_only_for_partial_second_year() -> None:
-    env = make_game("hunger", num_agents=40, max_steps=1800, variants=["plants", "seasons", "kids"])
+    env = make_game("hunger", num_agents=40, max_steps=1800, variants=["plant", "seasons", "kids"])
 
     assert env.game.events["egg_drop"].timesteps == [250]
     assert env.game.events["egg_hatch"].timesteps == [750]

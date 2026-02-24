@@ -119,7 +119,7 @@ class ExploreGoal(Goal):
 
 
 class FleeGoal(Goal):
-    """Flee from nearby predators (scramblers)."""
+    """Flee from nearby predators (carnivores)."""
 
     name = "Flee"
     FLEE_RADIUS = 10
@@ -137,7 +137,7 @@ class FleeGoal(Goal):
         pos = ctx.state.position
         best_pos, best_d = None, self.FLEE_RADIUS + 1
         for epos, e in ctx.map.entities.items():
-            if e.type != "agent" or e.properties.get("scrambler", 0) <= 0:
+            if e.type != "agent" or e.properties.get("carnivore", 0) <= 0:
                 continue
             d = manhattan(pos, epos)
             if d < best_d:
@@ -146,14 +146,14 @@ class FleeGoal(Goal):
 
 
 class HarvestGoal(Goal):
-    """Find and harvest plants with food."""
+    """Find and harvest plant objects with food."""
 
     name = "Harvest"
 
     def execute(self, ctx: HungerContext) -> Action | None:
         pos = ctx.state.position
-        plants = ctx.map.find(type="plants")
-        usable = [(p, e) for p, e in plants if e.properties.get("food", 0) > 0]
+        plant_entities = ctx.map.find(type="plant")
+        usable = [(p, e) for p, e in plant_entities if e.properties.get("food", 0) > 0]
 
         if not usable:
             return ctx.navigator.explore(
@@ -198,7 +198,7 @@ class AvoidPredatorGoal(Goal):
         pos = ctx.state.position
         best_pos, best_d = None, self.AVOID_RADIUS + 1
         for epos, e in ctx.map.entities.items():
-            if e.type != "agent" or e.properties.get("scrambler", 0) <= 0:
+            if e.type != "agent" or e.properties.get("carnivore", 0) <= 0:
                 continue
             d = manhattan(pos, epos)
             if 0 < d < best_d:
@@ -207,7 +207,7 @@ class AvoidPredatorGoal(Goal):
 
 
 class HuntGoal(Goal):
-    """Find herbivores (scouts) and chase them down."""
+    """Find herbivores and chase them down."""
 
     name = "Hunt"
 
@@ -215,7 +215,7 @@ class HuntGoal(Goal):
         pos = ctx.state.position
         prey: list[tuple[tuple[int, int], int]] = []
         for epos, e in ctx.map.entities.items():
-            if e.type != "agent" or e.properties.get("scout", 0) <= 0:
+            if e.type != "agent" or e.properties.get("herbivore", 0) <= 0:
                 continue
             prey.append((epos, e.properties.get("food", 0)))
 
