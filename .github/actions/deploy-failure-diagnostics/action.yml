@@ -1,0 +1,65 @@
+name: Deploy Failure Diagnostics
+description: Collect Helm, migration job, and namespace event diagnostics after a failed deploy.
+
+inputs:
+  namespace:
+    required: true
+    description: Kubernetes namespace of the release
+  release:
+    required: true
+    description: Helm release name
+  migrate_job_prefix:
+    required: false
+    description: Prefix for migration job names
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NAMESPACE: ${{ inputs.namespace }}
+        RELEASE: ${{ inputs.release }}
+        MIGRATE_JOB_PREFIX: ${{ inputs.migrate_job_prefix }}
+      run: |
+        set +e
+
+        namespace="$NAMESPACE"
+        release="$RELEASE"
+        migrate_job_prefix="${MIGRATE_JOB_PREFIX:-${release}-db-migrate}"
+
+        echo "Collecting diagnostics for release=${release} namespace=${namespace}"
+
+        echo "::group::helm status"
+        helm -n "$namespace" status "$release"
+        echo "::endgroup::"
+
+        echo "::group::helm history"
+        helm -n "$namespace" history "$release"
+        echo "::endgroup::"
+
+        echo "::group::migration jobs"
+        kubectl -n "$namespace" get jobs --sort-by=.metadata.creationTimestamp | grep "$migrate_job_prefix"
+        echo "::endgroup::"
+
+        latest_job="$(
+          kubectl -n "$namespace" get jobs --sort-by=.metadata.creationTimestamp -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' \
+            | grep "^${migrate_job_prefix}" \
+            | tail -n1
+        )"
+        if [[ -n "$latest_job" ]]; then
+          echo "::group::migration job describe (${latest_job})"
+          kubectl -n "$namespace" describe job "$latest_job"
+          echo "::endgroup::"
+
+          pod="$(kubectl -n "$namespace" get pods -l "job-name=${latest_job}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)"
+          if [[ -n "$pod" ]]; then
+            echo "::group::migration pod logs (${pod})"
+            kubectl -n "$namespace" logs "$pod" --all-containers=true --tail=-1
+            echo "::endgroup::"
+          fi
+        fi
+
+        echo "::group::recent namespace events"
+        kubectl -n "$namespace" get events --sort-by=.lastTimestamp | tail -n 40
+        echo "::endgroup::"

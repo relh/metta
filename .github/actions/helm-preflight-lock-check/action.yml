@@ -1,0 +1,39 @@
+name: Helm Preflight Lock Check
+description: Check that a Helm release is not stuck in a pending state before deploying.
+
+inputs:
+  namespace:
+    required: true
+    description: Kubernetes namespace of the release
+  release:
+    required: true
+    description: Helm release name
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        NAMESPACE: ${{ inputs.namespace }}
+        RELEASE: ${{ inputs.release }}
+      run: |
+        set -euo pipefail
+
+        namespace="$NAMESPACE"
+        release="$RELEASE"
+
+        if ! status_json="$(helm -n "$namespace" status "$release" -o json 2>/dev/null)"; then
+          echo "No existing Helm release found for ${release} in namespace ${namespace}."
+          exit 0
+        fi
+
+        status="$(echo "$status_json" | jq -r '.info.status')"
+
+        echo "Helm release status: ${status}"
+        case "$status" in
+          pending-install|pending-upgrade|pending-rollback)
+            echo "::error::Helm release ${release} is ${status}; resolve the lock before deploying."
+            helm -n "$namespace" history "$release" || true
+            exit 1
+            ;;
+        esac

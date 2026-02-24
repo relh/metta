@@ -28,7 +28,8 @@ spec:
       containers:
         - name: server
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "tag is required" .Values.image.tag }}"
-          imagePullPolicy: Always
+          # Tags are immutable commit SHAs in this deployment flow.
+          imagePullPolicy: IfNotPresent
           command: ["uv", "run", "--no-sync", "python", "src/metta/app_backend/server.py"]
           workingDir: /workspace/metta/app_backend
           envFrom:

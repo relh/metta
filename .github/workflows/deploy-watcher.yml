@@ -34,15 +34,27 @@ jobs:
         uses: ./.github/actions/eks-configure
         with:
           aws_role: ${{ vars.AWS_ROLE }}
+      - name: Preflight release lock check
+        uses: ./.github/actions/helm-preflight-lock-check
+        with:
+          namespace: orchestrator
+          release: orchestrator
 
       - name: Deploy watcher
         run: |
-          helm upgrade \
+          helm upgrade -i \
+            --atomic --timeout 15m \
             -n orchestrator \
             orchestrator \
             ./devops/charts/orchestrator \
             --reuse-values \
             --set watcher.imageTag=${{ inputs.image_tag }}
+      - name: Collect deploy failure diagnostics
+        if: failure()
+        uses: ./.github/actions/deploy-failure-diagnostics
+        with:
+          namespace: orchestrator
+          release: orchestrator
 
   notify-discord:
     name: Notify Discord

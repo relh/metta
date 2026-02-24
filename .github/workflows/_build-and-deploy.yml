@@ -144,10 +144,18 @@ jobs:
         if: inputs.pre_deploy_command != ''
         run: ${{ inputs.pre_deploy_command }}
 
+      - name: Preflight production release lock check
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: ./.github/actions/helm-preflight-lock-check
+        with:
+          namespace: ${{ inputs.namespace }}
+          release: ${{ inputs.release }}
+
       - name: Deploy to production
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
-          helm upgrade \
+          helm upgrade -i \
+            --atomic --timeout 15m \
             -n ${{ inputs.namespace }} \
             ${{ inputs.release }} \
             ${{ inputs.chart }} \
@@ -165,6 +173,24 @@ jobs:
             --set image.tag=${{ steps.build-image.outputs.tag }} \
             --labels pr-preview=true,pr-number=${{ github.event.pull_request.number }} \
             ${{ inputs.preview_helm_values }}
+
+      - name: Determine release name for diagnostics
+        id: diag-release
+        if: failure() && (github.ref == 'refs/heads/main' || env.BUILD_PREVIEW == 'true')
+        shell: bash
+        run: |
+          if [[ "$BUILD_PREVIEW" == "true" ]]; then
+            echo "name=${{ inputs.release }}-pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=${{ inputs.release }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Collect deploy failure diagnostics
+        if: failure() && (github.ref == 'refs/heads/main' || env.BUILD_PREVIEW == 'true')
+        uses: ./.github/actions/deploy-failure-diagnostics
+        with:
+          namespace: ${{ inputs.namespace }}
+          release: ${{ steps.diag-release.outputs.name }}
 
       - name: Comment PR with preview URL
         if: env.BUILD_PREVIEW == 'true' && inputs.preview_host != ''
