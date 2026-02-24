@@ -27,6 +27,7 @@ class User(BaseModel):
     email: str
     is_softmax_team_member: bool = Field(default=False, alias="is_softmax_team_member")
     is_service_account_user: bool = Field(default=False)
+    discord_id: Optional[str] = Field(default=None)
 
 
 def get_user_from_header(request: Request) -> Optional[User]:
@@ -150,6 +151,7 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
                         id=user_info.get("id"),
                         email=user_info.get("email"),
                         is_softmax_team_member=user_info.get("isSoftmaxTeamMember", False),
+                        discord_id=user_info.get("discordId", None),
                     )
                 return None
 

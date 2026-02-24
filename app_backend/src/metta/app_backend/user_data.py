@@ -23,6 +23,7 @@ class UserRow(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     is_softmax_team_member: Optional[bool] = None
+    discord_id: Optional[str] = None
 
 
 class Ownable(BaseModel):
@@ -33,30 +34,26 @@ class Ownable(BaseModel):
 def _user_row(info: dict, user_id: str, *, include_sensitive: bool) -> UserRow:
     raw_name = info.get("name")
     raw_email = info.get("email")
+    raw_discord_id = info.get("discordId")
     return UserRow(
         id=str(info.get("id", user_id)),
         name=str(raw_name) if raw_name is not None else None,
         email=str(raw_email) if include_sensitive and raw_email is not None else None,
         is_softmax_team_member=bool(info.get("isSoftmaxTeamMember", False)) if include_sensitive else None,
+        discord_id=str(raw_discord_id) if include_sensitive and raw_discord_id is not None else None,
     )
 
 
-async def fill_user_data(entities: Sequence[Ownable], *, current_user: Optional[User] = None) -> None:
-    """Batch-resolve user info for entities with user_id.
+async def load_user_ids(user_ids: list[str], *, include_sensitive: bool = True) -> dict[str, UserRow]:
+    """Resolve user IDs to UserRow objects via the softmax.com API.
 
-    Calls the softmax.com /api/users/resolve endpoint to look up user data.
-    Results are cached for 5 minutes per user to avoid repeated cross-service calls.
-    Emails are only included when current_user is a softmax team member.
-    Degrades gracefully on failure — leaves entity.user as None.
+    Results are cached for 5 minutes per user. Degrades gracefully on failure.
     """
-    user_ids = list({e.user_id for e in entities})
     if not user_ids or not settings.OBSERVATORY_AUTH_SECRET:
-        return
+        return {}
 
-    include_sensitive = current_user is not None and current_user.is_softmax_team_member
-
-    # Snapshot cached entries into a local dict so TTL expiry between the
-    # write and read phases can't silently drop users.
+    # Snapshot cached entries so TTL expiry between the write and read
+    # phases can't silently drop users.
     resolved: dict[str, dict] = {}
     uncached_ids: list[str] = []
     for uid in user_ids:
@@ -85,7 +82,29 @@ async def fill_user_data(entities: Sequence[Ownable], *, current_user: Optional[
         except Exception:
             logger.warning("Failed to resolve user data", exc_info=(not settings.LOCAL_DEV))
 
+    return {uid: _user_row(info, uid, include_sensitive=include_sensitive) for uid, info in resolved.items()}
+
+
+async def load_user_id(user_id: str, *, include_sensitive: bool = True) -> Optional[UserRow]:
+    """Resolve a single user ID. Returns None if resolution fails."""
+    result = await load_user_ids([user_id], include_sensitive=include_sensitive)
+    return result.get(user_id)
+
+
+async def fill_user_data(entities: Sequence[Ownable], *, current_user: Optional[User] = None) -> None:
+    """Batch-resolve user info for entities with user_id.
+
+    Calls the softmax.com /api/users/resolve endpoint to look up user data.
+    Results are cached for 5 minutes per user to avoid repeated cross-service calls.
+    Emails are only included when current_user is a softmax team member.
+    Degrades gracefully on failure — leaves entity.user as None.
+    """
+    user_ids = list({e.user_id for e in entities})
+    include_sensitive = current_user is not None and current_user.is_softmax_team_member
+
+    resolved = await load_user_ids(user_ids, include_sensitive=include_sensitive)
+
     for entity in entities:
-        info = resolved.get(entity.user_id)
-        if info:
-            entity.user = _user_row(info, entity.user_id, include_sensitive=include_sensitive)
+        user = resolved.get(entity.user_id)
+        if user:
+            entity.user = user

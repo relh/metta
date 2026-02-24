@@ -2878,6 +2878,8 @@ export interface components {
       email?: string | null
       /** Is Softmax Team Member */
       is_softmax_team_member?: boolean | null
+      /** Discord Id */
+      discord_id?: string | null
     }
     /** ValidationError */
     ValidationError: {
