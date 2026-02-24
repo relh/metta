@@ -77,7 +77,6 @@ const OPPONENT_COLORS = [
 ]
 
 const METTASCOPE_REPLAY_URL_PREFIX = 'https://metta-ai.github.io/metta/mettascope/mettascope.html?replay='
-const VIBESCOPE_REPLAY_URL_PREFIX = 'https://metta-ai.github.io/metta/vibescope/vibescope.html?replay='
 
 const DASHBOARD_FEEDBACK_ISSUE_URL = 'https://github.com/Metta-AI/metta/issues/new'
 const DEFAULT_DASHBOARD_CACHE_KEY = '__default__'
@@ -104,7 +103,6 @@ type OpponentSummaryRow = {
   source: 'derived' | 'episodes'
 }
 
-type ReplayScope = 'mettascope' | 'vibescope'
 type ReplaySpotlightMode = 'selected' | 'worst' | 'median' | 'best'
 type OverviewTrendMetric = 'reward' | 'noop_rate' | 'steps' | 'resource_gained'
 type TrainingFocus = 'mining' | 'aligning' | 'scouting' | 'coordination' | 'scrambling'
@@ -331,15 +329,6 @@ function normalizeReplayUrl(replayUrl: string | null | undefined): string | null
   if (!replayUrl) return null
   if (replayUrl.startsWith(METTASCOPE_REPLAY_URL_PREFIX)) return replayUrl
   return `${METTASCOPE_REPLAY_URL_PREFIX}${replayUrl}`
-}
-
-function normalizeVibescopeUrl(replayUrl: string | null | undefined): string | null {
-  if (!replayUrl) return null
-  if (replayUrl.startsWith(VIBESCOPE_REPLAY_URL_PREFIX)) return replayUrl
-  const raw = replayUrl.startsWith(METTASCOPE_REPLAY_URL_PREFIX)
-    ? replayUrl.slice(METTASCOPE_REPLAY_URL_PREFIX.length)
-    : replayUrl
-  return `${VIBESCOPE_REPLAY_URL_PREFIX}${raw}`
 }
 
 function episodeResourceGained(episode: DashboardEpisode): number {
@@ -676,7 +665,6 @@ export function DashboardClient() {
   const [tagQuery, setTagQuery] = useState('')
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [overviewReplayMode, setOverviewReplayMode] = useState<ReplaySpotlightMode>('selected')
-  const [overviewReplayScope, setOverviewReplayScope] = useState<ReplayScope>('vibescope')
   const [overviewTrendMetric, setOverviewTrendMetric] = useState<OverviewTrendMetric>('reward')
   const [autoCommandCopied, setAutoCommandCopied] = useState(false)
   const [episodeSort, setEpisodeSort] = useState<EpisodeSortKey>('reward')
@@ -956,13 +944,11 @@ export function DashboardClient() {
   const replaySpotlightUrls = useMemo(() => {
     const replayUrl = typeof replaySpotlightEpisode?.replay_url === 'string' ? replaySpotlightEpisode.replay_url : null
     const mettascopeUrl = normalizeReplayUrl(replayUrl)
-    const vibescopeUrl = normalizeVibescopeUrl(replayUrl)
     return {
       mettascopeUrl,
-      vibescopeUrl,
-      selected: overviewReplayScope === 'vibescope' ? vibescopeUrl : mettascopeUrl,
+      selected: mettascopeUrl,
     }
-  }, [overviewReplayScope, replaySpotlightEpisode?.replay_url])
+  }, [replaySpotlightEpisode?.replay_url])
 
   const replaySpotlightFocusStep = useMemo(
     () => estimateReplayFocusStep(replaySpotlightEpisode),
@@ -1634,49 +1620,6 @@ export function DashboardClient() {
                     </p>
                   ) : (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        <label style={{ display: 'grid', gap: 6 }}>
-                          Episode focus
-                          <select
-                            value={overviewReplayMode}
-                            onChange={(event) => setOverviewReplayMode(event.target.value as ReplaySpotlightMode)}
-                          >
-                            <option value="selected" disabled={!selectedReplayEpisodeFromTable}>
-                              selected from Episodes tab
-                            </option>
-                            <option value="worst">worst reward with replay</option>
-                            <option value="median">median reward with replay</option>
-                            <option value="best">best reward with replay</option>
-                          </select>
-                        </label>
-                        <label style={{ display: 'grid', gap: 6 }}>
-                          Viewer
-                          <select
-                            value={overviewReplayScope}
-                            onChange={(event) => setOverviewReplayScope(event.target.value as ReplayScope)}
-                          >
-                            <option value="vibescope">VibeScope</option>
-                            <option value="mettascope">MettaScope</option>
-                          </select>
-                        </label>
-                      </div>
-                      <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                        Episode: <code>{replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : '-'}</code>{' '}
-                        · reward{' '}
-                        <code>
-                          {formatNumber(
-                            toFiniteNumber(replaySpotlightEpisode?.reward ?? replaySpotlightEpisode?.avg_reward),
-                            3
-                          )}
-                        </code>{' '}
-                        · steps <code>{String(toFiniteNumber(replaySpotlightEpisode?.steps) ?? '-')}</code>
-                        {replaySpotlightFocusStep !== null && (
-                          <>
-                            {' '}
-                            · seek hint <code>~step {replaySpotlightFocusStep}</code>
-                          </>
-                        )}
-                      </p>
                       <div
                         style={{
                           width: '100%',
@@ -1698,12 +1641,46 @@ export function DashboardClient() {
                           <div style={{ padding: 12, color: '#fff' }}>Replay viewer unavailable for this episode.</div>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
-                        {replaySpotlightUrls.vibescopeUrl && (
-                          <a href={replaySpotlightUrls.vibescopeUrl} target="_blank" rel="noreferrer">
-                            Open in VibeScope
-                          </a>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <label style={{ display: 'grid', gap: 6 }}>
+                          Episode focus
+                          <select
+                            value={overviewReplayMode}
+                            onChange={(event) => setOverviewReplayMode(event.target.value as ReplaySpotlightMode)}
+                          >
+                            <option value="selected" disabled={!selectedReplayEpisodeFromTable}>
+                              selected from Episodes tab
+                            </option>
+                            <option value="worst">worst reward with replay</option>
+                            <option value="median">median reward with replay</option>
+                            <option value="best">best reward with replay</option>
+                          </select>
+                        </label>
+                        <label style={{ display: 'grid', gap: 6 }}>
+                          Viewer
+                          <select value="mettascope" disabled>
+                            <option value="mettascope">MettaScope</option>
+                          </select>
+                        </label>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                        Episode: <code>{replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : '-'}</code>{' '}
+                        · reward{' '}
+                        <code>
+                          {formatNumber(
+                            toFiniteNumber(replaySpotlightEpisode?.reward ?? replaySpotlightEpisode?.avg_reward),
+                            3
+                          )}
+                        </code>{' '}
+                        · steps <code>{String(toFiniteNumber(replaySpotlightEpisode?.steps) ?? '-')}</code>
+                        {replaySpotlightFocusStep !== null && (
+                          <>
+                            {' '}
+                            · seek hint <code>~step {replaySpotlightFocusStep}</code>
+                          </>
                         )}
+                      </p>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
                         {replaySpotlightUrls.mettascopeUrl && (
                           <a href={replaySpotlightUrls.mettascopeUrl} target="_blank" rel="noreferrer">
                             Open in MettaScope
@@ -1717,83 +1694,87 @@ export function DashboardClient() {
                   )}
                 </article>
 
-                <article className="card grid" style={{ gap: 10 }}>
-                  <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
-                    <h2 style={{ margin: 0 }}>Episode Metrics Over Time</h2>
-                    <span className="dashboard-title-subline">X: episode time, Y: selected metric.</span>
-                  </div>
-                  <label style={{ display: 'grid', gap: 6, maxWidth: 300 }}>
-                    Metric
-                    <select
-                      value={overviewTrendMetric}
-                      onChange={(event) => setOverviewTrendMetric(event.target.value as OverviewTrendMetric)}
-                    >
-                      <option value="reward">Reward</option>
-                      <option value="noop_rate">Noop rate</option>
-                      <option value="steps">Steps</option>
-                      <option value="resource_gained">Resource gained</option>
-                    </select>
-                  </label>
-                  {overviewTrendPoints.length < 2 || !overviewTrendStats ? (
-                    <p style={{ margin: 0 }}>
-                      Not enough per-episode signal for this metric yet. Per-step curves (resource/gear over time)
-                      require richer episode telemetry; we can add those when backend collection lands.
-                    </p>
-                  ) : (
-                    <>
-                      <div style={{ overflowX: 'auto' }}>
-                        <svg width="100%" height="220" viewBox="0 0 640 220" role="img" aria-label="Metric over time">
-                          <rect x="0" y="0" width="640" height="220" fill="var(--panel-soft-bg-1)" />
-                          <path d={overviewTrendPath} fill="none" stroke="#2563eb" strokeWidth="2.5" />
-                        </svg>
-                      </div>
-                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
-                        <span>
-                          Start: <code>{formatDateTime(overviewTrendStats.start)}</code>
-                        </span>
-                        <span>
-                          End: <code>{formatDateTime(overviewTrendStats.end)}</code>
-                        </span>
-                        <span>
-                          Min/Max: <code>{formatNumber(overviewTrendStats.min, 3)}</code> /{' '}
-                          <code>{formatNumber(overviewTrendStats.max, 3)}</code>
-                        </span>
-                        <span>
-                          Delta: <code>{formatSigned(overviewTrendStats.latest - overviewTrendStats.oldest, 3)}</code>
-                        </span>
-                      </div>
-                    </>
-                  )}
-                </article>
-              </section>
+                <div className="grid" style={{ gap: 10 }}>
+                  <article className="card grid" style={{ gap: 10 }}>
+                    <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
+                      <h2 style={{ margin: 0 }}>Episode Metrics Over Time</h2>
+                      <span className="dashboard-title-subline">X: episode time, Y: selected metric.</span>
+                    </div>
+                    <label style={{ display: 'grid', gap: 6, maxWidth: 300 }}>
+                      Metric
+                      <select
+                        value={overviewTrendMetric}
+                        onChange={(event) => setOverviewTrendMetric(event.target.value as OverviewTrendMetric)}
+                      >
+                        <option value="reward">Reward</option>
+                        <option value="noop_rate">Noop rate</option>
+                        <option value="steps">Steps</option>
+                        <option value="resource_gained">Resource gained</option>
+                      </select>
+                    </label>
+                    {overviewTrendPoints.length < 2 || !overviewTrendStats ? (
+                      <p style={{ margin: 0 }}>
+                        Not enough per-episode signal for this metric yet. Per-step curves (resource/gear over time)
+                        require richer episode telemetry; we can add those when backend collection lands.
+                      </p>
+                    ) : (
+                      <>
+                        <div style={{ overflowX: 'auto' }}>
+                          <svg width="100%" height="220" viewBox="0 0 640 220" role="img" aria-label="Metric over time">
+                            <rect x="0" y="0" width="640" height="220" fill="var(--panel-soft-bg-1)" />
+                            <path d={overviewTrendPath} fill="none" stroke="#2563eb" strokeWidth="2.5" />
+                          </svg>
+                        </div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+                          <span>
+                            Start: <code>{formatDateTime(overviewTrendStats.start)}</code>
+                          </span>
+                          <span>
+                            End: <code>{formatDateTime(overviewTrendStats.end)}</code>
+                          </span>
+                          <span>
+                            Min/Max: <code>{formatNumber(overviewTrendStats.min, 3)}</code> /{' '}
+                            <code>{formatNumber(overviewTrendStats.max, 3)}</code>
+                          </span>
+                          <span>
+                            Delta: <code>{formatSigned(overviewTrendStats.latest - overviewTrendStats.oldest, 3)}</code>
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </article>
 
-              {data.derived?.outcome && (
-                <section className="card">
-                  <h2 style={{ marginTop: 0 }}>Outcome Summary</h2>
-                  <p style={{ marginTop: 0 }}>
-                    {String(data.derived.outcome.reason ?? 'No outcome summary provided.')}
-                  </p>
-                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
-                    <span>
-                      Evidence: <strong>{data.derived.outcome.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
-                    </span>
-                    <span>
-                      Score delta:{' '}
-                      <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.score_delta), 3)}</code>
-                    </span>
-                    <span>
-                      Rank delta: <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.rank_delta), 0)}</code>
-                    </span>
-                    <span>
-                      Baseline: v
-                      {data.derived.outcome.baseline?.version === null ||
-                      data.derived.outcome.baseline?.version === undefined
-                        ? '-'
-                        : data.derived.outcome.baseline.version}
-                    </span>
-                  </div>
-                </section>
-              )}
+                  {data.derived?.outcome && (
+                    <article className="card">
+                      <h2 style={{ marginTop: 0 }}>Outcome Summary</h2>
+                      <p style={{ marginTop: 0 }}>
+                        {String(data.derived.outcome.reason ?? 'No outcome summary provided.')}
+                      </p>
+                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
+                        <span>
+                          Evidence:{' '}
+                          <strong>{data.derived.outcome.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
+                        </span>
+                        <span>
+                          Score delta:{' '}
+                          <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.score_delta), 3)}</code>
+                        </span>
+                        <span>
+                          Rank delta:{' '}
+                          <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.rank_delta), 0)}</code>
+                        </span>
+                        <span>
+                          Baseline: v
+                          {data.derived.outcome.baseline?.version === null ||
+                          data.derived.outcome.baseline?.version === undefined
+                            ? '-'
+                            : data.derived.outcome.baseline.version}
+                        </span>
+                      </div>
+                    </article>
+                  )}
+                </div>
+              </section>
 
               <section className="card">
                 <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
