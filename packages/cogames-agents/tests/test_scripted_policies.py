@@ -18,6 +18,7 @@ from cogames.play import play as play_episode
 from mettagrid.envs.mettagrid_puffer_env import MettaGridPufferEnv
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
+from mettagrid.runner.rollout import run_episode_local
 from mettagrid.simulator import Simulator
 
 
@@ -184,3 +185,26 @@ def test_scripted_policies_can_play_short_episode(policy: PolicyUnderTest, env_c
         seed=42,
         render_mode="none",
     )
+
+
+@pytest.mark.skipif(
+    not _nim_bindings_available(),
+    reason=(
+        "Nim bindings missing. Run `nim c nim_agents.nim` in "
+        "packages/cogames-agents/src/cogames_agents/policy/nim_agents."
+    ),
+)
+def test_nlanky_aligns_junctions_in_machina() -> None:
+    _, env_cfg, _ = get_mission("cogsguard_machina_1.basic", variants_arg=None, cogs=None)
+    env_cfg.game.max_steps = 200
+    results, _ = run_episode_local(
+        policy_specs=[PolicySpec(class_path="nlanky", data_path=None)],
+        assignments=[0] * env_cfg.game.num_agents,
+        env=env_cfg,
+        seed=42,
+        device="cpu",
+        render_mode="none",
+    )
+    agent_stats = results.stats.get("agent", [])
+    aligned_total = sum(float(stats.get("junction.aligned_by_agent", 0.0)) for stats in agent_stats)
+    assert aligned_total > 0.0, f"Expected nlanky to align at least one junction, got stats={agent_stats}"

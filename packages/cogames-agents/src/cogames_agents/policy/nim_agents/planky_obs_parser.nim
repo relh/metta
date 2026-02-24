@@ -63,6 +63,9 @@ proc deriveAlignment(objName: string, clipped: int, aoeMask: int, tagNames: seq[
         return alCogs
       if tag == "team:clips":
         return alClips
+  # Territory influence should not imply ownership for neutral junctions.
+  if "junction" in objName:
+    return alNone
   if "c:" in objName:
     return alCogs
   if "clips" in objName or clipped > 0:

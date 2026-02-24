@@ -885,25 +885,147 @@ const
   AlignMaxAttemptsPerTarget = 5
   AlignMaxNavStepsPerTarget = 40
   AlignCooldownSteps = 50
+  AlignConnectivityRadius = 15
+  AlignHubSearchRadius = 15
 
 proc alignRecentlyFailed(ctx: PlankyContext, p: Location): bool =
   let failedStep = ctx.bb[].ints.getOrDefault("align_failed_" & locKey(p), -9999)
   ctx.step - failedStep < AlignCooldownSteps
 
-proc findBestNeutralJunction(ctx: PlankyContext): Option[Location] =
+proc sqDist(a: Location, b: Location): int =
+  let dr = a.y - b.y
+  let dc = a.x - b.x
+  dr * dr + dc * dc
+
+proc getHomeHub(ctx: PlankyContext): Option[Location] =
+  let homeHubKey = "_align_home_hub"
+  if ctx.bb[].locs.hasKey(homeHubKey):
+    return some(ctx.bb[].locs[homeHubKey])
+
+  var hubOpt = ctx.map.findNearest(ctx.state.position, kindContains="hub", alignment=alCogs)
+  if hubOpt.isNone:
+    # Fallback for partial/ambiguous tag observations: still anchor around the nearest hub.
+    hubOpt = ctx.map.findNearest(ctx.state.position, kindContains="hub")
+    if hubOpt.isNone:
+      return none(Location)
+  let (hubPos, _) = hubOpt.get()
+  ctx.bb[].locs[homeHubKey] = hubPos
+  some(hubPos)
+
+proc buildConnectedCogsNodes(ctx: PlankyContext, homeHub: Location): seq[Location] =
+  let r2 = AlignConnectivityRadius * AlignConnectivityRadius
+  var connected: seq[Location] = @[homeHub]
+  var pending: seq[Location] = @[]
+
+  for (jpos, _) in ctx.map.find(kindContains="junction", alignment=alCogs):
+    pending.add(jpos)
+
+  var changed = true
+  while changed:
+    changed = false
+    var nextPending: seq[Location] = @[]
+    for jpos in pending:
+      var joinsNetwork = false
+      for cpos in connected:
+        if sqDist(jpos, cpos) <= r2:
+          joinsNetwork = true
+          break
+      if joinsNetwork:
+        connected.add(jpos)
+        changed = true
+      else:
+        nextPending.add(jpos)
+    pending = nextPending
+
+  connected
+
+proc isConnectedToCogsNetwork(ctx: PlankyContext, p: Location): bool =
+  let homeHubOpt = getHomeHub(ctx)
+  if homeHubOpt.isNone:
+    return false
+
+  let connected = buildConnectedCogsNodes(ctx, homeHubOpt.get())
+  let r2 = AlignConnectivityRadius * AlignConnectivityRadius
+  for cpos in connected:
+    if sqDist(p, cpos) <= r2:
+      return true
+
+  false
+
+proc getAlignHubSearchTarget(ctx: var PlankyContext, homeHub: Location): Location =
+  let offsets = [
+    (-AlignHubSearchRadius, 0),
+    (0, -AlignHubSearchRadius),
+    (AlignHubSearchRadius, 0),
+    (0, AlignHubSearchRadius),
+    (-AlignHubSearchRadius div 2, -AlignHubSearchRadius div 2),
+    (AlignHubSearchRadius div 2, -AlignHubSearchRadius div 2),
+    (AlignHubSearchRadius div 2, AlignHubSearchRadius div 2),
+    (-AlignHubSearchRadius div 2, AlignHubSearchRadius div 2),
+  ]
+  let key = "_align_hub_scan_idx"
+  # Seed aligners across the 4 cardinal spokes first (agents 4..7 map to 0..3).
+  var idx = ctx.bb[].ints.getOrDefault(key, ctx.agentId mod 4)
+  var target = Location(x: homeHub.x + offsets[idx][1], y: homeHub.y + offsets[idx][0])
+  if manhattan(ctx.state.position, target) <= 2:
+    idx = (idx + 1) mod offsets.len
+    ctx.bb[].ints[key] = idx
+    target = Location(x: homeHub.x + offsets[idx][1], y: homeHub.y + offsets[idx][0])
+  target
+
+proc alignSearchAction(ctx: var PlankyContext): NavAction =
+  let homeHubOpt = getHomeHub(ctx)
+  if homeHubOpt.isSome:
+    let target = getAlignHubSearchTarget(ctx, homeHubOpt.get())
+    return ctx.nav.getAction(ctx.state.position, target, ctx.map, reachAdjacent=true)
+  ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId))
+
+proc findBestAlignableJunction(ctx: PlankyContext): Option[Location] =
   let pos = ctx.state.position
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
-  for (jpos, e) in ctx.map.find(kindContains="junction"):
+
+  for (jpos, e) in ctx.map.find(kind="junction"):
     if e.alignment != alNone:
       continue
     if alignRecentlyFailed(ctx, jpos):
       continue
+    if not isConnectedToCogsNetwork(ctx, jpos):
+      continue
+
     let d = manhattan(pos, jpos)
     if d < bestDist:
       bestDist = d
       best = some(jpos)
+
   best
+
+proc isAlignableTarget(ctx: PlankyContext, p: Location): bool =
+  if p notin ctx.map.entities:
+    return false
+  let ent = ctx.map.entities[p]
+  if ent.kind != "junction":
+    return false
+  if ent.alignment != alNone:
+    return false
+  if alignRecentlyFailed(ctx, p):
+    return false
+  if not isConnectedToCogsNetwork(ctx, p):
+    return false
+  true
+
+proc findAdjacentAlignableJunction(ctx: PlankyContext): Option[Location] =
+  let p = ctx.state.position
+  let neighbors = [
+    Location(x: p.x, y: p.y - 1),
+    Location(x: p.x, y: p.y + 1),
+    Location(x: p.x - 1, y: p.y),
+    Location(x: p.x + 1, y: p.y),
+  ]
+  for npos in neighbors:
+    if isAlignableTarget(ctx, npos):
+      return some(npos)
+  none(Location)
 
 method isSatisfied*(g: AlignJunctionGoal, ctx: var PlankyContext): bool =
   discard g
@@ -920,10 +1042,19 @@ method execute*(g: AlignJunctionGoal, ctx: var PlankyContext): Option[NavAction]
   ctx.bb[].ints[navKey] = ctx.bb[].ints.getOrDefault(navKey, 0) + 1
   var navSteps = ctx.bb[].ints[navKey]
 
-  let targetOpt = findBestNeutralJunction(ctx)
+  var targetOpt = none(Location)
+  let adjacent = findAdjacentAlignableJunction(ctx)
+  if adjacent.isSome:
+    targetOpt = adjacent
+  if ctx.bb[].locs.hasKey(targetKey):
+    let existingTarget = ctx.bb[].locs[targetKey]
+    if targetOpt.isNone and isAlignableTarget(ctx, existingTarget):
+      targetOpt = some(existingTarget)
+  if targetOpt.isNone:
+    targetOpt = findBestAlignableJunction(ctx)
   if targetOpt.isNone:
     ctx.bb[].ints[navKey] = 0
-    return some(ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId)))
+    return some(alignSearchAction(ctx))
   let target = targetOpt.get()
 
   let prevTarget = ctx.bb[].locs.getOrDefault(targetKey, Location(x: -9999, y: -9999))
@@ -935,7 +1066,7 @@ method execute*(g: AlignJunctionGoal, ctx: var PlankyContext): Option[NavAction]
   if navSteps > AlignMaxNavStepsPerTarget:
     ctx.bb[].ints["align_failed_" & locKey(target)] = ctx.step
     ctx.bb[].ints[navKey] = 0
-    return some(ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId)))
+    return some(alignSearchAction(ctx))
 
   let dist = manhattan(ctx.state.position, target)
   if dist <= 1:
@@ -945,7 +1076,7 @@ method execute*(g: AlignJunctionGoal, ctx: var PlankyContext): Option[NavAction]
     if attempts > AlignMaxAttemptsPerTarget:
       ctx.bb[].ints["align_failed_" & locKey(target)] = ctx.step
       ctx.bb[].ints[attemptsKey] = 0
-      return some(ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId)))
+      return some(alignSearchAction(ctx))
     return some(moveToward(ctx.state.position, target))
 
   ctx.bb[].ints["align_attempts_" & locKey(target)] = 0
