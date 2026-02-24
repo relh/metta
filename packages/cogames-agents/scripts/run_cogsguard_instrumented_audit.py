@@ -21,7 +21,9 @@ from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
 from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
-from cogames.cogs_vs_clips.stations import GEAR_COSTS
+from cogames.cogs_vs_clips.config import CvCConfig
+
+GEAR_COSTS = CvCConfig.GEAR_COSTS
 
 MOVE_DELTAS = {
     "move_north": (-1, 0),
@@ -29,6 +31,20 @@ MOVE_DELTAS = {
     "move_east": (0, 1),
     "move_west": (0, -1),
 }
+
+
+def _get_cogs_team_inventory(harness: DebugHarness) -> dict[str, int]:
+    c_sim = getattr(harness.sim, "_c_sim", None)
+    if c_sim is None:
+        return {}
+    get_team_inventories = getattr(c_sim, "get_team_inventories", None)
+    if callable(get_team_inventories):
+        team_inventories = get_team_inventories()
+        if isinstance(team_inventories, dict):
+            cogs = team_inventories.get("cogs", {})
+            if isinstance(cogs, dict):
+                return {str(key): int(value) for key, value in cogs.items()}
+    return {}
 
 
 def run_audit(
@@ -66,9 +82,7 @@ def run_audit(
         role_counts: Counter[str] = Counter()
         adjacent_roles = {role: False for role in GEAR_COSTS}
 
-        hub_inv = {}
-        if hasattr(harness.sim, "_c_sim"):
-            hub_inv = harness.sim._c_sim.get_team_inventories().get("cogs", {})
+        hub_inv = _get_cogs_team_inventory(harness)
         available_roles = {
             role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()

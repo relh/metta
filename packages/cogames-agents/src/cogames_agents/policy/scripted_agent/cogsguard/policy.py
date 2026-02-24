@@ -67,8 +67,11 @@ VIBE_TO_ROLE = {
     "aligner": Role.ALIGNER,
     "scrambler": Role.SCRAMBLER,
 }
-SMART_ROLE_SWITCH_COOLDOWN = 40
+SMART_ROLE_SWITCH_COOLDOWN = 120
 SCRAMBLER_GEAR_PRIORITY_STEPS = 25
+SMART_ROLE_REASSESS_INTERVAL = 25
+SMART_ROLE_REASSESS_PROBABILITY = 0.25
+SMART_ROLE_STARTUP_ORDER = ("scout", "miner", "aligner", "scrambler")
 
 
 def _agent_rng_seed(agent_id: int, *, salt: int = 0) -> int:
@@ -274,11 +277,11 @@ class SmartRoleCoordinator:
         """Pick a role vibe based on aggregated snapshots."""
         snapshot = self.agent_snapshots.get(agent_id)
         if snapshot is None:
-            return self._rng_for_agent(agent_id).choice(ROLE_VIBES)
+            return SMART_ROLE_STARTUP_ORDER[agent_id % len(SMART_ROLE_STARTUP_ORDER)]
 
         structures_known = self._aggregate_structures()
         if "hub" not in structures_known:
-            return "scout"
+            return SMART_ROLE_STARTUP_ORDER[agent_id % len(SMART_ROLE_STARTUP_ORDER)]
 
         role_counts = self._aggregate_role_counts()
         if role_counts.get("scout", 0) == 0:
@@ -303,7 +306,44 @@ class SmartRoleCoordinator:
 
         if self._aggregate_structures_seen() < 10:
             return "scout"
+
+        stochastic_role = self._maybe_stochastic_reassess(
+            agent_id=agent_id,
+            step=snapshot.step,
+            role_counts=role_counts,
+            junction_counts=junction_counts,
+        )
+        if stochastic_role is not None:
+            return stochastic_role
         return "miner"
+
+    def _maybe_stochastic_reassess(
+        self,
+        *,
+        agent_id: int,
+        step: int,
+        role_counts: dict[str, int],
+        junction_counts: dict[str, int],
+    ) -> Optional[str]:
+        # Periodic, bounded stochastic reassessment keeps gear-role behavior adaptive
+        # without introducing high-frequency switching noise.
+        if step <= 0 or step % SMART_ROLE_REASSESS_INTERVAL != 0:
+            return None
+        rng = self._rng_for_agent(agent_id)
+        if rng.random() >= SMART_ROLE_REASSESS_PROBABILITY:
+            return None
+
+        weighted_roles = ["miner", "miner", "scout"]
+        if junction_counts.get("clips", 0) > 0:
+            weighted_roles.append("scrambler")
+        if junction_counts.get("neutral", 0) > 0:
+            weighted_roles.append("aligner")
+
+        for role in ROLE_VIBES:
+            if role_counts.get(role, 0) == 0:
+                weighted_roles.extend((role, role))
+
+        return rng.choice(weighted_roles)
 
     def _rng_for_agent(self, agent_id: int) -> random.Random:
         rng = self.agent_rngs.get(agent_id)
@@ -346,6 +386,9 @@ class SmartRoleCoordinator:
 
     def get_role_gear_counts(self) -> dict[str, int]:
         return self._aggregate_role_gear_counts()
+
+    def get_role_counts(self) -> dict[str, int]:
+        return self._aggregate_role_counts()
 
     def _aggregate_heart_count(self) -> int:
         return sum(snapshot.heart_count for snapshot in self.agent_snapshots.values())
@@ -901,6 +944,8 @@ class CogsguardAgentPolicyImpl(StatefulPolicyImpl[CogsguardAgentState]):
             selected_role = self._choose_role_vibe(s)
             if DEBUG:
                 print(f"[A{s.agent_id}] GEAR_VIBE: Picking role vibe: {selected_role}")
+            s.last_role_switch_step = s.step_count
+            s.role_lock_until_step = s.step_count + SMART_ROLE_SWITCH_COOLDOWN
             return change_vibe_action(selected_role, action_names=self._action_names)
 
         # Role vibes: execute the role behavior
@@ -1555,11 +1600,16 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
 
         # Gear vibe: pick a role and change vibe to it
         if vibe == "gear":
-            selected_role = self._choose_role_vibe(s)
+            if self._smart_role_enabled and s.step_count <= 20:
+                selected_role = SMART_ROLE_STARTUP_ORDER[s.agent_id % len(SMART_ROLE_STARTUP_ORDER)]
+            else:
+                selected_role = self._choose_role_vibe(s)
             if DEBUG:
                 print(f"[A{s.agent_id}] GEAR_VIBE: Picking role vibe: {selected_role}")
             if not self._has_vibe(selected_role):
                 return self._noop()
+            s.last_role_switch_step = s.step_count
+            s.role_lock_until_step = s.step_count + SMART_ROLE_SWITCH_COOLDOWN
             return change_vibe_action(selected_role, action_names=self._action_names)
 
         # Role vibes: execute the role behavior
@@ -1601,6 +1651,14 @@ class CogsguardMultiRoleImpl(CogsguardAgentPolicyImpl):
         selected_role = self._smart_role_coordinator.choose_role(s.agent_id)
         if selected_role == s.current_vibe:
             return None
+
+        role_counts = self._smart_role_coordinator.get_role_counts()
+        selected_role_count = role_counts.get(selected_role, 0)
+        if selected_role_count > 0:
+            if s.step_count % SMART_ROLE_REASSESS_INTERVAL != 0:
+                return None
+            if self._rng.random() >= SMART_ROLE_REASSESS_PROBABILITY:
+                return None
 
         s.last_role_switch_step = s.step_count
         s.role_lock_until_step = s.step_count + SMART_ROLE_SWITCH_COOLDOWN

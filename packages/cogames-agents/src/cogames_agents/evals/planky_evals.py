@@ -49,6 +49,36 @@ def _get_planky_map(map_name: str) -> MapGenConfig:
     )
 
 
+def _force_neutral_to_clips_without_proximity(cfg: MettaGridConfig) -> None:
+    """Force deterministic neutral->clips conversion on tiny eval maps.
+
+    Planky maps do not include clips hubs/nets, so the default proximity filters
+    on `neutral_to_clips` never match. This helper preserves the team-alignment
+    exclusion while removing unreachable proximity gating.
+    """
+    from mettagrid.config.filter import AnyFilter, hasTagPrefix, isNot  # noqa: PLC0415
+    from mettagrid.config.query import Query  # noqa: PLC0415
+
+    clip_event = cfg.game.events.get("neutral_to_clips")
+    if clip_event is None:
+        return
+    assert isinstance(clip_event.target_query, Query)
+    target_filters: list[AnyFilter] = [isNot(hasTagPrefix("team:"))]
+    clip_event.target_query.filters = target_filters
+    # Match tutorial overrun behavior exactly for compatibility with event filtering.
+    clip_event.filters = [isNot(hasTagPrefix("team"))]
+    clip_event.max_targets = None
+
+    # Deterministic fallback for tiny eval maps: ensure junctions start clips-aligned.
+    # This avoids dependence on event execution ordering/proximity edge cases.
+    junction_obj = cfg.game.objects.get("junction")
+    if junction_obj is not None:
+        passthrough_tags = [
+            tag for tag in junction_obj.tags if not tag.startswith("team:") and not tag.startswith("net:")
+        ]
+        junction_obj.tags = [*passthrough_tags, "team:clips", "net:clips"]
+
+
 # ---------------------------------------------------------------------------
 # Base class
 # ---------------------------------------------------------------------------
@@ -233,10 +263,13 @@ class PlankyScramblerTarget(_PlankyDiagnosticBase):
     map_name: str = "scrambler_target.map"
     max_steps: int = Field(default=300)
     inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"scrambler": 1, "heart": 3})
-    # Let initial_clips fire at step 10 to create the clips junction target
-    clips_initial_start: int = Field(default=10)
+    # Force an early neutral->clips conversion so scramblers always have a valid target.
+    clips_align_start: int = Field(default=1)
+    clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
-    clips_align_start: int = Field(default=99999)
+
+    def configure_env(self, cfg: MettaGridConfig) -> None:
+        _force_neutral_to_clips_without_proximity(cfg)
 
 
 # ==============================================================================
@@ -331,10 +364,12 @@ class PlankyScramblerFullCycle(_PlankyDiagnosticBase):
     description: str = "Scrambler: gear -> hearts -> scramble junction."
     map_name: str = "scrambler_full_cycle.map"
     max_steps: int = Field(default=400)
-    # Let initial_clips fire at step 10
-    clips_initial_start: int = Field(default=10)
+    clips_align_start: int = Field(default=1)
+    clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
-    clips_align_start: int = Field(default=99999)
+
+    def configure_env(self, cfg: MettaGridConfig) -> None:
+        _force_neutral_to_clips_without_proximity(cfg)
 
 
 class PlankyResourceChain(_PlankyDiagnosticBase):
@@ -379,9 +414,12 @@ class PlankyScramblerRecovery(_PlankyDiagnosticBase):
     map_name: str = "scrambler_full_cycle.map"
     max_steps: int = Field(default=400)
     # No gear/hearts seed — must get both from stations. Keep one enemy target present.
-    clips_initial_start: int = Field(default=10)
+    clips_align_start: int = Field(default=1)
+    clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
-    clips_align_start: int = Field(default=99999)
+
+    def configure_env(self, cfg: MettaGridConfig) -> None:
+        _force_neutral_to_clips_without_proximity(cfg)
 
 
 # ==============================================================================

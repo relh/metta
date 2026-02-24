@@ -28,8 +28,6 @@ from .types import CogsguardAgentState, Role, StructureType
 MAX_RETRIES = 3
 # HP buffer to start returning to the hub before gear is lost.
 HP_RETURN_BUFFER = 12
-# Scramblers should switch to aligner gear after making some neutral junctions.
-SCRAMBLE_TO_ALIGN_THRESHOLD = 1
 
 
 class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
@@ -110,24 +108,6 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 print(f"[A{s.agent_id}] SCRAMBLER: Have gear but no heart, getting hearts first")
             return self._get_hearts(s)
 
-        junctions = s.get_structures_by_type(StructureType.CHARGER)
-        enemy_junctions = [c for c in junctions if c.alignment == "clips" or c.clipped]
-        neutral_junctions = [c for c in junctions if c.alignment is None]
-
-        if has_gear and len(s.alignment_overrides) >= SCRAMBLE_TO_ALIGN_THRESHOLD:
-            if DEBUG and s.step_count % 10 == 0:
-                print(f"[A{s.agent_id}] SCRAMBLER: Swapping to aligner gear after scrambles")
-            action = self._switch_to_aligner_gear(s)
-            if action is not None:
-                return action
-
-        if has_gear and not enemy_junctions and neutral_junctions:
-            if DEBUG and s.step_count % 10 == 0:
-                print(f"[A{s.agent_id}] SCRAMBLER: No enemy junctions; swapping to aligner gear")
-            action = self._switch_to_aligner_gear(s)
-            if action is not None:
-                return action
-
         # Find the best enemy depot to scramble (prioritize closest enemy junction)
         target_depot = self._find_best_target(s)
 
@@ -163,14 +143,6 @@ class ScramblerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                 f"(alignment={alignment}, heart={s.heart}, energy={s.energy})!"
             )
         return self._use_object_at(s, target_depot)
-
-    def _switch_to_aligner_gear(self, s: CogsguardAgentState) -> Optional[Action]:
-        aligner_station = s.get_structure_position(StructureType.ALIGNER_STATION)
-        if aligner_station is None:
-            return None
-        if not is_adjacent((s.row, s.col), aligner_station):
-            return self._move_towards(s, aligner_station, reach_adjacent=True)
-        return self._use_object_at(s, aligner_station)
 
     def _handle_no_gear(self, s: CogsguardAgentState) -> Action:
         """Handle behavior when scrambler doesn't have gear.

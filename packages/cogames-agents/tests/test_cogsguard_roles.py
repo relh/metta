@@ -100,7 +100,7 @@ def test_aligner_does_not_require_influence_before_aligning(policy_env_info: Pol
         position=(state.row, state.col - 1),
         structure_type=StructureType.CHARGER,
         name="junction",
-        alignment="clips",
+        alignment=None,
     )
 
     action = policy.execute_role(state)

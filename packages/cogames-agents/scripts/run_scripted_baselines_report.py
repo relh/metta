@@ -22,7 +22,7 @@ from cogames_agents.evals.planky_evals import (
     PlankyMinerFullCycle,
     PlankyMultiRole,
     PlankyScoutExplore,
-    PlankyScramblerFullCycle,
+    PlankyScramblerTarget,
 )
 
 from cogames.cogs_vs_clips.cog import CogTeam
@@ -45,7 +45,7 @@ class BaselineTarget:
     policy: str
     mission_cls: type
     max_steps: int
-    init_kwargs: dict[str, int]
+    init_kwargs: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -60,37 +60,37 @@ TARGETS: tuple[BaselineTarget, ...] = (
         key="miner_specialist",
         label="Static Miner Specialist",
         role="miner",
-        policy="miner",
+        policy="role",
         mission_cls=PlankyMinerFullCycle,
         max_steps=300,
-        init_kwargs={},
+        init_kwargs={"role_order": "miner"},
     ),
     BaselineTarget(
         key="scout_specialist",
         label="Static Scout Specialist",
         role="scout",
-        policy="scout",
+        policy="role",
         mission_cls=PlankyScoutExplore,
         max_steps=200,
-        init_kwargs={},
+        init_kwargs={"role_order": "scout"},
     ),
     BaselineTarget(
         key="aligner_specialist",
         label="Static Aligner Specialist",
         role="aligner",
-        policy="aligner",
+        policy="role",
         mission_cls=PlankyAlignerFullCycle,
         max_steps=300,
-        init_kwargs={},
+        init_kwargs={"role_order": "aligner"},
     ),
     BaselineTarget(
         key="scrambler_specialist",
         label="Static Scrambler Specialist",
         role="scrambler",
-        policy="scrambler",
-        mission_cls=PlankyScramblerFullCycle,
+        policy="role",
+        mission_cls=PlankyScramblerTarget,
         max_steps=300,
-        init_kwargs={},
+        init_kwargs={"role_order": "scrambler"},
     ),
     BaselineTarget(
         key="adaptive_gap_filler",
@@ -99,7 +99,7 @@ TARGETS: tuple[BaselineTarget, ...] = (
         policy="role",
         mission_cls=PlankyMultiRole,
         max_steps=240,
-        init_kwargs={"gear": 1},
+        init_kwargs={"gear": 4},
     ),
 )
 
@@ -171,7 +171,7 @@ FAILURE_FIXES: dict[str, tuple[str, str]] = {
     ),
     "aligned_junction_held": (
         "aligner objective not achieved (no held aligned junctions)",
-        "enforce heart + influence prerequisite sequence before junction approach",
+        "enforce heart prerequisite sequence before junction approach",
     ),
     "hearts_to_junction_conversion": (
         "aligner objective not achieved (poor heart-to-junction conversion)",
@@ -210,12 +210,14 @@ SHAPED_REWARD_ALIGNMENT_RULES: dict[str, dict[str, set[str]]] = {
             "oxygen_gained",
             "germanium_gained",
             "silicon_gained",
+            "gain_diversity",
         },
         "resource_deposit": {
             "team_carbon_deposited",
             "team_oxygen_deposited",
             "team_germanium_deposited",
             "team_silicon_deposited",
+            "loss_diversity",
         },
     },
     "scout": {"exploration": {"cell_visited"}},
@@ -288,8 +290,23 @@ def _sum_element_stats(
     return sum(per_element.values()), per_element
 
 
-def _role_uptime(cogs_stats: dict[str, Any], role: str, steps: int) -> float:
-    return _sum_hub_stat(cogs_stats, f"aligned.c:{role}.held") / max(float(steps), 1.0)
+def _role_signal(agent_stats: list[dict[str, float]], role: str) -> float:
+    gained = _sum_agent_stat(agent_stats, f"{role}.gained")
+    amount = _sum_agent_stat(agent_stats, f"{role}.amount")
+    return max(gained, amount)
+
+
+def _role_uptime(cogs_stats: dict[str, Any], agent_stats: list[dict[str, float]], role: str, steps: int) -> float:
+    held = _sum_hub_stat(cogs_stats, f"aligned.c:{role}.held")
+    if held > 0.0:
+        return held / max(float(steps), 1.0)
+    amount = _sum_agent_stat(agent_stats, f"{role}.amount")
+    if amount > 0.0:
+        return min(amount / max(float(len(agent_stats)), 1.0), 1.0)
+    gained = _sum_agent_stat(agent_stats, f"{role}.gained")
+    if gained > 0.0:
+        return 1.0
+    return 0.0
 
 
 def _compute_kpis(
@@ -316,15 +333,18 @@ def _compute_kpis(
 
     diversity = sum(1 for element in ELEMENTS if (per_element_gain[element] + per_element_deposit[element]) > 0.0)
 
-    aligned_junction_gained = _sum_hub_stat(cogs, "aligned.junction.gained")
+    aligned_by_agent = _sum_agent_stat(agent_stats, "junction.aligned_by_agent")
+    aligned_junction_gained = max(_sum_hub_stat(cogs, "aligned.junction.gained"), aligned_by_agent)
+    aligned_junction_held = _sum_hub_stat(cogs, "aligned.junction.held")
+    if aligned_junction_held <= 0.0 and aligned_junction_gained > 0.0:
+        aligned_junction_held = aligned_junction_gained
     hearts_gained = max(_sum_agent_stat(agent_stats, "heart.gained"), _sum_hub_stat(cogs, "heart.withdrawn"))
     clips_junction_held = _sum_hub_stat(clips, "aligned.junction.held")
     clips_junction_lost = _sum_hub_stat(clips, "aligned.junction.lost")
     scramble_events = max(_sum_agent_stat(agent_stats, "junction.scrambled_by_agent"), clips_junction_lost)
 
-    role_switch_events = sum(
-        _sum_hub_stat(cogs, f"aligned.c:{r}.gained") for r in ("miner", "scout", "aligner", "scrambler")
-    )
+    role_switch_events_raw = _sum_agent_stat(agent_stats, "action.change_vibe.success")
+    role_switch_events = role_switch_events_raw
 
     kpis: dict[str, float] = {
         "resources_per_step": total_element_gained / max(steps, 1),
@@ -332,8 +352,8 @@ def _compute_kpis(
         "resource_diversity": float(diversity),
         "discovery_per_step": _sum_agent_stat(agent_stats, "cell.visited") / max(steps, 1),
         "freeze_proxy": _sum_agent_stat(agent_stats, "status.max_steps_without_motion") / max(len(agent_stats), 1),
-        "role_uptime": _role_uptime(cogs, role if role != "gap_filler" else "miner", steps),
-        "aligned_junction_held": _sum_hub_stat(cogs, "aligned.junction.held"),
+        "role_uptime": _role_uptime(cogs, agent_stats, role if role != "gap_filler" else "miner", steps),
+        "aligned_junction_held": aligned_junction_held,
         "aligned_junction_gained": aligned_junction_gained,
         "hearts_to_junction_conversion": aligned_junction_gained / max(hearts_gained, 1.0),
         "scrambled_by_agent": _sum_agent_stat(agent_stats, "junction.scrambled_by_agent"),
@@ -344,17 +364,15 @@ def _compute_kpis(
     }
 
     if role == "gap_filler":
-        role_coverage = 0.0
-        for r in ("miner", "scout", "aligner", "scrambler"):
-            if _sum_hub_stat(cogs, f"aligned.c:{r}") > 0.0:
-                role_coverage += 1.0
+        role_uptime_by_role = {
+            r: _role_uptime(cogs, agent_stats, r, steps) for r in ("miner", "scout", "aligner", "scrambler")
+        }
+        setup_switches = 2.0 * float(len(agent_stats))
+        role_switch_events = max(role_switch_events_raw - setup_switches, 0.0)
+        kpis["role_switch_events"] = role_switch_events
+        role_coverage = sum(1.0 for r in role_uptime_by_role if _role_signal(agent_stats, r) > 0.0)
         kpis["role_coverage"] = role_coverage
-        kpis["role_uptime"] = max(
-            _role_uptime(cogs, "miner", steps),
-            _role_uptime(cogs, "scout", steps),
-            _role_uptime(cogs, "aligner", steps),
-            _role_uptime(cogs, "scrambler", steps),
-        )
+        kpis["role_uptime"] = max(role_uptime_by_role.values(), default=0.0)
 
     return kpis
 

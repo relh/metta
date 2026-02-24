@@ -26,7 +26,9 @@ from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
 from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
-from cogames.cogs_vs_clips.stations import GEAR_COSTS
+from cogames.cogs_vs_clips.config import CvCConfig
+
+GEAR_COSTS = CvCConfig.GEAR_COSTS
 
 
 def _is_hub_tag(name: str, tags: Iterable[str]) -> bool:
@@ -50,6 +52,20 @@ MOVE_DELTAS = {
     "move_east": (0, 1),
     "move_west": (0, -1),
 }
+
+
+def _get_cogs_team_inventory(harness: DebugHarness) -> dict[str, int]:
+    c_sim = getattr(harness.sim, "_c_sim", None)
+    if c_sim is None:
+        return {}
+    get_team_inventories = getattr(c_sim, "get_team_inventories", None)
+    if callable(get_team_inventories):
+        team_inventories = get_team_inventories()
+        if isinstance(team_inventories, dict):
+            cogs = team_inventories.get("cogs", {})
+            if isinstance(cogs, dict):
+                return {str(key): int(value) for key, value in cogs.items()}
+    return {}
 
 
 def run_rollout(
@@ -87,7 +103,7 @@ def run_rollout(
     observed_roles: set[str] = set()
     prereq_trace_lines: list[str] = []
     prereq_stats = {
-        "aligner": {"attempts": 0, "missing_gear": 0, "missing_heart": 0, "missing_influence": 0},
+        "aligner": {"attempts": 0, "missing_gear": 0, "missing_heart": 0},
         "scrambler": {"attempts": 0, "missing_gear": 0, "missing_heart": 0},
     }
     role_counts_history: list[dict[str, int]] = []
@@ -157,9 +173,7 @@ def run_rollout(
 
     for _ in range(steps):
         harness.step(1)
-        hub_inv = {}
-        if hasattr(harness.sim, "_c_sim"):
-            hub_inv = harness.sim._c_sim.get_team_inventories().get("cogs", {})
+        hub_inv = _get_cogs_team_inventory(harness)
         gear_resources_available = {
             role: all(hub_inv.get(resource, 0) >= amount for resource, amount in cost.items())
             for role, cost in GEAR_COSTS.items()
@@ -318,8 +332,6 @@ def run_rollout(
                         prereq_stats["aligner"]["missing_gear"] += 1
                     if missing.get("heart"):
                         prereq_stats["aligner"]["missing_heart"] += 1
-                    if missing.get("influence"):
-                        prereq_stats["aligner"]["missing_influence"] += 1
                     if trace_prereqs:
                         prereq_trace_lines.append(
                             format_prereq_trace_line(
@@ -474,8 +486,7 @@ def run_rollout(
     print(
         f"- aligner: attempts={prereq_stats['aligner']['attempts']} "
         f"missing_gear={prereq_stats['aligner']['missing_gear']} "
-        f"missing_heart={prereq_stats['aligner']['missing_heart']} "
-        f"missing_influence={prereq_stats['aligner']['missing_influence']}"
+        f"missing_heart={prereq_stats['aligner']['missing_heart']}"
     )
     print(
         f"- scrambler: attempts={prereq_stats['scrambler']['attempts']} "

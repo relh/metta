@@ -6,14 +6,11 @@ def prereq_missing(
     *,
     gear: int,
     heart: int,
-    influence: int,
+    influence: int = 0,
 ) -> dict[str, bool]:
     if action_type not in {"align", "scramble"}:
         raise ValueError(f"Unsupported action_type: {action_type}")
-    missing = {"gear": gear < 1, "heart": heart < 1}
-    if action_type == "align":
-        missing["influence"] = influence < 1
-    return missing
+    return {"gear": gear < 1, "heart": heart < 1}
 
 
 def format_prereq_trace_line(

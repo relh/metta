@@ -4,6 +4,8 @@ Harness for evaluating scripted agents on CogsGuard missions via `cogames scrimm
 
 ## Scripts
 
+For an end-to-end runbook, see `packages/cogames-agents/docs/scripted-baselines-howto.md`.
+
 ### `benchmark_agents.sh`
 
 Runs every registered scripted agent through `cogames scrimmage` and saves per-agent JSON results.

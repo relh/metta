@@ -116,7 +116,6 @@ def test_nlanky_aligner_gets_hearts() -> None:
     assert agent_stats[0].get("heart.gained", 0) > 0, f"Expected some hearts gained, got stats={agent_stats[0]}"
 
 
-@pytest.mark.xfail(reason="aoe_mask needs team-based friend/enemy detection; nlanky can't find enemies")
 def test_nlanky_scrambler_scrambles_junction() -> None:
     stats = run_nlanky_episode(PlankyScramblerTarget, max_steps=300, roles={"scrambler": 1})
     agent_stats = stats["stats"].get("agent", [])

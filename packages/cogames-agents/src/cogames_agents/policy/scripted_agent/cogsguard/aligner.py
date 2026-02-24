@@ -6,7 +6,7 @@ With aligner gear, agents can align junctions to the cogs team.
 
 Strategy:
 - Find ALL junctions on the map
-- Prioritize aligning neutral and enemy (clips) junctions
+- Prioritize aligning neutral junctions
 - Systematically work through all junctions to take them over
 - Check energy before moving to targets
 - Retry failed align actions up to MAX_RETRIES times

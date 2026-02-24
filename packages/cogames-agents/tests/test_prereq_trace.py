@@ -9,7 +9,7 @@ from cogames_agents.policy.scripted_agent.cogsguard.prereq_trace import (
 
 def test_prereq_missing_align() -> None:
     missing = prereq_missing("align", gear=0, heart=1, influence=0)
-    assert missing == {"gear": True, "heart": False, "influence": True}
+    assert missing == {"gear": True, "heart": False}
 
 
 def test_prereq_missing_scramble() -> None:
@@ -30,8 +30,8 @@ def test_format_prereq_trace_line() -> None:
         gear=1,
         heart=0,
         influence=0,
-        missing={"gear": False, "heart": True, "influence": True},
+        missing={"gear": False, "heart": True},
     )
     assert line.startswith("step=7 agent=3 action=align")
     assert "gear=1 heart=0 influence=0" in line
-    assert "missing[heart,influence]" in line
+    assert "missing[heart]" in line
