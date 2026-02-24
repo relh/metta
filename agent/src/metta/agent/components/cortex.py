@@ -280,8 +280,27 @@ class CortexTD(nn.Module):
                 f"got num_slots={num_slots}, num_agents_per_env={self._num_agents_per_env}"
             )
 
-        within_env_index = torch.remainder(agent_slot_ids, self._num_agents_per_env)
-        route_ids = torch.remainder(within_env_index, num_slots)
+        route_ids: torch.Tensor
+        if "cortex_route_ids" in td.keys():
+            route_ids_2d = cast(torch.Tensor, td["cortex_route_ids"]).to(device=device, dtype=torch.long)
+            if route_ids_2d.dim() != 2 or route_ids_2d.shape[1] != 1:
+                raise ValueError(f"cortex_route_ids must have shape [B*TT,1], got {tuple(route_ids_2d.shape)}")
+            flat_route_ids = route_ids_2d.reshape(-1)
+            if flat_route_ids.numel() != B * TT:
+                raise ValueError(
+                    f"cortex_route_ids length {flat_route_ids.numel()} must equal batch*bptt ({B}*{TT}={B * TT})"
+                )
+            route_ids_bt = flat_route_ids.view(B, TT)
+            route_ids = route_ids_bt[:, 0].contiguous()
+            if TT > 1 and not bool((route_ids_bt == route_ids.unsqueeze(1)).all()):
+                raise ValueError("cortex_route_ids must stay constant across timesteps within each sequence")
+            if bool((route_ids < 0).any()) or bool((route_ids >= num_slots).any()):
+                raise ValueError(f"cortex_route_ids values must be in [0, {num_slots}), got {route_ids.tolist()}")
+        else:
+            within_env_index = torch.remainder(agent_slot_ids, self._num_agents_per_env)
+            route_ids = torch.remainder(within_env_index, num_slots)
+
+        td.set("cortex_route_ids", route_ids[:, None].expand(-1, TT).reshape(B * TT, 1))
         return agent_slot_ids, route_ids
 
     @torch._dynamo.disable
@@ -368,13 +387,16 @@ class CortexTD(nn.Module):
 
     def experience_keys(self) -> Dict[FlatKey, torch.Size]:
         """Replay keys required by the component."""
-        return {
+        keys: Dict[FlatKey, torch.Size] = {
             "agent_slot_ids": torch.Size([1]),
             "row_id": torch.Size([]),
             "t_in_row": torch.Size([]),
             "dones": torch.Size([]),
             "truncateds": torch.Size([]),
         }
+        if self._routed_adapter_num_slots() is not None:
+            keys["cortex_route_ids"] = torch.Size([1])
+        return keys
 
     def reset_memory(self) -> None:
         """Preserve rollout hidden state and row pre-states across rollouts."""
@@ -399,7 +421,7 @@ class CortexTD(nn.Module):
     def get_agent_experience_spec(self) -> Composite:
         spec_dict: Dict[str, UnboundedDiscrete] = {}
         for key, shape in self.experience_keys().items():
-            if key in ("agent_slot_ids", "row_id", "t_in_row"):
+            if key in ("agent_slot_ids", "row_id", "t_in_row", "cortex_route_ids"):
                 dtype = torch.long
             else:
                 dtype = torch.float32

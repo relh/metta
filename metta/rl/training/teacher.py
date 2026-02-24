@@ -11,6 +11,7 @@ from metta.rl.loss.kickstarter import KickstarterConfig
 from metta.rl.loss.loss import LossConfig
 from metta.rl.loss.losses import LossesConfig
 from metta.rl.loss.ppo_actor import PPOActorConfig
+from metta.rl.loss.ppo_critic import PPOCriticConfig
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training.scheduler import LossRunGate, ScheduleRule
@@ -62,6 +63,12 @@ def _parse_teacher_mode(mode: TeacherMode) -> _TeacherModeParts:
     return _TeacherModeParts(source=source_typed, family=family_typed, slice_mode=slice_typed)
 
 
+def _prefixed_name(prefix: str, base: str) -> str:
+    if not prefix:
+        return base
+    return f"{prefix}{base}"
+
+
 class TeacherConfig(Config):
     """Shared knobs for enabling teacher/supervisor driven training phases."""
 
@@ -104,6 +111,8 @@ def apply_teacher_phase(
     teacher_cfg: TeacherConfig,
     trajectory_isolation: TrajectoryIsolationConfig | None = None,
     default_steps: int = DEFAULT_TEACHER_STEPS,
+    name_prefix: str = "",
+    target_slice_name: str | None = None,
 ) -> None:
     """Enable and schedule the requested teacher loss.
 
@@ -126,13 +135,19 @@ def apply_teacher_phase(
     total_steps = teacher_cfg.steps or default_steps
     anneal_start_step = 0 if teacher_cfg.anneal_start_step is None else int(teacher_cfg.anneal_start_step)
     ppo_begin_step = int(teacher_cfg.ppo_begin_step)
-    teacher_policy_name = "teacher"
+    teacher_policy_name = _prefixed_name(name_prefix, "teacher")
     primary_policy_name = next(iter(policy_assets.keys()), "learner0")
 
     mode_parts = _parse_teacher_mode(teacher_cfg.mode)
     is_sliced = mode_parts.slice_mode == "sliced"
+    if is_sliced and (name_prefix or target_slice_name is not None):
+        raise ValueError("apply_teacher_phase name_prefix/target_slice_name only supports mixed teacher modes")
     supervisor_modes = {"supervisor", "eer_cloner"}
     teacher_asset_modes = {"kickstarter", "eer_kickstarter"}
+    if target_slice_name is not None:
+        if trajectory_isolation is None:
+            raise ValueError("target_slice_name requires trajectory_isolation")
+        primary_policy_name = _slice_by_name(trajectory_isolation, target_slice_name).primary_policy
 
     if mode_parts.family in supervisor_modes:
         _require_policy_uri(teacher_cfg)
@@ -155,6 +170,7 @@ def apply_teacher_phase(
         is_sliced=is_sliced,
         teacher_cfg=teacher_cfg,
         teacher_policy_name=teacher_policy_name,
+        name_prefix=name_prefix,
     )
     if not is_sliced:
         if trajectory_isolation is None:
@@ -168,6 +184,7 @@ def apply_teacher_phase(
             primary_policy_name=primary_policy_name,
             teacher_policy_name=teacher_policy_name,
             include_teacher_policy=(mode_parts.family in teacher_asset_modes),
+            target_slice_name=target_slice_name,
         )
 
     def _gate_loss(name: str, end_at_step: int = total_steps) -> None:
@@ -185,7 +202,7 @@ def apply_teacher_phase(
     if ppo_begin_step > 0:
         # Delay PPO training, but keep PPO rollout active so experience collection remains unchanged.
         ppo_losses_for_gating = [
-            name for name, loss_cfg in losses if name == "ppo_critic" or isinstance(loss_cfg, PPOActorConfig)
+            name for name, loss_cfg in losses if isinstance(loss_cfg, (PPOActorConfig, PPOCriticConfig))
         ]
         for loss_name in ppo_losses_for_gating:
             if losses.has_loss(loss_name):
@@ -237,8 +254,7 @@ def apply_teacher_phase(
                 "trajectory_isolation must be provided when using sliced teacher mode. "
                 "Pass TrainTool.trajectory_isolation or create one with default_trajectory_isolation_config()"
             )
-        ppo_loss_names = ["ppo_critic"]
-        ppo_loss_names.extend(name for name, loss_cfg in losses if isinstance(loss_cfg, PPOActorConfig))
+        ppo_loss_names = [name for name, loss_cfg in losses if isinstance(loss_cfg, (PPOActorConfig, PPOCriticConfig))]
 
         _setup_trajectory_isolation(
             trajectory_isolation=trajectory_isolation,
@@ -278,19 +294,21 @@ def apply_teacher_phase(
         return
 
     if mode_parts.family == "supervisor":
-        supervisor = losses["supervisor"]
-        _gate_loss("supervisor")
-        _anneal("supervisor", attr_path="action_loss_coef", start_value=supervisor.action_loss_coef)
-        _anneal("supervisor", attr_path="teacher_led_proportion", start_value=supervisor.teacher_led_proportion)
+        supervisor_name = _prefixed_name(name_prefix, "supervisor")
+        supervisor = losses[supervisor_name]
+        _gate_loss(supervisor_name)
+        _anneal(supervisor_name, attr_path="action_loss_coef", start_value=supervisor.action_loss_coef)
+        _anneal(supervisor_name, attr_path="teacher_led_proportion", start_value=supervisor.teacher_led_proportion)
 
     elif mode_parts.family == "eer_kickstarter":
-        eer_kick = losses["eer_kickstarter"]
+        eer_kick_name = _prefixed_name(name_prefix, "eer_kickstarter")
+        eer_kick = losses[eer_kick_name]
 
-        _gate_loss("eer_kickstarter")
+        _gate_loss(eer_kick_name)
         if total_steps:
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.eer_kickstarter.action_loss_coef",
+                    target_path=f"losses.{eer_kick_name}.action_loss_coef",
                     mode="progress",
                     style="linear",
                     start_value=eer_kick.action_loss_coef,
@@ -301,7 +319,7 @@ def apply_teacher_phase(
             )
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.eer_kickstarter.value_loss_coef",
+                    target_path=f"losses.{eer_kick_name}.value_loss_coef",
                     mode="progress",
                     style="linear",
                     start_value=eer_kick.value_loss_coef,
@@ -312,7 +330,7 @@ def apply_teacher_phase(
             )
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.eer_kickstarter.r_lambda",
+                    target_path=f"losses.{eer_kick_name}.r_lambda",
                     mode="progress",
                     style="linear",
                     start_value=eer_kick.r_lambda,
@@ -322,15 +340,16 @@ def apply_teacher_phase(
                 )
             )
     elif mode_parts.family == "kickstarter":
-        ks = losses["kickstarter"]
+        kickstarter_name = _prefixed_name(name_prefix, "kickstarter")
+        ks = losses[kickstarter_name]
         ks.teacher_led_proportion = teacher_cfg.teacher_led_proportion
 
-        _gate_loss("kickstarter")
-        _anneal("kickstarter", attr_path="teacher_led_proportion", start_value=teacher_cfg.teacher_led_proportion)
+        _gate_loss(kickstarter_name)
+        _anneal(kickstarter_name, attr_path="teacher_led_proportion", start_value=teacher_cfg.teacher_led_proportion)
         if total_steps:
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.kickstarter.action_loss_coef",
+                    target_path=f"losses.{kickstarter_name}.action_loss_coef",
                     mode="progress",
                     style="linear",
                     start_value=ks.action_loss_coef,
@@ -341,7 +360,7 @@ def apply_teacher_phase(
             )
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.kickstarter.value_loss_coef",
+                    target_path=f"losses.{kickstarter_name}.value_loss_coef",
                     mode="progress",
                     style="linear",
                     start_value=ks.value_loss_coef,
@@ -352,13 +371,14 @@ def apply_teacher_phase(
             )
 
     elif mode_parts.family == "eer_cloner":
-        eer_cl = losses["eer_cloner"]
+        eer_cloner_name = _prefixed_name(name_prefix, "eer_cloner")
+        eer_cl = losses[eer_cloner_name]
 
-        _gate_loss("eer_cloner")
+        _gate_loss(eer_cloner_name)
         if total_steps:
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.eer_cloner.action_loss_coef",
+                    target_path=f"losses.{eer_cloner_name}.action_loss_coef",
                     mode="progress",
                     style="linear",
                     start_value=eer_cl.action_loss_coef,
@@ -369,7 +389,7 @@ def apply_teacher_phase(
             )
             scheduler_rules.append(
                 ScheduleRule(
-                    target_path="losses.eer_cloner.r_lambda",
+                    target_path=f"losses.{eer_cloner_name}.r_lambda",
                     mode="progress",
                     style="linear",
                     start_value=eer_cl.r_lambda,
@@ -394,6 +414,7 @@ def _select_teacher_loss_cfg(
     is_sliced: bool,
     teacher_cfg: TeacherConfig,
     teacher_policy_name: str,
+    name_prefix: str = "",
 ) -> list[str]:
     """Instantiate and add the teacher loss config to losses if not already present."""
 
@@ -402,28 +423,35 @@ def _select_teacher_loss_cfg(
             return
         losses.add_loss(name, cfg)
 
+    supervisor_name = _prefixed_name(name_prefix, "supervisor")
+    eer_kickstarter_name = _prefixed_name(name_prefix, "eer_kickstarter")
+    kickstarter_name = _prefixed_name(name_prefix, "kickstarter")
+    eer_cloner_name = _prefixed_name(name_prefix, "eer_cloner")
+    teacher_led_name = _prefixed_name(name_prefix, "teacher_led")
+    student_led_name = _prefixed_name(name_prefix, "student_led")
+
     if not is_sliced:
         if family == "supervisor":
             _add_if_missing(
-                "supervisor",
+                supervisor_name,
                 ActionSupervisedConfig(teacher_led_proportion=teacher_cfg.teacher_led_proportion),
             )
-            return ["supervisor"]
+            return [supervisor_name]
         if family == "eer_kickstarter":
-            _add_if_missing("eer_kickstarter", EERKickstarterConfig(teacher=teacher_policy_name))
-            return ["eer_kickstarter"]
+            _add_if_missing(eer_kickstarter_name, EERKickstarterConfig(teacher=teacher_policy_name))
+            return [eer_kickstarter_name]
         if family == "kickstarter":
             _add_if_missing(
-                "kickstarter",
+                kickstarter_name,
                 KickstarterConfig(
                     teacher=teacher_policy_name,
                     teacher_led_proportion=teacher_cfg.teacher_led_proportion,
                 ),
             )
-            return ["kickstarter"]
+            return [kickstarter_name]
         if family == "eer_cloner":
-            _add_if_missing("eer_cloner", EERClonerConfig())
-            return ["eer_cloner"]
+            _add_if_missing(eer_cloner_name, EERClonerConfig())
+            return [eer_cloner_name]
         raise ValueError(f"Unsupported teacher mode family '{family}' with sliced={is_sliced}")
 
     if family == "supervisor":
@@ -441,9 +469,9 @@ def _select_teacher_loss_cfg(
     else:
         raise ValueError(f"Unsupported teacher mode family '{family}' with sliced={is_sliced}")
 
-    _add_if_missing("teacher_led", teacher_loss_cfg)
-    _add_if_missing("student_led", student_loss_cfg)
-    return ["teacher_led", "student_led"]
+    _add_if_missing(teacher_led_name, teacher_loss_cfg)
+    _add_if_missing(student_led_name, student_loss_cfg)
+    return [teacher_led_name, student_led_name]
 
 
 def _ensure_teacher_policy_asset(
@@ -558,18 +586,26 @@ def _wire_teacher_loss_into_mixed_slice(
     primary_policy_name: str,
     teacher_policy_name: str,
     include_teacher_policy: bool,
+    target_slice_name: str | None = None,
 ) -> None:
-    matching_slices = [
-        slice_cfg for slice_cfg in trajectory_isolation.slices if slice_cfg.primary_policy == primary_policy_name
-    ]
-    if len(matching_slices) != 1:
-        raise ValueError(
-            "Mixed teacher mode requires exactly one trajectory isolation slice with "
-            f"primary_policy={primary_policy_name!r}. Found: "
-            f"{[(s.name, s.primary_policy) for s in trajectory_isolation.slices]!r}"
-        )
-
-    target_slice = matching_slices[0]
+    if target_slice_name is not None:
+        target_slice = _slice_by_name(trajectory_isolation, target_slice_name)
+        if target_slice.primary_policy != primary_policy_name:
+            raise ValueError(
+                f"target_slice_name={target_slice_name!r} has primary_policy={target_slice.primary_policy!r}, "
+                f"expected {primary_policy_name!r}"
+            )
+    else:
+        matching_slices = [
+            slice_cfg for slice_cfg in trajectory_isolation.slices if slice_cfg.primary_policy == primary_policy_name
+        ]
+        if len(matching_slices) != 1:
+            raise ValueError(
+                "Mixed teacher mode requires exactly one trajectory isolation slice with "
+                f"primary_policy={primary_policy_name!r}. Found: "
+                f"{[(s.name, s.primary_policy) for s in trajectory_isolation.slices]!r}"
+            )
+        target_slice = matching_slices[0]
 
     for loss_name in teacher_loss_names:
         used_in = [slice_cfg.name for slice_cfg in trajectory_isolation.slices if loss_name in slice_cfg.losses]

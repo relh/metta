@@ -13,6 +13,7 @@ For general `tools/run.py` usage (recipes, discovery, override syntax), see `doc
 - [Horde prediction framework](#horde-prediction-framework)
 - [Useful recipes and games](#useful-recipes-and-games)
   - [CogsGuard](#cogsguard)
+  - [CogsGuard MARLBRO](#cogsguard-marlbro)
 
 ## SkyPilot sandboxes
 
@@ -354,3 +355,71 @@ To train on the arena layout instead of Machina 1:
   run=your_run_name \
   layout=arena
 ```
+
+### CogsGuard MARLBRO
+
+`recipes.experiment.cogsguard_marlbro.train` is the two-slice MARLBRO variant of CogsGuard. It trains miner and aligner
+roles in separate trajectory-isolation slices with role-conditioned rewards.
+
+**Train:**
+
+```bash
+./devops/run.sh recipes.experiment.cogsguard_marlbro.train run=your_run_name
+```
+
+**Default behavior (no routers, no teacher):**
+
+- Uses separate policies: `miner_policy` and `aligner_policy`
+- Uses two fixed slices:
+  - `miner_slice`: agents `0:4`
+  - `aligner_slice`: agents `4:8`
+- Uses standard per-slice PPO losses (`ppo_actor_*`, `ppo_critic_*`)
+- No teacher/supervisor losses are attached by default
+
+#### Enable routed adapters
+
+When `routed_adapter` is enabled for MARLBRO, default slices switch to a single shared policy (`shared_policy`) with
+per-slice route slots.
+
+```bash
+./devops/run.sh recipes.experiment.cogsguard_marlbro.train \
+  run=your_run_name \
+  routed_adapter.enabled=true
+```
+
+Useful knobs:
+
+- `routed_adapter.rank`
+- `routed_adapter.trunk_lr_mult`
+- `routed_adapter.num_slots` (defaults to `num_agents` if not set)
+- `routed_adapter.alpha`
+- `routed_adapter.dropout`
+- `routed_adapter.freeze_base`
+
+#### Enable teacher from CLI
+
+MARLBRO now accepts top-level `teacher.*` overrides (same style as CogsGuard). Scripted mixed supervisor is supported:
+
+```bash
+./devops/run.sh recipes.experiment.cogsguard_marlbro.train \
+  run=your_run_name \
+  teacher.policy_uri=metta://policy/nlanky \
+  teacher.mode=scripted.supervisor.mixed
+```
+
+You can combine teacher + routed adapters:
+
+```bash
+./devops/run.sh recipes.experiment.cogsguard_marlbro.train \
+  run=your_run_name \
+  routed_adapter.enabled=true \
+  teacher.policy_uri=metta://policy/nlanky \
+  teacher.mode=scripted.supervisor.mixed
+```
+
+#### Caveats
+
+- Top-level `teacher` and slice-level `slice_configs[*].teacher` cannot be used together.
+- Per-slice scripted teachers with different scripted URIs are not supported (scripted supervisor URI is global).
+- If `policy_architecture` already sets `cortex_routed_adapter`, do not also pass top-level `routed_adapter`.
+- Custom `route_slot_ids` require routed adapters and must be within `[0, routed_adapter.num_slots)`.

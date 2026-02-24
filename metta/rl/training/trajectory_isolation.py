@@ -114,6 +114,7 @@ class TrajectoryIsolationSliceConfig(Config):
     policies: list[str] = Field(min_length=1)
     primary_policy: str | None = None
     losses: list[str] = Field(default_factory=list)
+    route_slot_ids: tuple[int, ...] | None = None
     sampling: SamplingConfig = Field(default_factory=SamplingConfig)
     advantage: AdvantageConfig = Field(default_factory=AdvantageConfig)
 
@@ -136,6 +137,18 @@ class TrajectoryIsolationSliceConfig(Config):
             lo, hi = self.agent_range
             if lo < 0 or hi <= lo:
                 raise ValueError(f"Slice '{self.name}' agent_range must satisfy 0 <= lo < hi, got ({lo}, {hi})")
+        if self.route_slot_ids is not None:
+            if self.agent_range is None:
+                raise ValueError(f"Slice '{self.name}' route_slot_ids requires agent_range")
+            lo, hi = self.agent_range
+            expected = hi - lo
+            if len(self.route_slot_ids) != expected:
+                raise ValueError(
+                    f"Slice '{self.name}' route_slot_ids length must match agent_range width ({expected}), "
+                    f"got {len(self.route_slot_ids)}"
+                )
+            if any(int(slot_id) < 0 for slot_id in self.route_slot_ids):
+                raise ValueError(f"Slice '{self.name}' route_slot_ids must be non-negative")
 
         return self
 
@@ -314,6 +327,28 @@ class TrajectoryIsolationSliceRuntime:
         # Force concrete row selection so every key shares the same sliced leading dimension.
         base_td = td[row_indices].clone()
         set_sequence_metadata(base_td, batch_size=int(row_indices.numel()), time_steps=1)
+        if self.cfg.route_slot_ids is not None:
+            if self.cfg.agent_range is None:
+                raise ValueError(f"Slice '{self.cfg.name}' route_slot_ids requires agent_range")
+            num_agents_per_env = context.trajectory_isolator.config.num_agents_per_env
+            if num_agents_per_env is None:
+                raise ValueError(f"Slice '{self.cfg.name}' route_slot_ids requires num_agents_per_env")
+            lo, _hi = self.cfg.agent_range
+            route_slot_ids = torch.as_tensor(
+                self.cfg.route_slot_ids,
+                device=base_td.device,
+                dtype=torch.long,
+            )
+            agent_slot_ids = base_td["agent_slot_ids"].reshape(-1).to(device=base_td.device, dtype=torch.long)
+            within_env_index = torch.remainder(agent_slot_ids, int(num_agents_per_env))
+            route_offset = within_env_index - int(lo)
+            if bool((route_offset < 0).any()) or bool((route_offset >= route_slot_ids.numel()).any()):
+                raise ValueError(
+                    f"Slice '{self.cfg.name}' route_slot_ids does not align with sampled agent slots "
+                    f"(agent_range={self.cfg.agent_range})"
+                )
+            route_ids = route_slot_ids.index_select(0, route_offset).reshape(-1, 1)
+            base_td.set("cortex_route_ids", route_ids)
         slice_td = TensorDict({}, batch_size=base_td.batch_size, device=base_td.device)
         for policy_name in self.cfg.policies:
             # Keep policy containers independent while sharing immutable rollout inputs.

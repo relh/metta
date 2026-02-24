@@ -1,5 +1,6 @@
 from typing import List
 
+from cortex.config import RoutedAdapterConfig
 from cortex.stacks import build_cortex_auto_config
 from pydantic import ConfigDict, Field
 
@@ -30,6 +31,7 @@ class CnnSharedCriticConfig(PolicyArchitecture):
     core_resnet_pattern: str = "L"
     core_use_layer_norm: bool = False
     core_compile: bool = False
+    cortex_routed_adapter: RoutedAdapterConfig | None = None
 
     agents_per_env_slice: int | None = None
 
@@ -62,6 +64,7 @@ class CnnSharedCriticConfig(PolicyArchitecture):
                     pattern=self.core_resnet_pattern,
                     post_norm=self.core_use_layer_norm,
                     compile_blocks=self.core_compile,
+                    routed_adapter=self.cortex_routed_adapter,
                 ),
                 pass_state_during_training=self.pass_state_during_training,
             ),

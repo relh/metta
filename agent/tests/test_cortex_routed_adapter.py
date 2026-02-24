@@ -113,6 +113,28 @@ def test_cortex_routed_adapter_uses_within_env_index_in_sequence_mode() -> None:
     torch.testing.assert_close(captured_route_ids[-1], torch.tensor([0, 1, 0, 1], dtype=torch.long))
 
 
+def test_cortex_routed_adapter_prefers_explicit_route_ids() -> None:
+    component = _make_component(num_slots=8, num_agents_per_env=8)
+    captured_route_ids: list[torch.Tensor] = []
+    original_step = component.stack.step
+
+    def capture_step(x: torch.Tensor, state=None, **kwargs):  # type: ignore[no-untyped-def]
+        route_ids = kwargs.get("route_ids")
+        assert route_ids is not None
+        captured_route_ids.append(route_ids.detach().cpu().clone())
+        return original_step(x, state, **kwargs)
+
+    component.stack.step = capture_step  # type: ignore[method-assign]
+
+    td = _make_rollout_td(torch.tensor([0, 1, 2, 3], dtype=torch.long))
+    td.set("cortex_route_ids", torch.tensor([[7], [6], [5], [4]], dtype=torch.long))
+    out = component(td)
+
+    assert out["core_out"].shape == torch.Size([4, 16])
+    assert captured_route_ids
+    torch.testing.assert_close(captured_route_ids[-1], torch.tensor([7, 6, 5, 4], dtype=torch.long))
+
+
 def test_cortex_routed_adapter_requires_agent_slot_ids() -> None:
     component = _make_component(num_slots=2, num_agents_per_env=8)
     td = TensorDict({"core_in": torch.randn(2, 16)}, batch_size=[2])
