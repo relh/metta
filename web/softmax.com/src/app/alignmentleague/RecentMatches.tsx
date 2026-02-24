@@ -14,6 +14,7 @@ import type {
 import { formatPolicyLabel } from "@/lib/policyUtils";
 
 import { PolicyTag } from "./PolicyTag";
+import { PolicyLogViewer } from "./PolicyLogViewer";
 
 type PolicyOption = {
   id: string;
@@ -333,6 +334,7 @@ export function RecentMatches() {
                   <THead>
                     <TH className="w-36">Date</TH>
                     <TH className="w-20">Replay</TH>
+                    <TH className="w-16">Logs</TH>
                     <TH className="w-24">Status</TH>
                     <TH className="w-28">Pool</TH>
                     <TH className="w-24">Agents</TH>
@@ -364,6 +366,13 @@ export function RecentMatches() {
                               >
                                 Replay
                               </a>
+                            ) : (
+                              <span className="text-xs text-[#8a9bb8]">-</span>
+                            )}
+                          </TD>
+                          <TD className="w-16 align-top">
+                            {match.job_id && match.status === "completed" ? (
+                              <PolicyLogViewer jobId={match.job_id} />
                             ) : (
                               <span className="text-xs text-[#8a9bb8]">-</span>
                             )}

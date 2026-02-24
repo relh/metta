@@ -138,6 +138,7 @@ class MatchResponse(BaseModel):
     players: list[MatchPlayerInfo] = Field(description="Participating policies and their results")
     error: str | None = Field(description="Error message if the match failed")
     episode_id: UUID | None = Field(description="Episode identifier, present if a game was recorded")
+    job_id: UUID | None = Field(description="Job identifier, present if match has an associated job")
     episode: EpisodeResponse | None = Field(default=None, description="Full episode data, included in detail responses")
     created_at: datetime = Field(description="When the match was created")
 
@@ -797,6 +798,7 @@ def create_tournament_router() -> APIRouter:
             players=players,
             error=error if m.status == MatchStatus.failed else None,
             episode_id=ep_id,
+            job_id=m.job_id,
             episode=episode,
             created_at=m.created_at,
         )

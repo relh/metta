@@ -37,7 +37,11 @@ const decodePathSegment = (value: string) => {
 const encodePathSegment = (value: string) =>
   encodeURIComponent(decodePathSegment(value));
 
-async function fetchApi(url: string, userId?: string): Promise<unknown> {
+async function fetchApi(
+  url: string,
+  userId?: string,
+  responseType: "json" | "text" = "json",
+): Promise<unknown> {
   let headers: Record<string, string> = {};
   if (userId) {
     const user = await loadUserById(userId);
@@ -69,7 +73,7 @@ async function fetchApi(url: string, userId?: string): Promise<unknown> {
     } catch {}
     throw new Error(`Failed to fetch ${url}: ${detail}`);
   }
-  return response.json();
+  return responseType === "text" ? response.text() : response.json();
 }
 
 export async function getSeasons(): Promise<SeasonSummary[]> {
@@ -161,4 +165,23 @@ export async function getPolicyMemberships(
   return (await fetchApi(
     `/tournament/policies/${policyVersionId}/memberships`,
   )) as MembershipHistoryResponse;
+}
+
+export async function listPolicyLogs(
+  jobId: string,
+  userId: string,
+): Promise<string[]> {
+  return (await fetchApi(`/jobs/${jobId}/policy-logs`, userId)) as string[];
+}
+
+export async function getPolicyLog(
+  jobId: string,
+  policyIdx: number,
+  userId: string,
+): Promise<string> {
+  return (await fetchApi(
+    `/jobs/${jobId}/policy-logs/${policyIdx}`,
+    userId,
+    "text",
+  )) as string;
 }

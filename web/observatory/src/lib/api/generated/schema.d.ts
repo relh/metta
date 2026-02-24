@@ -1815,6 +1815,11 @@ export interface components {
        * @description Episode identifier, present if a game was recorded
        */
       episode_id: string | null
+      /**
+       * Job Id
+       * @description Job identifier, present if match has an associated job
+       */
+      job_id: string | null
       /** @description Full episode data, included in detail responses */
       episode?: components['schemas']['EpisodeResponse'] | null
       /**
