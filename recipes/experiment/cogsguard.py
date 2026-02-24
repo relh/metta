@@ -37,6 +37,7 @@ from cogames.cogs_vs_clips.sites import (
     make_cogsguard_arena_site,
     make_cogsguard_machina1_site,
 )
+from cogames.cogs_vs_clips.variants import BraveheartVariant
 from cogames.core import CoGameMissionVariant, CoGameSite
 from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
@@ -900,6 +901,71 @@ def scout(
     key, label = _role_progress_metric(variants, layout)
     tt.stats_reporter.progress_metric = key
     tt.stats_reporter.progress_metric_label = label
+    return tt
+
+
+def scrambler(
+    num_agents: int = 4,
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    max_steps: int = 1000,
+    variants: str | Sequence[str] | None = ("no_objective", "scrambler"),
+    teacher: Optional[TeacherConfig] = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
+) -> tools.TrainTool:
+    """Train scrambler role with optional teacher supervision.
+
+    Hubs start with 255 hearts via BraveheartVariant. Clips invade normally.
+    """
+    if teacher is None:
+        teacher = TeacherConfig(policy_uri=None)
+    elif isinstance(teacher, dict):
+        teacher = TeacherConfig.model_validate(teacher)
+
+    resolved_variants, resolved_rewards = split_variants(variants)
+    scrambler_variants = list(resolved_variants or []) + [BraveheartVariant()]
+    mission = _make_cogsguard_mission(
+        layout=layout,
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=scrambler_variants,
+    )
+    env = mission.make_env()
+    if resolved_rewards:
+        apply_reward_variants(env, variants=list(resolved_rewards))
+
+    curriculum = cc.bucketed(env)
+    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
+
+    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
+    trainer_cfg = TrainerConfig()
+    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
+
+    tt = tools.TrainTool(
+        trainer=trainer_cfg,
+        training_env=training_env_cfg,
+        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
+        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    )
+    if _vibe_actions_enabled(training_env_cfg=training_env_cfg):
+        _wire_vibe_actor_loss(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
+
+    if teacher and teacher.enabled:
+        scheduler_run_gates: list[LossRunGate] = []
+        scheduler_rules: list[ScheduleRule] = []
+        apply_teacher_phase(
+            trainer_cfg=trainer_cfg,
+            losses=trainer_cfg.losses,
+            training_env_cfg=training_env_cfg,
+            policy_assets=tt.policy_assets,
+            scheduler_rules=scheduler_rules,
+            scheduler_run_gates=scheduler_run_gates,
+            teacher_cfg=teacher,
+            trajectory_isolation=tt.trajectory_isolation,
+        )
+        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    tt.stats_reporter.progress_metric = f"env_per_label_rewards/{env.label}"
+    tt.stats_reporter.progress_metric_label = "scrambler"
     return tt
 
 
