@@ -499,6 +499,27 @@ export type DashboardRolePercentilesResponse = {
 
 export type DiagnoseAxis = 'stability' | 'efficiency' | 'control' | 'social_coordination'
 
+export type DiagnoseValidityCheck = {
+  check_id: string
+  passed: boolean
+  details: string
+}
+
+export type DiagnoseValidityReport = {
+  valid: boolean
+  failed_check_ids: string[]
+  checks: DiagnoseValidityCheck[]
+}
+
+export type DiagnoseInterpretationStability = {
+  stable: boolean
+  snapshot_count?: number
+  dominant_issue_stable?: boolean
+  top_symptom_stable?: boolean
+  notes?: string[]
+  [key: string]: unknown
+}
+
 export type DiagnoseManifest = {
   run_id: string
   created_at: string
@@ -508,7 +529,9 @@ export type DiagnoseManifest = {
   pack_version: string
   stage_status: string
   run_status: string
-  artifact_files?: string[]
+  artifact_files: string[]
+  diagnose_validity: DiagnoseValidityReport
+  interpretation_stability: DiagnoseInterpretationStability
   [key: string]: unknown
 }
 
@@ -568,9 +591,41 @@ export type DiagnosePrescription = {
   [key: string]: unknown
 }
 
+export type DiagnoseTournamentObjectiveContext = {
+  aligned_junction_held_stage1?: number | null
+  aligned_junction_held_stage2_absolute?: number | null
+  aligned_junction_held_stage2_mirror?: number | null
+}
+
+export type DiagnoseSocialReview = {
+  confirmed: boolean
+  severity: number
+  confidence: number
+  summary: string
+  evidence_refs?: string[]
+  [key: string]: unknown
+}
+
+export type DiagnoseStage2DiagnosisDelta = {
+  stage1_dominant_issue: string
+  final_dominant_issue: string
+  changed: boolean
+  summary: string
+  evidence_refs: string[]
+  [key: string]: unknown
+}
+
+export type DiagnoseEvidenceIndex = {
+  metric_refs?: string[]
+  replay_refs?: string[]
+  baseline_refs?: string[]
+  [key: string]: unknown
+}
+
 export type DiagnoseDoctorNote = {
   run_id: string
   status: string
+  diagnosis_status?: string
   stage_status: string
   dominant_issue: string
   notes: string[]
@@ -579,6 +634,10 @@ export type DiagnoseDoctorNote = {
   stage1_probe_evaluations: DiagnoseProbeEvaluation[]
   symptoms: DiagnoseSymptom[]
   prescriptions: DiagnosePrescription[]
+  tournament_objective_context: DiagnoseTournamentObjectiveContext
+  social_review?: DiagnoseSocialReview | null
+  stage2_diagnosis_delta?: DiagnoseStage2DiagnosisDelta | null
+  evidence_index: DiagnoseEvidenceIndex
   [key: string]: unknown
 }
 

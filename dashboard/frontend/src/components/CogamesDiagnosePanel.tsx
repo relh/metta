@@ -22,6 +22,11 @@ const AXIS_LABEL: Record<DiagnoseAxis, string> = {
 
 function formatPct(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'n/a'
+  return `${value.toFixed(digits)}%`
+}
+
+function formatRatioPct(value: number | null | undefined, digits = 0): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'n/a'
   return `${(value * 100).toFixed(digits)}%`
 }
 
@@ -30,6 +35,20 @@ function formatDateTime(value: string | null | undefined): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString()
+}
+
+function formatNumber(value: number | null | undefined, digits = 3): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'n/a'
+  return value.toFixed(digits)
+}
+
+function clampPct(value: number | null | undefined): number {
+  if (value === null || value === undefined || !Number.isFinite(value)) return 0
+  return Math.max(0, Math.min(100, value))
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : []
 }
 
 function parseRefCandidates(reference: string): string[] {
@@ -56,6 +75,28 @@ function replayUrlForEvidenceRef(reference: string, lookup: Record<string, strin
     if (lookup[candidate]) return lookup[candidate]
   }
   return null
+}
+
+type SocialReview = {
+  confirmed?: boolean
+  severity?: number
+  confidence?: number
+  summary?: string
+  evidence_refs?: string[]
+}
+
+function parseEvidenceRefsByKey(evidenceRefs: string[] | null | undefined): Record<string, string> {
+  const parsed: Record<string, string> = {}
+  for (const entry of asArray(evidenceRefs)) {
+    if (typeof entry !== 'string') continue
+    const equalsIndex = entry.indexOf('=')
+    if (equalsIndex <= 0 || equalsIndex >= entry.length - 1) continue
+    const key = entry.slice(0, equalsIndex).trim()
+    const value = entry.slice(equalsIndex + 1).trim()
+    if (!key || !value) continue
+    parsed[key] = value
+  }
+  return parsed
 }
 
 function radarPoint(index: number, total: number, normalized: number, size = 220): { x: number; y: number } {
@@ -93,10 +134,7 @@ export const CogamesDiagnosePanel: FC<{
   replayLookupByRef,
   policyVersionId,
 }) => {
-  const probeEvaluations = useMemo(() => {
-    if (!note) return []
-    return Array.isArray(note.stage1_probe_evaluations) ? note.stage1_probe_evaluations : []
-  }, [note])
+  const probeEvaluations = asArray(note?.stage1_probe_evaluations)
 
   const evalByProbe = useMemo(
     () =>
@@ -104,31 +142,15 @@ export const CogamesDiagnosePanel: FC<{
     [probeEvaluations]
   )
 
-  const probeCatalog = useMemo(() => {
-    if (!note) return []
-    return Array.isArray(note.stage1_probe_catalog) ? note.stage1_probe_catalog : []
-  }, [note])
+  const probeCatalog = asArray(note?.stage1_probe_catalog)
+  const symptoms = asArray(note?.symptoms)
+  const prescriptions = asArray(note?.prescriptions)
+  const notes = asArray(note?.notes)
 
-  const symptoms = useMemo(() => {
-    if (!note) return []
-    return Array.isArray(note.symptoms) ? note.symptoms : []
-  }, [note])
-
-  const prescriptions = useMemo(() => {
-    if (!note) return []
-    return Array.isArray(note.prescriptions) ? note.prescriptions : []
-  }, [note])
-
-  const notes = useMemo(() => {
-    if (!note) return []
-    return Array.isArray(note.notes) ? note.notes : []
-  }, [note])
-
-  const axisScores = useMemo(() => {
-    if (!note) return new Map<DiagnoseAxis, NonNullable<DiagnoseDoctorNote['axes']>[number]>()
-    const axes = Array.isArray(note.axes) ? note.axes : []
-    return new Map(axes.map((entry) => [entry.axis, entry]))
-  }, [note])
+  const axisScores = useMemo(
+    () => new Map(asArray(note?.axes).map((entry) => [entry.axis, entry])),
+    [note?.axes]
+  )
 
   const coreAxisChecks = useMemo(() => {
     return CORE_STAGE1_AXES.map((axis) => {
@@ -137,35 +159,65 @@ export const CogamesDiagnosePanel: FC<{
     })
   }, [axisScores])
 
-  const stage1GateReady = useMemo(() => coreAxisChecks.every((check) => check.confirmed), [coreAxisChecks])
+  const stage1GateReady = coreAxisChecks.every((check) => check.confirmed)
 
-  const hasReplayEvidence = useMemo(() => {
-    for (const evaluation of probeEvaluations) {
-      const refs = Array.isArray(evaluation.evidence_refs) ? evaluation.evidence_refs : []
-      for (const reference of refs) {
-        if (/^https?:\/\//i.test(reference)) return true
-        if (replayUrlForEvidenceRef(reference, replayLookupByRef)) return true
-      }
-    }
-    return false
-  }, [probeEvaluations, replayLookupByRef])
+  const replayRefs = useMemo(() => {
+    const refs = asArray(note?.evidence_index?.replay_refs)
+    return refs.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+  }, [note])
 
-  const stage2GateReady = stage1GateReady && hasReplayEvidence
+  const stage2GateReady = stage1GateReady && replayRefs.length > 0
 
   const stageStatus = String(manifest?.stage_status ?? note?.stage_status ?? '-')
   const runStatus = String(manifest?.run_status ?? note?.status ?? '-')
+  const diagnosisStatus = String(note?.diagnosis_status ?? '-')
   const stageStatusLower = stageStatus.toLowerCase()
   const runStatusLower = runStatus.toLowerCase()
   const stage2Reached = stageStatusLower.includes('stage2') || stageStatusLower.includes('social')
+  const diagnoseValidity = manifest?.diagnose_validity ?? null
   const runInvalid =
+    (typeof diagnoseValidity?.valid === 'boolean' ? !diagnoseValidity.valid : false) ||
     runStatusLower.includes('invalid') ||
     runStatusLower.includes('incomplete') ||
     (!stage2GateReady && (stageStatusLower.includes('complete') || stage2Reached))
 
+  const interpretationStability = manifest?.interpretation_stability ?? null
+  const tournamentObjectiveContext = note?.tournament_objective_context ?? null
+
+  const socialReview: SocialReview | null =
+    note && typeof note.social_review === 'object' && note.social_review !== null
+      ? (note.social_review as SocialReview)
+      : null
+
+  const stage2DiagnosisDelta =
+    note && typeof note.stage2_diagnosis_delta === 'object' && note.stage2_diagnosis_delta !== null
+      ? (note.stage2_diagnosis_delta as { summary?: string; changed?: boolean })
+      : null
+
+  const rankedSymptoms = useMemo(
+    () =>
+      [...symptoms].sort(
+        (a, b) => (Number.isFinite(b.severity) ? b.severity : 0) - (Number.isFinite(a.severity) ? a.severity : 0)
+      ),
+    [symptoms]
+  )
+
+  const topSymptom = rankedSymptoms[0] ?? null
+
+  const topPrescription = useMemo(() => {
+    if (prescriptions.length === 0) return null
+    if (!topSymptom) return prescriptions[0]
+    const matching = prescriptions.find((entry) => entry.symptom_id === topSymptom.symptom_id)
+    return matching ?? prescriptions[0]
+  }, [prescriptions, topSymptom])
+
+  const socialEvidenceByKey = useMemo(() => parseEvidenceRefsByKey(socialReview?.evidence_refs), [socialReview])
+
   const radarPolygon = useMemo(() => {
     const points = AXIS_ORDER.map((axis, index) => {
       const score = axisScores.get(axis)
-      const normalized = score && Number.isFinite(score.normalized_score) ? score.normalized_score : 0
+      const normalized =
+        score && Number.isFinite(score.normalized_score) ? Math.max(0, Math.min(1, score.normalized_score / 100)) : 0
       return radarPoint(index, AXIS_ORDER.length, normalized)
     })
     return points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ')
@@ -236,6 +288,9 @@ export const CogamesDiagnosePanel: FC<{
               <span>
                 status: <strong>{runStatus}</strong>
               </span>
+              <span>
+                diagnosis: <strong>{diagnosisStatus}</strong>
+              </span>
               <span>created: {formatDateTime(manifest?.created_at)}</span>
             </div>
           </div>
@@ -288,12 +343,160 @@ export const CogamesDiagnosePanel: FC<{
                   )}
                 </p>
                 <ul style={{ margin: 0 }}>
-                  <li>Replay evidence: {hasReplayEvidence ? 'present' : 'missing'}</li>
+                  <li>Replay evidence refs: {replayRefs.length}</li>
                   <li>Stage-2 reached: {stage2Reached ? 'yes' : 'no'}</li>
                   <li>Stage-2 gate status: {stage2GateReady ? 'pass' : 'blocked'}</li>
+                  <li>
+                    Manifest validity:{' '}
+                    {typeof diagnoseValidity?.valid === 'boolean' ? String(diagnoseValidity.valid) : 'n/a'}
+                  </li>
                 </ul>
               </article>
             </div>
+          </section>
+
+          <section className="card" style={{ display: 'grid', gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Run Findings Snapshot</h3>
+            <div className="grid two">
+              <article className="diagnose-list-item">
+                <div className="grid" style={{ gap: 8 }}>
+                  <p style={{ margin: 0 }}>
+                    dominant issue: <strong>{note.dominant_issue ?? '-'}</strong>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    diagnosis status: <strong>{diagnosisStatus}</strong>
+                  </p>
+                  {topSymptom ? (
+                    <p style={{ margin: 0, fontSize: 13 }}>
+                      Top Symptom: <strong>{topSymptom.symptom_id}</strong> ({AXIS_LABEL[topSymptom.axis]}) · severity=
+                      {formatRatioPct(topSymptom.severity, 0)} · confidence={formatRatioPct(topSymptom.confidence, 0)}
+                    </p>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 13 }}>Top Symptom: none</p>
+                  )}
+                  {topPrescription ? (
+                    <p style={{ margin: 0, fontSize: 13 }}>
+                      Primary Prescription: <strong>{topPrescription.owner}</strong> · {topPrescription.action}
+                    </p>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: 13 }}>Primary Prescription: none</p>
+                  )}
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    social confirmed:{' '}
+                    <strong>{socialReview ? (socialReview.confirmed ? 'true' : 'false') : 'n/a'}</strong> · absolute
+                    reward mean: <strong>{socialEvidenceByKey['absolute:policy_reward_mean'] ?? 'n/a'}</strong> ·
+                    mirror reward mean: <strong>{socialEvidenceByKey['mirror:policy_reward_mean'] ?? 'n/a'}</strong> ·
+                    mirror gap: <strong>{socialEvidenceByKey['mirror:policy_reward_gap'] ?? 'n/a'}</strong>
+                  </p>
+                </div>
+              </article>
+
+              <article className="diagnose-list-item">
+                <div className="grid" style={{ gap: 10 }}>
+                  {AXIS_ORDER.map((axis) => {
+                    const score = axisScores.get(axis)
+                    const scoreValue = score?.normalized_score
+                    return (
+                      <div key={`snapshot-axis-${axis}`} className="diagnose-axis-score-row">
+                        <div className="diagnose-axis-score-head">
+                          <span>{AXIS_LABEL[axis]}</span>
+                          <span>{score ? formatPct(scoreValue, 0) : 'n/a'}</span>
+                        </div>
+                        <div className="diagnose-axis-score-track">
+                          <div
+                            className="diagnose-axis-score-fill"
+                            style={{ width: `${clampPct(scoreValue)}%` }}
+                            aria-hidden="true"
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section className="grid two">
+            <article className="card">
+              <h3 style={{ marginTop: 0 }}>Tournament Objective Context</h3>
+              <ul style={{ marginBottom: 0 }}>
+                <li>
+                  aligned.junction.held stage1: {formatNumber(tournamentObjectiveContext?.aligned_junction_held_stage1)}
+                </li>
+                <li>
+                  aligned.junction.held stage2 absolute:{' '}
+                  {formatNumber(tournamentObjectiveContext?.aligned_junction_held_stage2_absolute)}
+                </li>
+                <li>
+                  aligned.junction.held stage2 mirror:{' '}
+                  {formatNumber(tournamentObjectiveContext?.aligned_junction_held_stage2_mirror)}
+                </li>
+              </ul>
+            </article>
+
+            <article className="card">
+              <h3 style={{ marginTop: 0 }}>Stage-2 Social Review</h3>
+              {socialReview ? (
+                <div className="grid" style={{ gap: 8 }}>
+                  <p style={{ margin: 0 }}>
+                    confirmed: <strong>{socialReview.confirmed ? 'true' : 'false'}</strong>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    severity: <strong>{formatRatioPct(socialReview.severity ?? null, 0)}</strong>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    confidence: <strong>{formatRatioPct(socialReview.confidence ?? null, 0)}</strong>
+                  </p>
+                  {socialReview.summary ? <p style={{ margin: 0 }}>{socialReview.summary}</p> : null}
+                  {stage2DiagnosisDelta?.summary ? (
+                    <p style={{ margin: 0, color: '#546b8a' }}>delta: {stage2DiagnosisDelta.summary}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p style={{ marginBottom: 0 }}>No social review payload on this doctor note.</p>
+              )}
+            </article>
+          </section>
+
+          <section className="grid two">
+            <article className="card">
+              <h3 style={{ marginTop: 0 }}>Run Validity Checks</h3>
+              {diagnoseValidity ? (
+                <div className="grid" style={{ gap: 8 }}>
+                  <p style={{ margin: 0 }}>
+                    valid: <strong>{diagnoseValidity.valid ? 'true' : 'false'}</strong>
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    failed checks:{' '}
+                    {Array.isArray(diagnoseValidity.failed_check_ids) && diagnoseValidity.failed_check_ids.length > 0
+                      ? diagnoseValidity.failed_check_ids.join(', ')
+                      : 'none'}
+                  </p>
+                </div>
+              ) : (
+                <p style={{ marginBottom: 0 }}>Manifest unavailable for selected run.</p>
+              )}
+            </article>
+
+            <article className="card">
+              <h3 style={{ marginTop: 0 }}>Interpretation Stability</h3>
+              {interpretationStability ? (
+                <div className="grid" style={{ gap: 8 }}>
+                  <p style={{ margin: 0 }}>
+                    stable: <strong>{interpretationStability.stable ? 'true' : 'false'}</strong>
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    snapshots: <strong>{String(interpretationStability.snapshot_count ?? 'n/a')}</strong>
+                  </p>
+                  {Array.isArray(interpretationStability.notes) && interpretationStability.notes.length > 0 ? (
+                    <p style={{ margin: 0, fontSize: 13 }}>{interpretationStability.notes.join(' | ')}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p style={{ marginBottom: 0 }}>Manifest unavailable for selected run.</p>
+              )}
+            </article>
           </section>
 
           <section className="card" style={{ display: 'grid', gap: 10 }}>
@@ -431,7 +634,8 @@ export const CogamesDiagnosePanel: FC<{
                       </p>
                       <p style={{ margin: '0 0 4px', fontSize: 13 }}>{symptom.likely_cause}</p>
                       <p style={{ margin: 0, fontSize: 12, color: '#546b8a' }}>
-                        severity={formatPct(symptom.severity, 0)} · confidence={formatPct(symptom.confidence, 0)}
+                        severity={formatRatioPct(symptom.severity, 0)} · confidence=
+                        {formatRatioPct(symptom.confidence, 0)}
                       </p>
                     </div>
                   ))}

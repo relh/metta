@@ -24,7 +24,11 @@ const AXIS_LABEL: Record<DiagnoseAxis, string> = {
   social_coordination: 'Social Coordination',
 }
 
-function formatPct(value: number, digits = 0): string {
+function formatScorePct(value: number, digits = 0): string {
+  return `${value.toFixed(digits)}%`
+}
+
+function formatRatioPct(value: number, digits = 0): string {
   return `${(value * 100).toFixed(digits)}%`
 }
 
@@ -132,12 +136,12 @@ export default async function DiagnoseRunPage({ params }: { params: Promise<{ ru
                   <span>{score?.confirmed ? 'Mastered' : 'Training'}</span>
                 </div>
                 <p style={{ margin: '8px 0', color: '#3d5d84' }}>
-                  normalized={score ? formatPct(score.normalized_score, 0) : 'n/a'}
+                  normalized={score ? formatScorePct(score.normalized_score, 0) : 'n/a'}
                 </p>
                 {score ? (
                   <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
-                    <li>move_success={formatPct(score.derived_metrics.mean_move_success, 0)}</li>
-                    <li>timeout_rate={formatPct(score.derived_metrics.timeout_rate, 1)}</li>
+                    <li>move_success={formatRatioPct(score.derived_metrics.mean_move_success, 0)}</li>
+                    <li>timeout_rate={formatRatioPct(score.derived_metrics.timeout_rate, 1)}</li>
                     <li>reward_variance={score.derived_metrics.reward_variance.toFixed(2)}</li>
                     <li>stuck_steps={score.derived_metrics.mean_stuck_steps.toFixed(0)}</li>
                   </ul>
@@ -189,7 +193,7 @@ export default async function DiagnoseRunPage({ params }: { params: Promise<{ ru
                   </div>
                   <p style={{ margin: '6px 0', color: '#3d5d84', fontSize: 13 }}>{symptom.likely_cause}</p>
                   <p style={{ margin: 0, color: '#3d5d84', fontSize: 12 }}>
-                    severity={formatPct(symptom.severity, 0)} · confidence={formatPct(symptom.confidence, 0)}
+                    severity={formatRatioPct(symptom.severity, 0)} · confidence={formatRatioPct(symptom.confidence, 0)}
                   </p>
                   <p style={{ margin: '6px 0 0', color: '#3d5d84', fontSize: 12 }}>action: {symptom.action}</p>
                 </div>

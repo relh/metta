@@ -1,6 +1,6 @@
 import json
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -12,6 +12,7 @@ from dashboard.backend.dashboard_backend.config import settings
 from metta.app_backend.route_logger import timed_http_handler
 
 _RUN_ID_RE = re.compile(r"^(?!.*\.\.)[0-9A-Za-z._-]+$")
+_ARTIFACT_COMPONENT_RE = re.compile(r"^[0-9A-Za-z._@+=-]+$")
 _REPO_SENTINEL = "pnpm-workspace.yaml"
 
 
@@ -27,6 +28,24 @@ class DiagnoseRunsResponse(BaseModel):
 def _assert_safe_name(value: str, field_name: str) -> None:
     if not _RUN_ID_RE.fullmatch(value):
         raise HTTPException(status_code=422, detail=f"Invalid {field_name}: {value}")
+
+
+def _assert_safe_artifact_path(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail=f"Invalid artifact: {value}")
+    path = PurePosixPath(normalized)
+    if path.is_absolute():
+        raise HTTPException(status_code=422, detail=f"Invalid artifact: {value}")
+    normalized_parts = path.parts
+    if not normalized_parts:
+        raise HTTPException(status_code=422, detail=f"Invalid artifact: {value}")
+    for part in normalized_parts:
+        if part in {".", ".."}:
+            raise HTTPException(status_code=422, detail=f"Invalid artifact: {value}")
+        if not _ARTIFACT_COMPONENT_RE.fullmatch(part):
+            raise HTTPException(status_code=422, detail=f"Invalid artifact: {value}")
+    return PurePosixPath(*normalized_parts).as_posix()
 
 
 def _content_type_for_artifact(artifact: str) -> str:
@@ -111,6 +130,15 @@ def _required_json(path: Path, detail: str) -> dict[str, Any]:
     return payload
 
 
+def _required_manifest_artifact_files(manifest: dict[str, Any]) -> set[str]:
+    artifact_files = manifest.get("artifact_files")
+    if not isinstance(artifact_files, list):
+        raise HTTPException(status_code=422, detail="Manifest missing artifact_files")
+    if not all(isinstance(item, str) for item in artifact_files):
+        raise HTTPException(status_code=422, detail="Manifest artifact_files must be a list of strings")
+    return set(artifact_files)
+
+
 def create_cogames_diagnose_router() -> APIRouter:
     router = APIRouter(prefix="/dashboard/v1/cogames-diagnose", tags=["dashboard"])
 
@@ -149,34 +177,32 @@ def create_cogames_diagnose_router() -> APIRouter:
         run_dir = _required_run_dir(diagnose_root, run_id)
         return _required_json(run_dir / "doctor_note.json", detail="Doctor note not found")
 
-    @router.get("/runs/{run_id}/artifacts/{artifact}")
+    @router.get("/runs/{run_id}/artifacts/{artifact_path:path}")
     @timed_http_handler
-    async def get_artifact(run_id: str, artifact: str, user: SoftmaxUser) -> FileResponse:
+    async def get_artifact(run_id: str, artifact_path: str, user: SoftmaxUser) -> FileResponse:
         del user
         _assert_safe_name(run_id, "run id")
-        _assert_safe_name(artifact, "artifact")
+        artifact = _assert_safe_artifact_path(artifact_path)
         diagnose_root = _resolve_diagnose_root()
         if diagnose_root is None:
             raise HTTPException(status_code=404, detail="Diagnose run not found")
 
         run_dir = _required_run_dir(diagnose_root, run_id)
-        manifest = _load_manifest(diagnose_root, run_id)
-        allowed = set()
-        if isinstance(manifest, dict):
-            artifact_files = manifest.get("artifact_files")
-            if isinstance(artifact_files, list):
-                allowed.update([item for item in artifact_files if isinstance(item, str)])
+        manifest = _required_json(run_dir / "manifest.json", detail="Manifest not found")
+        allowed = _required_manifest_artifact_files(manifest)
         allowed.add("manifest.json")
         allowed.add("doctor_note.json")
 
         if artifact not in allowed:
             raise HTTPException(status_code=404, detail="Artifact not found")
 
-        artifact_path = run_dir / artifact
-        if not artifact_path.is_file():
+        artifact_file = run_dir / Path(artifact)
+        if not artifact_file.is_file():
+            raise HTTPException(status_code=404, detail="Artifact not found")
+        if not artifact_file.resolve().is_relative_to(run_dir.resolve()):
             raise HTTPException(status_code=404, detail="Artifact not found")
 
         headers = {"Content-Disposition": f'attachment; filename="{artifact}"'} if artifact.endswith(".zip") else None
-        return FileResponse(path=artifact_path, media_type=_content_type_for_artifact(artifact), headers=headers)
+        return FileResponse(path=artifact_file, media_type=_content_type_for_artifact(artifact), headers=headers)
 
     return router
