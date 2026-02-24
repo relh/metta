@@ -529,8 +529,10 @@ class StatsReporter(TrainerComponent):
             logger.debug("Memory monitor stats failed: %s", exc, exc_info=True)
             return {}
 
-    def _collect_hyperparameters(self, *, optimizer: torch.optim.Optimizer) -> dict[str, Any]:
+    def _collect_hyperparameters(self, *, optimizer: torch.optim.Optimizer | None) -> dict[str, Any]:
         hyperparameters: dict[str, Any] = {}
+        if optimizer is None:
+            return hyperparameters
         param_groups = optimizer.param_groups
         if not param_groups:
             return hyperparameters

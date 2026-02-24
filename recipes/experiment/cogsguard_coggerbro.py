@@ -34,6 +34,12 @@ from metta.rl.training.trajectory_isolation import (
     TrajectoryIsolationSliceConfig,
 )
 from metta.tools.utils.auto_config import auto_run_name
+from recipes.experiment.coggernaut import (
+    _DEFAULT_EVENT_PROFILES,
+    _apply_role_conditional_rewards,
+    _set_role_id_assignment,
+    _with_role_conditional,
+)
 from recipes.experiment.cogsguard import (
     DEFAULT_INCLUDE_EVAL_MISSIONS,
     DEFAULT_INCLUDE_FIXED_MAPS,
@@ -43,13 +49,6 @@ from recipes.experiment.cogsguard import (
 )
 from recipes.experiment.cogsguard import (
     train as _cg_train,
-)
-from recipes.experiment.cogsguard_coggernaut import (
-    _DEFAULT_EVENT_PROFILES,
-    _apply_role_conditional_rewards,
-    _set_gear_gate_for_hearts,
-    _set_role_id_assignment,
-    _with_role_conditional,
 )
 
 _HOLD_STEPS = 2_500_000_000
@@ -70,7 +69,7 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: TeacherConfig | dict[str, object] | None = None,
-    variants: str | Sequence[str] | None = ("no_clips", "milestones", "no_objective"),
+    variants: str | Sequence[str] | None = ("no_clips", "milestones", "no_objective", "tin_man"),
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
     max_steps: int = 1000,
@@ -135,7 +134,6 @@ def train(
     }
 
     _set_role_id_assignment(tt.training_env.curriculum, role_ids)
-    _set_gear_gate_for_hearts(tt.training_env.curriculum)
     _apply_role_conditional_rewards(tt.training_env.curriculum)
 
     # -- Losses: per-side actor/critic + shared action_supervised per side --

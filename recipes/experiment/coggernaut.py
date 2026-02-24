@@ -1,11 +1,11 @@
-"""CogsGuard Coggernaut: two-policy role training with gear-gated hearts.
+"""CogsGuard Coggernaut: three-policy role training.
 
-Two learnable policies trained in parallel via agent-count trajectory isolation:
+Three learnable policies trained in parallel via agent-range trajectory isolation:
 - 4 agents -> miner policy slice
-- 4 agents -> aligner policy slice
+- 2 agents -> aligner policy slice
+- 2 agents -> scrambler policy slice
 
-Role assignment is vibe-based (no role_id resource). Agents must hold gear
-before withdrawing hearts from hubs.
+Role assignment uses explicit role_id inventory + global observation.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from cortex.rl.feature_extractors import BoxCNNFeatureExtractorConfig
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
 from cogames.cogs_vs_clips.cogsguard_curriculum import EventProfile
-from cogames.cogs_vs_clips.config import CvCConfig
 from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
 from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
@@ -30,7 +29,7 @@ from metta.rl.training.trajectory_isolation import (
     TrajectoryIsolationSliceConfig,
 )
 from metta.tools.utils.auto_config import auto_run_name
-from mettagrid.config.filter import actorHasAnyOf
+from mettagrid.config.game_value import inv
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from recipes.experiment.cogsguard import (
     DEFAULT_INCLUDE_EVAL_MISSIONS,
@@ -45,15 +44,13 @@ from recipes.experiment.cogsguard import (
 
 _DEFAULT_EVENT_PROFILES: list[EventProfile] = [
     EventProfile(
-        name="no_clips",
-        clips_overrides={"disabled": True},
+        name="default",
+        clips_overrides={},
         weather_overrides={},
     ),
 ]
 
 _ROLE_ORDER: tuple[str, ...] = ("miner", "aligner", "scrambler", "scout")
-
-_HEART_HANDLERS = ("get_heart", "get_and_make_heart", "get_last_heart")
 
 
 def _with_role_conditional(variants: str | Sequence[str] | None) -> tuple[str, ...]:
@@ -64,54 +61,31 @@ def _with_role_conditional(variants: str | Sequence[str] | None) -> tuple[str, .
 
 
 def _apply_role_ids(env: MettaGridConfig, role_ids: Sequence[int]) -> None:
-    """Assign vibes to agents based on role_ids for slice-aligned role assignment."""
+    """Assign explicit role_ids and vibes to agents, and set up role_id observation."""
     if not env.game.agents:
         raise ValueError("role_conditional requires env.game.agents (per-agent configs)")
     if len(env.game.agents) != len(role_ids):
         raise ValueError(f"Expected {len(role_ids)} agents for role assignment, got {len(env.game.agents)}")
 
-    env.game.actions.change_vibe.enabled = False
+    role_id_item = "role_id"
+    if role_id_item not in env.game.resource_names:
+        env.game.resource_names = [*env.game.resource_names, role_id_item]
+    obs_key = f"inv:own:{role_id_item}"
+    if obs_key not in env.game.obs.global_obs.obs:
+        env.game.obs.global_obs.obs[obs_key] = inv(f"agent.{role_id_item}")
     vibe_id_by_name = {name: idx for idx, name in enumerate(env.game.vibe_names)}
     for agent_cfg, role_id in zip(env.game.agents, role_ids, strict=False):
         role_name = _ROLE_ORDER[int(role_id) % len(_ROLE_ORDER)]
         role_vibe = vibe_id_by_name.get(role_name)
+        agent_cfg.inventory.initial = {**agent_cfg.inventory.initial, role_id_item: role_id}
         if role_vibe is not None:
             agent_cfg.vibe = role_vibe
-
-
-def _require_gear_for_hearts(env: MettaGridConfig) -> None:
-    """Add a gear filter to hub heart-withdrawal handlers.
-
-    Agents must hold any gear before they can pick up hearts.  This prevents
-    random early hub-spam from draining team resources via heart
-    manufacturing before agents have bought gear.
-    """
-    gear_filter = actorHasAnyOf(CvCConfig.GEAR)
-    for object_name, object_cfg in env.game.objects.items():
-        if not object_name.endswith(":hub"):
-            continue
-        for handler_name, handler in object_cfg.on_use_handlers.items():
-            if handler_name in _HEART_HANDLERS:
-                handler.filters.append(gear_filter)
 
 
 def _set_role_id_assignment(curriculum: CurriculumConfig, role_ids: Sequence[int]) -> None:
     def _apply(task_generator_config: object) -> None:
         if hasattr(task_generator_config, "env"):
             _apply_role_ids(task_generator_config.env, role_ids)
-        if hasattr(task_generator_config, "task_generators"):
-            for child in task_generator_config.task_generators:
-                _apply(child)
-        if hasattr(task_generator_config, "child_generator_config"):
-            _apply(task_generator_config.child_generator_config)
-
-    _apply(curriculum.task_generator)
-
-
-def _set_gear_gate_for_hearts(curriculum: CurriculumConfig) -> None:
-    def _apply(task_generator_config: object) -> None:
-        if hasattr(task_generator_config, "env"):
-            _require_gear_for_hearts(task_generator_config.env)
         if hasattr(task_generator_config, "task_generators"):
             for child in task_generator_config.task_generators:
                 _apply(child)
@@ -148,11 +122,12 @@ def build_two_policy_role_train_tool(
     max_steps_buckets: Sequence[int] | None = None,
     seed_span: cc.Span | None = None,
     event_profiles: Sequence[EventProfile] | None = None,
-    run_name_prefix: str = "coggernaut_two_roles",
-    role_ids: Sequence[int] = (0, 0, 0, 0, 1, 1, 1, 1),
+    run_name_prefix: str = "coggernaut_three_roles",
+    role_ids: Sequence[int] = (0, 0, 0, 0, 1, 1, 2, 2),
     slice_configs: Sequence[tuple[str, tuple[int, int], str, str]] = (
         ("miner_slice", (0, 4), "miner_policy", "miner"),
-        ("aligner_slice", (4, 8), "aligner_policy", "aligner"),
+        ("aligner_slice", (4, 6), "aligner_policy", "aligner"),
+        ("scrambler_slice", (6, 8), "scrambler_policy", "scrambler"),
     ),
 ) -> tools.TrainTool:
     if event_profiles is None:
@@ -198,7 +173,6 @@ def build_two_policy_role_train_tool(
     }
 
     _set_role_id_assignment(tt.training_env.curriculum, role_ids)
-    _set_gear_gate_for_hearts(tt.training_env.curriculum)
     _apply_role_conditional_rewards(tt.training_env.curriculum)
 
     tt.trainer.losses.losses.pop("ppo_actor", None)
@@ -230,7 +204,7 @@ def train(
     run: str | None = None,
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
-    variants: str | Sequence[str] | None = ("no_objective",),
+    variants: str | Sequence[str] | None = ("no_objective", "randomize_spawns", "tin_man"),
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
     max_steps: int = 1000,
@@ -240,7 +214,7 @@ def train(
     seed_span: cc.Span | None = None,
     event_profiles: Sequence[EventProfile] | None = None,
 ) -> tools.TrainTool:
-    """CogsGuard Coggernaut: two learnable slices (miner/aligner, 4+4)."""
+    """CogsGuard Coggernaut: three learnable slices (miner/aligner/scrambler, 4+2+2)."""
 
     return build_two_policy_role_train_tool(
         run=run,
