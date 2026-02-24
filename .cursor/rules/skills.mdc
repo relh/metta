@@ -6,7 +6,7 @@ alwaysApply: true
 
 # Shared Skills
 
-Skill files live in `skills/`.
+Skill files live in the `cogents` repo (symlinked at `skills/` via `.cursor/skills`).
 Prefix conventions and namespaces live in `docs/skills.md`.
 
 ## Shared Skill List

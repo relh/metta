@@ -25,7 +25,12 @@ done
 
 if [ -z "$SKILLS_DIR" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2> /dev/null || pwd)
-  SKILLS_DIR="$REPO_ROOT/skills"
+  COGENTS_DIR="${COGENTS_PATH:-$(dirname "$REPO_ROOT")/cogents}"
+  if [ -d "$COGENTS_DIR/skills" ]; then
+    SKILLS_DIR="$COGENTS_DIR/skills"
+  else
+    SKILLS_DIR="$REPO_ROOT/skills"
+  fi
 fi
 
 CLAUDE_SKILLS_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"

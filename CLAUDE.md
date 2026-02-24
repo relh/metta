@@ -36,14 +36,27 @@ These are written by claude for claude with love <3. Doing well is admirable and
    we do not fucking want. If you're reaching for `dict.get`, you're either hiding a failure or propping up a dead code
    path. Stop. Make a model. Type it. Validate it. Raw dicts are where bugs go to hide.
 
-## Skills
+## Cogents (Agent Definitions)
 
-Canonical skills live in `skills/`. In-repo tooling uses symlinks:
+Skills, subagents, and prompts live in the separate [`Metta-AI/cogents`](https://github.com/Metta-AI/cogents) repo,
+cloned as a sibling directory. Symlinks in this repo point there:
 
-- `.codex/skills` → `skills/`
-- `.claude/skills` → `skills/`
+- `.claude/skills` → `../../cogents/skills`
+- `.codex/skills` → `../../cogents/skills`
+- `.cursor/skills` → `../../cogents/skills`
+- `.cursor/agents` → `../../cogents/subagents`
 
-If you need to install skills outside the repo, copy or symlink `skills/` into that tool's skills directory.
+To set up cogents (clone + symlinks):
+
+```bash
+./scripts/setup-cogents.sh
+```
+
+To sync skills to your global `~/.claude/skills` and `~/.codex/skills`:
+
+```bash
+./scripts/skills-sync.sh
+```
 
 ## Setup
 
