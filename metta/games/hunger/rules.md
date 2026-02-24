@@ -2,25 +2,25 @@
 
 ## Overview
 
-Predator-prey survival game with seasonal cycles. Agents choose a role, forage or hunt for food, and try to hatch eggs
-through harsh winters.
+Carnivore-herbivore survival game with seasonal cycles. Agents choose a role, forage or hunt for food, and try to hatch
+eggs through harsh winters.
 
 ## Roles
 
 At the start of the episode, agents visit a gear station to lock in their role. Once chosen, roles cannot be changed.
 
-- **Prey**: Can harvest food from plants. Cannot tag anyone. Nimble (small energy pool, fast regen).
-- **Predator**: Can tag prey to steal all their food. Can tag other predators (both lose egg). Cannot harvest plants.
-  Bursty (large energy pool, slow regen).
+- **Herbivore**: Can harvest food from plants. Cannot tag anyone. Nimble (small energy pool, fast regen).
+- **Carnivore**: Can tag herbivores to steal all their food. Can tag other carnivores (both lose egg). Cannot harvest
+  plants. Bursty (large energy pool, slow regen).
 
 ## Food
 
 Food is the survival currency. All agents lose food periodically. If an agent's food reaches zero while carrying an egg,
 they lose the egg.
 
-- **Prey** get food by tapping plants.
-- **Predators** get food by tapping prey (steals all the prey's food, capped at 100).
-- **Predators cannot** get food from plants.
+- **Herbivores** get food by tapping plants.
+- **Carnivores** get food by tapping herbivores (steals all the herbivore's food, capped at 100).
+- **Carnivores cannot** get food from plants.
 
 ## Plants
 
@@ -47,8 +47,8 @@ The year is 1000 ticks, divided into 4 seasons of 250 ticks each. The episode ru
 - If an agent makes it to spring still carrying an egg, the egg hatches (reward).
 - An agent **loses their egg** if:
   - Their food reaches zero (starvation).
-  - They are tagged by a predator (prey only).
-  - They tag or are tagged by another predator (both lose egg).
+  - They are tagged by a carnivore (herbivore only).
+  - They tag or are tagged by another carnivore (both lose egg).
 
 ## Day/Night Cycle
 
@@ -57,19 +57,19 @@ Each day is 50 ticks (~5 cycles per season). Affects both energy and plants.
 - **Day**: Agents regen energy faster (+2 solar). Plants produce bonus food.
 - **Night**: Agents regen energy at base rate. Plants produce only base food.
 
-Predators are especially slow at night (solar drops to 1). Prey can still move reasonably well (solar 3). This makes
-nighttime safer for prey.
+Carnivores are especially slow at night (solar drops to 1). Herbivores can still move reasonably well (solar 3). This
+makes nighttime safer for herbivores.
 
 ## Energy
 
 Energy is consumed by movement. When energy runs out, the agent cannot move.
 
-|               | Prey | Predator |
-| ------------- | ---- | -------- |
-| Energy pool   | 30   | 100      |
-| Solar (day)   | 5    | 3        |
-| Solar (night) | 3    | 1        |
-| Move cost     | 4    | 4        |
+|               | Herbivore | Carnivore |
+| ------------- | --------- | --------- |
+| Energy pool   | 30        | 100       |
+| Solar (day)   | 5         | 3         |
+| Solar (night) | 3         | 1         |
+| Move cost     | 4         | 4         |
 
 ## Scoring
 

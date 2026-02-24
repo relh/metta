@@ -2,41 +2,42 @@
 
 from __future__ import annotations
 
-import importlib
-from typing import Optional
+from typing import Optional, Sequence
 
 import metta.tools as tools
+from metta.games.games import GAMES, make_game
 from metta.sim.simulation_config import SimulationConfig
 from mettagrid.policy.loader import discover_and_register_policies
-
-_GAME_MODULES = {
-    "hunger": "metta.games.hunger.missions",
-}
-
-_GAME_DEFAULTS = {
-    "hunger": {
-        "policy_uri": "metta://policy/hunger_agent",
-        "policy_packages": ["metta.games.hunger.agent.hunger_agent"],
-    },
-}
 
 
 def play(
     game: str = "hunger",
     policy_uri: Optional[str] = None,
     num_agents: int = 40,
-    max_steps: int = 5000,
+    cogs: Optional[int] = None,
+    max_steps: Optional[int] = None,
+    variants: Optional[Sequence[str]] = None,
 ) -> tools.PlayTool:
-    if game not in _GAME_MODULES:
-        raise ValueError(f"Unknown game {game!r}. Available: {list(_GAME_MODULES.keys())}")
+    if game not in GAMES:
+        raise ValueError(f"Unknown game {game!r}. Available: {list(GAMES.keys())}")
 
-    defaults = _GAME_DEFAULTS.get(game, {})
+    info = GAMES[game]
     if policy_uri is None:
-        policy_uri = defaults.get("policy_uri")
-    for pkg in defaults.get("policy_packages", []):
+        policy_uri = info.get("policy_uri")
+    for pkg in info.get("policy_packages", []):
         discover_and_register_policies(pkg)
 
-    mod = importlib.import_module(_GAME_MODULES[game])
-    env = mod.make_game(num_agents=num_agents, max_steps=max_steps)
+    if isinstance(variants, str):
+        variant_list = [v.strip() for v in variants.split(",") if v.strip()]
+    else:
+        variant_list = list(variants) if variants else []
+    env = make_game(
+        game,
+        num_agents=num_agents,
+        cogs=cogs,
+        max_steps=max_steps,
+        variants=variant_list if variant_list else None,
+    )
     sim = SimulationConfig(suite=game, name="basic", env=env)
-    return tools.PlayTool(sim=sim, policy_uri=policy_uri)
+    steps = max_steps if max_steps is not None else env.game.max_steps
+    return tools.PlayTool(sim=sim, policy_uri=policy_uri, max_steps=steps)

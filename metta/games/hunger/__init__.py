@@ -1,1 +1,1 @@
-"""Hunger: a predator-prey survival game with seasonal cycles."""
+"""Hunger: a carnivore-herbivore survival game with seasonal cycles."""

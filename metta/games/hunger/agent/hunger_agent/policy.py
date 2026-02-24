@@ -1,9 +1,9 @@
 """Hunger Agent policy — goal-tree scripted agent for the Hunger game.
 
-Each agent randomly chooses predator or prey role, picks up the corresponding
+Each agent randomly chooses carnivore or herbivore role, picks up the corresponding
 gear, then executes role-specific behavior:
-  - Prey: harvest plants, flee from predators
-  - Predator: hunt prey, avoid other predators (to protect egg)
+  - Herbivore: harvest plants, flee from carnivores
+  - Carnivore: hunt herbivores, avoid other carnivores (to protect egg)
 """
 
 from __future__ import annotations
@@ -37,18 +37,18 @@ from .obs_parser import ObsParser
 SPAWN_POS = (100, 100)
 
 
-def _prey_goals() -> list[Goal]:
+def _herbivore_goals() -> list[Goal]:
     return [
-        GetGearGoal("prey_station", "scout"),
+        GetGearGoal("herbivore_station", "scout"),
         FleeGoal(),
         HarvestGoal(),
         ExploreGoal(),
     ]
 
 
-def _predator_goals() -> list[Goal]:
+def _carnivore_goals() -> list[Goal]:
     return [
-        GetGearGoal("predator_station", "scrambler"),
+        GetGearGoal("carnivore_station", "scrambler"),
         AvoidPredatorGoal(),
         HuntGoal(),
         ExploreGoal(),
@@ -78,7 +78,7 @@ class HungerBrain(StatefulPolicyImpl[HungerAgentState]):
         self._obs_parser = ObsParser(pei)
 
     def initial_agent_state(self) -> HungerAgentState:
-        goals = _prey_goals() if self._role == "prey" else _predator_goals()
+        goals = _herbivore_goals() if self._role == "herbivore" else _carnivore_goals()
         return HungerAgentState(self._agent_id, self._role, goals)
 
     def step_with_state(self, obs: AgentObservation, s: HungerAgentState) -> tuple[Action, HungerAgentState]:
@@ -135,8 +135,8 @@ class HungerBrain(StatefulPolicyImpl[HungerAgentState]):
 class HungerPolicy(MultiAgentPolicy):
     """Scripted agent for the Hunger game.
 
-    Each agent randomly chooses predator or prey role based on predator_prob.
-    URI: metta://policy/hunger_agent?predator_prob=0.5
+    Each agent randomly chooses carnivore or herbivore role based on carnivore_prob.
+    URI: metta://policy/hunger_agent?carnivore_prob=0.5
     """
 
     short_names = ["hunger_agent"]
@@ -145,11 +145,11 @@ class HungerPolicy(MultiAgentPolicy):
         self,
         policy_env_info: PolicyEnvInterface,
         device: str = "cpu",
-        predator_prob: float = 0.5,
+        carnivore_prob: float = 0.5,
         **kwargs: object,
     ) -> None:
         super().__init__(policy_env_info, device=device)
-        self._predator_prob = predator_prob
+        self._carnivore_prob = carnivore_prob
         self._feature_by_id = {f.id: f for f in policy_env_info.obs_features}
         self._action_map = policy_env_info.action_name_to_flat_index
         self._noop = dtype_actions.type(self._action_map["noop"])
@@ -157,7 +157,7 @@ class HungerPolicy(MultiAgentPolicy):
 
     def agent_policy(self, agent_id: int) -> StatefulAgentPolicy[HungerAgentState]:
         if agent_id not in self._agents:
-            role = "predator" if random.random() < self._predator_prob else "prey"
+            role = "carnivore" if random.random() < self._carnivore_prob else "herbivore"
             brain = HungerBrain(self._policy_env_info, agent_id, role)
             self._agents[agent_id] = StatefulAgentPolicy(brain, self._policy_env_info, agent_id=agent_id)
         return self._agents[agent_id]

@@ -152,7 +152,7 @@ class HarvestGoal(Goal):
 
     def execute(self, ctx: HungerContext) -> Action | None:
         pos = ctx.state.position
-        plants = ctx.map.find(type="plant")
+        plants = ctx.map.find(type="plants")
         usable = [(p, e) for p, e in plants if e.properties.get("food", 0) > 0]
 
         if not usable:
@@ -207,7 +207,7 @@ class AvoidPredatorGoal(Goal):
 
 
 class HuntGoal(Goal):
-    """Find prey (scouts) and chase them down."""
+    """Find herbivores (scouts) and chase them down."""
 
     name = "Hunt"
 

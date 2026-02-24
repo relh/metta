@@ -9,13 +9,11 @@ Copy the hunger game structure as a template:
 ```
 metta/games/my_game/
     __init__.py          # Empty
-    config.py            # Resources, gear, constants
-    agent.py             # agent_config() → AgentConfig
-    stations.py          # Grid object factories → GridObjectConfig
-    seasons.py           # Events factory → dict[str, EventConfig]
-    sites.py             # Map layout → CoGameSite
-    mission.py           # MyMission(CoGameMission) → MettaGridConfig
-    missions.py          # Registry + make_game() factory
+    # Resources, gear, constants inlined in game/variants
+    agent/               # Policy, obs parser; base AgentConfig inlined in game
+    variants/seasons.py  # Season constants and food-drop events
+    game.py              # MyMission(CoGameMission), make_game(), register(), site
+metta/games/games.py     # Registry; import games to trigger registration
 ```
 
 Tests go in `tests/metta/games/my_game/test_*.py`.
@@ -261,6 +259,18 @@ Tests live in `tests/metta/games/<game>/`. Use deterministic ASCII maps and the 
 ### Test Harness Pattern
 
 ```python
+from mettagrid.config.mettagrid_config import (
+    ActionsConfig,
+    AgentConfig,
+    GameConfig,
+    InventoryConfig,
+    MettaGridConfig,
+    MoveActionConfig,
+    NoopActionConfig,
+    ResourceLimitsConfig,
+    WallConfig,
+)
+from mettagrid.mapgen.ascii import AsciiMapBuilder
 from mettagrid.simulator import Simulation
 
 def make_test_env(agent_initial, objects, events=None):
@@ -274,7 +284,7 @@ def make_test_env(agent_initial, objects, events=None):
                 initial={},
                 limits={"all": ResourceLimitsConfig(min=10000, max=10000, resources=MyConfig.RESOURCES)},
             )),
-            objects={"wall": wall_config(), **objects},
+            objects={"wall": WallConfig(name="wall", render_symbol="\u2b1b"), **objects},
             events=events or {},
             map_builder=AsciiMapBuilder.Config(
                 map_data=[
@@ -335,7 +345,7 @@ def test_scrambler_tags_scout():
     # Agent 0 at (1,2), Agent 1 at (2,2). Agent 0 moves east onto agent 1.
     cfg = MettaGridConfig(game=GameConfig(
         num_agents=2,
-        agents=[test_agent(), agent_config(max_steps=100)],
+        agents=[test_agent(), AgentConfig(inventory=..., rewards={})],
         # ... map with two @ symbols adjacent
     ))
     sim = Simulation(cfg, seed=42)
@@ -351,28 +361,22 @@ def test_scrambler_tags_scout():
 
 ## Registering Your Game
 
-### 1. Create a mission registry (`missions.py`)
+### 1. Add `create` classmethod and register in `game.py`
 
 ```python
-from metta.games.my_game.mission import MyMission
-from metta.games.my_game.sites import MY_ARENA
+class MyMission(CoGameMission):
+    @classmethod
+    def create(cls, num_agents: int, max_steps: int) -> MyMission:
+        return cls(name="basic", site=my_site(num_agents), num_cogs=num_agents, max_steps=max_steps)
 
-MISSIONS = {"basic": MyMission(name="basic", site=MY_ARENA)}
-
-def make_game(num_agents=10, max_steps=5000):
-    mission = MISSIONS["basic"].model_copy(update={"num_cogs": num_agents, "max_steps": max_steps})
-    return mission.make_env()
+from metta.games.games import register
+register("my_game", MyMission, parse_variants=parse_variants, policy_uri="metta://policy/my_agent", policy_packages=["metta.games.my_game.agent"])
 ```
 
-### 2. Add to the play recipe (`recipes/experiment/game.py`)
+### 2. Add import to `metta/games/games.py`
 
 ```python
-from metta.games.my_game.missions import make_game as make_my_game
-
-_GAME_FACTORIES = {
-    "hunger": make_hunger,
-    "my_game": make_my_game,
-}
+from metta.games.my_game import game  # noqa: E402, F401
 ```
 
 ### 3. Play it
