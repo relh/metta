@@ -3,7 +3,8 @@ name: Build Image and Deploy with Helm
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
-  cancel-in-progress: true
+  # Never cancel in-flight production deploys on main; cancelling can leave Helm in pending-* state.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 on:
   workflow_call:
