@@ -214,7 +214,12 @@ class Policy(MultiAgentPolicy, nn.Module):
         self(td)
         new_state = self.dump_agent_state()
         action_idx = int(td["actions"][0].item())
-        return Action(name=self._policy_env_info.action_names[action_idx]), new_state
+        action_name = self._policy_env_info.action_names[action_idx]
+        vibe_name: str | None = None
+        if self._policy_env_info.vibe_action_names and "vibe_actions" in td.keys():
+            vibe_idx = int(td["vibe_actions"][0].item())
+            vibe_name = self._policy_env_info.vibe_action_names[vibe_idx]
+        return Action(name=action_name, vibe=vibe_name), new_state
 
     def _obs_to_td(self, obs: AgentObservation, device: torch.device, agent_id: int | None = None) -> TensorDict:
         obs_tensor = obs_to_obs_tensor(obs, self._policy_env_info.observation_space.shape, device)

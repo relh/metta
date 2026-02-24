@@ -36,6 +36,25 @@ class SimplePolicy(Policy):
         return self._device
 
 
+class VibePolicy(SimplePolicy):
+    def forward(self, td: TensorDict, action: torch.Tensor | None = None) -> TensorDict:
+        td["actions"] = torch.ones(td.batch_size[0], dtype=torch.long)
+        td["vibe_actions"] = torch.ones(td.batch_size[0], dtype=torch.long)
+        return td
+
+
+def _policy_env_with_vibes() -> PolicyEnvInterface:
+    return PolicyEnvInterface(
+        obs_features=[ObservationFeatureSpec(id=0, name="padding", normalization=255.0)],
+        tags=["agent"],
+        action_names=["noop", "move_north"],
+        vibe_action_names=["change_vibe_default", "change_vibe_miner"],
+        num_agents=1,
+        observation_shape=(10, 3),
+        egocentric_shape=(7, 7),
+    )
+
+
 def test_policy_inherits_from_multi_agent_policy():
     """Verify Policy is a subclass of MultiAgentPolicy."""
     assert issubclass(Policy, MultiAgentPolicy)
@@ -81,6 +100,20 @@ def test_agent_policy_adapter_step():
     # Get action
     action = agent_policy.step(obs)
     assert isinstance(action, Action)
+
+
+def test_agent_policy_adapter_step_with_vibe_action():
+    policy_env_info = _policy_env_with_vibes()
+    policy = VibePolicy(policy_env_info)
+    agent_policy = policy.agent_policy(agent_id=0)
+    feature = policy_env_info.obs_features[0]
+    tokens = [ObservationToken(feature=feature, value=0, raw_token=(255, 0, 0)) for _ in range(10)]
+    obs = AgentObservation(agent_id=0, tokens=tokens)
+
+    action = agent_policy.step(obs)
+    assert isinstance(action, Action)
+    assert action.name == "move_north"
+    assert action.vibe == "change_vibe_miner"
 
 
 def test_agent_policy_adapter_reset():
