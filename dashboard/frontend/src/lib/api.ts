@@ -652,6 +652,12 @@ export type DiagnoseRunsResponse = {
 
 type DashboardRequestMethod = 'GET' | 'POST'
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
 async function parseJsonOrThrow(response: Response): Promise<unknown> {
   const text = await response.text()
   let maybeJson: unknown = null
@@ -685,12 +691,21 @@ async function dashboardRequest<T>(
   body?: string,
   extraHeaders?: Record<string, string>
 ): Promise<T> {
-  const response = await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
-    method,
-    headers: getDashboardRequestHeaders(extraHeaders),
-    body,
-    cache: 'no-store',
-  })
+  const send = async (): Promise<Response> => {
+    return await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
+      method,
+      headers: getDashboardRequestHeaders(extraHeaders),
+      body,
+      cache: 'no-store',
+    })
+  }
+
+  let response = await send()
+  if (response.status === 503 && method === 'GET') {
+    await sleep(350)
+    response = await send()
+  }
+
   return (await parseJsonOrThrow(response)) as T
 }
 
@@ -700,8 +715,27 @@ export async function fetchDashboardData(policyVersionId: string): Promise<Dashb
   )
 }
 
+type DashboardDefaultPolicyVersionResponse = {
+  policy_version_id: string
+}
+
 export async function fetchDashboardDefaultData(): Promise<DashboardResponse> {
-  return await dashboardRequest<DashboardResponse>('/dashboard/v1/policies/versions/default/data')
+  try {
+    return await dashboardRequest<DashboardResponse>('/dashboard/v1/policies/versions/default/data')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    const needsFallback = message.startsWith('422: Invalid policy version id format') || message.startsWith('404:')
+    if (!needsFallback) throw err
+  }
+
+  const defaultVersion = await dashboardRequest<DashboardDefaultPolicyVersionResponse>(
+    '/dashboard/v1/policies/versions/default'
+  )
+  const policyVersionId = String(defaultVersion.policy_version_id ?? '').trim()
+  if (!policyVersionId) {
+    throw new Error('500: Default policy endpoint returned empty policy_version_id')
+  }
+  return await fetchDashboardData(policyVersionId)
 }
 
 export async function fetchDashboardAnalysis(

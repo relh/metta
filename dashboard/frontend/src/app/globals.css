@@ -398,10 +398,51 @@ code {
   grid-template-columns: minmax(260px, 2fr) repeat(3, minmax(150px, 1fr));
 }
 
+.skill-view-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .capability-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+}
+
+.capability-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.capability-tree-node {
+  list-style: none;
+  position: relative;
+}
+
+.capability-tree-card {
+  border-width: 2px;
+}
+
+.capability-tree-children {
+  list-style: none;
+  margin: 10px 0 0 16px;
+  padding: 0 0 0 18px;
+  display: grid;
+  gap: 10px;
+  border-left: 2px dashed var(--line-strong);
+}
+
+.capability-tree-children > .capability-tree-node::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 28px;
+  width: 16px;
+  border-top: 2px dashed var(--line-strong);
 }
 
 .capability-card {

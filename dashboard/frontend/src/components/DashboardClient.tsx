@@ -76,7 +76,12 @@ const OPPONENT_COLORS = [
   '#6366f1',
 ]
 
+const METTASCOPE_REPLAY_URL_PREFIX = 'https://metta-ai.github.io/metta/mettascope/mettascope.html?replay='
+const VIBESCOPE_REPLAY_URL_PREFIX = 'https://metta-ai.github.io/metta/vibescope/vibescope.html?replay='
+
 const DASHBOARD_FEEDBACK_ISSUE_URL = 'https://github.com/Metta-AI/metta/issues/new'
+const DEFAULT_DASHBOARD_CACHE_KEY = '__default__'
+const dashboardResponseCache = new Map<string, DashboardResponse>()
 
 const SORT_HEADER_BUTTON_STYLE: CSSProperties = {
   background: 'transparent',
@@ -99,10 +104,38 @@ type OpponentSummaryRow = {
   source: 'derived' | 'episodes'
 }
 
+type ReplayScope = 'mettascope' | 'vibescope'
+type ReplaySpotlightMode = 'selected' | 'worst' | 'median' | 'best'
+type OverviewTrendMetric = 'reward' | 'noop_rate' | 'steps' | 'resource_gained'
+type TrainingFocus = 'mining' | 'aligning' | 'scouting' | 'coordination' | 'scrambling'
+
+type OverviewTrendPoint = {
+  id: string
+  createdAt: string | null | undefined
+  value: number
+}
+
 function parseDashboardTab(value: string | null): DashboardTab | null {
   if (!value) return null
   const normalized = value.trim().toLowerCase()
   return DASHBOARD_TABS.includes(normalized as DashboardTab) ? (normalized as DashboardTab) : null
+}
+
+function cacheDashboardResponse(response: DashboardResponse, isDefault: boolean = false): void {
+  const policyVersionId = String(response.policy?.id ?? '').trim()
+  if (!policyVersionId) return
+  dashboardResponseCache.set(policyVersionId, response)
+  if (isDefault) {
+    dashboardResponseCache.set(DEFAULT_DASHBOARD_CACHE_KEY, response)
+  }
+}
+
+function getCachedDashboardResponse(policyVersionId: string): DashboardResponse | null {
+  return dashboardResponseCache.get(policyVersionId) ?? null
+}
+
+function getCachedDefaultDashboardResponse(): DashboardResponse | null {
+  return dashboardResponseCache.get(DEFAULT_DASHBOARD_CACHE_KEY) ?? null
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -292,6 +325,120 @@ function opponentColorMap(names: string[]): Record<string, string> {
     map[unique[i]] = OPPONENT_COLORS[i % OPPONENT_COLORS.length]
   }
   return map
+}
+
+function normalizeReplayUrl(replayUrl: string | null | undefined): string | null {
+  if (!replayUrl) return null
+  if (replayUrl.startsWith(METTASCOPE_REPLAY_URL_PREFIX)) return replayUrl
+  return `${METTASCOPE_REPLAY_URL_PREFIX}${replayUrl}`
+}
+
+function normalizeVibescopeUrl(replayUrl: string | null | undefined): string | null {
+  if (!replayUrl) return null
+  if (replayUrl.startsWith(VIBESCOPE_REPLAY_URL_PREFIX)) return replayUrl
+  const raw = replayUrl.startsWith(METTASCOPE_REPLAY_URL_PREFIX)
+    ? replayUrl.slice(METTASCOPE_REPLAY_URL_PREFIX.length)
+    : replayUrl
+  return `${VIBESCOPE_REPLAY_URL_PREFIX}${raw}`
+}
+
+function episodeResourceGained(episode: DashboardEpisode): number {
+  const candidates = [
+    metricNumber(episode, 'resource.gained'),
+    metricNumber(episode, 'resource.total_gained'),
+    metricNumber(episode, 'resources.gained'),
+  ]
+  return Math.max(...candidates, 0)
+}
+
+function buildOverviewTrendPoints(episodes: DashboardEpisode[], metric: OverviewTrendMetric): OverviewTrendPoint[] {
+  const points: OverviewTrendPoint[] = []
+  for (const episode of episodes) {
+    let value: number | null = null
+    if (metric === 'reward') value = toFiniteNumber(episode.reward ?? episode.avg_reward)
+    if (metric === 'noop_rate') value = episodeNoopRate(episode)
+    if (metric === 'steps') value = toFiniteNumber(episode.steps)
+    if (metric === 'resource_gained') value = episodeResourceGained(episode)
+    if (value === null) continue
+    points.push({
+      id: episodeIdentifier(episode),
+      createdAt: episode.created_at,
+      value,
+    })
+  }
+
+  return points.sort((left, right) => {
+    const leftTs = left.createdAt ? Date.parse(left.createdAt) : NaN
+    const rightTs = right.createdAt ? Date.parse(right.createdAt) : NaN
+    const leftFinite = Number.isFinite(leftTs)
+    const rightFinite = Number.isFinite(rightTs)
+    if (leftFinite && rightFinite) return leftTs - rightTs
+    if (leftFinite) return -1
+    if (rightFinite) return 1
+    return left.id.localeCompare(right.id)
+  })
+}
+
+function buildSparklinePath(points: OverviewTrendPoint[], width: number, height: number, pad: number): string {
+  if (points.length === 0) return ''
+  const values = points.map((point) => point.value)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = Math.max(max - min, 1e-9)
+  const usableWidth = Math.max(width - pad * 2, 1)
+  const usableHeight = Math.max(height - pad * 2, 1)
+
+  return points
+    .map((point, index) => {
+      const x = pad + (points.length === 1 ? usableWidth / 2 : (usableWidth * index) / (points.length - 1))
+      const normalizedY = (point.value - min) / span
+      const y = height - pad - normalizedY * usableHeight
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+    })
+    .join(' ')
+}
+
+function estimateReplayFocusStep(episode: DashboardEpisode | null): number | null {
+  if (!episode) return null
+  const steps = toFiniteNumber(episode.steps)
+  if (steps === null || steps <= 0) return null
+  const tags = asStringArray(episode.diagnostic_tags).join(' ').toLowerCase()
+  const lateFocus =
+    episode.status === 'failed' || tags.includes('stalled_noop_heavy=true') || tags.includes('freeze_heavy')
+  const ratio = lateFocus ? 0.75 : 0.5
+  return Math.max(1, Math.round(steps * ratio))
+}
+
+function deriveTrainingFocus(kpis: DashboardResponse['derived']['kpis'] | undefined): TrainingFocus {
+  if (!kpis) return 'coordination'
+  const scores: Record<TrainingFocus, number> = {
+    mining: Math.max(
+      toFiniteNumber(kpis.resource_retention) ?? 0,
+      Math.min((toFiniteNumber(kpis.resource_efficiency_per_step) ?? 0) * 25, 1)
+    ),
+    aligning: toFiniteNumber(kpis.junction_control_rate) ?? 0,
+    scouting: toFiniteNumber(kpis.move_efficiency) ?? 0,
+    coordination: Math.max(toFiniteNumber(kpis.reward_consistency) ?? 0, 1 - (toFiniteNumber(kpis.noop_rate) ?? 1)),
+    scrambling: Math.max((toFiniteNumber(kpis.profile_aggressive) ?? 0) / 100, 0),
+  }
+
+  let weakest: TrainingFocus = 'coordination'
+  let weakestScore = Number.POSITIVE_INFINITY
+  for (const focus of Object.keys(scores) as TrainingFocus[]) {
+    if (scores[focus] < weakestScore) {
+      weakestScore = scores[focus]
+      weakest = focus
+    }
+  }
+  return weakest
+}
+
+function autoTrainingRecipeHint(focus: TrainingFocus): string {
+  if (focus === 'mining') return 'recipes/experiment/cogsguard.py::miner'
+  if (focus === 'aligning') return 'recipes/experiment/cogsguard.py::aligner'
+  if (focus === 'scouting') return 'recipes/experiment/cogsguard.py::scout'
+  if (focus === 'scrambling') return 'planned scrambler curriculum'
+  return 'join curricula (scout/miner/aligning)'
 }
 
 function episodeTagTokens(episode: DashboardEpisode): string[] {
@@ -508,6 +655,8 @@ function KPIStatCard({
 export function DashboardClient() {
   const [policyVersionId, setPolicyVersionId] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [loadLabel, setLoadLabel] = useState('Loading dashboard data.')
   const [analysisLoading, setAnalysisLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
@@ -518,12 +667,18 @@ export function DashboardClient() {
   const [roleLoading, setRoleLoading] = useState(false)
   const [roleError, setRoleError] = useState<string | null>(null)
   const rolePercentilesCacheRef = useRef<Map<string, DashboardRolePercentilesResponse>>(new Map())
+  const loadProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const loadProgressResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
 
   const [statusFilter, setStatusFilter] = useState<EpisodeStatusFilter>('all')
   const [replayOnly, setReplayOnly] = useState(false)
   const [tagQuery, setTagQuery] = useState('')
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
+  const [overviewReplayMode, setOverviewReplayMode] = useState<ReplaySpotlightMode>('selected')
+  const [overviewReplayScope, setOverviewReplayScope] = useState<ReplayScope>('vibescope')
+  const [overviewTrendMetric, setOverviewTrendMetric] = useState<OverviewTrendMetric>('reward')
+  const [autoCommandCopied, setAutoCommandCopied] = useState(false)
   const [episodeSort, setEpisodeSort] = useState<EpisodeSortKey>('reward')
   const [episodeSortDir, setEpisodeSortDir] = useState<SortDir>('desc')
 
@@ -548,6 +703,57 @@ export function DashboardClient() {
       }
     }
   }, [])
+
+  const clearLoadProgressTimers = useCallback(() => {
+    if (loadProgressIntervalRef.current) {
+      clearInterval(loadProgressIntervalRef.current)
+      loadProgressIntervalRef.current = null
+    }
+    if (loadProgressResetTimeoutRef.current) {
+      clearTimeout(loadProgressResetTimeoutRef.current)
+      loadProgressResetTimeoutRef.current = null
+    }
+  }, [])
+
+  const beginDashboardLoadProgress = useCallback(
+    (label: string) => {
+      clearLoadProgressTimers()
+      setLoadLabel(label)
+      setLoadProgress(8)
+      setLoading(true)
+      loadProgressIntervalRef.current = setInterval(() => {
+        setLoadProgress((current) => {
+          if (current >= 92) return current
+          if (current < 35) return current + 7
+          if (current < 70) return current + 4
+          return current + 2
+        })
+      }, 220)
+    },
+    [clearLoadProgressTimers]
+  )
+
+  const finishDashboardLoadProgress = useCallback(() => {
+    clearLoadProgressTimers()
+    setLoadProgress(100)
+    loadProgressResetTimeoutRef.current = setTimeout(() => {
+      setLoading(false)
+      setLoadProgress(0)
+    }, 180)
+  }, [clearLoadProgressTimers])
+
+  useEffect(() => {
+    return () => {
+      clearLoadProgressTimers()
+    }
+  }, [clearLoadProgressTimers])
+
+  const loadProgressMessage = useMemo(() => {
+    if (!loading) return null
+    if (loadProgress < 30) return `${loadLabel} Fetching policy + episode data...`
+    if (loadProgress < 70) return `${loadLabel} Computing diagnostics and matchups...`
+    return `${loadLabel} Finalizing dashboard view...`
+  }, [loadLabel, loadProgress, loading])
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
   const completedEpisodes = useMemo(() => episodes.filter((episode) => episode.status === 'completed'), [episodes])
@@ -722,6 +928,65 @@ export function DashboardClient() {
     return lookup
   }, [episodes])
 
+  const replayEpisodes = useMemo(() => {
+    return completedEpisodes
+      .filter((episode) => Boolean(episode.replay_url))
+      .sort(
+        (left, right) =>
+          (toFiniteNumber(left.reward ?? left.avg_reward) ?? Number.NEGATIVE_INFINITY) -
+          (toFiniteNumber(right.reward ?? right.avg_reward) ?? Number.NEGATIVE_INFINITY)
+      )
+  }, [completedEpisodes])
+
+  const selectedReplayEpisodeFromTable = useMemo(() => {
+    if (!selectedEpisodeId) return null
+    const found = episodes.find((episode) => episodeIdentifier(episode) === selectedEpisodeId)
+    if (!found?.replay_url) return null
+    return found
+  }, [episodes, selectedEpisodeId])
+
+  const replaySpotlightEpisode = useMemo(() => {
+    if (overviewReplayMode === 'selected' && selectedReplayEpisodeFromTable) return selectedReplayEpisodeFromTable
+    if (replayEpisodes.length === 0) return null
+    if (overviewReplayMode === 'worst') return replayEpisodes[0]
+    if (overviewReplayMode === 'best') return replayEpisodes[replayEpisodes.length - 1]
+    return replayEpisodes[Math.floor(replayEpisodes.length / 2)]
+  }, [overviewReplayMode, replayEpisodes, selectedReplayEpisodeFromTable])
+
+  const replaySpotlightUrls = useMemo(() => {
+    const replayUrl = typeof replaySpotlightEpisode?.replay_url === 'string' ? replaySpotlightEpisode.replay_url : null
+    const mettascopeUrl = normalizeReplayUrl(replayUrl)
+    const vibescopeUrl = normalizeVibescopeUrl(replayUrl)
+    return {
+      mettascopeUrl,
+      vibescopeUrl,
+      selected: overviewReplayScope === 'vibescope' ? vibescopeUrl : mettascopeUrl,
+    }
+  }, [overviewReplayScope, replaySpotlightEpisode?.replay_url])
+
+  const replaySpotlightFocusStep = useMemo(
+    () => estimateReplayFocusStep(replaySpotlightEpisode),
+    [replaySpotlightEpisode]
+  )
+
+  const overviewTrendPoints = useMemo(
+    () => buildOverviewTrendPoints(completedEpisodes, overviewTrendMetric),
+    [completedEpisodes, overviewTrendMetric]
+  )
+  const overviewTrendPath = useMemo(() => buildSparklinePath(overviewTrendPoints, 640, 220, 24), [overviewTrendPoints])
+  const overviewTrendStats = useMemo(() => {
+    if (overviewTrendPoints.length === 0) return null
+    const values = overviewTrendPoints.map((point) => point.value)
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+      latest: values[values.length - 1],
+      oldest: values[0],
+      start: overviewTrendPoints[0].createdAt,
+      end: overviewTrendPoints[overviewTrendPoints.length - 1].createdAt,
+    }
+  }, [overviewTrendPoints])
+
   const teamCompRows = useMemo(() => asTeamCompRows(data?.derived?.team_comp), [data])
   const trendPoints = useMemo(() => asTrendPoints(trend?.points), [trend])
 
@@ -775,35 +1040,57 @@ export function DashboardClient() {
     setSelectedTrendMetric(defaultMetric)
   }, [selectedTrendMetric, trendExplorer?.selected_metric, trendSeries])
 
-  const loadDashboardData = useCallback(async (rawPolicyVersionId: string) => {
-    const trimmedPolicyVersionId = rawPolicyVersionId.trim()
-    if (!trimmedPolicyVersionId) return
+  const loadDashboardData = useCallback(
+    async (rawPolicyVersionId: string) => {
+      const trimmedPolicyVersionId = rawPolicyVersionId.trim()
+      if (!trimmedPolicyVersionId) return
 
-    setError(null)
-    setAnalysisError(null)
-    setAnalysis(null)
-    setRolePercentiles(null)
-    setRoleError(null)
-    setRoleLoading(false)
-    setLoading(true)
-    try {
-      const response = await fetchDashboardData(trimmedPolicyVersionId)
-      setData(response)
-      setSelectedEpisodeId(null)
-      if (typeof window !== 'undefined') {
-        const url = new URL(window.location.href)
-        if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
-          url.searchParams.set('policyVersionId', trimmedPolicyVersionId)
-          window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+      setError(null)
+      setAnalysisError(null)
+      setAnalysis(null)
+      setRolePercentiles(null)
+      setRoleError(null)
+      setRoleLoading(false)
+
+      const cachedResponse = getCachedDashboardResponse(trimmedPolicyVersionId)
+      if (cachedResponse) {
+        clearLoadProgressTimers()
+        setLoading(false)
+        setLoadProgress(0)
+        setData(cachedResponse)
+        setSelectedEpisodeId(null)
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href)
+          if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
+            url.searchParams.set('policyVersionId', trimmedPolicyVersionId)
+            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+          }
         }
+        return
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      setError(message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+
+      beginDashboardLoadProgress('Generating dashboard summary.')
+      try {
+        const response = await fetchDashboardData(trimmedPolicyVersionId)
+        cacheDashboardResponse(response)
+        setData(response)
+        setSelectedEpisodeId(null)
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href)
+          if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
+            url.searchParams.set('policyVersionId', trimmedPolicyVersionId)
+            window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        setError(message)
+      } finally {
+        finishDashboardLoadProgress()
+      }
+    },
+    [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress]
+  )
 
   const onLoad = async () => {
     await loadDashboardData(policyVersionId)
@@ -1048,16 +1335,41 @@ export function DashboardClient() {
     const initialize = async () => {
       if (initialPolicyVersionId) {
         setPolicyVersionId(initialPolicyVersionId)
+        const cachedResponse = getCachedDashboardResponse(initialPolicyVersionId)
+        if (cachedResponse) {
+          setData(cachedResponse)
+          setError(null)
+          return
+        }
         await loadDashboardData(initialPolicyVersionId)
         return
       }
 
+      const cachedDefault = getCachedDefaultDashboardResponse()
+      if (cachedDefault) {
+        clearLoadProgressTimers()
+        setLoading(false)
+        setLoadProgress(0)
+        const defaultPolicyVersionId = String(cachedDefault.policy?.id ?? '').trim()
+        setData(cachedDefault)
+        setError(null)
+        if (!defaultPolicyVersionId) return
+        setPolicyVersionId(defaultPolicyVersionId)
+        const url = new URL(window.location.href)
+        if (url.searchParams.get('policyVersionId') !== defaultPolicyVersionId) {
+          url.searchParams.set('policyVersionId', defaultPolicyVersionId)
+          window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+        }
+        return
+      }
+
       try {
-        setLoading(true)
+        beginDashboardLoadProgress('Loading default policy dashboard.')
         const response = await fetchDashboardDefaultData()
         if (cancelled) return
 
         const defaultPolicyVersionId = String(response.policy?.id ?? '').trim()
+        cacheDashboardResponse(response, true)
         setData(response)
         setError(null)
         if (!defaultPolicyVersionId) return
@@ -1074,7 +1386,7 @@ export function DashboardClient() {
         setError(message)
       } finally {
         if (!cancelled) {
-          setLoading(false)
+          finishDashboardLoadProgress()
         }
       }
     }
@@ -1083,7 +1395,7 @@ export function DashboardClient() {
     return () => {
       cancelled = true
     }
-  }, [loadDashboardData])
+  }, [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress, loadDashboardData])
 
   const kpis = data?.derived?.kpis
   const avgReward = toFiniteNumber(kpis?.avg_reward ?? kpis?.mean_reward)
@@ -1094,6 +1406,22 @@ export function DashboardClient() {
   const junctionControl = toFiniteNumber(kpis?.junction_control_rate)
   const noopRate = toFiniteNumber(kpis?.noop_rate)
   const rewardConsistency = toFiniteNumber(kpis?.reward_consistency)
+  const trainingFocus = deriveTrainingFocus(kpis)
+  const autoTrainingCommand = useMemo(() => {
+    const policyName = String(data?.policy?.name ?? 'policy')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+    const policyVersion = String(data?.policy?.version ?? 'x')
+    const runName = `auto-${policyName}-v${policyVersion}-${trainingFocus}`
+    return `uv run ./tools/run.py train arena run=${runName} trainer.total_timesteps=20000000`
+  }, [data?.policy?.name, data?.policy?.version, trainingFocus])
+  const autoTrainingHint = autoTrainingRecipeHint(trainingFocus)
+  const copyAutoTrainingCommand = useCallback(async () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return
+    await navigator.clipboard.writeText(autoTrainingCommand)
+    setAutoCommandCopied(true)
+    setTimeout(() => setAutoCommandCopied(false), 1800)
+  }, [autoTrainingCommand])
 
   return (
     <main className="grid dashboard-shell" style={{ gap: 16 }}>
@@ -1126,6 +1454,33 @@ export function DashboardClient() {
             {loading ? 'Loading...' : 'Load dashboard data'}
           </button>
         </div>
+        {loading && (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(loadProgress)}
+              style={{
+                width: '100%',
+                height: 8,
+                borderRadius: 999,
+                background: 'rgba(15, 23, 42, 0.12)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.max(4, Math.min(100, loadProgress))}%`,
+                  height: '100%',
+                  background: 'linear-gradient(90deg, #2563eb, #0ea5e9)',
+                  transition: 'width 220ms ease',
+                }}
+              />
+            </div>
+            <p style={{ margin: 0, color: '#6f86a6', fontSize: 12 }}>{loadProgressMessage}</p>
+          </div>
+        )}
         {error && (
           <p style={{ margin: 0, color: '#b42318' }}>
             <strong>Error:</strong> {error}
@@ -1266,6 +1621,152 @@ export function DashboardClient() {
                 />
               </section>
 
+              <section className="grid two">
+                <article className="card grid" style={{ gap: 10 }}>
+                  <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
+                    <h2 style={{ margin: 0 }}>Replay Spotlight</h2>
+                    <span className="dashboard-title-subline">Embedded replay view for fastest debugging.</span>
+                  </div>
+                  {replayEpisodes.length === 0 ? (
+                    <p style={{ margin: 0 }}>
+                      No replay URLs found in sampled completed episodes. We can wire richer in-view controls once
+                      replay capture coverage is complete.
+                    </p>
+                  ) : (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        <label style={{ display: 'grid', gap: 6 }}>
+                          Episode focus
+                          <select
+                            value={overviewReplayMode}
+                            onChange={(event) => setOverviewReplayMode(event.target.value as ReplaySpotlightMode)}
+                          >
+                            <option value="selected" disabled={!selectedReplayEpisodeFromTable}>
+                              selected from Episodes tab
+                            </option>
+                            <option value="worst">worst reward with replay</option>
+                            <option value="median">median reward with replay</option>
+                            <option value="best">best reward with replay</option>
+                          </select>
+                        </label>
+                        <label style={{ display: 'grid', gap: 6 }}>
+                          Viewer
+                          <select
+                            value={overviewReplayScope}
+                            onChange={(event) => setOverviewReplayScope(event.target.value as ReplayScope)}
+                          >
+                            <option value="vibescope">VibeScope</option>
+                            <option value="mettascope">MettaScope</option>
+                          </select>
+                        </label>
+                      </div>
+                      <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                        Episode: <code>{replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : '-'}</code>{' '}
+                        · reward{' '}
+                        <code>
+                          {formatNumber(
+                            toFiniteNumber(replaySpotlightEpisode?.reward ?? replaySpotlightEpisode?.avg_reward),
+                            3
+                          )}
+                        </code>{' '}
+                        · steps <code>{String(toFiniteNumber(replaySpotlightEpisode?.steps) ?? '-')}</code>
+                        {replaySpotlightFocusStep !== null && (
+                          <>
+                            {' '}
+                            · seek hint <code>~step {replaySpotlightFocusStep}</code>
+                          </>
+                        )}
+                      </p>
+                      <div
+                        style={{
+                          width: '100%',
+                          border: '1px solid var(--line)',
+                          borderRadius: 10,
+                          overflow: 'hidden',
+                          background: '#000',
+                          minHeight: 360,
+                        }}
+                      >
+                        {replaySpotlightUrls.selected ? (
+                          <iframe
+                            src={replaySpotlightUrls.selected}
+                            title="Replay spotlight"
+                            style={{ width: '100%', height: 420, border: 0 }}
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div style={{ padding: 12, color: '#fff' }}>Replay viewer unavailable for this episode.</div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+                        {replaySpotlightUrls.vibescopeUrl && (
+                          <a href={replaySpotlightUrls.vibescopeUrl} target="_blank" rel="noreferrer">
+                            Open in VibeScope
+                          </a>
+                        )}
+                        {replaySpotlightUrls.mettascopeUrl && (
+                          <a href={replaySpotlightUrls.mettascopeUrl} target="_blank" rel="noreferrer">
+                            Open in MettaScope
+                          </a>
+                        )}
+                        <button type="button" onClick={() => activateTab('episodes')}>
+                          Pick specific episode
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </article>
+
+                <article className="card grid" style={{ gap: 10 }}>
+                  <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
+                    <h2 style={{ margin: 0 }}>Episode Metrics Over Time</h2>
+                    <span className="dashboard-title-subline">X: episode time, Y: selected metric.</span>
+                  </div>
+                  <label style={{ display: 'grid', gap: 6, maxWidth: 300 }}>
+                    Metric
+                    <select
+                      value={overviewTrendMetric}
+                      onChange={(event) => setOverviewTrendMetric(event.target.value as OverviewTrendMetric)}
+                    >
+                      <option value="reward">Reward</option>
+                      <option value="noop_rate">Noop rate</option>
+                      <option value="steps">Steps</option>
+                      <option value="resource_gained">Resource gained</option>
+                    </select>
+                  </label>
+                  {overviewTrendPoints.length < 2 || !overviewTrendStats ? (
+                    <p style={{ margin: 0 }}>
+                      Not enough per-episode signal for this metric yet. Per-step curves (resource/gear over time)
+                      require richer episode telemetry; we can add those when backend collection lands.
+                    </p>
+                  ) : (
+                    <>
+                      <div style={{ overflowX: 'auto' }}>
+                        <svg width="100%" height="220" viewBox="0 0 640 220" role="img" aria-label="Metric over time">
+                          <rect x="0" y="0" width="640" height="220" fill="var(--panel-soft-bg-1)" />
+                          <path d={overviewTrendPath} fill="none" stroke="#2563eb" strokeWidth="2.5" />
+                        </svg>
+                      </div>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+                        <span>
+                          Start: <code>{formatDateTime(overviewTrendStats.start)}</code>
+                        </span>
+                        <span>
+                          End: <code>{formatDateTime(overviewTrendStats.end)}</code>
+                        </span>
+                        <span>
+                          Min/Max: <code>{formatNumber(overviewTrendStats.min, 3)}</code> /{' '}
+                          <code>{formatNumber(overviewTrendStats.max, 3)}</code>
+                        </span>
+                        <span>
+                          Delta: <code>{formatSigned(overviewTrendStats.latest - overviewTrendStats.oldest, 3)}</code>
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </article>
+              </section>
+
               {data.derived?.outcome && (
                 <section className="card">
                   <h2 style={{ marginTop: 0 }}>Outcome Summary</h2>
@@ -1404,6 +1905,38 @@ export function DashboardClient() {
                       ))}
                     </ul>
                   )}
+                  <div className="card" style={{ padding: 10, background: 'var(--panel-soft-bg-1)' }}>
+                    <p style={{ marginTop: 0, marginBottom: 6 }}>
+                      <strong>Auto next run</strong> · focus <code>{trainingFocus}</code>
+                    </p>
+                    <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+                      Suggested curriculum: <code>{autoTrainingHint}</code>
+                    </p>
+                    <code style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{autoTrainingCommand}</code>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button type="button" onClick={copyAutoTrainingCommand}>
+                        {autoCommandCopied ? 'Copied' : 'Copy run command'}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {!actionSummary && (
+                <section className="card" style={{ display: 'grid', gap: 8 }}>
+                  <h2 style={{ margin: 0 }}>Auto Next Run</h2>
+                  <p style={{ margin: 0 }}>
+                    Focus area inferred from current weaknesses: <code>{trainingFocus}</code>
+                  </p>
+                  <p style={{ margin: 0, fontSize: 13 }}>
+                    Suggested curriculum: <code>{autoTrainingHint}</code>
+                  </p>
+                  <code style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{autoTrainingCommand}</code>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" onClick={copyAutoTrainingCommand}>
+                      {autoCommandCopied ? 'Copied' : 'Copy run command'}
+                    </button>
+                  </div>
                 </section>
               )}
 

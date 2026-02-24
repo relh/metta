@@ -28,6 +28,7 @@ type CapabilityCard = {
 
 type IndicatorFilter = 'all' | CapabilityIndicator
 type SourceFilter = 'all' | CapabilitySource
+type CapabilityViewMode = 'tree' | 'grid'
 
 type CapabilitySpec = {
   id: string
@@ -74,6 +75,14 @@ const CAPABILITY_SPECS: CapabilitySpec[] = [
     trainingSource: 'join curricula (scout/miner/aligning)',
   },
 ]
+
+const CAPABILITY_DEPENDENCY_GRAPH: Record<string, string[]> = {
+  coordination: ['mining', 'aligning', 'scouting', 'scrambling'],
+  mining: [],
+  aligning: [],
+  scouting: [],
+  scrambling: [],
+}
 
 const INDICATOR_LABEL: Record<CapabilityIndicator, string> = {
   yes: 'Yes',
@@ -509,6 +518,7 @@ export const SkillTreePanel: FC<{
   const [trainedFilter, setTrainedFilter] = useState<IndicatorFilter>('all')
   const [evalFilter, setEvalFilter] = useState<IndicatorFilter>('all')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [viewMode, setViewMode] = useState<CapabilityViewMode>('tree')
 
   const capabilities = useMemo(
     () => buildCapabilityCards(data, diagnoseNote, diagnoseManifest),
@@ -536,6 +546,28 @@ export const SkillTreePanel: FC<{
     })
   }, [capabilities, evalFilter, query, sourceFilter, trainedFilter])
 
+  const filteredCapabilityEval = useMemo(
+    () => filtered.filter((capability) => capability.source === 'capability_eval'),
+    [filtered]
+  )
+
+  const treeCapabilityById = useMemo(() => {
+    return new Map(filteredCapabilityEval.map((capability) => [capability.id, capability] as const))
+  }, [filteredCapabilityEval])
+
+  const treeRootIds = useMemo(() => {
+    const allIds = new Set(treeCapabilityById.keys())
+    if (allIds.size === 0) return []
+    const dependencyIds = new Set<string>()
+    for (const deps of Object.values(CAPABILITY_DEPENDENCY_GRAPH)) {
+      for (const dep of deps) {
+        if (allIds.has(dep)) dependencyIds.add(dep)
+      }
+    }
+    const explicitRoots = [...allIds].filter((id) => !dependencyIds.has(id))
+    return explicitRoots.length > 0 ? explicitRoots : [...allIds]
+  }, [treeCapabilityById])
+
   const counts = useMemo(() => {
     const next: Record<CapabilityIndicator, number> = {
       yes: 0,
@@ -554,14 +586,70 @@ export const SkillTreePanel: FC<{
     return capabilities.reduce((total, capability) => total + capability.score, 0) / capabilities.length
   }, [capabilities])
 
+  const renderCapabilityCard = (capability: CapabilityCard, treeCard = false) => {
+    return (
+      <article key={capability.id} className={`card capability-card${treeCard ? ' capability-tree-card' : ''}`}>
+        <div className="capability-card-head">
+          <h3 style={{ margin: 0 }}>{capability.title}</h3>
+          <span className="badge badge-source">
+            {SOURCE_LABEL[capability.source]} · {AXIS_LABEL[capability.axis]}
+          </span>
+        </div>
+        <p className="capability-description">{capability.description}</p>
+
+        <div className="capability-indicator-row">
+          <div className={`capability-indicator indicator-${capability.eval}`}>
+            <span>Eval</span>
+            <strong>{INDICATOR_LABEL[capability.eval]}</strong>
+          </div>
+          <div className={`capability-indicator indicator-${capability.eval}`}>
+            <span>Score</span>
+            <strong>{formatPercent(capability.score, 0)}</strong>
+          </div>
+          <div className={`capability-indicator capability-indicator-trained indicator-${capability.trained}`}>
+            <span>Trained</span>
+            <strong>{INDICATOR_LABEL[capability.trained]}</strong>
+          </div>
+        </div>
+
+        <div className="capability-evidence">
+          {capability.evidence.map((entry) => (
+            <p key={`${capability.id}-${entry}`}>
+              <code>{entry}</code>
+            </p>
+          ))}
+        </div>
+      </article>
+    )
+  }
+
+  const renderCapabilityTreeNode = (nodeId: string) => {
+    const capability = treeCapabilityById.get(nodeId)
+    if (!capability) return null
+    const dependencies = (CAPABILITY_DEPENDENCY_GRAPH[nodeId] ?? []).filter((childId) =>
+      treeCapabilityById.has(childId)
+    )
+
+    return (
+      <li key={nodeId} className="capability-tree-node">
+        {renderCapabilityCard(capability, true)}
+        {dependencies.length > 0 && (
+          <ul className="capability-tree-children">
+            {dependencies.map((childId) => renderCapabilityTreeNode(childId))}
+          </ul>
+        )}
+      </li>
+    )
+  }
+
   return (
     <div className="grid" style={{ gap: 12 }}>
       <section className="card grid" style={{ gap: 12 }}>
         <div className="dashboard-control-head">
           <div className="dashboard-title-line">
-            <h2 style={{ margin: 0 }}>Capability Grid</h2>
+            <h2 style={{ margin: 0 }}>Capability Tree</h2>
             <span className="dashboard-title-subline">
-              Canonical diagnosis inventory: capabilities + Cogames diagnose + instrumentation + behavior slices.
+              Canonical diagnosis inventory with dependency view for major skills.
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
@@ -597,6 +685,14 @@ export const SkillTreePanel: FC<{
               </option>
             ))}
           </select>
+          <div className="skill-view-toggle">
+            <button type="button" onClick={() => setViewMode('tree')} disabled={viewMode === 'tree'}>
+              Tree
+            </button>
+            <button type="button" onClick={() => setViewMode('grid')} disabled={viewMode === 'grid'}>
+              Grid
+            </button>
+          </div>
         </div>
       </section>
 
@@ -609,48 +705,36 @@ export const SkillTreePanel: FC<{
         </div>
       </section>
 
-      <section className="capability-grid">
-        {filtered.length === 0 ? (
-          <article className="card">
-            <p style={{ margin: 0 }}>No capabilities match current filters.</p>
-          </article>
-        ) : (
-          filtered.map((capability) => (
-            <article key={capability.id} className="card capability-card">
-              <div className="capability-card-head">
-                <h3 style={{ margin: 0 }}>{capability.title}</h3>
-                <span className="badge badge-source">
-                  {SOURCE_LABEL[capability.source]} · {AXIS_LABEL[capability.axis]}
-                </span>
-              </div>
-              <p className="capability-description">{capability.description}</p>
-
-              <div className="capability-indicator-row">
-                <div className={`capability-indicator indicator-${capability.eval}`}>
-                  <span>Eval</span>
-                  <strong>{INDICATOR_LABEL[capability.eval]}</strong>
-                </div>
-                <div className={`capability-indicator indicator-${capability.eval}`}>
-                  <span>Score</span>
-                  <strong>{formatPercent(capability.score, 0)}</strong>
-                </div>
-                <div className={`capability-indicator capability-indicator-trained indicator-${capability.trained}`}>
-                  <span>Trained</span>
-                  <strong>{INDICATOR_LABEL[capability.trained]}</strong>
-                </div>
-              </div>
-
-              <div className="capability-evidence">
-                {capability.evidence.map((entry) => (
-                  <p key={`${capability.id}-${entry}`}>
-                    <code>{entry}</code>
-                  </p>
-                ))}
-              </div>
+      {viewMode === 'tree' ? (
+        <section className="card grid" style={{ gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 13, color: '#4b617f' }}>
+            Dependency tree uses capability-eval signals only. Root skill depends on child skills.
+          </p>
+          {filteredCapabilityEval.length === 0 ? (
+            <article className="card">
+              <p style={{ margin: 0 }}>No capability-eval nodes match current filters.</p>
             </article>
-          ))
-        )}
-      </section>
+          ) : (
+            <ul className="capability-tree">{treeRootIds.map((rootId) => renderCapabilityTreeNode(rootId))}</ul>
+          )}
+          {sourceFilter !== 'all' && sourceFilter !== 'capability_eval' && (
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+              Current source filter is <code>{sourceFilter}</code>; tree view always visualizes capability-eval
+              dependencies.
+            </p>
+          )}
+        </section>
+      ) : (
+        <section className="capability-grid">
+          {filtered.length === 0 ? (
+            <article className="card">
+              <p style={{ margin: 0 }}>No capabilities match current filters.</p>
+            </article>
+          ) : (
+            filtered.map((capability) => renderCapabilityCard(capability))
+          )}
+        </section>
+      )}
     </div>
   )
 }
