@@ -1,6 +1,6 @@
 import
   genny, fidget2/measure,
-  random_agents, thinky_agents, racecar_agents, cogsguard_agents, planky_policy,
+  random_agents, thinky_agents, racecar_agents, cogsguard_agents, nlanky_policy,
   cogsguard_align_all_agents
 
 
@@ -57,12 +57,12 @@ exportRefObject CogsguardAlignAllPolicy:
   procs:
     stepBatch(CogsguardAlignAllPolicy, pointer, int, int, int, int, pointer, int, pointer)
 
-exportRefObject PlankyPolicy:
+exportRefObject NlankyPolicy:
   constructor:
-    newPlankyPolicy(string)
+    newNlankyPolicy(string)
   procs:
-    stepBatch(PlankyPolicy, pointer, int, int, int, int, pointer, int, pointer)
-    getInfosJson(PlankyPolicy, int)
+    stepBatch(NlankyPolicy, pointer, int, int, int, int, pointer, int, pointer)
+    getInfosJson(NlankyPolicy, int)
 
 writeFiles("bindings/generated", "NimAgents")
 

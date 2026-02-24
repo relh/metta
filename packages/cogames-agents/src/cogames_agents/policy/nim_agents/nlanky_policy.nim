@@ -4,14 +4,14 @@ import fidget2/measure
 import jsony
 
 import common
-import planky_types
-import planky_entity_map
-import planky_obs_parser
-import planky_nav
-import planky_goals
+import nlanky_types
+import nlanky_entity_map
+import nlanky_obs_parser
+import nlanky_nav
+import nlanky_goals
 
 type
-  PlankyConfig = object
+  NlankyConfig = object
     miner: Option[int]
     scout: Option[int]
     aligner: Option[int]
@@ -22,11 +22,11 @@ type
     traceAgent: Option[int]
     disableRoleSwitching: Option[bool]
 
-  PlankyInitConfig = object
+  NlankyInitConfig = object
     env: PolicyConfig
-    planky: PlankyConfig
+    nlanky: NlankyConfig
 
-  PlankyAgent = ref object
+  NlankyAgent = ref object
     agentId: int
     assignedRole: string
     role: string
@@ -41,16 +41,16 @@ type
     convertToScramblerAtStep: int
     infosJson: string
 
-  PlankyPolicy* = ref object
-    agents*: seq[PlankyAgent]
+  NlankyPolicy* = ref object
+    agents*: seq[NlankyAgent]
     obsParser: ObsParser
     disableRoleSwitching: bool
     traceEnabled: bool
     traceLevel: int
     traceAgent: int
 
-proc updateInfosNoState(agent: PlankyAgent, roleOverride: Option[string] = none(string)) {.raises: [].} =
-  ## Mirror Python Planky's per-step `policy.infos` metadata shape.
+proc updateInfosNoState(agent: NlankyAgent, roleOverride: Option[string] = none(string)) {.raises: [].} =
+  ## Mirror Python Nlanky's per-step `policy.infos` metadata shape.
   let role = (if roleOverride.isSome: roleOverride.get() else: agent.role)
   let goal = agent.bb.strs.getOrDefault("_active_goal", "")
 
@@ -60,8 +60,8 @@ proc updateInfosNoState(agent: PlankyAgent, roleOverride: Option[string] = none(
   info["cargo"] = %"0"
   agent.infosJson = $info
 
-proc updateInfos(agent: PlankyAgent, state: StateSnapshot, roleOverride: Option[string] = none(string)) {.raises: [].} =
-  ## Mirror Python Planky's per-step `policy.infos` metadata shape.
+proc updateInfos(agent: NlankyAgent, state: StateSnapshot, roleOverride: Option[string] = none(string)) {.raises: [].} =
+  ## Mirror Python Nlanky's per-step `policy.infos` metadata shape.
   let role = (if roleOverride.isSome: roleOverride.get() else: agent.role)
   let goal = agent.bb.strs.getOrDefault("_active_goal", "")
   let tgtOpt = agent.nav.cachedTarget()
@@ -92,10 +92,10 @@ proc actionName(cfg: Config, actionId: int32): string =
     return cfg.config.actions[idx]
   $actionId
 
-proc shouldTrace(policy: PlankyPolicy, agentId: int): bool =
+proc shouldTrace(policy: NlankyPolicy, agentId: int): bool =
   policy.traceEnabled and (policy.traceAgent < 0 or agentId == policy.traceAgent)
 
-proc formatTraceLine(policy: PlankyPolicy, agent: PlankyAgent, state: StateSnapshot, actionId: int32): string =
+proc formatTraceLine(policy: NlankyPolicy, agent: NlankyAgent, state: StateSnapshot, actionId: int32): string =
   let goal = agent.bb.strs.getOrDefault("_active_goal", "")
   let role = agent.role
   let pos = state.position
@@ -117,7 +117,7 @@ proc formatTraceLine(policy: PlankyPolicy, agent: PlankyAgent, state: StateSnaps
   "[t=" & $agent.stepInEpisode & " a=" & $agent.agentId & " " & role &
     " (" & $pos.y & "," & $pos.x & ") hp=" & $hp & " cargo=" & cargo & "] " & goal & " -> " & act & targetStr
 
-proc updateEpisodeState(agent: PlankyAgent, episodePct: int) =
+proc updateEpisodeState(agent: NlankyAgent, episodePct: int) =
   if episodePct == -1:
     agent.stepInEpisode += 1
     return
@@ -149,9 +149,9 @@ proc actionId(cfg: Config, act: NavAction): int =
   of naMoveEast:
     cfg.actions.moveEast
 
-proc newPlankyAgent(agentId: int, envJson: string, role: string): PlankyAgent =
+proc newNlankyAgent(agentId: int, envJson: string, role: string): NlankyAgent =
   let cfg = parseConfig(envJson)
-  PlankyAgent(
+  NlankyAgent(
     agentId: agentId,
     assignedRole: role,
     role: role,
@@ -167,30 +167,30 @@ proc newPlankyAgent(agentId: int, envJson: string, role: string): PlankyAgent =
     infosJson: "",
   )
 
-proc newPlankyPolicy*(environmentConfig: string): PlankyPolicy {.raises: [].} =
-  # Expected input: { "env": <PolicyConfig>, "planky": <PlankyConfig> }.
+proc newNlankyPolicy*(environmentConfig: string): NlankyPolicy {.raises: [].} =
+  # Expected input: { "env": <PolicyConfig>, "nlanky": <NlankyConfig> }.
   # We must not let exceptions escape across the generated C bindings; if parsing
   # fails, crash loudly instead of silently nooping.
-  var initCfg: PlankyInitConfig
+  var initCfg: NlankyInitConfig
   try:
-    initCfg = environmentConfig.fromJson(PlankyInitConfig)
+    initCfg = environmentConfig.fromJson(NlankyInitConfig)
   except jsony.JsonError, ValueError:
-    echo "Error parsing Planky init config: ", getCurrentExceptionMsg()
+    echo "Error parsing Nlanky init config: ", getCurrentExceptionMsg()
     quit(QuitFailure)
   let envJson = initCfg.env.toJson()
-  var agents: seq[PlankyAgent] = @[]
+  var agents: seq[NlankyAgent] = @[]
 
-  # Match Python Planky defaults:
+  # Match Python Nlanky defaults:
   # - miner/aligner/scrambler are "unset" when omitted (-1 in Python).
   # - if stem > 0 OR any explicit role is provided, treat remaining unset roles as 0
   # - else defaults: 4 miners, 4 aligners, 0 scramblers.
-  var miner = (if initCfg.planky.miner.isSome: initCfg.planky.miner.get() else: -1)
-  var scout = (if initCfg.planky.scout.isSome: initCfg.planky.scout.get() else: 0)
-  var aligner = (if initCfg.planky.aligner.isSome: initCfg.planky.aligner.get() else: -1)
-  var scrambler = (if initCfg.planky.scrambler.isSome: initCfg.planky.scrambler.get() else: -1)
-  var stem = (if initCfg.planky.stem.isSome: initCfg.planky.stem.get() else: 0)
+  var miner = (if initCfg.nlanky.miner.isSome: initCfg.nlanky.miner.get() else: -1)
+  var scout = (if initCfg.nlanky.scout.isSome: initCfg.nlanky.scout.get() else: 0)
+  var aligner = (if initCfg.nlanky.aligner.isSome: initCfg.nlanky.aligner.get() else: -1)
+  var scrambler = (if initCfg.nlanky.scrambler.isSome: initCfg.nlanky.scrambler.get() else: -1)
+  var stem = (if initCfg.nlanky.stem.isSome: initCfg.nlanky.stem.get() else: 0)
   let disableRoleSwitching =
-    (if initCfg.planky.disableRoleSwitching.isSome: initCfg.planky.disableRoleSwitching.get() else: false)
+    (if initCfg.nlanky.disableRoleSwitching.isSome: initCfg.nlanky.disableRoleSwitching.get() else: false)
 
   let anyExplicit = (miner >= 0) or (aligner >= 0) or (scrambler >= 0) or (scout > 0)
   if stem > 0 or anyExplicit:
@@ -228,7 +228,7 @@ proc newPlankyPolicy*(environmentConfig: string): PlankyPolicy {.raises: [].} =
         break
 
   for id in 0 ..< initCfg.env.numAgents:
-    let a = newPlankyAgent(id, envJson, roles[id])
+    let a = newNlankyAgent(id, envJson, roles[id])
     if id == firstAlignerId and roles[id] == "aligner" and not disableRoleSwitching:
       a.convertToScramblerAtStep = 1000
     a.updateInfosNoState()
@@ -239,11 +239,11 @@ proc newPlankyPolicy*(environmentConfig: string): PlankyPolicy {.raises: [].} =
       newObsParser(agents[0].cfg)
     else:
       newObsParser(parseConfig(envJson))
-  let traceEnabled = (if initCfg.planky.trace.isSome: initCfg.planky.trace.get() else: 0) != 0
-  let traceLevel = (if initCfg.planky.traceLevel.isSome: initCfg.planky.traceLevel.get() else: 1)
-  let traceAgent = (if initCfg.planky.traceAgent.isSome: initCfg.planky.traceAgent.get() else: -1)
+  let traceEnabled = (if initCfg.nlanky.trace.isSome: initCfg.nlanky.trace.get() else: 0) != 0
+  let traceLevel = (if initCfg.nlanky.traceLevel.isSome: initCfg.nlanky.traceLevel.get() else: 1)
+  let traceAgent = (if initCfg.nlanky.traceAgent.isSome: initCfg.nlanky.traceAgent.get() else: -1)
 
-  PlankyPolicy(
+  NlankyPolicy(
     agents: agents,
     obsParser: parser,
     disableRoleSwitching: disableRoleSwitching,
@@ -252,7 +252,7 @@ proc newPlankyPolicy*(environmentConfig: string): PlankyPolicy {.raises: [].} =
     traceAgent: traceAgent,
   )
 
-proc getInfosJson*(policy: PlankyPolicy, agentId: int): cstring {.raises: [].} =
+proc getInfosJson*(policy: NlankyPolicy, agentId: int): cstring {.raises: [].} =
   ## Exposed over FFI for Python to populate AgentPolicy.infos.
   if policy == nil:
     return cstring""
@@ -261,8 +261,8 @@ proc getInfosJson*(policy: PlankyPolicy, agentId: int): cstring {.raises: [].} =
   policy.agents[agentId].infosJson.cstring
 
 proc stepOneImpl(
-  policy: PlankyPolicy,
-  agent: PlankyAgent,
+  policy: NlankyPolicy,
+  agent: NlankyAgent,
   numTokens: int,
   sizeToken: int,
   rawObservation: pointer,
@@ -296,7 +296,23 @@ proc stepOneImpl(
       elif ent.alignment == alClips:
         agent.myTeamId = some(0)
 
-  # Failed-move detection (mirrors Python Planky).
+  # Death/respawn detection: large position jump signals a respawn event.
+  if lastPos.isSome:
+    let respawnDist = manhattan(state.position, lastPos.get())
+    if respawnDist > 20:
+      agent.nav.clearCache()
+      agent.nav.clearHistory()
+      agent.bb.bools["_depositing"] = false
+      agent.bb.bools["_at_extractor"] = false
+      agent.bb.bools["_emergency_mine_active"] = false
+      agent.bb.ints["_move_fail_count"] = 0
+      agent.bb.ints["_heart_hub_bumps"] = 0
+      agent.bb.ints["_at_extractor_stall_count"] = 0
+      if agent.bb.strs.hasKey("target_resource"):
+        agent.bb.strs.del("target_resource")
+      agent.map.clearFarEntities(state.position, radius=30)
+
+  # Failed-move detection (mirrors Python Nlanky).
   let lastWasMove = agent.bb.bools.getOrDefault("_last_was_move", false)
   var moveFailCount = agent.bb.ints.getOrDefault("_move_fail_count", 0)
   if lastPos.isSome and lastWasMove and state.position == lastPos.get():
@@ -330,7 +346,7 @@ proc stepOneImpl(
       let canAffordGear =
         state.teamCarbon >= 4 and state.teamOxygen >= 2 and state.teamGermanium >= 2 and state.teamSilicon >= 2
       let canAffordHearts =
-        state.teamCarbon >= 2 and state.teamOxygen >= 2 and state.teamGermanium >= 2 and state.teamSilicon >= 2
+        state.teamCarbon >= 8 and state.teamOxygen >= 8 and state.teamGermanium >= 8 and state.teamSilicon >= 8
       if not canAffordGear and not canAffordHearts:
         agent.bb.strs["change_role"] = "miner"
 
@@ -343,7 +359,7 @@ proc stepOneImpl(
       agent.bb.bools["_last_was_move"] = false
       agent.updateInfos(state, roleOverride=some(newRole))
       if policy.shouldTrace(agent.agentId):
-        echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+        echo "[nlanky] ", policy.formatTraceLine(agent, state, agentAction[])
       return
 
   # Map vibe -> effective role.
@@ -355,7 +371,7 @@ proc stepOneImpl(
       agent.bb.bools["_last_was_move"] = false
       agent.updateInfos(state, roleOverride=some(agent.assignedRole))
       if policy.shouldTrace(agent.agentId):
-        echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+        echo "[nlanky] ", policy.formatTraceLine(agent, state, agentAction[])
       return
     effectiveRole = "stem"
   elif vibe == "gear":
@@ -368,7 +384,7 @@ proc stepOneImpl(
       agent.bb.bools["_last_was_move"] = false
       agent.updateInfos(state, roleOverride=some(agent.assignedRole))
       if policy.shouldTrace(agent.agentId):
-        echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+        echo "[nlanky] ", policy.formatTraceLine(agent, state, agentAction[])
       return
     effectiveRole = "stem"
 
@@ -376,7 +392,7 @@ proc stepOneImpl(
     agent.role = effectiveRole
     agent.goals = makeGoalList(effectiveRole)
 
-  var ctx = PlankyContext(
+  var ctx = NlankyContext(
     state: state,
     map: agent.map,
     bb: addr agent.bb,
@@ -400,11 +416,11 @@ proc stepOneImpl(
   agent.bb.bools["_last_was_move"] = navAct in [naMoveNorth, naMoveSouth, naMoveWest, naMoveEast]
   agent.updateInfos(state)
   if policy.shouldTrace(agent.agentId):
-    echo "[planky] ", policy.formatTraceLine(agent, state, agentAction[])
+    echo "[nlanky] ", policy.formatTraceLine(agent, state, agentAction[])
 
 proc stepOne(
-  policy: PlankyPolicy,
-  agent: PlankyAgent,
+  policy: NlankyPolicy,
+  agent: NlankyAgent,
   numTokens: int,
   sizeToken: int,
   rawObservation: pointer,
@@ -413,11 +429,11 @@ proc stepOne(
   try:
     stepOneImpl(policy, agent, numTokens, sizeToken, rawObservation, agentAction)
   except Exception:
-    echo "Planky step error: agentId=", agent.agentId, " msg=", getCurrentExceptionMsg()
+    echo "Nlanky step error: agentId=", agent.agentId, " msg=", getCurrentExceptionMsg()
     quit(QuitFailure)
 
 proc stepBatch*(
-  policy: PlankyPolicy,
+  policy: NlankyPolicy,
   agentIds: pointer,
   numAgentIds: int,
   numAgents: int,

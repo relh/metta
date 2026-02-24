@@ -1,9 +1,9 @@
 import std/[options, tables, algorithm]
 
 import common
-import planky_types
-import planky_entity_map
-import planky_nav
+import nlanky_types
+import nlanky_entity_map
+import nlanky_nav
 
 const
   SpawnRow = 100
@@ -15,7 +15,7 @@ const
   TeamSufficientThreshold = 100
 
 type
-  PlankyContext* = object
+  NlankyContext* = object
     state*: StateSnapshot
     map*: EntityMap
     bb*: ptr Blackboard
@@ -29,13 +29,13 @@ type
 method name*(g: Goal): string {.base.} =
   "Goal"
 
-method isSatisfied*(g: Goal, ctx: var PlankyContext): bool {.base.} =
+method isSatisfied*(g: Goal, ctx: var NlankyContext): bool {.base.} =
   false
 
 method preconditions*(g: Goal): seq[Goal] {.base.} =
   @[]
 
-method execute*(g: Goal, ctx: var PlankyContext): Option[NavAction] {.base.} =
+method execute*(g: Goal, ctx: var NlankyContext): Option[NavAction] {.base.} =
   some(naNoop)
 
 proc locKey(pos: Location): string =
@@ -53,7 +53,7 @@ proc hasRoleGear(s: StateSnapshot, role: string): bool =
   of "scrambler": s.scramblerGear
   else: false
 
-proc teamResourcesSufficient(ctx: PlankyContext): bool =
+proc teamResourcesSufficient(ctx: NlankyContext): bool =
   let s = ctx.state
   s.teamCarbon > TeamSufficientThreshold and
     s.teamOxygen > TeamSufficientThreshold and
@@ -81,13 +81,13 @@ proc moveToward(current, target: Location): NavAction =
   if dc < 0: return naMoveWest
   naMoveNorth
 
-proc deepestUnsatisfied(goal: Goal, ctx: var PlankyContext): Goal =
+proc deepestUnsatisfied(goal: Goal, ctx: var NlankyContext): Goal =
   for pre in goal.preconditions():
     if not pre.isSatisfied(ctx):
       return deepestUnsatisfied(pre, ctx)
   goal
 
-proc evaluateGoals*(goals: seq[Goal], ctx: var PlankyContext): NavAction =
+proc evaluateGoals*(goals: seq[Goal], ctx: var NlankyContext): NavAction =
   for g in goals:
     if g.isSatisfied(ctx):
       continue
@@ -111,7 +111,7 @@ type
 method name*(g: SurviveGoal): string =
   "Survive"
 
-proc isInSafeZone(ctx: PlankyContext): bool =
+proc isInSafeZone(ctx: NlankyContext): bool =
   let pos = ctx.state.position
   for (hpos, _) in ctx.map.find(kindContains="hub"):
     if manhattan(pos, hpos) <= JunctionAoeRange:
@@ -121,7 +121,7 @@ proc isInSafeZone(ctx: PlankyContext): bool =
       return true
   false
 
-proc nearestSafeZone(ctx: PlankyContext): Option[Location] =
+proc nearestSafeZone(ctx: NlankyContext): Option[Location] =
   let pos = ctx.state.position
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
@@ -137,7 +137,7 @@ proc nearestSafeZone(ctx: PlankyContext): Option[Location] =
       best = some(jpos)
   best
 
-method isSatisfied*(g: SurviveGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: SurviveGoal, ctx: var NlankyContext): bool =
   discard g
   if isInSafeZone(ctx):
     return true
@@ -149,7 +149,7 @@ method isSatisfied*(g: SurviveGoal, ctx: var PlankyContext): bool =
   let hpNeeded = stepsToSafety + HpSafetyMargin
   ctx.state.hp > hpNeeded
 
-method execute*(g: SurviveGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: SurviveGoal, ctx: var NlankyContext): Option[NavAction] =
   let safePos = nearestSafeZone(ctx)
   if safePos.isNone:
     return some(ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId)))
@@ -185,7 +185,7 @@ proc teamCanAffordGear(g: GetGearGoal, s: StateSnapshot): bool =
 method name*(g: GetGearGoal): string =
   g.goalName
 
-method isSatisfied*(g: GetGearGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: GetGearGoal, ctx: var NlankyContext): bool =
   if hasRoleGear(ctx.state, g.role):
     ctx.bb[].ints[g.goalName & "_total_attempts"] = 0
     ctx.bb[].ints[g.goalName & "_bump_count"] = 0
@@ -203,7 +203,7 @@ method isSatisfied*(g: GetGearGoal, ctx: var PlankyContext): bool =
 
   false
 
-method execute*(g: GetGearGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: GetGearGoal, ctx: var NlankyContext): Option[NavAction] =
   let attemptsKey = g.goalName & "_total_attempts"
   let giveupKey = g.goalName & "_giveup_step"
   let bumpKey = g.goalName & "_bump_count"
@@ -318,7 +318,7 @@ proc newScramblerGearGoal(): GetScramblerGearGoal =
 
 const ResourceTypes = ["carbon", "oxygen", "germanium", "silicon"]
 
-proc extractorRecentlyFailed(ctx: PlankyContext, pos: Location): bool =
+proc extractorRecentlyFailed(ctx: NlankyContext, pos: Location): bool =
   let failedStep = ctx.bb[].ints.getOrDefault("mine_failed_" & locKey(pos), -9999)
   ctx.step - failedStep < 30
 
@@ -328,7 +328,7 @@ type
 method name*(g: ExploreHubGoal): string =
   "ExploreHub"
 
-method isSatisfied*(g: ExploreHubGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: ExploreHubGoal, ctx: var NlankyContext): bool =
   discard g
   var found = 0
   for r in ResourceTypes:
@@ -340,7 +340,7 @@ method isSatisfied*(g: ExploreHubGoal, ctx: var PlankyContext): bool =
     return true
   false
 
-method execute*(g: ExploreHubGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: ExploreHubGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   let offsets = [(-5, -5), (-5, 5), (5, 5), (5, -5)]
   let idxKey = "_hub_corner_idx"
@@ -375,7 +375,7 @@ proc teamAmount(s: StateSnapshot, res: string): int =
   of "silicon": s.teamSilicon
   else: 0
 
-method isSatisfied*(g: PickResourceGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: PickResourceGoal, ctx: var NlankyContext): bool =
   discard g
   if teamResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
     return true
@@ -427,7 +427,7 @@ method isSatisfied*(g: PickResourceGoal, ctx: var PlankyContext): bool =
 
   true
 
-method execute*(g: PickResourceGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: PickResourceGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   if ctx.bb[].strs.hasKey("_bottleneck_target"):
     let b = ctx.bb[].strs["_bottleneck_target"]
@@ -478,7 +478,7 @@ method name*(g: DepositCargoGoal): string =
 
 const DepositMaxAttemptsPerDepot = 5
 
-proc findCogsDepot(ctx: PlankyContext): Option[Location] =
+proc findCogsDepot(ctx: NlankyContext): Option[Location] =
   let pos = ctx.state.position
 
   proc recentlyFailed(p: Location): bool =
@@ -506,7 +506,7 @@ proc findCogsDepot(ctx: PlankyContext): Option[Location] =
 
   best
 
-method isSatisfied*(g: DepositCargoGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: DepositCargoGoal, ctx: var NlankyContext): bool =
   discard g
   let cargo = ctx.state.cargoTotal()
 
@@ -535,7 +535,7 @@ method isSatisfied*(g: DepositCargoGoal, ctx: var PlankyContext): bool =
 
   true
 
-method execute*(g: DepositCargoGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: DepositCargoGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   if ctx.state.cargoTotal() == 0:
     ctx.bb[].bools["_depositing"] = false
@@ -576,7 +576,7 @@ method name*(g: MineResourceGoal): string =
 
 const MineMaxAttemptsPerExtractor = 5
 
-proc findExtractor(ctx: PlankyContext, resource: string): Option[Location] =
+proc findExtractor(ctx: NlankyContext, resource: string): Option[Location] =
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
   for (pos, e) in ctx.map.find(kind=resource & "_extractor"):
@@ -592,13 +592,13 @@ proc findExtractor(ctx: PlankyContext, resource: string): Option[Location] =
       best = some(pos)
   best
 
-method isSatisfied*(g: MineResourceGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: MineResourceGoal, ctx: var NlankyContext): bool =
   discard g
   if teamResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
     return true
   false
 
-method execute*(g: MineResourceGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: MineResourceGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   let targetRes = ctx.bb[].strs.getOrDefault("target_resource", "carbon")
 
@@ -657,14 +657,15 @@ const
   HeartMaxHubBumps = 5
   HeartCooldownSteps = 30
   HeartReserve = 1
+  HeartElementCost = 1  # Each heart costs this many of EACH element
 
 proc teamCanAffordHeart(s: StateSnapshot): bool =
-  s.teamCarbon >= 1 + HeartReserve and
-    s.teamOxygen >= 1 + HeartReserve and
-    s.teamGermanium >= 1 + HeartReserve and
-    s.teamSilicon >= 1 + HeartReserve
+  s.teamCarbon >= HeartElementCost + HeartReserve and
+    s.teamOxygen >= HeartElementCost + HeartReserve and
+    s.teamGermanium >= HeartElementCost + HeartReserve and
+    s.teamSilicon >= HeartElementCost + HeartReserve
 
-method isSatisfied*(g: GetHeartsGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: GetHeartsGoal, ctx: var NlankyContext): bool =
   if ctx.state.heart >= g.minHearts:
     if ctx.bb[].ints.hasKey("_heart_hub_bumps"):
       ctx.bb[].ints.del("_heart_hub_bumps")
@@ -678,7 +679,7 @@ method isSatisfied*(g: GetHeartsGoal, ctx: var PlankyContext): bool =
     return true
   false
 
-method execute*(g: GetHeartsGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: GetHeartsGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   let hub = ctx.map.findNearest(ctx.state.position, kindContains="hub", alignment=alCogs)
   if hub.isNone:
@@ -698,7 +699,7 @@ method execute*(g: GetHeartsGoal, ctx: var PlankyContext): Option[NavAction] =
   ctx.bb[].ints["_heart_hub_bumps"] = 0
   some(ctx.nav.getAction(ctx.state.position, hubPos, ctx.map, reachAdjacent=true))
 
-proc findDeposit(ctx: PlankyContext): Option[Location] =
+proc findDeposit(ctx: NlankyContext): Option[Location] =
   let pos = ctx.state.position
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
@@ -725,7 +726,7 @@ const
   EmergencyCriticalLow = 3
   EmergencyRecoveryThreshold = 8
 
-method isSatisfied*(g: EmergencyMineGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: EmergencyMineGoal, ctx: var NlankyContext): bool =
   discard g
   if ctx.state.heart > 0:
     return true
@@ -756,7 +757,7 @@ method isSatisfied*(g: EmergencyMineGoal, ctx: var PlankyContext): bool =
       return false
     return true
 
-method execute*(g: EmergencyMineGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: EmergencyMineGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   let s = ctx.state
   var lowest = "carbon"
@@ -812,13 +813,13 @@ type
 method name*(g: FallbackMineGoal): string =
   "FallbackMine"
 
-method isSatisfied*(g: FallbackMineGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: FallbackMineGoal, ctx: var NlankyContext): bool =
   discard g
   if teamResourcesSufficient(ctx) and ctx.state.cargoTotal() == 0:
     return true
   false
 
-method execute*(g: FallbackMineGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: FallbackMineGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
@@ -863,11 +864,11 @@ type
 method name*(g: ExploreGoal): string =
   "Explore"
 
-method isSatisfied*(g: ExploreGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: ExploreGoal, ctx: var NlankyContext): bool =
   discard g
   false
 
-method execute*(g: ExploreGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: ExploreGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   some(ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId)))
 
@@ -888,7 +889,7 @@ const
   AlignConnectivityRadius = 15
   AlignHubSearchRadius = 15
 
-proc alignRecentlyFailed(ctx: PlankyContext, p: Location): bool =
+proc alignRecentlyFailed(ctx: NlankyContext, p: Location): bool =
   let failedStep = ctx.bb[].ints.getOrDefault("align_failed_" & locKey(p), -9999)
   ctx.step - failedStep < AlignCooldownSteps
 
@@ -897,7 +898,7 @@ proc sqDist(a: Location, b: Location): int =
   let dc = a.x - b.x
   dr * dr + dc * dc
 
-proc getHomeHub(ctx: PlankyContext): Option[Location] =
+proc getHomeHub(ctx: NlankyContext): Option[Location] =
   let homeHubKey = "_align_home_hub"
   if ctx.bb[].locs.hasKey(homeHubKey):
     return some(ctx.bb[].locs[homeHubKey])
@@ -912,7 +913,7 @@ proc getHomeHub(ctx: PlankyContext): Option[Location] =
   ctx.bb[].locs[homeHubKey] = hubPos
   some(hubPos)
 
-proc buildConnectedCogsNodes(ctx: PlankyContext, homeHub: Location): seq[Location] =
+proc buildConnectedCogsNodes(ctx: NlankyContext, homeHub: Location): seq[Location] =
   let r2 = AlignConnectivityRadius * AlignConnectivityRadius
   var connected: seq[Location] = @[homeHub]
   var pending: seq[Location] = @[]
@@ -939,7 +940,7 @@ proc buildConnectedCogsNodes(ctx: PlankyContext, homeHub: Location): seq[Locatio
 
   connected
 
-proc isConnectedToCogsNetwork(ctx: PlankyContext, p: Location): bool =
+proc isConnectedToCogsNetwork(ctx: NlankyContext, p: Location): bool =
   let homeHubOpt = getHomeHub(ctx)
   if homeHubOpt.isNone:
     return false
@@ -952,7 +953,7 @@ proc isConnectedToCogsNetwork(ctx: PlankyContext, p: Location): bool =
 
   false
 
-proc getAlignHubSearchTarget(ctx: var PlankyContext, homeHub: Location): Location =
+proc getAlignHubSearchTarget(ctx: var NlankyContext, homeHub: Location): Location =
   let offsets = [
     (-AlignHubSearchRadius, 0),
     (0, -AlignHubSearchRadius),
@@ -973,14 +974,14 @@ proc getAlignHubSearchTarget(ctx: var PlankyContext, homeHub: Location): Locatio
     target = Location(x: homeHub.x + offsets[idx][1], y: homeHub.y + offsets[idx][0])
   target
 
-proc alignSearchAction(ctx: var PlankyContext): NavAction =
+proc alignSearchAction(ctx: var NlankyContext): NavAction =
   let homeHubOpt = getHomeHub(ctx)
   if homeHubOpt.isSome:
     let target = getAlignHubSearchTarget(ctx, homeHubOpt.get())
     return ctx.nav.getAction(ctx.state.position, target, ctx.map, reachAdjacent=true)
   ctx.nav.explore(ctx.state.position, ctx.map, directionBias=directionBiasFor(ctx.agentId))
 
-proc findBestAlignableJunction(ctx: PlankyContext): Option[Location] =
+proc findBestAlignableJunction(ctx: NlankyContext): Option[Location] =
   let pos = ctx.state.position
   var bestDist = high(int)
   var best: Option[Location] = none(Location)
@@ -1000,7 +1001,7 @@ proc findBestAlignableJunction(ctx: PlankyContext): Option[Location] =
 
   best
 
-proc isAlignableTarget(ctx: PlankyContext, p: Location): bool =
+proc isAlignableTarget(ctx: NlankyContext, p: Location): bool =
   if p notin ctx.map.entities:
     return false
   let ent = ctx.map.entities[p]
@@ -1014,7 +1015,7 @@ proc isAlignableTarget(ctx: PlankyContext, p: Location): bool =
     return false
   true
 
-proc findAdjacentAlignableJunction(ctx: PlankyContext): Option[Location] =
+proc findAdjacentAlignableJunction(ctx: NlankyContext): Option[Location] =
   let p = ctx.state.position
   let neighbors = [
     Location(x: p.x, y: p.y - 1),
@@ -1027,7 +1028,7 @@ proc findAdjacentAlignableJunction(ctx: PlankyContext): Option[Location] =
       return some(npos)
   none(Location)
 
-method isSatisfied*(g: AlignJunctionGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: AlignJunctionGoal, ctx: var NlankyContext): bool =
   discard g
   if not ctx.state.alignerGear:
     return true
@@ -1035,7 +1036,7 @@ method isSatisfied*(g: AlignJunctionGoal, ctx: var PlankyContext): bool =
     return true
   false
 
-method execute*(g: AlignJunctionGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: AlignJunctionGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   let navKey = "_align_nav_steps"
   let targetKey = "_align_nav_target"
@@ -1093,11 +1094,11 @@ const
   ScrambleMaxNavStepsPerTarget = 40
   ScrambleCooldownSteps = 50
 
-proc scrambleRecentlyFailed(ctx: PlankyContext, p: Location): bool =
+proc scrambleRecentlyFailed(ctx: NlankyContext, p: Location): bool =
   let failedStep = ctx.bb[].ints.getOrDefault("scramble_failed_" & locKey(p), -9999)
   ctx.step - failedStep < ScrambleCooldownSteps
 
-proc findBestEnemyJunction(ctx: PlankyContext): Option[Location] =
+proc findBestEnemyJunction(ctx: NlankyContext): Option[Location] =
   let pos = ctx.state.position
 
   var enemies: seq[Location] = @[]
@@ -1128,7 +1129,7 @@ proc findBestEnemyJunction(ctx: PlankyContext): Option[Location] =
       best = some(epos)
   best
 
-method isSatisfied*(g: ScrambleJunctionGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: ScrambleJunctionGoal, ctx: var NlankyContext): bool =
   discard g
   if not ctx.state.scramblerGear:
     return true
@@ -1136,7 +1137,7 @@ method isSatisfied*(g: ScrambleJunctionGoal, ctx: var PlankyContext): bool =
     return true
   false
 
-method execute*(g: ScrambleJunctionGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: ScrambleJunctionGoal, ctx: var NlankyContext): Option[NavAction] =
   discard g
   let navKey = "_scramble_nav_steps"
   let targetKey = "_scramble_nav_target"
@@ -1185,11 +1186,11 @@ type
 method name*(g: SelectRoleGoal): string =
   "SelectRole"
 
-method isSatisfied*(g: SelectRoleGoal, ctx: var PlankyContext): bool =
+method isSatisfied*(g: SelectRoleGoal, ctx: var NlankyContext): bool =
   discard ctx
   g.selected
 
-method execute*(g: SelectRoleGoal, ctx: var PlankyContext): Option[NavAction] =
+method execute*(g: SelectRoleGoal, ctx: var NlankyContext): Option[NavAction] =
   # Simple distribution: 5 miners, rest aligners (mirrors Python).
   let role =
     if ctx.agentId < 5:

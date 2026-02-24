@@ -44,7 +44,7 @@ class TestMettaURIs:
             [
                 "from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri",
                 "spec = policy_spec_from_uri('metta://policy/nlanky?miner=4')",
-                "assert spec.class_path.endswith('PlankyAgentsMultiPolicy')",
+                "assert spec.class_path.endswith('NlankyAgentsMultiPolicy')",
                 "assert spec.init_kwargs['miner'] == 4",
             ]
         )

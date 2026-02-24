@@ -47,7 +47,7 @@ proc updateFromObservation*(
   visibleEntities: Table[Location, Entity],
   step: int
 ) =
-  ## Mirror Python Planky behavior:
+  ## Mirror Python Nlanky behavior:
   ## - mark currently observable cells explored
   ## - remove stale entities in currently observable cells
   ## - upsert currently visible entities
@@ -71,6 +71,20 @@ proc updateFromObservation*(
     var ent = ent0
     ent.lastSeen = step
     m.entities[pos] = ent
+
+proc clearFarEntities*(m: EntityMap, center: Location, radius: int) =
+  var toRemove: seq[Location] = @[]
+  for pos in m.entities.keys:
+    if manhattan(pos, center) > radius:
+      toRemove.add(pos)
+  for pos in toRemove:
+    m.entities.del(pos)
+  var exploredToRemove: seq[Location] = @[]
+  for pos in m.explored:
+    if manhattan(pos, center) > radius:
+      exploredToRemove.add(pos)
+  for pos in exploredToRemove:
+    m.explored.excl(pos)
 
 proc find*(
   m: EntityMap,

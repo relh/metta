@@ -75,7 +75,7 @@ Example:
 ```bash
 cd packages/cogames-agents
 uv run cogames upload \
-  -p "class=cogames_agents.policy.nim_agents.agents.PlankyAgentsMultiPolicy" \
+  -p "class=cogames_agents.policy.nim_agents.agents.NlankyAgentsMultiPolicy" \
   -n "daveey.nlanky" \
   --season beta-cvc \
   --validation-mode docker \

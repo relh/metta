@@ -1,7 +1,7 @@
 import std/[tables, sets, options, heapqueue, random, algorithm]
 
 import common
-import planky_entity_map
+import nlanky_entity_map
 
 type
   NavAction* = enum
@@ -35,6 +35,9 @@ proc clearCache*(nav: Navigator) =
   nav.cachedReachAdjacent = false
   nav.expectedPos = none(Location)
 
+proc clearHistory*(nav: Navigator) =
+  nav.positionHistory.setLen(0)
+
 proc cachedTarget*(nav: Navigator): Option[Location] =
   nav.cachedTarget
 
@@ -55,7 +58,7 @@ proc moveAction*(fromPos, toPos: Location): NavAction =
   naNoop
 
 proc isStuck(nav: Navigator): bool =
-  ## Mirrors Python Planky Navigator._is_stuck.
+  ## Mirrors Python Nlanky Navigator._is_stuck.
   let history = nav.positionHistory
   if history.len < 6:
     return false
@@ -75,7 +78,7 @@ proc isStuck(nav: Navigator): bool =
   false
 
 proc orderedDeltas(directionBias: string): seq[Location] =
-  ## Mirrors Python Planky ordering:
+  ## Mirrors Python Nlanky ordering:
   ## - north: N, W, E, S
   ## - south: S, W, E, N
   ## - east:  E, N, S, W
@@ -94,7 +97,7 @@ proc orderedDeltas(directionBias: string): seq[Location] =
     @[Location(x: 0, y: -1), Location(x: 0, y: 1), Location(x: -1, y: 0), Location(x: 1, y: 0)]
 
 proc randomMove(nav: Navigator, current: Location, m: EntityMap): NavAction =
-  ## Mirrors Python Planky Navigator._random_move.
+  ## Mirrors Python Nlanky Navigator._random_move.
   let deltas = [Location(x: 0, y: -1), Location(x: 0, y: 1), Location(x: 1, y: 0), Location(x: -1, y: 0)]
   var order = @[0, 1, 2, 3]
   var r = nav.rng
@@ -225,7 +228,7 @@ proc getPath(nav: Navigator, start, target: Location, m: EntityMap, reachAdjacen
   path
 
 proc moveTowardGreedy(nav: Navigator, current, target: Location, m: EntityMap): NavAction =
-  ## Mirrors Python Planky Navigator._move_toward_greedy: prefer primary axis direction,
+  ## Mirrors Python Nlanky Navigator._move_toward_greedy: prefer primary axis direction,
   ## then secondary axis, then random move.
   let dr = target.y - current.y
   let dc = target.x - current.x
@@ -272,7 +275,7 @@ proc getAction*(
 
   let nextPos = path[0]
   if m.hasAgent(nextPos):
-    # Attempt a small sidestep around the blocking agent (mirrors Python Planky).
+    # Attempt a small sidestep around the blocking agent (mirrors Python Nlanky).
     let currentDist = manhattan2(current, target)
     var best: Option[Location] = none(Location)
     var bestScore = high(int)

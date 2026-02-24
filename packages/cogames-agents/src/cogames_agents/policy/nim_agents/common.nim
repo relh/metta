@@ -31,7 +31,7 @@ type
     vibes*: Vibes
     vibeNames*: seq[string]
     ## Map from vibe name suffix (from `change_vibe_<suffix>`) to action id.
-    ## Used by vibe-driven scripted agents (e.g., Planky).
+    ## Used by vibe-driven scripted agents (e.g., Nlanky).
     vibeActionByName*: Table[string, int]
     hubProtocols*: seq[HubProtocol]
     inventoryTokenBase*: int

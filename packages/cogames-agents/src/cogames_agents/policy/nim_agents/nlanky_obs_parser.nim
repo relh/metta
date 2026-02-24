@@ -1,8 +1,8 @@
 import std/[tables, strutils, options]
 
 import common
-import planky_types
-import planky_entity_map
+import nlanky_types
+import nlanky_entity_map
 
 const
   SpawnRow = 100

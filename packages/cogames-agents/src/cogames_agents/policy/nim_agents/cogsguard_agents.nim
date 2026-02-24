@@ -16,7 +16,7 @@ const
   ResourceNames = ["carbon", "oxygen", "germanium", "silicon"]
 
 proc stationTagForRole(roleName: string): string =
-  # Standardized tag used by Planky eval maps.
+  # Standardized tag used by Nlanky eval maps.
   "type:c:" & roleName
 
 const Offsets4 = [
@@ -228,7 +228,7 @@ proc updateMap(agent: CogsguardAgent, visible: Table[Location, seq[FeatureValue]
 
   if agent.map.len == 0:
     agent.map = initTable[Location, seq[FeatureValue]]()
-  # Mirror Python Planky: treat spawn as an arbitrary stable origin so world
+  # Mirror Python Nlanky: treat spawn as an arbitrary stable origin so world
   # coords are positive and consistent across episodes.
   agent.location = Location(x: 100 + offset.x, y: 100 + offset.y)
 
@@ -358,7 +358,7 @@ proc doGather(agent: CogsguardAgent): int =
   let target = agent.nearestLocation(candidates)
   if target.isSome():
     let extractor = target.get()
-    # Planky mines by "bumping" an extractor (attempting to move into it) while adjacent.
+    # Nlanky mines by "bumping" an extractor (attempting to move into it) while adjacent.
     # Navigate to an adjacent tile first, then bump.
     if manhattan(agent.location, extractor) == 1:
       return agent.stepAction(agent.location, extractor)
@@ -469,7 +469,7 @@ proc step*(
 
     var action = agent.cfg.actions.noop
 
-    # In Planky, agents can start on the "default" vibe; immediately pick a role so
+    # In Nlanky, agents can start on the "default" vibe; immediately pick a role so
     # role logic can drive movement (e.g., toward a gear station) rather than idling.
     if vibeName == "gear" or vibeName == "default":
       if agent.assignedRoleIdx < 0:

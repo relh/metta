@@ -75,7 +75,7 @@ POLICIES_UNDER_TEST: tuple[PolicyUnderTest, ...] = (
         supports_supervisor=True,
     ),
     PolicyUnderTest(
-        "cogames_agents.policy.nim_agents.agents.PlankyAgentsMultiPolicy",
+        "cogames_agents.policy.nim_agents.agents.NlankyAgentsMultiPolicy",
         requires_nim=True,
         supports_supervisor=True,
     ),

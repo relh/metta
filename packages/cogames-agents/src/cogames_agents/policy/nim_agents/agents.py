@@ -114,7 +114,7 @@ class CogsguardAlignAllAgentsMultiPolicy(NimMultiAgentPolicy):
         )
 
 
-class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
+class NlankyAgentsMultiPolicy(NimMultiAgentPolicy):
     short_names = ["nlanky"]
 
     @staticmethod
@@ -164,13 +164,13 @@ class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
 
         # Don't rely on newer mettagrid APIs (some runners don't support passing
         # `init_config_json` into NimMultiAgentPolicy). Instead, wrap the
-        # env JSON provided by NimMultiAgentPolicy into Planky's expected shape.
+        # env JSON provided by NimMultiAgentPolicy into Nlanky's expected shape.
         def _policy_factory(env_json: str):
             env = json.loads(env_json)
             init_config_json = json.dumps(
                 {
                     "env": env,
-                    "planky": {
+                    "nlanky": {
                         "miner": miner_i,
                         "scout": scout_i,
                         "aligner": aligner_i,
@@ -183,7 +183,7 @@ class PlankyAgentsMultiPolicy(NimMultiAgentPolicy):
                     },
                 }
             )
-            return _nim_agents().PlankyPolicy(init_config_json)
+            return _nim_agents().NlankyPolicy(init_config_json)
 
         super().__init__(
             policy_env_info,
