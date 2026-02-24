@@ -33,6 +33,7 @@ This CLI supports running inside a devcontainer on macOS. The key challenges:
 """
 
 import functools
+import json
 import os
 import platform
 import shutil
@@ -63,6 +64,7 @@ from metta.tools.utils.auto_config import auto_stats_server_uri
 from mettagrid.runner.episode_runner import run_episode_isolated
 from mettagrid.runner.types import SingleEpisodeJob
 from mettagrid.util.uri_resolvers.schemes import localize_uri
+from softmax.aws.secrets_manager import get_secretsmanager_secret
 
 repo_root = get_repo_root()
 
@@ -92,7 +94,7 @@ LOCAL_BACKEND_URL = f"http://{LOCALHOST}:{SERVER_PORT}"
 LOCAL_MACHINE_TOKEN = "local-dev-user@example.com"
 LOCAL_AWS_PROFILE = "softmax"
 LOCAL_OBSERVATORY_AUTH_SECRET = "local-observatory-auth-secret"
-LOCAL_LOGIN_SERVICE_URL = f"http://{LOCALHOST}:3002"  # Local softmax.com frontend
+LOCAL_LOGIN_SERVICE_URL = "http://localhost:3002"  # Local softmax.com frontend
 PROD_LOGIN_SERVICE_URL = "https://softmax.com"
 
 
@@ -268,6 +270,11 @@ def _local_dev_env() -> dict[str, str]:
     env["LOCAL_DEV_AWS_PROFILE"] = LOCAL_AWS_PROFILE
     env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
     env["ENABLE_MOCK_TOURNAMENTS"] = "true"
+
+    discord_raw = get_secretsmanager_secret("discord/oauth-dev", require_exists=False)
+    if discord_raw is not None:
+        discord_secret = json.loads(discord_raw)
+        env["DISCORD_BOT_TOKEN"] = discord_secret["DISCORD_BOT_TOKEN"]
 
     aws_path = os.path.expanduser("~/.aws")
     source_mounts = [
@@ -515,6 +522,9 @@ def frontend(
     ] = False,
 ):
     env = _base_env()
+
+    if "LOGIN_SERVICE_URL" in env:
+        env["AUTH_SERVER_URL"] = f"{env['LOGIN_SERVICE_URL']}/api"
 
     if backend == "local":
         env["OBSERVATORY_API_URL"] = LOCAL_BACKEND_URL

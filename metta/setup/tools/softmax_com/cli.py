@@ -17,7 +17,7 @@ from softmax.aws.secrets_manager import get_secretsmanager_secret
 repo_root = get_repo_root()
 
 # Local dev configuration
-LOCALHOST = "127.0.0.1"
+LOCALHOST = "localhost"
 POSTGRES_PORT = 5433  # next port after 5432, which is used by the observatory postgres
 POSTGRES_USER = "postgres"
 POSTGRES_PASSWORD = "password"
@@ -143,9 +143,17 @@ def frontend(
     # In production, we use a custom Github App, which require two more fields:
     # GITHUB_INSTALLATION_ID and GITHUB_APP_PEM.
     # Those two fields are optional but allow us to populate GitHubTeamMember table.
-    oauth_secret = json.loads(get_secretsmanager_secret("github/oauth-dev"))
-    env["GITHUB_CLIENT_ID"] = oauth_secret["GITHUB_CLIENT_ID"]
-    env["GITHUB_CLIENT_SECRET"] = oauth_secret["GITHUB_CLIENT_SECRET"]
+    github_oauth_raw = get_secretsmanager_secret("github/oauth-dev", require_exists=False)
+    if github_oauth_raw is not None:
+        github_oauth_secret = json.loads(github_oauth_raw)
+        env["GITHUB_CLIENT_ID"] = github_oauth_secret["GITHUB_CLIENT_ID"]
+        env["GITHUB_CLIENT_SECRET"] = github_oauth_secret["GITHUB_CLIENT_SECRET"]
+
+    discord_oauth_raw = get_secretsmanager_secret("discord/oauth-dev", require_exists=False)
+    if discord_oauth_raw is not None:
+        discord_oauth_secret = json.loads(discord_oauth_raw)
+        env["DISCORD_CLIENT_ID"] = discord_oauth_secret["DISCORD_CLIENT_ID"]
+        env["DISCORD_CLIENT_SECRET"] = discord_oauth_secret["DISCORD_CLIENT_SECRET"]
 
     # Respect OBSERVATORY_API_URL from environment (set by `up` command), otherwise use --backend flag
     if "OBSERVATORY_API_URL" not in env:
