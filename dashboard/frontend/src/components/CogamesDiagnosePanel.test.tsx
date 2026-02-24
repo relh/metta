@@ -188,39 +188,41 @@ describe('CogamesDiagnosePanel', () => {
     expect(screen.getByText(/aligned\.junction\.held stage1:\s*0\.111/)).toBeTruthy()
     expect(screen.getByText(/aligned\.junction\.held stage2 absolute:\s*0\.222/)).toBeTruthy()
     expect(screen.getByText(/aligned\.junction\.held stage2 mirror:\s*0\.333/)).toBeTruthy()
-    expect(screen.getByText((_, node) => node?.textContent?.trim() === 'severity: 80%')).toBeTruthy()
-    expect(screen.getByText((_, node) => node?.textContent?.trim() === 'confidence: 90%')).toBeTruthy()
+    expect(screen.getByText((_: string, node: Element | null) => node?.textContent?.trim() === 'severity: 80%')).toBeTruthy()
+    expect(
+      screen.getByText((_: string, node: Element | null) => node?.textContent?.trim() === 'confidence: 90%')
+    ).toBeTruthy()
     expect(screen.getByText('delta: Stage-2 social evidence changed the diagnosis.')).toBeTruthy()
     expect(screen.getByText(/failed checks:\s*missing_mirror_scrimmage/)).toBeTruthy()
     expect(screen.getByText('dominant issue changed across snapshots')).toBeTruthy()
     expect(screen.getByText('Run Findings Snapshot')).toBeTruthy()
     expect(
       screen.getByText(
-        (_, node) =>
+        (_: string, node: Element | null) =>
           node?.tagName === 'P' && (node?.textContent ?? '').includes('dominant issue: social_coordination')
       )
     ).toBeTruthy()
     expect(
       screen.getByText(
-        (_, node) =>
+        (_: string, node: Element | null) =>
           node?.tagName === 'P' && (node?.textContent ?? '').includes('diagnosis status: revised_after_stage2')
       )
     ).toBeTruthy()
     expect(
-      screen.getByText((_, node) =>
+      screen.getByText((_: string, node: Element | null) =>
         node?.tagName === 'P' &&
         ((node?.textContent ?? '').includes('Top Symptom: social_bridge_window_miss (Social Coordination)') ?? false)
       )
     ).toBeTruthy()
     expect(
-      screen.getByText((_, node) =>
+      screen.getByText((_: string, node: Element | null) =>
         node?.tagName === 'P' &&
         (node?.textContent ?? '').includes('Primary Prescription: research') &&
         (node?.textContent ?? '').includes('add timed bridge social probe with strict window')
       )
     ).toBeTruthy()
     expect(
-      screen.getByText((_, node) =>
+      screen.getByText((_: string, node: Element | null) =>
         node?.tagName === 'P' &&
         (node?.textContent ?? '').includes('social confirmed:') &&
         (node?.textContent ?? '').includes('absolute reward mean: 0.5521') &&
