@@ -37,6 +37,11 @@ variable "github_app_secret_name" {
 }
 
 
+variable "discord_app_secret_name" {
+  default = "discord/softmax-com-app"
+}
+
+
 # variable "cloudflare_api_token_secret_arn" {
 #   description = "Cloudflare API token"
 #   default     = "arn:aws:secretsmanager:us-east-1:751442549699:secret:cloudflare/softmax-com-dns-token-ZQmiVP"

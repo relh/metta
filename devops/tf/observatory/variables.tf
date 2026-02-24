@@ -38,6 +38,11 @@ variable "readonly_db_uri_secret_name" {
   default = "observatory/readonly-db-uri"
 }
 
+variable "discord_app_secret_name" {
+  type    = string
+  default = "discord/softmax-com-app"
+}
+
 variable "readonly_db_username" {
   type    = string
   default = "readonly"

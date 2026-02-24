@@ -33,6 +33,15 @@ data "aws_secretsmanager_secret_version" "readonly_db_uri" {
   secret_id = aws_secretsmanager_secret.readonly_db_uri.id
 }
 
+data "aws_secretsmanager_secret" "discord_app" {
+  name = var.discord_app_secret_name
+}
+
+data "aws_secretsmanager_secret_version" "discord_app" {
+  secret_id = data.aws_secretsmanager_secret.discord_app.id
+}
+
+
 resource "kubernetes_secret" "observatory_backend_env" {
   metadata {
     name      = "observatory-backend-env"
@@ -48,6 +57,9 @@ resource "kubernetes_secret" "observatory_backend_env" {
     SMART_PLUGS_ENABLED     = "true"
     SMART_PLUGS_ALLOW_WRITE = "false"
     SMART_PLUGS_CONFIG_JSON = data.aws_secretsmanager_secret_version.smart_plugs_config_version.secret_string
+
+    # used to send Discord notifications
+    DISCORD_BOT_TOKEN = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_BOT_TOKEN"]
   }
 }
 

@@ -14,6 +14,14 @@ data "aws_secretsmanager_secret_version" "github_app_secret" {
   secret_id = data.aws_secretsmanager_secret.github_app_secret.id
 }
 
+data "aws_secretsmanager_secret" "discord_app" {
+  name = var.discord_app_secret_name
+}
+
+data "aws_secretsmanager_secret_version" "discord_app" {
+  secret_id = data.aws_secretsmanager_secret.discord_app.id
+}
+
 # copy observatory auth secret to softmax-com secrets
 data "kubernetes_secret" "observatory_backend_env" {
   metadata {
@@ -42,6 +50,9 @@ locals {
     GITHUB_CLIENT_SECRET   = jsondecode(data.aws_secretsmanager_secret_version.github_app_secret.secret_string)["client_secret"]
     GITHUB_INSTALLATION_ID = jsondecode(data.aws_secretsmanager_secret_version.github_app_secret.secret_string)["installation_id"]
     GITHUB_APP_PEM         = jsondecode(data.aws_secretsmanager_secret_version.github_app_secret.secret_string)["pem"]
+
+    DISCORD_CLIENT_ID     = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_CLIENT_ID"]
+    DISCORD_CLIENT_SECRET = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_CLIENT_SECRET"]
 
     # Environment Configuration
     DEV_MODE              = "false"
