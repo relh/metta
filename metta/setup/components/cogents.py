@@ -1,11 +1,10 @@
-import subprocess
 from pathlib import Path
 
 from metta.setup.components.base import SetupModule
 from metta.setup.registry import register_module
 from metta.setup.utils import info, success
 
-COGENTS_REPO = "https://github.com/Metta-AI/cogents.git"
+COGENTS_REPO = "git@github.com:Metta-AI/cogents.git"
 
 SYMLINKS: dict[str, str] = {
     ".claude/skills": "skills",
@@ -46,8 +45,11 @@ class CogentsSetup(SetupModule):
 
         if not (cogents / ".git").is_dir():
             info(f"Cloning cogents into {cogents}...")
-            subprocess.run(
+            info("Using GitHub SSH auth from your local GitHub account (must have Metta-AI access).")
+            self.run_command(
                 ["git", "clone", COGENTS_REPO, str(cogents)],
+                capture_output=False,
+                non_interactive=non_interactive,
                 check=True,
             )
         else:

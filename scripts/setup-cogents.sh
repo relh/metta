@@ -9,10 +9,12 @@ set -e
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2> /dev/null || pwd)
 COGENTS_DIR="${COGENTS_PATH:-$(dirname "$REPO_ROOT")/cogents}"
+COGENTS_REPO="${COGENTS_REPO:-git@github.com:Metta-AI/cogents.git}"
 
 if [ ! -d "$COGENTS_DIR/.git" ]; then
   echo "Cloning cogents into $COGENTS_DIR..."
-  git clone https://github.com/Metta-AI/cogents.git "$COGENTS_DIR"
+  echo "Using GitHub SSH auth from your local account (must have Metta-AI access)."
+  git clone "$COGENTS_REPO" "$COGENTS_DIR"
 fi
 
 for target in .claude/skills .codex/skills .cursor/skills; do
