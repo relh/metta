@@ -447,11 +447,6 @@ proc step*(
           action = agent.moveToOrExplore(agent.chest)
         else:
           action = agent.returnToHubSearch()
-      elif invInfluence == 0:
-        if agent.hub.isSome():
-          action = agent.moveToOrExplore(agent.hub)
-        else:
-          action = agent.returnToHubSearch()
       elif targetAlign.isSome():
         action = agent.attemptAlign(targetAlign.get(), invHeart)
       else:

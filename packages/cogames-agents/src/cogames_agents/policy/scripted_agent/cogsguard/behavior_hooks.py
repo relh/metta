@@ -25,7 +25,7 @@ def build_cogsguard_behavior_hooks(policy: CogsguardMultiRoleImpl) -> dict[str, 
         return scout.execute_role(s)
 
     def _get_influence(s: CogsguardAgentState) -> Action:
-        return aligner._get_resources(s, need_influence=True, need_heart=False)
+        return aligner._get_resources(s, need_heart=False)
 
     return {
         "explore": policy._explore,

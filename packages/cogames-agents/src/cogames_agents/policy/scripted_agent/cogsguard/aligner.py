@@ -2,7 +2,7 @@
 Aligner role for CoGsGuard.
 
 Aligners find supply depots and align them to the cogs commons to take control.
-With aligner gear, they get +20 influence capacity.
+With aligner gear, agents can align junctions to the cogs team.
 
 Strategy:
 - Find ALL junctions on the map
@@ -40,7 +40,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         - Check if we have enough energy before attempting to move to targets
         - If energy is low, go recharge at the nexus
         - Retry failed align actions up to MAX_RETRIES times
-        - Require gear, heart, and influence before attempting to align
+        - Require gear and heart before attempting to align
         - If gear acquisition fails repeatedly, get hearts first
         """
         if DEBUG and s.step_count % 50 == 0:
@@ -60,10 +60,9 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
                     print(f"[A{s.agent_id}] ALIGNER: Low HP ({s.hp}), returning to hub")
                 return self._do_recharge(s)
 
-        # === Resource check: need gear, heart, and influence to align ===
+        # === Resource check: need gear and heart to align ===
         has_gear = s.aligner >= 1
         has_heart = s.heart >= 1
-        has_influence = s.influence >= 1
         known_junctions = s.get_structures_by_type(StructureType.CHARGER)
 
         # If we don't have gear, try to get it
@@ -74,14 +73,11 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         if not known_junctions:
             return self._explore_for_junctions(s)
 
-        # If we have gear but are missing resources, go get them first.
-        if not has_heart or not has_influence:
+        # If we have gear but no heart, go get one first.
+        if not has_heart:
             if DEBUG and s.step_count % 10 == 0:
-                print(
-                    f"[A{s.agent_id}] ALIGNER: Have gear but missing resources "
-                    f"(heart={has_heart}, influence={has_influence}), getting resources first"
-                )
-            return self._get_resources(s, need_influence=not has_influence, need_heart=not has_heart)
+                print(f"[A{s.agent_id}] ALIGNER: Have gear but missing heart, getting resources first")
+            return self._get_resources(s, need_heart=True)
 
         # Check if last action succeeded (for retry logic)
         # Actions can fail due to insufficient energy - agents auto-regen so just retry
@@ -181,7 +177,7 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
             print(f"[A{s.agent_id}] ALIGNER_NO_GEAR: At station, waiting for gear")
         return self._use_object_at(s, station_pos)
 
-    def _get_resources(self, s: CogsguardAgentState, need_influence: bool, need_heart: bool) -> Action:
+    def _get_resources(self, s: CogsguardAgentState, need_heart: bool = True) -> Action:
         """Get hearts from the hub (primary source).
 
         The hub can produce hearts from resources:
@@ -192,52 +188,47 @@ class AlignerAgentPolicyImpl(CogsguardAgentPolicyImpl):
         So as long as miners deposit resources, aligners can get hearts.
         If we've been trying to get hearts for too long, go explore instead.
         """
-        if need_heart:
-            # If we've waited more than 40 steps for hearts, go explore instead
-            if s._heart_wait_start == 0:
-                s._heart_wait_start = s.step_count
-            if s.step_count - s._heart_wait_start > 40:
-                if DEBUG:
-                    print(f"[A{s.agent_id}] ALIGNER: Waited 40+ steps for hearts, exploring instead")
-                s._heart_wait_start = 0
-                return self._explore_for_junctions(s)
-
-            # Use hub as primary heart source
-            hub_pos = s.get_structure_position(StructureType.HUB)
-            if hub_pos is not None:
-                # Check if we have minerals to deposit first
-                has_minerals = s.carbon > 0 or s.oxygen > 0 or s.germanium > 0 or s.silicon > 0
-
-                if not is_adjacent((s.row, s.col), hub_pos):
-                    if DEBUG and s.step_count % 10 == 0:
-                        print(f"[A{s.agent_id}] ALIGNER: Moving to hub at {hub_pos} for hearts")
-                    return self._move_towards(s, hub_pos, reach_adjacent=True)
-
-                # Adjacent to hub - deposit minerals if we have any, otherwise get heart
-                if has_minerals:
-                    if DEBUG:
-                        print(
-                            f"[A{s.agent_id}] ALIGNER: Depositing minerals at hub "
-                            f"(C:{s.carbon} O:{s.oxygen} G:{s.germanium} Si:{s.silicon})"
-                        )
-                else:
-                    if DEBUG and s.step_count % 10 == 0:
-                        print(f"[A{s.agent_id}] ALIGNER: Getting hearts from hub at {hub_pos}")
-                return self._use_object_at(s, hub_pos)
-
-            # Hub not found - explore to find it
-            if DEBUG:
-                print(f"[A{s.agent_id}] ALIGNER: No hub found, exploring")
+        if not need_heart:
             s._heart_wait_start = 0
-            return self._explore(s)
+            return self._explore_for_junctions(s)
 
-        # Just need influence - wait for AOE regeneration near hub.
+        # If we've waited more than 40 steps for hearts, go explore instead
+        if s._heart_wait_start == 0:
+            s._heart_wait_start = s.step_count
+        if s.step_count - s._heart_wait_start > 40:
+            if DEBUG:
+                print(f"[A{s.agent_id}] ALIGNER: Waited 40+ steps for hearts, exploring instead")
+            s._heart_wait_start = 0
+            return self._explore_for_junctions(s)
+
+        # Use hub as primary heart source
         hub_pos = s.get_structure_position(StructureType.HUB)
-        if hub_pos is None:
-            return self._explore(s)
-        if not is_adjacent((s.row, s.col), hub_pos):
-            return self._move_towards(s, hub_pos, reach_adjacent=True)
-        return self._noop()
+        if hub_pos is not None:
+            # Check if we have minerals to deposit first
+            has_minerals = s.carbon > 0 or s.oxygen > 0 or s.germanium > 0 or s.silicon > 0
+
+            if not is_adjacent((s.row, s.col), hub_pos):
+                if DEBUG and s.step_count % 10 == 0:
+                    print(f"[A{s.agent_id}] ALIGNER: Moving to hub at {hub_pos} for hearts")
+                return self._move_towards(s, hub_pos, reach_adjacent=True)
+
+            # Adjacent to hub - deposit minerals if we have any, otherwise get heart
+            if has_minerals:
+                if DEBUG:
+                    print(
+                        f"[A{s.agent_id}] ALIGNER: Depositing minerals at hub "
+                        f"(C:{s.carbon} O:{s.oxygen} G:{s.germanium} Si:{s.silicon})"
+                    )
+            else:
+                if DEBUG and s.step_count % 10 == 0:
+                    print(f"[A{s.agent_id}] ALIGNER: Getting hearts from hub at {hub_pos}")
+            return self._use_object_at(s, hub_pos)
+
+        # Hub not found - explore to find it
+        if DEBUG:
+            print(f"[A{s.agent_id}] ALIGNER: No hub found, exploring")
+        s._heart_wait_start = 0
+        return self._explore(s)
 
     def _find_best_target(self, s: CogsguardAgentState) -> Optional[tuple[int, int]]:
         """Find the closest un-aligned junction to align.

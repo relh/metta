@@ -83,7 +83,7 @@ def test_alignment_uses_team_tags(policy_env_info: PolicyEnvInterface) -> None:
     )
 
 
-def test_aligner_requires_influence_before_aligning(policy_env_info: PolicyEnvInterface) -> None:
+def test_aligner_does_not_require_influence_before_aligning(policy_env_info: PolicyEnvInterface) -> None:
     policy = AlignerAgentPolicyImpl(policy_env_info, agent_id=0, role=Role.ALIGNER)
     state = _make_state(Role.ALIGNER)
 
@@ -105,8 +105,7 @@ def test_aligner_requires_influence_before_aligning(policy_env_info: PolicyEnvIn
 
     action = policy.execute_role(state)
 
-    assert action.name == "noop"
-    assert state._pending_action_type is None
+    assert action.name != "noop"
 
 
 def test_scrambler_prioritizes_clips_junctions(policy_env_info: PolicyEnvInterface) -> None:

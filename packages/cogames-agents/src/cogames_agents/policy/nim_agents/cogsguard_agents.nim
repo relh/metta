@@ -132,7 +132,7 @@ proc chooseSmartRoleAgents(coordinator: SmartRoleCoordinator, agents: seq[Cogsgu
 
   if junctionCounts[1] > 0 and heartsTotal > 0:
     return roleIndex("scrambler")
-  if junctionCounts[2] > 0 and heartsTotal > 0 and influenceTotal > 0:
+  if junctionCounts[2] > 0 and heartsTotal > 0:
     return roleIndex("aligner")
 
   if maxStructuresSeen < 10:
