@@ -6,6 +6,7 @@ export type UserInfo = {
   id: string;
   email: string | null;
   name: string | null;
+  discordId: string | null;
   isSoftmaxTeamMember: boolean;
 };
 
@@ -49,10 +50,15 @@ export async function loadUserByMachineToken(
     },
   }));
 
+  const discordId =
+    machineToken.user.accounts.find((a) => a.provider === "discord")
+      ?.providerAccountId ?? null;
+
   return {
     id: machineToken.user.id,
     email: machineToken.user.email,
     name: machineToken.user.name,
+    discordId,
     isSoftmaxTeamMember,
   };
 }
@@ -80,10 +86,15 @@ export async function loadUserById(id: string): Promise<UserInfo | null> {
     },
   }));
 
+  const discordId =
+    dbUser.accounts.find((a) => a.provider === "discord")?.providerAccountId ??
+    null;
+
   return {
     id: dbUser.id,
     email: dbUser.email,
     name: dbUser.name,
+    discordId,
     isSoftmaxTeamMember,
   };
 }
@@ -131,10 +142,15 @@ export async function loadUsersByIds(
       teamMemberIds.has(id),
     );
 
+    const discordId =
+      dbUser.accounts.find((a) => a.provider === "discord")
+        ?.providerAccountId ?? null;
+
     result.set(dbUser.id, {
       id: dbUser.id,
       email: dbUser.email,
       name: dbUser.name,
+      discordId,
       isSoftmaxTeamMember,
     });
   }

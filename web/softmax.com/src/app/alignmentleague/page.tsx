@@ -46,6 +46,17 @@ export default async function AlignmentLeaguePage() {
   const isLoggedIn = !!session?.user;
   const profileCompleted = dbUser?.profileCompleted ?? false;
 
+  const discordEnabled = !!(
+    process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
+  );
+  const discordInviteUrl = "https://discord.gg/secret-hologenesis";
+  const discordAccount = session?.user?.id
+    ? await prisma.account.findFirst({
+        where: { userId: session.user.id, provider: "discord" },
+        select: { providerAccountId: true },
+      })
+    : null;
+
   let myPolicies: PolicySummary[] = [];
   if (isLoggedIn && profileCompleted && session?.user?.id) {
     try {
@@ -101,46 +112,32 @@ export default async function AlignmentLeaguePage() {
           </section>
         )}
 
-        {isLoggedIn && !profileCompleted && (
+        {isLoggedIn && (
           <section className="mt-8">
-            <H2>Complete Your Profile</H2>
-            <div className="mt-4 rounded-2xl border border-[#d8d2bf] bg-[#fffef8] p-6">
-              <p className="text-[#4a5f8c]">
-                Please complete your profile to participate in the Alignment
-                League.
-              </p>
-              <div className="mt-4">
-                <AccountCard
-                  user={{
-                    name: dbUser?.name ?? session.user?.name ?? "",
-                    email: dbUser?.email ?? session.user?.email ?? "",
-                    institution: dbUser?.institution ?? "",
-                    profileCompleted: false,
-                    tosVersion: dbUser?.tosVersion ?? null,
-                    consentServiceUpdates:
-                      dbUser?.consentServiceUpdates ?? false,
-                    consentMarketing: dbUser?.consentMarketing ?? false,
-                  }}
-                />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {isLoggedIn && profileCompleted && (
-          <section className="mt-8">
-            <H2>Your Account</H2>
+            <H2>
+              {profileCompleted ? "Your Account" : "Complete Your Profile"}
+            </H2>
             <div className="mt-4">
+              {!profileCompleted && (
+                <div className="mb-4 rounded-2xl border border-[#d8d2bf] bg-[#fffef8] p-6">
+                  <p className="text-[#4a5f8c]">
+                    Please complete your profile to participate in the Alignment
+                    League.
+                  </p>
+                </div>
+              )}
               <AccountCard
                 user={{
                   name: dbUser?.name ?? session.user?.name ?? "",
                   email: dbUser?.email ?? session.user?.email ?? "",
                   institution: dbUser?.institution ?? "",
-                  profileCompleted: true,
+                  profileCompleted,
                   tosVersion: dbUser?.tosVersion ?? null,
                   consentServiceUpdates: dbUser?.consentServiceUpdates ?? false,
                   consentMarketing: dbUser?.consentMarketing ?? false,
                 }}
+                discordUserId={discordAccount?.providerAccountId}
+                discordEnabled={discordEnabled}
               />
             </div>
           </section>

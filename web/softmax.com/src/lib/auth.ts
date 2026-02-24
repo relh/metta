@@ -4,6 +4,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import NextAuth, { NextAuthConfig } from "next-auth";
 import { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
+import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
 
@@ -25,6 +26,15 @@ function buildAuthConfig(): NextAuthConfig {
       Google({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      }),
+    );
+  }
+  if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
+    providers.push(
+      Discord({
+        clientId: process.env.DISCORD_CLIENT_ID,
+        clientSecret: process.env.DISCORD_CLIENT_SECRET,
+        authorization: { params: { scope: "identify" } },
       }),
     );
   }
@@ -51,6 +61,38 @@ function buildAuthConfig(): NextAuthConfig {
     adapter: PrismaAdapter(prisma as any),
     providers,
     callbacks: {
+      async signIn({ account }) {
+        if (account?.provider === "discord") {
+          const { auth: getSession } = await import("@/lib/auth");
+          const session = await getSession();
+          if (!session?.user?.id) return false;
+
+          // special case: used only for linking discord account to a user account
+          await prisma.account.upsert({
+            where: {
+              provider_providerAccountId: {
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+              },
+            },
+            update: { userId: session.user.id },
+            create: {
+              userId: session.user.id,
+              type: account.type,
+              provider: account.provider,
+              providerAccountId: account.providerAccountId,
+              access_token: account.access_token as string | undefined,
+              refresh_token: account.refresh_token as string | undefined,
+              expires_at: account.expires_at,
+              token_type: account.token_type,
+              scope: account.scope,
+            },
+          });
+
+          return "/alignmentleague";
+        }
+        return true;
+      },
       async session({ session, user }) {
         if (session.user) {
           session.user.id = user.id;
