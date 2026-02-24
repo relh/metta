@@ -174,7 +174,8 @@ def build_defect_backlog(store_dir: Path) -> DefectBacklog:
 
 def build_defect_fix_plan(store_dir: Path, *, max_items: int = 5) -> DefectFixPlan:
     defects = load_crash_defects(store_dir)
-    candidates = [defect for defect in defects if defect.status == "open"]
+    candidates = [defect for defect in defects if defect.status in {"open", "triaged"}]
+    open_count = sum(1 for defect in defects if defect.status == "open")
     candidates_sorted = sorted(candidates, key=lambda item: item.submitted_at, reverse=True)
     items = [
         DefectFixPlanItem(
@@ -190,7 +191,7 @@ def build_defect_fix_plan(store_dir: Path, *, max_items: int = 5) -> DefectFixPl
     plan = DefectFixPlan(
         generated_at=_utc_now(),
         source_defects_path=str(_defects_path(store_dir)),
-        open_defects=len(candidates),
+        open_defects=open_count,
         items=items,
     )
     store_dir.mkdir(parents=True, exist_ok=True)
@@ -274,18 +275,24 @@ def validate_defect_fix(
 
     argv = shlex.split(fix_command)
     timed_out = False
+    return_code: int | None = None
     with stdout_log.open("w", encoding="utf-8") as stdout_sink, stderr_log.open("w", encoding="utf-8") as stderr_sink:
-        process = subprocess.Popen(argv, stdout=stdout_sink, stderr=stderr_sink, text=True)  # noqa: S603
-        while process.poll() is None:
-            time.sleep(0.2)
-            if time.monotonic() - started_mono > float(timeout_seconds):
-                process.kill()
-                timed_out = True
-                break
-        process.wait()
-        return_code = process.returncode
-        if timed_out:
-            stderr_sink.write(f"fix validation timed out after {timeout_seconds} seconds\n")
+        try:
+            process = subprocess.Popen(argv, stdout=stdout_sink, stderr=stderr_sink, text=True)  # noqa: S603
+        except FileNotFoundError as exc:
+            stderr_sink.write(f"fix validation command failed to start: {exc}\n")
+            return_code = 127
+        else:
+            while process.poll() is None:
+                time.sleep(0.2)
+                if time.monotonic() - started_mono > float(timeout_seconds):
+                    process.kill()
+                    timed_out = True
+                    break
+            process.wait()
+            return_code = process.returncode
+            if timed_out:
+                stderr_sink.write(f"fix validation timed out after {timeout_seconds} seconds\n")
 
     ended_at = _utc_now()
     attempt = DefectFixAttempt(
