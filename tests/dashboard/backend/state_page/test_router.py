@@ -59,38 +59,18 @@ def test_agent_indices_from_tags_falls_back_for_non_indexable_policy_ids() -> No
     assert _agent_indices_from_tags(tags, "policy-a", 6) == [0, 1, 2]
 
 
-def test_default_policy_version_returns_top_leaderboard_entry(monkeypatch: Any) -> None:
-    season_id = uuid4()
-    winner_policy_version_id = uuid4()
-    fake_season = SimpleNamespace(
-        id=season_id,
-        name="beta-teams-large",
-        canonical=True,
-        version=7,
-    )
-
-    calls: list[tuple[str, Any]] = []
-
-    class _FakeCommissioner:
-        async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[Any, float, int]]:
-            calls.append(("get_leaderboard", pool_name))
-            return [
-                (winner_policy_version_id, 42.0, 12),
-            ]
-
-    async def fake_build_commissioner(season_name: str, *, season_id: Any) -> _FakeCommissioner:
-        calls.append((season_name, season_id))
-        return _FakeCommissioner()
+def test_default_dashboard_data_returns_404_when_default_policy_missing(monkeypatch: Any) -> None:
+    async def fake_default_winner_policy_version_id(_session: Any) -> tuple[str | None, str | None]:
+        return None, None
 
     @asynccontextmanager
     async def fake_db_session(*, read_only: bool = False) -> Any:
         assert read_only
-        session = _FakeSession([_ExecuteResult(scalar=fake_season)])
-        yield session
+        yield SimpleNamespace()
 
     monkeypatch.setattr(
-        "dashboard.backend.dashboard_backend.state_page.router.build_commissioner",
-        fake_build_commissioner,
+        "dashboard.backend.dashboard_backend.state_page.router._default_winner_policy_version_id",
+        fake_default_winner_policy_version_id,
     )
     monkeypatch.setattr(
         "dashboard.backend.dashboard_backend.state_page.router.db_session",
@@ -101,44 +81,10 @@ def test_default_policy_version_returns_top_leaderboard_entry(monkeypatch: Any) 
     app.include_router(create_dashboard_router())
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/policies/versions/default")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["policy_version_id"] == str(winner_policy_version_id)
-    assert body["season"] == "beta-teams-large"
-    assert calls[0] == ("beta-teams-large", season_id)
-    assert calls[1] == ("get_leaderboard", None)
+    response = client.get("/dashboard/v1/policies/versions/default/data")
 
-
-def test_default_policy_version_returns_none_when_default_season_missing(monkeypatch: Any) -> None:
-    async def fake_build_commissioner(_season_name: str, *, season_id: Any) -> Any:
-        del season_id
-        raise AssertionError("build_commissioner should not be called when no default season exists")
-
-    @asynccontextmanager
-    async def fake_db_session(*, read_only: bool = False) -> Any:
-        assert read_only
-        session = _FakeSession([_ExecuteResult(scalar=None)])
-        yield session
-
-    monkeypatch.setattr(
-        "dashboard.backend.dashboard_backend.state_page.router.build_commissioner",
-        fake_build_commissioner,
-    )
-    monkeypatch.setattr(
-        "dashboard.backend.dashboard_backend.state_page.router.db_session",
-        fake_db_session,
-    )
-
-    app = FastAPI()
-    app.include_router(create_dashboard_router())
-    client = TestClient(app, base_url="http://localhost")
-
-    response = client.get("/dashboard/v1/policies/versions/default")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["policy_version_id"] is None
-    assert body["season"] is None
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No default policy version available"
 
 
 def test_dashboard_data_builds_commissioner_with_season_id(
@@ -161,9 +107,6 @@ def test_dashboard_data_builds_commissioner_with_season_id(
         version=7,
     )
 
-    async def fake_require_policy_version(_policy_version_id: str) -> tuple[Any, Any]:
-        return policy_version_id, fake_policy_version
-
     async def fake_fetch_sources(_policy_version_id: Any, _limit: int) -> tuple[list[Any], list[Any]]:
         return [], []
 
@@ -171,6 +114,14 @@ def test_dashboard_data_builds_commissioner_with_season_id(
         return []
 
     calls: list[tuple[str, Any]] = []
+    requested_policy_version_ids: list[str] = []
+
+    async def fake_default_winner_policy_version_id(_session: Any) -> tuple[str | None, str | None]:
+        return str(policy_version_id), "beta-teams-large"
+
+    async def fake_require_policy_version(requested_policy_version_id: str) -> tuple[Any, Any]:
+        requested_policy_version_ids.append(requested_policy_version_id)
+        return policy_version_id, fake_policy_version
 
     class _FakeCommissioner:
         async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[Any, float, int]]:
@@ -198,6 +149,10 @@ def test_dashboard_data_builds_commissioner_with_season_id(
         fake_require_policy_version,
     )
     monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._default_winner_policy_version_id",
+        fake_default_winner_policy_version_id,
+    )
+    monkeypatch.setattr(
         "dashboard.backend.dashboard_backend.state_page.router._fetch_policy_dashboard_sources",
         fake_fetch_sources,
     )
@@ -219,10 +174,15 @@ def test_dashboard_data_builds_commissioner_with_season_id(
     client = TestClient(app, base_url="http://localhost")
 
     response = client.get(f"/dashboard/v1/policies/versions/{policy_version_id}/data")
+    default_response = client.get("/dashboard/v1/policies/versions/default/data")
 
     assert response.status_code == 200
+    assert default_response.status_code == 200
+    assert requested_policy_version_ids == [str(policy_version_id), str(policy_version_id)]
     assert calls[0] == ("beta-teams-large", season_id)
     assert calls[1] == ("get_leaderboard", None)
+    assert calls[2] == ("beta-teams-large", season_id)
+    assert calls[3] == ("get_leaderboard", None)
     payload = response.json()
     derived = payload["derived"]
     assert "unsupported" in derived

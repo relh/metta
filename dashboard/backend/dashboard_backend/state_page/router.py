@@ -98,11 +98,6 @@ class DashboardRolePercentilesResponse(BaseModel):
     rows: list[RolePercentileRow]
 
 
-class DashboardDefaultPolicyVersionResponse(BaseModel):
-    policy_version_id: str | None
-    season: str | None
-
-
 async def _latest_default_season(session: Any) -> Season | None:
     season_query = (
         select(Season)
@@ -404,13 +399,14 @@ async def _fetch_and_summarize_replays(episode_ids: list[str], policy_version_id
 def create_dashboard_router() -> APIRouter:
     router = APIRouter(prefix="/dashboard/v1/policies/versions", tags=["dashboard"])
 
-    @router.get("/default")
+    @router.get("/default/data")
     @timed_http_handler
-    async def get_default_policy_version(user: SoftmaxUser) -> DashboardDefaultPolicyVersionResponse:
-        del user
+    async def get_default_dashboard_data(user: SoftmaxUser) -> DashboardResponse:
         async with db_session(read_only=True) as session:
-            policy_version_id, season = await _default_winner_policy_version_id(session)
-        return DashboardDefaultPolicyVersionResponse(policy_version_id=policy_version_id, season=season)
+            policy_version_id, _season = await _default_winner_policy_version_id(session)
+        if not policy_version_id:
+            raise HTTPException(status_code=404, detail="No default policy version available")
+        return await get_dashboard_data(policy_version_id, user)
 
     @router.get("/{policy_version_id}/data")
     @timed_http_handler

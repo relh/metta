@@ -30,7 +30,7 @@ import {
   fetchDiagnoseRuns,
   fetchDashboardAnalysis,
   fetchDashboardData,
-  fetchDashboardDefaultPolicyVersion,
+  fetchDashboardDefaultData,
   fetchDashboardRolePercentiles,
 } from '../lib/api'
 import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
@@ -935,13 +935,29 @@ export function DashboardClient() {
       }
 
       try {
-        const response = await fetchDashboardDefaultPolicyVersion()
-        const defaultPolicyVersionId = response.policy_version_id?.trim()
-        if (!defaultPolicyVersionId || cancelled) return
+        setLoading(true)
+        const response = await fetchDashboardDefaultData()
+        if (cancelled) return
+
+        const defaultPolicyVersionId = String(response.policy?.id ?? '').trim()
+        setData(response)
+        setError(null)
+        if (!defaultPolicyVersionId) return
+
         setPolicyVersionId(defaultPolicyVersionId)
-        await loadDashboardData(defaultPolicyVersionId)
-      } catch {
-        // Leave manual entry as fallback when default lookup is unavailable.
+        const url = new URL(window.location.href)
+        if (url.searchParams.get('policyVersionId') !== defaultPolicyVersionId) {
+          url.searchParams.set('policyVersionId', defaultPolicyVersionId)
+          window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+        }
+      } catch (err) {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
+        setError(message)
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
 
