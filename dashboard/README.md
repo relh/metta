@@ -213,3 +213,8 @@ Optional env:
 dashboard/scripts/capture_observatory_storage_state.sh
 dashboard/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 ```
+
+Notes:
+
+- `live_ui_smoke.sh` defaults to `https://policy-dashboard.softmax-research.net` (standalone dashboard).
+- Override `DASHBOARD_URL` if you explicitly want to smoke the Observatory embed route.
