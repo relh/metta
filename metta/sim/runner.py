@@ -56,6 +56,7 @@ def _run_single_simulation(
                 env=sim_cfg.env,
                 seed=seed + episode_idx,
                 max_action_time_ms=max_action_time_ms,
+                overage_budget_ms=sim_cfg.overage_budget_ms,
                 episode_tags=dict(sim_cfg.episode_tags),
             )
             ep_results = run_episode_isolated(
@@ -90,6 +91,9 @@ class SimulationRunConfig(BaseModel):
 
     max_action_time_ms: int | None = Field(
         default=10000, description="Maximum time (in ms) a policy is given to take an action"
+    )
+    overage_budget_ms: int | None = Field(
+        default=None, description="Cumulative overage budget (ms) per agent before permanent noop"
     )
     episode_tags: dict[str, str] = Field(default_factory=dict, description="Tags to add to each episode")
 
