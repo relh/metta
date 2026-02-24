@@ -716,33 +716,22 @@ def _role_progress_metric(
     return f"env_per_label_rewards/{label}", display
 
 
-def miner(
-    num_agents: int = 4,
-    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
-    max_steps: int = 1000,
-    variants: str | Sequence[str] | None = ("no_objective", "miner"),
-    teacher: Optional[TeacherConfig] = None,
-    policy_architecture: Optional[PolicyArchitecture] = None,
-) -> tools.TrainTool:
-    """Train miner role with optional teacher supervision."""
+def _resolve_role_teacher(teacher: TeacherConfig | dict[str, object] | None) -> TeacherConfig:
     if teacher is None:
-        teacher = TeacherConfig(policy_uri=None)
-    elif isinstance(teacher, dict):
-        teacher = TeacherConfig.model_validate(teacher)
+        return TeacherConfig(policy_uri=None)
+    if isinstance(teacher, dict):
+        return TeacherConfig.model_validate(teacher)
+    return teacher
 
-    resolved_variants, resolved_rewards = split_variants(variants)
-    mission = _make_cogsguard_mission(
-        layout=layout,
-        num_agents=num_agents,
-        max_steps=max_steps,
-        variants=resolved_variants,
-        clips_overrides={"disabled": True},
-    )
-    env = mission.make_env()
-    env.game.actions.change_vibe.enabled = False
-    if resolved_rewards:
-        apply_reward_variants(env, variants=list(resolved_rewards))
 
+def _make_role_train_tool(
+    *,
+    env: MettaGridConfig,
+    layout: _CogsGuardLayout,
+    teacher: TeacherConfig,
+    policy_architecture: Optional[PolicyArchitecture],
+    enable_vibe_actor_loss: bool = False,
+) -> tools.TrainTool:
     curriculum = cc.bucketed(env)
     curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
 
@@ -757,7 +746,10 @@ def miner(
         policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
     )
 
-    if teacher and teacher.enabled:
+    if enable_vibe_actor_loss and _vibe_actions_enabled(training_env_cfg=training_env_cfg):
+        _wire_vibe_actor_loss(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
+
+    if teacher.enabled:
         scheduler_run_gates: list[LossRunGate] = []
         scheduler_rules: list[ScheduleRule] = []
         apply_teacher_phase(
@@ -771,6 +763,40 @@ def miner(
             trajectory_isolation=tt.trajectory_isolation,
         )
         tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
+
+    return tt
+
+
+def miner(
+    num_agents: int = 4,
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    max_steps: int = 1000,
+    variants: str | Sequence[str] | None = ("no_objective", "miner"),
+    teacher: Optional[TeacherConfig] = None,
+    policy_architecture: Optional[PolicyArchitecture] = None,
+) -> tools.TrainTool:
+    """Train miner role with optional teacher supervision."""
+    resolved_teacher = _resolve_role_teacher(teacher)
+
+    resolved_variants, resolved_rewards = split_variants(variants)
+    mission = _make_cogsguard_mission(
+        layout=layout,
+        num_agents=num_agents,
+        max_steps=max_steps,
+        variants=resolved_variants,
+        clips_overrides={"disabled": True},
+    )
+    env = mission.make_env()
+    env.game.actions.change_vibe.enabled = False
+    if resolved_rewards:
+        apply_reward_variants(env, variants=list(resolved_rewards))
+
+    tt = _make_role_train_tool(
+        env=env,
+        layout=layout,
+        teacher=resolved_teacher,
+        policy_architecture=policy_architecture,
+    )
 
     key, label = _role_progress_metric(variants, layout)
     tt.stats_reporter.progress_metric = key
@@ -787,10 +813,7 @@ def aligner(
     policy_architecture: Optional[PolicyArchitecture] = None,
 ) -> tools.TrainTool:
     """Train aligner role with optional teacher supervision."""
-    if teacher is None:
-        teacher = TeacherConfig(policy_uri=None)
-    elif isinstance(teacher, dict):
-        teacher = TeacherConfig.model_validate(teacher)
+    resolved_teacher = _resolve_role_teacher(teacher)
 
     resolved_variants, resolved_rewards = split_variants(variants)
     mission = _make_cogsguard_mission(
@@ -808,34 +831,12 @@ def aligner(
     if resolved_rewards:
         apply_reward_variants(env, variants=list(resolved_rewards))
 
-    curriculum = cc.bucketed(env)
-    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
-
-    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
-    trainer_cfg = TrainerConfig()
-    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
-
-    tt = tools.TrainTool(
-        trainer=trainer_cfg,
-        training_env=training_env_cfg,
-        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    tt = _make_role_train_tool(
+        env=env,
+        layout=layout,
+        teacher=resolved_teacher,
+        policy_architecture=policy_architecture,
     )
-
-    if teacher and teacher.enabled:
-        scheduler_run_gates: list[LossRunGate] = []
-        scheduler_rules: list[ScheduleRule] = []
-        apply_teacher_phase(
-            trainer_cfg=trainer_cfg,
-            losses=trainer_cfg.losses,
-            training_env_cfg=training_env_cfg,
-            policy_assets=tt.policy_assets,
-            scheduler_rules=scheduler_rules,
-            scheduler_run_gates=scheduler_run_gates,
-            teacher_cfg=teacher,
-            trajectory_isolation=tt.trajectory_isolation,
-        )
-        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
 
     key, label = _role_progress_metric(variants, layout)
     tt.stats_reporter.progress_metric = key
@@ -852,10 +853,7 @@ def scout(
     policy_architecture: Optional[PolicyArchitecture] = None,
 ) -> tools.TrainTool:
     """Train scout role with optional teacher supervision."""
-    if teacher is None:
-        teacher = TeacherConfig(policy_uri=None)
-    elif isinstance(teacher, dict):
-        teacher = TeacherConfig.model_validate(teacher)
+    resolved_teacher = _resolve_role_teacher(teacher)
 
     resolved_variants, resolved_rewards = split_variants(variants)
     mission = _make_cogsguard_mission(
@@ -866,37 +864,16 @@ def scout(
         clips_overrides={"disabled": True},
     )
     env = mission.make_env()
+    env.game.actions.change_vibe.enabled = False
     if resolved_rewards:
         apply_reward_variants(env, variants=list(resolved_rewards))
 
-    curriculum = cc.bucketed(env)
-    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
-
-    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
-    trainer_cfg = TrainerConfig()
-    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
-
-    tt = tools.TrainTool(
-        trainer=trainer_cfg,
-        training_env=training_env_cfg,
-        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    tt = _make_role_train_tool(
+        env=env,
+        layout=layout,
+        teacher=resolved_teacher,
+        policy_architecture=policy_architecture,
     )
-
-    if teacher and teacher.enabled:
-        scheduler_run_gates: list[LossRunGate] = []
-        scheduler_rules: list[ScheduleRule] = []
-        apply_teacher_phase(
-            trainer_cfg=trainer_cfg,
-            losses=trainer_cfg.losses,
-            training_env_cfg=training_env_cfg,
-            policy_assets=tt.policy_assets,
-            scheduler_rules=scheduler_rules,
-            scheduler_run_gates=scheduler_run_gates,
-            teacher_cfg=teacher,
-            trajectory_isolation=tt.trajectory_isolation,
-        )
-        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
 
     key, label = _role_progress_metric(variants, layout)
     tt.stats_reporter.progress_metric = key
@@ -916,10 +893,7 @@ def scrambler(
 
     Hubs start with 255 hearts via BraveheartVariant. Clips invade normally.
     """
-    if teacher is None:
-        teacher = TeacherConfig(policy_uri=None)
-    elif isinstance(teacher, dict):
-        teacher = TeacherConfig.model_validate(teacher)
+    resolved_teacher = _resolve_role_teacher(teacher)
 
     resolved_variants, resolved_rewards = split_variants(variants)
     scrambler_variants = list(resolved_variants or []) + [BraveheartVariant()]
@@ -933,36 +907,13 @@ def scrambler(
     if resolved_rewards:
         apply_reward_variants(env, variants=list(resolved_rewards))
 
-    curriculum = cc.bucketed(env)
-    curriculum.add_bucket("game.map_builder.seed", [cc.Span(0, 1_000_000)])
-
-    default_architecture = DefaultPolicyConfig(feature_extractor=BoxCNNFeatureExtractorConfig())
-    trainer_cfg = TrainerConfig()
-    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum.to_curriculum())
-
-    tt = tools.TrainTool(
-        trainer=trainer_cfg,
-        training_env=training_env_cfg,
-        evaluator=EvaluatorConfig(simulations=simulations(env=env, layout=layout)),
-        policy_assets={"learner0": PolicyAssetConfig(architecture=policy_architecture or default_architecture)},
+    tt = _make_role_train_tool(
+        env=env,
+        layout=layout,
+        teacher=resolved_teacher,
+        policy_architecture=policy_architecture,
+        enable_vibe_actor_loss=True,
     )
-    if _vibe_actions_enabled(training_env_cfg=training_env_cfg):
-        _wire_vibe_actor_loss(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
-
-    if teacher and teacher.enabled:
-        scheduler_run_gates: list[LossRunGate] = []
-        scheduler_rules: list[ScheduleRule] = []
-        apply_teacher_phase(
-            trainer_cfg=trainer_cfg,
-            losses=trainer_cfg.losses,
-            training_env_cfg=training_env_cfg,
-            policy_assets=tt.policy_assets,
-            scheduler_rules=scheduler_rules,
-            scheduler_run_gates=scheduler_run_gates,
-            teacher_cfg=teacher,
-            trajectory_isolation=tt.trajectory_isolation,
-        )
-        tt.scheduler = SchedulerConfig(run_gates=scheduler_run_gates, rules=scheduler_rules)
 
     tt.stats_reporter.progress_metric = f"env_per_label_rewards/{env.label}"
     tt.stats_reporter.progress_metric_label = "scrambler"
