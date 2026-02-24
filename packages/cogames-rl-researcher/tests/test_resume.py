@@ -3,10 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from cogames_rl_researcher.resume import ResumeConfig, run_resume
 from cogames_rl_researcher.startup import StartupConfig, run_startup
 
 from tests.test_startup import _write_fake_cogames
+
+
+def test_resume_invalid_source_path_has_clear_error(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="source must point to a startup/resume run directory"):
+        run_resume(ResumeConfig(source=tmp_path / "missing-run-dir"))
 
 
 def test_resume_runs_missing_submit_and_leaderboard(tmp_path: Path, monkeypatch) -> None:

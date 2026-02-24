@@ -112,8 +112,17 @@ def _resolve_bundle_path(source: Path) -> Path:
     return source
 
 
+def _missing_source_message(resolved_source: Path) -> str:
+    return (
+        "source must point to a startup/resume run directory (containing audit_bundle.json) "
+        f"or an explicit audit_bundle.json path: {resolved_source}"
+    )
+
+
 def _load_bundle(source: Path) -> AuditBundle:
     bundle_path = _resolve_bundle_path(source)
+    if not bundle_path.exists():
+        raise ValueError(_missing_source_message(bundle_path))
     payload = json.loads(bundle_path.read_text(encoding="utf-8"))
     return AuditBundle.model_validate(payload)
 
@@ -598,9 +607,13 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    source_path = Path(args.source)
+    resolved_source = _resolve_bundle_path(source_path)
+    if not resolved_source.exists():
+        parser.error(_missing_source_message(resolved_source))
 
     config = ResumeConfig(
-        source=Path(args.source),
+        source=source_path,
         output_root=Path(args.output_root) if args.output_root else None,
         policy=args.policy,
         policy_name=args.policy_name,
