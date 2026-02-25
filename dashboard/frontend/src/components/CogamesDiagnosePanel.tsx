@@ -147,10 +147,7 @@ export const CogamesDiagnosePanel: FC<{
   const prescriptions = asArray(note?.prescriptions)
   const notes = asArray(note?.notes)
 
-  const axisScores = useMemo(
-    () => new Map(asArray(note?.axes).map((entry) => [entry.axis, entry])),
-    [note?.axes]
-  )
+  const axisScores = useMemo(() => new Map(asArray(note?.axes).map((entry) => [entry.axis, entry])), [note?.axes])
 
   const coreAxisChecks = useMemo(() => {
     return CORE_STAGE1_AXES.map((axis) => {
@@ -213,6 +210,36 @@ export const CogamesDiagnosePanel: FC<{
 
   const socialEvidenceByKey = useMemo(() => parseEvidenceRefsByKey(socialReview?.evidence_refs), [socialReview])
 
+  const probeEvaluatedCount = useMemo(
+    () => probeCatalog.filter((probe) => evalByProbe.has(probe.probe_id)).length,
+    [evalByProbe, probeCatalog]
+  )
+  const probePassCount = useMemo(
+    () => probeCatalog.filter((probe) => evalByProbe.get(probe.probe_id)?.passed).length,
+    [evalByProbe, probeCatalog]
+  )
+
+  const axisMetricRows = useMemo(() => {
+    const rows: Array<{ axis: DiagnoseAxis; metric: string; value: number | null }> = []
+    for (const axis of AXIS_ORDER) {
+      const score = axisScores.get(axis)
+      const metrics = score?.derived_metrics
+      if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)) continue
+      for (const [metric, rawValue] of Object.entries(metrics)) {
+        rows.push({
+          axis,
+          metric,
+          value: typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : null,
+        })
+      }
+    }
+    return rows
+  }, [axisScores])
+
+  const diagnoseValidityChecks = useMemo(() => {
+    return asArray(diagnoseValidity?.checks)
+  }, [diagnoseValidity?.checks])
+
   const radarPolygon = useMemo(() => {
     const points = AXIS_ORDER.map((axis, index) => {
       const score = axisScores.get(axis)
@@ -229,72 +256,74 @@ export const CogamesDiagnosePanel: FC<{
   }, [policyVersionId])
 
   return (
-    <div className="grid" style={{ gap: 12 }}>
-      <section className="card">
-        <div className="diagnose-header">
-          <div className="dashboard-title-line">
-            <h2 style={{ margin: 0 }}>Diagnose</h2>
-            <span className="dashboard-title-subline">
-              CLI-run diagnostics from <code>outputs/cogames-diagnose</code>. Stage-1 confirms signals, then Stage-2
-              social checks finalize prescriptions.
-            </span>
-            <code>{manifest?.run_id ?? selectedRunId ?? 'no-run-selected'}</code>
-          </div>
-        </div>
-      </section>
-
-      <section className="card grid" style={{ gap: 10 }}>
-        {loading ? (
-          <p style={{ margin: 0 }}>Loading diagnose runs...</p>
-        ) : error ? (
-          <p style={{ margin: 0, color: '#b42318' }}>
-            <strong>Error:</strong> {error}
-          </p>
-        ) : runs.length === 0 ? (
-          <div className="grid" style={{ gap: 8 }}>
-            <p style={{ margin: 0 }}>
-              No diagnose runs found yet. This is expected unless diagnose artifacts were generated/imported for this
-              environment. Run this locally, then refresh this tab:
-            </p>
-            {diagnoseCommand ? (
-              <div className="diagnose-list-item">
-                <code>{diagnoseCommand}</code>
-              </div>
-            ) : (
-              <p style={{ margin: 0, color: '#546b8a' }}>
-                Load a policy in the dashboard first so we can generate a UUID-scoped diagnose command.
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="diagnose-selector-row">
-            <label style={{ display: 'grid', gap: 6 }}>
-              Diagnose run
-              <select value={selectedRunId ?? ''} onChange={(event) => onSelectRun(event.target.value)}>
-                {runs.map((run) => (
-                  <option key={run.run_id} value={run.run_id}>
-                    {run.run_id}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="diagnose-meta">
-              <span>
-                policy: <strong>{manifest?.policy ?? '-'}</strong>
+    <div className="grid diagnose-panel" style={{ gap: 12 }}>
+      <section className="grid diagnose-top-row">
+        <section className="card">
+          <div className="diagnose-header">
+            <div className="dashboard-title-line">
+              <h2 style={{ margin: 0 }}>Diagnose</h2>
+              <span className="dashboard-title-subline">
+                CLI-run diagnostics from <code>outputs/cogames-diagnose</code>. Stage-1 confirms signals, then Stage-2
+                social checks finalize prescriptions.
               </span>
-              <span>
-                stage: <strong>{stageStatus}</strong>
-              </span>
-              <span>
-                status: <strong>{runStatus}</strong>
-              </span>
-              <span>
-                diagnosis: <strong>{diagnosisStatus}</strong>
-              </span>
-              <span>created: {formatDateTime(manifest?.created_at)}</span>
+              <code>{manifest?.run_id ?? selectedRunId ?? 'no-run-selected'}</code>
             </div>
           </div>
-        )}
+        </section>
+
+        <section className="card grid" style={{ gap: 10 }}>
+          {loading ? (
+            <p style={{ margin: 0 }}>Loading diagnose runs...</p>
+          ) : error ? (
+            <p style={{ margin: 0, color: '#b42318' }}>
+              <strong>Error:</strong> {error}
+            </p>
+          ) : runs.length === 0 ? (
+            <div className="grid" style={{ gap: 8 }}>
+              <p style={{ margin: 0 }}>
+                No diagnose runs found yet. This is expected unless diagnose artifacts were generated/imported for this
+                environment. Run this locally, then refresh this tab:
+              </p>
+              {diagnoseCommand ? (
+                <div className="diagnose-list-item">
+                  <code>{diagnoseCommand}</code>
+                </div>
+              ) : (
+                <p style={{ margin: 0, color: '#546b8a' }}>
+                  Load a policy in the dashboard first so we can generate a UUID-scoped diagnose command.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="diagnose-selector-row">
+              <label style={{ display: 'grid', gap: 6 }}>
+                Diagnose run
+                <select value={selectedRunId ?? ''} onChange={(event) => onSelectRun(event.target.value)}>
+                  {runs.map((run) => (
+                    <option key={run.run_id} value={run.run_id}>
+                      {run.run_id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="diagnose-meta">
+                <span>
+                  policy: <strong>{manifest?.policy ?? '-'}</strong>
+                </span>
+                <span>
+                  stage: <strong>{stageStatus}</strong>
+                </span>
+                <span>
+                  status: <strong>{runStatus}</strong>
+                </span>
+                <span>
+                  diagnosis: <strong>{diagnosisStatus}</strong>
+                </span>
+                <span>created: {formatDateTime(manifest?.created_at)}</span>
+              </div>
+            </div>
+          )}
+        </section>
       </section>
 
       {noteLoading ? (
@@ -384,9 +413,9 @@ export const CogamesDiagnosePanel: FC<{
                   <p style={{ margin: 0, fontSize: 13 }}>
                     social confirmed:{' '}
                     <strong>{socialReview ? (socialReview.confirmed ? 'true' : 'false') : 'n/a'}</strong> · absolute
-                    reward mean: <strong>{socialEvidenceByKey['absolute:policy_reward_mean'] ?? 'n/a'}</strong> ·
-                    mirror reward mean: <strong>{socialEvidenceByKey['mirror:policy_reward_mean'] ?? 'n/a'}</strong> ·
-                    mirror gap: <strong>{socialEvidenceByKey['mirror:policy_reward_gap'] ?? 'n/a'}</strong>
+                    reward mean: <strong>{socialEvidenceByKey['absolute:policy_reward_mean'] ?? 'n/a'}</strong> · mirror
+                    reward mean: <strong>{socialEvidenceByKey['mirror:policy_reward_mean'] ?? 'n/a'}</strong> · mirror
+                    gap: <strong>{socialEvidenceByKey['mirror:policy_reward_gap'] ?? 'n/a'}</strong>
                   </p>
                 </div>
               </article>
@@ -415,6 +444,172 @@ export const CogamesDiagnosePanel: FC<{
                 </div>
               </article>
             </div>
+          </section>
+
+          <section className="card" style={{ display: 'grid', gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Suite Coverage + Probe Scorecard</h3>
+            <div className="grid two">
+              <article className="diagnose-list-item">
+                <p style={{ margin: 0 }}>
+                  Pack: <strong>{manifest?.pack_id ?? '-'}</strong> · version{' '}
+                  <strong>{manifest?.pack_version ?? '-'}</strong>
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  Artifacts: <strong>{asArray(manifest?.artifact_files).length}</strong>
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  Command: <code>{manifest?.command ?? '-'}</code>
+                </p>
+              </article>
+              <article className="diagnose-list-item">
+                <p style={{ margin: 0 }}>
+                  Probe coverage: <strong>{probeEvaluatedCount}</strong> / <strong>{probeCatalog.length}</strong>
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  Probe pass rate:{' '}
+                  <strong>
+                    {probeCatalog.length > 0 ? formatPct((probePassCount / probeCatalog.length) * 100, 0) : 'n/a'}
+                  </strong>
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+                  Evidence refs (replay-indexed): <strong>{replayRefs.length}</strong>
+                </p>
+              </article>
+            </div>
+            {probeCatalog.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Probe</th>
+                      <th>Axis</th>
+                      <th>Mission</th>
+                      <th>Validation</th>
+                      <th>Status</th>
+                      <th>Summary</th>
+                      <th>Evidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {probeCatalog.map((probe) => {
+                      const evaluation = evalByProbe.get(probe.probe_id)
+                      const evidenceRefs = asArray(evaluation?.evidence_refs)
+                      return (
+                        <tr key={`probe-score-${probe.probe_id}`}>
+                          <td>
+                            <code>{probe.probe_id}</code>
+                          </td>
+                          <td>{AXIS_LABEL[probe.axis]}</td>
+                          <td>{probe.mission}</td>
+                          <td>
+                            <code>{probe.validation_metric}</code> · {probe.pass_fail_threshold}
+                          </td>
+                          <td>
+                            {evaluation ? (
+                              <span className={evaluation.passed ? 'diagnose-pass' : 'diagnose-fail'}>
+                                {evaluation.passed ? 'pass' : 'fail'}
+                              </span>
+                            ) : (
+                              <span>not-run</span>
+                            )}
+                          </td>
+                          <td>{evaluation?.summary ?? '-'}</td>
+                          <td>
+                            {evidenceRefs.length === 0 ? (
+                              '-'
+                            ) : (
+                              <div style={{ display: 'grid', gap: 4 }}>
+                                {evidenceRefs.map((reference) => {
+                                  const replayUrl = replayUrlForEvidenceRef(reference, replayLookupByRef)
+                                  return (
+                                    <span key={`probe-evidence-${probe.probe_id}-${reference}`}>
+                                      <code>{reference}</code>{' '}
+                                      {replayUrl ? (
+                                        <a href={replayUrl} target="_blank" rel="noreferrer">
+                                          replay
+                                        </a>
+                                      ) : null}
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p style={{ margin: 0 }}>No probe catalog entries in this diagnose run.</p>
+            )}
+          </section>
+
+          <section className="grid two">
+            <section className="card" style={{ display: 'grid', gap: 8 }}>
+              <h3 style={{ margin: 0 }}>Axis Metric Drilldown</h3>
+              {axisMetricRows.length === 0 ? (
+                <p style={{ marginBottom: 0 }}>No derived axis metrics available.</p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Axis</th>
+                        <th>Metric</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {axisMetricRows.map((row) => (
+                        <tr key={`axis-metric-${row.axis}-${row.metric}`}>
+                          <td>{AXIS_LABEL[row.axis]}</td>
+                          <td>
+                            <code>{row.metric}</code>
+                          </td>
+                          <td>{row.value === null ? 'n/a' : formatNumber(row.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="card" style={{ display: 'grid', gap: 8 }}>
+              <h3 style={{ margin: 0 }}>Validity Check Details</h3>
+              {diagnoseValidityChecks.length === 0 ? (
+                <p style={{ marginBottom: 0 }}>No explicit validity check records in manifest.</p>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Check</th>
+                        <th>Status</th>
+                        <th>Details</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {diagnoseValidityChecks.map((check) => (
+                        <tr key={`validity-check-${check.check_id}`}>
+                          <td>
+                            <code>{check.check_id}</code>
+                          </td>
+                          <td>
+                            <span className={check.passed ? 'diagnose-pass' : 'diagnose-fail'}>
+                              {check.passed ? 'pass' : 'fail'}
+                            </span>
+                          </td>
+                          <td>{check.details}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
           </section>
 
           <section className="grid two">
@@ -503,7 +698,7 @@ export const CogamesDiagnosePanel: FC<{
             <h3 style={{ margin: 0 }}>Spider Chart + Stage-1 Axes</h3>
             <div className="grid two">
               <article className="diagnose-list-item">
-                <svg width="220" height="220" viewBox="0 0 220 220" role="img" aria-label="Axis spider chart">
+                <svg width="220" height="220" viewBox="-18 -18 256 256" role="img" aria-label="Axis spider chart">
                   <title>Diagnose axis radar</title>
                   {[0.25, 0.5, 0.75, 1].map((level) => {
                     const ring = AXIS_ORDER.map((_, index) => radarPoint(index, AXIS_ORDER.length, level))

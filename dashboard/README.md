@@ -68,9 +68,23 @@ pnpm dev
 Production uses a private RDS read replica (`main-pg-ro...`) that is not directly reachable from laptops in many
 environments (private subnets + security group ingress from EKS only).
 
-Use one of these two local modes:
+Recommended local mode (one command):
 
-### Mode A: local snapshot (recommended)
+### Quickstart (one command)
+
+Run backend + frontend together against the production read-only DB via EKS tunnel:
+
+```bash
+dashboard/scripts/dev_local.sh
+```
+
+This starts:
+
+- Dashboard backend at `http://127.0.0.1:8010`
+- Dashboard frontend at `http://127.0.0.1:5174`
+- Frontend API base set to local backend (`NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010`)
+
+### Manual Alternative A: local snapshot
 
 Best for day-to-day development. You run dashboard against local Postgres seeded from production.
 
@@ -115,7 +129,7 @@ NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010 pnpm dev
 - Frontend: `http://127.0.0.1:5174`
 - Backend docs: `http://127.0.0.1:8010/internal/docs`
 
-### Mode B: live production read-replica via EKS tunnel
+### Manual Alternative B: live production read-replica via EKS tunnel
 
 Use this only when you need live read-replica data locally.
 

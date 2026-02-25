@@ -62,6 +62,11 @@
   --role-card-bg: #f7faff;
   --role-progress-bg: #dde7f3;
   --role-progress-bar: #2f6fd8;
+  --tree-hub-axis-bg: #edf4ff;
+  --tree-hub-source-bg: #ecfdf3;
+  --tree-hub-group-bg: #fff8e6;
+  --tree-hub-ink: #4b617f;
+  --tree-hub-strong-ink: #111827;
 }
 
 :root[data-theme='dark'] {
@@ -127,6 +132,11 @@
   --role-card-bg: #111827;
   --role-progress-bg: #374151;
   --role-progress-bar: #60a5fa;
+  --tree-hub-axis-bg: #102743;
+  --tree-hub-source-bg: #0f2f22;
+  --tree-hub-group-bg: #3a2a10;
+  --tree-hub-ink: #bfd3f6;
+  --tree-hub-strong-ink: #f3f4f6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -193,6 +203,11 @@
     --role-card-bg: #111827;
     --role-progress-bg: #374151;
     --role-progress-bar: #60a5fa;
+    --tree-hub-axis-bg: #102743;
+    --tree-hub-source-bg: #0f2f22;
+    --tree-hub-group-bg: #3a2a10;
+    --tree-hub-ink: #bfd3f6;
+    --tree-hub-strong-ink: #f3f4f6;
   }
 }
 
@@ -227,6 +242,10 @@ main {
 
 .grid.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid.overview-insights-layout > * {
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
@@ -418,13 +437,68 @@ code {
   gap: 12px;
 }
 
+.capability-tree-forest {
+  gap: 14px;
+}
+
 .capability-tree-node {
   list-style: none;
   position: relative;
 }
 
+.capability-tree-hub {
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--tree-hub-ink);
+}
+
+.capability-tree-hub strong {
+  color: var(--tree-hub-strong-ink);
+  font-size: 12px;
+  letter-spacing: 0.01em;
+}
+
+.capability-tree-hub-axis {
+  background: var(--tree-hub-axis-bg);
+}
+
+.capability-tree-hub-source {
+  background: var(--tree-hub-source-bg);
+}
+
+.capability-tree-hub-group {
+  background: var(--tree-hub-group-bg);
+}
+
 .capability-tree-card {
-  border-width: 2px;
+  border-width: 1px;
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.capability-card-compact .capability-card-head h3 {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.capability-card-compact .capability-description {
+  font-size: 12px;
+}
+
+.capability-card-compact .capability-indicator {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.capability-card-compact .capability-evidence p {
+  font-size: 11px;
 }
 
 .capability-tree-children {
@@ -601,6 +675,39 @@ code {
   flex-wrap: wrap;
 }
 
+.diagnose-header .dashboard-title-line {
+  min-width: 0;
+  white-space: normal;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.diagnose-header .dashboard-title-subline {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.diagnose-top-row {
+  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.1fr);
+  align-items: start;
+}
+
+.diagnose-panel {
+  min-width: 0;
+}
+
+.diagnose-panel .card,
+.diagnose-panel .diagnose-list-item,
+.diagnose-panel .diagnose-axis-card,
+.diagnose-panel .diagnose-probe-card {
+  min-width: 0;
+}
+
+.diagnose-panel code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .diagnose-selector-row {
   display: grid;
   gap: 10px;
@@ -612,6 +719,18 @@ code {
   flex-wrap: wrap;
   font-size: 13px;
   color: var(--ink-muted);
+}
+
+.diagnose-meta > span,
+.diagnose-meta strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1020px) {
+  .diagnose-top-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .diagnose-axis-card {

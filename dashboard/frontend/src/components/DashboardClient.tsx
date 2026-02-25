@@ -77,10 +77,46 @@ const OPPONENT_COLORS = [
 ]
 
 const METTASCOPE_REPLAY_URL_PREFIX = 'https://metta-ai.github.io/metta/mettascope/mettascope.html?replay='
+const OVERVIEW_TREND_CHART_WIDTH = 560
+const OVERVIEW_TREND_CHART_HEIGHT = 200
 
 const DASHBOARD_FEEDBACK_ISSUE_URL = 'https://github.com/Metta-AI/metta/issues/new'
 const DEFAULT_DASHBOARD_CACHE_KEY = '__default__'
+const MAX_DASHBOARD_CACHE_ENTRIES = 6
+const MAX_PERSISTED_DASHBOARD_CACHE_ENTRIES = 2
+const DASHBOARD_PERSISTED_CACHE_STORAGE_KEY = 'policy-dashboard-response-cache:v1'
+const ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY = 'policy-dashboard-role-percentiles-cache:v1'
+const DASHBOARD_CACHE_TTL_MS = 30 * 60 * 1000
 const dashboardResponseCache = new Map<string, DashboardResponse>()
+const rolePercentilesCache = new Map<string, DashboardRolePercentilesResponse>()
+const rolePercentilesInflightRequests = new Map<string, Promise<DashboardRolePercentilesResponse>>()
+let dashboardCacheHydratedFromStorage = false
+let rolePercentilesCacheHydratedFromStorage = false
+
+type PersistedDashboardCacheEntry = {
+  policyVersionId: string
+  response: DashboardResponse
+  isDefault?: boolean
+}
+
+type PersistedDashboardCachePayload = {
+  version: 1
+  apiBaseUrl: string
+  savedAtMs: number
+  entries: PersistedDashboardCacheEntry[]
+}
+
+type PersistedRolePercentilesCacheEntry = {
+  cacheKey: string
+  response: DashboardRolePercentilesResponse
+}
+
+type PersistedRolePercentilesCachePayload = {
+  version: 1
+  apiBaseUrl: string
+  savedAtMs: number
+  entries: PersistedRolePercentilesCacheEntry[]
+}
 
 const SORT_HEADER_BUTTON_STYLE: CSSProperties = {
   background: 'transparent',
@@ -119,21 +155,256 @@ function parseDashboardTab(value: string | null): DashboardTab | null {
   return DASHBOARD_TABS.includes(normalized as DashboardTab) ? (normalized as DashboardTab) : null
 }
 
+function browserLocalStorage(): Storage | null {
+  if (typeof window === 'undefined') return null
+  const localStorage = (window as Window & { localStorage?: unknown }).localStorage as Partial<Storage> | undefined
+  if (
+    !localStorage ||
+    typeof localStorage.getItem !== 'function' ||
+    typeof localStorage.setItem !== 'function' ||
+    typeof localStorage.removeItem !== 'function'
+  ) {
+    return null
+  }
+  return localStorage as Storage
+}
+
+function storageGetItem(key: string): string | null {
+  const localStorage = browserLocalStorage()
+  if (!localStorage) return null
+  return localStorage.getItem(key)
+}
+
+function storageSetItem(key: string, value: string): void {
+  const localStorage = browserLocalStorage()
+  if (!localStorage) return
+  localStorage.setItem(key, value)
+}
+
+function storageRemoveItem(key: string): void {
+  const localStorage = browserLocalStorage()
+  if (!localStorage) return
+  localStorage.removeItem(key)
+}
+
 function cacheDashboardResponse(response: DashboardResponse, isDefault: boolean = false): void {
+  hydrateDashboardCacheFromStorage()
   const policyVersionId = String(response.policy?.id ?? '').trim()
   if (!policyVersionId) return
+  if (dashboardResponseCache.has(policyVersionId)) {
+    dashboardResponseCache.delete(policyVersionId)
+  }
   dashboardResponseCache.set(policyVersionId, response)
   if (isDefault) {
     dashboardResponseCache.set(DEFAULT_DASHBOARD_CACHE_KEY, response)
   }
+
+  const nonDefaultKeys = [...dashboardResponseCache.keys()].filter((key) => key !== DEFAULT_DASHBOARD_CACHE_KEY)
+  while (nonDefaultKeys.length > MAX_DASHBOARD_CACHE_ENTRIES) {
+    const oldestKey = nonDefaultKeys.shift()
+    if (!oldestKey) break
+    dashboardResponseCache.delete(oldestKey)
+  }
+
+  persistDashboardCacheToStorage()
 }
 
 function getCachedDashboardResponse(policyVersionId: string): DashboardResponse | null {
+  hydrateDashboardCacheFromStorage()
   return dashboardResponseCache.get(policyVersionId) ?? null
 }
 
 function getCachedDefaultDashboardResponse(): DashboardResponse | null {
+  hydrateDashboardCacheFromStorage()
   return dashboardResponseCache.get(DEFAULT_DASHBOARD_CACHE_KEY) ?? null
+}
+
+function hydrateDashboardCacheFromStorage(): void {
+  if (dashboardCacheHydratedFromStorage) return
+  dashboardCacheHydratedFromStorage = true
+  if (typeof window === 'undefined') return
+
+  try {
+    const raw = storageGetItem(DASHBOARD_PERSISTED_CACHE_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Partial<PersistedDashboardCachePayload>
+    if (parsed.version !== 1 || parsed.apiBaseUrl !== DASHBOARD_API_BASE_URL || !Array.isArray(parsed.entries)) {
+      storageRemoveItem(DASHBOARD_PERSISTED_CACHE_STORAGE_KEY)
+      return
+    }
+    if (Date.now() - Number(parsed.savedAtMs ?? 0) > DASHBOARD_CACHE_TTL_MS) {
+      storageRemoveItem(DASHBOARD_PERSISTED_CACHE_STORAGE_KEY)
+      return
+    }
+
+    for (const entry of parsed.entries) {
+      const policyVersionId = String(entry?.policyVersionId ?? '').trim()
+      if (!policyVersionId || !entry?.response || typeof entry.response !== 'object') continue
+      dashboardResponseCache.set(policyVersionId, entry.response)
+      if (entry.isDefault) {
+        dashboardResponseCache.set(DEFAULT_DASHBOARD_CACHE_KEY, entry.response)
+      }
+    }
+
+    const nonDefaultKeys = [...dashboardResponseCache.keys()].filter((key) => key !== DEFAULT_DASHBOARD_CACHE_KEY)
+    while (nonDefaultKeys.length > MAX_DASHBOARD_CACHE_ENTRIES) {
+      const oldestKey = nonDefaultKeys.shift()
+      if (!oldestKey) break
+      dashboardResponseCache.delete(oldestKey)
+    }
+  } catch {
+    storageRemoveItem(DASHBOARD_PERSISTED_CACHE_STORAGE_KEY)
+  }
+}
+
+function persistDashboardCacheToStorage(): void {
+  if (typeof window === 'undefined') return
+
+  const nonDefaultKeys = [...dashboardResponseCache.keys()]
+    .filter((key) => key !== DEFAULT_DASHBOARD_CACHE_KEY)
+    .slice(-MAX_PERSISTED_DASHBOARD_CACHE_ENTRIES)
+  const entries: PersistedDashboardCacheEntry[] = []
+  for (const key of nonDefaultKeys) {
+    const response = dashboardResponseCache.get(key)
+    if (!response) continue
+    entries.push({ policyVersionId: key, response })
+  }
+
+  const defaultResponse = dashboardResponseCache.get(DEFAULT_DASHBOARD_CACHE_KEY)
+  if (defaultResponse) {
+    const defaultPolicyVersionId = String(defaultResponse.policy?.id ?? '').trim()
+    if (defaultPolicyVersionId) {
+      const existingEntry = entries.find((entry) => entry.policyVersionId === defaultPolicyVersionId)
+      if (existingEntry) {
+        existingEntry.isDefault = true
+      } else {
+        entries.push({ policyVersionId: defaultPolicyVersionId, response: defaultResponse, isDefault: true })
+      }
+    }
+  }
+
+  if (entries.length === 0) {
+    storageRemoveItem(DASHBOARD_PERSISTED_CACHE_STORAGE_KEY)
+    return
+  }
+
+  const payload: PersistedDashboardCachePayload = {
+    version: 1,
+    apiBaseUrl: DASHBOARD_API_BASE_URL,
+    savedAtMs: Date.now(),
+    entries,
+  }
+
+  try {
+    storageSetItem(DASHBOARD_PERSISTED_CACHE_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // Best-effort cache only: ignore quota/storage errors.
+  }
+}
+
+function rolePercentilesCacheKey(policyVersionIdRaw: string, generatedAtRaw: string | null | undefined): string | null {
+  const policyVersionId = policyVersionIdRaw.trim()
+  if (!policyVersionId) return null
+  const generatedAt = typeof generatedAtRaw === 'string' ? generatedAtRaw.trim() : ''
+  return generatedAt ? `${policyVersionId}:${generatedAt}` : policyVersionId
+}
+
+function hydrateRolePercentilesCacheFromStorage(): void {
+  if (rolePercentilesCacheHydratedFromStorage) return
+  rolePercentilesCacheHydratedFromStorage = true
+  if (typeof window === 'undefined') return
+
+  try {
+    const raw = storageGetItem(ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Partial<PersistedRolePercentilesCachePayload>
+    if (parsed.version !== 1 || parsed.apiBaseUrl !== DASHBOARD_API_BASE_URL || !Array.isArray(parsed.entries)) {
+      storageRemoveItem(ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY)
+      return
+    }
+    if (Date.now() - Number(parsed.savedAtMs ?? 0) > DASHBOARD_CACHE_TTL_MS) {
+      storageRemoveItem(ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY)
+      return
+    }
+
+    for (const entry of parsed.entries) {
+      const cacheKey = String(entry?.cacheKey ?? '').trim()
+      if (!cacheKey || !entry?.response || typeof entry.response !== 'object') continue
+      rolePercentilesCache.set(cacheKey, entry.response)
+    }
+  } catch {
+    storageRemoveItem(ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY)
+  }
+}
+
+function persistRolePercentilesCacheToStorage(): void {
+  if (typeof window === 'undefined') return
+
+  const entries = [...rolePercentilesCache.entries()]
+    .slice(-MAX_DASHBOARD_CACHE_ENTRIES)
+    .map(([cacheKey, response]) => ({
+      cacheKey,
+      response,
+    }))
+
+  if (entries.length === 0) {
+    storageRemoveItem(ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY)
+    return
+  }
+
+  const payload: PersistedRolePercentilesCachePayload = {
+    version: 1,
+    apiBaseUrl: DASHBOARD_API_BASE_URL,
+    savedAtMs: Date.now(),
+    entries,
+  }
+
+  try {
+    storageSetItem(ROLE_PERCENTILES_PERSISTED_CACHE_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // Best-effort cache only: ignore quota/storage errors.
+  }
+}
+
+function getCachedRolePercentiles(cacheKey: string): DashboardRolePercentilesResponse | null {
+  hydrateRolePercentilesCacheFromStorage()
+  return rolePercentilesCache.get(cacheKey) ?? null
+}
+
+function cacheRolePercentiles(cacheKey: string, response: DashboardRolePercentilesResponse): void {
+  hydrateRolePercentilesCacheFromStorage()
+  if (rolePercentilesCache.has(cacheKey)) {
+    rolePercentilesCache.delete(cacheKey)
+  }
+  rolePercentilesCache.set(cacheKey, response)
+  while (rolePercentilesCache.size > MAX_DASHBOARD_CACHE_ENTRIES) {
+    const oldestKey = rolePercentilesCache.keys().next().value
+    if (!oldestKey) break
+    rolePercentilesCache.delete(oldestKey)
+  }
+  persistRolePercentilesCacheToStorage()
+}
+
+function getOrFetchRolePercentiles(
+  cacheKey: string,
+  policyVersionId: string
+): Promise<DashboardRolePercentilesResponse> {
+  const cached = getCachedRolePercentiles(cacheKey)
+  if (cached) return Promise.resolve(cached)
+
+  const inFlight = rolePercentilesInflightRequests.get(cacheKey)
+  if (inFlight) return inFlight
+
+  const request = fetchDashboardRolePercentiles(policyVersionId)
+    .then((response) => {
+      cacheRolePercentiles(cacheKey, response)
+      return response
+    })
+    .finally(() => {
+      rolePercentilesInflightRequests.delete(cacheKey)
+    })
+  rolePercentilesInflightRequests.set(cacheKey, request)
+  return request
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -655,7 +926,6 @@ export function DashboardClient() {
   const [rolePercentiles, setRolePercentiles] = useState<DashboardRolePercentilesResponse | null>(null)
   const [roleLoading, setRoleLoading] = useState(false)
   const [roleError, setRoleError] = useState<string | null>(null)
-  const rolePercentilesCacheRef = useRef<Map<string, DashboardRolePercentilesResponse>>(new Map())
   const loadProgressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const loadProgressResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview')
@@ -743,6 +1013,29 @@ export function DashboardClient() {
     return `${loadLabel} Finalizing dashboard view...`
   }, [loadLabel, loadProgress, loading])
 
+  const preloadRolePercentiles = useCallback(
+    async (policyVersionIdRaw: string, generatedAtRaw: string | null | undefined) => {
+      const policyVersionId = policyVersionIdRaw.trim()
+      if (!policyVersionId) return
+
+      const cacheKey = rolePercentilesCacheKey(policyVersionId, generatedAtRaw)
+      if (!cacheKey) return
+      const cachedPercentiles = getCachedRolePercentiles(cacheKey)
+      if (cachedPercentiles) {
+        setRolePercentiles(cachedPercentiles)
+        return
+      }
+
+      try {
+        const response = await getOrFetchRolePercentiles(cacheKey, policyVersionId)
+        setRolePercentiles(response)
+      } catch {
+        // Best-effort preload: tab-specific fetch will surface any errors when Parses is opened.
+      }
+    },
+    []
+  )
+
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
   const completedEpisodes = useMemo(() => episodes.filter((episode) => episode.status === 'completed'), [episodes])
   const failedEpisodes = useMemo(() => episodes.filter((episode) => episode.status === 'failed'), [episodes])
@@ -750,6 +1043,18 @@ export function DashboardClient() {
   const diagnostics = useMemo(() => asStringArray(data?.derived?.kpis?.diagnostics), [data])
   const failures = useMemo(() => asFailures(data?.derived?.failures), [data])
   const matchup = useMemo(() => asMatchup(data?.derived?.matchup), [data])
+  const matchupCurrentAvgReward = toFiniteNumber(matchup?.current_avg_reward)
+  const matchupBaselineAvgReward = toFiniteNumber(matchup?.baseline_avg_reward)
+  const matchupGlobalDelta = toFiniteNumber(matchup?.global_reward_delta)
+  const matchupOpponentSpread = toFiniteNumber(matchup?.opponent_spread)
+  const matchupCompositionSpread = toFiniteNumber(matchup?.composition_spread)
+  const matchupCurrentAvgRewardSeverity = kpiSeverity(matchupCurrentAvgReward, 30, 10)
+  const matchupBaselineAvgRewardSeverity = kpiSeverity(matchupBaselineAvgReward, 30, 10)
+  const matchupGlobalDeltaSeverity = kpiSeverity(matchupGlobalDelta, 5, 0)
+  const matchupOpponentSpreadSeverity = kpiSeverity(matchupOpponentSpread, 20, 40, false)
+  const matchupCompositionSpreadSeverity = kpiSeverity(matchupCompositionSpread, 12, 24, false)
+  const matchupEvidenceSeverity =
+    matchup?.evidence_sufficient === true ? 'good' : matchup?.evidence_sufficient === false ? 'bad' : 'warn'
   const trend = useMemo<DashboardTrendSummary | null>(() => {
     if (!data?.derived?.trend || typeof data.derived.trend !== 'object' || Array.isArray(data.derived.trend))
       return null
@@ -959,7 +1264,10 @@ export function DashboardClient() {
     () => buildOverviewTrendPoints(completedEpisodes, overviewTrendMetric),
     [completedEpisodes, overviewTrendMetric]
   )
-  const overviewTrendPath = useMemo(() => buildSparklinePath(overviewTrendPoints, 640, 220, 24), [overviewTrendPoints])
+  const overviewTrendPath = useMemo(
+    () => buildSparklinePath(overviewTrendPoints, OVERVIEW_TREND_CHART_WIDTH, OVERVIEW_TREND_CHART_HEIGHT, 22),
+    [overviewTrendPoints]
+  )
   const overviewTrendStats = useMemo(() => {
     if (overviewTrendPoints.length === 0) return null
     const values = overviewTrendPoints.map((point) => point.value)
@@ -1043,6 +1351,7 @@ export function DashboardClient() {
         clearLoadProgressTimers()
         setLoading(false)
         setLoadProgress(0)
+        void preloadRolePercentiles(trimmedPolicyVersionId, cachedResponse.generated_at)
         setData(cachedResponse)
         setSelectedEpisodeId(null)
         if (typeof window !== 'undefined') {
@@ -1061,6 +1370,7 @@ export function DashboardClient() {
         cacheDashboardResponse(response)
         setData(response)
         setSelectedEpisodeId(null)
+        void preloadRolePercentiles(String(response.policy?.id ?? trimmedPolicyVersionId), response.generated_at)
         if (typeof window !== 'undefined') {
           const url = new URL(window.location.href)
           if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
@@ -1075,7 +1385,7 @@ export function DashboardClient() {
         finishDashboardLoadProgress()
       }
     },
-    [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress]
+    [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress, preloadRolePercentiles]
   )
 
   const onLoad = async () => {
@@ -1172,15 +1482,15 @@ export function DashboardClient() {
   }, [filteredEpisodes, selectedEpisodeId])
 
   useEffect(() => {
-    if (activeTab !== 'roles') return
     const loadedPolicyVersionId = data?.policy?.id
     if (!loadedPolicyVersionId) return
+    const shouldShowRoleLoadState = activeTab === 'roles'
+    if (!shouldShowRoleLoadState) return
     const policyVersionKey = String(loadedPolicyVersionId)
-    const generatedAt = typeof data?.generated_at === 'string' ? data.generated_at : ''
-    const cacheKey = generatedAt ? `${policyVersionKey}:${generatedAt}` : null
+    const cacheKey = rolePercentilesCacheKey(policyVersionKey, data?.generated_at) ?? policyVersionKey
 
-    const cachedPercentiles = cacheKey ? rolePercentilesCacheRef.current.get(cacheKey) : undefined
-    if (cacheKey && cachedPercentiles !== undefined) {
+    const cachedPercentiles = getCachedRolePercentiles(cacheKey)
+    if (cachedPercentiles) {
       setRolePercentiles(cachedPercentiles)
       setRoleLoading(false)
       setRoleError(null)
@@ -1191,13 +1501,11 @@ export function DashboardClient() {
     setRoleLoading(true)
     setRoleError(null)
 
-    void fetchDashboardRolePercentiles(policyVersionKey)
+    void getOrFetchRolePercentiles(cacheKey, policyVersionKey)
       .then((response) => {
         if (cancelled) return
-        if (cacheKey) {
-          rolePercentilesCacheRef.current.set(cacheKey, response)
-        }
         setRolePercentiles(response)
+        setRoleError(null)
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -1323,6 +1631,7 @@ export function DashboardClient() {
         setPolicyVersionId(initialPolicyVersionId)
         const cachedResponse = getCachedDashboardResponse(initialPolicyVersionId)
         if (cachedResponse) {
+          void preloadRolePercentiles(initialPolicyVersionId, cachedResponse.generated_at)
           setData(cachedResponse)
           setError(null)
           return
@@ -1337,6 +1646,7 @@ export function DashboardClient() {
         setLoading(false)
         setLoadProgress(0)
         const defaultPolicyVersionId = String(cachedDefault.policy?.id ?? '').trim()
+        void preloadRolePercentiles(defaultPolicyVersionId, cachedDefault.generated_at)
         setData(cachedDefault)
         setError(null)
         if (!defaultPolicyVersionId) return
@@ -1358,6 +1668,7 @@ export function DashboardClient() {
         cacheDashboardResponse(response, true)
         setData(response)
         setError(null)
+        void preloadRolePercentiles(defaultPolicyVersionId, response.generated_at)
         if (!defaultPolicyVersionId) return
 
         setPolicyVersionId(defaultPolicyVersionId)
@@ -1381,7 +1692,13 @@ export function DashboardClient() {
     return () => {
       cancelled = true
     }
-  }, [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress, loadDashboardData])
+  }, [
+    beginDashboardLoadProgress,
+    clearLoadProgressTimers,
+    finishDashboardLoadProgress,
+    loadDashboardData,
+    preloadRolePercentiles,
+  ])
 
   const kpis = data?.derived?.kpis
   const avgReward = toFiniteNumber(kpis?.avg_reward ?? kpis?.mean_reward)
@@ -1523,7 +1840,7 @@ export function DashboardClient() {
               onClick={() => activateTab('opponents')}
               className={activeTab === 'opponents' ? 'active-tab' : ''}
             >
-              Opponents
+              Teammates
             </button>
             <button
               type="button"
@@ -1607,8 +1924,8 @@ export function DashboardClient() {
                 />
               </section>
 
-              <section className="grid two">
-                <article className="card grid" style={{ gap: 10 }}>
+              <section className="grid" style={{ gap: 10 }}>
+                <article className="card grid" style={{ gap: 10, minWidth: 0 }}>
                   <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
                     <h2 style={{ margin: 0 }}>Replay Spotlight</h2>
                     <span className="dashboard-title-subline">Embedded replay view for fastest debugging.</span>
@@ -1632,21 +1949,26 @@ export function DashboardClient() {
                       >
                         {replaySpotlightUrls.selected ? (
                           <iframe
+                            key={
+                              replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : 'replay-spotlight'
+                            }
                             src={replaySpotlightUrls.selected}
                             title="Replay spotlight"
                             style={{ width: '100%', height: 420, border: 0 }}
+                            loading="lazy"
                             allowFullScreen
                           />
                         ) : (
                           <div style={{ padding: 12, color: '#fff' }}>Replay viewer unavailable for this episode.</div>
                         )}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        <label style={{ display: 'grid', gap: 6 }}>
-                          Episode focus
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ whiteSpace: 'nowrap' }}>Episode focus</span>
                           <select
                             value={overviewReplayMode}
                             onChange={(event) => setOverviewReplayMode(event.target.value as ReplaySpotlightMode)}
+                            style={{ margin: 0, width: 'auto', minWidth: 0, flex: 1 }}
                           >
                             <option value="selected" disabled={!selectedReplayEpisodeFromTable}>
                               selected from Episodes tab
@@ -1654,12 +1976,6 @@ export function DashboardClient() {
                             <option value="worst">worst reward with replay</option>
                             <option value="median">median reward with replay</option>
                             <option value="best">best reward with replay</option>
-                          </select>
-                        </label>
-                        <label style={{ display: 'grid', gap: 6 }}>
-                          Viewer
-                          <select value="mettascope" disabled>
-                            <option value="mettascope">MettaScope</option>
                           </select>
                         </label>
                       </div>
@@ -1680,31 +1996,77 @@ export function DashboardClient() {
                           </>
                         )}
                       </p>
-                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
-                        {replaySpotlightUrls.mettascopeUrl && (
-                          <a href={replaySpotlightUrls.mettascopeUrl} target="_blank" rel="noreferrer">
-                            Open in MettaScope
-                          </a>
-                        )}
-                        <button type="button" onClick={() => activateTab('episodes')}>
-                          Pick specific episode
-                        </button>
-                      </div>
                     </>
                   )}
                 </article>
 
-                <div className="grid" style={{ gap: 10 }}>
-                  <article className="card grid" style={{ gap: 10 }}>
+                <div
+                  className="grid two overview-insights-layout"
+                  style={{ gap: 10, minWidth: 0, overflowX: 'hidden' }}
+                >
+                  <div className="grid" style={{ gap: 10, minWidth: 0 }}>
+                    {data.derived?.outcome && (
+                      <article className="card" style={{ minWidth: 0 }}>
+                        <h2 style={{ marginTop: 0 }}>Outcome Summary</h2>
+                        <p style={{ marginTop: 0 }}>
+                          {String(data.derived.outcome.reason ?? 'No outcome summary provided.')}
+                        </p>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gap: 8,
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                            fontSize: 13,
+                          }}
+                        >
+                          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                            Evidence:{' '}
+                            <strong>{data.derived.outcome.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
+                          </span>
+                          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                            Score delta:{' '}
+                            <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.score_delta), 3)}</code>
+                          </span>
+                          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                            Rank delta:{' '}
+                            <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.rank_delta), 0)}</code>
+                          </span>
+                          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                            Baseline: v
+                            {data.derived.outcome.baseline?.version === null ||
+                            data.derived.outcome.baseline?.version === undefined
+                              ? '-'
+                              : data.derived.outcome.baseline.version}
+                          </span>
+                        </div>
+                      </article>
+                    )}
+
+                    <section className="card">
+                      <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
+                      {diagnostics.length === 0 ? (
+                        <p style={{ marginBottom: 0 }}>No diagnostics emitted.</p>
+                      ) : (
+                        <ul style={{ marginBottom: 0, display: 'grid', gap: 6 }}>
+                          {diagnostics.map((entry) => (
+                            <li key={entry}>{entry}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  </div>
+
+                  <article className="card grid" style={{ gap: 10, minWidth: 0 }}>
                     <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
                       <h2 style={{ margin: 0 }}>Episode Metrics Over Time</h2>
                       <span className="dashboard-title-subline">X: episode time, Y: selected metric.</span>
                     </div>
-                    <label style={{ display: 'grid', gap: 6, maxWidth: 300 }}>
-                      Metric
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: 320 }}>
+                      <span style={{ whiteSpace: 'nowrap' }}>Metric</span>
                       <select
                         value={overviewTrendMetric}
                         onChange={(event) => setOverviewTrendMetric(event.target.value as OverviewTrendMetric)}
+                        style={{ margin: 0, width: 'auto', minWidth: 0, flex: 1 }}
                       >
                         <option value="reward">Reward</option>
                         <option value="noop_rate">Noop rate</option>
@@ -1719,74 +2081,68 @@ export function DashboardClient() {
                       </p>
                     ) : (
                       <>
-                        <div style={{ overflowX: 'auto' }}>
-                          <svg width="100%" height="220" viewBox="0 0 640 220" role="img" aria-label="Metric over time">
-                            <rect x="0" y="0" width="640" height="220" fill="var(--panel-soft-bg-1)" />
-                            <path d={overviewTrendPath} fill="none" stroke="#2563eb" strokeWidth="2.5" />
+                        <div style={{ overflowX: 'hidden' }}>
+                          <svg
+                            width="100%"
+                            height={OVERVIEW_TREND_CHART_HEIGHT}
+                            viewBox={`0 0 ${OVERVIEW_TREND_CHART_WIDTH} ${OVERVIEW_TREND_CHART_HEIGHT}`}
+                            role="img"
+                            aria-label="Metric over time"
+                            style={{
+                              display: 'block',
+                              width: '94%',
+                              maxWidth: OVERVIEW_TREND_CHART_WIDTH,
+                              margin: '0 auto',
+                            }}
+                          >
+                            <rect
+                              x="0"
+                              y="0"
+                              width={OVERVIEW_TREND_CHART_WIDTH}
+                              height={OVERVIEW_TREND_CHART_HEIGHT}
+                              fill="var(--panel-soft-bg-1)"
+                            />
+                            <path d={overviewTrendPath} fill="none" stroke="#2563eb" strokeWidth="2.3" />
                           </svg>
                         </div>
-                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
-                          <span>
-                            Start: <code>{formatDateTime(overviewTrendStats.start)}</code>
-                          </span>
-                          <span>
-                            End: <code>{formatDateTime(overviewTrendStats.end)}</code>
-                          </span>
-                          <span>
-                            Min/Max: <code>{formatNumber(overviewTrendStats.min, 3)}</code> /{' '}
-                            <code>{formatNumber(overviewTrendStats.max, 3)}</code>
-                          </span>
-                          <span>
-                            Delta: <code>{formatSigned(overviewTrendStats.latest - overviewTrendStats.oldest, 3)}</code>
-                          </span>
+                        <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
+                          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                              Start:{' '}
+                              <code style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                                {formatDateTime(overviewTrendStats.start)}
+                              </code>
+                            </span>
+                            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                              End:{' '}
+                              <code style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                                {formatDateTime(overviewTrendStats.end)}
+                              </code>
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                              Min/Max:{' '}
+                              <code style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                                {formatNumber(overviewTrendStats.min, 3)}
+                              </code>{' '}
+                              /{' '}
+                              <code style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                                {formatNumber(overviewTrendStats.max, 3)}
+                              </code>
+                            </span>
+                            <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                              Delta:{' '}
+                              <code style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                                {formatSigned(overviewTrendStats.latest - overviewTrendStats.oldest, 3)}
+                              </code>
+                            </span>
+                          </div>
                         </div>
                       </>
                     )}
                   </article>
-
-                  {data.derived?.outcome && (
-                    <article className="card">
-                      <h2 style={{ marginTop: 0 }}>Outcome Summary</h2>
-                      <p style={{ marginTop: 0 }}>
-                        {String(data.derived.outcome.reason ?? 'No outcome summary provided.')}
-                      </p>
-                      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
-                        <span>
-                          Evidence:{' '}
-                          <strong>{data.derived.outcome.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
-                        </span>
-                        <span>
-                          Score delta:{' '}
-                          <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.score_delta), 3)}</code>
-                        </span>
-                        <span>
-                          Rank delta:{' '}
-                          <code>{formatSigned(toFiniteNumber(data.derived.outcome.delta?.rank_delta), 0)}</code>
-                        </span>
-                        <span>
-                          Baseline: v
-                          {data.derived.outcome.baseline?.version === null ||
-                          data.derived.outcome.baseline?.version === undefined
-                            ? '-'
-                            : data.derived.outcome.baseline.version}
-                        </span>
-                      </div>
-                    </article>
-                  )}
                 </div>
-              </section>
-
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
-                {diagnostics.length === 0 ? (
-                  <p style={{ marginBottom: 0 }}>No diagnostics emitted.</p>
-                ) : (
-                  <ul style={{ marginBottom: 0, display: 'grid', gap: 6 }}>
-                    {diagnostics.map((entry) => (
-                      <li key={entry}>{entry}</li>
-                    ))}
-                  </ul>
-                )}
               </section>
 
               {(unsupported || instrumentation) && (
@@ -2152,9 +2508,9 @@ export function DashboardClient() {
                           <div className="card" style={{ background: 'var(--panel-soft-bg-2)' }}>
                             <h3 style={{ marginTop: 0 }}>Cross-Submission Pattern Groups</h3>
                             <div style={{ display: 'grid', gap: 8 }}>
-                              {selectedTrendPatternGroups.map((group) => (
+                              {selectedTrendPatternGroups.map((group, index) => (
                                 <article
-                                  key={`${String(group.code ?? 'group')}-${String(group.metric_key ?? '')}-${String(group.title ?? '')}`}
+                                  key={`${String(group.code ?? 'group')}-${String(group.metric_key ?? '')}-${String(group.title ?? '')}-${index}`}
                                   className="card"
                                   style={{ padding: 12 }}
                                 >
@@ -2616,31 +2972,55 @@ export function DashboardClient() {
                   <h2 style={{ margin: 0 }}>Matchup Diagnosis</h2>
                   <p style={{ margin: 0 }}>{String(matchup.reason ?? '-')}</p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                    <div className="card" style={{ padding: 10 }}>
-                      Current avg reward: <code>{formatNumber(toFiniteNumber(matchup.current_avg_reward), 3)}</code>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCurrentAvgRewardSeverity) }}
+                    >
+                      Current avg reward: <code>{formatNumber(matchupCurrentAvgReward, 3)}</code>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
-                      Baseline avg reward: <code>{formatNumber(toFiniteNumber(matchup.baseline_avg_reward), 3)}</code>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupBaselineAvgRewardSeverity) }}
+                    >
+                      Baseline avg reward: <code>{formatNumber(matchupBaselineAvgReward, 3)}</code>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
-                      Global delta: <code>{formatSigned(toFiniteNumber(matchup.global_reward_delta), 3)}</code>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupGlobalDeltaSeverity) }}
+                    >
+                      Global delta: <code>{formatSigned(matchupGlobalDelta, 3)}</code>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupEvidenceSeverity) }}
+                    >
                       Evidence: <strong>{matchup.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
-                      Opponent spread: <code>{formatNumber(toFiniteNumber(matchup.opponent_spread), 3)}</code>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
+                    >
+                      Opponent spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
+                    >
                       Best/Worst opponent:{' '}
                       <code>
                         {String(matchup.best_opponent ?? '-')} / {String(matchup.worst_opponent ?? '-')}
                       </code>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
-                      Composition spread: <code>{formatNumber(toFiniteNumber(matchup.composition_spread), 3)}</code>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
+                    >
+                      Composition spread: <code>{formatNumber(matchupCompositionSpread, 3)}</code>
                     </div>
-                    <div className="card" style={{ padding: 10 }}>
+                    <div
+                      className="card"
+                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
+                    >
                       Best/Worst composition:{' '}
                       <code>
                         {String(matchup.best_composition ?? '-')} / {String(matchup.worst_composition ?? '-')}

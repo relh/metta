@@ -33,9 +33,12 @@ describe('SkillTreePanel', () => {
 
     expect(screen.getByText('Capability Tree')).toBeTruthy()
     expect(
-      screen.getByText('Dependency tree uses capability-eval signals only. Root skill depends on child skills.')
+      screen.getByText(
+        'Tree view now includes all filtered tiles via related subtrees: core abilities, diagnose evidence, and operational signals.'
+      )
     ).toBeTruthy()
     expect(screen.getByText('Coordination')).toBeTruthy()
+    expect(screen.getByText('Diagnose Axis: Stability')).toBeTruthy()
 
     const treeButton = screen.getByRole('button', { name: 'Tree' })
     const gridButton = screen.getByRole('button', { name: 'Grid' })

@@ -26,6 +26,13 @@ type CapabilityCard = {
   evidence: string[]
 }
 
+type DiagnoseAxisTreeGroup = {
+  axis: DiagnoseAxis
+  axisCards: CapabilityCard[]
+  probeCards: CapabilityCard[]
+  symptomCards: CapabilityCard[]
+}
+
 type IndicatorFilter = 'all' | CapabilityIndicator
 type SourceFilter = 'all' | CapabilitySource
 type CapabilityViewMode = 'tree' | 'grid'
@@ -109,6 +116,8 @@ const AXIS_LABEL: Record<DiagnoseAxis, string> = {
 }
 
 const AXIS_ORDER: DiagnoseAxis[] = ['stability', 'efficiency', 'control', 'social_coordination']
+const DIAGNOSE_TREE_SOURCES: CapabilitySource[] = ['cogames_axis', 'cogames_probe', 'cogames_symptom']
+const SIGNAL_TREE_SOURCES: CapabilitySource[] = ['instrumentation', 'kpi_diagnostic', 'behavior_slice']
 
 const INDICATOR_FILTERS: Array<{ value: IndicatorFilter; label: string }> = [
   { value: 'all', label: 'All' },
@@ -551,6 +560,36 @@ export const SkillTreePanel: FC<{
     [filtered]
   )
 
+  const filteredDiagnoseByAxis = useMemo(() => {
+    return AXIS_ORDER.map((axis) => ({
+      axis,
+      cards: filtered
+        .filter((capability) => capability.axis === axis && DIAGNOSE_TREE_SOURCES.includes(capability.source))
+        .sort((left, right) => {
+          if (left.source !== right.source) return SOURCE_LABEL[left.source].localeCompare(SOURCE_LABEL[right.source])
+          return left.title.localeCompare(right.title)
+        }),
+    }))
+      .filter((group) => group.cards.length > 0)
+      .map(
+        (group): DiagnoseAxisTreeGroup => ({
+          axis: group.axis,
+          axisCards: group.cards.filter((capability) => capability.source === 'cogames_axis'),
+          probeCards: group.cards.filter((capability) => capability.source === 'cogames_probe'),
+          symptomCards: group.cards.filter((capability) => capability.source === 'cogames_symptom'),
+        })
+      )
+  }, [filtered])
+
+  const filteredSignalGroups = useMemo(() => {
+    return SIGNAL_TREE_SOURCES.map((source) => ({
+      source,
+      cards: filtered
+        .filter((capability) => capability.source === source)
+        .sort((left, right) => left.title.localeCompare(right.title)),
+    })).filter((group) => group.cards.length > 0)
+  }, [filtered])
+
   const treeCapabilityById = useMemo(() => {
     return new Map(filteredCapabilityEval.map((capability) => [capability.id, capability] as const))
   }, [filteredCapabilityEval])
@@ -586,9 +625,15 @@ export const SkillTreePanel: FC<{
     return capabilities.reduce((total, capability) => total + capability.score, 0) / capabilities.length
   }, [capabilities])
 
-  const renderCapabilityCard = (capability: CapabilityCard, treeCard = false) => {
+  const renderCapabilityCard = (
+    capability: CapabilityCard,
+    { treeCard = false, compact = false }: { treeCard?: boolean; compact?: boolean } = {}
+  ) => {
     return (
-      <article key={capability.id} className={`card capability-card${treeCard ? ' capability-tree-card' : ''}`}>
+      <article
+        key={capability.id}
+        className={`card capability-card${treeCard ? ' capability-tree-card' : ''}${compact ? ' capability-card-compact' : ''}`}
+      >
         <div className="capability-card-head">
           <h3 style={{ margin: 0 }}>{capability.title}</h3>
           <span className="badge badge-source">
@@ -632,13 +677,25 @@ export const SkillTreePanel: FC<{
 
     return (
       <li key={nodeId} className="capability-tree-node">
-        {renderCapabilityCard(capability, true)}
+        {renderCapabilityCard(capability, { treeCard: true, compact: true })}
         {dependencies.length > 0 && (
           <ul className="capability-tree-children">
             {dependencies.map((childId) => renderCapabilityTreeNode(childId))}
           </ul>
         )}
       </li>
+    )
+  }
+
+  const renderCardLeaves = (cards: CapabilityCard[]) => {
+    return (
+      <ul className="capability-tree-children">
+        {cards.map((capability) => (
+          <li key={capability.id} className="capability-tree-node">
+            {renderCapabilityCard(capability, { treeCard: true, compact: true })}
+          </li>
+        ))}
+      </ul>
     )
   }
 
@@ -708,21 +765,89 @@ export const SkillTreePanel: FC<{
       {viewMode === 'tree' ? (
         <section className="card grid" style={{ gap: 12 }}>
           <p style={{ margin: 0, fontSize: 13, color: '#4b617f' }}>
-            Dependency tree uses capability-eval signals only. Root skill depends on child skills.
+            Tree view now includes all filtered tiles via related subtrees: core abilities, diagnose evidence, and
+            operational signals.
           </p>
-          {filteredCapabilityEval.length === 0 ? (
-            <article className="card">
-              <p style={{ margin: 0 }}>No capability-eval nodes match current filters.</p>
-            </article>
-          ) : (
-            <ul className="capability-tree">{treeRootIds.map((rootId) => renderCapabilityTreeNode(rootId))}</ul>
-          )}
-          {sourceFilter !== 'all' && sourceFilter !== 'capability_eval' && (
+
+          <article className="card grid" style={{ gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Core Ability Dependency Subtree</h3>
             <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-              Current source filter is <code>{sourceFilter}</code>; tree view always visualizes capability-eval
-              dependencies.
+              Root skill depends on child skills; cards include score, training status, and evidence.
             </p>
-          )}
+            {filteredCapabilityEval.length === 0 ? (
+              <p style={{ margin: 0 }}>No capability-eval nodes match current filters.</p>
+            ) : (
+              <ul className="capability-tree">{treeRootIds.map((rootId) => renderCapabilityTreeNode(rootId))}</ul>
+            )}
+          </article>
+
+          <article className="card grid" style={{ gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Diagnose Evidence Subtrees</h3>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+              Axis-organized tree including diagnose axis, probe, and symptom tiles.
+            </p>
+            {filteredDiagnoseByAxis.length === 0 ? (
+              <p style={{ margin: 0 }}>No diagnose evidence tiles match current filters.</p>
+            ) : (
+              <ul className="capability-tree capability-tree-forest">
+                {filteredDiagnoseByAxis.map((group) => (
+                  <li key={group.axis} className="capability-tree-node">
+                    <div className="capability-tree-hub capability-tree-hub-axis">
+                      <strong>{AXIS_LABEL[group.axis]}</strong>
+                      <span>{group.axisCards.length + group.probeCards.length + group.symptomCards.length} tiles</span>
+                    </div>
+                    <ul className="capability-tree-children">
+                      {group.axisCards.map((capability) => (
+                        <li key={capability.id} className="capability-tree-node">
+                          {renderCapabilityCard(capability, { treeCard: true, compact: true })}
+                        </li>
+                      ))}
+                      {group.probeCards.length > 0 && (
+                        <li className="capability-tree-node">
+                          <div className="capability-tree-hub capability-tree-hub-group">
+                            <strong>Probe Checks</strong>
+                            <span>{group.probeCards.length}</span>
+                          </div>
+                          {renderCardLeaves(group.probeCards)}
+                        </li>
+                      )}
+                      {group.symptomCards.length > 0 && (
+                        <li className="capability-tree-node">
+                          <div className="capability-tree-hub capability-tree-hub-group">
+                            <strong>Symptoms</strong>
+                            <span>{group.symptomCards.length}</span>
+                          </div>
+                          {renderCardLeaves(group.symptomCards)}
+                        </li>
+                      )}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="card grid" style={{ gap: 10 }}>
+            <h3 style={{ margin: 0 }}>Operational Signal Subtrees</h3>
+            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+              Source-grouped tree for instrumentation checks, KPI diagnostics, and behavior slices.
+            </p>
+            {filteredSignalGroups.length === 0 ? (
+              <p style={{ margin: 0 }}>No operational signal tiles match current filters.</p>
+            ) : (
+              <ul className="capability-tree capability-tree-forest">
+                {filteredSignalGroups.map((group) => (
+                  <li key={group.source} className="capability-tree-node">
+                    <div className="capability-tree-hub capability-tree-hub-source">
+                      <strong>{SOURCE_LABEL[group.source]}</strong>
+                      <span>{group.cards.length} tiles</span>
+                    </div>
+                    {renderCardLeaves(group.cards)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
         </section>
       ) : (
         <section className="capability-grid">

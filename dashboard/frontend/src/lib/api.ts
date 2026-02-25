@@ -31,6 +31,15 @@ function getDashboardRequestHeaders(extraHeaders?: Record<string, string>): Reco
   return headers
 }
 
+function isLocalApiBaseUrl(apiBaseUrl: string): boolean {
+  try {
+    const parsed = new URL(apiBaseUrl)
+    return parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+  } catch {
+    return apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')
+  }
+}
+
 export type DashboardEpisode = {
   episode_id: string
   id?: string
@@ -692,12 +701,34 @@ async function dashboardRequest<T>(
   extraHeaders?: Record<string, string>
 ): Promise<T> {
   const send = async (): Promise<Response> => {
-    return await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
-      method,
-      headers: getDashboardRequestHeaders(extraHeaders),
-      body,
-      cache: 'no-store',
-    })
+    try {
+      return await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
+        method,
+        headers: getDashboardRequestHeaders(extraHeaders),
+        body,
+        cache: 'no-store',
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      const isNetworkLikeError =
+        error instanceof TypeError ||
+        message.toLowerCase().includes('failed to fetch') ||
+        message.toLowerCase().includes('networkerror')
+      if (!isNetworkLikeError) {
+        throw error
+      }
+      if (isLocalApiBaseUrl(DASHBOARD_API_BASE_URL)) {
+        throw new Error(
+          `Network/CORS error reaching ${DASHBOARD_API_BASE_URL}. ` +
+            `Run the local backend on http://127.0.0.1:8010 and set ` +
+            `NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010.`
+        )
+      }
+      throw new Error(
+        `Network/CORS error reaching ${DASHBOARD_API_BASE_URL}. ` +
+          `Check VPN/network access and verify the dashboard API is reachable from your environment.`
+      )
+    }
   }
 
   let response = await send()

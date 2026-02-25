@@ -188,7 +188,9 @@ describe('CogamesDiagnosePanel', () => {
     expect(screen.getByText(/aligned\.junction\.held stage1:\s*0\.111/)).toBeTruthy()
     expect(screen.getByText(/aligned\.junction\.held stage2 absolute:\s*0\.222/)).toBeTruthy()
     expect(screen.getByText(/aligned\.junction\.held stage2 mirror:\s*0\.333/)).toBeTruthy()
-    expect(screen.getByText((_: string, node: Element | null) => node?.textContent?.trim() === 'severity: 80%')).toBeTruthy()
+    expect(
+      screen.getByText((_: string, node: Element | null) => node?.textContent?.trim() === 'severity: 80%')
+    ).toBeTruthy()
     expect(
       screen.getByText((_: string, node: Element | null) => node?.textContent?.trim() === 'confidence: 90%')
     ).toBeTruthy()
@@ -209,30 +211,39 @@ describe('CogamesDiagnosePanel', () => {
       )
     ).toBeTruthy()
     expect(
-      screen.getByText((_: string, node: Element | null) =>
-        node?.tagName === 'P' &&
-        ((node?.textContent ?? '').includes('Top Symptom: social_bridge_window_miss (Social Coordination)') ?? false)
+      screen.getByText(
+        (_: string, node: Element | null) =>
+          node?.tagName === 'P' &&
+          ((node?.textContent ?? '').includes('Top Symptom: social_bridge_window_miss (Social Coordination)') ?? false)
       )
     ).toBeTruthy()
     expect(
-      screen.getByText((_: string, node: Element | null) =>
-        node?.tagName === 'P' &&
-        (node?.textContent ?? '').includes('Primary Prescription: research') &&
-        (node?.textContent ?? '').includes('add timed bridge social probe with strict window')
+      screen.getByText(
+        (_: string, node: Element | null) =>
+          node?.tagName === 'P' &&
+          (node?.textContent ?? '').includes('Primary Prescription: research') &&
+          (node?.textContent ?? '').includes('add timed bridge social probe with strict window')
       )
     ).toBeTruthy()
     expect(
-      screen.getByText((_: string, node: Element | null) =>
-        node?.tagName === 'P' &&
-        (node?.textContent ?? '').includes('social confirmed:') &&
-        (node?.textContent ?? '').includes('absolute reward mean: 0.5521') &&
-        (node?.textContent ?? '').includes('mirror reward mean: 0.4988') &&
-        (node?.textContent ?? '').includes('mirror gap: 0.0533')
+      screen.getByText(
+        (_: string, node: Element | null) =>
+          node?.tagName === 'P' &&
+          (node?.textContent ?? '').includes('social confirmed:') &&
+          (node?.textContent ?? '').includes('absolute reward mean: 0.5521') &&
+          (node?.textContent ?? '').includes('mirror reward mean: 0.4988') &&
+          (node?.textContent ?? '').includes('mirror gap: 0.0533')
       )
     ).toBeTruthy()
 
-    const replayLink = screen.getByRole('link', { name: 'replay' })
-    expect(replayLink.getAttribute('href')).toBe('https://example.test/replays/episode-42')
+    expect(screen.getByText('Suite Coverage + Probe Scorecard')).toBeTruthy()
+    expect(screen.getByText('Axis Metric Drilldown')).toBeTruthy()
+    expect(screen.getByText('Validity Check Details')).toBeTruthy()
+
+    const replayLinks = screen.getAllByRole('link', { name: 'replay' })
+    expect(
+      replayLinks.some((link) => link.getAttribute('href') === 'https://example.test/replays/episode-42')
+    ).toBeTruthy()
   })
 
   it('uses canonical evidence_index replay refs only for stage-2 gate', () => {
