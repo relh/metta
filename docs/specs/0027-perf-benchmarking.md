@@ -41,6 +41,12 @@ The training team built a rigorous perf methodology over the wave2 optimization 
 `packages/mettagrid/benchmarks/perf_optimization/` — standardized benchmark script (`test_perf.sh`), sweep configs, and
 reference data. Used for #6895 and #7332. No formal protocol around when to run or how to report.
 
+### Training tooling
+
+`metta/perf/training_harness.py` — reusable harness that configures a TrainTool for benchmarking (strips services,
+injects MicrobenchReporter) with preset configs, baseline comparison, and phase timing breakdown. CLI at
+`scripts/training_perf_benchmark.py`. See [`metta/perf/README.md`](../../metta/perf/README.md) for usage.
+
 ### Tournament
 
 No protocol or tooling. Bottleneck now characterized (see Three-phase benchmark coverage below).
@@ -166,7 +172,7 @@ faster upstream stages can shift allreduce from hidden-behind-compute to the cri
 - [x] Scorecard format adopted, building on `sps_macro_interventions` pattern —
       [`docs/perf/scorecard.md`](../perf/scorecard.md)
 - [x] `/tr.perf-scorecard` skill for both Claude Code and Codex — `skills/tr.perf-scorecard/`
-- [ ] Benchmark scripts print scorecard rows + reminder
+- [x] Benchmark scripts print scorecard rows + reminder
 - [ ] N>=3 adopted as team norm for perf-claiming PRs
 
 ## Non-Goals
