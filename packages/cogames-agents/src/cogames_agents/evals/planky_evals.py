@@ -49,41 +49,6 @@ def _get_planky_map(map_name: str) -> MapGenConfig:
     )
 
 
-def _force_neutral_to_clips_without_proximity(cfg: MettaGridConfig) -> None:
-    """Force deterministic neutral->clips conversion on tiny eval maps.
-
-    Planky maps do not include clips hubs/nets, so the default proximity filters
-    on `neutral_to_clips` never match. This helper preserves the team-alignment
-    exclusion while removing unreachable proximity gating.
-    """
-    from mettagrid.config.filter import AnyFilter, hasTagPrefix, isNot  # noqa: PLC0415
-    from mettagrid.config.query import Query  # noqa: PLC0415
-
-    clip_event = cfg.game.events.get("neutral_to_clips")
-    if clip_event is None:
-        return
-    assert isinstance(clip_event.target_query, Query)
-    target_filters: list[AnyFilter] = [isNot(hasTagPrefix("team:"))]
-    clip_event.target_query.filters = target_filters
-    # Match tutorial overrun behavior exactly for compatibility with event filtering.
-    clip_event.filters = [isNot(hasTagPrefix("team"))]
-    clip_event.max_targets = None
-
-    # Deterministic fallback for tiny eval maps: ensure junctions start clips-aligned.
-    # This avoids dependence on event execution ordering/proximity edge cases.
-    junction_obj = cfg.game.objects.get("junction")
-    if junction_obj is not None:
-        passthrough_tags = [
-            tag for tag in junction_obj.tags if not tag.startswith("team:") and not tag.startswith("net:")
-        ]
-        junction_obj.tags = [*passthrough_tags, "team:clips", "net:clips"]
-
-
-# ---------------------------------------------------------------------------
-# Base class
-# ---------------------------------------------------------------------------
-
-
 class _PlankyDiagnosticBase(Mission):
     """Base class for Planky behavior evaluation missions.
 
@@ -122,6 +87,8 @@ class _PlankyDiagnosticBase(Mission):
     clips_initial_start: int = Field(default=99999)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
+    clips_align_all_neutral: bool = Field(default=False)
+    clips_align_unlimited_targets: bool = Field(default=False)
 
     def configure_env(self, cfg: MettaGridConfig) -> None:
         """Hook for per-mission environment customization."""
@@ -142,6 +109,8 @@ class _PlankyDiagnosticBase(Mission):
         self.clips.initial_clips_start = self.clips_initial_start
         self.clips.scramble_start = self.clips_scramble_start
         self.clips.align_start = self.clips_align_start
+        self.clips.align_all_neutral = self.clips_align_all_neutral
+        self.clips.align_unlimited_targets = self.clips_align_unlimited_targets
 
         try:
             cfg = super().make_env()
@@ -267,9 +236,8 @@ class PlankyScramblerTarget(_PlankyDiagnosticBase):
     clips_align_start: int = Field(default=1)
     clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
-
-    def configure_env(self, cfg: MettaGridConfig) -> None:
-        _force_neutral_to_clips_without_proximity(cfg)
+    clips_align_all_neutral: bool = Field(default=True)
+    clips_align_unlimited_targets: bool = Field(default=True)
 
 
 # ==============================================================================
@@ -367,9 +335,8 @@ class PlankyScramblerFullCycle(_PlankyDiagnosticBase):
     clips_align_start: int = Field(default=1)
     clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
-
-    def configure_env(self, cfg: MettaGridConfig) -> None:
-        _force_neutral_to_clips_without_proximity(cfg)
+    clips_align_all_neutral: bool = Field(default=True)
+    clips_align_unlimited_targets: bool = Field(default=True)
 
 
 class PlankyResourceChain(_PlankyDiagnosticBase):
@@ -417,9 +384,8 @@ class PlankyScramblerRecovery(_PlankyDiagnosticBase):
     clips_align_start: int = Field(default=1)
     clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
-
-    def configure_env(self, cfg: MettaGridConfig) -> None:
-        _force_neutral_to_clips_without_proximity(cfg)
+    clips_align_all_neutral: bool = Field(default=True)
+    clips_align_unlimited_targets: bool = Field(default=True)
 
 
 # ==============================================================================
