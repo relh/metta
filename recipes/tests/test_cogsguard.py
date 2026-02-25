@@ -224,6 +224,8 @@ def test_train_does_not_enable_teacher_by_default() -> None:
     assert not tool.trainer.losses.has_loss("teacher_led")
     assert not tool.trainer.losses.has_loss("student_led")
     assert tool.scheduler is None
+    assert tool.stats_reporter.progress_metric == "env_game/cogs/aligned.junction.held"
+    assert "env_game/cogs/aligned.junction.held" in tool.stats_reporter.default_zero_metrics
 
 
 def test_train_sweep_mode_uses_best_auc_routed_adapter_defaults() -> None:
@@ -249,6 +251,7 @@ def test_sweep_sweeps_hypers_and_fixes_variants_and_timesteps() -> None:
 
     assert space["variants"] == ["milestones", "credit", "penalize_vibe_change"]
     assert space["trainer.total_timesteps"] == 3_000_000_000
+    assert tool.protein_metric == "env_game/cogs/aligned.junction.held"
 
     # Ensure we sweep PPO/training hypers rather than the environment variants.
     assert isinstance(space["trainer.optimizer.learning_rate"], ParameterConfig)

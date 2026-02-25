@@ -32,7 +32,7 @@ from mettagrid.config.mettagrid_config import MettaGridConfig
 
 _PERFORMANCE_REGISTRY: dict[str, "PerformanceProgress"] = {}
 
-JUNCTION_HELD_STAT = "env_team/cogs/aligned.junction.held"
+JUNCTION_HELD_STAT = "env_game/cogs/aligned.junction.held"
 
 
 class PerformanceProgress(ABC):
