@@ -1,0 +1,22 @@
+name: "Stable Release Hourly"
+
+on:
+  schedule:
+    # Run hourly
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: stable-release-hourly
+  cancel-in-progress: false
+
+jobs:
+  stable-release-hourly:
+    permissions:
+      contents: write # Needed to create tags and push to stable branch
+      id-token: write # Needed for AWS OIDC authentication
+    uses: ./.github/workflows/_stable-release-run.yml
+    secrets: inherit
+    with:
+      check_groups: live_tests_light,live_tests_heavy
+      logs_artifact_name: runner-logs-public-checks

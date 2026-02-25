@@ -1,0 +1,23 @@
+name: "Stable Release Nightly"
+
+on:
+  schedule:
+    # Run daily at 2:00 AM UTC
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      check_groups:
+        description: "Optional check group filter, e.g. live_tests_light"
+        required: false
+        type: string
+
+jobs:
+  stable-release-nightly:
+    permissions:
+      contents: write # Needed to create tags and push to stable branch
+      id-token: write # Needed for AWS OIDC authentication
+    uses: ./.github/workflows/_stable-release-run.yml
+    secrets: inherit
+    with:
+      check_groups: ${{ github.event.inputs.check_groups || '' }}
+      logs_artifact_name: runner-logs
