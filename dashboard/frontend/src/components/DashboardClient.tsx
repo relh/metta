@@ -155,6 +155,12 @@ function parseDashboardTab(value: string | null): DashboardTab | null {
   return DASHBOARD_TABS.includes(normalized as DashboardTab) ? (normalized as DashboardTab) : null
 }
 
+function isTypingContextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tagName = target.tagName
+  return target.isContentEditable || tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT'
+}
+
 function browserLocalStorage(): Storage | null {
   if (typeof window === 'undefined') return null
   const localStorage = (window as Window & { localStorage?: unknown }).localStorage as Partial<Storage> | undefined
@@ -935,10 +941,12 @@ export function DashboardClient() {
   const [tagQuery, setTagQuery] = useState('')
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [overviewReplayMode, setOverviewReplayMode] = useState<ReplaySpotlightMode>('selected')
+  const [isReplayTheaterMode, setIsReplayTheaterMode] = useState(false)
   const [overviewTrendMetric, setOverviewTrendMetric] = useState<OverviewTrendMetric>('reward')
   const [autoCommandCopied, setAutoCommandCopied] = useState(false)
   const [episodeSort, setEpisodeSort] = useState<EpisodeSortKey>('reward')
   const [episodeSortDir, setEpisodeSortDir] = useState<SortDir>('desc')
+  const replaySpotlightContainerRef = useRef<HTMLDivElement | null>(null)
 
   const [selectedTrendMetric, setSelectedTrendMetric] = useState('score')
   const [showAnalysis, setShowAnalysis] = useState(true)
@@ -1254,6 +1262,51 @@ export function DashboardClient() {
       selected: mettascopeUrl,
     }
   }, [replaySpotlightEpisode?.replay_url])
+  const replayKeyboardShortcutsEnabled = activeTab === 'overview' && Boolean(replaySpotlightUrls.selected)
+
+  const toggleReplayTheaterMode = useCallback(() => {
+    setIsReplayTheaterMode((current) => !current)
+  }, [])
+
+  const toggleReplayFullscreen = useCallback(() => {
+    if (typeof document === 'undefined') return
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+      return
+    }
+    const container = replaySpotlightContainerRef.current
+    if (!container || typeof container.requestFullscreen !== 'function') return
+    void container.requestFullscreen()
+  }, [])
+
+  useEffect(() => {
+    if (replayKeyboardShortcutsEnabled) return
+    setIsReplayTheaterMode(false)
+  }, [replayKeyboardShortcutsEnabled])
+
+  useEffect(() => {
+    if (!replayKeyboardShortcutsEnabled || typeof window === 'undefined') return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.repeat) return
+      if (isTypingContextTarget(event.target)) return
+      const key = event.key.toLowerCase()
+      if (key === 't') {
+        event.preventDefault()
+        toggleReplayTheaterMode()
+        return
+      }
+      if (key === 'f') {
+        event.preventDefault()
+        toggleReplayFullscreen()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [replayKeyboardShortcutsEnabled, toggleReplayFullscreen, toggleReplayTheaterMode])
 
   const replaySpotlightFocusStep = useMemo(
     () => estimateReplayFocusStep(replaySpotlightEpisode),
@@ -1938,13 +1991,20 @@ export function DashboardClient() {
                   ) : (
                     <>
                       <div
+                        ref={replaySpotlightContainerRef}
+                        data-testid="replay-spotlight-shell"
+                        data-theater-mode={isReplayTheaterMode ? 'on' : 'off'}
                         style={{
-                          width: '100%',
+                          width: isReplayTheaterMode ? 'calc(100vw - 24px)' : '100%',
+                          maxWidth: isReplayTheaterMode ? 'calc(100vw - 24px)' : '100%',
+                          marginLeft: isReplayTheaterMode ? '50%' : undefined,
+                          transform: isReplayTheaterMode ? 'translateX(-50%)' : undefined,
                           border: '1px solid var(--line)',
                           borderRadius: 10,
                           overflow: 'hidden',
                           background: '#000',
-                          minHeight: 360,
+                          minHeight: isReplayTheaterMode ? 0 : 360,
+                          aspectRatio: isReplayTheaterMode ? '16 / 9' : undefined,
                         }}
                       >
                         {replaySpotlightUrls.selected ? (
@@ -1954,7 +2014,7 @@ export function DashboardClient() {
                             }
                             src={replaySpotlightUrls.selected}
                             title="Replay spotlight"
-                            style={{ width: '100%', height: 420, border: 0 }}
+                            style={{ width: '100%', height: isReplayTheaterMode ? '100%' : 420, border: 0 }}
                             loading="lazy"
                             allowFullScreen
                           />
@@ -1978,6 +2038,10 @@ export function DashboardClient() {
                             <option value="best">best reward with replay</option>
                           </select>
                         </label>
+                        <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                          Shortcuts: <code>t</code> theater ({isReplayTheaterMode ? 'on' : 'off'}) · <code>f</code>{' '}
+                          fullscreen
+                        </p>
                       </div>
                       <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
                         Episode: <code>{replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : '-'}</code>{' '}
