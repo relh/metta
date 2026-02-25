@@ -12,7 +12,7 @@ from cogames.cogs_vs_clips.variants import NoClipsVariant
 GameFactory = Callable[[int, int], MettaGridConfig]
 
 
-def make_cogsguard_env(seed: int, num_agents: int, max_steps: int = 1000) -> MettaGridConfig:
+def make_cogsguard_env(seed: int, num_agents: int, max_steps: int = 10000) -> MettaGridConfig:
     mission = make_cogsguard_mission(num_agents=num_agents, max_steps=max_steps)
     env = mission.make_env()
     env.game.map_builder.seed = seed  # type: ignore
