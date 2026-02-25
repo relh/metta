@@ -629,6 +629,11 @@ export const SkillTreePanel: FC<{
     capability: CapabilityCard,
     { treeCard = false, compact = false }: { treeCard?: boolean; compact?: boolean } = {}
   ) => {
+    const isSummaryEvidence = (entry: string) => entry.startsWith('training source:') || entry.startsWith('score:')
+    const summaryEvidence = capability.evidence.filter(isSummaryEvidence)
+    const summaryEvidenceLine = summaryEvidence.join(' · ')
+    const detailEvidence = capability.evidence.filter((entry) => !isSummaryEvidence(entry))
+
     return (
       <article
         key={capability.id}
@@ -658,7 +663,12 @@ export const SkillTreePanel: FC<{
         </div>
 
         <div className="capability-evidence">
-          {capability.evidence.map((entry) => (
+          {summaryEvidenceLine && (
+            <p className="capability-evidence-meta">
+              <code>{summaryEvidenceLine}</code>
+            </p>
+          )}
+          {detailEvidence.map((entry) => (
             <p key={`${capability.id}-${entry}`}>
               <code>{entry}</code>
             </p>

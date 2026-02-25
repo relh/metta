@@ -408,19 +408,42 @@ code {
 }
 
 .skill-controls {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 10px;
-  grid-template-columns: minmax(180px, 2fr) repeat(6, minmax(120px, 1fr));
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .capability-controls {
-  grid-template-columns: minmax(260px, 2fr) repeat(3, minmax(150px, 1fr));
+  flex-wrap: nowrap;
+}
+
+.capability-controls > * {
+  min-width: 0;
+}
+
+.capability-controls input {
+  width: 100%;
+  flex: 1 1 420px;
+  min-width: 260px;
+}
+
+.capability-controls select {
+  flex: 0 0 auto;
+  min-width: 110px;
 }
 
 .skill-view-toggle {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: inline-flex;
   gap: 8px;
+  flex: 0 0 auto;
+}
+
+.skill-view-toggle button {
+  width: auto;
+  white-space: nowrap;
+  padding: 8px 10px;
 }
 
 .capability-grid {
@@ -552,7 +575,7 @@ code {
 .capability-indicator-row {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .capability-indicator {
@@ -573,7 +596,7 @@ code {
 }
 
 .capability-indicator-trained {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 
 .capability-evidence {
@@ -584,6 +607,17 @@ code {
 .capability-evidence p {
   margin: 0;
   font-size: 12px;
+}
+
+.capability-evidence-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.capability-evidence-meta code {
+  white-space: nowrap;
 }
 
 .capability-evidence code {
@@ -639,10 +673,8 @@ code {
   border-color: var(--indicator-no-border);
 }
 
-.skill-controls input,
-.skill-controls select,
-.skill-controls button {
-  width: 100%;
+.capability-controls :is(select, button) {
+  width: auto;
 }
 
 .badge {
@@ -862,12 +894,18 @@ code {
 }
 
 @media (max-width: 1100px) {
-  .skill-controls {
-    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  .capability-controls {
+    flex-wrap: wrap;
   }
 
-  .capability-controls {
-    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  .capability-controls input {
+    flex: 1 1 100%;
+    min-width: 220px;
+  }
+
+  .capability-controls select {
+    flex: 1 1 160px;
+    min-width: 0;
   }
 
   .role-grid {
@@ -876,6 +914,36 @@ code {
 }
 
 @media (max-width: 700px) {
+  .capability-indicator-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .capability-indicator-trained {
+    grid-column: 1 / -1;
+  }
+
+  .capability-evidence-meta {
+    flex-wrap: wrap;
+  }
+
+  .capability-evidence-meta code {
+    white-space: pre-wrap;
+  }
+
+  .capability-controls select,
+  .capability-controls .skill-view-toggle {
+    flex: 1 1 100%;
+  }
+
+  .skill-view-toggle {
+    width: 100%;
+  }
+
+  .skill-view-toggle button {
+    flex: 1 1 0;
+    width: 100%;
+  }
+
   .role-grid {
     grid-template-columns: 1fr;
   }
