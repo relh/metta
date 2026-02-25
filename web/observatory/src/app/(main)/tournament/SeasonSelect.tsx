@@ -6,6 +6,7 @@ import { Button } from '@/components/Button'
 import { Select } from '@/components/Select'
 import type { SeasonSummary, SeasonVersionInfo } from '@/lib/api'
 import { seasonTabModeForName, type SeasonTabMode } from '@/lib/tournament/tabMode'
+import { parseDatetime } from '@/utils/datetime'
 
 type SeasonOption = { value: string; label: string }
 type VersionOption = { value: number; label: string; canonical: boolean }
@@ -36,6 +37,22 @@ const parseSeasonRef = (seasonRef: string | null) => {
 
 const formatSeasonRef = (name: string, version: number | null, canonical: boolean) =>
   version && !canonical ? `${name}:v${version}` : name
+
+const formatSeasonVersionLabel = (version: SeasonVersionInfo): string => {
+  const createdAt = parseDatetime(version.created_at)
+  if (!createdAt) {
+    return version.canonical ? `Season ${version.version} (current)` : `Season ${version.version}`
+  }
+
+  const dateLabel = createdAt.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  })
+  const timeLabel = createdAt.toLocaleTimeString(undefined, { hour: 'numeric' }).toLowerCase()
+  const seasonLabel = `${dateLabel}, ${timeLabel} season`
+  return version.canonical ? `${seasonLabel} (current)` : seasonLabel
+}
 
 export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   const seasonRef = useSelectedLayoutSegment()
@@ -226,7 +243,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
         .map((v) => ({
           value: v.version,
           canonical: v.canonical,
-          label: v.canonical ? `v${v.version} (current)` : `v${v.version}`,
+          label: formatSeasonVersionLabel(v),
         })),
     [versions]
   )

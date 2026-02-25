@@ -35,9 +35,13 @@ type ChartPointCustom = {
   policyId: string
   policyLabel: string
   stageLabel: string
+  rawMean: number | null
+  percentile: number | null
   stddev: number | null
   matches: number
 }
+
+type ScoreMode = 'percentile' | 'raw'
 
 const formatScore = (value: number | null | undefined, digits: number = 4): string => {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -50,6 +54,7 @@ const escapeHtml = (value: string): string =>
   value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 
 export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages, series }) => {
+  const [scoreMode, setScoreMode] = useState<ScoreMode>('percentile')
   const [hoveredPolicyId, setHoveredPolicyId] = useState<string | null>(null)
 
   const stageLabelByKey = useMemo(() => new Map(stages.map((stage) => [stage.key, stage.label] as const)), [stages])
@@ -64,7 +69,55 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
       ? hoveredPolicyId
       : (focusedPolicyIds[0] ?? null)
 
+  const percentileByStageAndPolicy = useMemo(() => {
+    const byStage = new Map<string, Map<string, number>>()
+    for (const [stageIndex, stage] of stages.entries()) {
+      const stageValues: Array<{ policyId: string; value: number }> = []
+      for (const policy of series) {
+        const value = policy.points[stageIndex]?.mean
+        if (value === null || value === undefined || Number.isNaN(value)) {
+          continue
+        }
+        stageValues.push({ policyId: policy.policyId, value })
+      }
+
+      if (stageValues.length === 0) {
+        byStage.set(stage.key, new Map())
+        continue
+      }
+
+      const percentiles = new Map<string, number>()
+      if (stageValues.length === 1) {
+        percentiles.set(stageValues[0].policyId, 100)
+        byStage.set(stage.key, percentiles)
+        continue
+      }
+
+      stageValues.sort((left, right) => left.value - right.value)
+      let start = 0
+      while (start < stageValues.length) {
+        let end = start
+        while (end + 1 < stageValues.length && stageValues[end + 1].value === stageValues[start].value) {
+          end += 1
+        }
+        const rank = (start + end) / 2
+        const percentile = (rank / (stageValues.length - 1)) * 100
+        for (let index = start; index <= end; index += 1) {
+          percentiles.set(stageValues[index].policyId, percentile)
+        }
+        start = end + 1
+      }
+
+      byStage.set(stage.key, percentiles)
+    }
+    return byStage
+  }, [series, stages])
+
   const yDomain = useMemo<[number, number]>(() => {
+    if (scoreMode === 'percentile') {
+      return [0, 100]
+    }
+
     let minValue = Number.POSITIVE_INFINITY
     let maxValue = Number.NEGATIVE_INFINITY
 
@@ -97,9 +150,9 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
     }
 
     return [boundedLower, boundedUpper]
-  }, [series])
+  }, [scoreMode, series])
 
-  const yAxisDigits = yDomain[1] - yDomain[0] < 0.2 ? 3 : 2
+  const yAxisDigits = scoreMode === 'percentile' ? 0 : yDomain[1] - yDomain[0] < 0.2 ? 3 : 2
 
   const chartOptions = useMemo<Highcharts.Options>(() => {
     const chartSeries: Highcharts.SeriesOptionsType[] = []
@@ -118,11 +171,21 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
         name: policy.policyLabel,
         data: policy.points.map((point, stageIndex) => ({
           x: stageIndex,
-          y: point.mean,
+          y:
+            scoreMode === 'percentile'
+              ? point.mean === null
+                ? null
+                : (percentileByStageAndPolicy.get(point.stageKey)?.get(policy.policyId) ?? null)
+              : point.mean,
           custom: {
             policyId: policy.policyId,
             policyLabel: policy.policyLabel,
             stageLabel: stageLabelByKey.get(point.stageKey) ?? point.stageKey,
+            rawMean: point.mean,
+            percentile:
+              point.mean === null
+                ? null
+                : (percentileByStageAndPolicy.get(point.stageKey)?.get(policy.policyId) ?? null),
             stddev: point.stddev,
             matches: point.matches,
           } satisfies ChartPointCustom,
@@ -176,7 +239,7 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
         errorBarData.push([stageIndex, point.mean - point.stddev, point.mean + point.stddev])
       })
 
-      if (errorBarData.length > 0) {
+      if (scoreMode === 'raw' && errorBarData.length > 0) {
         chartSeries.push({
           type: 'errorbar',
           linkedTo: lineSeriesId,
@@ -202,9 +265,10 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
         animation: false,
         spacingTop: 14,
         spacingRight: 20,
-        spacingBottom: 8,
+        spacingBottom: 10,
         spacingLeft: 16,
         marginLeft: 72,
+        marginBottom: 52,
       },
       title: { text: undefined },
       credits: { enabled: false },
@@ -214,7 +278,7 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
         lineColor: 'var(--border-subtle)',
         tickColor: 'var(--border-subtle)',
         labels: {
-          y: 4,
+          y: 18,
           style: {
             color: 'var(--fg-muted)',
             fontSize: '12px',
@@ -223,7 +287,7 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
       },
       yAxis: {
         title: {
-          text: 'Score',
+          text: scoreMode === 'percentile' ? 'Percentile' : 'Raw score',
           margin: 18,
           style: {
             color: 'var(--fg-muted)',
@@ -240,7 +304,7 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
             fontSize: '12px',
           },
           formatter() {
-            return Number(this.value).toFixed(yAxisDigits)
+            return formatScore(Number(this.value), yAxisDigits)
           },
         },
       },
@@ -265,7 +329,8 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
             <div style="font-size:12px;color:var(--fg-muted);">${escapeHtml(custom.stageLabel)}</div>
             <div style="margin-top:4px;font-size:14px;font-weight:600;color:var(--fg);">${escapeHtml(custom.policyLabel)}</div>
             <div style="margin-top:4px;font-size:12px;color:var(--fg-muted);line-height:1.35;">
-              <div>Mean: <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;color:var(--fg);">${formatScore(this.y as number | null | undefined)}</span></div>
+              <div>Percentile: <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;color:var(--fg);">${formatScore(custom.percentile, 1)}</span></div>
+              <div>Raw mean: <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;color:var(--fg);">${formatScore(custom.rawMean)}</span></div>
               <div>Stddev: <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;color:var(--fg);">${custom.stddev === null ? 'n/a' : formatScore(custom.stddev)}</span></div>
               <div>Matches: <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;color:var(--fg);">${custom.matches}</span></div>
             </div>
@@ -294,6 +359,8 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
     activePolicyId,
     focusedPolicyIdSet,
     hasFocusedPolicies,
+    percentileByStageAndPolicy,
+    scoreMode,
     series,
     stageLabelByKey,
     stages,
@@ -308,7 +375,31 @@ export const PlayersStageScoreChart: FC<PlayersStageScoreChartProps> = ({ stages
 
   return (
     <div className="rounded-lg border border-border-subtle bg-surface-alt">
-      <div className="h-[400px] w-full" onMouseLeave={() => setHoveredPolicyId(null)}>
+      <div className="flex items-center justify-end gap-2 border-b border-border-subtle px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setScoreMode('percentile')}
+          aria-pressed={scoreMode === 'percentile'}
+          className={`rounded px-2 py-1 text-xs ${
+            scoreMode === 'percentile'
+              ? 'bg-indigo-600 text-white'
+              : 'bg-surface text-foreground-muted hover:text-foreground'
+          }`}
+        >
+          Percentile
+        </button>
+        <button
+          type="button"
+          onClick={() => setScoreMode('raw')}
+          aria-pressed={scoreMode === 'raw'}
+          className={`rounded px-2 py-1 text-xs ${
+            scoreMode === 'raw' ? 'bg-indigo-600 text-white' : 'bg-surface text-foreground-muted hover:text-foreground'
+          }`}
+        >
+          Raw score
+        </button>
+      </div>
+      <div className="h-[420px] w-full" onMouseLeave={() => setHoveredPolicyId(null)}>
         <HighchartsReact
           highcharts={Highcharts}
           options={chartOptions}
