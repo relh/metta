@@ -23,7 +23,7 @@ if ! check_cmd uv; then
     exit 1
 fi
 
-if ! uv run --project "$REPO_ROOT" --no-sync metta run githooks pre-push; then
+if ! uv run --project "$REPO_ROOT" --no-sync python -m metta.setup.metta_cli run githooks pre-push; then
     exit 1
 fi
 

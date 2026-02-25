@@ -312,12 +312,12 @@ def get_file_linters() -> list[FileLinter]:
         FileLinter(
             name="Python",
             format_cmds=(
-                ("uv", "run", "ruff", "check", "--fix", "--force-exclude"),
-                ("uv", "run", "ruff", "format", "--force-exclude"),
+                ("uv", "run", "--no-sync", "ruff", "check", "--fix", "--force-exclude"),
+                ("uv", "run", "--no-sync", "ruff", "format", "--force-exclude"),
             ),
             check_cmds=(
-                ("uv", "run", "ruff", "check", "--force-exclude"),
-                ("uv", "run", "ruff", "format", "--check", "--force-exclude"),
+                ("uv", "run", "--no-sync", "ruff", "check", "--force-exclude"),
+                ("uv", "run", "--no-sync", "ruff", "format", "--check", "--force-exclude"),
             ),
             extensions=(".py",),
         ),
@@ -388,12 +388,12 @@ def get_project_checks() -> list[ProjectCheck]:
     return [
         ProjectCheck(
             name="Pyright",
-            check_cmd=("uv", "run", "pyright", *CHECK_PYRIGHT_PACKAGES),
+            check_cmd=("uv", "run", "--no-sync", "pyright", *CHECK_PYRIGHT_PACKAGES),
             extensions=(".py",),
         ),
         ProjectCheck(
             name="Python Import Linter",
-            check_cmd=("env", "GRIMP_PURE_PYTHON=1", "uv", "run", "lint-imports"),
+            check_cmd=("env", "GRIMP_PURE_PYTHON=1", "uv", "run", "--no-sync", "lint-imports"),
             extensions=(".py",),
         ),
         ProjectCheck(

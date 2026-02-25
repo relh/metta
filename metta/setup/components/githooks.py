@@ -280,7 +280,7 @@ class GitHooksSetup(SetupModule):
         if push_mode == PushHookMode.NONE:
             sys.exit(0)
 
-        lint_cmd = ["uv", "run", "--no-sync", "python", "-m", "metta.setup.tools.code_formatters"]
+        lint_cmd = [sys.executable, "-m", "metta.setup.tools.code_formatters"]
         try:
             subprocess.run(lint_cmd, cwd=self.repo_root, check=True)
         except subprocess.CalledProcessError as e:
@@ -310,7 +310,7 @@ class GitHooksSetup(SetupModule):
         if not staged_files:
             sys.exit(0)
 
-        lint_cmd = ["uv", "run", "--no-sync", "python", "-m", "metta.setup.tools.code_formatters", "--staged"]
+        lint_cmd = [sys.executable, "-m", "metta.setup.tools.code_formatters", "--staged"]
         if hook_mode == CommitHookMode.FIX:
             lint_cmd.append("--fix")
 
