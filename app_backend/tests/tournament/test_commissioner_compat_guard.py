@@ -81,13 +81,26 @@ async def _run_n_iterations(
 
 
 @pytest.mark.asyncio
-async def test_server_compat_mismatch_skips_cycle():
-    """Season requires 0.4 but server has 0.3 installed — skip to avoid incompatible env configs."""
+async def test_server_compat_mismatch_exits():
     commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(compat_version="0.4")
-    _, mock_run_cycle, sleep_while_in_db = await _run_n_iterations(commissioner, 1, season=season, server_compat="0.3")
-    mock_run_cycle.assert_not_called()
-    assert sleep_while_in_db == [False]
+    commissioner.season_id = season.id
+
+    @asynccontextmanager
+    async def fake_db_session(*_, **__):
+        yield MagicMock()
+
+    with (
+        patch.object(commissioner, "_ensure_season_exists", new_callable=AsyncMock),
+        patch.object(commissioner, "_resolve_target_season", new_callable=AsyncMock, return_value=season),
+        patch.object(commissioner, "_run_cycle", new_callable=AsyncMock, return_value=False) as mock_run_cycle,
+        patch("metta.app_backend.tournament.commissioners.base.db_session", fake_db_session),
+        patch("metta.app_backend.tournament.commissioners.base.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        patch("metta.app_backend.tournament.commissioners.base.get_compat_version", return_value="0.3"),
+    ):
+        await commissioner.run()
+        mock_run_cycle.assert_not_called()
+        mock_sleep.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -107,9 +120,23 @@ async def test_compat_none_runs_cycle():
 
 
 @pytest.mark.asyncio
-async def test_disabled_season_sleeps_outside_db_session():
+async def test_disabled_season_exits():
     commissioner = _StubCommissioner(season_id=uuid4())
     season = _make_season(disabled_at=datetime.now(UTC))
-    _, mock_run_cycle, sleep_while_in_db = await _run_n_iterations(commissioner, 1, season=season)
-    mock_run_cycle.assert_not_called()
-    assert sleep_while_in_db == [False]
+    commissioner.season_id = season.id
+
+    @asynccontextmanager
+    async def fake_db_session(*_, **__):
+        yield MagicMock()
+
+    with (
+        patch.object(commissioner, "_ensure_season_exists", new_callable=AsyncMock),
+        patch.object(commissioner, "_resolve_target_season", new_callable=AsyncMock, return_value=season),
+        patch.object(commissioner, "_run_cycle", new_callable=AsyncMock, return_value=False) as mock_run_cycle,
+        patch("metta.app_backend.tournament.commissioners.base.db_session", fake_db_session),
+        patch("metta.app_backend.tournament.commissioners.base.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        patch("metta.app_backend.tournament.commissioners.base.get_compat_version", return_value="0.3"),
+    ):
+        await commissioner.run()
+        mock_run_cycle.assert_not_called()
+        mock_sleep.assert_not_called()

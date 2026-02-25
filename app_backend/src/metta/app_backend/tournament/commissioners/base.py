@@ -162,28 +162,22 @@ class CommissionerBase(ABC):
             f"(initial_compat={self.initial_compat_version}, rss={_rss_mb()})"
         )
         while True:
-            sleep_seconds: float | None = None
             async with db_session(read_only=True):
                 season = await self._resolve_target_season()
                 if not season:
                     raise ValueError(f"Bound season '{self.season_id}' no longer exists")
                 if season.disabled_at is not None:
-                    logger.info(f"Season '{self.season_name}' is disabled, sleeping")
-                    sleep_seconds = POLL_INTERVAL_SECONDS * 100
-                else:
-                    season_compat_version = season.compat_version
-                    server_compat_version = get_compat_version()
-                    if season_compat_version is not None and season_compat_version != server_compat_version:
-                        logger.warning(
-                            f"[{self.season_name}] season compat {season_compat_version} != "
-                            f"server compat {server_compat_version} — game envs would be "
-                            f"incompatible with episode-runner:compat-v{season_compat_version}, sleeping"
-                        )
-                        sleep_seconds = POLL_INTERVAL_SECONDS * 100
-
-            if sleep_seconds is not None:
-                await asyncio.sleep(sleep_seconds)
-                continue
+                    logger.info(f"Season '{self.season_name}' is disabled, exiting commissioner")
+                    return
+                season_compat_version = season.compat_version
+                server_compat_version = get_compat_version()
+                if season_compat_version is not None and season_compat_version != server_compat_version:
+                    logger.warning(
+                        f"[{self.season_name}] season compat {season_compat_version} != "
+                        f"server compat {server_compat_version} — game envs would be "
+                        f"incompatible with episode-runner:compat-v{season_compat_version}, exiting commissioner"
+                    )
+                    return
 
             had_activity = False
             start = time.monotonic()
