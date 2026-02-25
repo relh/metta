@@ -166,6 +166,10 @@ function slug(value: string): string {
   return normalized.replace(/^-+|-+$/g, '') || 'scenario'
 }
 
+function sourceClassName(source: CapabilitySource): string {
+  return source.replace(/_/g, '-')
+}
+
 function inferAxisFromText(value: string): DiagnoseAxis {
   const text = value.toLowerCase()
   if (
@@ -528,6 +532,7 @@ export const SkillTreePanel: FC<{
   const [evalFilter, setEvalFilter] = useState<IndicatorFilter>('all')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [viewMode, setViewMode] = useState<CapabilityViewMode>('tree')
+  const [collapsedBranches, setCollapsedBranches] = useState<Record<string, boolean>>({})
 
   const capabilities = useMemo(
     () => buildCapabilityCards(data, diagnoseNote, diagnoseManifest),
@@ -637,7 +642,7 @@ export const SkillTreePanel: FC<{
     return (
       <article
         key={capability.id}
-        className={`card capability-card${treeCard ? ' capability-tree-card' : ''}${compact ? ' capability-card-compact' : ''}`}
+        className={`card capability-card capability-card-source-${sourceClassName(capability.source)} capability-card-eval-${capability.eval}${treeCard ? ' capability-tree-card' : ''}${compact ? ' capability-card-compact' : ''}`}
       >
         <div className="capability-card-head">
           <h3 style={{ margin: 0 }}>{capability.title}</h3>
@@ -678,17 +683,30 @@ export const SkillTreePanel: FC<{
     )
   }
 
+  const isBranchCollapsed = (branchKey: string): boolean => collapsedBranches[branchKey] === true
+  const toggleBranch = (branchKey: string) => {
+    setCollapsedBranches((prev) => ({ ...prev, [branchKey]: !prev[branchKey] }))
+  }
+
   const renderCapabilityTreeNode = (nodeId: string) => {
     const capability = treeCapabilityById.get(nodeId)
     if (!capability) return null
     const dependencies = (CAPABILITY_DEPENDENCY_GRAPH[nodeId] ?? []).filter((childId) =>
       treeCapabilityById.has(childId)
     )
+    const branchKey = `core:${nodeId}`
+    const collapsed = isBranchCollapsed(branchKey)
 
     return (
       <li key={nodeId} className="capability-tree-node">
         {renderCapabilityCard(capability, { treeCard: true, compact: true })}
         {dependencies.length > 0 && (
+          <button type="button" className="capability-branch-toggle" onClick={() => toggleBranch(branchKey)}>
+            {collapsed ? 'Expand' : 'Collapse'} {dependencies.length}{' '}
+            {dependencies.length === 1 ? 'dependency' : 'dependencies'}
+          </button>
+        )}
+        {dependencies.length > 0 && !collapsed && (
           <ul className="capability-tree-children">
             {dependencies.map((childId) => renderCapabilityTreeNode(childId))}
           </ul>
@@ -779,85 +797,142 @@ export const SkillTreePanel: FC<{
             operational signals.
           </p>
 
-          <article className="card grid" style={{ gap: 10 }}>
-            <h3 style={{ margin: 0 }}>Core Ability Dependency Subtree</h3>
-            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-              Root skill depends on child skills; cards include score, training status, and evidence.
-            </p>
-            {filteredCapabilityEval.length === 0 ? (
-              <p style={{ margin: 0 }}>No capability-eval nodes match current filters.</p>
-            ) : (
-              <ul className="capability-tree">{treeRootIds.map((rootId) => renderCapabilityTreeNode(rootId))}</ul>
-            )}
-          </article>
+          <div className="capability-tech-columns">
+            <article className="card grid capability-tech-lane capability-tech-lane-core" style={{ gap: 10 }}>
+              <h3 style={{ margin: 0 }}>Core Ability Dependency Subtree</h3>
+              <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+                Root skill depends on child skills; cards include score, training status, and evidence.
+              </p>
+              {filteredCapabilityEval.length === 0 ? (
+                <p style={{ margin: 0 }}>No capability-eval nodes match current filters.</p>
+              ) : (
+                <ul className="capability-tree capability-tree-forest">
+                  {treeRootIds.map((rootId) => renderCapabilityTreeNode(rootId))}
+                </ul>
+              )}
+            </article>
 
-          <article className="card grid" style={{ gap: 10 }}>
-            <h3 style={{ margin: 0 }}>Diagnose Evidence Subtrees</h3>
-            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-              Axis-organized tree including diagnose axis, probe, and symptom tiles.
-            </p>
-            {filteredDiagnoseByAxis.length === 0 ? (
-              <p style={{ margin: 0 }}>No diagnose evidence tiles match current filters.</p>
-            ) : (
-              <ul className="capability-tree capability-tree-forest">
-                {filteredDiagnoseByAxis.map((group) => (
-                  <li key={group.axis} className="capability-tree-node">
-                    <div className="capability-tree-hub capability-tree-hub-axis">
-                      <strong>{AXIS_LABEL[group.axis]}</strong>
-                      <span>{group.axisCards.length + group.probeCards.length + group.symptomCards.length} tiles</span>
-                    </div>
-                    <ul className="capability-tree-children">
-                      {group.axisCards.map((capability) => (
-                        <li key={capability.id} className="capability-tree-node">
-                          {renderCapabilityCard(capability, { treeCard: true, compact: true })}
-                        </li>
-                      ))}
-                      {group.probeCards.length > 0 && (
-                        <li className="capability-tree-node">
-                          <div className="capability-tree-hub capability-tree-hub-group">
-                            <strong>Probe Checks</strong>
-                            <span>{group.probeCards.length}</span>
-                          </div>
-                          {renderCardLeaves(group.probeCards)}
-                        </li>
-                      )}
-                      {group.symptomCards.length > 0 && (
-                        <li className="capability-tree-node">
-                          <div className="capability-tree-hub capability-tree-hub-group">
-                            <strong>Symptoms</strong>
-                            <span>{group.symptomCards.length}</span>
-                          </div>
-                          {renderCardLeaves(group.symptomCards)}
-                        </li>
-                      )}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
+            <article className="card grid capability-tech-lane capability-tech-lane-diagnose" style={{ gap: 10 }}>
+              <h3 style={{ margin: 0 }}>Diagnose Evidence Subtrees</h3>
+              <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+                Axis-organized tree including diagnose axis, probe, and symptom tiles.
+              </p>
+              {filteredDiagnoseByAxis.length === 0 ? (
+                <p style={{ margin: 0 }}>No diagnose evidence tiles match current filters.</p>
+              ) : (
+                <ul className="capability-tree capability-tree-forest">
+                  {filteredDiagnoseByAxis.map((group) => {
+                    const axisBranchKey = `diagnose:${group.axis}`
+                    const probesBranchKey = `diagnose:${group.axis}:probes`
+                    const symptomsBranchKey = `diagnose:${group.axis}:symptoms`
+                    const axisCollapsed = isBranchCollapsed(axisBranchKey)
+                    const probesCollapsed = isBranchCollapsed(probesBranchKey)
+                    const symptomsCollapsed = isBranchCollapsed(symptomsBranchKey)
 
-          <article className="card grid" style={{ gap: 10 }}>
-            <h3 style={{ margin: 0 }}>Operational Signal Subtrees</h3>
-            <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-              Source-grouped tree for instrumentation checks, KPI diagnostics, and behavior slices.
-            </p>
-            {filteredSignalGroups.length === 0 ? (
-              <p style={{ margin: 0 }}>No operational signal tiles match current filters.</p>
-            ) : (
-              <ul className="capability-tree capability-tree-forest">
-                {filteredSignalGroups.map((group) => (
-                  <li key={group.source} className="capability-tree-node">
-                    <div className="capability-tree-hub capability-tree-hub-source">
-                      <strong>{SOURCE_LABEL[group.source]}</strong>
-                      <span>{group.cards.length} tiles</span>
-                    </div>
-                    {renderCardLeaves(group.cards)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
+                    return (
+                      <li key={group.axis} className="capability-tree-node">
+                        <div className="capability-tree-hub capability-tree-hub-axis capability-tree-hub-interactive">
+                          <div className="capability-tree-hub-meta">
+                            <strong>{AXIS_LABEL[group.axis]}</strong>
+                            <span>
+                              {group.axisCards.length + group.probeCards.length + group.symptomCards.length} tiles
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="capability-branch-toggle"
+                            onClick={() => toggleBranch(axisBranchKey)}
+                          >
+                            {axisCollapsed ? 'Expand' : 'Collapse'}
+                          </button>
+                        </div>
+                        {!axisCollapsed && (
+                          <ul className="capability-tree-children">
+                            {group.axisCards.map((capability) => (
+                              <li key={capability.id} className="capability-tree-node">
+                                {renderCapabilityCard(capability, { treeCard: true, compact: true })}
+                              </li>
+                            ))}
+                            {group.probeCards.length > 0 && (
+                              <li className="capability-tree-node">
+                                <div className="capability-tree-hub capability-tree-hub-group capability-tree-hub-interactive">
+                                  <div className="capability-tree-hub-meta">
+                                    <strong>Probe Checks</strong>
+                                    <span>{group.probeCards.length}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="capability-branch-toggle"
+                                    onClick={() => toggleBranch(probesBranchKey)}
+                                  >
+                                    {probesCollapsed ? 'Expand' : 'Collapse'}
+                                  </button>
+                                </div>
+                                {!probesCollapsed && renderCardLeaves(group.probeCards)}
+                              </li>
+                            )}
+                            {group.symptomCards.length > 0 && (
+                              <li className="capability-tree-node">
+                                <div className="capability-tree-hub capability-tree-hub-group capability-tree-hub-interactive">
+                                  <div className="capability-tree-hub-meta">
+                                    <strong>Symptoms</strong>
+                                    <span>{group.symptomCards.length}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="capability-branch-toggle"
+                                    onClick={() => toggleBranch(symptomsBranchKey)}
+                                  >
+                                    {symptomsCollapsed ? 'Expand' : 'Collapse'}
+                                  </button>
+                                </div>
+                                {!symptomsCollapsed && renderCardLeaves(group.symptomCards)}
+                              </li>
+                            )}
+                          </ul>
+                        )}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </article>
+
+            <article className="card grid capability-tech-lane capability-tech-lane-signals" style={{ gap: 10 }}>
+              <h3 style={{ margin: 0 }}>Operational Signal Subtrees</h3>
+              <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+                Source-grouped tree for instrumentation checks, KPI diagnostics, and behavior slices.
+              </p>
+              {filteredSignalGroups.length === 0 ? (
+                <p style={{ margin: 0 }}>No operational signal tiles match current filters.</p>
+              ) : (
+                <ul className="capability-tree capability-tree-forest">
+                  {filteredSignalGroups.map((group) => {
+                    const branchKey = `signal:${group.source}`
+                    const collapsed = isBranchCollapsed(branchKey)
+                    return (
+                      <li key={group.source} className="capability-tree-node">
+                        <div className="capability-tree-hub capability-tree-hub-source capability-tree-hub-interactive">
+                          <div className="capability-tree-hub-meta">
+                            <strong>{SOURCE_LABEL[group.source]}</strong>
+                            <span>{group.cards.length} tiles</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="capability-branch-toggle"
+                            onClick={() => toggleBranch(branchKey)}
+                          >
+                            {collapsed ? 'Expand' : 'Collapse'}
+                          </button>
+                        </div>
+                        {!collapsed && renderCardLeaves(group.cards)}
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </article>
+          </div>
         </section>
       ) : (
         <section className="capability-grid">

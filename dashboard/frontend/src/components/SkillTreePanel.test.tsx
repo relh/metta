@@ -39,6 +39,15 @@ describe('SkillTreePanel', () => {
     ).toBeTruthy()
     expect(screen.getByText('Coordination')).toBeTruthy()
     expect(screen.getByText('Diagnose Axis: Stability')).toBeTruthy()
+    expect(screen.getByText('Mining')).toBeTruthy()
+
+    const collapseDependenciesButton = screen.getByRole('button', { name: 'Collapse 4 dependencies' })
+    fireEvent.click(collapseDependenciesButton)
+    expect(screen.queryByText('Mining')).toBeNull()
+
+    const expandDependenciesButton = screen.getByRole('button', { name: 'Expand 4 dependencies' })
+    fireEvent.click(expandDependenciesButton)
+    expect(screen.getByText('Mining')).toBeTruthy()
 
     const treeButton = screen.getByRole('button', { name: 'Tree' })
     const gridButton = screen.getByRole('button', { name: 'Grid' })

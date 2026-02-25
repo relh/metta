@@ -67,6 +67,22 @@
   --tree-hub-group-bg: #fff8e6;
   --tree-hub-ink: #4b617f;
   --tree-hub-strong-ink: #111827;
+  --tech-core-bg: #f3f8ff;
+  --tech-core-border: #cdddf7;
+  --tech-diagnose-bg: #f1fbf4;
+  --tech-diagnose-border: #cde8d5;
+  --tech-signals-bg: #fff8ed;
+  --tech-signals-border: #ecd8ba;
+  --tree-toggle-bg: #eef2ff;
+  --tree-toggle-border: #c7d2fe;
+  --tree-toggle-ink: #334155;
+  --capability-source-capability-eval: #2563eb;
+  --capability-source-cogames-axis: #0f766e;
+  --capability-source-cogames-probe: #0e7490;
+  --capability-source-cogames-symptom: #047857;
+  --capability-source-kpi-diagnostic: #ca8a04;
+  --capability-source-instrumentation: #7c3aed;
+  --capability-source-behavior-slice: #ea580c;
 }
 
 :root[data-theme='dark'] {
@@ -137,6 +153,22 @@
   --tree-hub-group-bg: #3a2a10;
   --tree-hub-ink: #bfd3f6;
   --tree-hub-strong-ink: #f3f4f6;
+  --tech-core-bg: #0f2038;
+  --tech-core-border: #2b4565;
+  --tech-diagnose-bg: #0f2f22;
+  --tech-diagnose-border: #1e5d43;
+  --tech-signals-bg: #3a2a10;
+  --tech-signals-border: #725318;
+  --tree-toggle-bg: #1e293b;
+  --tree-toggle-border: #334155;
+  --tree-toggle-ink: #dbeafe;
+  --capability-source-capability-eval: #60a5fa;
+  --capability-source-cogames-axis: #34d399;
+  --capability-source-cogames-probe: #22d3ee;
+  --capability-source-cogames-symptom: #6ee7b7;
+  --capability-source-kpi-diagnostic: #facc15;
+  --capability-source-instrumentation: #c4b5fd;
+  --capability-source-behavior-slice: #fb923c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -208,6 +240,22 @@
     --tree-hub-group-bg: #3a2a10;
     --tree-hub-ink: #bfd3f6;
     --tree-hub-strong-ink: #f3f4f6;
+    --tech-core-bg: #0f2038;
+    --tech-core-border: #2b4565;
+    --tech-diagnose-bg: #0f2f22;
+    --tech-diagnose-border: #1e5d43;
+    --tech-signals-bg: #3a2a10;
+    --tech-signals-border: #725318;
+    --tree-toggle-bg: #1e293b;
+    --tree-toggle-border: #334155;
+    --tree-toggle-ink: #dbeafe;
+    --capability-source-capability-eval: #60a5fa;
+    --capability-source-cogames-axis: #34d399;
+    --capability-source-cogames-probe: #22d3ee;
+    --capability-source-cogames-symptom: #6ee7b7;
+    --capability-source-kpi-diagnostic: #facc15;
+    --capability-source-instrumentation: #c4b5fd;
+    --capability-source-behavior-slice: #fb923c;
   }
 }
 
@@ -452,6 +500,32 @@ code {
   grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
 }
 
+.capability-tech-columns {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.capability-tech-lane {
+  min-width: 0;
+}
+
+.capability-tech-lane-core {
+  background: var(--tech-core-bg);
+  border-color: var(--tech-core-border);
+}
+
+.capability-tech-lane-diagnose {
+  background: var(--tech-diagnose-bg);
+  border-color: var(--tech-diagnose-border);
+}
+
+.capability-tech-lane-signals {
+  background: var(--tech-signals-bg);
+  border-color: var(--tech-signals-border);
+}
+
 .capability-tree {
   list-style: none;
   margin: 0;
@@ -482,6 +556,11 @@ code {
   color: var(--tree-hub-ink);
 }
 
+.capability-tree-hub-meta {
+  display: grid;
+  gap: 2px;
+}
+
 .capability-tree-hub strong {
   color: var(--tree-hub-strong-ink);
   font-size: 12px;
@@ -498,6 +577,25 @@ code {
 
 .capability-tree-hub-group {
   background: var(--tree-hub-group-bg);
+}
+
+.capability-tree-hub-interactive {
+  align-items: center;
+}
+
+.capability-branch-toggle {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  border-color: var(--tree-toggle-border);
+  background: var(--tree-toggle-bg);
+  color: var(--tree-toggle-ink);
+  white-space: nowrap;
+}
+
+.capability-branch-toggle:hover:not(:disabled) {
+  filter: brightness(0.96);
 }
 
 .capability-tree-card {
@@ -546,6 +644,51 @@ code {
   display: grid;
   gap: 10px;
   min-width: 0;
+  border-left: 4px solid var(--line-strong);
+}
+
+.capability-card-source-capability-eval {
+  border-left-color: var(--capability-source-capability-eval);
+}
+
+.capability-card-source-cogames-axis {
+  border-left-color: var(--capability-source-cogames-axis);
+}
+
+.capability-card-source-cogames-probe {
+  border-left-color: var(--capability-source-cogames-probe);
+}
+
+.capability-card-source-cogames-symptom {
+  border-left-color: var(--capability-source-cogames-symptom);
+}
+
+.capability-card-source-kpi-diagnostic {
+  border-left-color: var(--capability-source-kpi-diagnostic);
+}
+
+.capability-card-source-instrumentation {
+  border-left-color: var(--capability-source-instrumentation);
+}
+
+.capability-card-source-behavior-slice {
+  border-left-color: var(--capability-source-behavior-slice);
+}
+
+.capability-card-eval-yes {
+  box-shadow: 0 0 0 1px var(--indicator-yes-border);
+}
+
+.capability-card-eval-partial {
+  box-shadow: 0 0 0 1px var(--indicator-partial-border);
+}
+
+.capability-card-eval-no {
+  box-shadow: 0 0 0 1px var(--indicator-no-border);
+}
+
+.capability-card-eval-planned {
+  box-shadow: 0 0 0 1px var(--indicator-planned-border);
 }
 
 .capability-card-head {
@@ -894,6 +1037,10 @@ code {
 }
 
 @media (max-width: 1100px) {
+  .capability-tech-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .capability-controls {
     flex-wrap: wrap;
   }
@@ -914,6 +1061,10 @@ code {
 }
 
 @media (max-width: 700px) {
+  .capability-tech-columns {
+    grid-template-columns: 1fr;
+  }
+
   .capability-indicator-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
