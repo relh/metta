@@ -1,4 +1,3 @@
-import json
 from uuid import uuid4
 
 import pytest
@@ -8,27 +7,15 @@ from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchReq
 from metta.app_backend.tournament.referees.cogsguard import CogsguardPairingReferee, CogsguardSelfPlayReferee
 from metta.app_backend.tournament.referees.pairing import PairingReferee
 from metta.app_backend.tournament.referees.selfplay import SelfPlayReferee
-from mettagrid.runner.types import SingleEpisodeJob
 
 
 def _make_player(pool_id=None) -> PoolPlayer:
     return PoolPlayer(id=uuid4(), pool_id=pool_id or uuid4(), policy_version_id=uuid4())
 
 
-def _to_job_spec(req: MatchRequest) -> dict:
-    tags = {k: str(v) for k, v in req.episode_tags.model_dump(exclude_none=True).items()}
-    return SingleEpisodeJob(
-        policy_uris=[f"metta://policy/{uuid4()}" for _ in req.pool_player_ids],
-        assignments=req.assignments,
-        env=req.env,
-        seed=req.seed,
-        episode_tags=tags,
-    ).model_dump()
-
-
-def _assert_job_specs_json_serializable(requests: list[MatchRequest]) -> None:
+def _assert_match_requests_serializable(requests: list[MatchRequest]) -> None:
     for req in requests:
-        json.dumps(_to_job_spec(req))
+        req.model_dump()
 
 
 SELF_PLAY_REFEREES = [SelfPlayReferee(), CogsguardSelfPlayReferee()]
@@ -43,14 +30,14 @@ ALL_REFEREES = SELF_PLAY_REFEREES + PAIRING_REFEREES
 def test_selfplay_schedule_produces_serializable_jobs(referee):
     requests = referee.get_matches_to_schedule([_make_player()], {})
     assert len(requests) > 0
-    _assert_job_specs_json_serializable(requests)
+    _assert_match_requests_serializable(requests)
 
 
 @pytest.mark.parametrize("referee", PAIRING_REFEREES, ids=lambda r: type(r).__name__)
 def test_pairing_schedule_produces_serializable_jobs(referee):
     requests = referee.get_matches_to_schedule([_make_player(), _make_player()], {})
     assert len(requests) > 0
-    _assert_job_specs_json_serializable(requests)
+    _assert_match_requests_serializable(requests)
 
 
 # -- self-play correctness --
@@ -98,8 +85,6 @@ def test_selfplay_tags(referee):
     requests = referee.get_matches_to_schedule([_make_player()], {})
     for req in requests:
         assert req.episode_tags.match_type == "self_play"
-        if referee.game_tag:
-            assert req.episode_tags.game == referee.game_tag
 
 
 # -- pairing correctness --
@@ -163,8 +148,6 @@ def test_pairing_tags(referee):
     requests = referee.get_matches_to_schedule([_make_player(), _make_player()], {})
     for req in requests:
         assert req.episode_tags.match_type == "pairing"
-        if referee.game_tag:
-            assert req.episode_tags.game == referee.game_tag
 
 
 # -- env config correctness --

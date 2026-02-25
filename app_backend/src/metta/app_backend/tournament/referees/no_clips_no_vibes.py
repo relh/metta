@@ -25,7 +25,7 @@ def _make_no_clips_no_vibes_env(seed: int, num_agents: int) -> MettaGridConfig:
 
 class NoClipsNoVibesSelfPlayReferee(SelfPlayRefereeBase):
     num_agents: int = NUM_AGENTS
-    game_tag: str = "cogsguard_machina_1_no_clips_no_vibes"
+    env_name: str = "cogsguard_machina_1_no_clips_no_vibes_8agents"
     description: str = "Self-play matches on CogsGuard Machina1 (8 agents, clips and vibe changing disabled)"
 
     def make_env(self, seed: int) -> MettaGridConfig:
@@ -34,7 +34,7 @@ class NoClipsNoVibesSelfPlayReferee(SelfPlayRefereeBase):
 
 class NoClipsNoVibesPairingReferee(PairingRefereeBase):
     num_agents: int = NUM_AGENTS
-    game_tag: str = "cogsguard_machina_1_no_clips_no_vibes"
+    env_name: str = "cogsguard_machina_1_no_clips_no_vibes_8agents"
     match_configurations: list[list[int]] = [
         [0, 0, 1, 1, 1, 1, 1, 1],  # 2v6
         [0, 0, 0, 0, 0, 0, 1, 1],  # 6v2

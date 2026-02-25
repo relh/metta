@@ -16,7 +16,7 @@ def _make_env(seed: int, num_agents: int) -> MettaGridConfig:
 
 class CvcSelfPlayReferee(SelfPlayRefereeBase):
     num_agents: int = NUM_AGENTS
-    game_tag: str = "cogsguard_machina_1"
+    env_name: str = "cogsguard_machina_1_5agents"
     description: str = "Self-play matches on CogsGuard Machina1"
 
     def make_env(self, seed: int) -> MettaGridConfig:
@@ -25,7 +25,7 @@ class CvcSelfPlayReferee(SelfPlayRefereeBase):
 
 class CvcPairingReferee(PairingRefereeBase):
     num_agents: int = NUM_AGENTS
-    game_tag: str = "cogsguard_machina_1"
+    env_name: str = "cogsguard_machina_1_5agents"
     match_configurations: list[list[int]] = [
         [0, 1, 1, 1, 1],  # 1v4
         [0, 0, 0, 0, 1],  # 4v1

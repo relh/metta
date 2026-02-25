@@ -19,6 +19,7 @@ def make_cogsguard_env(seed: int, num_agents: int = 10, max_steps: int = 1000) -
 
 
 class GameEnvGenerator(BaseModel):
+    env_name: str = "cogsguard_8agents"
     num_agents: int = Field(default=8, description="Number of agents in the game environment")
 
     def make_env(self, seed: int) -> MettaGridConfig:

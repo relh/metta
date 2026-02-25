@@ -43,7 +43,7 @@ class EpisodeTags(BaseModel):
 class MatchRequest(BaseModel):
     pool_player_ids: list[UUID]
     assignments: list[int]
-    env: MettaGridConfig
+    map_seed: int
     episode_tags: EpisodeTags
     seed: int
     team_id: UUID | None = None
@@ -102,6 +102,8 @@ def compute_weighted_score_stddev(
 
 class RefereeBase(ABC):
     description: str = ""
+    env_name: str = ""
+    num_agents: int | None = None
     scorer: Scorer = WeightedScorer()
 
     @abstractmethod

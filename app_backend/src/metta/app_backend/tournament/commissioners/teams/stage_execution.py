@@ -102,9 +102,10 @@ class TeamStageExecutionMixin:
             return 0
 
         requests = referee.get_matches_to_schedule(active_players, match_counts, limit=slots)
+        self._require_pool_env_config(pool)
         total = 0
         for req in requests:
-            if await self._create_and_dispatch_match(pool.id, req, season.compat_version):
+            if await self._create_and_dispatch_match(pool, req):
                 total += 1
 
         return total

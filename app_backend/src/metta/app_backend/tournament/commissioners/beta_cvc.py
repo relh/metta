@@ -8,11 +8,13 @@ from metta.app_backend.tournament.referees.cvc import (
 
 class _CvcSelfPlayV2(CvcSelfPlayReferee):
     num_agents: int = 8
+    env_name: str = "cogsguard_machina_1_8agents"
     description: str = "Self-play matches on CogsGuard Machina1 (8 agents)"
 
 
 class _CvcPairingV2(CvcPairingReferee):
     num_agents: int = 8
+    env_name: str = "cogsguard_machina_1_8agents"
     match_configurations: list[list[int]] = [
         [0, 0, 1, 1, 1, 1, 1, 1],  # 2v6
         [0, 0, 0, 0, 0, 0, 1, 1],  # 6v2

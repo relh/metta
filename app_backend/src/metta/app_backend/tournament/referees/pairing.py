@@ -18,7 +18,6 @@ class PairingRefereeBase(RefereeBase):
     num_agents: int
     match_configurations: list[list[int]]
     matches_per_config: int = 5
-    game_tag: str | None = None
 
     def get_matches_to_schedule(
         self,
@@ -56,8 +55,8 @@ class PairingRefereeBase(RefereeBase):
             MatchRequest(
                 pool_player_ids=[pp1, pp2],
                 assignments=config,
-                env=self.make_env(seed + map_seed_offset),
-                episode_tags=EpisodeTags(match_type="pairing", game=self.game_tag, assignments=str(config)),
+                map_seed=seed + map_seed_offset,
+                episode_tags=EpisodeTags(match_type="pairing", game=self.env_name, assignments=str(config)),
                 seed=seed,
             )
             for _, pp1, pp2, config, map_seed_offset in pending
@@ -66,6 +65,7 @@ class PairingRefereeBase(RefereeBase):
 
 class PairingReferee(PairingRefereeBase):
     num_agents: int = 4
+    env_name: str = "cogsguard_4agents"
     match_configurations: list[list[int]] = [
         [0, 1, 1, 1],  # 1v3
         [0, 0, 0, 1],  # 3v1

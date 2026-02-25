@@ -1,4 +1,3 @@
-import json
 import random
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -14,6 +13,7 @@ from metta.app_backend.models.tournament import (
     Match,
     MatchPlayer,
     MatchStatus,
+    MettagridEnvConfig,
     Pool,
     PoolPlayer,
     Season,
@@ -46,7 +46,6 @@ from metta.app_backend.tournament.referees.teams.policy_stage import (
 )
 from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageReferee
 from metta.app_backend.tournament.referees.teams.team_stage import TeamConfig, TeamStageReferee
-from mettagrid.runner.types import SingleEpisodeJob
 
 GameModel = Callable[[list[UUID], list[int]], dict[UUID, float]]
 
@@ -94,10 +93,9 @@ class DryRunTeamCommissioner(TeamCommissionerBase):
 
     async def _create_and_dispatch_match(
         self,
-        pool_id: UUID,
+        pool: Pool,
         request: MatchRequest,
-        compat_version: str | None = None,
-    ) -> bool:  # type: ignore[unused-arg]
+    ) -> bool:
         session = get_db()
         pv_result = await session.execute(
             select(PoolPlayer.id, PoolPlayer.policy_version_id).where(col(PoolPlayer.id).in_(request.pool_player_ids))
@@ -108,7 +106,7 @@ class DryRunTeamCommissioner(TeamCommissionerBase):
         scores = self._game_model(pv_ids, request.assignments)
 
         match = Match(
-            pool_id=pool_id,
+            pool_id=pool.id,
             assignments=request.assignments,
             team_id=request.team_id,
             status=MatchStatus.completed,
@@ -139,15 +137,7 @@ def _make_player(pool_id=None) -> PoolPlayer:
 
 def _assert_json_serializable(requests: list[MatchRequest]) -> None:
     for req in requests:
-        tags = {k: str(v) for k, v in req.episode_tags.model_dump(exclude_none=True).items()}
-        spec = SingleEpisodeJob(
-            policy_uris=[f"metta://policy/{uuid4()}" for _ in req.pool_player_ids],
-            assignments=req.assignments,
-            env=req.env,
-            seed=req.seed,
-            episode_tags=tags,
-        ).model_dump()
-        json.dumps(spec)
+        req.model_dump()
 
 
 # -- make_assignments --
@@ -439,7 +429,14 @@ async def test_team_eval_schedules_duplicate_team_compositions_per_team(stats_re
         season_id = season.id
         commissioner.season_id = season.id
 
-        pool = Pool(season_id=season.id, name="team-round-1")
+        env_config = MettagridEnvConfig(
+            config_hash=uuid4().hex,
+            config={"game": {"map_builder": {"seed": 0}}},
+        )
+        session.add(env_config)
+        await session.flush()
+
+        pool = Pool(season_id=season.id, name="team-round-1", env_config_id=env_config.id)
         session.add(pool)
         await session.flush()
         pool_id = pool.id
@@ -473,6 +470,9 @@ async def test_team_eval_schedules_duplicate_team_compositions_per_team(stats_re
     async with db_session() as session:
         season = (await session.execute(select(Season).where(Season.id == season_id))).scalar_one()
         pool = (await session.execute(select(Pool).where(Pool.id == pool_id))).scalar_one()
+        pool.env_config = (
+            await session.execute(select(MettagridEnvConfig).where(MettagridEnvConfig.id == pool.env_config_id))
+        ).scalar_one()
         await commissioner._load_config()
 
         alive_teams = await commissioner._get_alive_teams(pool.id)

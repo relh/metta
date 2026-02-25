@@ -1,3 +1,4 @@
+import copy
 from datetime import UTC, datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal, Optional
@@ -9,6 +10,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, INTEGER, JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
 from metta.app_backend.models.policies import PolicyVersion
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
 if TYPE_CHECKING:
     from metta.app_backend.models.job_request import JobRequest
@@ -29,15 +31,42 @@ class MembershipAction(str, Enum):
 
 class MettagridEnvConfig(SQLModel, table=True):
     __tablename__ = "mettagrid_env_configs"  # type: ignore[assignment]
+    __table_args__ = (
+        Index(
+            "idx_env_configs_name_compat",
+            "name",
+            "compat_version",
+            unique=True,
+            postgresql_where=text("name IS NOT NULL AND compat_version IS NOT NULL"),
+        ),
+        Index(
+            "idx_env_configs_name_no_compat",
+            "name",
+            unique=True,
+            postgresql_where=text("name IS NOT NULL AND compat_version IS NULL"),
+        ),
+    )
 
     id: UUID = Field(
         default_factory=uuid4, primary_key=True, sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
     config_hash: str = Field(index=True, unique=True)
     config: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    name: str | None = Field(default=None)
+    compat_version: str | None = Field(default=None)
+    git_commit: str | None = Field(default=None)
+    num_agents: int | None = Field(default=None)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
+
+    def generate_with_map_seed(self, map_seed: int) -> MettaGridConfig:
+        seeded_config = copy.deepcopy(self.config)
+        map_builder = seeded_config["game"]["map_builder"]
+        if "seed" not in map_builder:
+            raise KeyError("env_config.game.map_builder.seed is required")
+        map_builder["seed"] = map_seed
+        return MettaGridConfig.model_validate(seeded_config)
 
 
 class Season(SQLModel, table=True):

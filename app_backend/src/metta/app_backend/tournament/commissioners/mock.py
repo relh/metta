@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlmodel import col, select
 
 from metta.app_backend.database import get_db
-from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
+from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, Pool, PoolPlayer
 from metta.app_backend.tournament.referees.base import MatchRequest
 
 logger = logging.getLogger(__name__)
@@ -41,10 +41,9 @@ class MockMatchExecutionMixin:
 
     async def _create_and_dispatch_match(
         self,
-        pool_id: UUID,
+        pool: Pool,
         request: MatchRequest,
-        compat_version: str | None = None,
-    ) -> bool:  # type: ignore[unused-arg]
+    ) -> bool:
         session = get_db()
 
         pool_players = await session.execute(
@@ -64,7 +63,7 @@ class MockMatchExecutionMixin:
         scores = self._compute_mock_scores(policy_ids, request)
 
         match = Match(
-            pool_id=pool_id,
+            pool_id=pool.id,
             assignments=request.assignments,
             team_id=request.team_id,
             status=MatchStatus.completed,

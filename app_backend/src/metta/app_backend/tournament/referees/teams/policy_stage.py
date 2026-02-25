@@ -42,6 +42,7 @@ class PolicyStageReferee(RefereeBase):
         self.policies_per_team = stage.policies_per_team
         self.matches_per_combo = stage.matches_per_combo
         self.game = game
+        self.env_name = game.env_name
         self.max_failed_attempts = max_failed_attempts
 
     def make_env(self, seed: int) -> MettaGridConfig:
@@ -77,7 +78,7 @@ class PolicyStageReferee(RefereeBase):
             MatchRequest(
                 pool_player_ids=pp_ids,
                 assignments=assignments,
-                env=self.make_env(seed + seed_offset),
+                map_seed=seed + seed_offset,
                 episode_tags=EpisodeTags(match_type="team_eval", team_size=self.policies_per_team),
                 seed=seed,
             )

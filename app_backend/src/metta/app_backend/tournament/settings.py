@@ -18,6 +18,7 @@ class CommissionerSettings(BaseSettings):
     STATS_DB_URI: str = "postgres://postgres:password@127.0.0.1:5432/metta"
     MACHINE_TOKEN: str | None = None
     ENABLE_MOCK_TOURNAMENTS: bool = False
+    GIT_COMMIT: str | None = None
 
 
 settings = CommissionerSettings()

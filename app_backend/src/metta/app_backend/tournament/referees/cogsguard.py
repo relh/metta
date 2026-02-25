@@ -8,7 +8,7 @@ NUM_AGENTS = 10
 
 class CogsguardSelfPlayReferee(SelfPlayRefereeBase):
     num_agents: int = NUM_AGENTS
-    game_tag: str = "cogsguard"
+    env_name: str = "cogsguard_10agents"
     description: str = "Self-play matches on CogsGuard Machina1"
 
     def make_env(self, seed: int) -> MettaGridConfig:
@@ -17,7 +17,7 @@ class CogsguardSelfPlayReferee(SelfPlayRefereeBase):
 
 class CogsguardPairingReferee(PairingRefereeBase):
     num_agents: int = NUM_AGENTS
-    game_tag: str = "cogsguard"
+    env_name: str = "cogsguard_10agents"
     match_configurations: list[list[int]] = [
         [0, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # 1v9
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 9v1

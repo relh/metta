@@ -17,7 +17,6 @@ from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
@@ -169,15 +168,6 @@ class CommissionerBase(ABC):
                 if season.disabled_at is not None:
                     logger.info(f"Season '{self.season_name}' is disabled, exiting commissioner")
                     return
-                season_compat_version = season.compat_version
-                server_compat_version = get_compat_version()
-                if season_compat_version is not None and season_compat_version != server_compat_version:
-                    logger.warning(
-                        f"[{self.season_name}] season compat {season_compat_version} != "
-                        f"server compat {server_compat_version} — game envs would be "
-                        f"incompatible with episode-runner:compat-v{season_compat_version}, exiting commissioner"
-                    )
-                    return
 
             had_activity = False
             start = time.monotonic()
@@ -239,7 +229,7 @@ class CommissionerBase(ABC):
             requests = referee.get_matches_to_schedule(players, match_counts, limit=slots_available)
             logger.info(f"[{self.season_name}] pool={pool_name} matches_to_schedule={len(requests)}")
             for req in requests:
-                success = await self._create_and_dispatch_match(pool.id, req, season.compat_version)
+                success = await self._create_and_dispatch_match(pool, req)
                 if success:
                     total_scheduled += 1
                     slots_available -= 1
@@ -258,7 +248,13 @@ class CommissionerBase(ABC):
     async def _get_pools(self, season_id: UUID) -> dict[str, Pool]:
         session = get_db()
         pools = (
-            (await session.execute(select(Pool).where(Pool.season_id == season_id).options(selectinload(Pool.players))))
+            (
+                await session.execute(
+                    select(Pool)
+                    .where(Pool.season_id == season_id)
+                    .options(selectinload(Pool.players), selectinload(Pool.env_config))
+                )
+            )
             .scalars()
             .all()
         )
@@ -296,7 +292,7 @@ class CommissionerBase(ABC):
                 session.add(Pool(season_id=season.id, name=name))
                 logger.info(f"Created pool '{name}' for season '{self.season_name}'")
 
-        await session.commit()
+        await session.flush()
 
         pools_by_name = await self._get_pools(season.id)
 
@@ -304,26 +300,91 @@ class CommissionerBase(ABC):
             pool = pools_by_name.get(pool_name)
             if not pool:
                 continue
-            config_data = referee.make_env(seed=0).model_dump(mode="json")
-            config_hash = hashlib.sha256(json.dumps(config_data, sort_keys=True).encode()).hexdigest()
-            stmt = (
-                pg_insert(MettagridEnvConfig)
-                .values(config_hash=config_hash, config=config_data)
-                .on_conflict_do_nothing(index_elements=["config_hash"])
-                .returning(MettagridEnvConfig)
-            )
-            result = (await session.execute(stmt)).scalar_one_or_none()
-            if result:
-                env_config = result
-            else:
-                env_config = (
-                    await session.execute(select(MettagridEnvConfig).filter_by(config_hash=config_hash))
-                ).scalar_one()
-            if pool.env_config_id != env_config.id:
-                pool.env_config_id = env_config.id
+            if not referee.env_name:
+                continue
+
+            if (
+                pool.env_config is None
+                or pool.env_config.name != referee.env_name
+                or pool.env_config.compat_version != season.compat_version
+            ):
+                pool.env_config = await self._get_or_create_env_config(referee, season.compat_version)
+
+            env_config = self._require_pool_env_config(pool)
+            required_compat = season.compat_version
+            if required_compat is not None:
+                if env_config.compat_version is None:
+                    raise RuntimeError(
+                        f"Stored env config '{referee.env_name}' is missing compat_version, "
+                        f"but season requires {required_compat}."
+                    )
+                if env_config.compat_version != required_compat:
+                    raise RuntimeError(
+                        f"Stored env config '{referee.env_name}' has compat {env_config.compat_version}, "
+                        f"but season requires {required_compat}."
+                    )
+
+            referee_num_agents = referee.num_agents
+            if referee_num_agents is not None and env_config.num_agents is not None:
+                if env_config.num_agents != referee_num_agents:
+                    raise ValueError(
+                        f"Referee {type(referee).__name__} expects {referee_num_agents} agents "
+                        f"but stored config '{referee.env_name}' has {env_config.num_agents}"
+                    )
 
         await session.commit()
         return pools_by_name
+
+    async def _get_or_create_env_config(self, referee: RefereeBase, compat_version: str | None) -> MettagridEnvConfig:
+        session = get_db()
+
+        server_compat = get_compat_version()
+        if compat_version is not None and compat_version != server_compat:
+            raise RuntimeError(
+                f"No stored env config for '{referee.env_name}' at compat {compat_version}, "
+                f"and server is on {server_compat} — cannot generate. "
+                f"Deploy a server matching compat {compat_version} to register the config."
+            )
+        resolved_env_config = (
+            await session.execute(
+                select(MettagridEnvConfig).where(
+                    MettagridEnvConfig.name == referee.env_name,
+                    (
+                        col(MettagridEnvConfig.compat_version).is_(None)
+                        if compat_version is None
+                        else MettagridEnvConfig.compat_version == compat_version
+                    ),
+                )
+            )
+        ).scalar_one_or_none()
+        if resolved_env_config:
+            return resolved_env_config
+
+        logger.info(
+            f"[{self.season_name}]creating env config for '{referee.env_name}' "
+            f"compat={compat_version} (rss={_rss_mb()})"
+        )
+        config_obj = referee.make_env(seed=0)
+        config_data = config_obj.model_dump(mode="json")
+        config_hash = hashlib.sha256(json.dumps(config_data, sort_keys=True).encode()).hexdigest()
+        env_config = MettagridEnvConfig(
+            config_hash=config_hash,
+            config=config_data,
+            name=referee.env_name,
+            compat_version=compat_version,
+            git_commit=settings.GIT_COMMIT,
+            num_agents=referee.num_agents,
+        )
+        session.add(env_config)
+        await session.flush()
+        return env_config
+
+    @staticmethod
+    def _require_pool_env_config(pool: Pool) -> MettagridEnvConfig:
+        if pool.env_config is None:
+            pool_name = pool.name if pool.name is not None else str(pool.id)
+            raise ValueError(f"Pool '{pool_name}' is missing env_config")
+        return pool.env_config
 
     @trace("commissioner.sync_match_statuses")
     async def _sync_match_statuses(self) -> bool:
@@ -646,12 +707,10 @@ class CommissionerBase(ABC):
 
         await session.commit()
 
-    async def _create_and_dispatch_match(
-        self, pool_id: UUID, request: MatchRequest, compat_version: str | None = None
-    ) -> bool:
+    async def _create_and_dispatch_match(self, pool: Pool, request: MatchRequest) -> bool:
         with tracer.start_as_current_span("tournament.job.enqueue", kind=SpanKind.PRODUCER) as span:
             span.set_attribute("tournament.season", self.season_name)
-            span.set_attribute("tournament.pool_id", str(pool_id))
+            span.set_attribute("tournament.pool_id", str(pool.id))
             span.set_attribute("job.type", JobType.episode.value)
             span.set_attribute("job.queue", "episode-runner")
 
@@ -674,24 +733,26 @@ class CommissionerBase(ABC):
             # Commit to release transaction before HTTP call
             await session.commit()
 
-            match = Match(pool_id=pool_id, assignments=request.assignments, team_id=request.team_id)  # type: ignore[call-arg]
+            match = Match(pool_id=pool.id, assignments=request.assignments, team_id=request.team_id)  # type: ignore[call-arg]
             match_id = match.id
             span.set_attribute("match.id", str(match_id))
 
             tags = {k: str(v) for k, v in request.episode_tags.model_dump(exclude_none=True).items()}
-            if git_ref := os.environ.get("GIT_COMMIT"):
+            if git_ref := settings.GIT_COMMIT:
                 tags["scheduler_git_ref"] = git_ref
+
+            env_config = self._require_pool_env_config(pool)
             job_spec = SingleEpisodeJob(
                 policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
                 assignments=request.assignments,
-                env=request.env,
+                env=env_config.generate_with_map_seed(request.map_seed),
                 seed=request.seed,
                 episode_tags=tags,
             ).model_dump()
 
-            if compat_version is not None:
+            if env_config.compat_version is not None:
                 registry = os.environ.get("EPISODE_RUNNER_REGISTRY", "ghcr.io/metta-ai/episode-runner")
-                job_spec["episode_runner_image"] = f"{registry}:compat-v{compat_version}"
+                job_spec["episode_runner_image"] = f"{registry}:compat-v{env_config.compat_version}"
 
             stats_client = StatsClient(settings.STATS_SERVER_URI, machine_token=settings.MACHINE_TOKEN)
             try:

@@ -23,7 +23,6 @@ from metta.app_backend.models.tournament import (
 from metta.app_backend.tournament.referees.base import EpisodeTags, MatchCountEntry, MatchRequest
 from metta.app_backend.tournament.referees.teams.team_stage import (
     TeamConfig,
-    TeamStageReferee,
     build_pending_team_match_schedule,
 )
 from metta.app_backend.tournament.teams.scoring import compute_team_average_scores
@@ -255,23 +254,18 @@ class TeamDbHelpersMixin:
             return 0
 
         seed = 42
-        referee = TeamStageReferee(
-            matches_per_team=matches_per_team,
-            teams=[],
-            game=self.config.game,
-            max_failed_attempts=self.config.max_failed_attempts,
-        )
+        self._require_pool_env_config(pool)
         scheduled = 0
         for team, seed_offset in pending:
             request = MatchRequest(
                 pool_player_ids=team.pool_player_ids,
                 assignments=team.assignments,
-                env=referee.make_env(seed + seed_offset),
+                map_seed=seed + seed_offset,
                 episode_tags=EpisodeTags(match_type="team_elimination", team_id=team.team_id),
                 seed=seed,
                 team_id=team.team_id,
             )
-            if await self._create_and_dispatch_match(pool.id, request, season.compat_version):
+            if await self._create_and_dispatch_match(pool, request):
                 scheduled += 1
 
         return scheduled

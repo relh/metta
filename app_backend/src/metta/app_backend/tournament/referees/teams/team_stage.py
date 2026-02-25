@@ -60,6 +60,7 @@ class TeamStageReferee(RefereeBase):
         self.matches_per_team = matches_per_team
         self.teams = teams
         self.game = game
+        self.env_name = game.env_name
         self.max_failed_attempts = max_failed_attempts
 
     def make_env(self, seed: int) -> MettaGridConfig:
@@ -88,7 +89,7 @@ class TeamStageReferee(RefereeBase):
             MatchRequest(
                 pool_player_ids=team.pool_player_ids,
                 assignments=team.assignments,
-                env=self.make_env(seed + seed_offset),
+                map_seed=seed + seed_offset,
                 episode_tags=EpisodeTags(match_type="team_elimination", team_id=team.team_id),
                 seed=seed,
                 team_id=team.team_id,

@@ -15,7 +15,6 @@ MAX_FAILED_ATTEMPTS = 3
 class SelfPlayRefereeBase(RefereeBase):
     num_agents: int
     matches_per_player: int = 2
-    game_tag: str | None = None
 
     def get_matches_to_schedule(
         self,
@@ -37,14 +36,14 @@ class SelfPlayRefereeBase(RefereeBase):
 
             seed = 42
             needed = self.matches_per_player - counts.completed
-            tags = EpisodeTags(match_type="self_play", game=self.game_tag)
+            tags = EpisodeTags(match_type="self_play", game=self.env_name)
 
             for match_i in range(needed):
                 requests.append(
                     MatchRequest(
                         pool_player_ids=[player.id],
                         assignments=[0] * self.num_agents,
-                        env=self.make_env(seed + counts.completed + match_i),
+                        map_seed=seed + counts.completed + match_i,
                         seed=seed,
                         episode_tags=tags,
                     )
@@ -57,6 +56,7 @@ class SelfPlayRefereeBase(RefereeBase):
 
 class SelfPlayReferee(SelfPlayRefereeBase):
     num_agents: int = 4
+    env_name: str = "cogsguard_4agents"
     description: str = "Self-play matches on Machina 1 Open World"
 
     def make_env(self, seed: int) -> MettaGridConfig:
