@@ -1009,7 +1009,7 @@ export function DashboardClient() {
   const loadProgressMessage = useMemo(() => {
     if (!loading) return null
     if (loadProgress < 30) return `${loadLabel} Fetching policy + episode data...`
-    if (loadProgress < 70) return `${loadLabel} Computing diagnostics and matchups...`
+    if (loadProgress < 70) return `${loadLabel} Computing diagnostics and teammate pairings...`
     return `${loadLabel} Finalizing dashboard view...`
   }, [loadLabel, loadProgress, loading])
 
@@ -2422,7 +2422,7 @@ export function DashboardClient() {
                         {selectedTrendOverlay && (
                           <div className="card" style={{ background: 'var(--panel-soft-bg-1)' }}>
                             <p style={{ marginTop: 0, marginBottom: 8 }}>
-                              Team vs Population Overlay ({selectedTrendOverlay.signal ?? 'insufficient'})
+                              Policy Relative to Team/Population Overlay ({selectedTrendOverlay.signal ?? 'insufficient'})
                             </p>
                             <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
                               {selectedTrendOverlay.reason ?? '-'}
@@ -2450,7 +2450,7 @@ export function DashboardClient() {
                                 </code>
                               </span>
                               <span>
-                                Delta vs team:{' '}
+                                Delta to team:{' '}
                                 <code>
                                   {formatSigned(
                                     toFiniteNumber(selectedTrendOverlay.delta_vs_team_mean),
@@ -2459,7 +2459,7 @@ export function DashboardClient() {
                                 </code>
                               </span>
                               <span>
-                                Delta vs population:{' '}
+                                Delta to population:{' '}
                                 <code>
                                   {formatSigned(
                                     toFiniteNumber(selectedTrendOverlay.delta_vs_population_mean),
@@ -2478,7 +2478,7 @@ export function DashboardClient() {
                                 <tr>
                                   <th>Version</th>
                                   <th>Value</th>
-                                  <th>Delta vs prev</th>
+                                  <th>Delta to prev</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -2823,7 +2823,7 @@ export function DashboardClient() {
                               onClick={() => onEpisodeSort('opponent')}
                               style={SORT_HEADER_BUTTON_STYLE}
                             >
-                              Opponent {episodeSort === 'opponent' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
+                              Teammate {episodeSort === 'opponent' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
                             </button>
                           </th>
                           <th>
@@ -2944,32 +2944,32 @@ export function DashboardClient() {
             <>
               <section className="grid two">
                 <article className="card">
-                  <h2 style={{ marginTop: 0 }}>Best Matchup</h2>
+                  <h2 style={{ marginTop: 0 }}>Best Teammate Pairing</h2>
                   {bestWorstOpponents?.best ? (
                     <p style={{ marginBottom: 0 }}>
                       <strong>{bestWorstOpponents.best.opponent}</strong> (avg reward{' '}
                       {formatNumber(bestWorstOpponents.best.avgReward, 3)})
                     </p>
                   ) : (
-                    <p style={{ marginBottom: 0 }}>No matchup reward data yet.</p>
+                    <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
                   )}
                 </article>
                 <article className="card">
-                  <h2 style={{ marginTop: 0 }}>Worst Matchup</h2>
+                  <h2 style={{ marginTop: 0 }}>Lowest-Reward Teammate Pairing</h2>
                   {bestWorstOpponents?.worst ? (
                     <p style={{ marginBottom: 0 }}>
                       <strong>{bestWorstOpponents.worst.opponent}</strong> (avg reward{' '}
                       {formatNumber(bestWorstOpponents.worst.avgReward, 3)})
                     </p>
                   ) : (
-                    <p style={{ marginBottom: 0 }}>No matchup reward data yet.</p>
+                    <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
                   )}
                 </article>
               </section>
 
               {matchup && (
                 <section className="card" style={{ display: 'grid', gap: 10 }}>
-                  <h2 style={{ margin: 0 }}>Matchup Diagnosis</h2>
+                  <h2 style={{ margin: 0 }}>Teammate Pairing Diagnosis</h2>
                   <p style={{ margin: 0 }}>{String(matchup.reason ?? '-')}</p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
                     <div
@@ -3000,13 +3000,13 @@ export function DashboardClient() {
                       className="card"
                       style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
                     >
-                      Opponent spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
+                      Teammate spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
                     </div>
                     <div
                       className="card"
                       style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
                     >
-                      Best/Worst opponent:{' '}
+                      Best/Worst teammate:{' '}
                       <code>
                         {String(matchup.best_opponent ?? '-')} / {String(matchup.worst_opponent ?? '-')}
                       </code>
@@ -3032,16 +3032,16 @@ export function DashboardClient() {
 
               {matchup && asMatchupSlices(matchup.opponent_slices).length > 0 && (
                 <section className="card">
-                  <h2 style={{ marginTop: 0 }}>Matchup Slices (Current vs Baseline)</h2>
+                  <h2 style={{ marginTop: 0 }}>Teammate Pairing Slices (Current Relative to Baseline)</h2>
                   <div style={{ overflowX: 'auto' }}>
                     <table>
                       <thead>
                         <tr>
-                          <th>Opponent</th>
+                          <th>Paired Policy</th>
                           <th>Current Avg</th>
                           <th>Baseline Avg</th>
-                          <th>Delta vs Baseline</th>
-                          <th>Delta vs Policy</th>
+                          <th>Delta to Baseline</th>
+                          <th>Delta to Policy Mean</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3076,8 +3076,8 @@ export function DashboardClient() {
                           <th>Composition</th>
                           <th>Current Avg</th>
                           <th>Baseline Avg</th>
-                          <th>Delta vs Baseline</th>
-                          <th>Delta vs Policy</th>
+                          <th>Delta to Baseline</th>
+                          <th>Delta to Policy Mean</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3105,15 +3105,15 @@ export function DashboardClient() {
               )}
 
               <section className="card">
-                <h2 style={{ marginTop: 0 }}>Opponent Breakdown</h2>
+                <h2 style={{ marginTop: 0 }}>Teammate Breakdown</h2>
                 {opponentRows.length === 0 ? (
-                  <p style={{ marginBottom: 0 }}>No opponent metrics available.</p>
+                  <p style={{ marginBottom: 0 }}>No teammate metrics available.</p>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
                     <table>
                       <thead>
                         <tr>
-                          <th>Opponent</th>
+                          <th>Teammate</th>
                           <th>Games</th>
                           <th>Completed</th>
                           <th>Avg Reward</th>
@@ -3278,7 +3278,7 @@ export function DashboardClient() {
                           <th>Job ID</th>
                           <th>Error Type</th>
                           <th>Error Message</th>
-                          <th>Opponent</th>
+                          <th>Teammate</th>
                           <th>Team</th>
                           <th>Created</th>
                         </tr>

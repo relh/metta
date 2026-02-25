@@ -209,7 +209,7 @@ class MatchupSlice(BaseModel):
 class MatchupSummary(BaseModel):
     evidence_sufficient: bool = False
     interaction_specific_issue: bool = False
-    reason: str = "Insufficient matchup evidence. Collect more episodes."
+    reason: str = "Insufficient teammate-pairing evidence. Collect more episodes."
     current_avg_reward: float = 0.0
     baseline_avg_reward: float | None = None
     global_reward_delta: float | None = None
@@ -1239,7 +1239,7 @@ def compute_confidence_summary(
     for interval in intervals:
         if interval.crosses_zero:
             recommended_actions.append(
-                f"`{interval.label}` is inconclusive; increase sample size or reduce matchup variance."
+                f"`{interval.label}` is inconclusive; increase sample size or reduce teammate-pairing variance."
             )
 
     return ConfidenceSummary(
@@ -1282,7 +1282,7 @@ def compute_pattern_extraction_summary(
                 severity="warn",
                 confidence="medium",
                 evidence=matchup.reason,
-                next_action="Focus on worst matchup/composition slices before global policy changes.",
+                next_action="Focus on worst teammate-pairing/composition slices before global policy changes.",
             )
         )
     elif outcome.verdict == "hurt":
@@ -1322,7 +1322,9 @@ def compute_pattern_extraction_summary(
                 severity="warn",
                 confidence="medium" if trend_explorer.evidence_sufficient else "low",
                 evidence=score_series.reason,
-                next_action="Compare latest version against last known-good with matched opponents and eval settings.",
+                next_action=(
+                    "Compare latest version against last known-good with matched teammate pairings and eval settings."
+                ),
             )
         )
 
@@ -1362,7 +1364,7 @@ def compute_pattern_extraction_summary(
                 severity="info",
                 confidence="low",
                 evidence="Current signals are mixed or low-effect.",
-                next_action="Collect more episodes and keep matchup mix consistent before major changes.",
+                next_action="Collect more episodes and keep teammate-pairing mix consistent before major changes.",
             )
         )
 
@@ -1428,7 +1430,7 @@ def compute_outcome_summary(
         if score_delta > 0.01:
             return OutcomeSummary(
                 verdict="helped",
-                reason=f"Leaderboard score improved by {score_delta:.3f} vs v{baseline.version}.",
+                reason=f"Leaderboard score improved by {score_delta:.3f} relative to v{baseline.version}.",
                 evidence_sufficient=True,
                 current=current_snapshot,
                 baseline=baseline_snapshot,
@@ -1437,7 +1439,7 @@ def compute_outcome_summary(
         if score_delta < -0.01:
             return OutcomeSummary(
                 verdict="hurt",
-                reason=f"Leaderboard score dropped by {abs(score_delta):.3f} vs v{baseline.version}.",
+                reason=f"Leaderboard score dropped by {abs(score_delta):.3f} relative to v{baseline.version}.",
                 evidence_sufficient=True,
                 current=current_snapshot,
                 baseline=baseline_snapshot,
@@ -1445,7 +1447,7 @@ def compute_outcome_summary(
             )
         return OutcomeSummary(
             verdict="inconclusive",
-            reason=f"Leaderboard score change vs v{baseline.version} is near zero ({score_delta:.3f}).",
+            reason=f"Leaderboard score change relative to v{baseline.version} is near zero ({score_delta:.3f}).",
             evidence_sufficient=True,
             current=current_snapshot,
             baseline=baseline_snapshot,
@@ -1455,13 +1457,13 @@ def compute_outcome_summary(
     if rank_delta is not None:
         if rank_delta < 0:
             verdict = "helped"
-            reason = f"Rank improved by {abs(rank_delta)} vs v{baseline.version}, but score confidence is low."
+            reason = f"Rank improved by {abs(rank_delta)} relative to v{baseline.version}, but score confidence is low."
         elif rank_delta > 0:
             verdict = "hurt"
-            reason = f"Rank worsened by {rank_delta} vs v{baseline.version}, but score confidence is low."
+            reason = f"Rank worsened by {rank_delta} relative to v{baseline.version}, but score confidence is low."
         else:
             verdict = "inconclusive"
-            reason = f"Rank unchanged vs v{baseline.version}, and score confidence is low."
+            reason = f"Rank unchanged relative to v{baseline.version}, and score confidence is low."
         return OutcomeSummary(
             verdict=verdict,
             reason=reason,
@@ -1674,7 +1676,8 @@ def compute_diagnostics(
             best_opp = max(opponent_avgs, key=opponent_avgs.get)  # type: ignore[arg-type]
             worst_opp = min(opponent_avgs, key=opponent_avgs.get)  # type: ignore[arg-type]
             diagnostics.append(
-                f"Matchup disparity - best avg {best_avg:.1f} vs {best_opp}, worst avg {worst_avg:.1f} vs {worst_opp}"
+                f"Teammate disparity - best avg {best_avg:.1f} with {best_opp}, "
+                f"worst avg {worst_avg:.1f} with {worst_opp}"
             )
 
     # Declining rewards
@@ -1713,7 +1716,7 @@ def compute_diagnostics(
     avg_2v6 = sum(comp_rewards.get("2v6", [])) / max(len(comp_rewards.get("2v6", [])), 1)
     if avg_2v6 > 0 and avg_6v2 / avg_2v6 > 3.0 and len(comp_rewards.get("6v2", [])) >= 3:
         diagnostics.append(
-            f"Over-reliance on agent count - 6v2 avg {avg_6v2:.1f} vs 2v6 avg {avg_2v6:.1f} "
+            f"Over-reliance on agent count - 6v2 avg {avg_6v2:.1f} compared with 2v6 avg {avg_2v6:.1f} "
             f"(ratio {avg_6v2 / avg_2v6:.1f}x)"
         )
 
@@ -1836,7 +1839,7 @@ def compute_matchup_summary(
     current_completed = [episode for episode in current_episodes if episode.status == "completed"]
     if not current_completed:
         return MatchupSummary(
-            reason="No completed episodes available for matchup diagnosis.",
+            reason="No completed episodes available for teammate-pairing diagnosis.",
         )
 
     current_avg_reward = statistics.mean(episode.reward for episode in current_completed)
@@ -1933,14 +1936,19 @@ def compute_matchup_summary(
 
     if not evidence_sufficient:
         if baseline_episodes:
-            reason = "Insufficient matched matchup slices vs baseline. Collect more overlap before strong claims."
+            reason = (
+                "Insufficient matched teammate-pairing slices relative to baseline. "
+                "Collect more overlap before strong claims."
+            )
         elif len(opponent_slices) >= 2 and opponent_spread >= 0.5:
             reason = (
-                f"Large within-submission matchup spread ({opponent_spread:.2f}) "
+                f"Large within-submission teammate spread ({opponent_spread:.2f}) "
                 f"from {worst_opponent} to {best_opponent}. Inspect worst slices first."
             )
         else:
-            reason = "Matchup evidence is limited; collect more episodes before making matchup-specific claims."
+            reason = (
+                "Teammate-pairing evidence is limited; collect more episodes before making pairing-specific claims."
+            )
     else:
         opponent_reason: str | None = None
         if matched_opponent_slices:
@@ -1966,9 +1974,9 @@ def compute_matchup_summary(
             ):
                 interaction_specific_issue = True
                 opponent_reason = (
-                    "Regression is concentrated vs "
+                    "Regression is concentrated with teammate "
                     f"{worst_opponent_row.key} ({worst_opponent_row.delta_vs_baseline:+.2f}) "
-                    f"while other opponents are comparatively stable ({other_opponent_delta_avg:+.2f})."
+                    f"while other teammate pairings are comparatively stable ({other_opponent_delta_avg:+.2f})."
                 )
 
         composition_reason: str | None = None
@@ -2003,14 +2011,14 @@ def compute_matchup_summary(
         elif global_reward_delta is not None and global_reward_delta <= -0.1:
             reason = (
                 f"Regression appears broad across slices (global reward delta {global_reward_delta:+.2f}). "
-                "Prioritize global behavior fixes before matchup-specific tuning."
+                "Prioritize global behavior fixes before teammate-pairing-specific tuning."
             )
         elif global_reward_delta is not None and global_reward_delta >= 0.1:
-            reason = f"Matchups improved overall (global reward delta {global_reward_delta:+.2f})."
+            reason = f"Teammate pairings improved overall (global reward delta {global_reward_delta:+.2f})."
         else:
             reason = (
                 f"Overall change is small (global reward delta {global_reward_delta:+.2f}). "
-                "Monitor worst matchup slices for drift."
+                "Monitor lowest-reward teammate-pairing slices for drift."
             )
 
     return MatchupSummary(
@@ -2237,7 +2245,7 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
             headline="Evidence is insufficient for strong prescriptions.",
             actions=[
                 "Collect more evaluation evidence (target at least 5 matched samples for current and baseline).",
-                "Keep matchup mix consistent while collecting evidence to avoid confounded deltas.",
+                "Keep teammate-pairing mix consistent while collecting evidence to avoid confounded deltas.",
                 "Re-run diagnosis after additional episodes before changing rollout policy.",
             ],
         )
@@ -2256,9 +2264,9 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
     if outcome.verdict == "hurt":
         return ActionSummary(
             rollout_recommendation="hold",
-            headline="Performance regressed vs baseline. Hold rollout.",
+            headline="Performance regressed relative to baseline. Hold rollout.",
             actions=[
-                "Start with worst matchup and lowest-reward episodes to isolate behavior regressions.",
+                "Start with the lowest-reward teammate pairing and episodes to isolate behavior regressions.",
                 (
                     "Target one dominant driver first "
                     "(junction control, reward non-zero rate, or noop/freeze pathologies)."
@@ -2273,7 +2281,7 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
             headline="Submission improved leaderboard performance.",
             actions=[
                 "Proceed with guarded rollout while monitoring failure and timeout rates.",
-                "Run one validation pack on recent opponent mix to confirm stability.",
+                "Run one validation pack on recent teammate-pairing mix to confirm stability.",
                 "If reliability drifts upward, revert and prioritize performance-safe optimizations.",
             ],
         )
@@ -2283,7 +2291,10 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
         headline="Outcome is inconclusive. Gather targeted evidence before changing rollout state.",
         actions=[
             "Increase sample size for the current submission and baseline.",
-            "Inspect matchup-specific slices to determine whether regression is global or interaction-specific.",
+            (
+                "Inspect teammate-pairing-specific slices to determine whether regression is "
+                "global or interaction-specific."
+            ),
             "Re-evaluate once confidence criteria are met.",
         ],
     )
@@ -2353,7 +2364,7 @@ def compute_orchestration_hooks(
             ),
             hook_actions=[
                 "Re-run with reduced inference load and profiling enabled.",
-                "Compare failure deltas on the same opponent/composition slice.",
+                "Compare failure deltas on the same teammate/composition slice.",
                 "Keep behavior changes minimal while reliability is unstable.",
             ],
             acceptance_checks=[
@@ -2366,10 +2377,10 @@ def compute_orchestration_hooks(
         add_hook(
             hook_id="interaction_slice_patch",
             title="Interaction-specific patch pack",
-            objective="Patch the worst matchup/composition without global regression.",
+            objective="Patch the worst teammate-pairing/composition without global regression.",
             rationale=matchup.reason,
             hook_actions=[
-                "Generate focused eval slice for worst opponent/composition.",
+                "Generate focused eval slice for worst teammate/composition.",
                 "Inspect lowest-reward replays in that slice before policy changes.",
                 "Apply targeted adjustment and re-evaluate full pack.",
             ],
@@ -2402,10 +2413,10 @@ def compute_orchestration_hooks(
         add_hook(
             hook_id="guarded_rollout_validation",
             title="Guarded rollout validation pack",
-            objective="Validate gains under current matchup mix before promotion.",
+            objective="Validate gains under current teammate-pairing mix before promotion.",
             rationale=actions.headline,
             hook_actions=[
-                "Run one validation pack with current population/opponent distribution.",
+                "Run one validation pack with current population and teammate-pairing distribution.",
                 "Track confidence intervals for reward and failure deltas.",
                 "Proceed only if reliability guardrails stay green.",
             ],
@@ -2716,7 +2727,7 @@ def build_analysis_prompt(summary: dict[str, Any]) -> str:
         "### Root Cause Analysis",
         "Connect multiple diagnostics and metrics to"
         " identify underlying causes. Look for patterns"
-        " across KPIs, matchups, and team compositions"
+        " across KPIs, teammate pairings, and team compositions"
         " that point to the same root issue.",
         "",
         "### Top 3 Training Priorities",
@@ -2725,10 +2736,10 @@ def build_analysis_prompt(summary: dict[str, Any]) -> str:
         " curriculum modifications, hyperparameter changes,"
         " or architectural improvements.",
         "",
-        "### Opponent Adaptation",
-        "For low-performing matchups, analyze the"
-        " opponent's strategy profile and suggest"
-        " counter-strategies. If no matchup data exists,"
+        "### Policy Pairing Coordination",
+        "For low-performing teammate pairings, analyze the"
+        " paired-policy strategy profile and suggest"
+        " coordination adjustments. If no pairing data exists,"
         " skip this section.",
         "",
         "### Policy Narrative",

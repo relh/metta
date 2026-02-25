@@ -92,7 +92,7 @@ PY
 
 run_tab overview 'h2:has-text("Outcome Summary")'
 run_tab episodes 'h2:has-text("Filters & Export")'
-run_tab opponents 'h2:has-text("Opponent Breakdown")'
+run_tab opponents 'h2:has-text("Teammate Breakdown")'
 run_tab health 'h2:has-text("Failed Episodes")'
 run_tab roles 'h2:has-text("Parses")'
 run_tab capabilities 'h2:has-text("Capability Grid")'

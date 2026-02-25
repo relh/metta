@@ -234,7 +234,7 @@ function EpisodeChip({ value, episode }: { value: string; episode: DashboardEpis
           }}
         >
           <span style={{ display: 'block' }}>
-            vs <strong>{String(episode.opponent_name ?? '-')}</strong> ({String(episode.team_composition ?? '-')})
+            with teammate <strong>{String(episode.opponent_name ?? '-')}</strong> ({String(episode.team_composition ?? '-')})
           </span>
           <span style={{ display: 'block' }}>
             reward {formatNumber(episode.reward, 3)} • steps {String(episode.steps ?? '-')} • created{' '}
@@ -310,10 +310,10 @@ function renderInlineTokens(
 type QuipTemplate = (context: { policy: string; best: string; worst: string; rival: string }) => string
 
 const QUIP_TEMPLATES: QuipTemplate[] = [
-  ({ policy, best }) => `${policy} requested analysis. Starting with the only opponent it likes: ${best}.`,
-  ({ rival, worst }) => `Comparing ${rival} against ${worst}. This may explain the emotional damage.`,
+  ({ policy, best }) => `${policy} requested analysis. Starting with its strongest teammate pairing: ${best}.`,
+  ({ rival, worst }) => `Comparing teammate profiles ${rival} and ${worst} to explain coordination gaps.`,
   ({ policy }) => `Collecting signals, replay references, and failure traces for ${policy}.`,
-  ({ best, rival }) => `Checking whether gains vs ${best} still hold under pressure from ${rival}.`,
+  ({ best, rival }) => `Checking whether gains with ${best} still hold when paired with ${rival}.`,
   () => 'Parsing diagnostics and writing links you can actually click.',
 ]
 
@@ -333,9 +333,9 @@ function loadingContext(
 
   return {
     policy: policyName || 'policy',
-    best: rows[0]?.name ?? 'top-opponent',
-    worst: rows[rows.length - 1]?.name ?? 'hard-counter',
-    rival: rows[1]?.name ?? rows[0]?.name ?? 'benchmark-opponent',
+    best: rows[0]?.name ?? 'top-teammate',
+    worst: rows[rows.length - 1]?.name ?? 'lowest-reward-teammate',
+    rival: rows[1]?.name ?? rows[0]?.name ?? 'benchmark-teammate',
   }
 }
 

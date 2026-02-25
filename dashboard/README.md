@@ -45,7 +45,7 @@ uv run python -m dashboard.backend.dashboard_backend.main
   - `Overview`: policy metadata, KPI snapshot, diagnostics, quality gates, rollout actions
   - `Capabilities`: unified capability grid with diagnose evidence overlays
   - `Parses`: role-percentile table backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
-  - `Opponents`: matchup diagnosis and opponent/composition slice tables
+  - `Teammates`: teammate-pairing diagnosis and teammate/composition slice tables
   - `Episodes`: per-episode filters/export, replay links, and diagnostics tags
   - `Health`: failure and crash-dump summaries, tag/instrumentation inventory
   - `Diagnose`: run selector, stage gating, spider chart, probes, symptoms, prescriptions

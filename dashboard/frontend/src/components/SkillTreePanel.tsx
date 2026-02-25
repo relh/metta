@@ -63,7 +63,7 @@ const CAPABILITY_SPECS: CapabilitySpec[] = [
   {
     id: 'scrambling',
     title: 'Scrambling',
-    description: 'Disrupt opponent plans and force mistakes.',
+    description: 'Disrupt clip opponents and force mistakes.',
     axis: 'control',
     trainingSource: 'planned scrambler curriculum',
   },
