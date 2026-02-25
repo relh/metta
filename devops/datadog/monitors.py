@@ -160,20 +160,20 @@ def job_queue_buildup_monitor() -> dict:
     """Monitor for job queue buildup approaching backpressure limit.
 
     Alerts when outstanding jobs (pending + dispatched + running) are building up,
-    indicating the system can't process jobs fast enough. Backpressure kicks in at 200.
+    indicating the system can't process jobs fast enough. Backpressure kicks in at 300.
     """
     return {
         "name": "[Tournament] Job Queue Buildup: {{value}} outstanding",
         "type": "query alert",
-        "query": "avg(last_5m):sum:job.outstanding_count{service:observatory-backend} > 180",
+        "query": "avg(last_5m):sum:job.outstanding_count{service:observatory-backend} > 280",
         "message": (
-            "{{value}} outstanding jobs (limit: 200). Jobs may be processing slowly or failing.\n\n"
+            "{{value}} outstanding jobs (limit: 300). Jobs may be processing slowly or failing.\n\n"
             "Check: https://observatory.softmax-research.net/episode-jobs\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
         "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
         "priority": 3,
-        "thresholds": {"critical": 180},
+        "thresholds": {"critical": 280},
         "options": {
             "notify_no_data": False,
             "renotify_interval": 30,

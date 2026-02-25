@@ -60,7 +60,7 @@ from metta.app_backend.user_data import Ownable, fill_user_data
 
 logger = logging.getLogger(__name__)
 
-MAX_OUTSTANDING_JOBS = 200
+MAX_OUTSTANDING_JOBS = 300
 
 
 class JobPolicyVersionSummary(BaseModel):
