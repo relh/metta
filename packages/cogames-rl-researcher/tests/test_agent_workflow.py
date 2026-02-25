@@ -105,7 +105,7 @@ def test_run_agent_workflow_until_report_fails_when_report_missing(monkeypatch, 
 
 def test_deterministic_fallback_script_preserves_startup_exit_on_report_failure() -> None:
     script = _deterministic_fallback_script("neophyte", Path("artifacts/ai_researcher/neophyte_workflow_report.md"))
-    startup_exit_idx = script.index('STARTUP_EXIT=${PIPESTATUS[0]}')
+    startup_exit_idx = script.index("STARTUP_EXIT=${PIPESTATUS[0]}")
     python_idx = script.index("python - <<'PY'")
     report_exit_idx = script.index("REPORT_EXIT=${?}")
     final_exit_idx = script.rindex('exit "$STARTUP_EXIT"')
