@@ -11,3 +11,6 @@ processes:
 
   frontend:
     command: metta softmax-com frontend
+    depends_on:
+      postgres:
+        condition: process_healthy

@@ -53,12 +53,13 @@ Softmax.com local development.
 [bold]Individual services:[/bold]
   metta softmax-com postgres up -d   # Backgrounded postgres
   metta softmax-com frontend         # Softmax.com frontend
+  metta softmax-com db-migrate       # Apply Prisma migrations to local softmax_com DB
 
 [bold]Teardown:[/bold]
   metta softmax-com postgres down
 
 [bold green]If you're starting this for the first time, you need to run:[/bold green]
-  pnpm db:migrate   # From web/softmax.com directory
+  metta softmax-com db-migrate
 """
 
 app = typer.Typer(
@@ -105,6 +106,7 @@ def up(
     if not tui:
         cmd.append("-t=false")
     if services:
+        cmd.append("up")
         cmd.extend(services)
     info("Starting Softmax.com services...")
     subprocess.run(cmd, cwd=repo_root, env=env, check=True)
@@ -170,6 +172,15 @@ def frontend(
     info("Starting Softmax.com frontend")
 
     subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/softmax.com")
+
+
+@app.command(name="db-migrate", help="Apply Prisma migrations to the local softmax_com database")
+@handle_errors
+def db_migrate():
+    env = _base_env()
+    env["DATABASE_URL"] = LOCAL_DB_URI
+    info("Applying Prisma migrations to local softmax_com database on localhost:5433")
+    subprocess.run(["pnpm", "db:migrate"], env=env, check=True, cwd=repo_root / "web/softmax.com")
 
 
 if __name__ == "__main__":
