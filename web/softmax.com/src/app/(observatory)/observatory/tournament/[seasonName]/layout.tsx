@@ -14,6 +14,7 @@ import {
   seasonTeamsRoute,
 } from "@observatory/lib/routes";
 import { getSeasonStageContext } from "@observatory/lib/tournament/api";
+import { parseDatetime } from "@observatory/utils/datetime";
 
 import { StageProgress } from "./StageProgress";
 import { defaultSelectedStage } from "./stageSelection";
@@ -32,11 +33,16 @@ const SEASON_STATUS_BADGE_CLASSES: Record<SeasonDetail["status"], string> = {
     "border-blue-500/40 text-blue-700 dark:text-blue-300 bg-transparent",
 };
 
-const formatStartedAt = (iso: string) =>
-  new Date(iso).toLocaleString(undefined, {
+const formatCreatedAt = (iso: string) => {
+  const createdAt = parseDatetime(iso);
+  if (!createdAt) {
+    return "—";
+  }
+  return createdAt.toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });
+};
 
 const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
   const repo = await getRepo();
@@ -73,8 +79,8 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
             : ""}
         </span>
         <span>Stages: {season.stage_count}</span>
-        {season.started_at && (
-          <span>Started at: {formatStartedAt(season.started_at)}</span>
+        {season.created_at && (
+          <span>Created at: {formatCreatedAt(season.created_at)}</span>
         )}
         <TournamentDescriptionMeta season={season} />
       </div>

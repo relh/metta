@@ -2419,6 +2419,11 @@ export interface components {
        */
       compat_version?: string | null;
       /**
+       * Created At
+       * @description ISO 8601 timestamp when this season version was created
+       */
+      created_at: string;
+      /**
        * Tournament Type
        * @description Tournament format
        * @enum {string}
@@ -2514,6 +2519,11 @@ export interface components {
        * @description Compatibility version string (e.g. '0.4')
        */
       compat_version?: string | null;
+      /**
+       * Created At
+       * @description ISO 8601 timestamp when this season version was created
+       */
+      created_at: string;
       /**
        * Tournament Type
        * @description Tournament format

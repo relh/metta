@@ -358,16 +358,23 @@ class TestTournamentRouteSmoke:
         assert versions[1]["canonical"] is False
 
     @pytest.mark.asyncio
-    async def test_roll_team_season_rejected(
-        self, test_client: TestClient, softmax_headers: dict, seed_teams_season: dict
-    ):
-        response = test_client.post(
-            f"/tournament/seasons/{seed_teams_season['season_id']}/roll",
-            json={"compat_version": "0.6"},
-            headers=softmax_headers,
-        )
-        assert response.status_code == 400
-        assert response.json()["detail"] == "Only freeplay seasons can be rolled"
+    async def test_roll_team_season(self, test_client: TestClient, softmax_headers: dict, seed_teams_season: dict):
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_teams_season['season_id']}/roll",
+                json={"compat_version": "0.6"},
+                headers=softmax_headers,
+            )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["name"] == seed_teams_season["season_name"]
+        assert payload["version"] == 2
+        assert payload["canonical"] is True
+        assert payload["tournament_type"] == "team"
+        assert payload["compat_version"] == "0.6"
 
     @pytest.mark.asyncio
     async def test_roll_freeplay_requires_compat_version(

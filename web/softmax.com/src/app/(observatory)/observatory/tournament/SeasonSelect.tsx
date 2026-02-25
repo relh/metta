@@ -54,9 +54,7 @@ const formatSeasonRef = (
 const formatSeasonVersionLabel = (version: SeasonVersionInfo): string => {
   const createdAt = parseDatetime(version.created_at);
   if (!createdAt) {
-    return version.canonical
-      ? `Season ${version.version} (current)`
-      : `Season ${version.version}`;
+    return `Season ${version.version}`;
   }
 
   const dateLabel = createdAt.toLocaleDateString(undefined, {
@@ -65,16 +63,16 @@ const formatSeasonVersionLabel = (version: SeasonVersionInfo): string => {
     day: "numeric",
   });
   const timeLabel = createdAt
-    .toLocaleTimeString(undefined, { hour: "numeric" })
+    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
     .toLowerCase();
   const seasonLabel = `${dateLabel}, ${timeLabel} season`;
-  return version.canonical ? `${seasonLabel} (current)` : seasonLabel;
+  return seasonLabel;
 };
 
 export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   const seasonRef = useSelectedLayoutSegment();
   const searchParams = useSearchParams();
-  const { repo } = use(AppContext);
+  const { repo, isSoftmaxTeamMember } = use(AppContext);
   const [rollError, setRollError] = useState<string | null>(null);
   const [updateCompatError, setUpdateCompatError] = useState<string | null>(
     null,
@@ -263,6 +261,14 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   }, [repo, selectedSeasonName, versionsRefreshNonce]);
 
   useEffect(() => {
+    if (isSoftmaxTeamMember) {
+      return;
+    }
+    setIsRollDialogOpen(false);
+    setIsUpdateCompatDialogOpen(false);
+  }, [isSoftmaxTeamMember]);
+
+  useEffect(() => {
     let cancelled = false;
     if (selectedMode !== "freeplay" || !selectedSeasonName) {
       setActivePlayersToMigrateCount(null);
@@ -408,7 +414,12 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   };
 
   const handleRollSeason = async () => {
-    if (!selectedSeasonName || !selectedSeason?.id || nextVersion === null) {
+    if (
+      !isSoftmaxTeamMember ||
+      !selectedSeasonName ||
+      !selectedSeason?.id ||
+      nextVersion === null
+    ) {
       return;
     }
     const compatVersion = rollCompatVersion.trim();
@@ -428,7 +439,11 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
       setRollMigrateActivePlayers(false);
       setIsRollDialogOpen(false);
       setVersionsRefreshNonce((current) => current + 1);
-      router.push(seasonRoute(newSeason.name, { mode: "freeplay" }));
+      router.push(
+        seasonRoute(newSeason.name, {
+          mode: seasonTabModeForName(newSeason.name),
+        }),
+      );
       router.refresh();
     } catch (error: unknown) {
       setRollError(
@@ -440,7 +455,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   };
 
   const handleUpdateCurrentCompatVersion = async () => {
-    if (!selectedSeason?.id) {
+    if (!isSoftmaxTeamMember || !selectedSeason?.id) {
       return;
     }
     const compatVersion = updateCompatVersion.trim();
@@ -501,34 +516,32 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
           instanceId="season-version-select"
           isDisabled={!selectedSeasonName || isLoadingVersions}
         />
-        {selectedMode === "freeplay" &&
-          selectedSeasonName &&
-          selectedSeason?.id && (
-            <>
-              <Button
-                onClick={openUpdateCompatDialog}
-                size="sm"
-                disabled={
-                  isUpdatingCompatBusy || compatVersionOptions.length === 0
-                }
-              >
-                Update compat version
-              </Button>
-              <Button
-                onClick={openRollDialog}
-                size="sm"
-                disabled={
-                  isRollingBusy ||
-                  nextVersion === null ||
-                  compatVersionOptions.length === 0
-                }
-              >
-                Make new season
-              </Button>
-            </>
-          )}
+        {isSoftmaxTeamMember && selectedSeasonName && selectedSeason?.id && (
+          <>
+            <Button
+              onClick={openUpdateCompatDialog}
+              size="sm"
+              disabled={
+                isUpdatingCompatBusy || compatVersionOptions.length === 0
+              }
+            >
+              Update compat version
+            </Button>
+            <Button
+              onClick={openRollDialog}
+              size="sm"
+              disabled={
+                isRollingBusy ||
+                nextVersion === null ||
+                compatVersionOptions.length === 0
+              }
+            >
+              Make new season
+            </Button>
+          </>
+        )}
       </div>
-      {isRollDialogOpen && (
+      {isSoftmaxTeamMember && isRollDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-surface border-border w-full max-w-lg space-y-4 rounded-lg border p-6 shadow-xl">
             <h2 className="text-base font-semibold">
@@ -592,7 +605,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
           </div>
         </div>
       )}
-      {isUpdateCompatDialogOpen && (
+      {isSoftmaxTeamMember && isUpdateCompatDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-surface border-border w-full max-w-lg space-y-4 rounded-lg border p-6 shadow-xl">
             <h2 className="text-base font-semibold">

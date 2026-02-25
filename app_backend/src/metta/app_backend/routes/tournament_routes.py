@@ -218,6 +218,7 @@ class SeasonSummary(BaseModel):
     leaderboard_pool: str | None = Field(default=None, description="Name of the pool used for the leaderboard")
     is_default: bool = Field(description="Whether this is the default season")
     compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
+    created_at: str = Field(description="ISO 8601 timestamp when this season version was created")
     tournament_type: Literal["freeplay", "team"] = Field(description="Tournament format")
     pools: list[PoolInfo] = Field(description="Pools in this season")
 
@@ -240,6 +241,7 @@ class SeasonSummary(BaseModel):
                 leaderboard_pool=None,
                 is_default=False,
                 compat_version=season.compat_version,
+                created_at=season.created_at.isoformat(),
                 tournament_type=season.tournament_type,
                 pools=[],
             )
@@ -258,6 +260,7 @@ class SeasonSummary(BaseModel):
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
             compat_version=season.compat_version,
+            created_at=season.created_at.isoformat(),
             tournament_type=season.tournament_type,
             pools=[
                 PoolInfo(
@@ -323,6 +326,7 @@ class SeasonDetail(SeasonSummary):
             ],
             status=status,
             display_name=commissioner.display_name,
+            created_at=season.created_at.isoformat(),
             started_at=season.started_at.isoformat() if season.started_at else None,
             tournament_type=tournament_type,
             entrant_count=entrant_count,
@@ -693,8 +697,6 @@ def create_tournament_router() -> APIRouter:
         include_hidden: bool = Query(default=False, description="Include hidden seasons (for testing)"),
     ) -> SeasonSummary:
         name, season = await _resolve_canonical_season_by_id_or_404(session, season_id, allow_hidden=include_hidden)
-        if season.tournament_type != "freeplay":
-            raise HTTPException(status_code=400, detail="Only freeplay seasons can be rolled")
         commissioner_cls = tournament_registry.SEASONS[name]
 
         compat_version = request.compat_version.strip()
