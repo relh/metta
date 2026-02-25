@@ -22,6 +22,7 @@ type CapabilityCard = {
   source: CapabilitySource
   score: number
   trained: CapabilityIndicator
+  supportLabel: 'Trained' | 'Backed'
   eval: CapabilityIndicator
   evidence: string[]
 }
@@ -163,6 +164,11 @@ function normalizeCapabilityIndicator(value: unknown): CapabilityIndicator | nul
   return null
 }
 
+function normalizeSupportType(value: unknown): 'trained' | 'backed' | null {
+  if (value === 'trained' || value === 'backed') return value
+  return null
+}
+
 function slug(value: string): string {
   const normalized = value
     .trim()
@@ -301,13 +307,19 @@ function probeIndicator(
 function capabilityAuditStatus(
   data: DashboardResponse,
   capabilityId: string
-): { status: CapabilityIndicator | null; trainingSource: string | null; evidence: string[] } {
+): {
+  status: CapabilityIndicator | null
+  supportType: 'trained' | 'backed' | null
+  trainingSource: string | null
+  evidence: string[]
+} {
   const entry = data.derived.capability_code_audit?.capabilities?.[capabilityId]
   const status = normalizeCapabilityIndicator(entry?.status)
+  const supportType = normalizeSupportType(entry?.support_type)
   const trainingSource =
     typeof entry?.training_source === 'string' && entry.training_source.trim() ? entry.training_source : null
   const evidence = asStringArray(entry?.evidence)
-  return { status, trainingSource, evidence }
+  return { status, supportType, trainingSource, evidence }
 }
 
 function buildCapabilityEvalCards(
@@ -323,6 +335,7 @@ function buildCapabilityEvalCards(
     const probeSignal = probeIndicator(note, spec.axis)
     const audit = capabilityAuditStatus(data, spec.id)
     const trained = audit.status ?? sourceIndicators.capability_eval
+    const supportLabel = audit.supportType === 'trained' ? 'Trained' : 'Backed'
     const trainingSource = audit.trainingSource ?? spec.defaultTrainingSource
 
     const baseScore = clamp01(evalFromMetrics[spec.id] ?? 0)
@@ -361,6 +374,7 @@ function buildCapabilityEvalCards(
       source: 'capability_eval',
       score: evalScore,
       trained,
+      supportLabel,
       eval: evalIndicator,
       evidence,
     }
@@ -380,6 +394,7 @@ function buildKpiDiagnosticCards(
     source: 'kpi_diagnostic',
     score: 0.2,
     trained: sourceIndicators.kpi_diagnostic,
+    supportLabel: 'Backed',
     eval: 'no',
     evidence: ['score: 20%', 'triggered by dashboard KPI diagnostic stream'],
   }))
@@ -412,6 +427,7 @@ function buildInstrumentationCards(
       source: 'instrumentation',
       score: coverage,
       trained: sourceIndicators.instrumentation,
+      supportLabel: 'Backed',
       eval: evalIndicator,
       evidence: [
         `score: ${formatPercent(coverage, 0)}`,
@@ -448,6 +464,7 @@ function buildBehaviorSliceCards(
       source: 'behavior_slice',
       score,
       trained: sourceIndicators.behavior_slice,
+      supportLabel: 'Backed',
       eval: scoreToIndicator(score),
       evidence: [
         `score: ${formatPercent(score, 0)}`,
@@ -481,6 +498,7 @@ function buildDiagnoseAxisCards(
       source: 'cogames_axis',
       score,
       trained: sourceIndicators.cogames_axis,
+      supportLabel: 'Backed',
       eval: evalIndicator,
       evidence: [
         `score: ${formatPercent(score, 0)}`,
@@ -515,6 +533,7 @@ function buildDiagnoseProbeCards(
       source: 'cogames_probe',
       score,
       trained: sourceIndicators.cogames_probe,
+      supportLabel: 'Backed',
       eval: evaluation ? scoreToIndicator(score) : 'planned',
       evidence: [
         `score: ${formatPercent(score, 0)}`,
@@ -542,6 +561,7 @@ function buildDiagnoseSymptomCards(
       source: 'cogames_symptom',
       score,
       trained: sourceIndicators.cogames_symptom,
+      supportLabel: 'Backed',
       eval: scoreToIndicator(score),
       evidence: [
         `score: ${formatPercent(score, 0)} (inverse severity)`,
@@ -714,7 +734,7 @@ export const SkillTreePanel: FC<{
             <strong>{formatPercent(capability.score, 0)}</strong>
           </div>
           <div className={`capability-indicator capability-indicator-trained indicator-${capability.trained}`}>
-            <span>Backed</span>
+            <span>{capability.supportLabel}</span>
             <strong>{INDICATOR_LABEL[capability.trained]}</strong>
           </div>
         </div>
@@ -803,7 +823,7 @@ export const SkillTreePanel: FC<{
           <select value={trainedFilter} onChange={(event) => setTrainedFilter(event.target.value as IndicatorFilter)}>
             {INDICATOR_FILTERS.map((option) => (
               <option key={`trained-${option.value}`} value={option.value}>
-                Backed: {option.label}
+                Support: {option.label}
               </option>
             ))}
           </select>

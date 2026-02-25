@@ -2057,7 +2057,8 @@ export function DashboardClient() {
                           borderRadius: 10,
                           overflow: 'hidden',
                           background: '#000',
-                          aspectRatio: '1 / 1',
+                          minHeight: isReplayTheaterMode ? 0 : 360,
+                          aspectRatio: isReplayTheaterMode ? '16 / 9' : undefined,
                         }}
                       >
                         {replaySpotlightUrls.selected ? (
@@ -2090,8 +2091,7 @@ export function DashboardClient() {
                               onLoad={onReplaySpotlightLoaded}
                               style={{
                                 width: '100%',
-                                height: '100%',
-                                display: 'block',
+                                height: isReplayTheaterMode ? '100%' : 420,
                                 border: 0,
                                 opacity: isReplaySpotlightLoaded ? 1 : 0,
                                 transition: 'opacity 180ms ease',

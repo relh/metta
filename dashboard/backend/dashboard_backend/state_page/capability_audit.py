@@ -10,6 +10,8 @@ from pathlib import Path
 from dashboard.backend.dashboard_backend.state_page.diagnostics import CapabilityCodeAudit, CapabilityCodeStatus
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
+_SKIP_DIR_NAMES = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+_TEXT_SUFFIXES = (".py", ".md", ".toml", ".yaml", ".yml")
 
 
 @lru_cache(maxsize=128)
@@ -55,6 +57,55 @@ def _contains_all(relative_path: str, *tokens: str) -> bool:
     return all(token in content for token in tokens)
 
 
+@lru_cache(maxsize=64)
+def _iter_relative_files(roots: tuple[str, ...], suffixes: tuple[str, ...]) -> tuple[str, ...]:
+    relative_files: set[str] = set()
+    for root in roots:
+        candidate = (_REPO_ROOT / root).resolve()
+        if not candidate.exists():
+            continue
+        if candidate.is_file():
+            if not suffixes or candidate.suffix in suffixes:
+                relative_files.add(str(candidate.relative_to(_REPO_ROOT)))
+            continue
+        for path in candidate.rglob("*"):
+            if not path.is_file():
+                continue
+            if any(part in _SKIP_DIR_NAMES for part in path.parts):
+                continue
+            if suffixes and path.suffix not in suffixes:
+                continue
+            relative_files.add(str(path.relative_to(_REPO_ROOT)))
+    return tuple(sorted(relative_files))
+
+
+@lru_cache(maxsize=256)
+def _keyword_hits(
+    roots: tuple[str, ...], tokens: tuple[str, ...], suffixes: tuple[str, ...] = _TEXT_SUFFIXES
+) -> tuple[str, ...]:
+    normalized_tokens = tuple(token.strip().lower() for token in tokens if token.strip())
+    if not normalized_tokens:
+        return tuple()
+    matches: list[str] = []
+    for relative_path in _iter_relative_files(roots, suffixes):
+        content = _read_text(relative_path)
+        if content is None:
+            continue
+        lowered = content.lower()
+        if all(token in lowered for token in normalized_tokens):
+            matches.append(relative_path)
+    return tuple(matches)
+
+
+def _keyword_check(label: str, roots: tuple[str, ...], tokens: tuple[str, ...]) -> tuple[str, str, bool]:
+    hits = _keyword_hits(roots, tokens)
+    if hits:
+        return label, hits[0], True
+    root_desc = ", ".join(roots)
+    token_desc = " & ".join(tokens)
+    return label, f"keyword search in {root_desc}: {token_desc}", False
+
+
 def _status_from_checks(checks: list[tuple[str, str, bool]]) -> str:
     if not checks:
         return "planned"
@@ -66,10 +117,16 @@ def _status_from_checks(checks: list[tuple[str, str, bool]]) -> str:
     return "partial"
 
 
-def _status_entry(training_source: str | None, checks: list[tuple[str, str, bool]]) -> CapabilityCodeStatus:
+def _status_entry(
+    training_source: str | None,
+    checks: list[tuple[str, str, bool]],
+    *,
+    support_type: str = "backed",
+) -> CapabilityCodeStatus:
     evidence = [f"{'PASS' if ok else 'MISS'}: {label} [{ref}]" for label, ref, ok in checks]
     return CapabilityCodeStatus(
         status=_status_from_checks(checks),
+        support_type=support_type,
         training_source=training_source,
         evidence=evidence,
     )
@@ -78,6 +135,12 @@ def _status_entry(training_source: str | None, checks: list[tuple[str, str, bool
 @lru_cache(maxsize=1)
 def build_capability_code_audit() -> CapabilityCodeAudit:
     generated_at = datetime.now(timezone.utc).isoformat()
+    reward_variants_file = "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py"
+    mining_shaper_exists = _has_python_function(reward_variants_file, "_apply_miner")
+    aligning_shaper_exists = _has_python_function(reward_variants_file, "_apply_aligner")
+    scrambling_shaper_exists = _has_python_function(reward_variants_file, "_apply_scrambler")
+    scouting_shaper_exists = _has_python_function(reward_variants_file, "_apply_scout")
+    coordination_shaper_exists = _contains_all(reward_variants_file, '"role_conditional"')
 
     capabilities = {
         "mining": _status_entry(
@@ -88,24 +151,18 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                     "recipes/experiment/cogsguard.py::miner",
                     _has_python_function("recipes/experiment/cogsguard.py", "miner"),
                 ),
-                (
-                    "tutorial script",
-                    "packages/cogames/tutorials/TRAIN_MINER.py",
-                    _exists("packages/cogames/tutorials/TRAIN_MINER.py"),
-                ),
-                (
-                    "tutorial mission registered",
-                    "packages/cogames/src/cogames/cogs_vs_clips/missions.py",
-                    _contains_all("packages/cogames/src/cogames/cogs_vs_clips/missions.py", "MinerTutorialMission"),
+                _keyword_check(
+                    "tutorial coverage (keyword discovery)",
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("miner_tutorial", "minerrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
                     "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_miner",
-                    _has_python_function(
-                        "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py", "_apply_miner"
-                    ),
+                    mining_shaper_exists,
                 ),
             ],
+            support_type="trained" if mining_shaper_exists else "backed",
         ),
         "aligning": _status_entry(
             "recipes/experiment/cogsguard.py::aligner",
@@ -115,24 +172,18 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                     "recipes/experiment/cogsguard.py::aligner",
                     _has_python_function("recipes/experiment/cogsguard.py", "aligner"),
                 ),
-                (
-                    "tutorial script",
-                    "packages/cogames/tutorials/TRAIN_ALIGNER.py",
-                    _exists("packages/cogames/tutorials/TRAIN_ALIGNER.py"),
-                ),
-                (
-                    "tutorial mission registered",
-                    "packages/cogames/src/cogames/cogs_vs_clips/missions.py",
-                    _contains_all("packages/cogames/src/cogames/cogs_vs_clips/missions.py", "AlignerTutorialMission"),
+                _keyword_check(
+                    "tutorial coverage (keyword discovery)",
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("aligner_tutorial", "alignerrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
                     "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_aligner",
-                    _has_python_function(
-                        "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py", "_apply_aligner"
-                    ),
+                    aligning_shaper_exists,
                 ),
             ],
+            support_type="trained" if aligning_shaper_exists else "backed",
         ),
         "scrambling": _status_entry(
             "recipes/experiment/cogsguard.py::scrambler",
@@ -142,33 +193,18 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                     "recipes/experiment/cogsguard.py::scrambler",
                     _has_python_function("recipes/experiment/cogsguard.py", "scrambler"),
                 ),
-                (
-                    "scrambler tutorial mission",
-                    "packages/cogames/src/cogames/cogs_vs_clips/scrambler_tutorial.py::ScramblerTutorialMission",
-                    _contains_all(
-                        "packages/cogames/src/cogames/cogs_vs_clips/scrambler_tutorial.py",
-                        "ScramblerTutorialMission",
-                        "ScramblerRewardsVariant",
-                    ),
-                ),
-                (
-                    "tutorial script",
-                    "packages/cogames/tutorials/TRAIN_SCRAMBLER.py",
-                    _exists("packages/cogames/tutorials/TRAIN_SCRAMBLER.py"),
-                ),
-                (
-                    "tutorial mission registered",
-                    "packages/cogames/src/cogames/cogs_vs_clips/missions.py",
-                    _contains_all("packages/cogames/src/cogames/cogs_vs_clips/missions.py", "ScramblerTutorialMission"),
+                _keyword_check(
+                    "tutorial coverage (keyword discovery)",
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("scrambler_tutorial", "scramblerrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
                     "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_scrambler",
-                    _has_python_function(
-                        "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py", "_apply_scrambler"
-                    ),
+                    scrambling_shaper_exists,
                 ),
             ],
+            support_type="trained" if scrambling_shaper_exists else "backed",
         ),
         "scouting": _status_entry(
             "recipes/experiment/cogsguard.py::scout",
@@ -178,24 +214,18 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                     "recipes/experiment/cogsguard.py::scout",
                     _has_python_function("recipes/experiment/cogsguard.py", "scout"),
                 ),
-                (
-                    "tutorial script",
-                    "packages/cogames/tutorials/TRAIN_SCOUT.py",
-                    _exists("packages/cogames/tutorials/TRAIN_SCOUT.py"),
-                ),
-                (
-                    "tutorial mission registered",
-                    "packages/cogames/src/cogames/cogs_vs_clips/missions.py",
-                    _contains_all("packages/cogames/src/cogames/cogs_vs_clips/missions.py", "ScoutTutorialMission"),
+                _keyword_check(
+                    "tutorial coverage (keyword discovery)",
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("scout_tutorial", "scoutrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
                     "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_scout",
-                    _has_python_function(
-                        "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py", "_apply_scout"
-                    ),
+                    scouting_shaper_exists,
                 ),
             ],
+            support_type="trained" if scouting_shaper_exists else "backed",
         ),
         "coordination": _status_entry(
             "recipes/experiment/coggernaut.py::train",
@@ -220,21 +250,20 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 (
                     "role-conditional reward shaping",
                     "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py",
-                    _contains_all(
-                        "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py", '"role_conditional"'
-                    ),
+                    coordination_shaper_exists,
                 ),
                 (
                     "two-policy coordination train recipe",
                     "recipes/experiment/cogsguard_marlbro.py::train",
                     _has_python_function("recipes/experiment/cogsguard_marlbro.py", "train"),
                 ),
-                (
-                    "dedicated coordination tutorial",
-                    "packages/cogames/tutorials/TRAIN_COORDINATION.py",
-                    _exists("packages/cogames/tutorials/TRAIN_COORDINATION.py"),
+                _keyword_check(
+                    "coordination-style recipe wiring (keyword discovery)",
+                    ("recipes/experiment",),
+                    ("role_conditional", "_role_order"),
                 ),
             ],
+            support_type="trained" if coordination_shaper_exists else "backed",
         ),
     }
 

@@ -420,6 +420,7 @@ export type DashboardCrashDumpSummary = {
 
 export type DashboardCapabilityCodeStatus = {
   status?: 'yes' | 'partial' | 'no' | 'planned' | string
+  support_type?: 'trained' | 'backed' | string
   training_source?: string | null
   evidence?: string[]
   [key: string]: unknown

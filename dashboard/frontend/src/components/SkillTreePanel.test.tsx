@@ -60,4 +60,41 @@ describe('SkillTreePanel', () => {
     expect(gridButton.getAttribute('disabled')).not.toBeNull()
     expect(screen.getByText('Mining')).toBeTruthy()
   })
+
+  it('labels shaped-reward capabilities as Trained and other tiles as Backed', () => {
+    const response: DashboardResponse = {
+      ...BASE_RESPONSE,
+      derived: {
+        ...BASE_RESPONSE.derived,
+        capability_code_audit: {
+          generated_at: '2026-02-25T12:00:00Z',
+          capabilities: {
+            mining: {
+              status: 'yes',
+              support_type: 'trained',
+              training_source: 'recipes/experiment/cogsguard.py::miner',
+              evidence: [
+                'PASS: role recipe function [recipes/experiment/cogsguard.py::miner]',
+                'PASS: role-specific reward shaper [packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_miner]',
+              ],
+            },
+          },
+          sources: {
+            capability_eval: { status: 'yes', support_type: 'backed', evidence: [] },
+            cogames_axis: { status: 'yes', support_type: 'backed', evidence: [] },
+            cogames_probe: { status: 'yes', support_type: 'backed', evidence: [] },
+            cogames_symptom: { status: 'yes', support_type: 'backed', evidence: [] },
+            kpi_diagnostic: { status: 'yes', support_type: 'backed', evidence: [] },
+            instrumentation: { status: 'yes', support_type: 'backed', evidence: [] },
+            behavior_slice: { status: 'yes', support_type: 'backed', evidence: [] },
+          },
+        },
+      },
+    }
+
+    render(<SkillTreePanel data={response} diagnoseNote={null} diagnoseManifest={null} />)
+
+    expect(screen.getAllByText('Trained').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Backed').length).toBeGreaterThan(0)
+  })
 })

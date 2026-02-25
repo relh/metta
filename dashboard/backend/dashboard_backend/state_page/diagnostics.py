@@ -408,6 +408,7 @@ class PatternExtractionSummary(BaseModel):
 
 class CapabilityCodeStatus(BaseModel):
     status: str = "planned"  # yes | partial | no | planned
+    support_type: str = "backed"  # trained | backed
     training_source: str | None = None
     evidence: list[str] = Field(default_factory=list)
 
