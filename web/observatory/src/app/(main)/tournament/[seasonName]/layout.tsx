@@ -77,11 +77,6 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
   const tabs: LinkTab[] = [
     { id: 'players', label: 'Players', href: `/tournament/${seasonName}/players` },
     {
-      id: 'leaderboard',
-      label: 'Leaderboard',
-      href: stageContext.teamSeason ? `/tournament/${seasonName}?view=leaderboard` : `/tournament/${seasonName}`,
-    },
-    {
       id: 'matches',
       label: 'Matches',
       href: `/tournament/${seasonName}/matches`,

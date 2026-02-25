@@ -148,6 +148,7 @@ class TeamCommissionerBase(
             stage_flow.append(
                 ProgressStage(
                     index=binding.index + 1,
+                    name=binding.display_name,
                     kind=binding.stage.kind,
                     description=binding.stage.description,
                     input_pool=binding.input_pool,

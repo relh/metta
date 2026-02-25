@@ -23,6 +23,7 @@ TeamTournamentStageKind = Literal["policy_eval", "sample_teams", "team_eval", "s
 
 class PolicyEvalStage(BaseModel):
     kind: Literal["policy_eval"] = "policy_eval"
+    display_name: str | None = Field(default=None, description="Optional UI title for this stage")
     policies_per_team: int = Field(description="Number of policies composing each team in this eval stage")
     matches_per_combo: int = Field(default=10, description="Matches to play per unique team combination")
     elim: Elimination | None = Field(default=None, description="Elimination rule applied after this stage completes")
@@ -41,6 +42,7 @@ class PolicyEvalStage(BaseModel):
 
 class SampleStage(BaseModel):
     kind: Literal["sample_teams"] = "sample_teams"
+    display_name: str | None = Field(default=None, description="Optional UI title for this stage")
     team_size: int = Field(description="Number of policies per sampled team")
     num_teams: int = Field(description="Total number of teams to sample")
     min_per_policy: int | None = Field(default=None, description="Minimum teams each policy must appear in")
@@ -52,6 +54,7 @@ class SampleStage(BaseModel):
 
 class TeamEvalStage(BaseModel):
     kind: Literal["team_eval"] = "team_eval"
+    display_name: str | None = Field(default=None, description="Optional UI title for this stage")
     matches_per_team: int = Field(description="Matches each team plays in this round")
     cull_fraction: float = Field(description="Fraction of lowest-scoring teams culled after this round (0.0-1.0)")
 
@@ -64,6 +67,7 @@ class TeamEvalStage(BaseModel):
 
 class ScoreStage(BaseModel):
     kind: Literal["score_policies"] = "score_policies"
+    display_name: str | None = Field(default=None, description="Optional UI title for this stage")
     top_k: int = Field(description="Number of best team placements used per policy")
 
     @property

@@ -1164,6 +1164,8 @@ async def test_get_progress_uses_season_config_snapshot(stats_repo: str) -> None
     progress = await commissioner.get_progress()
     assert len(progress.stage_flow) == len(season_config.stages)
     assert progress.stage_flow[0].kind == "policy_eval"
+    assert progress.stage_flow[0].name == "Play-ins: two-player"
+    assert progress.stage_flow[2].name == "Playoffs: eight-player"
     assert progress.stage_flow[-1].kind == "score_policies"
 
 

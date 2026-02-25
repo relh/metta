@@ -230,7 +230,7 @@ class TestTournamentRouteSmoke:
         seasons = r.json()
         assert isinstance(seasons, list)
         if seasons:
-            assert "display_name" not in seasons[0]
+            assert seasons[0]["display_name"]
             assert isinstance(seasons[0]["summary"], str)
             assert "pools" in seasons[0]
             assert isinstance(seasons[0]["pools"], list)

@@ -32,6 +32,7 @@ class StageStats(BaseModel):
 
 class ProgressStage(BaseModel):
     index: int = Field(description="1-indexed position of this stage in TeamTournamentConfig.stages")
+    name: str = Field(description="Human-readable stage title for UI display")
     kind: TeamTournamentStageKind = Field(
         description="Configured stage kind: policy_eval, sample_teams, team_eval, or score_policies"
     )

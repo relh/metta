@@ -35,14 +35,24 @@ class BetaTeamsCommissioner(TeamCommissionerBase):
         game=GameEnvGenerator(num_agents=8),
         stages=[
             PolicyEvalStage(
-                policies_per_team=1, matches_per_combo=2, min_policies=8, elim=ThresholdElim(min_score=0.01)
+                display_name="Play-ins: one-player",
+                policies_per_team=1,
+                matches_per_combo=2,
+                min_policies=8,
+                elim=ThresholdElim(min_score=0.01),
             ),
-            PolicyEvalStage(policies_per_team=2, matches_per_combo=2, min_policies=8, elim=FractionElim(fraction=0.25)),
-            PolicyEvalStage(policies_per_team=4, matches_per_combo=2),
-            SampleStage(team_size=8, num_teams=1000),
-            TeamEvalStage(matches_per_team=10, cull_fraction=0.5),
-            TeamEvalStage(matches_per_team=10, cull_fraction=0.5),
-            TeamEvalStage(matches_per_team=10, cull_fraction=0.0),
-            ScoreStage(top_k=10),
+            PolicyEvalStage(
+                display_name="Play-ins: two-player",
+                policies_per_team=2,
+                matches_per_combo=2,
+                min_policies=8,
+                elim=FractionElim(fraction=0.25),
+            ),
+            PolicyEvalStage(display_name="Play-ins: four-player", policies_per_team=4, matches_per_combo=2),
+            SampleStage(display_name="Sampling: eight-player", team_size=8, num_teams=1000),
+            TeamEvalStage(display_name="Playoffs: eight-player", matches_per_team=10, cull_fraction=0.5),
+            TeamEvalStage(display_name="Playoffs: eight-player", matches_per_team=10, cull_fraction=0.5),
+            TeamEvalStage(display_name="Playoffs: eight-player", matches_per_team=10, cull_fraction=0.0),
+            ScoreStage(display_name="Final scoring", top_k=10),
         ],
     )

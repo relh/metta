@@ -18,3 +18,4 @@ async def test_season_summary_unknown_disabled_team_season_is_team() -> None:
     summary = await SeasonSummary.from_commissioner(season, season.name)
 
     assert summary.tournament_type == "team"
+    assert summary.display_name == season.name

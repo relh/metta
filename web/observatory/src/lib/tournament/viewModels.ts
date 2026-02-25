@@ -19,7 +19,7 @@ export type StageProgressItem = {
 }
 
 function stageTitle(stage: ProgressResponse['stage_flow'][number]): string {
-  return stageKindLabel(stage.kind)
+  return stage.name || stageKindLabel(stage.kind)
 }
 
 function policyCount(stats: StageStats | undefined): number | null {

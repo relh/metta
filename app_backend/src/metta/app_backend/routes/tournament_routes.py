@@ -266,6 +266,7 @@ class UpdateCurrentSeasonCompatVersionRequest(BaseModel):
 class SeasonSummary(BaseModel):
     id: UUID = Field(description="Unique season identifier")
     name: str = Field(description="Short name of the season")
+    display_name: str = Field(description="Human-readable season title for UI display")
     version: int = Field(description="Season version number")
     canonical: bool = Field(description="Whether this is the canonical (active) version")
     summary: str = Field(description="Human-readable description of the season")
@@ -287,6 +288,7 @@ class SeasonSummary(BaseModel):
             return cls(
                 id=season.id,
                 name=season_name,
+                display_name=season_name,
                 version=season.version,
                 canonical=season.canonical,
                 summary="",
@@ -304,6 +306,7 @@ class SeasonSummary(BaseModel):
         return cls(
             id=season.id,
             name=season_name,
+            display_name=commissioner.display_name,
             version=season.version,
             canonical=season.canonical,
             summary=desc.summary,
@@ -328,7 +331,6 @@ class SeasonDetail(SeasonSummary):
     status: Literal["not_started", "in_progress", "complete"] = Field(
         description="High-level tournament status inferred from season/progress state"
     )
-    display_name: str = Field(description="Human-readable season title for UI display")
     started_at: str | None = Field(default=None, description="ISO 8601 timestamp when the season was started")
     tournament_type: Literal["freeplay", "team"] = Field(description="Tournament format")
     entrant_count: int = Field(description="Unique policy versions that have entered the season")

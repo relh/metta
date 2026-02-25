@@ -27,8 +27,8 @@ export function stageKindLabel(kind: TournamentStageFlowEntry['kind']): string {
   }
 }
 
-export function stageFlowLabel(stage: Pick<TournamentStageFlowEntry, 'index' | 'kind'>): string {
-  return `${stage.index}. ${stageKindLabel(stage.kind)}`
+export function stageFlowLabel(stage: Pick<TournamentStageFlowEntry, 'index' | 'kind' | 'name'>): string {
+  return `${stage.index}. ${stage.name || stageKindLabel(stage.kind)}`
 }
 
 export function isTeamSeason(stages: StageStats[]): boolean {

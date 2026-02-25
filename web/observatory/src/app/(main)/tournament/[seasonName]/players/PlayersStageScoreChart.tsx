@@ -1,7 +1,7 @@
 'use client'
 
-import Highcharts from 'highcharts'
-import 'highcharts/highcharts-more'
+import Highcharts from 'highcharts/esm/highcharts.js'
+import 'highcharts/esm/highcharts-more.js'
 import HighchartsReact from 'highcharts-react-official'
 import { FC, useMemo, useState } from 'react'
 

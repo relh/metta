@@ -32,16 +32,50 @@ def _score_pool(n: int = 1) -> str:
     return f"policy-scores-{n}"
 
 
+_NUMBER_WORDS: dict[int, str] = {
+    1: "one",
+    2: "two",
+    3: "three",
+    4: "four",
+    5: "five",
+    6: "six",
+    7: "seven",
+    8: "eight",
+    9: "nine",
+    10: "ten",
+}
+
+
+def _player_size_label(player_count: int) -> str:
+    word = _NUMBER_WORDS.get(player_count, str(player_count))
+    return f"{word}-player"
+
+
 @dataclass(frozen=True)
 class StageBinding:
     index: int
     stage: PolicyEvalStage | SampleStage | TeamEvalStage | ScoreStage
+    display_name: str
     input_pool: str
     output_pool: str
     score_source_pool: str | None = None
 
 
 class TeamStagePlanningMixin:
+    def _stage_display_name(self, stage: PolicyEvalStage | SampleStage | TeamEvalStage | ScoreStage) -> str:
+        if stage.display_name:
+            return stage.display_name
+
+        match stage:
+            case PolicyEvalStage():
+                return f"Play-ins: {_player_size_label(stage.policies_per_team)}"
+            case SampleStage():
+                return f"Sampling: {_player_size_label(stage.team_size)}"
+            case TeamEvalStage():
+                return f"Playoffs: {_player_size_label(self.config.sample_stage.team_size)}"
+            case ScoreStage():
+                return "Final scoring"
+
     def _stage_bindings(self) -> list[StageBinding]:
         bindings: list[StageBinding] = []
         policy_pool_num = 1
@@ -85,6 +119,7 @@ class TeamStagePlanningMixin:
                 StageBinding(
                     index=index,
                     stage=stage,
+                    display_name=self._stage_display_name(stage),
                     input_pool=input_pool,
                     output_pool=output_pool,
                     score_source_pool=score_source_pool,

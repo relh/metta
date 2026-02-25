@@ -96,12 +96,15 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   }, [freeplaySeasons.length, searchParams, selectedSeason])
   const tabSeasons = selectedMode === 'freeplay' ? freeplaySeasons : tournamentSeasons
   const seasonOptions: SeasonOption[] = useMemo(() => {
-    const options = tabSeasons.map((season) => ({ value: season.name, label: season.name }))
+    const options = tabSeasons.map((season) => ({ value: season.name, label: season.display_name }))
     if (selectedSeasonName && !options.some((option) => option.value === selectedSeasonName)) {
-      options.unshift({ value: selectedSeasonName, label: selectedSeasonName })
+      options.unshift({
+        value: selectedSeasonName,
+        label: selectedSeason?.display_name ?? selectedSeasonName,
+      })
     }
     return options
-  }, [selectedSeasonName, tabSeasons])
+  }, [selectedSeason, selectedSeasonName, tabSeasons])
   const [versions, setVersions] = useState<SeasonVersionInfo[]>([])
   const [isLoadingVersions, setIsLoadingVersions] = useState(false)
   const [versionsRefreshNonce, setVersionsRefreshNonce] = useState(0)
@@ -361,7 +364,6 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
     <div className="space-y-3">
       {compatVersionError && <div className="text-red-500 text-sm">{compatVersionError}</div>}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-foreground-muted font-medium">Season:</span>
         <Select
           options={seasonOptions}
           value={seasonOptions.find((option) => option.value === selectedSeasonName) || null}
@@ -371,7 +373,6 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
           placeholder={`Select ${selectedMode === 'freeplay' ? 'freeplay' : 'tournament'} season...`}
           instanceId="season-select"
         />
-        <span className="text-foreground-muted font-medium">Version:</span>
         <Select
           options={versionOptions}
           value={selectedVersion}

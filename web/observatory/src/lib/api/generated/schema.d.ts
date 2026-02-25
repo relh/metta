@@ -2212,6 +2212,11 @@ export interface components {
        */
       index: number
       /**
+       * Name
+       * @description Human-readable stage title for UI display
+       */
+      name: string
+      /**
        * Kind
        * @description Configured stage kind: policy_eval, sample_teams, team_eval, or score_policies
        * @enum {string}
@@ -2368,6 +2373,11 @@ export interface components {
        */
       name: string
       /**
+       * Display Name
+       * @description Human-readable season title for UI display
+       */
+      display_name: string
+      /**
        * Version
        * @description Season version number
        */
@@ -2420,11 +2430,6 @@ export interface components {
        */
       status: 'not_started' | 'in_progress' | 'complete'
       /**
-       * Display Name
-       * @description Human-readable season title for UI display
-       */
-      display_name: string
-      /**
        * Started At
        * @description ISO 8601 timestamp when the season was started
        */
@@ -2463,6 +2468,11 @@ export interface components {
        * @description Short name of the season
        */
       name: string
+      /**
+       * Display Name
+       * @description Human-readable season title for UI display
+       */
+      display_name: string
       /**
        * Version
        * @description Season version number
