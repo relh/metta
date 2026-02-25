@@ -770,6 +770,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/tournament/compat-versions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Available Compat Versions */
+    get: operations['list_available_compat_versions_tournament_compat_versions_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/tournament/seasons/{season_name}/versions': {
     parameters: {
       query?: never
@@ -798,6 +815,23 @@ export interface paths {
     put?: never
     /** Roll Season */
     post: operations['roll_season_tournament_seasons__season_id__roll_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/tournament/seasons/{season_id}/update-current-season-compat-version': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Update Current Season Compat Version */
+    post: operations['update_current_season_compat_version_tournament_seasons__season_id__update_current_season_compat_version_post']
     delete?: never
     options?: never
     head?: never
@@ -2910,6 +2944,14 @@ export interface components {
        */
       id: string
     }
+    /** UpdateCurrentSeasonCompatVersionRequest */
+    UpdateCurrentSeasonCompatVersionRequest: {
+      /**
+       * Compat Version
+       * @description Compatibility version for the current canonical season
+       */
+      compat_version: string
+    }
     /** UserRow */
     UserRow: {
       /** Id */
@@ -4376,6 +4418,26 @@ export interface operations {
       }
     }
   }
+  list_available_compat_versions_tournament_compat_versions_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': string[]
+        }
+      }
+    }
+  }
   list_season_versions_tournament_seasons__season_name__versions_get: {
     parameters: {
       query?: never
@@ -4422,6 +4484,44 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['RollSeasonRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SeasonSummary']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  update_current_season_compat_version_tournament_seasons__season_id__update_current_season_compat_version_post: {
+    parameters: {
+      query?: {
+        /** @description Include hidden seasons (for testing) */
+        include_hidden?: boolean
+      }
+      header?: never
+      path: {
+        season_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateCurrentSeasonCompatVersionRequest']
       }
     }
     responses: {

@@ -5,7 +5,7 @@ These catch SQLAlchemy loader chain errors (e.g. raiseload("*") misuse)
 that only surface at request time.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -241,6 +241,17 @@ class TestTournamentRouteSmoke:
             assert "entrant_count" not in seasons[0]
 
     @pytest.mark.asyncio
+    async def test_list_available_compat_versions(self, test_client: TestClient):
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6", "0.5"]),
+        ):
+            response = test_client.get("/tournament/compat-versions")
+
+        assert response.status_code == 200
+        assert response.json() == ["0.6", "0.5"]
+
+    @pytest.mark.asyncio
     async def test_get_season(self, test_client: TestClient, softmax_headers: dict, seed_season: dict):
         r = test_client.get(
             f"/tournament/seasons/{seed_season['season_name']}?include_hidden=true", headers=softmax_headers
@@ -317,11 +328,15 @@ class TestTournamentRouteSmoke:
     async def test_roll_freeplay_season(
         self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
     ):
-        response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
-            json={"compat_version": "0.6"},
-            headers=softmax_headers,
-        )
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                json={"compat_version": "0.6"},
+                headers=softmax_headers,
+            )
         assert response.status_code == 200
         payload = response.json()
         assert payload["name"] == seed_rollable_freeplay_season["season_name"]
@@ -393,11 +408,15 @@ class TestTournamentRouteSmoke:
     async def test_roll_freeplay_by_season_id(
         self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
     ):
-        response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
-            json={"compat_version": "0.6"},
-            headers=softmax_headers,
-        )
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                json={"compat_version": "0.6"},
+                headers=softmax_headers,
+            )
         assert response.status_code == 200
         payload = response.json()
         assert payload["name"] == seed_rollable_freeplay_season["season_name"]
@@ -407,11 +426,15 @@ class TestTournamentRouteSmoke:
     async def test_roll_freeplay_with_migrate_active_players(
         self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
     ):
-        response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
-            json={"compat_version": "0.6", "migrate_active_players": True},
-            headers=softmax_headers,
-        )
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                json={"compat_version": "0.6", "migrate_active_players": True},
+                headers=softmax_headers,
+            )
         assert response.status_code == 200
         season_name = seed_rollable_freeplay_season["season_name"]
         detail = test_client.get(f"/tournament/seasons/{season_name}?include_hidden=true", headers=softmax_headers)
@@ -420,6 +443,73 @@ class TestTournamentRouteSmoke:
         assert payload["version"] == 2
         assert payload["entrant_count"] == 1
         assert payload["active_entrant_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_rejects_unavailable_compat_version(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.5"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                json={"compat_version": "0.6"},
+                headers=softmax_headers,
+            )
+        assert response.status_code == 400
+        assert response.json()["detail"].startswith("compat_version 0.6 is not available in")
+
+    @pytest.mark.asyncio
+    async def test_update_current_season_compat_version(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.7", "0.6"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}"
+                "/update-current-season-compat-version?include_hidden=true",
+                json={"compat_version": "0.7"},
+                headers=softmax_headers,
+            )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["name"] == seed_rollable_freeplay_season["season_name"]
+        assert payload["version"] == 1
+        assert payload["canonical"] is True
+        assert payload["compat_version"] == "0.7"
+
+    @pytest.mark.asyncio
+    async def test_update_current_season_compat_version_requires_value(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}"
+            "/update-current-season-compat-version?include_hidden=true",
+            json={"compat_version": "   "},
+            headers=softmax_headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "compat_version is required"
+
+    @pytest.mark.asyncio
+    async def test_update_current_season_compat_version_rejects_unavailable(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        with patch(
+            "metta.app_backend.routes.tournament_routes._list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            response = test_client.post(
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}"
+                "/update-current-season-compat-version?include_hidden=true",
+                json={"compat_version": "0.7"},
+                headers=softmax_headers,
+            )
+        assert response.status_code == 400
+        assert response.json()["detail"].startswith("compat_version 0.7 is not available in")
 
     @pytest.mark.asyncio
     async def test_list_match_policy_logs_owner(self, test_client: TestClient, seed_season: dict):

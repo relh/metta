@@ -628,11 +628,22 @@ export class Repo {
     return this.apiCallWithBody<ProgressResponse>(`/tournament/seasons/${encodePathSegment(seasonName)}/start`, {})
   }
 
+  async getAvailableCompatVersions(): Promise<string[]> {
+    return this.apiCall<string[]>('/tournament/compat-versions')
+  }
+
   async rollSeason(seasonId: string, compatVersion: string, migrateActivePlayers = false): Promise<SeasonSummary> {
     return this.apiCallWithBody<SeasonSummary>(`/tournament/seasons/${encodePathSegment(seasonId)}/roll`, {
       compat_version: compatVersion,
       migrate_active_players: migrateActivePlayers,
     })
+  }
+
+  async updateCurrentSeasonCompatVersion(seasonId: string, compatVersion: string): Promise<SeasonSummary> {
+    return this.apiCallWithBody<SeasonSummary>(
+      `/tournament/seasons/${encodePathSegment(seasonId)}/update-current-season-compat-version`,
+      { compat_version: compatVersion }
+    )
   }
 
   async getSeasonStages(seasonName: string): Promise<StageStats[]> {
