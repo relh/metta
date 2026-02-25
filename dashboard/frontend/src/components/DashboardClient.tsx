@@ -699,12 +699,25 @@ function deriveTrainingFocus(kpis: DashboardResponse['derived']['kpis'] | undefi
   return weakest
 }
 
-function autoTrainingRecipeHint(focus: TrainingFocus): string {
+function autoTrainingRecipeHint(
+  focus: TrainingFocus,
+  capabilityCodeAudit: DashboardResponse['derived']['capability_code_audit'] | undefined
+): string {
+  const capabilityIdByFocus: Record<TrainingFocus, string> = {
+    mining: 'mining',
+    aligning: 'aligning',
+    scouting: 'scouting',
+    coordination: 'coordination',
+    scrambling: 'scrambling',
+  }
+  const auditedSource = capabilityCodeAudit?.capabilities?.[capabilityIdByFocus[focus]]?.training_source
+  if (typeof auditedSource === 'string' && auditedSource.trim()) return auditedSource
+
   if (focus === 'mining') return 'recipes/experiment/cogsguard.py::miner'
   if (focus === 'aligning') return 'recipes/experiment/cogsguard.py::aligner'
   if (focus === 'scouting') return 'recipes/experiment/cogsguard.py::scout'
-  if (focus === 'scrambling') return 'planned scrambler curriculum'
-  return 'join curricula (scout/miner/aligning)'
+  if (focus === 'scrambling') return 'recipes/experiment/cogsguard.py::scrambler'
+  return 'recipes/experiment/coggernaut.py::train'
 }
 
 function episodeTagTokens(episode: DashboardEpisode): string[] {
@@ -1284,8 +1297,9 @@ export function DashboardClient() {
       selected: mettascopeUrl,
     }
   }, [replaySpotlightEpisode?.replay_url])
-  const isReplaySpotlightLoaded =
-    replaySpotlightUrls.selected ? loadedReplaySpotlightUrl === replaySpotlightUrls.selected : true
+  const isReplaySpotlightLoaded = replaySpotlightUrls.selected
+    ? loadedReplaySpotlightUrl === replaySpotlightUrls.selected
+    : true
   const replayKeyboardShortcutsEnabled = activeTab === 'overview' && Boolean(replaySpotlightUrls.selected)
 
   const toggleReplayTheaterMode = useCallback(() => {
@@ -1810,7 +1824,7 @@ export function DashboardClient() {
     const runName = `auto-${policyName}-v${policyVersion}-${trainingFocus}`
     return `uv run ./tools/run.py train arena run=${runName} trainer.total_timesteps=20000000`
   }, [data?.policy?.name, data?.policy?.version, trainingFocus])
-  const autoTrainingHint = autoTrainingRecipeHint(trainingFocus)
+  const autoTrainingHint = autoTrainingRecipeHint(trainingFocus, data?.derived?.capability_code_audit)
   const copyAutoTrainingCommand = useCallback(async () => {
     if (typeof navigator === 'undefined' || !navigator.clipboard) return
     await navigator.clipboard.writeText(autoTrainingCommand)
@@ -2043,8 +2057,7 @@ export function DashboardClient() {
                           borderRadius: 10,
                           overflow: 'hidden',
                           background: '#000',
-                          minHeight: isReplayTheaterMode ? 0 : 360,
-                          aspectRatio: isReplayTheaterMode ? '16 / 9' : undefined,
+                          aspectRatio: '1 / 1',
                         }}
                       >
                         {replaySpotlightUrls.selected ? (
@@ -2077,7 +2090,8 @@ export function DashboardClient() {
                               onLoad={onReplaySpotlightLoaded}
                               style={{
                                 width: '100%',
-                                height: isReplayTheaterMode ? '100%' : 420,
+                                height: '100%',
+                                display: 'block',
                                 border: 0,
                                 opacity: isReplaySpotlightLoaded ? 1 : 0,
                                 transition: 'opacity 180ms ease',
@@ -2554,7 +2568,8 @@ export function DashboardClient() {
                         {selectedTrendOverlay && (
                           <div className="card" style={{ background: 'var(--panel-soft-bg-1)' }}>
                             <p style={{ marginTop: 0, marginBottom: 8 }}>
-                              Policy Relative to Team/Population Overlay ({selectedTrendOverlay.signal ?? 'insufficient'})
+                              Policy Relative to Team/Population Overlay (
+                              {selectedTrendOverlay.signal ?? 'insufficient'})
                             </p>
                             <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
                               {selectedTrendOverlay.reason ?? '-'}

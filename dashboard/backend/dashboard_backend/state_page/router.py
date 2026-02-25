@@ -25,6 +25,7 @@ from dashboard.backend.dashboard_backend.auth import SoftmaxUser
 from dashboard.backend.dashboard_backend.config import settings
 from dashboard.backend.dashboard_backend.database import db_session
 from dashboard.backend.dashboard_backend.state_page import diagnostics as claude_dashboard
+from dashboard.backend.dashboard_backend.state_page.capability_audit import build_capability_code_audit
 from dashboard.backend.dashboard_backend.state_page.diagnostics import (
     DashboardDerived,
     DashboardEpisode,
@@ -610,6 +611,7 @@ def create_dashboard_router() -> APIRouter:
             confidence_summary,
             pattern_summary,
         )
+        capability_code_audit = build_capability_code_audit()
 
         return DashboardResponse(
             policy=policy_info,
@@ -634,6 +636,7 @@ def create_dashboard_router() -> APIRouter:
                 trend=trend_summary,
                 trend_explorer=trend_explorer_summary,
                 patterns=pattern_summary,
+                capability_code_audit=capability_code_audit,
             ),
         )
 

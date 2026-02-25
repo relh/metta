@@ -406,6 +406,19 @@ class PatternExtractionSummary(BaseModel):
     signals: list[PatternSignal] = Field(default_factory=list)
 
 
+class CapabilityCodeStatus(BaseModel):
+    status: str = "planned"  # yes | partial | no | planned
+    training_source: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+
+
+class CapabilityCodeAudit(BaseModel):
+    template_version: str = "state-page-capability-code-audit-v1"
+    generated_at: str = ""
+    capabilities: dict[str, CapabilityCodeStatus] = Field(default_factory=dict)
+    sources: dict[str, CapabilityCodeStatus] = Field(default_factory=dict)
+
+
 class DashboardDerived(BaseModel):
     kpis: DerivedMetrics
     team_comp: list[TeamCompStats]
@@ -423,6 +436,7 @@ class DashboardDerived(BaseModel):
     trend: VersionTrendSummary | None = None
     trend_explorer: TrendExplorerSummary | None = None
     patterns: PatternExtractionSummary | None = None
+    capability_code_audit: CapabilityCodeAudit | None = None
 
 
 class EpisodeSelectionMetadata(BaseModel):

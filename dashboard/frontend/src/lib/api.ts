@@ -418,6 +418,21 @@ export type DashboardCrashDumpSummary = {
   [key: string]: unknown
 }
 
+export type DashboardCapabilityCodeStatus = {
+  status?: 'yes' | 'partial' | 'no' | 'planned' | string
+  training_source?: string | null
+  evidence?: string[]
+  [key: string]: unknown
+}
+
+export type DashboardCapabilityCodeAudit = {
+  template_version?: string
+  generated_at?: string
+  capabilities?: Record<string, DashboardCapabilityCodeStatus>
+  sources?: Record<string, DashboardCapabilityCodeStatus>
+  [key: string]: unknown
+}
+
 export type DashboardDerived = {
   kpis: DashboardKpis
   failures: DashboardFailures
@@ -435,6 +450,7 @@ export type DashboardDerived = {
   actions?: DashboardActionSummary | null
   orchestration?: DashboardOrchestrationSummary | null
   crash_dump?: DashboardCrashDumpSummary | null
+  capability_code_audit?: DashboardCapabilityCodeAudit | null
   [key: string]: unknown
 }
 
