@@ -2,6 +2,23 @@
 
 This runbook covers what is already implemented in `metta` for the AI researcher loop and how to run it end-to-end.
 
+## Prompt Meta-Layer
+
+If you want an AI coding agent to run the workflow from a single prompt ("run the neophyte workflow"), use:
+
+- `packages/cogames-rl-researcher/prompts/run-neophyte-workflow.md`
+- `packages/cogames-rl-researcher/prompts/run-experienced-workflow.md`
+
+These prompts orchestrate the existing scripts as tools, including tutorial readthrough, policy creation, training,
+startup/submit, and reporting.
+
+One-line agent launch:
+
+```bash
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent codex --profile neophyte
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent claude --profile experienced
+```
+
 ## What Exists Today
 
 Implementation package:
@@ -68,6 +85,32 @@ Notes:
 - add `--allow-interactive-login` if local browser-based auth recovery is desired
 - use `--researcher-profile neophyte` for stricter happy-path/gate behavior
 - gates are enforced by default; use `--no-enforce-gates` to avoid non-zero exit on gate failure
+
+### Startup via Cogent Runner (Neophyte Competitor Bot)
+
+From the cogent EC2 instance:
+
+```bash
+./agent-runner.py --branch main --neophyte-competitor-bot \
+  --policy metta://policy/role_py \
+  --policy-name my-neophyte-policy \
+  --season beta-cvc
+```
+
+This runs `run_ai_researcher_startup.py` with `--researcher-profile neophyte`.
+
+### Startup via Cogent Runner (Experienced Competitor Bot)
+
+From the cogent EC2 instance:
+
+```bash
+./agent-runner.py --branch main --experienced-competitor-bot \
+  --policy metta://policy/role_py \
+  --policy-name my-experienced-policy \
+  --season beta-cvc
+```
+
+This runs `run_ai_researcher_startup.py` with `--researcher-profile experienced`.
 
 ## Resume Workflow (Continue Existing Run)
 

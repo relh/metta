@@ -2,6 +2,22 @@
 
 Claude-first RL researcher workflows for CoGames.
 
+## Prompt Layer (Meta-Workflows)
+
+If you want an AI agent (Codex/Claude) to run the workflow end-to-end, use the prompt pack:
+
+- `packages/cogames-rl-researcher/prompts/run-neophyte-workflow.md`
+- `packages/cogames-rl-researcher/prompts/run-experienced-workflow.md`
+
+These prompts are the meta-layer. The scripts in this package are the tools those prompts call.
+
+One-line commands:
+
+```bash
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent codex --profile neophyte
+./packages/cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent claude --profile experienced
+```
+
 ## Startup Workflow
 
 Run the startup loop:

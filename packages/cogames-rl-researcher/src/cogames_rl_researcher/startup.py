@@ -849,7 +849,10 @@ def _parse_successful_step_output_json(step_results: list[StepResult], step_name
     if result is None:
         return None
     output = Path(result.stdout_log).read_text(encoding="utf-8")
-    return _parse_json_output(output)
+    try:
+        return _parse_json_output(output)
+    except (ValueError, json.JSONDecodeError):
+        return None
 
 
 def _summarize_step_failures(step_results: list[StepResult]) -> tuple[int, int, float, int, int]:
@@ -1090,7 +1093,48 @@ def _write_daily_report(path: Path, bundle: AuditBundle) -> None:
     path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
 
 
+def _extract_policy_class_path(policy: str) -> str | None:
+    match = re.search(r"(?:^|,)class=([^,]+)", policy)
+    if match is None:
+        return None
+    class_path = match.group(1).strip()
+    return class_path or None
+
+
+def _infer_upload_include_files(policy: str, cwd: Path | None = None) -> list[str]:
+    class_path = _extract_policy_class_path(policy)
+    if class_path is None:
+        return []
+
+    module_path, _, _ = class_path.rpartition(".")
+    if not module_path:
+        return []
+
+    root = (cwd or Path.cwd()).resolve()
+    module_relative = Path(*module_path.split("."))
+
+    module_file = root / module_relative.with_suffix(".py")
+    if module_file.is_file():
+        return [str(module_file.relative_to(root))]
+
+    module_package_dir = root / module_relative
+    if (module_package_dir / "__init__.py").is_file():
+        return [str(module_package_dir.relative_to(root))]
+
+    return []
+
+
+def _append_include_files(command: list[str], include_files: list[str]) -> list[str]:
+    if not include_files:
+        return command
+    command_with_includes = command.copy()
+    for include_file in include_files:
+        command_with_includes.extend(["--include-files", include_file])
+    return command_with_includes
+
+
 def _build_step_catalog(config: StartupConfig, replay_dir: Path) -> dict[str, StepSpec]:
+    upload_include_files = _infer_upload_include_files(config.policy)
     specs = [
         StepSpec(
             name="login_auth_check",
@@ -1124,40 +1168,46 @@ def _build_step_catalog(config: StartupConfig, replay_dir: Path) -> dict[str, St
         ),
         StepSpec(
             name="upload_dry_run_validation",
-            command=[
-                config.cogames_bin,
-                "upload",
-                "--name",
-                config.policy_name,
-                "--policy",
-                config.policy,
-                "--season",
-                config.season,
-                "--dry-run",
-                "--no-submit",
-                "--login-server",
-                config.login_server,
-                "--server",
-                config.server,
-            ],
+            command=_append_include_files(
+                [
+                    config.cogames_bin,
+                    "upload",
+                    "--name",
+                    config.policy_name,
+                    "--policy",
+                    config.policy,
+                    "--season",
+                    config.season,
+                    "--dry-run",
+                    "--no-submit",
+                    "--login-server",
+                    config.login_server,
+                    "--server",
+                    config.server,
+                ],
+                upload_include_files,
+            ),
         ),
         StepSpec(
             name="upload",
-            command=[
-                config.cogames_bin,
-                "upload",
-                "--name",
-                config.policy_name,
-                "--policy",
-                config.policy,
-                "--season",
-                config.season,
-                "--no-submit",
-                "--login-server",
-                config.login_server,
-                "--server",
-                config.server,
-            ],
+            command=_append_include_files(
+                [
+                    config.cogames_bin,
+                    "upload",
+                    "--name",
+                    config.policy_name,
+                    "--policy",
+                    config.policy,
+                    "--season",
+                    config.season,
+                    "--no-submit",
+                    "--login-server",
+                    config.login_server,
+                    "--server",
+                    config.server,
+                ],
+                upload_include_files,
+            ),
         ),
         StepSpec(
             name="submit",

@@ -31,5 +31,11 @@ rel=$(python3 -c "import os.path; print(os.path.relpath('$COGENTS_DIR', '$REPO_R
 ln -s "$rel/subagents" "$REPO_ROOT/.cursor/agents"
 echo "  .cursor/agents -> $rel/subagents"
 
+mkdir -p "$REPO_ROOT/.agent"
+rm -f "$REPO_ROOT/.agent/prompts"
+rel=$(python3 -c "import os.path; print(os.path.relpath('$COGENTS_DIR', '$REPO_ROOT/.agent'))")
+ln -s "$rel/prompts" "$REPO_ROOT/.agent/prompts"
+echo "  .agent/prompts -> $rel/prompts"
+
 echo ""
 echo "Done. Cogents is at $COGENTS_DIR"

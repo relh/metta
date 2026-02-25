@@ -45,6 +45,7 @@ cloned as a sibling directory. Symlinks in this repo point there:
 - `.codex/skills` → `../../cogents/skills`
 - `.cursor/skills` → `../../cogents/skills`
 - `.cursor/agents` → `../../cogents/subagents`
+- `.agent/prompts` → `../../cogents/prompts`
 
 To set up cogents (clone + symlinks):
 

@@ -4,7 +4,8 @@ A dedicated EC2 instance that runs AI agent tasks on a schedule or on-demand via
 
 ## How it works
 
-The runner checks out a branch, reads a skill or prompt, and invokes `claude -p` with the content. Commits appear as
+The runner checks out a branch, reads a skill or prompt from the cogents repo, and invokes `claude -p` with the content.
+It can also launch the neophyte or experienced `cogames-rl-researcher` startup workflow directly. Commits appear as
 `softmax-cogent[bot]`. GitHub auth uses short-lived tokens from the Softmax Cogent GitHub App.
 
 ## Usage
@@ -18,11 +19,21 @@ SSH into the cogent instance and run:
 # Run a skill on a feature branch
 ./agent-runner.py --branch alex/my-feature --skill pr.check-ci
 
-# Run a custom prompt (from devops/cogent/prompts/ on the target branch)
+# Run a custom prompt (from cogents/prompts/ on the target branch)
 ./agent-runner.py --branch alex/experiment --prompt check-training.md
 
 # With a custom timeout (default: 60 min)
 ./agent-runner.py --branch main --skill cb.review-main --timeout 30
+
+# Launch the neophyte competitor bot directly
+./agent-runner.py --branch main --neophyte-competitor-bot \
+  --policy metta://policy/role_py \
+  --policy-name my-neophyte-policy
+
+# Launch the experienced competitor bot directly
+./agent-runner.py --branch main --experienced-competitor-bot \
+  --policy metta://policy/role_py \
+  --policy-name my-experienced-policy
 ```
 
 ### `--skill`
@@ -32,9 +43,23 @@ branches. The cogents repo tracks the same branch if it exists, otherwise falls 
 
 ### `--prompt`
 
-Reads a prompt file from the metta repo at `devops/cogent/prompts/<path>`. Prompts are branch-specific — they come from
-whatever branch `--branch` checks out. To add a custom prompt, create a file in `devops/cogent/prompts/` on your branch
-and push.
+Reads a prompt file from the cogents repo at `prompts/<path>`. Prompts are shared in the same repo as skills.
+
+### `--neophyte-competitor-bot`
+
+Runs:
+
+`uv run ./packages/cogames-rl-researcher/scripts/run_ai_researcher_startup.py --researcher-profile neophyte`
+
+Use `--policy-name` (required) plus optional `--policy`, `--season`, `--output-root`, and `--cogames-bin`.
+
+### `--experienced-competitor-bot`
+
+Runs:
+
+`uv run ./packages/cogames-rl-researcher/scripts/run_ai_researcher_startup.py --researcher-profile experienced`
+
+Use `--policy-name` (required) plus optional `--policy`, `--season`, `--output-root`, and `--cogames-bin`.
 
 ### `--branch`
 

@@ -7,6 +7,7 @@ alwaysApply: true
 # Shared Skills
 
 Skill files live in the `cogents` repo (symlinked at `skills/` via `.cursor/skills`).
+Agent prompts also live there (symlinked at `.agent/prompts`).
 Prefix conventions and namespaces live in `docs/skills.md`.
 
 ## Shared Skill List

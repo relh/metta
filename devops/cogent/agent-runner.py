@@ -10,14 +10,19 @@ import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import jwt
 
 METTA_DIR = Path("/home/ubuntu/metta")
 COGENTS_DIR = Path("/home/ubuntu/cogents")
+PROMPT_DIR = COGENTS_DIR / "prompts"
 CREDENTIALS_FILE = Path.home() / ".config/metta/credentials.sh"
 LOG_DIR = Path.home() / ".agent/logs"
 DEFAULT_TIMEOUT_MIN = 60
+DEFAULT_COGAMES_POLICY = "metta://policy/role_py"
+DEFAULT_COGAMES_SEASON = "beta-cvc"
+ResearcherProfile = Literal["experienced", "neophyte"]
 
 
 CREDENTIAL_KEYS = [
@@ -94,14 +99,10 @@ def checkout_repo(repo_dir: Path, branch: str, fallback_to_main: bool = False):
     subprocess.run(["git", "pull", "--ff-only"], cwd=repo_dir, check=True)
 
 
-PROMPT_DIR = METTA_DIR / "devops" / "cogent" / "prompts"
-
-
 def read_content(skill: str | None, prompt: str | None) -> tuple[str, str]:
     """Read skill or prompt content. Returns (content, label).
 
-    Skills are read from the cogents repo. Prompts are read from the metta repo
-    (branch-specific, checked out via --branch).
+    Skills and prompts are both read from the cogents repo.
     """
     if skill:
         path = COGENTS_DIR / "skills" / skill / "SKILL.md"
@@ -117,6 +118,33 @@ def read_content(skill: str | None, prompt: str | None) -> tuple[str, str]:
     return path.read_text(), f"prompt-{Path(prompt).stem}"
 
 
+def build_competitor_command(
+    policy: str,
+    policy_name: str,
+    season: str,
+    output_root: str,
+    cogames_bin: str,
+    researcher_profile: ResearcherProfile,
+) -> list[str]:
+    return [
+        "uv",
+        "run",
+        "./packages/cogames-rl-researcher/scripts/run_ai_researcher_startup.py",
+        "--policy",
+        policy,
+        "--policy-name",
+        policy_name,
+        "--season",
+        season,
+        "--researcher-profile",
+        researcher_profile,
+        "--output-root",
+        output_root,
+        "--cogames-bin",
+        cogames_bin,
+    ]
+
+
 def run_claude(content: str, timeout_min: int) -> subprocess.CompletedProcess:
     """Invoke claude -p with the given content piped via stdin."""
     return subprocess.run(
@@ -129,22 +157,66 @@ def run_claude(content: str, timeout_min: int) -> subprocess.CompletedProcess:
     )
 
 
+def run_command(command: list[str], timeout_min: int) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        command,
+        cwd=METTA_DIR,
+        capture_output=True,
+        text=True,
+        timeout=timeout_min * 60,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Cogent agent runner")
     parser.add_argument("--branch", default="main", help="Git branch to check out (default: main)")
     parser.add_argument("--skill", help="Skill name (reads from cogents/skills/<name>/SKILL.md)")
-    parser.add_argument("--prompt", help="Prompt path (reads from devops/cogent/prompts/<path> in metta repo)")
+    parser.add_argument("--prompt", help="Prompt path (reads from cogents/prompts/<path>)")
+    parser.add_argument(
+        "--neophyte-competitor-bot",
+        action="store_true",
+        help="Run cogames researcher startup using the neophyte profile",
+    )
+    parser.add_argument(
+        "--experienced-competitor-bot",
+        action="store_true",
+        help="Run cogames researcher startup using the experienced profile",
+    )
+    parser.add_argument("--policy", default=DEFAULT_COGAMES_POLICY, help="Policy URI/path for researcher startup")
+    parser.add_argument("--policy-name", help="Policy name for researcher upload/submit")
+    parser.add_argument("--season", default=DEFAULT_COGAMES_SEASON, help="Tournament season")
+    parser.add_argument("--output-root", default="./artifacts/ai_researcher", help="Researcher artifact output root")
+    parser.add_argument("--cogames-bin", default="cogames", help="Cogames binary path for researcher startup")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MIN, help="Timeout in minutes (default: 60)")
     args = parser.parse_args()
 
-    if not args.skill and not args.prompt:
-        parser.error("One of --skill or --prompt is required")
-    if args.skill and args.prompt:
-        parser.error("Only one of --skill or --prompt can be specified")
+    competitor_profile: ResearcherProfile | None = None
+    if args.neophyte_competitor_bot and args.experienced_competitor_bot:
+        parser.error("Use only one of --neophyte-competitor-bot or --experienced-competitor-bot")
+    if args.neophyte_competitor_bot:
+        competitor_profile = "neophyte"
+    if args.experienced_competitor_bot:
+        competitor_profile = "experienced"
+
+    if competitor_profile is not None:
+        if args.skill or args.prompt:
+            parser.error("Competitor bot flags cannot be combined with --skill/--prompt")
+        if not args.policy_name:
+            parser.error("--policy-name is required with competitor bot flags")
+    else:
+        if not args.skill and not args.prompt:
+            parser.error("One of --skill or --prompt is required")
+        if args.skill and args.prompt:
+            parser.error("Only one of --skill or --prompt can be specified")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    label = f"skill-{args.skill}" if args.skill else f"prompt-{Path(args.prompt).stem}"
+    if competitor_profile is not None:
+        label = f"{competitor_profile}-competitor-bot"
+    elif args.skill:
+        label = f"skill-{args.skill}"
+    else:
+        label = f"prompt-{Path(args.prompt).stem}"
     log_path = LOG_DIR / f"{timestamp}-{label}.log"
 
     print(f"[cogent] branch={args.branch} {label} timeout={args.timeout}m")
@@ -162,13 +234,30 @@ def main():
     print(f"[cogent] Checking out {args.branch} on cogents (fallback to main)...")
     checkout_repo(COGENTS_DIR, args.branch, fallback_to_main=True)
 
-    content, label = read_content(args.skill, args.prompt)
+    mode = "claude"
+    if competitor_profile is not None:
+        command = build_competitor_command(
+            policy=args.policy,
+            policy_name=args.policy_name,
+            season=args.season,
+            output_root=args.output_root,
+            cogames_bin=args.cogames_bin,
+            researcher_profile=competitor_profile,
+        )
+        print(f"[cogent] Running {competitor_profile} competitor bot: {' '.join(command)}")
+        run_target = run_command
+        run_args = (command, args.timeout)
+        mode = f"{competitor_profile} competitor bot"
+    else:
+        content, label = read_content(args.skill, args.prompt)
+        print(f"[cogent] Running claude ({len(content)} chars)...")
+        run_target = run_claude
+        run_args = (content, args.timeout)
 
-    print(f"[cogent] Running claude ({len(content)} chars)...")
     try:
-        result = run_claude(content, args.timeout)
+        result = run_target(*run_args)
     except subprocess.TimeoutExpired:
-        msg = f"TIMEOUT: Claude Code exceeded {args.timeout} minute limit"
+        msg = f"TIMEOUT: {mode} exceeded {args.timeout} minute limit"
         print(f"[cogent] {msg}", file=sys.stderr)
         log_path.write_text(msg + "\n")
         sys.exit(1)

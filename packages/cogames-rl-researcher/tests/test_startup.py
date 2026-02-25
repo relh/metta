@@ -463,3 +463,61 @@ def test_startup_trend_gates_fail_when_reliability_and_friction_regress(tmp_path
     gate_map = {check.gate_id: check.status for check in regressed.gates.checks}
     assert gate_map["reliability_trend"] == "fail"
     assert gate_map["friction_trend"] == "fail"
+
+
+def test_parse_successful_step_output_json_returns_none_for_non_json_output(tmp_path: Path) -> None:
+    stdout_log = tmp_path / "leaderboard.stdout.log"
+    stderr_log = tmp_path / "leaderboard.stderr.log"
+    stdout_log.write_text("INFO starting leaderboard check\nnot-json\n", encoding="utf-8")
+    stderr_log.write_text("", encoding="utf-8")
+    now = startup_module._utc_now()
+
+    step = startup_module.StepResult(
+        step_name="leaderboard_check",
+        attempt=1,
+        command=["cogames", "leaderboard", "--json"],
+        status="success",
+        return_code=0,
+        started_at=now,
+        ended_at=now,
+        duration_seconds=0.0,
+        stdout_log=str(stdout_log),
+        stderr_log=str(stderr_log),
+        stdout_tail="",
+        stderr_tail="",
+    )
+
+    parsed = startup_module._parse_successful_step_output_json([step], "leaderboard_check")
+    assert parsed is None
+
+
+def test_infer_upload_include_files_returns_local_policy_file(monkeypatch, tmp_path: Path) -> None:
+    policy_file = tmp_path / "generated_policy.py"
+    policy_file.write_text("class MyTrainablePolicy:\n    pass\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    include_files = startup_module._infer_upload_include_files(
+        "class=generated_policy.MyTrainablePolicy,data=artifacts/model_000001.pt"
+    )
+    assert include_files == ["generated_policy.py"]
+
+
+def test_build_step_catalog_adds_include_files_for_upload_steps(monkeypatch, tmp_path: Path) -> None:
+    policy_file = tmp_path / "generated_policy.py"
+    policy_file.write_text("class MyTrainablePolicy:\n    pass\n", encoding="utf-8")
+    replay_dir = tmp_path / "replays"
+    replay_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+
+    config = StartupConfig(
+        policy="class=generated_policy.MyTrainablePolicy,data=artifacts/model_000001.pt",
+        policy_name="generated-policy",
+    )
+    catalog = startup_module._build_step_catalog(config, replay_dir)
+
+    dry_run_cmd = catalog["upload_dry_run_validation"].command
+    upload_cmd = catalog["upload"].command
+    assert "--include-files" in dry_run_cmd
+    assert "--include-files" in upload_cmd
+    assert dry_run_cmd[dry_run_cmd.index("--include-files") + 1] == "generated_policy.py"
+    assert upload_cmd[upload_cmd.index("--include-files") + 1] == "generated_policy.py"

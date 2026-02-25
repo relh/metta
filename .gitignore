@@ -15,6 +15,7 @@ resources
 .task
 .omc/
 .local/
+.agent/
 *.local.code-workspace
 
 # OS-specific

@@ -11,6 +11,7 @@ SYMLINKS: dict[str, str] = {
     ".codex/skills": "skills",
     ".cursor/skills": "skills",
     ".cursor/agents": "subagents",
+    ".agent/prompts": "prompts",
 }
 
 
