@@ -186,8 +186,40 @@ async def seed_teams_season(stats_repo: str) -> dict:  # type: ignore[unused-arg
 
         return {
             "season_name": season.name,
+            "season_id": str(season.id),
             "policy_version_id": str(pv.id),
             "team_id": str(team.id),
+        }
+
+
+@pytest_asyncio.fixture
+async def seed_rollable_freeplay_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
+    async with db_session() as session:
+        season_name = "test-season"
+        commissioner_cls = SEASONS[season_name]
+        season = Season(name=season_name, canonical=True)
+        session.add(season)
+        await session.flush()
+
+        entry_pool = Pool(season_id=season.id, name=commissioner_cls.entry_pool)
+        session.add(entry_pool)
+        await session.flush()
+
+        policy = Policy(name=f"rollable-{uuid4().hex[:8]}", user_id="test-user")
+        session.add(policy)
+        await session.flush()
+
+        policy_version = PolicyVersion(policy_id=policy.id, version=1)
+        session.add(policy_version)
+        await session.flush()
+
+        session.add(PoolPlayer(pool_id=entry_pool.id, policy_version_id=policy_version.id, retired=False))
+        await session.flush()
+
+        return {
+            "season_name": season.name,
+            "season_id": str(season.id),
+            "policy_version_id": str(policy_version.id),
         }
 
 
@@ -204,6 +236,7 @@ class TestTournamentRouteSmoke:
             assert isinstance(seasons[0]["pools"], list)
             assert "entry_pool" in seasons[0]
             assert "leaderboard_pool" in seasons[0]
+            assert seasons[0]["tournament_type"] in {"freeplay", "team"}
             assert "status" not in seasons[0]
             assert "entrant_count" not in seasons[0]
 
@@ -279,6 +312,114 @@ class TestTournamentRouteSmoke:
         match_ids = {m["id"] for m in data}
         assert seed_or_logic_season["match_a_id"] in match_ids
         assert seed_or_logic_season["match_b_id"] in match_ids
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_season(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            json={"compat_version": "0.6"},
+            headers=softmax_headers,
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["name"] == seed_rollable_freeplay_season["season_name"]
+        assert payload["version"] == 2
+        assert payload["canonical"] is True
+        assert payload["tournament_type"] == "freeplay"
+        assert payload["compat_version"] == "0.6"
+
+        versions_response = test_client.get(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_name']}/versions",
+            headers=softmax_headers,
+        )
+        assert versions_response.status_code == 200
+        versions = versions_response.json()
+        assert len(versions) == 2
+        assert versions[0]["version"] == 2
+        assert versions[0]["canonical"] is True
+        assert versions[1]["version"] == 1
+        assert versions[1]["canonical"] is False
+
+    @pytest.mark.asyncio
+    async def test_roll_team_season_rejected(
+        self, test_client: TestClient, softmax_headers: dict, seed_teams_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_teams_season['season_id']}/roll",
+            json={"compat_version": "0.6"},
+            headers=softmax_headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Only freeplay seasons can be rolled"
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_requires_compat_version(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            json={"compat_version": "   "},
+            headers=softmax_headers,
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "compat_version is required"
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_requires_authentication(
+        self, test_client: TestClient, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            json={"compat_version": "0.6"},
+        )
+        assert response.status_code == 401
+        assert response.json()["detail"] == "Failed to authenticate"
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_requires_softmax_membership(
+        self, test_client: TestClient, regular_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            json={"compat_version": "0.6"},
+            headers=regular_headers,
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "User is not a softmax team member"
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_by_season_id(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            json={"compat_version": "0.6"},
+            headers=softmax_headers,
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["name"] == seed_rollable_freeplay_season["season_name"]
+        assert payload["version"] == 2
+
+    @pytest.mark.asyncio
+    async def test_roll_freeplay_with_migrate_active_players(
+        self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
+    ):
+        response = test_client.post(
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            json={"compat_version": "0.6", "migrate_active_players": True},
+            headers=softmax_headers,
+        )
+        assert response.status_code == 200
+        season_name = seed_rollable_freeplay_season["season_name"]
+        detail = test_client.get(f"/tournament/seasons/{season_name}?include_hidden=true", headers=softmax_headers)
+        assert detail.status_code == 200
+        payload = detail.json()
+        assert payload["version"] == 2
+        assert payload["entrant_count"] == 1
+        assert payload["active_entrant_count"] == 1
 
     @pytest.mark.asyncio
     async def test_list_match_policy_logs_owner(self, test_client: TestClient, seed_season: dict):

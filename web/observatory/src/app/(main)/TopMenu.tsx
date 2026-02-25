@@ -1,12 +1,13 @@
 'use client'
 import clsx from 'clsx'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { FC, PropsWithChildren, use } from 'react'
 
 import { AutoRefreshBadge } from '@/components/AutoRefreshBadge'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { seasonNameFromRef, seasonTabModeForName, type SeasonTabMode } from '@/lib/tournament/tabMode'
 
 import { AppContext } from './AppContext'
 import { UserDropdown } from './UserDropdown'
@@ -27,9 +28,24 @@ const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ 
 
 export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ currentUser, devMode }) => {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { apiBaseUrl } = use(AppContext)
 
   const isPoliciesActive = pathname === '/' || pathname.startsWith('/policies')
+  const isTournamentRoute = pathname.startsWith('/tournament')
+  const modeParam = searchParams.get('mode')
+  let effectiveMode: SeasonTabMode = 'freeplay'
+  if (modeParam === 'freeplay' || modeParam === 'tournament') {
+    effectiveMode = modeParam
+  } else if (pathname.startsWith('/tournament/')) {
+    const seasonSegment = pathname.split('/')[2]
+    if (seasonSegment) {
+      const decoded = decodeURIComponent(seasonSegment)
+      effectiveMode = seasonTabModeForName(seasonNameFromRef(decoded))
+    }
+  }
+  const isFreeplayActive = isTournamentRoute && effectiveMode === 'freeplay'
+  const isTournamentActive = isTournamentRoute && effectiveMode === 'tournament'
 
   return (
     <nav className="border-b border-border-strong bg-surface px-5 flex justify-between items-center">
@@ -41,7 +57,10 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
             Policy Dashboard
           </MenuLink>
-          <MenuLink href="/tournament" isActive={pathname.startsWith('/tournament')}>
+          <MenuLink href="/tournament?mode=freeplay" isActive={isFreeplayActive}>
+            Freeplay
+          </MenuLink>
+          <MenuLink href="/tournament?mode=tournament" isActive={isTournamentActive}>
             Tournament
           </MenuLink>
           <MenuLink href="/episode-jobs" isActive={pathname.startsWith('/episode-job')}>

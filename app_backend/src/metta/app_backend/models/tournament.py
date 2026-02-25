@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, ForeignKey, Index, UniqueConstraint, Uuid, text
@@ -63,6 +63,18 @@ class Season(SQLModel, table=True):
     )
 
     pools: list["Pool"] = Relationship(back_populates="season")
+
+    @property
+    def tournament_type(self) -> Literal["freeplay", "team"]:
+        return "team" if self.team_tournament_config is not None else "freeplay"
+
+    @property
+    def implied_status(self) -> Literal["not_started", "in_progress", "complete"]:
+        if self.disabled_at is not None:
+            return "complete"
+        if self.started_at is None:
+            return "not_started"
+        return "in_progress"
 
 
 class Pool(SQLModel, table=True):

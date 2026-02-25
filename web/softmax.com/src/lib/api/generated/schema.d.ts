@@ -1261,6 +1261,12 @@ export interface components {
        */
       compat_version?: string | null;
       /**
+       * Tournament Type
+       * @description Tournament format
+       * @enum {string}
+       */
+      tournament_type: "freeplay" | "team";
+      /**
        * Pools
        * @description Pools in this season
        */
@@ -1281,12 +1287,6 @@ export interface components {
        * @description ISO 8601 timestamp when the season was started
        */
       started_at?: string | null;
-      /**
-       * Tournament Type
-       * @description Tournament format
-       * @enum {string}
-       */
-      tournament_type: "policy" | "team";
       /**
        * Entrant Count
        * @description Unique policy versions that have entered the season
@@ -1356,6 +1356,12 @@ export interface components {
        * @description Compatibility version string (e.g. '0.4')
        */
       compat_version?: string | null;
+      /**
+       * Tournament Type
+       * @description Tournament format
+       * @enum {string}
+       */
+      tournament_type: "freeplay" | "team";
       /**
        * Pools
        * @description Pools in this season

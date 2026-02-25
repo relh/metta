@@ -628,6 +628,13 @@ export class Repo {
     return this.apiCallWithBody<ProgressResponse>(`/tournament/seasons/${encodePathSegment(seasonName)}/start`, {})
   }
 
+  async rollSeason(seasonId: string, compatVersion: string, migrateActivePlayers = false): Promise<SeasonSummary> {
+    return this.apiCallWithBody<SeasonSummary>(`/tournament/seasons/${encodePathSegment(seasonId)}/roll`, {
+      compat_version: compatVersion,
+      migrate_active_players: migrateActivePlayers,
+    })
+  }
+
   async getSeasonStages(seasonName: string): Promise<StageStats[]> {
     return this.apiCall<StageStats[]>(`/tournament/seasons/${encodePathSegment(seasonName)}/stages`)
   }

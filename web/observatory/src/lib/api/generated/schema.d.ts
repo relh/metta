@@ -787,6 +787,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/tournament/seasons/{season_id}/roll': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Roll Season */
+    post: operations['roll_season_tournament_seasons__season_id__roll_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/tournament/seasons/{season_name}/leaderboard': {
     parameters: {
       query?: never
@@ -2245,6 +2262,20 @@ export interface components {
        */
       updated_at: string
     }
+    /** RollSeasonRequest */
+    RollSeasonRequest: {
+      /**
+       * Compat Version
+       * @description Compatibility version for the rolled season
+       */
+      compat_version: string
+      /**
+       * Migrate Active Players
+       * @description Migrate active players from the canonical season into the new season's entry pool
+       * @default false
+       */
+      migrate_active_players: boolean
+    }
     /** RunIdResponse */
     RunIdResponse: {
       /** Run Id */
@@ -2338,6 +2369,12 @@ export interface components {
        */
       compat_version?: string | null
       /**
+       * Tournament Type
+       * @description Tournament format
+       * @enum {string}
+       */
+      tournament_type: 'freeplay' | 'team'
+      /**
        * Pools
        * @description Pools in this season
        */
@@ -2358,12 +2395,6 @@ export interface components {
        * @description ISO 8601 timestamp when the season was started
        */
       started_at?: string | null
-      /**
-       * Tournament Type
-       * @description Tournament format
-       * @enum {string}
-       */
-      tournament_type: 'policy' | 'team'
       /**
        * Entrant Count
        * @description Unique policy versions that have entered the season
@@ -2433,6 +2464,12 @@ export interface components {
        * @description Compatibility version string (e.g. '0.4')
        */
       compat_version?: string | null
+      /**
+       * Tournament Type
+       * @description Tournament format
+       * @enum {string}
+       */
+      tournament_type: 'freeplay' | 'team'
       /**
        * Pools
        * @description Pools in this season
@@ -4357,6 +4394,44 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['SeasonVersionInfo'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  roll_season_tournament_seasons__season_id__roll_post: {
+    parameters: {
+      query?: {
+        /** @description Include hidden seasons (for testing) */
+        include_hidden?: boolean
+      }
+      header?: never
+      path: {
+        season_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RollSeasonRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SeasonSummary']
         }
       }
       /** @description Validation Error */

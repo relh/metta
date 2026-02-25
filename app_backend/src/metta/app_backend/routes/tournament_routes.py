@@ -47,13 +47,14 @@ from metta.app_backend.queries.episode_stats import (
     build_episode_response,
 )
 from metta.app_backend.route_logger import timed_http_handler
-from metta.app_backend.routes.docs_routes import public_api
+from metta.app_backend.routes.docs_routes import exclude_from_public_docs, public_api
 from metta.app_backend.tournament import registry as tournament_registry
 from metta.app_backend.tournament.commissioners.base import CommissionerBase
 from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.commissioners.teams.base import TeamCommissionerBase
 from metta.app_backend.tournament.progress import StageStats, TeamTournamentProgress
 from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageReferee
+from metta.app_backend.tournament.scripts.roll_season import roll_season_version
 from metta.app_backend.tournament.season_resolver import get_season_versions, parse_season_ref, resolve_season
 from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
 from metta.app_backend.tournament.stage_stats import build_stage_stats_row, load_stage_stats_counts
@@ -186,6 +187,14 @@ class SeasonVersionInfo(BaseModel):
     compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
 
 
+class RollSeasonRequest(BaseModel):
+    compat_version: str = Field(min_length=1, description="Compatibility version for the rolled season")
+    migrate_active_players: bool = Field(
+        default=False,
+        description="Migrate active players from the canonical season into the new season's entry pool",
+    )
+
+
 class SeasonSummary(BaseModel):
     id: UUID = Field(description="Unique season identifier")
     name: str = Field(description="Short name of the season")
@@ -196,6 +205,7 @@ class SeasonSummary(BaseModel):
     leaderboard_pool: str | None = Field(default=None, description="Name of the pool used for the leaderboard")
     is_default: bool = Field(description="Whether this is the default season")
     compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
+    tournament_type: Literal["freeplay", "team"] = Field(description="Tournament format")
     pools: list[PoolInfo] = Field(description="Pools in this season")
 
     @classmethod
@@ -216,6 +226,7 @@ class SeasonSummary(BaseModel):
                 leaderboard_pool=None,
                 is_default=False,
                 compat_version=season.compat_version,
+                tournament_type=season.tournament_type,
                 pools=[],
             )
 
@@ -232,6 +243,7 @@ class SeasonSummary(BaseModel):
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
             compat_version=season.compat_version,
+            tournament_type=season.tournament_type,
             pools=[
                 PoolInfo(
                     id=db_pools[p.name].id if p.name in db_pools else None,
@@ -250,7 +262,7 @@ class SeasonDetail(SeasonSummary):
     )
     display_name: str = Field(description="Human-readable season title for UI display")
     started_at: str | None = Field(default=None, description="ISO 8601 timestamp when the season was started")
-    tournament_type: Literal["policy", "team"] = Field(description="Tournament format")
+    tournament_type: Literal["freeplay", "team"] = Field(description="Tournament format")
     entrant_count: int = Field(description="Unique policy versions that have entered the season")
     active_entrant_count: int = Field(description="Unique non-retired policy versions still active in the season")
     match_count: int = Field(description="Total matches created across all pools in this season")
@@ -267,11 +279,11 @@ class SeasonDetail(SeasonSummary):
         commissioner = await build_commissioner(season_name, season_id=season.id)
         desc = commissioner.description_for_version(season.version)
         entrant_count, active_entrant_count, match_count = counts
-        tournament_type: Literal["policy", "team"] = "policy"
-        status = _infer_policy_season_status(season, match_count)
+        tournament_type = season.tournament_type
+        status = season.implied_status
         stage_count = len(desc.pools)
-        if isinstance(commissioner, TeamCommissionerBase):
-            tournament_type = "team"
+        if tournament_type == "team":
+            assert isinstance(commissioner, TeamCommissionerBase)
             progress = await commissioner.get_progress()
             status = _infer_team_season_status(season, progress)
             stage_count = len(progress.stage_flow)
@@ -306,19 +318,11 @@ class SeasonDetail(SeasonSummary):
         )
 
 
-def _infer_policy_season_status(season: Season, match_count: int) -> Literal["not_started", "in_progress", "complete"]:
-    if season.disabled_at is not None:
-        return "complete"
-    if season.started_at is None and match_count == 0:
-        return "not_started"
-    return "in_progress"
-
-
 def _infer_team_season_status(
     season: Season,
     progress: TeamTournamentProgress,
 ) -> Literal["not_started", "in_progress", "complete"]:
-    if season.disabled_at is not None:
+    if season.implied_status == "complete":
         return "complete"
     if not progress.started:
         return "not_started"
@@ -345,6 +349,22 @@ async def _resolve_season_or_404(
     if not season:
         raise HTTPException(status_code=404, detail="Season version not found")
     return name, season
+
+
+async def _resolve_canonical_season_by_id_or_404(
+    session: AsyncSession,
+    season_id: UUID,
+    *,
+    allow_hidden: bool = False,
+) -> tuple[str, Season]:
+    season = (await session.execute(select(Season).where(Season.id == season_id))).scalar_one_or_none()
+    if not season:
+        raise HTTPException(status_code=404, detail="Season not found")
+    if not season.canonical:
+        raise HTTPException(status_code=400, detail="Rolling a season version is not supported")
+    if season.name not in tournament_registry.SEASONS or (season.name in HIDDEN_SEASONS and not allow_hidden):
+        raise HTTPException(status_code=404, detail="Season not found")
+    return season.name, season
 
 
 async def _load_policy_version_summaries(
@@ -642,6 +662,38 @@ def create_tournament_router() -> APIRouter:
             )
             for s in versions
         ]
+
+    @router.post("/seasons/{season_id}/roll")
+    @exclude_from_public_docs
+    @timed_http_handler
+    async def roll_season(
+        season_id: UUID,
+        request: RollSeasonRequest,
+        _user: SoftmaxUser,
+        session: AsyncSession = Depends(get_session),
+        include_hidden: bool = Query(default=False, description="Include hidden seasons (for testing)"),
+    ) -> SeasonSummary:
+        name, season = await _resolve_canonical_season_by_id_or_404(session, season_id, allow_hidden=include_hidden)
+        if season.tournament_type != "freeplay":
+            raise HTTPException(status_code=400, detail="Only freeplay seasons can be rolled")
+        commissioner_cls = tournament_registry.SEASONS[name]
+
+        compat_version = request.compat_version.strip()
+        if not compat_version:
+            raise HTTPException(status_code=400, detail="compat_version is required")
+
+        initial_season_fields = commissioner_cls.get_initial_season_fields()
+        new_season = await roll_season_version(
+            session,
+            name,
+            commissioner_cls.entry_pool,
+            migrate_members=request.migrate_active_players,
+            copy_existing_pools=commissioner_cls.roll_copy_existing_pools,
+            overrides={"compat_version": compat_version},
+            team_tournament_config=initial_season_fields.get("team_tournament_config"),
+        )
+        pools_by_name = await _get_pools_by_name(session, new_season.id)
+        return await SeasonSummary.from_commissioner(new_season, name, pools_by_name)
 
     @router.get("/seasons/{season_name}/leaderboard")
     @timed_http_handler

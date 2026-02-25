@@ -8,6 +8,7 @@ import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
+import { seasonTabModeForName } from '@/lib/tournament/tabMode'
 
 import { matchesRoute } from './matches/utils'
 import { StageLeaderboard } from './StageLeaderboard'
@@ -71,6 +72,7 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
     if (parsed.view !== 'leaderboard') {
       const nextParams = new URLSearchParams()
       if (parsed.stage) nextParams.set('stage', parsed.stage)
+      nextParams.set('mode', seasonTabModeForName(seasonName))
       const query = nextParams.toString()
       redirect(query ? `/tournament/${seasonName}/players?${query}` : `/tournament/${seasonName}/players`)
     }

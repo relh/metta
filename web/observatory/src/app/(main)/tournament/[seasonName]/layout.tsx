@@ -105,6 +105,7 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
       <Suspense fallback={<Spinner />}>
         <SeasonDetails seasonName={seasonName} />
       </Suspense>
+      <LinkTabs tabs={tabs} stageKindsByPool={stageKindsByPool} defaultStage={stageContext.selectedStage} />
       {stageContext.progress && (
         <StageProgress
           stageFlow={stageContext.progress.stage_flow}
@@ -117,7 +118,6 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
           started={stageContext.progress.started}
         />
       )}
-      <LinkTabs tabs={tabs} stageKindsByPool={stageKindsByPool} defaultStage={stageContext.selectedStage} />
       {children}
     </div>
   )

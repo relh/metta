@@ -3,8 +3,9 @@ import { redirect } from 'next/navigation'
 
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
+import { seasonTabModeForName, TOURNAMENT_DEFAULT_SEASON_NAME } from '@/lib/tournament/tabMode'
 
-export default async function TournamentPage() {
+export default async function TournamentPage({ searchParams }: PageProps<'/tournament'>) {
   const repo = await getRepo()
   const seasons = await repo.getSeasons()
   if (seasons.length === 0) {
@@ -16,8 +17,18 @@ export default async function TournamentPage() {
     )
   }
 
-  const defaultSeason = seasons.find((s) => s.is_default) ?? seasons[0]
-  redirect(`/tournament/${defaultSeason.name}`)
+  const params = await searchParams
+  const requestedMode = params.mode === 'tournament' ? 'tournament' : 'freeplay'
+  const modeSeasons = seasons.filter((season) => seasonTabModeForName(season.name) === requestedMode)
+  const preferredSeasons = modeSeasons.length > 0 ? modeSeasons : seasons
+  const defaultSeason =
+    (requestedMode === 'tournament'
+      ? preferredSeasons.find((season) => season.name === TOURNAMENT_DEFAULT_SEASON_NAME)
+      : null) ??
+    preferredSeasons.find((season) => season.is_default) ??
+    preferredSeasons[0]
+  const effectiveMode = modeSeasons.length > 0 ? requestedMode : seasonTabModeForName(defaultSeason.name)
+  redirect(`/tournament/${defaultSeason.name}?mode=${effectiveMode}`)
 }
 
 export const metadata: Metadata = {
