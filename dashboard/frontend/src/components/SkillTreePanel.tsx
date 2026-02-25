@@ -706,10 +706,10 @@ export const SkillTreePanel: FC<{
     capability: CapabilityCard,
     { treeCard = false, compact = false }: { treeCard?: boolean; compact?: boolean } = {}
   ) => {
-    const isSummaryEvidence = (entry: string) => entry.startsWith('training source:') || entry.startsWith('score:')
-    const summaryEvidence = capability.evidence.filter(isSummaryEvidence)
-    const summaryEvidenceLine = summaryEvidence.join(' · ')
-    const detailEvidence = capability.evidence.filter((entry) => !isSummaryEvidence(entry))
+    const trainingSourceEvidence = capability.evidence.find((entry) => entry.startsWith('training source:')) ?? null
+    const detailEvidence = capability.evidence.filter(
+      (entry) => !entry.startsWith('training source:') && !entry.startsWith('score:')
+    )
 
     return (
       <article
@@ -733,6 +733,8 @@ export const SkillTreePanel: FC<{
             <span>Score</span>
             <strong>{formatPercent(capability.score, 0)}</strong>
           </div>
+        </div>
+        <div className="capability-indicator-row capability-indicator-row-support">
           <div className={`capability-indicator capability-indicator-trained indicator-${capability.trained}`}>
             <span>{capability.supportLabel}</span>
             <strong>{INDICATOR_LABEL[capability.trained]}</strong>
@@ -740,9 +742,9 @@ export const SkillTreePanel: FC<{
         </div>
 
         <div className="capability-evidence">
-          {summaryEvidenceLine && (
+          {trainingSourceEvidence && (
             <p className="capability-evidence-meta">
-              <code>{summaryEvidenceLine}</code>
+              <code>{trainingSourceEvidence}</code>
             </p>
           )}
           {detailEvidence.map((entry) => (
