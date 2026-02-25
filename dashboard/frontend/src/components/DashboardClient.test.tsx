@@ -73,6 +73,7 @@ describe('DashboardClient', () => {
     render(<DashboardClient />)
 
     const replayShell = await screen.findByTestId('replay-spotlight-shell')
+    fireEvent.load(screen.getByTitle('Replay spotlight'))
     expect(replayShell.getAttribute('data-theater-mode')).toBe('off')
 
     fireEvent.keyDown(window, { key: 't' })
@@ -122,6 +123,7 @@ describe('DashboardClient', () => {
     render(<DashboardClient />)
 
     const replayShell = await screen.findByTestId('replay-spotlight-shell')
+    fireEvent.load(screen.getByTitle('Replay spotlight'))
     const requestFullscreenSpy = vi.fn()
     Object.defineProperty(replayShell, 'requestFullscreen', {
       configurable: true,
@@ -134,6 +136,103 @@ describe('DashboardClient', () => {
     const input = screen.getByLabelText('Policy version id:')
     fireEvent.keyDown(input, { key: 'f' })
     expect(requestFullscreenSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not block dashboard loading progress on replay spotlight iframe load', async () => {
+    const response: DashboardResponse = {
+      policy: { id: 'policy-replay-load', name: 'glanky', version: 5, rank: 1, score: 2.5, matches: 10 },
+      episodes: [
+        {
+          episode_id: 'episode-replay-load',
+          status: 'completed',
+          reward: 1.4,
+          opponent_name: 'opponent-c',
+          team_composition: 'miner,aligner,scout,scrambler',
+          diagnostic_tags: [],
+          steps: 260,
+          replay_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      ],
+      season: 'beta-cvc',
+      generated_at: '2026-02-25T09:00:00Z',
+      derived: {
+        kpis: {},
+        failures: {},
+        opponent_metrics: {},
+      },
+      selection: {
+        sampled_episode_count: 1,
+      },
+    }
+
+    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
+      pool_id: 'pool-1',
+      pool_name: 'default',
+      roles: {},
+      rows: [],
+    })
+    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+
+    window.history.replaceState({}, '', '/?policyVersionId=policy-replay-load')
+    render(<DashboardClient />)
+
+    expect(await screen.findByRole('progressbar')).toBeTruthy()
+    await screen.findByTestId('replay-spotlight-shell')
+
+    await waitFor(() => {
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    })
+
+    expect(screen.getByTestId('replay-spotlight-loading')).toBeTruthy()
+    fireEvent.load(screen.getByTitle('Replay spotlight'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('replay-spotlight-loading')).toBeNull()
+    })
+  })
+
+  it('prefetches diagnose runs in parallel with dashboard fetch', async () => {
+    const response: DashboardResponse = {
+      policy: { id: 'policy-prefetch', name: 'glanky', version: 6, rank: 1, score: 2.6, matches: 11 },
+      episodes: [],
+      season: 'beta-cvc',
+      generated_at: '2026-02-25T09:15:00Z',
+      derived: {
+        kpis: {},
+        failures: {},
+        opponent_metrics: {},
+      },
+      selection: {
+        sampled_episode_count: 0,
+      },
+    }
+
+    const pendingDashboard = deferred<DashboardResponse>()
+    const pendingDiagnoseRuns = deferred<{ runs: api.DiagnoseRunSummary[] }>()
+    vi.mocked(api.fetchDashboardData).mockReturnValueOnce(pendingDashboard.promise)
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
+      pool_id: 'pool-1',
+      pool_name: 'default',
+      roles: {},
+      rows: [],
+    })
+    vi.mocked(api.fetchDiagnoseRuns).mockReturnValueOnce(pendingDiagnoseRuns.promise)
+
+    window.history.replaceState({}, '', '/?policyVersionId=policy-prefetch')
+    render(<DashboardClient />)
+
+    await waitFor(() => {
+      expect(api.fetchDashboardData).toHaveBeenCalledWith('policy-prefetch')
+    })
+    expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(1)
+
+    pendingDashboard.resolve(response)
+    pendingDiagnoseRuns.resolve({ runs: [] })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    })
+    expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(1)
   })
 
   it('does not block dashboard render on parses preload', async () => {

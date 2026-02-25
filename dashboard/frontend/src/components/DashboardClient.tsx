@@ -942,11 +942,14 @@ export function DashboardClient() {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null)
   const [overviewReplayMode, setOverviewReplayMode] = useState<ReplaySpotlightMode>('selected')
   const [isReplayTheaterMode, setIsReplayTheaterMode] = useState(false)
+  const [loadedReplaySpotlightUrl, setLoadedReplaySpotlightUrl] = useState<string | null>(null)
   const [overviewTrendMetric, setOverviewTrendMetric] = useState<OverviewTrendMetric>('reward')
   const [autoCommandCopied, setAutoCommandCopied] = useState(false)
   const [episodeSort, setEpisodeSort] = useState<EpisodeSortKey>('reward')
   const [episodeSortDir, setEpisodeSortDir] = useState<SortDir>('desc')
   const replaySpotlightContainerRef = useRef<HTMLDivElement | null>(null)
+  const diagnoseRunsCacheRef = useRef<DiagnoseRunSummary[] | null>(null)
+  const diagnoseRunsRequestRef = useRef<Promise<DiagnoseRunSummary[]> | null>(null)
 
   const [selectedTrendMetric, setSelectedTrendMetric] = useState('score')
   const [showAnalysis, setShowAnalysis] = useState(true)
@@ -1043,6 +1046,25 @@ export function DashboardClient() {
     },
     []
   )
+
+  const prefetchDiagnoseRuns = useCallback((): Promise<DiagnoseRunSummary[]> => {
+    if (diagnoseRunsCacheRef.current) {
+      return Promise.resolve(diagnoseRunsCacheRef.current)
+    }
+    if (diagnoseRunsRequestRef.current) {
+      return diagnoseRunsRequestRef.current
+    }
+    const request = fetchDiagnoseRuns()
+      .then((response) => {
+        diagnoseRunsCacheRef.current = [...response.runs]
+        return diagnoseRunsCacheRef.current
+      })
+      .finally(() => {
+        diagnoseRunsRequestRef.current = null
+      })
+    diagnoseRunsRequestRef.current = request
+    return request
+  }, [])
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
   const completedEpisodes = useMemo(() => episodes.filter((episode) => episode.status === 'completed'), [episodes])
@@ -1262,6 +1284,8 @@ export function DashboardClient() {
       selected: mettascopeUrl,
     }
   }, [replaySpotlightEpisode?.replay_url])
+  const isReplaySpotlightLoaded =
+    replaySpotlightUrls.selected ? loadedReplaySpotlightUrl === replaySpotlightUrls.selected : true
   const replayKeyboardShortcutsEnabled = activeTab === 'overview' && Boolean(replaySpotlightUrls.selected)
 
   const toggleReplayTheaterMode = useCallback(() => {
@@ -1278,6 +1302,12 @@ export function DashboardClient() {
     if (!container || typeof container.requestFullscreen !== 'function') return
     void container.requestFullscreen()
   }, [])
+
+  const onReplaySpotlightLoaded = useCallback(() => {
+    if (replaySpotlightUrls.selected) {
+      setLoadedReplaySpotlightUrl(replaySpotlightUrls.selected)
+    }
+  }, [replaySpotlightUrls.selected])
 
   useEffect(() => {
     if (replayKeyboardShortcutsEnabled) return
@@ -1398,6 +1428,7 @@ export function DashboardClient() {
       setRolePercentiles(null)
       setRoleError(null)
       setRoleLoading(false)
+      void prefetchDiagnoseRuns()
 
       const cachedResponse = getCachedDashboardResponse(trimmedPolicyVersionId)
       if (cachedResponse) {
@@ -1438,7 +1469,13 @@ export function DashboardClient() {
         finishDashboardLoadProgress()
       }
     },
-    [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress, preloadRolePercentiles]
+    [
+      beginDashboardLoadProgress,
+      clearLoadProgressTimers,
+      finishDashboardLoadProgress,
+      prefetchDiagnoseRuns,
+      preloadRolePercentiles,
+    ]
   )
 
   const onLoad = async () => {
@@ -1590,10 +1627,10 @@ export function DashboardClient() {
     setDiagnoseLoading(true)
     setDiagnoseError(null)
 
-    void fetchDiagnoseRuns()
-      .then((response) => {
+    void prefetchDiagnoseRuns()
+      .then((runs) => {
         if (cancelled) return
-        const sortedRuns = [...response.runs].sort((left, right) => {
+        const sortedRuns = [...runs].sort((left, right) => {
           const byCreatedAt = manifestTimestamp(right.manifest) - manifestTimestamp(left.manifest)
           if (byCreatedAt !== 0) return byCreatedAt
           return right.run_id.localeCompare(left.run_id)
@@ -1625,7 +1662,7 @@ export function DashboardClient() {
     return () => {
       cancelled = true
     }
-  }, [data])
+  }, [data, prefetchDiagnoseRuns])
 
   useEffect(() => {
     if (!selectedDiagnoseRunId) {
@@ -1680,6 +1717,7 @@ export function DashboardClient() {
 
     let cancelled = false
     const initialize = async () => {
+      void prefetchDiagnoseRuns()
       if (initialPolicyVersionId) {
         setPolicyVersionId(initialPolicyVersionId)
         const cachedResponse = getCachedDashboardResponse(initialPolicyVersionId)
@@ -1750,6 +1788,7 @@ export function DashboardClient() {
     clearLoadProgressTimers,
     finishDashboardLoadProgress,
     loadDashboardData,
+    prefetchDiagnoseRuns,
     preloadRolePercentiles,
   ])
 
@@ -1995,6 +2034,7 @@ export function DashboardClient() {
                         data-testid="replay-spotlight-shell"
                         data-theater-mode={isReplayTheaterMode ? 'on' : 'off'}
                         style={{
+                          position: 'relative',
                           width: isReplayTheaterMode ? 'calc(100vw - 24px)' : '100%',
                           maxWidth: isReplayTheaterMode ? 'calc(100vw - 24px)' : '100%',
                           marginLeft: isReplayTheaterMode ? '50%' : undefined,
@@ -2008,16 +2048,44 @@ export function DashboardClient() {
                         }}
                       >
                         {replaySpotlightUrls.selected ? (
-                          <iframe
-                            key={
-                              replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : 'replay-spotlight'
-                            }
-                            src={replaySpotlightUrls.selected}
-                            title="Replay spotlight"
-                            style={{ width: '100%', height: isReplayTheaterMode ? '100%' : 420, border: 0 }}
-                            loading="lazy"
-                            allowFullScreen
-                          />
+                          <>
+                            {!isReplaySpotlightLoaded && (
+                              <div
+                                data-testid="replay-spotlight-loading"
+                                style={{
+                                  position: 'absolute',
+                                  inset: 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  background: 'rgba(2, 6, 23, 0.88)',
+                                  color: '#dbeafe',
+                                  fontSize: 12,
+                                  letterSpacing: 0.2,
+                                  zIndex: 1,
+                                }}
+                              >
+                                Loading replay spotlight...
+                              </div>
+                            )}
+                            <iframe
+                              key={
+                                replaySpotlightEpisode ? episodeIdentifier(replaySpotlightEpisode) : 'replay-spotlight'
+                              }
+                              src={replaySpotlightUrls.selected}
+                              title="Replay spotlight"
+                              onLoad={onReplaySpotlightLoaded}
+                              style={{
+                                width: '100%',
+                                height: isReplayTheaterMode ? '100%' : 420,
+                                border: 0,
+                                opacity: isReplaySpotlightLoaded ? 1 : 0,
+                                transition: 'opacity 180ms ease',
+                              }}
+                              loading="lazy"
+                              allowFullScreen
+                            />
+                          </>
                         ) : (
                           <div style={{ padding: 12, color: '#fff' }}>Replay viewer unavailable for this episode.</div>
                         )}
