@@ -9,12 +9,13 @@ import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 import { formatRelativeTime } from '@/utils/datetime'
 
+import { episodeRoute, matchesRoute } from '@/lib/routes'
+
 import { MatchStatusBadge } from '../MatchStatusBadge'
 import { stageFlowLabel } from '../stageSelection'
 import { formatPolicyDisplay } from '../utils'
 import { MatchFilters } from './MatchFilters'
 import { nuqsParams } from './searchParams'
-import { matchesRoute } from './utils'
 
 const parseSearchParams = createLoader(nuqsParams)
 const MATCHES_PAGE_SIZE = 50
@@ -89,7 +90,7 @@ export default async function MatchesPage(params: PageProps<'/tournament/[season
                     <div className="flex justify-between gap-1">
                       {match.status === 'completed' && match.episode_id ? (
                         <Link
-                          href={`/episodes/${match.episode_id}`}
+                          href={episodeRoute(match.episode_id)}
                           className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
                         >
                           Results

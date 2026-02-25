@@ -3,6 +3,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 import { writeAuthCookieToken } from '@/auth/browser'
+import { policiesRoute } from '@/lib/routes'
 import { sanitizeRedirectPath } from '@/utils/redirect'
 
 import { validateToken } from './actions'
@@ -80,7 +81,7 @@ export default function AuthCallback() {
             <h1 className="text-3xl font-semibold mb-3 text-foreground">Something went wrong</h1>
             <p className="text-red-500 mb-2 text-lg">{status.message}</p>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push(policiesRoute())}
               className="mt-8 px-6 py-3 rounded-full bg-foreground text-surface font-semibold uppercase tracking-wider text-sm hover:bg-foreground-subtle transition-colors"
             >
               Retry Login

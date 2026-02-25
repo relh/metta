@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 
-import { buildPolicyDashboardPath } from '@/lib/policy-dashboard'
+import { policyDashboardRoute } from '@/lib/routes'
 
 export default async function PerformanceDashboardPage(props: PageProps<'/policies/versions/[policyVersionId]'>) {
   const { policyVersionId } = await props.params
-  redirect(buildPolicyDashboardPath({ policyVersionId }))
+  redirect(policyDashboardRoute({ policyVersionId }))
 }
 
 export async function generateMetadata(_: PageProps<'/policies/versions/[policyVersionId]'>) {

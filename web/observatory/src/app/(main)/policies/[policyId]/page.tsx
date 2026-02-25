@@ -3,6 +3,7 @@ import { CopyableUri } from '@/components/CopyableUri'
 import { StandardPageLayout } from '@/components/layouts/StandardPageLayout'
 import { LinkButton } from '@/components/LinkButton'
 import { StyledLink } from '@/components/StyledLink'
+import { policiesRoute, policyVersionRoute } from '@/lib/routes'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { UserDisplay } from '@/components/UserDisplay'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
@@ -43,7 +44,7 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
             </span>
           </div>
         </div>
-        <LinkButton href="/" theme="tertiary">
+        <LinkButton href={policiesRoute()} theme="tertiary">
           ← Back to policies
         </LinkButton>
       </div>
@@ -65,7 +66,7 @@ export default async function PolicyPage({ params }: PageProps<'/policies/[polic
                 {policyVersions.map((pv) => (
                   <TR key={pv.id}>
                     <TD>
-                      <StyledLink href={`/policies/versions/${pv.id}`} className="font-medium">
+                      <StyledLink href={policyVersionRoute(pv.id)} className="font-medium">
                         v{pv.version}
                       </StyledLink>
                     </TD>

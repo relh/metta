@@ -4,6 +4,7 @@ import clsx from 'clsx'
 
 import { Select } from '@/components/Select'
 import { StyledLink } from '@/components/StyledLink'
+import { seasonRoute } from '@/lib/routes'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { MembershipHistoryEntry } from '@/lib/repo'
 import { formatRelativeTime } from '@/utils/datetime'
@@ -122,7 +123,7 @@ export const MembershipHistoryTable: FC<{ memberships: MembershipHistoryEntry[] 
                 <TD className="text-foreground-muted text-sm">{formatRelativeTime(entry.created_at)}</TD>
                 <TD>
                   <div className="flex items-center gap-2">
-                    <StyledLink href={`/tournament/${entry.season_name}`}>{entry.season_name}</StyledLink>
+                    <StyledLink href={seasonRoute(entry.season_name)}>{entry.season_name}</StyledLink>
                     <VersionBadge version={entry.season_version} />
                   </div>
                 </TD>

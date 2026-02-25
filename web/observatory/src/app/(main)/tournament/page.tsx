@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
+import { seasonRoute } from '@/lib/routes'
 import { seasonTabModeForName, TOURNAMENT_DEFAULT_SEASON_NAME } from '@/lib/tournament/tabMode'
 
 export default async function TournamentPage({ searchParams }: PageProps<'/tournament'>) {
@@ -28,7 +29,7 @@ export default async function TournamentPage({ searchParams }: PageProps<'/tourn
     preferredSeasons.find((season) => season.is_default) ??
     preferredSeasons[0]
   const effectiveMode = modeSeasons.length > 0 ? requestedMode : seasonTabModeForName(defaultSeason.name)
-  redirect(`/tournament/${defaultSeason.name}?mode=${effectiveMode}`)
+  redirect(seasonRoute(defaultSeason.name, { mode: effectiveMode }))
 }
 
 export const metadata: Metadata = {

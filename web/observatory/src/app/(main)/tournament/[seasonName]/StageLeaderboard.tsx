@@ -6,6 +6,7 @@ import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import type { LeaderboardEntry, ScorePoliciesLeaderboardEntry, TeamSummary } from '@/lib/api'
 import { getStageLeaderboard, type StageKind } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
+import { policyVersionRoute } from '@/lib/routes'
 
 import { formatPolicyDisplay, formatPolicyTag } from './utils'
 
@@ -63,7 +64,7 @@ const policyColumns: LeaderboardColumn<LeaderboardEntry>[] = [
     key: 'policy',
     header: 'Policy',
     render: (entry) => (
-      <StyledLink href={`/policies/versions/${entry.policy.id}`} className="font-medium">
+      <StyledLink href={policyVersionRoute(entry.policy.id)} className="font-medium">
         {formatPolicyDisplay(entry)}
       </StyledLink>
     ),
@@ -94,7 +95,7 @@ const teamColumns: LeaderboardColumn<TeamSummary>[] = [
         {team.cogs.map((cog) => (
           <StyledLink
             key={cog.position}
-            href={`/policies/versions/${cog.policy.id}`}
+            href={policyVersionRoute(cog.policy.id)}
             className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-surface-alt border border-border"
           >
             {formatPolicyTag(cog.policy)}
@@ -146,7 +147,7 @@ function getScorePolicyColumns(
       key: 'policy',
       header: 'Policy',
       render: (entry) => (
-        <StyledLink href={`/policies/versions/${entry.policy.id}`} className="font-medium">
+        <StyledLink href={policyVersionRoute(entry.policy.id)} className="font-medium">
           {formatPolicyDisplay(entry)}
         </StyledLink>
       ),

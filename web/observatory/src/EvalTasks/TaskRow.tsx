@@ -6,6 +6,7 @@ import { AppContext } from '@/app/(main)/AppContext'
 import { A } from '../components/A'
 import { Spinner } from '../components/Spinner'
 import { StyledLink } from '../components/StyledLink'
+import { policyVersionRoute } from '../lib/routes'
 import { Table, TD, TH, TR } from '../components/Table'
 import { TaskBadge } from '../components/TaskBadge'
 import { UserDisplay } from '../components/UserDisplay'
@@ -105,7 +106,7 @@ export const TaskRow: FC<TaskRowProps> = ({ task, policyInfoMap, attemptedPolicy
             {isExpanded ? '▾' : isLoadingAttempts ? <Spinner size="sm" /> : '▸'}
           </span>
           {policyInfo ? (
-            <StyledLink href={`/policies/versions/${policyVersionId}`}>
+            <StyledLink href={policyVersionRoute(policyVersionId!)}>
               {policyInfo.name}:v{policyInfo.version}
             </StyledLink>
           ) : policyVersionId && !hasAttemptedPolicy ? (

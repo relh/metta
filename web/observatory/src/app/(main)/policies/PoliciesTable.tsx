@@ -3,6 +3,7 @@ import { FC } from 'react'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { policyRoute } from '@/lib/routes'
 import { UserDisplay } from '@/components/UserDisplay'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
@@ -33,7 +34,7 @@ export const PoliciesTable: FC<{ nameFilter?: string; page?: number }> = async (
           {policies.map((policy) => (
             <TR key={policy.id}>
               <TD>
-                <StyledLink href={`/policies/${policy.id}`} className="font-medium">
+                <StyledLink href={policyRoute(policy.id)} className="font-medium">
                   {policy.name}
                 </StyledLink>
               </TD>

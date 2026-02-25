@@ -1,11 +1,13 @@
 'use client'
 import { useRouter, useSearchParams, useSelectedLayoutSegment } from 'next/navigation'
 import { FC, use, useEffect, useMemo, useState } from 'react'
+
 import { AppContext } from '@/app/(main)/AppContext'
 import { Button } from '@/components/Button'
 import { Select } from '@/components/Select'
 import type { SeasonSummary, SeasonVersionInfo } from '@/lib/api'
-import { seasonTabModeForName, type SeasonTabMode } from '@/lib/tournament/tabMode'
+import { seasonRoute } from '@/lib/routes'
+import { type SeasonTabMode, seasonTabModeForName } from '@/lib/tournament/tabMode'
 import { parseDatetime } from '@/utils/datetime'
 
 type SeasonOption = { value: string; label: string }
@@ -126,7 +128,6 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   const [isLoadingVersions, setIsLoadingVersions] = useState(false)
   const [versionsRefreshNonce, setVersionsRefreshNonce] = useState(0)
   const router = useRouter()
-  const withMode = (path: string, mode: SeasonTabMode = selectedMode) => `${path}?mode=${mode}`
 
   useEffect(() => {
     let cancelled = false
@@ -260,7 +261,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
 
   const handleSeasonChange = (option: SeasonOption | null) => {
     if (option) {
-      router.push(withMode(`/tournament/${option.value}`))
+      router.push(seasonRoute(option.value, { mode: selectedMode }))
     }
   }
 
@@ -269,10 +270,12 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
       return
     }
     if (!option) {
-      router.push(withMode(`/tournament/${selectedSeasonName}`))
+      router.push(seasonRoute(selectedSeasonName, { mode: selectedMode }))
       return
     }
-    router.push(withMode(`/tournament/${formatSeasonRef(selectedSeasonName, option.value, option.canonical)}`))
+    router.push(
+      seasonRoute(formatSeasonRef(selectedSeasonName, option.value, option.canonical), { mode: selectedMode })
+    )
   }
 
   const nextVersion = useMemo(() => {
@@ -344,7 +347,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
       setRollMigrateActivePlayers(false)
       setIsRollDialogOpen(false)
       setVersionsRefreshNonce((current) => current + 1)
-      router.push(withMode(`/tournament/${newSeason.name}`, 'freeplay'))
+      router.push(seasonRoute(newSeason.name, { mode: 'freeplay' }))
       router.refresh()
     } catch (error: unknown) {
       setRollError(error instanceof Error ? error.message : 'Failed to roll season')

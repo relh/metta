@@ -7,6 +7,15 @@ import { FC, PropsWithChildren, use } from 'react'
 import { AutoRefreshBadge } from '@/components/AutoRefreshBadge'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import {
+  episodeJobsRoute,
+  evalTasksRoute,
+  policiesRoute,
+  policyDashboardRoute,
+  smartPlugsRoute,
+  sqlQueryRoute,
+  tournamentRoute,
+} from '@/lib/routes'
 import { seasonNameFromRef, seasonTabModeForName, type SeasonTabMode } from '@/lib/tournament/tabMode'
 
 import { AppContext } from './AppContext'
@@ -51,32 +60,32 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
     <nav className="border-b border-border-strong bg-surface px-5 flex justify-between items-center">
       <div className="max-w-7xl mx-auto flex items-center">
         <div className="flex">
-          <MenuLink href="/" isActive={isPoliciesActive}>
+          <MenuLink href={policiesRoute()} isActive={isPoliciesActive}>
             Policies
           </MenuLink>
           {isSoftmaxTeamMember && (
-            <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
+            <MenuLink href={policyDashboardRoute()} isActive={pathname.startsWith('/policy-dashboard')}>
               Policy Dashboard
             </MenuLink>
           )}
-          <MenuLink href="/tournament?mode=freeplay" isActive={isFreeplayActive}>
+          <MenuLink href={tournamentRoute({ mode: 'freeplay' })} isActive={isFreeplayActive}>
             Freeplay
           </MenuLink>
-          <MenuLink href="/tournament?mode=tournament" isActive={isTournamentActive}>
+          <MenuLink href={tournamentRoute({ mode: 'tournament' })} isActive={isTournamentActive}>
             Tournament
           </MenuLink>
           {isSoftmaxTeamMember && (
             <>
-              <MenuLink href="/episode-jobs" isActive={pathname.startsWith('/episode-job')}>
+              <MenuLink href={episodeJobsRoute()} isActive={pathname.startsWith('/episode-job')}>
                 Episode Jobs
               </MenuLink>
-              <MenuLink href="/sql-query" isActive={pathname === '/sql-query'}>
+              <MenuLink href={sqlQueryRoute()} isActive={pathname === '/sql-query'}>
                 SQL Query
               </MenuLink>
-              <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
+              <MenuLink href={smartPlugsRoute()} isActive={pathname.startsWith('/infra/smart-plugs')}>
                 Smart Plugs
               </MenuLink>
-              <MenuLink href="/eval-tasks" isActive={pathname.startsWith('/eval-task')}>
+              <MenuLink href={evalTasksRoute()} isActive={pathname.startsWith('/eval-task')}>
                 Remote Jobs
               </MenuLink>
             </>

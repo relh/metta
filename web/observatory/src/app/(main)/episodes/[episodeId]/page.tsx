@@ -7,6 +7,7 @@ import { SmallHeader } from '@/components/SmallHeader'
 import { TagList } from '@/components/TagList'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { getRepo } from '@/lib/repo/server'
+import { episodeJobsRoute } from '@/lib/routes'
 import { formatDate, formatRelativeTime } from '@/utils/datetime'
 
 import { JobsTable } from '../../episode-jobs/JobsTable'
@@ -34,7 +35,7 @@ export default async function EpisodeDetailPage(props: PageProps<'/episodes/[epi
             <span title={formatDate(episode.created_at)}>Created: {formatRelativeTime(episode.created_at)}</span>
             {episode.eval_task_id && <span>Eval Task: {episode.eval_task_id}</span>}
             {episode.job_id && (
-              <a href={`/episode-jobs?jobId=${episode.job_id}`} className="text-blue-600 hover:underline">
+              <a href={episodeJobsRoute({ jobId: episode.job_id })} className="text-blue-600 hover:underline">
                 Job: {episode.job_id.slice(0, 8)}
               </a>
             )}

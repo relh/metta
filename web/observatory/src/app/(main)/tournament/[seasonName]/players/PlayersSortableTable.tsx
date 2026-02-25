@@ -6,8 +6,7 @@ import { useMemo, useState } from 'react'
 
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
-
-import { matchesRoute } from '../matches/utils'
+import { matchesRoute, policyVersionRoute } from '@/lib/routes'
 import { getPolicyColor } from './policyColor'
 import { compareMissingLast, type ScoreSortDirection } from './scoreSort'
 import { useFocusedPolicies } from './useFocusedPolicies'
@@ -223,7 +222,7 @@ export function PlayersSortableTable({
                 </button>
               </TD>
               <TD className="text-left">
-                <StyledLink href={`/policies/versions/${row.policyId}`} className="font-medium">
+                <StyledLink href={policyVersionRoute(row.policyId)} className="font-medium">
                   {row.policyLabel}
                 </StyledLink>
               </TD>

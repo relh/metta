@@ -5,6 +5,7 @@ import { FC, use, useCallback } from 'react'
 import { clearAuthCookies } from '@/auth/browser'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { useDebugPanelVisible } from '@/lib/debug/useDebugPanelVisible'
+import { authLoginRoute, serviceAccountsRoute } from '@/lib/routes'
 
 import { AppContext } from './AppContext'
 
@@ -15,7 +16,7 @@ export const UserDropdown: FC<{ currentUser: string; devMode: boolean }> = ({ cu
 
   const signOut = useCallback(() => {
     clearAuthCookies()
-    router.replace('/auth/login')
+    router.replace(authLoginRoute())
   }, [router])
 
   return (
@@ -42,7 +43,7 @@ export const UserDropdown: FC<{ currentUser: string; devMode: boolean }> = ({ cu
                 <DropdownMenuItem
                   title="Service Accounts"
                   onClick={() => {
-                    router.push('/service-accounts')
+                    router.push(serviceAccountsRoute())
                   }}
                 />
               )}

@@ -2,13 +2,14 @@ import { notFound } from 'next/navigation'
 import { FC, Suspense } from 'react'
 
 import { AutoRefresh } from '@/components/AutoRefresh'
-import { LinkTabs, type LinkTab } from '@/components/LinkTabs'
+import { type LinkTab, LinkTabs } from '@/components/LinkTabs'
 import { Spinner } from '@/components/Spinner'
 import { TournamentDescriptionMeta } from '@/components/tournament/TournamentDescriptionMeta'
 import type { SeasonDetail } from '@/lib/api'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
-import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
+import { matchesRoute, seasonPlayersRoute, seasonTeamsRoute } from '@/lib/routes'
+import { getSeasonStageContext } from '@/lib/tournament/api'
 
 import { StageProgress } from './StageProgress'
 import { defaultSelectedStage } from './stageSelection'
@@ -75,11 +76,11 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
     : undefined
 
   const tabs: LinkTab[] = [
-    { id: 'players', label: 'Players', href: `/tournament/${seasonName}/players` },
+    { id: 'players', label: 'Players', href: seasonPlayersRoute(seasonName) },
     {
       id: 'matches',
       label: 'Matches',
-      href: `/tournament/${seasonName}/matches`,
+      href: matchesRoute(seasonName, {}),
       ...(stageContext.progress ? { allowedStageKinds: ['team_eval', 'policy_eval'] } : {}),
     },
     ...(stageContext.hasTeams
@@ -87,7 +88,7 @@ export default async function SeasonPage({ params, children }: LayoutProps<'/tou
           {
             id: 'teams',
             label: 'Teams',
-            href: `/tournament/${seasonName}/teams`,
+            href: seasonTeamsRoute(seasonName),
             ...(stageContext.progress ? { allowedStageKinds: ['team_eval'] } : {}),
           },
         ]

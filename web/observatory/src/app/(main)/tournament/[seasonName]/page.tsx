@@ -6,11 +6,10 @@ import { Card } from '@/components/Card'
 import { Spinner } from '@/components/Spinner'
 import { StyledLink } from '@/components/StyledLink'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
+import { matchesRoute, policyVersionRoute, seasonPlayersRoute } from '@/lib/routes'
 import { getSeasonStageContext } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
 import { seasonTabModeForName } from '@/lib/tournament/tabMode'
-
-import { matchesRoute } from './matches/utils'
 import { StageLeaderboard } from './StageLeaderboard'
 import { StartTournamentButton } from './StartTournamentButton'
 import { formatPolicyDisplay } from './utils'
@@ -37,7 +36,7 @@ const FlatLeaderboard: FC<{ seasonName: string }> = async ({ seasonName }) => {
         <TR key={entry.policy.id}>
           <TD>{entry.rank}</TD>
           <TD>
-            <StyledLink href={`/policies/versions/${entry.policy.id}`} className="font-medium">
+            <StyledLink href={policyVersionRoute(entry.policy.id)} className="font-medium">
               {formatPolicyDisplay(entry)}
             </StyledLink>
           </TD>
@@ -70,11 +69,12 @@ export default async function SeasonPage({ params, searchParams }: PageProps<'/t
     const progress = stageContext.progress
 
     if (parsed.view !== 'leaderboard') {
-      const nextParams = new URLSearchParams()
-      if (parsed.stage) nextParams.set('stage', parsed.stage)
-      nextParams.set('mode', seasonTabModeForName(seasonName))
-      const query = nextParams.toString()
-      redirect(query ? `/tournament/${seasonName}/players?${query}` : `/tournament/${seasonName}/players`)
+      redirect(
+        seasonPlayersRoute(seasonName, {
+          stage: parsed.stage ?? undefined,
+          mode: seasonTabModeForName(seasonName),
+        })
+      )
     }
 
     if (!progress || !progress.started) {

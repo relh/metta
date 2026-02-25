@@ -5,6 +5,7 @@ import { FC, use, useCallback, useEffect, useMemo, useState } from 'react'
 import { AppContext } from '@/app/(main)/AppContext'
 import { Card } from '@/components/Card'
 import { StyledLink } from '@/components/StyledLink'
+import { policyVersionRoute } from '@/lib/routes'
 import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import { EpisodeStatsResponse, PolicyStatsDetail, PolicyVersionRow } from '@/lib/repo'
 import { formatPolicyVersion } from '@/utils/format'
@@ -126,7 +127,7 @@ const SortablePolicyHeader: FC<{
     <SortTH sortKey={sortKey} active={active} onSort={onSort}>
       <div className="flex flex-col gap-0.5">
         {policy.policy_version_id && info ? (
-          <StyledLink href={`/policies/versions/${policy.policy_version_id}`}>{label}</StyledLink>
+          <StyledLink href={policyVersionRoute(policy.policy_version_id)}>{label}</StyledLink>
         ) : (
           <span>{label}</span>
         )}

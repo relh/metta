@@ -3,6 +3,7 @@ import { FC, useCallback, useEffect, useRef, useState } from 'react'
 
 import { normalizeReplayUrl, normalizeVibescopeUrl } from '@/components/ReplayViewer'
 import { StyledLink } from '@/components/StyledLink'
+import { episodeRoute, seasonRoute } from '@/lib/routes'
 import { TD, TR } from '@/components/Table'
 import { METTA_GITHUB_ORGANIZATION, METTA_GITHUB_REPO } from '@/constants'
 import { JobRequest } from '@/lib/repo'
@@ -504,7 +505,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
         <TD>
           <div className="flex flex-col gap-0.5">
             {job.match?.season_name && (
-              <StyledLink href={`/tournament/${job.match.season_name}`} className="text-xs">
+              <StyledLink href={seasonRoute(job.match.season_name)} className="text-xs">
                 {job.match.season_name}
               </StyledLink>
             )}
@@ -521,7 +522,7 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
         </TD>
         <TD>
           <div className="flex items-center gap-0 text-xs flex-wrap">
-            {episodeId && <StyledLink href={`/episodes/${episodeId}`}>Episode</StyledLink>}
+            {episodeId && <StyledLink href={episodeRoute(episodeId)}>Episode</StyledLink>}
             {job.episode?.replay_url && normalizeVibescopeUrl(job.episode.replay_url) && (
               <>
                 {episodeId && <span className="text-foreground-muted mx-1">&middot;</span>}

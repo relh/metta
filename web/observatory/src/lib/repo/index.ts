@@ -1,5 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 
+import { policiesRoute } from '@/lib/routes'
+
 import type {
   AIQueryResponse,
   EpisodeQueryRequest,
@@ -190,9 +192,9 @@ export class Repo {
   private async handleErrorResponse(response: Response): Promise<never> {
     if (response.status === 401) {
       if (typeof window === 'undefined') {
-        redirect('/')
+        redirect(policiesRoute())
       } else {
-        window.location.href = '/'
+        window.location.href = policiesRoute()
         throw new Error('Session expired, redirecting to login...')
       }
     }

@@ -7,6 +7,7 @@ import { Table, TableBody, TableHeader, TD, TH, TR } from '@/components/Table'
 import type { TeamSummary } from '@/lib/api'
 import { getSeasonStageContext, getTeamStages } from '@/lib/tournament/api'
 import { getRepo } from '@/lib/repo/server'
+import { policyVersionRoute } from '@/lib/routes'
 
 import { stageFlowLabel, stageLabel } from '../stageSelection'
 import { formatPolicyTag } from '../utils'
@@ -156,7 +157,7 @@ export default async function TeamsPage({ params, searchParams }: PageProps<'/to
                       {row.cogs.map((cog) => (
                         <StyledLink
                           key={cog.position}
-                          href={`/policies/versions/${cog.policy.id}`}
+                          href={policyVersionRoute(cog.policy.id)}
                           className="inline-block px-2 py-0.5 rounded text-xs font-mono bg-surface-alt border border-border hover:border-blue-400 transition-colors"
                         >
                           {formatPolicyTag(cog.policy)}

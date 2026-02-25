@@ -7,7 +7,7 @@ import { Spinner } from '@/components/Spinner'
 import { UserDisplay } from '@/components/UserDisplay'
 import { TasksTable } from '@/EvalTasks/TasksTable'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
-import { buildPolicyDashboardPath } from '@/lib/policy-dashboard'
+import { policyDashboardRoute, policyRoute } from '@/lib/routes'
 import { getRepo } from '@/lib/repo/server'
 import { formatDate } from '@/utils/datetime'
 import { formatPolicyVersion } from '@/utils/format'
@@ -17,7 +17,7 @@ import { PolicyVersionTournamentMembershipsCard } from './PolicyVersionTournamen
 
 export default async function PolicyVersionPage(props: PageProps<'/policies/versions/[policyVersionId]'>) {
   const { policyVersionId } = await props.params
-  const standaloneDashboardHref = buildPolicyDashboardPath({ policyVersionId })
+  const standaloneDashboardHref = policyDashboardRoute({ policyVersionId })
 
   const repo = await getRepo()
   const pvInfo = await repo.getPolicyVersion(policyVersionId)
@@ -48,7 +48,7 @@ export default async function PolicyVersionPage(props: PageProps<'/policies/vers
             <LinkButton href={standaloneDashboardHref} theme="secondary">
               View Dashboard
             </LinkButton>
-            <LinkButton href={`/policies/${pvInfo.policy_id}`} theme="tertiary">
+            <LinkButton href={policyRoute(pvInfo.policy_id)} theme="tertiary">
               &larr; Back to policy
             </LinkButton>
           </div>

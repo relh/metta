@@ -2,6 +2,7 @@ import { FC } from 'react'
 
 import { StyledLink } from '@/components/StyledLink'
 import { PolicyVersionSummary } from '@/lib/repo'
+import { policyVersionRoute } from '@/lib/routes'
 
 export function parsePolicyUri(uri: string): { uuid: string } | null {
   const match = uri.match(/^metta:\/\/policy\/([0-9a-fA-F-]{36})$/)
@@ -15,7 +16,7 @@ export const PolicyLink: FC<{ uri: string; policy?: PolicyVersionSummary | null 
   if (policy) {
     const label = policy.name && policy.version !== null ? `${policy.name}:v${policy.version}` : policy.id.slice(0, 8)
     return (
-      <StyledLink href={`/policies/versions/${policy.id}`} className="font-mono text-xs" title={uri}>
+      <StyledLink href={policyVersionRoute(policy.id)} className="font-mono text-xs" title={uri}>
         {label}
       </StyledLink>
     )
@@ -23,7 +24,7 @@ export const PolicyLink: FC<{ uri: string; policy?: PolicyVersionSummary | null 
   const parsed = parsePolicyUri(uri)
   if (parsed) {
     return (
-      <StyledLink href={`/policies/versions/${parsed.uuid}`} className="font-mono text-xs" title={uri}>
+      <StyledLink href={policyVersionRoute(parsed.uuid)} className="font-mono text-xs" title={uri}>
         {parsed.uuid.slice(0, 8)}
       </StyledLink>
     )
