@@ -1,4 +1,10 @@
+from unittest.mock import AsyncMock, patch
+
+import httpx
+import pytest
+
 from metta.app_backend.clients.stats_client import StatsClient
+from metta.app_backend.episode_runner_images import build_episode_runner_compat_image
 from metta.app_backend.models.job_request import JobRequestCreate, JobRequestUpdate, JobStatus, JobType
 
 
@@ -54,3 +60,47 @@ class TestEpisodeJobRoutes:
         dispatched_jobs = stats_client.list_jobs(statuses=[JobStatus.dispatched])
         assert len(dispatched_jobs) == 1
         assert dispatched_jobs[0].id == job_ids[1]
+
+    def test_create_jobs_accepts_known_episode_runner_image(self, stats_client: StatsClient):
+        with patch(
+            "metta.app_backend.routes.job_routes.list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            job_ids = stats_client.create_jobs(
+                [
+                    JobRequestCreate(
+                        job_type=JobType.episode,
+                        job={
+                            "assignments": [0],
+                            "env": {"game": {"num_agents": 1}},
+                            "seed": 42,
+                            "episode_runner_image": build_episode_runner_compat_image("0.6"),
+                        },
+                    )
+                ]
+            )
+
+        assert len(job_ids) == 1
+
+    def test_create_jobs_rejects_unknown_episode_runner_image(self, stats_client: StatsClient):
+        with patch(
+            "metta.app_backend.routes.job_routes.list_available_episode_runner_compat_versions",
+            new=AsyncMock(return_value=["0.6"]),
+        ):
+            with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                stats_client.create_jobs(
+                    [
+                        JobRequestCreate(
+                            job_type=JobType.episode,
+                            job={
+                                "assignments": [0],
+                                "env": {"game": {"num_agents": 1}},
+                                "seed": 42,
+                                "episode_runner_image": build_episode_runner_compat_image("0.7"),
+                            },
+                        )
+                    ]
+                )
+
+        assert exc_info.value.response.status_code == 400
+        assert "episode_runner_image" in exc_info.value.response.json()["detail"]

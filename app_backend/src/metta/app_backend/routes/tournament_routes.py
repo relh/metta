@@ -1,13 +1,11 @@
 import asyncio
 import logging
-import os
 import re
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
 import boto3
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -21,6 +19,10 @@ from sqlmodel import col, select
 # causing false positives on join() and selectinload() calls.
 from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser, User
 from metta.app_backend.database import db_session
+from metta.app_backend.episode_runner_images import (
+    get_episode_runner_registry,
+    list_available_episode_runner_compat_versions,
+)
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.job_artifacts import (
     job_logs_key,
@@ -63,67 +65,9 @@ from metta.app_backend.tournament.stage_stats import build_stage_stats_row, load
 
 logger = logging.getLogger(__name__)
 
-_COMPAT_IMAGE_TAG_PATTERN = re.compile(r"^compat-v(\d+\.\d+)$")
-_DEFAULT_EPISODE_RUNNER_REGISTRY = "ghcr.io/metta-ai/episode-runner"
-_REGISTRY_REQUEST_TIMEOUT_SECONDS = 10.0
-
-
-def _split_registry_reference(registry_reference: str) -> tuple[str, str]:
-    reference = registry_reference.strip().split("@", maxsplit=1)[0]
-    if "/" not in reference:
-        raise ValueError(f"Invalid registry reference: {registry_reference}")
-    host, repository_with_tag = reference.split("/", maxsplit=1)
-    repository = repository_with_tag
-    if ":" in repository.rsplit("/", maxsplit=1)[-1]:
-        repository = repository.rsplit(":", maxsplit=1)[0]
-    if not host or not repository:
-        raise ValueError(f"Invalid registry reference: {registry_reference}")
-    return host, repository
-
-
-def _sort_compat_versions(versions: set[str]) -> list[str]:
-    return sorted(versions, key=lambda value: tuple(int(part) for part in value.split(".")), reverse=True)
-
 
 async def _list_available_episode_runner_compat_versions() -> list[str]:
-    registry = os.environ.get("EPISODE_RUNNER_REGISTRY", _DEFAULT_EPISODE_RUNNER_REGISTRY)
-    host, repository = _split_registry_reference(registry)
-    compat_versions: set[str] = set()
-
-    try:
-        async with httpx.AsyncClient(timeout=_REGISTRY_REQUEST_TIMEOUT_SECONDS) as client:
-            token_response = await client.get(
-                f"https://{host}/token",
-                params={"scope": f"repository:{repository}:pull"},
-            )
-            token_response.raise_for_status()
-            token_payload = token_response.json()
-            token = token_payload.get("token") or token_payload.get("access_token")
-            if not token:
-                raise HTTPException(status_code=503, detail=f"Unable to fetch registry token for {registry}")
-
-            headers = {"Authorization": f"Bearer {token}"}
-            next_url: str | None = f"https://{host}/v2/{repository}/tags/list?n=100"
-            while next_url:
-                tags_response = await client.get(next_url, headers=headers)
-                tags_response.raise_for_status()
-                payload = tags_response.json()
-                tags = payload["tags"]
-                if tags is None:
-                    tags = []
-                for tag in tags:
-                    match = _COMPAT_IMAGE_TAG_PATTERN.match(tag)
-                    if match:
-                        compat_versions.add(match.group(1))
-                next_link = tags_response.links.get("next", {}).get("url")
-                if next_link and next_link.startswith("/"):
-                    next_url = f"https://{host}{next_link}"
-                else:
-                    next_url = next_link
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=503, detail=f"Unable to fetch compat versions from {registry}") from exc
-
-    return _sort_compat_versions(compat_versions)
+    return await list_available_episode_runner_compat_versions()
 
 
 def _agent_idx_from_filename(filename: str) -> int | None:
@@ -760,10 +704,7 @@ def create_tournament_router() -> APIRouter:
         if compat_version not in available_compat_versions:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"compat_version {compat_version} is not available in "
-                    f"{os.environ.get('EPISODE_RUNNER_REGISTRY', _DEFAULT_EPISODE_RUNNER_REGISTRY)}"
-                ),
+                detail=(f"compat_version {compat_version} is not available in {get_episode_runner_registry()}"),
             )
 
         initial_season_fields = commissioner_cls.get_initial_season_fields()
@@ -798,10 +739,7 @@ def create_tournament_router() -> APIRouter:
         if compat_version not in available_compat_versions:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"compat_version {compat_version} is not available in "
-                    f"{os.environ.get('EPISODE_RUNNER_REGISTRY', _DEFAULT_EPISODE_RUNNER_REGISTRY)}"
-                ),
+                detail=(f"compat_version {compat_version} is not available in {get_episode_runner_registry()}"),
             )
 
         season.compat_version = compat_version

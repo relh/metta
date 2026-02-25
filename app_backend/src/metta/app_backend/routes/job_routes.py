@@ -22,6 +22,11 @@ from sqlmodel import col, select
 
 from metta.app_backend.auth import SoftmaxUser
 from metta.app_backend.database import db_session
+from metta.app_backend.episode_runner_images import (
+    build_episode_runner_compat_image,
+    get_episode_runner_registry,
+    list_available_episode_runner_compat_versions,
+)
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
@@ -193,6 +198,32 @@ class EpisodeStatsResponse(BaseModel):
     steps: int | None
 
 
+async def _validate_episode_runner_images(jobs: list[JobRequestCreate]) -> None:
+    requested_images: set[str] = set()
+    for job in jobs:
+        if "episode_runner_image" not in job.job:
+            continue
+        raw_image = job.job["episode_runner_image"]
+        if not isinstance(raw_image, str):
+            raise HTTPException(status_code=400, detail="episode_runner_image must be a string")
+        episode_runner_image = raw_image.strip()
+        if not episode_runner_image:
+            raise HTTPException(status_code=400, detail="episode_runner_image must be a non-empty string")
+        requested_images.add(episode_runner_image)
+
+    if not requested_images:
+        return
+
+    available_compat_versions = await list_available_episode_runner_compat_versions()
+    available_images = {build_episode_runner_compat_image(version) for version in available_compat_versions}
+    unknown_images = sorted(requested_images - available_images)
+    if unknown_images:
+        raise HTTPException(
+            status_code=400,
+            detail=f"episode_runner_image(s) not available in {get_episode_runner_registry()}: {unknown_images}",
+        )
+
+
 def create_job_router() -> APIRouter:
     router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -214,6 +245,8 @@ def create_job_router() -> APIRouter:
                     status_code=429,
                     detail=f"Too many outstanding jobs ({outstanding_count}). Max allowed: {MAX_OUTSTANDING_JOBS}",
                 )
+
+        await _validate_episode_runner_images(jobs)
 
         # Resolve metta:// policy URIs -> (position, policy_version_id, s3_key)
         job_resolved: list[list[tuple[int, UUID, str]]] = []

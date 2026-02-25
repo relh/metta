@@ -3,7 +3,6 @@ import hashlib
 import inspect
 import json
 import logging
-import os
 import time
 from abc import ABC, abstractmethod
 from collections import defaultdict
@@ -24,6 +23,7 @@ from sqlmodel import col, select
 # SQLModel Relationship() type annotations cause false positives on join()/selectinload()
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.database import db_session, get_db, with_db
+from metta.app_backend.episode_runner_images import build_episode_runner_compat_image
 from metta.app_backend.models.episodes import Episode, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobStatus, JobType
 from metta.app_backend.models.policies import PolicyVersion
@@ -751,8 +751,7 @@ class CommissionerBase(ABC):
             ).model_dump()
 
             if env_config.compat_version is not None:
-                registry = os.environ.get("EPISODE_RUNNER_REGISTRY", "ghcr.io/metta-ai/episode-runner")
-                job_spec["episode_runner_image"] = f"{registry}:compat-v{env_config.compat_version}"
+                job_spec["episode_runner_image"] = build_episode_runner_compat_image(env_config.compat_version)
 
             stats_client = StatsClient(settings.STATS_SERVER_URI, machine_token=settings.MACHINE_TOKEN)
             try:
