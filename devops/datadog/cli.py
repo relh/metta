@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from enum import Enum
 from pathlib import Path
 
 import typer
@@ -28,6 +29,46 @@ dashboards_app = typer.Typer(
     no_args_is_help=True,
 )
 app.add_typer(dashboards_app, name="dashboards")
+
+
+class PruneMode(str, Enum):
+    YES = "yes"
+    NO = "no"
+    ASK = "ask"
+
+
+PRUNE_OPTION = typer.Option(
+    PruneMode.ASK,
+    "--prune",
+    help="Delete managed monitors that are no longer defined in code (yes|no|ask).",
+)
+
+
+def _managed_monitors_missing_from_code(monitors: list[dict], expected_names: set[str]) -> list[dict]:
+    candidates = [
+        monitor
+        for monitor in monitors
+        if "managed-by:code" in monitor.get("tags", []) and monitor.get("name") not in expected_names
+    ]
+    return sorted(candidates, key=lambda monitor: str(monitor.get("name", "")))
+
+
+def _should_delete_candidates(prune: PruneMode) -> bool | None:
+    if prune is PruneMode.YES:
+        return True
+    if prune is PruneMode.NO:
+        return False
+    return None
+
+
+def _dry_run_prune_summary(prune: PruneMode, candidate_count: int) -> str:
+    if candidate_count == 0:
+        return f"Dry-run prune behavior: no candidates (prune={prune.value})."
+    if prune is PruneMode.YES:
+        return "Dry-run prune behavior: would delete these candidates (prune=yes)."
+    if prune is PruneMode.NO:
+        return "Dry-run prune behavior: would not delete these candidates (prune=no)."
+    return "Dry-run prune behavior: would prompt before deleting these candidates (prune=ask)."
 
 
 @app.command()
@@ -79,6 +120,7 @@ def monitors_sync(
         "--dry-run",
         help="Print monitor configs without syncing to Datadog.",
     ),
+    prune: PruneMode = PRUNE_OPTION,
 ) -> None:
     """Sync monitor definitions to Datadog.
 
@@ -90,17 +132,49 @@ def monitors_sync(
 
     configs = get_all_monitor_configs()
 
+    expected_names = {config["name"] for config in configs}
+
+    client = DatadogMonitorsClient()
+    live_monitors = client.list_monitors()
+    deletion_candidates = _managed_monitors_missing_from_code(live_monitors, expected_names)
+
     if dry_run:
         typer.echo(f"Would sync {len(configs)} monitors:\n")
         typer.echo(json.dumps(configs, indent=2))
+        typer.echo("")
+        typer.echo(f"Managed monitors not present in code: {len(deletion_candidates)}")
+        typer.echo(_dry_run_prune_summary(prune, len(deletion_candidates)))
+        for monitor in deletion_candidates:
+            typer.echo(f"  [{monitor['id']}] {monitor['name']}")
         return
 
-    client = DatadogMonitorsClient()
     for config in configs:
         result = client.sync_monitor(config)
         typer.echo(f"Synced: {result['name']} (id={result['id']})")
 
     typer.echo(f"\nSynced {len(configs)} monitors to Datadog")
+
+    # Re-read monitors after sync in case updates changed tags or names.
+    live_monitors = client.list_monitors()
+    deletion_candidates = _managed_monitors_missing_from_code(live_monitors, expected_names)
+    typer.echo(f"Managed monitors not present in code: {len(deletion_candidates)}")
+    if not deletion_candidates:
+        return
+
+    for monitor in deletion_candidates:
+        typer.echo(f"  [{monitor['id']}] {monitor['name']}")
+
+    delete = _should_delete_candidates(prune)
+    if delete is None:
+        delete = typer.confirm("Delete these monitors from Datadog?", default=False)
+
+    if not delete:
+        typer.echo(f"Skipped deletion (prune={prune.value}).")
+        return
+
+    for monitor in deletion_candidates:
+        client.delete_monitor(monitor["id"])
+        typer.echo(f"Deleted: {monitor['name']} (id={monitor['id']})")
 
 
 @monitors_app.command("list")
