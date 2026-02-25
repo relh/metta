@@ -41,7 +41,7 @@ class RuffError:
 
 
 class AutoRuffFix:
-    def __init__(self, claude_api_key: str, model: str = "claude-3-7-sonnet-20250219", context_lines: int = 5):
+    def __init__(self, claude_api_key: str, model: str = "claude-sonnet-4-6", context_lines: int = 5):
         """Initialize the AutoRuffFix tool.
 
         Args:
@@ -506,8 +506,8 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     parser.add_argument(
         "--model",
-        default="claude-3-7-sonnet-20250219",
-        help="Claude model to use (default: claude-3-7-sonnet-20250219)",
+        default="claude-sonnet-4-6",
+        help="Claude model to use (default: claude-sonnet-4-6)",
     )
     parser.add_argument("--api-key", help="Anthropic API key (can also use ANTHROPIC_API_KEY env var)")
     parser.add_argument(
