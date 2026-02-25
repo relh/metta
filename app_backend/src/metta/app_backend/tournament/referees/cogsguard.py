@@ -1,32 +1,24 @@
-from metta.app_backend.tournament.referees.envs import make_cogsguard_env
+from metta.app_backend.tournament.referees.envs import get_game
 from metta.app_backend.tournament.referees.pairing import PairingRefereeBase
 from metta.app_backend.tournament.referees.selfplay import SelfPlayRefereeBase
-from mettagrid.config.mettagrid_config import MettaGridConfig
 
-NUM_AGENTS = 10
+COGSGUARD_GAME = get_game("cogsguard_10agents")
+COGSGUARD_PAIRING_CONFIGURATIONS: tuple[tuple[int, ...], ...] = (
+    (0, 1, 1, 1, 1, 1, 1, 1, 1, 1),  # 1v9
+    (0, 0, 0, 0, 0, 0, 0, 0, 0, 1),  # 9v1
+    (0, 0, 0, 0, 0, 1, 1, 1, 1, 1),  # 5v5
+)
 
 
 class CogsguardSelfPlayReferee(SelfPlayRefereeBase):
-    num_agents: int = NUM_AGENTS
-    env_name: str = "cogsguard_10agents"
-    description: str = "Self-play matches on CogsGuard Machina1"
-
-    def make_env(self, seed: int) -> MettaGridConfig:
-        return make_cogsguard_env(seed, self.num_agents)
+    game = COGSGUARD_GAME
+    description = "Self-play matches on CogsGuard Machina1"
 
 
 class CogsguardPairingReferee(PairingRefereeBase):
-    num_agents: int = NUM_AGENTS
-    env_name: str = "cogsguard_10agents"
-    match_configurations: list[list[int]] = [
-        [0, 1, 1, 1, 1, 1, 1, 1, 1, 1],  # 1v9
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 1],  # 9v1
-        [0, 0, 0, 0, 0, 1, 1, 1, 1, 1],  # 5v5
-    ]
-    description: str = (
+    game = COGSGUARD_GAME
+    match_configurations = [list(config) for config in COGSGUARD_PAIRING_CONFIGURATIONS]
+    description = (
         "Pairwise matchups on CogsGuard Machina1 with varied agent splits (1+9, 9+1, 5+5); "
         "scored by participation-weighted average"
     )
-
-    def make_env(self, seed: int) -> MettaGridConfig:
-        return make_cogsguard_env(seed, self.num_agents)

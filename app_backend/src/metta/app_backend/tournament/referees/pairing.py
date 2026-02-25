@@ -8,16 +8,37 @@ from metta.app_backend.tournament.referees.base import (
     MatchRequest,
     RefereeBase,
 )
-from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
+from metta.app_backend.tournament.referees.envs import GameEnvGenerator, get_game
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 MAX_FAILED_ATTEMPTS = 1
+DEFAULT_PAIRING_GAME = get_game("cogsguard_4agents")
+DEFAULT_PAIRING_CONFIGURATIONS: tuple[tuple[int, ...], ...] = (
+    (0, 1, 1, 1),  # 1v3
+    (0, 0, 0, 1),  # 3v1
+    (0, 0, 1, 1),  # 2v2
+)
+DEFAULT_PAIRING_DESCRIPTION = (
+    "Pairwise matchups on Machina 1 Open World with varied agent splits (1+3, 3+1, 2+2) "
+    "and shared rewards; scored by participation-weighted average"
+)
 
 
 class PairingRefereeBase(RefereeBase):
-    num_agents: int
+    game: GameEnvGenerator
     match_configurations: list[list[int]]
     matches_per_config: int = 5
+
+    @property
+    def num_agents(self) -> int:
+        return self.game.num_agents
+
+    @property
+    def env_name(self) -> str:
+        return self.game.env_name
+
+    def make_env(self, seed: int) -> MettaGridConfig:
+        return self.game.generate(seed)
 
     def get_matches_to_schedule(
         self,
@@ -64,17 +85,6 @@ class PairingRefereeBase(RefereeBase):
 
 
 class PairingReferee(PairingRefereeBase):
-    num_agents: int = 4
-    env_name: str = "cogsguard_4agents"
-    match_configurations: list[list[int]] = [
-        [0, 1, 1, 1],  # 1v3
-        [0, 0, 0, 1],  # 3v1
-        [0, 0, 1, 1],  # 2v2
-    ]
-    description: str = (
-        "Pairwise matchups on Machina 1 Open World with varied agent splits (1+3, 3+1, 2+2) "
-        "and shared rewards; scored by participation-weighted average"
-    )
-
-    def make_env(self, seed: int) -> MettaGridConfig:
-        return make_shared_rewards_env(seed, self.num_agents)
+    game = DEFAULT_PAIRING_GAME
+    description = DEFAULT_PAIRING_DESCRIPTION
+    match_configurations = [list(config) for config in DEFAULT_PAIRING_CONFIGURATIONS]

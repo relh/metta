@@ -6,15 +6,28 @@ from metta.app_backend.tournament.referees.base import (
     MatchRequest,
     RefereeBase,
 )
-from metta.app_backend.tournament.referees.envs import make_shared_rewards_env
+from metta.app_backend.tournament.referees.envs import GameEnvGenerator, get_game
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
 MAX_FAILED_ATTEMPTS = 3
+DEFAULT_SELF_PLAY_GAME = get_game("cogsguard_4agents")
+DEFAULT_SELF_PLAY_DESCRIPTION = "Self-play matches on Machina 1 Open World"
 
 
 class SelfPlayRefereeBase(RefereeBase):
-    num_agents: int
+    game: GameEnvGenerator
     matches_per_player: int = 2
+
+    @property
+    def num_agents(self) -> int:
+        return self.game.num_agents
+
+    @property
+    def env_name(self) -> str:
+        return self.game.env_name
+
+    def make_env(self, seed: int) -> MettaGridConfig:
+        return self.game.generate(seed)
 
     def get_matches_to_schedule(
         self,
@@ -55,9 +68,5 @@ class SelfPlayRefereeBase(RefereeBase):
 
 
 class SelfPlayReferee(SelfPlayRefereeBase):
-    num_agents: int = 4
-    env_name: str = "cogsguard_4agents"
-    description: str = "Self-play matches on Machina 1 Open World"
-
-    def make_env(self, seed: int) -> MettaGridConfig:
-        return make_shared_rewards_env(seed, self.num_agents)
+    game = DEFAULT_SELF_PLAY_GAME
+    description = DEFAULT_SELF_PLAY_DESCRIPTION

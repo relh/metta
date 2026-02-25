@@ -164,8 +164,18 @@ def test_make_assignments_full():
 
 def test_cogsguard_game_make_env():
     game = GameEnvGenerator(num_agents=8)
-    env = game.make_env(seed=42)
+    env = game.generate(seed=42)
     assert env.game.num_agents == 8
+
+
+def test_game_registry_rejects_mismatched_num_agents():
+    with pytest.raises(ValueError, match="fixed num_agents"):
+        GameEnvGenerator(env_name="cogsguard_10agents", num_agents=8)
+
+
+def test_game_registry_rejects_unknown_env():
+    with pytest.raises(ValueError, match="Unknown tournament game"):
+        GameEnvGenerator(env_name="not-a-real-game", num_agents=8)
 
 
 # -- PolicyStageReferee: combo generation --

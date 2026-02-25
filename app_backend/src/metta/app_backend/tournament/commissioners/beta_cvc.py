@@ -4,23 +4,25 @@ from metta.app_backend.tournament.referees.cvc import (
     CvcPairingReferee,
     CvcSelfPlayReferee,
 )
+from metta.app_backend.tournament.referees.envs import get_game
+
+V2_CVC_GAME = get_game("cogsguard_machina_1_8agents")
+V2_CVC_PAIRING_CONFIGURATIONS: tuple[tuple[int, ...], ...] = (
+    (0, 0, 1, 1, 1, 1, 1, 1),  # 2v6
+    (0, 0, 0, 0, 0, 0, 1, 1),  # 6v2
+    (0, 0, 0, 0, 1, 1, 1, 1),  # 4v4
+)
 
 
 class _CvcSelfPlayV2(CvcSelfPlayReferee):
-    num_agents: int = 8
-    env_name: str = "cogsguard_machina_1_8agents"
-    description: str = "Self-play matches on CogsGuard Machina1 (8 agents)"
+    game = V2_CVC_GAME
+    description = "Self-play matches on CogsGuard Machina1 (8 agents)"
 
 
 class _CvcPairingV2(CvcPairingReferee):
-    num_agents: int = 8
-    env_name: str = "cogsguard_machina_1_8agents"
-    match_configurations: list[list[int]] = [
-        [0, 0, 1, 1, 1, 1, 1, 1],  # 2v6
-        [0, 0, 0, 0, 0, 0, 1, 1],  # 6v2
-        [0, 0, 0, 0, 1, 1, 1, 1],  # 4v4
-    ]
-    description: str = (
+    game = V2_CVC_GAME
+    match_configurations = [list(config) for config in V2_CVC_PAIRING_CONFIGURATIONS]
+    description = (
         "Pairwise matchups on CogsGuard Machina1 with 8 agents (2+6, 6+2, 4+4); "
         "scored by participation-weighted average"
     )

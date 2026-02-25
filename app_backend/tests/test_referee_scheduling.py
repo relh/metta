@@ -3,6 +3,7 @@ from uuid import uuid4
 import pytest
 
 from metta.app_backend.models.tournament import PoolPlayer
+from metta.app_backend.tournament.commissioners.beta_cvc import BetaCvcCommissioner
 from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchRequest
 from metta.app_backend.tournament.referees.cogsguard import CogsguardPairingReferee, CogsguardSelfPlayReferee
 from metta.app_backend.tournament.referees.pairing import PairingReferee
@@ -157,3 +158,12 @@ def test_pairing_tags(referee):
 def test_env_has_correct_agent_count(referee):
     env = referee.make_env(seed=42)
     assert env.game.num_agents == referee.num_agents
+
+
+def test_beta_cvc_v2_referees_use_8_agent_game():
+    commissioner = BetaCvcCommissioner(season_id=uuid4())
+    referees = commissioner.get_referees(season_version=2)
+    assert referees["qualifying"].env_name == "cogsguard_machina_1_8agents"
+    assert referees["qualifying"].num_agents == 8
+    assert referees["competition"].env_name == "cogsguard_machina_1_8agents"
+    assert referees["competition"].num_agents == 8

@@ -64,7 +64,7 @@ class TeamStageReferee(RefereeBase):
         self.max_failed_attempts = max_failed_attempts
 
     def make_env(self, seed: int) -> MettaGridConfig:
-        return self.game.make_env(seed)
+        return self.game.generate(seed)
 
     def get_matches_to_schedule(
         self,
