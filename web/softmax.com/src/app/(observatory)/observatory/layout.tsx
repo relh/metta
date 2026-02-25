@@ -1,12 +1,15 @@
 import "@observatory/style.css";
 
 import { Metadata } from "next";
+import Link from "next/link";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { PropsWithChildren } from "react";
 import { ToastContainer } from "react-toastify";
 
 import { AccountSignInPrompt } from "@/components/account/AccountSignInPrompt";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db/prisma";
+import { CURRENT_TOS_VERSION } from "@/lib/tos";
 import { loadUserById } from "@/lib/user";
 import { AppProvider } from "@observatory-app/AppContext";
 import { TopMenu } from "@observatory-app/TopMenu";
@@ -31,6 +34,39 @@ export default async function RootLayout({ children }: PropsWithChildren) {
               </h1>
               <div className="max-w-lg p-6">
                 <AccountSignInPrompt />
+              </div>
+            </div>
+          </ThemeProvider>
+        </body>
+      </html>
+    );
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { tosVersion: true, profileCompleted: true },
+  });
+
+  if (!dbUser?.profileCompleted || dbUser.tosVersion !== CURRENT_TOS_VERSION) {
+    return (
+      <html lang="en">
+        <body className="overflow-y-scroll">
+          <ThemeProvider>
+            <div className="bg-background mx-auto flex min-h-screen flex-col items-center justify-center">
+              <h1 className="text-foreground mb-0 text-2xl font-semibold">
+                Softmax Observatory
+              </h1>
+              <div className="max-w-lg p-6 text-center">
+                <p className="text-foreground-muted mb-4">
+                  Please complete your profile and accept the Terms of Service
+                  to access the Observatory.
+                </p>
+                <Link
+                  href="/account"
+                  className="text-blue-500 underline hover:text-blue-400"
+                >
+                  Complete your profile
+                </Link>
               </div>
             </div>
           </ThemeProvider>

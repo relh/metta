@@ -63,7 +63,6 @@ export async function loadUserByMachineToken(
   };
 }
 
-// used by observatoryClient.ts to pass X-User-* headers to observatory API
 export async function loadUserById(id: string): Promise<UserInfo | null> {
   const dbUser = await prisma.user.findUnique({
     where: { id },

@@ -58,6 +58,12 @@ export const UserDropdown: FC<{ currentUser: string; devMode: boolean }> = ({
               )}
             </>
           )}
+          <DropdownMenuItem
+            title="Account Settings"
+            onClick={() => {
+              router.push("/account");
+            }}
+          />
           {devMode ? (
             <div className="text-foreground-subtle max-w-48 px-3 py-2 text-xs">
               Auth is set via DEV_AUTH_TOKEN. Sign out is not available in dev

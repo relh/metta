@@ -437,7 +437,7 @@ export function AccountCard({
               <Button
                 type="button"
                 onClick={() =>
-                  void signIn("discord", { callbackUrl: "/alignmentleague" })
+                  void signIn("discord", { callbackUrl: "/account" })
                 }
               >
                 Link Discord

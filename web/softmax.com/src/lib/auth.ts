@@ -1,12 +1,13 @@
 import "server-only";
 
-import { PrismaAdapter } from "@auth/prisma-adapter";
 import NextAuth, { NextAuthConfig } from "next-auth";
 import { Provider } from "next-auth/providers";
 import Credentials from "next-auth/providers/credentials";
 import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
+
+import { PrismaAdapter } from "@auth/prisma-adapter";
 
 import { prisma } from "./db/prisma";
 
@@ -89,7 +90,7 @@ function buildAuthConfig(): NextAuthConfig {
             },
           });
 
-          return "/alignmentleague";
+          return "/account";
         }
         return true;
       },
