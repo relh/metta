@@ -198,7 +198,7 @@ def create_docs_router(app, public_tags: set[str], internal_description: str | N
 
     @router.get("/internal/docs")
     async def internal_docs(_user: SoftmaxUser) -> HTMLResponse:
-        return _swagger_html("internal/openapi.json")
+        return _swagger_html("openapi.json")
 
     return router
 

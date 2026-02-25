@@ -3,5 +3,5 @@
   "quoteMark": "double",
   "wrappingStyle": "prettier",
   "excludeGlob": ["**/__generated__/**"],
-  "groupRules": [{ "flags": "scripts" }, {}, "^#", "^@/", "^\\."]
+  "groupRules": [{ "flags": "scripts" }, {}, "^#", "^@", "^\\."]
 }

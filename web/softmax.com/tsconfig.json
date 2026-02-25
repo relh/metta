@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@observatory/*": ["./src/observatory/*"],
+      "@observatory-app/*": ["./src/app/(observatory)/observatory/*"]
     }
   },
   "include": [

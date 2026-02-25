@@ -123,17 +123,6 @@ processes:
       period_seconds: 2
 
   # ===========================================================================
-  # FRONTEND (Next.js)
-  # ===========================================================================
-  # The Observatory web UI. Runs on port 5173.
-  # Port forwarding is configured in devcontainer.json runArgs.
-  frontend:
-    command: metta observatory frontend
-    depends_on:
-      server:
-        condition: process_healthy
-
-  # ===========================================================================
   # JOB WATCHER
   # ===========================================================================
   # Watches K8s pods in the "jobs" namespace and reports status to the backend.

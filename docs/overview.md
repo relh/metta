@@ -837,7 +837,6 @@ Infrastructure:
 
 | App                              | Framework                 | Purpose                                                     |
 | -------------------------------- | ------------------------- | ----------------------------------------------------------- |
-| Observatory (`web/observatory/`) | Next.js (App Router)      | Dashboard: episodes, policies, tournaments, SQL queries     |
 | Home (`web/home/`)               | Vite + React + TypeScript | Landing page                                                |
 | Gridworks (`web/gridworks/`)     | Frontend                  | Grid visualization (connects to `metta/gridworks/` FastAPI) |
 | Softmax.com (`web/softmax.com/`) | Next.js                   | Company website                                             |

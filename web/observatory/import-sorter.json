@@ -1,6 +1,0 @@
-{
-  "autoFormat": "onSave",
-  "quoteMark": "single",
-  "wrappingStyle": "prettier",
-  "groupRules": [{ "flags": "scripts" }, {}, "^#", "^@/", "^\\."]
-}

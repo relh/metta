@@ -360,13 +360,11 @@ kubectl --context tournament -n jobs get events --sort-by=.lastTimestamp | tail 
 | Area                     | Path                                                 |
 | ------------------------ | ---------------------------------------------------- |
 | Observatory deploy       | `.github/workflows/deploy-observatory.yml`           |
-| Frontend build workflow  | `.github/workflows/build-observatory-image.yml`      |
 | Watcher deploy           | `.github/workflows/deploy-watcher.yml`               |
 | Reusable deploy template | `.github/workflows/_build-and-deploy.yml`            |
 | Docker build action      | `.github/actions/docker-build/action.yml`            |
 | EKS configure action     | `.github/actions/eks-configure/action.yml`           |
 | Helm chart: backend      | `devops/charts/observatory-backend/`                 |
-| Helm chart: frontend     | `devops/charts/observatory/`                         |
 | Helm chart: orchestrator | `devops/charts/orchestrator/`                        |
 | Helmfile                 | `devops/helmfile.yaml`                               |
 | Datadog config           | `devops/helm.values/datadog-values.yaml`             |

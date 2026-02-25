@@ -1,0 +1,239 @@
+"use client";
+import { AppContext } from "@observatory-app/AppContext";
+import { Button } from "@observatory/components/Button";
+import { Input } from "@observatory/components/Input";
+import { Spinner } from "@observatory/components/Spinner";
+import { Table, TH } from "@observatory/components/Table";
+import { FC, use, useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  PaginatedEvalTasksResponse,
+  PolicyVersionRow,
+  TaskFilters,
+} from "../lib/repo";
+import { TaskRow } from "./TaskRow";
+
+const pageSize = 50;
+
+const UUID_REGEX =
+  /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/;
+
+export function parsePolicyVersionId(command: string): string | null {
+  const match = command.match(/policy_version_id=([0-9a-fA-F-]{36})/);
+  if (match && UUID_REGEX.test(match[1])) {
+    return match[1];
+  }
+  return null;
+}
+
+const FilterInput: FC<{
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ value, onChange }) => {
+  return (
+    <Input
+      value={value}
+      onChange={onChange}
+      placeholder="Filter..."
+      size="sm"
+    />
+  );
+};
+
+const StatusDropdown: FC<{
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ value, onChange }) => {
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      className="border-border-strong bg-surface text-foreground h-6 w-full rounded border py-1 pl-1 text-xs"
+    >
+      <option value="">All</option>
+      <option value="unprocessed">Unprocessed</option>
+      <option value="running">Running</option>
+      <option value="done">Done</option>
+      <option value="error">Error</option>
+      <option value="system_error">System Error</option>
+      <option value="canceled">Canceled</option>
+    </select>
+  );
+};
+
+export const TasksTable: FC<{
+  initialFilters?: TaskFilters;
+  hideFilters?: boolean;
+}> = ({ initialFilters, hideFilters }) => {
+  const { repo } = use(AppContext);
+
+  const [error, setError] = useState<string | null>(null);
+  const [tasksResponse, setTasksResponse] = useState<
+    PaginatedEvalTasksResponse | undefined
+  >();
+  const currentPage = tasksResponse?.page || 1;
+  const [filters, setFilters] = useState<TaskFilters>(initialFilters || {});
+  const isInitialMount = useRef(true);
+  const [policyInfoMap, setPolicyInfoMap] = useState<
+    Record<string, PolicyVersionRow>
+  >({});
+  const attemptedPolicyIds = useRef<Set<string>>(new Set());
+
+  // Load tasks
+  const loadTasks = useCallback(
+    async (page: number) => {
+      try {
+        const response = await repo.getEvalTasksPaginated(
+          page,
+          pageSize,
+          filters,
+        );
+        setTasksResponse(response);
+
+        // Extract unique policy_version_ids from commands that we haven't attempted yet
+        const policyVersionIds: string[] = [];
+        for (const task of response.tasks) {
+          const pvId = parsePolicyVersionId(task.command);
+          if (pvId && !attemptedPolicyIds.current.has(pvId)) {
+            policyVersionIds.push(pvId);
+          }
+        }
+
+        // Batch fetch policy info for new IDs
+        if (policyVersionIds.length > 0) {
+          try {
+            const policyVersions =
+              await repo.getPolicyVersionsBatch(policyVersionIds);
+            // Mark as attempted only after successful fetch
+            for (const pvId of policyVersionIds) {
+              attemptedPolicyIds.current.add(pvId);
+            }
+            const newPolicyInfo: Record<string, PolicyVersionRow> = {};
+            for (const pv of policyVersions) {
+              newPolicyInfo[pv.id] = pv;
+            }
+            if (Object.keys(newPolicyInfo).length > 0) {
+              setPolicyInfoMap((prev) => ({ ...prev, ...newPolicyInfo }));
+            }
+          } catch (err) {
+            console.error("Failed to fetch policy versions:", err);
+          }
+        }
+      } catch (err: any) {
+        console.error("Failed to load tasks:", err);
+        setError(`Failed to load tasks: ${err.message}`);
+      }
+    },
+    [repo, setError, filters],
+  );
+
+  // Initial load and filter changes (with 300ms debounce for filter changes)
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      loadTasks(1);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      loadTasks(1);
+    }, 300);
+    return () => clearTimeout(timeoutId);
+  }, [loadTasks]);
+
+  // Auto-refresh every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadTasks(currentPage);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [loadTasks, currentPage]);
+
+  if (!tasksResponse) {
+    return <Spinner size="lg" />;
+  }
+
+  return (
+    <div>
+      {error && (
+        <div className="mb-5 rounded border border-red-400 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {error}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <Table>
+          <Table.Header>
+            <TH>Policy</TH>
+            <TH>User</TH>
+            <TH>
+              <div className="flex flex-col gap-1">
+                Recipe
+                {!hideFilters && (
+                  <FilterInput
+                    value={filters.command || ""}
+                    onChange={(value) =>
+                      setFilters({ ...filters, command: value })
+                    }
+                  />
+                )}
+              </div>
+            </TH>
+            <TH>
+              <div className="flex flex-col gap-1">
+                Status
+                {!hideFilters && (
+                  <StatusDropdown
+                    value={filters.status || ""}
+                    onChange={(value) =>
+                      setFilters({ ...filters, status: value })
+                    }
+                  />
+                )}
+              </div>
+            </TH>
+            <TH>Created</TH>
+            <TH>Duration</TH>
+            <TH>Logs</TH>
+          </Table.Header>
+          <Table.Body>
+            {tasksResponse.tasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                policyInfoMap={policyInfoMap}
+                attemptedPolicyIds={attemptedPolicyIds.current}
+              />
+            ))}
+          </Table.Body>
+        </Table>
+        {tasksResponse.tasks.length === 0 && (
+          <div className="text-foreground-muted p-5 text-center">
+            No tasks found
+          </div>
+        )}
+      </div>
+
+      {/* Pagination */}
+      {tasksResponse.total_pages > 1 && (
+        <div className="flex justify-center gap-2 py-5">
+          <Button
+            onClick={() => loadTasks(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            Previous
+          </Button>
+          <span className="px-3 py-2 text-sm">
+            Page {currentPage} of {tasksResponse.total_pages}
+          </span>
+          <Button
+            onClick={() => loadTasks(currentPage + 1)}
+            disabled={currentPage === tasksResponse.total_pages}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};

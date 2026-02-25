@@ -51,7 +51,6 @@ jobs:
           max-deletions-per-workflow: "10"
           workflow-caps: |
             deploy-observatory.yml=12
-            build-observatory-image.yml=12
             build-home-image.yml=12
             build-image.yml=12
             build-pages.yml=10

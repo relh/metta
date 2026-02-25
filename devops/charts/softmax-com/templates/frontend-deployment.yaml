@@ -19,6 +19,8 @@ spec:
           env:
             - name: AUTH_TRUST_HOST
               value: "true"
+            - name: OBSERVATORY_POLICY_DASHBOARD_URL
+              value: "{{ .Values.policy_dashboard_url }}"
             - name: NEXTAUTH_URL
               value: https://{{ required "host" .Values.host }}
             - name: OBSERVATORY_API_URL

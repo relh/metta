@@ -13,8 +13,9 @@ frontend:
   replicas: 2
   min_available: 1
 
-# internal service endpoint - trusts "X-Auth-Request-Email" header
-observatory_api_url: http://observatory-backend.observatory.svc.cluster.local:8000
+observatory_api_url: https://api.observatory.softmax-research.net
+
+policy_dashboard_url: https://policy-dashboard.softmax-research.net
 
 db_migrate: true
 cronjobs: true

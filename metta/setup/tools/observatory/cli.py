@@ -4,7 +4,6 @@
 This module orchestrates all Observatory services for local development:
 - PostgreSQL database
 - FastAPI backend server
-- Next.js frontend
 - K8s job watcher
 - Tournament commissioner
 
@@ -46,9 +45,7 @@ from typing import Annotated
 import typer
 from dotenv import dotenv_values
 
-from metta.app_backend.clients.base_client import get_machine_token
 from metta.app_backend.clients.stats_client import StatsClient
-from metta.common.util.constants import PROD_STATS_SERVER_URI
 from metta.common.util.fs import get_repo_root
 from metta.setup.tools.observatory.local_k8s import (
     IMAGE,
@@ -155,15 +152,14 @@ Observatory local development.
 
 [bold]Quick start:[/bold]
   metta observatory local-k8s setup  # One-time: build image and create jobs namespace
-  metta observatory up               # Start all services (postgres, server, frontend, watcher, tournament)
+  metta observatory up               # Start all services (postgres, server, watcher, tournament)
 
 [bold]Start specific services:[/bold]
-  metta observatory up server frontend  # Only server and frontend
+  metta observatory up server  # Only server
 
 [bold]Individual services:[/bold]
   metta observatory postgres up -d   # Backgrounded postgres for api server
   metta observatory server           # API server (uses LocalStack for S3)
-  metta observatory frontend         # Observatory frontend
   metta observatory watcher          # Watches k8s jobs, reads results from S3
   metta observatory tournament run    # Tournament commissioner (creates matches, updates scores)
   metta observatory tournament roll-season <name>  # Roll a season to a new version
@@ -351,7 +347,7 @@ def _process_compose_env() -> dict[str, str]:
     return env
 
 
-@app.command(name="up", help="Start all observatory services (postgres, server, frontend, watcher)")
+@app.command(name="up", help="Start all observatory services (postgres, server, watcher)")
 @handle_errors
 def up(
     services: Annotated[list[str] | None, typer.Argument(help="Services to start (default: all)")] = None,
@@ -508,39 +504,9 @@ def event_processor():
 )
 @handle_errors
 def generate_api_types():
-    roots = [repo_root / "web/observatory", repo_root / "web/softmax.com"]
+    roots = [repo_root / "web/softmax.com"]
     for root in roots:
         subprocess.run(["pnpm", "run", "generate-api-types"], cwd=root, check=True)
-
-
-@app.command(name="frontend")
-@handle_errors
-def frontend(
-    backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
-    skip_auto_auth: Annotated[
-        bool, typer.Option("--skip-auto-auth", "-d", help="Don't authenticate with the backend on launch")
-    ] = False,
-):
-    env = _base_env()
-
-    if "LOGIN_SERVICE_URL" in env:
-        env["AUTH_SERVER_URL"] = f"{env['LOGIN_SERVICE_URL']}/api"
-
-    if backend == "local":
-        env["OBSERVATORY_API_URL"] = LOCAL_BACKEND_URL
-        if not skip_auto_auth:
-            env["DEV_AUTH_TOKEN"] = LOCAL_MACHINE_TOKEN
-        info(f"Connecting to local backend at {LOCAL_BACKEND_URL}")
-    else:
-        env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
-        if not skip_auto_auth and (token := get_machine_token(env["OBSERVATORY_API_URL"])):
-            env["DEV_AUTH_TOKEN"] = token
-        info("Connecting to prod backend")
-
-    info("Starting Observatory frontend")
-    info(f"API URL: {env.get('OBSERVATORY_API_URL')}")
-
-    subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/observatory")
 
 
 PROD_IMAGE = "ghcr.io/metta-ai/episode-runner:latest"

@@ -1,0 +1,59 @@
+import clsx from "clsx";
+import { FC } from "react";
+
+export function getButtonClassName(
+  size: "sm" | "md" | "lg",
+  theme: "primary" | "secondary" | "tertiary",
+  disabled: boolean = false,
+  wide: boolean = false,
+) {
+  return clsx(
+    "rounded-md",
+    wide && "w-full",
+    size === "sm" && "px-2 py-0.5 text-xs border",
+    size === "md" && "px-4 py-1 text-sm border-2",
+    size === "lg" && "px-6 py-2 text-base border-2",
+    theme === "primary" && [
+      "border-blue-500 bg-blue-500 text-white",
+      !disabled && "hover:bg-blue-600",
+    ],
+    theme === "secondary" && [
+      "border-blue-400 text-blue-500 bg-surface",
+      !disabled && "hover:bg-blue-100 dark:hover:bg-blue-900/30",
+    ],
+    theme === "tertiary" && [
+      "border-border-strong text-foreground-muted bg-transparent",
+      !disabled && "hover:bg-surface-alt hover:text-foreground",
+    ],
+    disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+  );
+}
+
+export const Button: FC<{
+  onClick?: () => void;
+  children: React.ReactNode;
+  theme?: "primary" | "secondary" | "tertiary";
+  type?: "button" | "submit";
+  size?: "sm" | "md" | "lg";
+  disabled?: boolean;
+  wide?: boolean;
+}> = ({
+  onClick,
+  children,
+  theme = "secondary",
+  type = "button",
+  size = "md",
+  disabled = false,
+  wide = false,
+}) => {
+  return (
+    <button
+      className={getButtonClassName(size, theme, disabled, wide)}
+      onClick={onClick}
+      type={type}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+};

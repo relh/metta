@@ -71,7 +71,7 @@ async function fetchApi(
       if (data.detail) {
         detail = String(data.detail);
       }
-    } catch {}
+    } catch {} // eslint-disable-line no-empty
     throw new Error(`Failed to fetch ${url}: ${detail}`);
   }
   return responseType === "text" ? response.text() : response.json();
@@ -149,15 +149,6 @@ export async function getSeasonVersions(
   return (await fetchApi(
     `/tournament/seasons/${encodePathSegment(seasonName)}/versions`,
   )) as SeasonVersionInfo[];
-}
-
-export async function getMyMemberships(
-  userId: string,
-): Promise<MembershipHistoryResponse> {
-  return (await fetchApi(
-    "/tournament/my-memberships",
-    userId,
-  )) as MembershipHistoryResponse;
 }
 
 export async function getPolicyMemberships(
