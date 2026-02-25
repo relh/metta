@@ -1,14 +1,17 @@
 'use client'
 import { useRouter } from 'next/navigation'
-import { FC, useCallback } from 'react'
+import { FC, use, useCallback } from 'react'
 
 import { clearAuthCookies } from '@/auth/browser'
 import { Dropdown, DropdownMenu, DropdownMenuItem } from '@/components/Dropdown'
 import { useDebugPanelVisible } from '@/lib/debug/useDebugPanelVisible'
 
+import { AppContext } from './AppContext'
+
 export const UserDropdown: FC<{ currentUser: string; devMode: boolean }> = ({ currentUser, devMode }) => {
   const router = useRouter()
   const { isVisible: debugPanelVisible, toggle: toggleDebugPanel } = useDebugPanelVisible()
+  const { isActuallySoftmaxTeamMember, actAsExternal, toggleActAsExternal } = use(AppContext)
 
   const signOut = useCallback(() => {
     clearAuthCookies()
@@ -26,12 +29,25 @@ export const UserDropdown: FC<{ currentUser: string; devMode: boolean }> = ({ cu
               close()
             }}
           />
-          <DropdownMenuItem
-            title="Service Accounts"
-            onClick={() => {
-              router.push('/service-accounts')
-            }}
-          />
+          {isActuallySoftmaxTeamMember && (
+            <>
+              <DropdownMenuItem
+                title={actAsExternal ? 'Act as Softmax user' : 'Act as external user'}
+                onClick={() => {
+                  toggleActAsExternal()
+                  close()
+                }}
+              />
+              {!actAsExternal && (
+                <DropdownMenuItem
+                  title="Service Accounts"
+                  onClick={() => {
+                    router.push('/service-accounts')
+                  }}
+                />
+              )}
+            </>
+          )}
           {devMode ? (
             <div className="px-3 py-2 text-xs text-foreground-subtle max-w-48">
               Auth is set via DEV_AUTH_TOKEN. Sign out is not available in dev mode.

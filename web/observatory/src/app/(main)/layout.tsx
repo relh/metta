@@ -3,6 +3,7 @@ import '@/style.css'
 import { Metadata } from 'next'
 import { NuqsAdapter } from 'nuqs/adapters/next/app'
 import { PropsWithChildren } from 'react'
+import { ToastContainer } from 'react-toastify'
 
 import { AppProvider } from '@/app/(main)/AppContext'
 import { TopMenu } from '@/app/(main)/TopMenu'
@@ -16,16 +17,17 @@ import { RequestDebugPanel } from '@/lib/debug/RequestDebugPanel'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { isOutageSimulated } from '@/lib/debug/simulate-outage'
 import { getRepo } from '@/lib/repo/server'
-import { ToastContainer } from 'react-toastify'
 
 export default async function RootLayout({ children }: PropsWithChildren) {
   const token = await getAuthToken()
   const repo = await getRepo()
 
   let currentUser = ''
+  let isSoftmaxTeamMember = false
   try {
     const userInfo = await repo.whoami()
     currentUser = userInfo.user_email
+    isSoftmaxTeamMember = userInfo.is_softmax_team_member
   } catch (err: any) {
     return (
       <html lang="en">
@@ -55,7 +57,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
       <body className="overflow-y-scroll">
         <ThemeProvider>
           <NuqsAdapter>
-            <AppProvider token={token} apiBaseUrl={config.apiBaseUrl}>
+            <AppProvider token={token} apiBaseUrl={config.apiBaseUrl} isSoftmaxTeamMember={isSoftmaxTeamMember}>
               <AutoRefreshProvider>
                 <ResetErrorProvider>
                   <div className="min-h-screen font-sans flex flex-col">

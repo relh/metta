@@ -266,6 +266,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/tournament/compat-versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Available Compat Versions */
+    get: operations["list_available_compat_versions_tournament_compat_versions_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/tournament/seasons/{season_name}/versions": {
     parameters: {
       query?: never;
@@ -1160,6 +1177,11 @@ export interface components {
        */
       index: number;
       /**
+       * Name
+       * @description Human-readable stage title for UI display
+       */
+      name: string;
+      /**
        * Kind
        * @description Configured stage kind: policy_eval, sample_teams, team_eval, or score_policies
        * @enum {string}
@@ -1226,6 +1248,11 @@ export interface components {
        */
       name: string;
       /**
+       * Display Name
+       * @description Human-readable season title for UI display
+       */
+      display_name: string;
+      /**
        * Version
        * @description Season version number
        */
@@ -1278,11 +1305,6 @@ export interface components {
        */
       status: "not_started" | "in_progress" | "complete";
       /**
-       * Display Name
-       * @description Human-readable season title for UI display
-       */
-      display_name: string;
-      /**
        * Started At
        * @description ISO 8601 timestamp when the season was started
        */
@@ -1321,6 +1343,11 @@ export interface components {
        * @description Short name of the season
        */
       name: string;
+      /**
+       * Display Name
+       * @description Human-readable season title for UI display
+       */
+      display_name: string;
       /**
        * Version
        * @description Season version number
@@ -2060,6 +2087,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_available_compat_versions_tournament_compat_versions_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": string[];
         };
       };
     };

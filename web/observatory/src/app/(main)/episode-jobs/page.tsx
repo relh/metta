@@ -5,6 +5,7 @@ import { Card } from '@/components/Card'
 import { PaginatedControls } from '@/components/PaginatedControls'
 import { RefreshButton } from '@/components/RefreshButton'
 import { SearchParamInput } from '@/components/SearchParamInput'
+import { AccessDenied } from '@/components/SoftmaxGuard'
 import { ServerDebugDrain } from '@/lib/debug/ServerDebugDrain'
 import { ALL_JOB_STATUSES } from '@/lib/repo'
 import { getRepo } from '@/lib/repo/server'
@@ -24,6 +25,12 @@ const nuqsParams = {
 const parseSearchParams = createLoader(nuqsParams)
 
 export default async function EpisodeJobsPage({ searchParams: rawSearchParams }: PageProps<'/episode-jobs'>) {
+  const repo = await getRepo()
+  const userInfo = await repo.whoami()
+  if (!userInfo.is_softmax_team_member) {
+    return <AccessDenied />
+  }
+
   const searchParams = await parseSearchParams(rawSearchParams)
   const {
     jobId: jobIdFilter,
@@ -33,8 +40,6 @@ export default async function EpisodeJobsPage({ searchParams: rawSearchParams }:
     poolId: poolIdFilter,
     page,
   } = searchParams
-
-  const repo = await getRepo()
   const pageSize = 50
 
   const [jobs, seasons] = await Promise.all([

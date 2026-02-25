@@ -29,7 +29,7 @@ const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({ 
 export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ currentUser, devMode }) => {
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { apiBaseUrl } = use(AppContext)
+  const { apiBaseUrl, isSoftmaxTeamMember } = use(AppContext)
 
   const isPoliciesActive = pathname === '/' || pathname.startsWith('/policies')
   const isTournamentRoute = pathname.startsWith('/tournament')
@@ -54,27 +54,33 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
           <MenuLink href="/" isActive={isPoliciesActive}>
             Policies
           </MenuLink>
-          <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
-            Policy Dashboard
-          </MenuLink>
+          {isSoftmaxTeamMember && (
+            <MenuLink href="/policy-dashboard" isActive={pathname.startsWith('/policy-dashboard')}>
+              Policy Dashboard
+            </MenuLink>
+          )}
           <MenuLink href="/tournament?mode=freeplay" isActive={isFreeplayActive}>
             Freeplay
           </MenuLink>
           <MenuLink href="/tournament?mode=tournament" isActive={isTournamentActive}>
             Tournament
           </MenuLink>
-          <MenuLink href="/episode-jobs" isActive={pathname.startsWith('/episode-job')}>
-            Episode Jobs
-          </MenuLink>
-          <MenuLink href="/sql-query" isActive={pathname === '/sql-query'}>
-            SQL Query
-          </MenuLink>
-          <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
-            Smart Plugs
-          </MenuLink>
-          <MenuLink href="/eval-tasks" isActive={pathname.startsWith('/eval-task')}>
-            Remote Jobs
-          </MenuLink>
+          {isSoftmaxTeamMember && (
+            <>
+              <MenuLink href="/episode-jobs" isActive={pathname.startsWith('/episode-job')}>
+                Episode Jobs
+              </MenuLink>
+              <MenuLink href="/sql-query" isActive={pathname === '/sql-query'}>
+                SQL Query
+              </MenuLink>
+              <MenuLink href="/infra/smart-plugs" isActive={pathname.startsWith('/infra/smart-plugs')}>
+                Smart Plugs
+              </MenuLink>
+              <MenuLink href="/eval-tasks" isActive={pathname.startsWith('/eval-task')}>
+                Remote Jobs
+              </MenuLink>
+            </>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-3">
@@ -89,13 +95,15 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({ current
                   close()
                 }}
               />
-              <DropdownMenuItem
-                title="Internal API"
-                onClick={() => {
-                  window.open('/api/internal/docs', '_blank')
-                  close()
-                }}
-              />
+              {isSoftmaxTeamMember && (
+                <DropdownMenuItem
+                  title="Internal API"
+                  onClick={() => {
+                    window.open('/api/internal/docs', '_blank')
+                    close()
+                  }}
+                />
+              )}
             </DropdownMenu>
           )}
         >

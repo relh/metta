@@ -66,10 +66,13 @@ async def get_user_from_token(request: Request) -> Optional[User]:
 
 async def get_user(request: Request) -> Optional[User]:
     user = get_user_from_header(request)
-    if user:
-        return user
+    if not user:
+        user = await get_user_from_token(request)
 
-    return await get_user_from_token(request)
+    if user and user.is_softmax_team_member and request.headers.get("X-Act-As-External", "").lower() == "true":
+        user = user.model_copy(update={"is_softmax_team_member": False})
+
+    return user
 
 
 async def get_user_or_raise(request: Request) -> User:

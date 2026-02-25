@@ -15,11 +15,12 @@ export type {
   MatchResponse,
   MembershipHistoryEntry,
   PolicySummary,
+  PolicyVersionSummary,
+  PoolMembership,
   SeasonDetail,
   SeasonSummary,
   SeasonVersionInfo,
 } from "@/lib/api";
-export type { PoolMembership, PolicyVersionSummary } from "@/lib/api";
 
 export type LeaderboardResponse = LeaderboardEntry[];
 export type PoliciesResponse = PolicySummary[];

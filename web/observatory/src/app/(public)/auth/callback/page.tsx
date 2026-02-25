@@ -29,7 +29,6 @@ export default function AuthCallback() {
     }
 
     async function processToken(authToken: string) {
-      // Validate token and check team membership before storing
       const validation = await validateToken(authToken)
 
       if (!validation.valid) {
@@ -37,12 +36,6 @@ export default function AuthCallback() {
         return
       }
 
-      if (!validation.isSoftmaxTeamMember) {
-        setStatus({ type: 'error', message: 'Access denied: Observatory is restricted to Softmax team members only.' })
-        return
-      }
-
-      // Token is valid and user is a team member - store the cookie
       // TODO - use HttpOnly cookie, avoid direct calls to observatory backend from browsers
       // must match AUTH_COOKIE_NAME
       writeAuthCookieToken(authToken)

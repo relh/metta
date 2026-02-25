@@ -1,7 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 
 import type {
-  AIQueryRequest,
   AIQueryResponse,
   EpisodeQueryRequest,
   EpisodeQueryResponse,
@@ -16,24 +15,22 @@ import type {
   PoliciesResponse,
   PolicySummary,
   PolicyVersionRow,
-  PolicyVersionSummary,
   PolicyVersionsResponse,
   ProgressResponse,
   ScorePoliciesLeaderboardEntry,
-  SQLQueryRequest,
-  SQLQueryResponse,
-  SeasonLeaderboardQuery,
   SeasonDetail,
-  SeasonSummary,
+  SeasonLeaderboardQuery,
   SeasonMatchSummary,
+  SeasonSummary,
+  SeasonTeamsQuery,
+  SeasonVersionInfo,
   ServiceAccountCreateResponse,
   ServiceAccountResponseBase,
+  SmartPlugStatus,
+  SQLQueryRequest,
+  SQLQueryResponse,
   StageLeaderboardQuery,
   StageLeaderboardType,
-  SeasonVersionInfo,
-  SeasonTeamsQuery,
-  Schemas,
-  SmartPlugStatus,
   StageStats,
   SubmissionResponse,
   TableInfo,
@@ -46,9 +43,9 @@ import { isOutageSimulated } from '@/lib/debug/simulate-outage'
 // Re-export generated API types so existing `import { X } from '@/lib/repo'`
 // statements continue to work.
 export type {
+  AgentStatsDetail,
   AIQueryRequest,
   AIQueryResponse,
-  AgentStatsDetail,
   EpisodePolicyStat,
   EpisodeQueryRequest,
   EpisodeQueryResponse,
@@ -56,8 +53,6 @@ export type {
   EpisodeWithTags,
   EvalTask,
   EvalTaskCreateRequest,
-  TaskAttempt,
-  TaskStatus,
   JobEpisodeInfo,
   JobMatchInfo,
   JobPolicyVersionSummary,
@@ -71,31 +66,33 @@ export type {
   PolicyStatsDetail,
   PolicySummary,
   PolicyVersionRow,
-  PolicyVersionSummary,
   PolicyVersionsResponse,
+  PolicyVersionSummary,
   PoolInfo,
   PoolMembership,
   ProgressResponse,
   ScorePoliciesLeaderboardEntry,
-  SeasonLeaderboardQuery,
-  SQLQueryRequest,
-  SQLQueryResponse,
   SeasonDetail,
-  SeasonSummary,
+  SeasonLeaderboardQuery,
   SeasonMatchPlayerSummary,
   SeasonMatchSummary,
+  SeasonSummary,
+  SeasonTeamsQuery,
+  SeasonVersionInfo,
   ServiceAccountCreateResponse,
   ServiceAccountResponseBase,
+  SmartPlugStatus,
+  SQLQueryRequest,
+  SQLQueryResponse,
   StageLeaderboardQuery,
   StageLeaderboardType,
-  SeasonVersionInfo,
-  SeasonTeamsQuery,
-  SmartPlugStatus,
   StageStats,
   SubmissionResponse,
   TableInfo,
   TableSchema,
+  TaskAttempt,
   TaskAttemptsResponse,
+  TaskStatus,
   TeamCogSummary,
   TeamSummary,
   UserRow,
@@ -146,7 +143,8 @@ export class Repo {
   constructor(
     public baseUrl: string = 'http://localhost:8000',
     private token: string | null = null,
-    private onRequest?: OnRequestCallback
+    private onRequest?: OnRequestCallback,
+    private actAsExternal: boolean = false
   ) {}
 
   private getHeaders(contentType?: string): Record<string, string> {
@@ -159,6 +157,10 @@ export class Repo {
     const token = this.token
     if (token) {
       headers['X-Auth-Token'] = token
+    }
+
+    if (this.actAsExternal) {
+      headers['X-Act-As-External'] = 'true'
     }
 
     return headers
@@ -309,8 +311,8 @@ export class Repo {
   }
 
   // User methods
-  async whoami(): Promise<{ user_email: string }> {
-    return this.apiCall<{ user_email: string }>('/whoami')
+  async whoami(): Promise<{ user_email: string; is_softmax_team_member: boolean }> {
+    return this.apiCall<{ user_email: string; is_softmax_team_member: boolean }>('/whoami')
   }
 
   async getSmartPlugStatus(): Promise<{ refreshed_at: string; items: SmartPlugStatus[] }> {

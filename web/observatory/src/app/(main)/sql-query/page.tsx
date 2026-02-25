@@ -3,6 +3,7 @@ import { use, useEffect, useState } from 'react'
 
 import { AppContext } from '@/app/(main)/AppContext'
 import { Button } from '@/components/Button'
+import { SoftmaxGuard } from '@/components/SoftmaxGuard'
 import { Spinner } from '@/components/Spinner'
 import { SQLQueryResponse, TableInfo, TableSchema } from '@/lib/repo'
 
@@ -139,107 +140,111 @@ export default function SQLQueryPage() {
   }
 
   return (
-    <div className="flex gap-4 p-4">
-      <TablesSidebar
-        tables={tables}
-        tablesLoading={tablesLoading}
-        selectedTable={selectedTable}
-        onTableClick={handleTableClick}
-        queryHistory={queryHistory}
-        onHistoryItemClick={setQuery}
-        onClearHistory={clearHistory}
-      />
+    <SoftmaxGuard>
+      <div className="flex gap-4 p-4">
+        <TablesSidebar
+          tables={tables}
+          tablesLoading={tablesLoading}
+          selectedTable={selectedTable}
+          onTableClick={handleTableClick}
+          queryHistory={queryHistory}
+          onHistoryItemClick={setQuery}
+          onClearHistory={clearHistory}
+        />
 
-      {/* Query Area */}
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        {/* Query Input Section */}
-        <div className="rounded-lg border border-border bg-surface p-4">
-          <h3 className="mb-3 mt-0 text-sm font-semibold uppercase tracking-wide text-foreground-subtle">SQL Query</h3>
+        {/* Query Area */}
+        <div className="flex min-w-0 flex-1 flex-col gap-4">
+          {/* Query Input Section */}
+          <div className="rounded-lg border border-border bg-surface p-4">
+            <h3 className="mb-3 mt-0 text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
+              SQL Query
+            </h3>
 
-          {/* Schema Info */}
-          {tableSchema && !schemaLoading && (
-            <div className="mb-3 rounded border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 p-3">
-              <h4 className="mb-2 mt-0 text-xs font-semibold text-blue-800 dark:text-blue-300">
-                Schema for {tableSchema.table_name}
-              </h4>
-              <div className="text-xs leading-relaxed">
-                {tableSchema.columns.map((col) => (
-                  <div key={col.name} className="mb-0.5 font-mono">
-                    <strong>{col.name}</strong>
-                    <span className="text-foreground-muted">
-                      {' '}
-                      ({col.type}
-                      {col.nullable ? ', nullable' : ''})
-                    </span>
-                  </div>
-                ))}
+            {/* Schema Info */}
+            {tableSchema && !schemaLoading && (
+              <div className="mb-3 rounded border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950 p-3">
+                <h4 className="mb-2 mt-0 text-xs font-semibold text-blue-800 dark:text-blue-300">
+                  Schema for {tableSchema.table_name}
+                </h4>
+                <div className="text-xs leading-relaxed">
+                  {tableSchema.columns.map((col) => (
+                    <div key={col.name} className="mb-0.5 font-mono">
+                      <strong>{col.name}</strong>
+                      <span className="text-foreground-muted">
+                        {' '}
+                        ({col.type}
+                        {col.nullable ? ', nullable' : ''})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <AIQueryBuilder onQueryGenerated={setQuery} />
+
+            {/* Query Input */}
+            <div className="relative">
+              <textarea
+                className="box-border min-h-[120px] w-full resize-y rounded border border-border bg-surface-alt p-2.5 pb-12 pr-36 font-mono text-sm text-foreground focus:border-blue-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-blue-500/10"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Enter your SQL query here..."
+                spellCheck={false}
+              />
+              <div className="absolute bottom-2.5 right-2.5">
+                <Button
+                  theme="primary"
+                  size="md"
+                  onClick={executeQuery}
+                  disabled={!query.trim() || queryState.type === 'loading'}
+                >
+                  {queryState.type === 'loading' ? (
+                    'Executing...'
+                  ) : (
+                    <>
+                      Execute <span className="text-xs opacity-80">⌘+Enter</span>
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
-          )}
-
-          <AIQueryBuilder onQueryGenerated={setQuery} />
-
-          {/* Query Input */}
-          <div className="relative">
-            <textarea
-              className="box-border min-h-[120px] w-full resize-y rounded border border-border bg-surface-alt p-2.5 pb-12 pr-36 font-mono text-sm text-foreground focus:border-blue-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-blue-500/10"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Enter your SQL query here..."
-              spellCheck={false}
-            />
-            <div className="absolute bottom-2.5 right-2.5">
-              <Button
-                theme="primary"
-                size="md"
-                onClick={executeQuery}
-                disabled={!query.trim() || queryState.type === 'loading'}
-              >
-                {queryState.type === 'loading' ? (
-                  'Executing...'
-                ) : (
-                  <>
-                    Execute <span className="text-xs opacity-80">⌘+Enter</span>
-                  </>
-                )}
-              </Button>
-            </div>
           </div>
-        </div>
 
-        {/* Results Section */}
-        <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-surface p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="my-0 text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Results</h3>
-            {queryState.type === 'success' && (
-              <span className="text-xs text-foreground-muted">{queryState.data.row_count} rows returned</span>
+          {/* Results Section */}
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-surface p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="my-0 text-sm font-semibold uppercase tracking-wide text-foreground-subtle">Results</h3>
+              {queryState.type === 'success' && (
+                <span className="text-xs text-foreground-muted">{queryState.data.row_count} rows returned</span>
+              )}
+            </div>
+
+            {queryState.type === 'error' && (
+              <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+                <strong>Error:</strong> {queryState.error}
+              </div>
+            )}
+
+            {queryState.type === 'loading' && <Spinner />}
+
+            {queryState.type === 'success' && queryState.data.row_count === 0 && (
+              <div className="py-10 text-center text-foreground-muted">No results returned</div>
+            )}
+
+            {queryState.type === 'success' && queryState.data.row_count > 0 && (
+              <QueryResultsTable data={queryState.data} />
+            )}
+
+            {queryState.type === 'idle' && (
+              <div className="py-10 text-center text-foreground-muted">
+                Select a table or enter a query to see results
+              </div>
             )}
           </div>
-
-          {queryState.type === 'error' && (
-            <div className="mb-4 rounded border border-red-200 bg-red-50 p-4 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
-              <strong>Error:</strong> {queryState.error}
-            </div>
-          )}
-
-          {queryState.type === 'loading' && <Spinner />}
-
-          {queryState.type === 'success' && queryState.data.row_count === 0 && (
-            <div className="py-10 text-center text-foreground-muted">No results returned</div>
-          )}
-
-          {queryState.type === 'success' && queryState.data.row_count > 0 && (
-            <QueryResultsTable data={queryState.data} />
-          )}
-
-          {queryState.type === 'idle' && (
-            <div className="py-10 text-center text-foreground-muted">
-              Select a table or enter a query to see results
-            </div>
-          )}
         </div>
       </div>
-    </div>
+    </SoftmaxGuard>
   )
 }

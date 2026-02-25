@@ -108,6 +108,7 @@ versions = client.get_policy_versions(name_fuzzy="my-policy")
 
 class WhoAmIResponse(BaseModel):
     user_email: str
+    is_softmax_team_member: bool = False
 
 
 _logging_configured = False
@@ -227,7 +228,10 @@ def create_app() -> fastapi.FastAPI:
     @app.get("/whoami")
     async def whoami(request: fastapi.Request, _user: NoAuthRequired) -> WhoAmIResponse:
         user = await get_user(request)
-        return WhoAmIResponse(user_email=user.email if user else "unknown")
+        return WhoAmIResponse(
+            user_email=user.email if user else "unknown",
+            is_softmax_team_member=user.is_softmax_team_member if user else False,
+        )
 
     public_tags = collect_public_tags(routers)
     app.include_router(create_docs_router(app, public_tags, internal_description=_INTERNAL_API_DESCRIPTION))

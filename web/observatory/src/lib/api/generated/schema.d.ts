@@ -2988,6 +2988,11 @@ export interface components {
     WhoAmIResponse: {
       /** User Email */
       user_email: string
+      /**
+       * Is Softmax Team Member
+       * @default false
+       */
+      is_softmax_team_member: boolean
     }
   }
   responses: never
