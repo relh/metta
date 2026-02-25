@@ -75,6 +75,18 @@ def test_stable_monitors_generated_per_job(monkeypatch) -> None:
         assert "scope:testing" in config["tags"]
         assert monitors.WEBHOOK_STABLE_ALERTS in config["message"]
 
+    stale_monitor = next(config for config in stable_configs if config["name"].endswith("stale (28h)"))
+    assert stale_monitor["type"] == "query alert"
+    assert f"avg({monitors.STABLE_STALE_QUERY_LOOKBACK})" in stale_monitor["query"]
+    assert "default_zero(" in stale_monitor["query"]
+    assert STABLE_CHECK_COMPLETED_AT_METRIC in stale_monitor["query"]
+    assert "{job:prod_job_a_check}" in stale_monitor["query"]
+    assert stale_monitor["query"].endswith(" < 1")
+    assert stale_monitor["thresholds"]["critical"] == 1
+    assert stale_monitor["options"]["notify_no_data"] is False
+    assert stale_monitor["options"]["require_full_window"] is False
+    assert "no_data_timeframe" not in stale_monitor["options"]
+
     failed_monitor = next(config for config in stable_configs if config["name"].endswith("latest failed"))
     assert failed_monitor["type"] == "service check"
     assert STABLE_CHECK_EFFECTIVE_STATUS_SERVICE_CHECK in failed_monitor["query"]

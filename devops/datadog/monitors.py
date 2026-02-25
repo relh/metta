@@ -19,8 +19,7 @@ WEBHOOK_ONCALL = "@oncall-on-call"
 WEBHOOK_STABLE_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
 
 STABLE_STALE_HOURS = 28
-STABLE_STALE_MINUTES = STABLE_STALE_HOURS * 60
-STABLE_STALE_QUERY_LOOKBACK = "last_5m"
+STABLE_STALE_QUERY_LOOKBACK = f"last_{STABLE_STALE_HOURS}h"
 STABLE_FAILED_SERVICE_CHECK_LAST_COUNT = 1
 
 
@@ -466,7 +465,10 @@ def _stable_runner_stale_monitor(job_tag: str) -> dict:
     return {
         "name": f"[Stable] {job_tag} stale ({STABLE_STALE_HOURS}h)",
         "type": "query alert",
-        "query": (f"max({STABLE_STALE_QUERY_LOOKBACK}):max:{STABLE_CHECK_COMPLETED_AT_METRIC}{{job:{job_tag}}} < 0"),
+        "query": (
+            f"avg({STABLE_STALE_QUERY_LOOKBACK}):"
+            f"default_zero(avg:{STABLE_CHECK_COMPLETED_AT_METRIC}{{job:{job_tag}}}) < 1"
+        ),
         "message": (
             f"No stable run reported for `{job_tag}` in the last {STABLE_STALE_HOURS} hours.\n\n{WEBHOOK_STABLE_ALERTS}"
         ),
@@ -478,10 +480,10 @@ def _stable_runner_stale_monitor(job_tag: str) -> dict:
             f"stable_job:{job_tag}",
         ],
         "priority": 3,
-        "thresholds": {"critical": 0},
+        "thresholds": {"critical": 1},
         "options": {
-            "notify_no_data": True,
-            "no_data_timeframe": STABLE_STALE_MINUTES,
+            "notify_no_data": False,
+            "require_full_window": False,
             "renotify_interval": 120,
             "include_tags": True,
         },
