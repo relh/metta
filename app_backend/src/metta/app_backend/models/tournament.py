@@ -50,7 +50,7 @@ class MettagridEnvConfig(SQLModel, table=True):
     id: UUID = Field(
         default_factory=uuid4, primary_key=True, sa_column_kwargs={"server_default": text("uuid_generate_v4()")}
     )
-    config_hash: str = Field(index=True, unique=True)
+    config_hash: str = Field(index=True)
     config: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
     name: str | None = Field(default=None)
     compat_version: str | None = Field(default=None)

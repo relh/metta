@@ -46,6 +46,10 @@ class _StubReferee(RefereeBase):
         return []
 
 
+class _AltNameSameConfigReferee(_StubReferee):
+    env_name = "test-env-alt"
+
+
 def test_env_config_generate_with_map_seed_sets_seed_without_mutating_input() -> None:
     env_config = make_cogsguard_env(seed=11, num_agents=4).model_dump(mode="json")
     env_row = MettagridEnvConfig(config_hash="abc123", config=env_config)
@@ -92,6 +96,23 @@ async def test_create_env_config_persists_metadata(
         assert row.compat_version == compat_version
         assert row.git_commit == git_commit
         assert row.num_agents == referee.num_agents
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_env_config_allows_same_hash_across_env_names(stats_repo: str) -> None:
+    _ = stats_repo
+    commissioner = _StubCommissioner(season_id=uuid4())
+    referee_a = _StubReferee()
+    referee_b = _AltNameSameConfigReferee()
+
+    async with db_session():
+        first = await commissioner._get_or_create_env_config(referee_a, compat_version=None)
+        second = await commissioner._get_or_create_env_config(referee_b, compat_version=None)
+
+        assert first.id != second.id
+        assert first.config_hash == second.config_hash
+        assert first.name == referee_a.env_name
+        assert second.name == referee_b.env_name
 
 
 @pytest.mark.asyncio
