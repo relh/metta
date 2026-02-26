@@ -137,6 +137,39 @@ def test_obs_token_to_box_shim_ignores_global_tokens():
     assert box_obs.sum().item() == 10.0
 
 
+def test_obs_token_to_box_shim_invalid_tokens_do_not_clobber_index_zero():
+    policy_env_info = _build_policy_env_info()
+    token_to_box = ObsTokenToBoxShim(policy_env_info, in_key="env_obs", out_key="box_obs")
+
+    obs = torch.full((1, 4, 3), 0xFF, dtype=torch.uint8)
+    obs[:, 0] = torch.tensor([0x00, 0, 10], dtype=torch.uint8)  # valid: x=0, y=0, feature=0, value=10
+    obs[:, 1] = torch.tensor([0x01, 255, 200], dtype=torch.uint8)  # invalid feature id -> must be ignored
+    obs[:, 2] = torch.tensor([0x02, 254, 100], dtype=torch.uint8)  # invalid feature id -> must be ignored
+    td = TensorDict({"env_obs": obs}, batch_size=[1])
+
+    output_td = token_to_box(td)
+    box_obs = output_td["box_obs"]
+
+    assert box_obs[0, 0, 0, 0].item() == 10.0
+    assert box_obs.sum().item() == 10.0
+
+
+def test_obs_token_to_box_shim_duplicate_tokens_use_deterministic_max():
+    policy_env_info = _build_policy_env_info()
+    token_to_box = ObsTokenToBoxShim(policy_env_info, in_key="env_obs", out_key="box_obs")
+
+    obs = torch.full((1, 4, 3), 0xFF, dtype=torch.uint8)
+    obs[:, 0] = torch.tensor([0x00, 0, 10], dtype=torch.uint8)  # same target index
+    obs[:, 1] = torch.tensor([0x00, 0, 20], dtype=torch.uint8)  # same target index, larger value
+    td = TensorDict({"env_obs": obs}, batch_size=[1])
+
+    output_td = token_to_box(td)
+    box_obs = output_td["box_obs"]
+
+    assert box_obs[0, 0, 0, 0].item() == 20.0
+    assert box_obs.sum().item() == 20.0
+
+
 def test_observation_normalizer_initializes_with_policy_env_info():
     """Test that ObservationNormalizer can initialize with PolicyEnvInterface."""
     policy_env_info = _build_policy_env_info()

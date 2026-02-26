@@ -4,6 +4,8 @@ import torch
 from cortex.blocks import PostUpBlock
 from cortex.cells.slstm import sLSTMCell
 from cortex.config import PostUpBlockConfig, sLSTMCellConfig
+from cortex.kernels.pytorch.slstm import slstm_sequence_pytorch
+from cortex.kernels.triton.slstm import slstm_sequence_triton
 
 
 def get_test_device():
@@ -600,3 +602,57 @@ def test_slstm_triton_vs_pytorch_with_resets() -> None:
                 atol=1e-3,
                 msg=f"Parameter gradient '{name_t}' should match",
             )
+
+
+def test_slstm_kernel_recurrent_mix_parity_nonzero_recurrent_weights() -> None:
+    """Ensure recurrent-mix math matches between Triton and PyTorch for non-zero recurrent weights."""
+    torch.manual_seed(31415)
+
+    if not torch.cuda.is_available():
+        print("⊘ Skipping kernel parity test (CUDA not available)")
+        return
+
+    B = 2
+    T = 8
+    NH = 4
+    DH = 16
+
+    # Keep values in a numerically stable band to isolate layout/math parity bugs.
+    scale = 0.05
+    Wx = scale * torch.randn(B, T, 4, NH, DH, device="cuda", dtype=torch.float32)
+    R = scale * torch.randn(4, NH, DH, DH, device="cuda", dtype=torch.float32)
+    b = scale * torch.randn(4, NH, DH, device="cuda", dtype=torch.float32)
+    states0 = scale * torch.randn(4, B, NH, DH, device="cuda", dtype=torch.float32)
+    resets = torch.zeros(B, T, device="cuda", dtype=torch.bool)
+    resets[0, 3] = True
+    resets[1, 6] = True
+
+    all_states_triton, last_state_triton = slstm_sequence_triton(
+        Wx=Wx,
+        R=R,
+        b=b,
+        initial_states=states0,
+        resets=resets,
+    )
+    all_states_pytorch, last_state_pytorch = slstm_sequence_pytorch(
+        Wx=Wx,
+        R=R,
+        b=b,
+        initial_states=states0,
+        resets=resets,
+    )
+
+    torch.testing.assert_close(
+        all_states_triton,
+        all_states_pytorch,
+        rtol=1e-3,
+        atol=1e-3,
+        msg="Forward all_states mismatch between Triton and PyTorch kernels",
+    )
+    torch.testing.assert_close(
+        last_state_triton,
+        last_state_pytorch,
+        rtol=1e-3,
+        atol=1e-3,
+        msg="Forward last_state mismatch between Triton and PyTorch kernels",
+    )

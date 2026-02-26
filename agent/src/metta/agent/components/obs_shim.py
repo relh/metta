@@ -400,15 +400,20 @@ class ObsTokenToBoxShim(nn.Module):
         dim_per_layer = self.out_width * self.out_height
         combined_index = atr_indices * dim_per_layer + flat_spatial_index  # [B_TT, M]
 
-        # Mask out invalid entries by directing them to index 0 with value 0
+        # Use a masked amax reduction so invalid tokens cannot clobber valid index-0 entries.
+        # This also makes duplicate-token behavior deterministic across backends.
         safe_index = torch.where(valid_mask, combined_index, torch.zeros_like(combined_index))
-        safe_values = torch.where(valid_mask, atr_values, torch.zeros_like(atr_values))
+        neg_inf = torch.full_like(atr_values, torch.finfo(atr_values.dtype).min)
+        safe_values = torch.where(valid_mask, atr_values, neg_inf)
 
-        # Scatter values into a flattened buffer, then reshape to [B_TT, L, W, H]
-        box_flat = torch.zeros(
-            (B_TT, self.num_layers * dim_per_layer), dtype=atr_values.dtype, device=token_observations.device
+        box_flat = torch.full(
+            (B_TT, self.num_layers * dim_per_layer),
+            torch.finfo(atr_values.dtype).min,
+            dtype=atr_values.dtype,
+            device=token_observations.device,
         )
-        box_flat.scatter_(1, safe_index, safe_values)
+        box_flat.scatter_reduce_(1, safe_index, safe_values, reduce="amax", include_self=True)
+        box_flat = torch.where(box_flat == torch.finfo(atr_values.dtype).min, torch.zeros_like(box_flat), box_flat)
         box_obs = box_flat.view(B_TT, self.num_layers, self.out_width, self.out_height)
 
         td[self.out_key] = box_obs

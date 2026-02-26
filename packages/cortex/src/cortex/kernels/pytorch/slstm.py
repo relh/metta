@@ -58,7 +58,7 @@ def _recurrent_mix(y: torch.Tensor, R: torch.Tensor) -> torch.Tensor:
 
     Args:
         y: [B, NH, DH] or [B, NH*DH]
-        R: [4, NH, DH, DH] recurrent weights per gate
+        R: [4, NH, DH, DH] recurrent weights per gate in [out, in] layout
 
     Returns:
         Ry: [B, 4*NH*DH]
@@ -71,18 +71,20 @@ def _recurrent_mix(y: torch.Tensor, R: torch.Tensor) -> torch.Tensor:
         y = y.view(B, NH, DH)
 
     NH, DH = y.shape[1], y.shape[2]
-    # y: [B, NH, DH]
-    # R: [4, NH, DH, DH]
-    # We want: [B, NH, DH] @ [NH, DH, 4*DH] -> [B, NH, 4*DH]
-    # Reshape R: [4, NH, DH, DH] -> [NH, DH, 4*DH]
-    R_reshaped = R.permute(1, 2, 0, 3).reshape(NH, DH, 4 * DH)
+    # y: [B, NH, DH_in]
+    # R: [4, NH, DH_out, DH_in]
+    # Build [NH, DH_in, 4*DH_out] so each gate uses y @ R[g]^T, matching Triton.
+    R_reshaped = R.permute(1, 3, 0, 2).reshape(NH, DH, 4 * DH)
 
-    # Batched matmul: [B, NH, DH] @ [NH, DH, 4*DH] -> [B, NH, 4*DH]
+    # Batched matmul: [B, NH, DH_in] @ [NH, DH_in, 4*DH_out] -> [B, NH, 4*DH]
     y_expanded = y.unsqueeze(2)  # [B, NH, 1, DH]
     R_expanded = R_reshaped.unsqueeze(0)  # [1, NH, DH, 4*DH]
     Ry = torch.matmul(y_expanded, R_expanded).squeeze(2)  # [B, NH, 4*DH]
 
-    return Ry.reshape(B, NH * 4 * DH)
+    # _slstm_pointwise expects flattened gate-major order: [i_all_heads, f_all_heads, z_all_heads, o_all_heads].
+    # Convert from [head, gate*dim] to [gate, head, dim] before flattening.
+    Ry = Ry.view(B, NH, 4, DH).permute(0, 2, 1, 3).reshape(B, 4 * NH * DH)
+    return Ry
 
 
 def slstm_sequence_pytorch(
