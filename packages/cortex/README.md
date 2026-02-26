@@ -19,13 +19,18 @@ pip install cortexcore
   - [Why This Design?](#why-this-design)
   - [Uniform Interface Design](#uniform-interface-design)
 - [Quick Start](#quick-start)
+  - [Global overrides](#global-overrides)
+  - [Routed Adapters](#routed-adapters)
 - [Supported Components](#supported-components)
   - [Memory Cells](#memory-cells)
   - [Blocks](#blocks)
 - [MoE using Column](#moe-using-column)
+  - [Compact Forward Pass (per token t)](#compact-forward-pass-per-token-t)
 - [Advanced Setup](#advanced-setup)
-- [Metta Framework Integration](#metta-framework-integration)
+  - [Register tokens and build via `build_cortex`](#register-tokens-and-build-via-build_cortex)
 - [AxonLayer: A Generalized Linear Operator with Stateful Dynamics](#axonlayer-a-generalized-linear-operator-with-stateful-dynamics)
+  - [Internal Structure](#internal-structure)
+  - [Rationale](#rationale)
   - [AxonLayer Integration Across Cells](#axonlayer-integration-across-cells)
 - [Evaluate Quickly](#evaluate-quickly)
 - [Backend Configuration](#backend-configuration)
@@ -530,56 +535,6 @@ Note: AxonLayer usage is opt-in per cell via its config (e.g., `use_axon_layer`,
 provided parent TensorDict state in place. When building stacks with the auto-pattern DSL, you can enable these Axon
 augmentations inline by using the `^` suffix on supported experts (for example, `M^`, `S^`, or `X^`). The suffix routes
 through the AxonLayer-enabled variant of that expert without manually toggling the config flags.
-
-## Metta Framework Integration
-
-Metta ships with a ready-to-use component for integrating Cortex stacks with its TensorDict-based pipelines.
-
-### CortexTD Component
-
-The `CortexTD` component (in `agent/src/metta/agent/components/cortex.py`) wraps a `CortexStack` and provides stateful
-memory across rollout and training.
-
-**Recommended pattern (auto stack):** Use the mixed Axon/mLSTM/sLSTM builder and enable AxonLayers.
-
-```python
-from cortex.stacks import build_cortex_auto_stack
-from metta.agent.components.cortex import CortexTD, CortexTDConfig
-
-# 1) Build a Cortex stack
-stack = build_cortex_auto_stack(
-    d_hidden=256,
-    num_layers=3,
-    post_norm=True,
-    use_axonlayers=True,
-)
-
-# 2) Wrap it as a Metta component
-component = CortexTD(CortexTDConfig(
-    stack=stack,
-    in_key="latent",
-    out_key="recurrent_out",
-    d_hidden=256,              # stack external size
-    out_features=256,          # identity projection when equal to d_hidden
-    key_prefix="cortex_state",
-    store_dtype="fp32",       # or "bf16"
-))
-```
-
-See also the reference wiring in:
-
-- `agent/src/metta/agent/components/cortex.py`
-- `agent/src/metta/agent/policies/cortex.py`
-
-**TensorDict expectations:**
-
-- `bptt`: int Tensor (shape [1]); 1 for rollout (step mode), >1 for training (sequence mode)
-- `batch`: int Tensor (shape [1]); batch size B
-- `agent_slot_ids`: Long Tensor with global agent-slot IDs (e.g. `[B, 1]` in step mode)
-- Optional resets via `dones`/`truncateds` booleans (B or [B, T])
-
-`CortexTD` maintains separate caches for rollout and training, supports checkpointing via `get_memory()`/`set_memory()`,
-and applies resets automatically.
 
 ## Evaluate Quickly
 

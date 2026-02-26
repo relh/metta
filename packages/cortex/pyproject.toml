@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/Metta-AI/metta/tree/main/packages/cortex"
+Repository = "https://github.com/Metta-AI/cortex"
 
 [dependency-groups]
 dev = ["pytest>=8.3.3", "pytest-cov>=6.1.1", "pytest-xdist>=3.8.0"]
