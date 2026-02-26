@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cortex Release"
+  short_description: "Bump cortexcore and publish via GitHub Actions"
+  default_prompt: "Bump packages/cortex version, update lockfile metadata, and dispatch release-cortexcore.yml to publish to PyPI or TestPyPI."
