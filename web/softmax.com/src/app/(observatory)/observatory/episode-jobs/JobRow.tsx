@@ -1,10 +1,7 @@
 "use client";
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  normalizeReplayUrl,
-  normalizeVibescopeUrl,
-} from "@observatory/components/ReplayViewer";
+import { normalizeReplayUrl } from "@observatory/components/ReplayViewer";
 import { StyledLink } from "@observatory/components/StyledLink";
 import { TD, TR } from "@observatory/components/Table";
 import {
@@ -614,25 +611,11 @@ export const JobRow: FC<{ job: JobRequest }> = ({ job }) => {
               <StyledLink href={episodeRoute(episodeId)}>Episode</StyledLink>
             )}
             {job.episode?.replay_url &&
-              normalizeVibescopeUrl(job.episode.replay_url) && (
+              normalizeReplayUrl(job.episode.replay_url) && (
                 <>
                   {episodeId && (
                     <span className="text-foreground-muted mx-1">&middot;</span>
                   )}
-                  <a
-                    href={normalizeVibescopeUrl(job.episode.replay_url)!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    VS
-                  </a>
-                </>
-              )}
-            {job.episode?.replay_url &&
-              normalizeReplayUrl(job.episode.replay_url) && (
-                <>
-                  <span className="text-foreground-muted mx-1">&middot;</span>
                   <a
                     href={normalizeReplayUrl(job.episode.replay_url)!}
                     target="_blank"

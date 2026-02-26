@@ -7,8 +7,6 @@ export const METTA_WANDB_ENTITY = "metta-research";
 
 export const METTASCOPE_REPLAY_URL_PREFIX =
   "https://metta-ai.github.io/metta/mettascope/mettascope.html?replay=";
-export const VIBESCOPE_REPLAY_URL_PREFIX =
-  "https://metta-ai.github.io/metta/vibescope/vibescope.html?replay=";
 
 // Leaderboard
 export const LEADERBOARD_SIM_VERSION = "v0.2";

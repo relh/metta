@@ -2,12 +2,8 @@
 
 import { FC, useState } from "react";
 
-import {
-  METTASCOPE_REPLAY_URL_PREFIX,
-  VIBESCOPE_REPLAY_URL_PREFIX,
-} from "../constants";
+import { METTASCOPE_REPLAY_URL_PREFIX } from "../constants";
 import { A } from "./A";
-import { Button } from "./Button";
 import { SmallHeader } from "./SmallHeader";
 
 export function normalizeReplayUrl(
@@ -19,21 +15,6 @@ export function normalizeReplayUrl(
   }
   return `${METTASCOPE_REPLAY_URL_PREFIX}${replayUrl}`;
 }
-
-export function normalizeVibescopeUrl(
-  replayUrl: string | null | undefined,
-): string | null {
-  if (!replayUrl) return null;
-  if (replayUrl.startsWith(VIBESCOPE_REPLAY_URL_PREFIX)) {
-    return replayUrl;
-  }
-  const raw = replayUrl.startsWith(METTASCOPE_REPLAY_URL_PREFIX)
-    ? replayUrl.slice(METTASCOPE_REPLAY_URL_PREFIX.length)
-    : replayUrl;
-  return `${VIBESCOPE_REPLAY_URL_PREFIX}${raw}`;
-}
-
-type ReplayScope = "mettascope" | "vibescope";
 
 type ReplayViewerProps = {
   replayUrl: string | null | undefined;
@@ -48,12 +29,9 @@ export const ReplayViewer: FC<ReplayViewerProps> = ({
   height = 480,
   showExternalLink = true,
 }) => {
-  const [scope, setScope] = useState<ReplayScope>("vibescope");
   const [copied, setCopied] = useState(false);
 
-  const msUrl = normalizeReplayUrl(replayUrl);
-  const vsUrl = normalizeVibescopeUrl(replayUrl);
-  const normalized = scope === "vibescope" ? vsUrl : msUrl;
+  const normalized = normalizeReplayUrl(replayUrl);
 
   if (!normalized) {
     return (
@@ -71,42 +49,7 @@ export const ReplayViewer: FC<ReplayViewerProps> = ({
 
   return (
     <div className="space-y-2">
-      {label ? (
-        <div className="flex items-center gap-2">
-          <SmallHeader>{label}</SmallHeader>
-          <Button
-            size="sm"
-            onClick={() => setScope("mettascope")}
-            disabled={scope === "mettascope"}
-          >
-            MS
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setScope("vibescope")}
-            disabled={scope === "vibescope"}
-          >
-            VS
-          </Button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 text-sm">
-          <Button
-            size="sm"
-            onClick={() => setScope("mettascope")}
-            disabled={scope === "mettascope"}
-          >
-            MS
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => setScope("vibescope")}
-            disabled={scope === "vibescope"}
-          >
-            VS
-          </Button>
-        </div>
-      )}
+      {label ? <SmallHeader>{label}</SmallHeader> : null}
       <div
         className="border-border w-full overflow-hidden rounded border bg-black"
         style={{ minHeight: "360px", height }}
@@ -120,16 +63,9 @@ export const ReplayViewer: FC<ReplayViewerProps> = ({
       </div>
       {showExternalLink ? (
         <div className="flex items-center gap-3 text-sm">
-          {msUrl ? (
-            <A href={msUrl} target="_blank" rel="noopener noreferrer">
-              Open in MettaScope
-            </A>
-          ) : null}
-          {vsUrl ? (
-            <A href={vsUrl} target="_blank" rel="noopener noreferrer">
-              Open in VibeScope
-            </A>
-          ) : null}
+          <A href={normalized} target="_blank" rel="noopener noreferrer">
+            Open in MettaScope
+          </A>
           <button
             onClick={handleCopyUrl}
             className="cursor-pointer text-blue-600 hover:text-blue-800 hover:underline"
