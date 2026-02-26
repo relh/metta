@@ -30,14 +30,9 @@ from metta.app_backend.episode_runner_images import (
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.dispatcher import dispatch_job
 from metta.app_backend.job_runner.job_artifacts import (
-    job_debug_key,
-    job_logs_key,
+    JobArtifact,
     job_policy_log_key,
     job_policy_log_prefix,
-    job_replay_key,
-    job_results_key,
-    job_runtime_info_key,
-    job_spec_key,
     read_job_artifact,
 )
 from metta.app_backend.metta_scheme_resolver import parse_policy_identifier
@@ -447,16 +442,13 @@ def create_job_router() -> APIRouter:
         with zipfile.ZipFile(io.BytesIO(body)) as zf:
             return zf.open("setup_trace.json").read()
 
+    # Build from the registry — each artifact is fetchable by its lowercased enum name.
     ARTIFACT_TYPES: dict[str, tuple[Callable[[UUID], str], str, Callable[[bytes], bytes]]] = {
-        "logs": (job_logs_key, "text/plain", lambda b: b),
-        "spec": (job_spec_key, "application/json", lambda b: b),
-        "results": (job_results_key, "application/json", lambda b: b),
-        "runtime_info": (job_runtime_info_key, "application/json", lambda b: b),
-        "replay": (job_replay_key, "application/octet-stream", lambda b: b),
-        "debug": (job_debug_key, "application/zip", lambda b: b),
-        "trace": (job_debug_key, "application/json", _extract_trace),
-        "setup_trace": (job_debug_key, "application/json", _extract_setup_trace),
+        a.name.lower(): (a.key, a.content_type, lambda b: b) for a in JobArtifact
     }
+    # Virtual artifacts derived from debug.zip
+    ARTIFACT_TYPES["trace"] = (JobArtifact.DEBUG.key, "application/json", _extract_trace)
+    ARTIFACT_TYPES["setup_trace"] = (JobArtifact.DEBUG.key, "application/json", _extract_setup_trace)
 
     @router.get("/{job_id}/artifacts/{artifact_type}")
     @timed_http_handler
@@ -614,8 +606,8 @@ def create_job_router() -> APIRouter:
                 await metrics.update_running_counts(session, {job.job_type})
             return job
 
-    # Policy logs use a separate endpoint from /artifacts because they require an agent_idx
-    # parameter. See job_artifacts.py for unification notes.
+    # Policy logs are per-agent (N per job), so they use dedicated endpoints rather than
+    # the /artifacts/{type} pattern. See job_artifacts.py for details.
     @router.get("/{job_id}/policy-logs")
     @timed_http_handler
     async def list_policy_logs(job_id: UUID, _user: SoftmaxUser) -> list[str]:

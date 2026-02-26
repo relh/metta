@@ -12,7 +12,7 @@ from botocore.client import BaseClient
 from kubernetes import client
 
 from metta.app_backend.job_runner.config import get_dispatch_config
-from metta.app_backend.job_runner.job_artifacts import job_logs_key, job_replay_key
+from metta.app_backend.job_runner.job_artifacts import JobArtifact
 from metta.common.util.constants import SOFTMAX_S3_BUCKET
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def copy_replay_to_public(job_id: UUID) -> str | None:
     if not cfg.EVAL_S3_BUCKET:
         return None
 
-    source_key = job_replay_key(job_id)
+    source_key = JobArtifact.REPLAY.key(job_id)
     s3 = get_s3_client()
 
     delays = [1, 2, 4, 8]
@@ -87,7 +87,7 @@ def capture_pod_logs(core_v1: client.CoreV1Api, pod_name: str, job_id: UUID):
     try:
         get_s3_client().put_object(
             Bucket=cfg.EVAL_S3_BUCKET,
-            Key=job_logs_key(job_id),
+            Key=JobArtifact.LOGS.key(job_id),
             Body=logs.encode("utf-8"),
             ContentType="text/plain",
         )

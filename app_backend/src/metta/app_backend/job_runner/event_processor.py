@@ -33,11 +33,7 @@ from metta.app_backend.job_runner.config import (
     get_dispatch_config,
 )
 from metta.app_backend.job_runner.episode_recording import record_job_episode
-from metta.app_backend.job_runner.job_artifacts import (
-    job_logs_key,
-    job_results_key,
-    job_runtime_info_key,
-)
+from metta.app_backend.job_runner.job_artifacts import JobArtifact
 from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to_public, get_s3_client
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
 from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
@@ -385,7 +381,7 @@ def _extract_error_from_logs(job_id: UUID, max_lines: int = 200) -> str | None:
 
     # Read logs from S3
     try:
-        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=job_logs_key(job_id))
+        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=JobArtifact.LOGS.key(job_id))
         logs = response["Body"].read().decode("utf-8", errors="replace")
     except s3.exceptions.NoSuchKey:
         logger.debug(f"No logs found in S3 for job {job_id}")
@@ -535,7 +531,7 @@ def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
     cfg = get_dispatch_config()
     s3 = get_s3_client()
     try:
-        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=job_runtime_info_key(job_id))
+        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=JobArtifact.RUNTIME_INFO.key(job_id))
         return RuntimeInfo.model_validate_json(response["Body"].read())
     except Exception:
         return RuntimeInfo()
@@ -632,7 +628,7 @@ def _handle_pod_succeeded(
         return
 
     cfg = get_dispatch_config()
-    results, read_error = _read_results_with_retry(ctx.job_id, cfg.EVAL_S3_BUCKET, job_results_key(ctx.job_id))
+    results, read_error = _read_results_with_retry(ctx.job_id, cfg.EVAL_S3_BUCKET, JobArtifact.RESULTS.key(ctx.job_id))
     if not results:
         detail = f" (last error: {read_error})" if read_error else ""
         error_type = "result_missing" if not read_error or "NoSuchKey" in read_error else "result_error"

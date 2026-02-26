@@ -1,6 +1,8 @@
 import asyncio
 import logging
 from collections.abc import Callable
+from enum import Enum
+from typing import Literal
 from uuid import UUID
 
 import boto3
@@ -11,44 +13,51 @@ from metta.app_backend.job_runner.config import get_dispatch_config
 logger = logging.getLogger(__name__)
 
 
+class JobArtifact(Enum):
+    """Single source of truth for every per-job S3 artifact.
+
+    Each member is (filename, env_var_name, presign_direction, content_type).
+    Adding a new artifact means adding one line here — dispatcher, executor,
+    and routes all derive from this enum.
+    """
+
+    SPEC = ("spec.json", "JOB_SPEC_URI", "get", "application/json")
+    RESULTS = ("results.json", "RESULTS_URI", "put", "application/json")
+    RUNTIME_INFO = ("runtime_info.json", "RUNTIME_INFO_URI", "put", "application/json")
+    REPLAY = ("replay.json.z", "REPLAY_URI", "put", "application/octet-stream")
+    DEBUG = ("debug.zip", "DEBUG_URI", "put", "application/zip")
+    LOGS = ("logs.txt", None, "put", "text/plain")  # written by event processor, not runner
+
+    def __init__(self, filename: str, env_var: str | None, direction: str, content_type: str):
+        self.filename = filename
+        self.env_var = env_var
+        self.direction: Literal["get", "put"] = direction  # type: ignore[assignment]
+        self.content_type = content_type
+
+    def key(self, job_id: UUID) -> str:
+        return f"{job_prefix(job_id)}/{self.filename}"
+
+    @classmethod
+    def presigned(cls) -> list["JobArtifact"]:
+        """Artifacts that need presigned URLs passed to the runner."""
+        return [a for a in cls if a.env_var is not None]
+
+
 def job_prefix(job_id: UUID) -> str:
     return f"jobs/{job_id}"
 
 
-def job_spec_key(job_id: UUID) -> str:
-    return f"{job_prefix(job_id)}/spec.json"
+# Policy logs are per-agent (N per job), not per-job like JobArtifact members.
+# They use a separate JSON-dict env var (POLICY_LOG_URLS) and dedicated routes,
+# so they intentionally live outside the enum.
+POLICY_LOG_FILENAME = "policy_agent_{agent_idx}.txt"
 
 
-def job_results_key(job_id: UUID) -> str:
-    return f"{job_prefix(job_id)}/results.json"
-
-
-def job_replay_key(job_id: UUID) -> str:
-    return f"{job_prefix(job_id)}/replay.json.z"
-
-
-def job_debug_key(job_id: UUID) -> str:
-    return f"{job_prefix(job_id)}/debug.zip"
-
-
-def job_logs_key(job_id: UUID) -> str:
-    return f"{job_prefix(job_id)}/logs.txt"
-
-
-def job_runtime_info_key(job_id: UUID) -> str:
-    return f"{job_prefix(job_id)}/runtime_info.json"
-
-
-# Policy logs require an agent_idx parameter, so they can't use ARTIFACT_TYPES (which only
-# supports job_id -> key mappings). If ARTIFACT_TYPES gains support for parameterized
-# artifacts, these could be unified with the artifacts endpoint.
 def job_policy_log_key(job_id: UUID, agent_idx: int) -> str:
-    """S3 key for a policy log file."""
-    return f"{job_prefix(job_id)}/policy_agent_{agent_idx}.txt"
+    return f"{job_prefix(job_id)}/{POLICY_LOG_FILENAME.format(agent_idx=agent_idx)}"
 
 
 def job_policy_log_prefix(job_id: UUID) -> str:
-    """S3 prefix to list all policy logs for a job."""
     return f"{job_prefix(job_id)}/policy_agent_"
 
 

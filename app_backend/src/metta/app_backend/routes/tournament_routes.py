@@ -25,7 +25,7 @@ from metta.app_backend.episode_runner_images import (
 )
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.job_runner.job_artifacts import (
-    job_logs_key,
+    JobArtifact,
     job_policy_log_key,
     job_policy_log_prefix,
     read_job_artifact,
@@ -1066,7 +1066,7 @@ def create_tournament_router() -> APIRouter:
 
         return match, pv_player
 
-    MATCH_ARTIFACT_TYPES = {"logs": (job_logs_key, "text/plain")}
+    MATCH_ARTIFACT_TYPES = {"logs": (JobArtifact.LOGS.key, JobArtifact.LOGS.content_type)}
 
     @router.get("/matches/{match_id}/{policy_version_id}/artifacts/{artifact_type}")
     @timed_http_handler

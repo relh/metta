@@ -13,14 +13,7 @@ from metta.app_backend.job_runner.config import (
     LABEL_JOB_ID,
     get_dispatch_config,
 )
-from metta.app_backend.job_runner.job_artifacts import (
-    job_debug_key,
-    job_policy_log_key,
-    job_replay_key,
-    job_results_key,
-    job_runtime_info_key,
-    job_spec_key,
-)
+from metta.app_backend.job_runner.job_artifacts import JobArtifact, job_policy_log_key
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_client
 from metta.app_backend.models.job_request import JobRequest, JobType
 from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
@@ -68,26 +61,19 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
         presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
     ]
     s3_client = boto3.client("s3")
-    spec_key = job_spec_key(job.id)
+    spec_key = JobArtifact.SPEC.key(job.id)
     s3_client.put_object(
         Bucket=cfg.EVAL_S3_BUCKET,
         Key=spec_key,
         Body=json.dumps(job_spec).encode("utf-8"),
         ContentType="application/json",
     )
-    presigned_env_vars: dict[str, tuple[Literal["get", "put"], str]] = {
-        "JOB_SPEC_URI": ("get", spec_key),
-        "RESULTS_URI": ("put", job_results_key(job.id)),
-        "RUNTIME_INFO_URI": ("put", job_runtime_info_key(job.id)),
-        "REPLAY_URI": ("put", job_replay_key(job.id)),
-        "DEBUG_URI": ("put", job_debug_key(job.id)),
-    }
     env_vars: list[client.V1EnvVar] = [
         client.V1EnvVar(
-            name=name,
-            value=presign_operation(op, cfg.EVAL_S3_BUCKET, key, exp, endpoint),
+            name=artifact.env_var,
+            value=presign_operation(artifact.direction, cfg.EVAL_S3_BUCKET, artifact.key(job.id), exp, endpoint),
         )
-        for name, (op, key) in presigned_env_vars.items()
+        for artifact in JobArtifact.presigned()
     ]
 
     # Generate presigned URLs for per-agent policy logs
