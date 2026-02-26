@@ -14,8 +14,7 @@ class EnergyVariant(CoGameMissionVariant):
     description: str = "Movement costs 1 energy per step."
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
-        if "energy" not in env.game.resource_names:
-            env.game.resource_names = list(env.game.resource_names) + ["energy"]
+        env.game.resource_names.append("energy")
 
         env.game.actions.move.consumed_resources = {"energy": 1}
 

@@ -10,4 +10,4 @@ class FullVariant(CoGameMissionVariant):
 
     name: str = "full"
     description: str = "Digest, seasons, carnivore, herbivore."
-    depends_on: list[str] = ["digest", "seasons", "carnivore", "herbivore", "kids"]
+    depends_on: list[str] = ["digest", "multi_year_5", "carnivore", "herbivore", "kids"]

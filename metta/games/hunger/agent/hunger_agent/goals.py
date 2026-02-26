@@ -151,9 +151,13 @@ class HarvestGoal(Goal):
     name = "Harvest"
 
     def execute(self, ctx: HungerContext) -> Action | None:
+        bb = ctx.blackboard
         pos = ctx.state.position
+        blacklist = bb.setdefault("Harvest_blacklist_until", {})
         plant_entities = ctx.map.find(type="plant")
-        usable = [(p, e) for p, e in plant_entities if e.properties.get("food", 0) > 0]
+        usable = [
+            (p, e) for p, e in plant_entities if e.properties.get("food", 0) > 0 and blacklist.get(p, -1) < ctx.step
+        ]
 
         if not usable:
             return ctx.navigator.explore(
@@ -167,6 +171,28 @@ class HarvestGoal(Goal):
         dist = manhattan(pos, target_pos)
 
         if dist <= 1:
+            last_target = bb.get("Harvest_last_target")
+            last_food = bb.get("Harvest_last_food")
+            if last_target == target_pos and last_food == ctx.state.food:
+                stall_steps = bb.get("Harvest_stall_steps", 0) + 1
+            else:
+                stall_steps = 0
+            bb["Harvest_last_target"] = target_pos
+            bb["Harvest_last_food"] = ctx.state.food
+            bb["Harvest_stall_steps"] = stall_steps
+
+            # Bumping an empty/depleted plant can loop forever with stale map state.
+            # Blacklist the target briefly and force exploration to re-acquire a fresh plant.
+            if stall_steps >= 8:
+                blacklist[target_pos] = ctx.step + 80
+                bb["Harvest_stall_steps"] = 0
+                ctx.navigator._cached_path = None
+                ctx.navigator._cached_target = None
+                return ctx.navigator.explore(
+                    pos,
+                    ctx.map,
+                    bias=["north", "east", "south", "west"][ctx.agent_id % 4],
+                )
             return move_toward(pos, target_pos)
 
         return ctx.navigator.get_action(pos, target_pos, ctx.map, reach_adjacent=True)

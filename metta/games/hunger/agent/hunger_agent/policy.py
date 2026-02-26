@@ -1,7 +1,7 @@
 """Hunger Agent policy — goal-tree scripted agent for the Hunger game.
 
-Each agent randomly chooses carnivore or herbivore role, picks up the corresponding
-gear, then executes role-specific behavior:
+Agents randomly choose carnivore or herbivore role (can be overridden with
+`carnivore_prob` in the policy URI):
   - Herbivore: harvest plant objects, flee from carnivores
   - Carnivore: hunt herbivores, avoid other carnivores (to protect egg)
 """
@@ -149,7 +149,7 @@ class HungerPolicy(MultiAgentPolicy):
         **kwargs: object,
     ) -> None:
         super().__init__(policy_env_info, device=device)
-        self._carnivore_prob = carnivore_prob
+        self._carnivore_prob = float(carnivore_prob)
         self._feature_by_id = {f.id: f for f in policy_env_info.obs_features}
         self._action_map = policy_env_info.action_name_to_flat_index
         self._noop = dtype_actions.type(self._action_map["noop"])
