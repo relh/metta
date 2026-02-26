@@ -25,7 +25,7 @@ export const TournamentDescriptionMeta: FC<{
   const compatGhcrHref = compatTag
     ? `${EPISODE_RUNNER_GHCR_URL}?tag=${encodeURIComponent(compatTag)}`
     : null;
-  const submitCommand = `cogames upload --name my-policy --policy ./run --season ${season.name} --validation-mode docker`;
+  const submitCommand = `cogames upload --name my-policy --policy ./run --season ${season.name}`;
   const showSubmitCommand = season.status === "not_started";
 
   if (!season.compat_version && !showSubmitCommand) {

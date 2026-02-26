@@ -73,8 +73,7 @@ Error: Season "beta-cvc" requires compat version 0.4, but you have cogames 0.3.1
 Run: pip install --upgrade cogames
 ```
 
-`cogames validate-bundle` gets the appropriate cogames version for that season, and similarly the appropriate episode
-runner version from ghcr if using `--validation-mode docker`.
+`cogames validate-bundle` gets the appropriate cogames version for that season.
 
 Only fires if the season has a non-null `compat_version`.
 

@@ -65,7 +65,6 @@ uv run cogames upload \
   -p "class=<full_class_path>" \
   -n "<name>" \
   --season <season> \
-  --validation-mode docker \
   --include-files src/cogames_agents \
   --setup-script setup_script.py
 ```
@@ -78,7 +77,6 @@ uv run cogames upload \
   -p "class=cogames_agents.policy.nim_agents.agents.NlankyAgentsMultiPolicy" \
   -n "daveey.nlanky" \
   --season beta-cvc \
-  --validation-mode docker \
   --include-files src/cogames_agents \
   --setup-script setup_script.py
 ```
@@ -89,11 +87,8 @@ For **trained checkpoints**, use the checkpoint URI instead of the short name:
 uv run cogames upload \
   -p "file://./train_dir/<run>/checkpoints" \
   -n "<name>" \
-  --season <season> \
-  --validation-mode docker
+  --season <season>
 ```
-
-Use `--validation-mode docker` to validate the policy in a container matching the tournament environment.
 
 ## Step 5: Show Observatory Link
 
