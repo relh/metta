@@ -54,4 +54,4 @@ class CarnivoreVariant(CoGameMissionVariant):
             instance.hub.stations.append("carnivore_station")
 
         env.game.render.assets["agent"].append(RenderAsset(asset="scrambler", resources=["carnivore"]))
-        env.game.render.assets["carnivore_station"] = "scrambler"
+        env.game.render.assets["carnivore_station"] = [RenderAsset(asset="scrambler")]

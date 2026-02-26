@@ -44,4 +44,4 @@ class HerbivoreVariant(CoGameMissionVariant):
         env.game.map_builder.instance.hub.stations.append("herbivore_station")
 
         env.game.render.assets["agent"].append(RenderAsset(asset="scout", resources=["herbivore"]))
-        env.game.render.assets["herbivore_station"] = "scout"
+        env.game.render.assets["herbivore_station"] = [RenderAsset(asset="scout")]

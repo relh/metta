@@ -15,6 +15,7 @@ from mettagrid.config.game_value import InventoryValue
 from mettagrid.config.handler_config import targetHas, updateTarget
 from mettagrid.config.mettagrid_config import MettaGridConfig, ResourceLimitsConfig
 from mettagrid.config.query import query
+from mettagrid.config.render_config import RenderHudConfig, RenderStatusBarConfig
 from mettagrid.config.reward_config import reward
 from mettagrid.config.tag import typeTag
 
@@ -71,4 +72,21 @@ class KidsVariant(CoGameMissionVariant):
             timesteps=periodic(start=0, period=STARVATION_CHECK_PERIOD, end=max_steps),
             filters=[targetHas({"egg": 1}), isNot(targetHas({"food": 1}))],
             mutations=[updateTarget({"egg": -1})],
+        )
+
+        env.game.render.agent_huds["egg"] = RenderHudConfig(resource="egg", max=1, rank=2)
+        env.game.render.agent_huds["kid"] = RenderHudConfig(resource="kid", max=5, rank=3)
+        env.game.render.object_status["agent"]["egg"] = RenderStatusBarConfig(
+            resource="egg",
+            short_name="EG",
+            max=1,
+            divisions=10,
+            rank=2,
+        )
+        env.game.render.object_status["agent"]["kid"] = RenderStatusBarConfig(
+            resource="kid",
+            short_name="KD",
+            max=5,
+            divisions=10,
+            rank=3,
         )

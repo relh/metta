@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from cogames.core import CoGameMissionVariant
-from mettagrid.config.mettagrid_config import MettaGridConfig, RenderHudConfig, ResourceLimitsConfig
+from mettagrid.config.mettagrid_config import (
+    MettaGridConfig,
+    RenderHudConfig,
+    RenderStatusBarConfig,
+    ResourceLimitsConfig,
+)
 from mettagrid.config.reward_config import inventoryReward
 
 
@@ -27,4 +32,10 @@ class FoodVariant(CoGameMissionVariant):
                 per_tick=True,
             )
 
-        env.game.render.hud1 = RenderHudConfig(resource="food", short_name="F", max=100)
+        env.game.render.agent_huds["food"] = RenderHudConfig(resource="food", max=100, rank=0)
+        env.game.render.object_status["agent"]["food"] = RenderStatusBarConfig(
+            resource="food",
+            short_name="F",
+            max=100,
+            rank=0,
+        )

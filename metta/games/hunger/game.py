@@ -73,6 +73,7 @@ class HungerGame(CoGameMission):
                 assets={
                     "agent": [],
                 },
+                object_status={"agent": {}},
             ),
         )
         return MettaGridConfig(game=game)

@@ -6,7 +6,7 @@ from cogames.core import CoGameMissionVariant
 from mettagrid.config.filter.filter import isNot
 from mettagrid.config.handler_config import Handler, actorHas, targetHas, withdraw
 from mettagrid.config.mettagrid_config import GridObjectConfig, InventoryConfig, MettaGridConfig
-from mettagrid.config.render_config import RenderAsset
+from mettagrid.config.render_config import RenderAsset, RenderStatusBarConfig
 
 INITIAL_PLANT_FOOD = 1
 MAX_PLANT_FOOD = 100
@@ -28,6 +28,9 @@ class PlantVariant(CoGameMissionVariant):
             RenderAsset(asset="junction.working", resources=["food"]),
             RenderAsset(asset="junction"),
         ]
+        env.game.render.object_status["plant"] = {
+            "food": RenderStatusBarConfig(resource="food", short_name="F", max=50, divisions=10, rank=0),
+        }
 
         instance = getattr(env.game.map_builder, "instance", None)
         if instance is not None:
