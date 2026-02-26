@@ -74,6 +74,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
             value=presign_operation(artifact.direction, cfg.EVAL_S3_BUCKET, artifact.key(job.id), exp, endpoint),
         )
         for artifact in JobArtifact.presigned()
+        if artifact.env_var is not None
     ]
 
     # Generate presigned URLs for per-agent policy logs
