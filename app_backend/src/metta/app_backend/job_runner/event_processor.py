@@ -12,8 +12,9 @@ from __future__ import annotations
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Callable, cast
 from uuid import UUID
 
 from kubernetes import client
@@ -98,29 +99,52 @@ def _mark_processed(session: Session, event: K8sEvent) -> None:
     session.commit()
 
 
-def _get_job_info_from_event(event_data: dict) -> tuple[UUID, str] | None:
-    """Extract job_id and pod_name from stored event data."""
-    pod_data = event_data.get("object", {})
-    metadata = pod_data.get("metadata", {})
-    labels = metadata.get("labels", {})
-    pod_name = metadata.get("name", "unknown")
+@dataclass(frozen=True, slots=True)
+class EventCtx:
+    """Parsed context from a raw K8s pod event. Built once, threaded to all handlers."""
 
-    job_id_str = labels.get(LABEL_JOB_ID)
-    if not job_id_str:
-        return None
+    event_type: str
+    phase: str | None
+    job_id: UUID
+    pod_name: str
+    job_name: str | None
+    container_running: bool
 
-    try:
-        return UUID(job_id_str), pod_name
-    except ValueError:
-        logger.warning(f"Invalid job_id label '{job_id_str}' for pod {pod_name}")
-        return None
+    @staticmethod
+    def parse(event_data: dict) -> EventCtx | None:
+        """Parse raw event dict. Returns None if not a tracked pod."""
+        pod_data = event_data.get("object", {})
+        metadata = pod_data.get("metadata", {})
+        labels = metadata.get("labels", {})
+        pod_name = metadata.get("name", "unknown")
 
+        job_id_str = labels.get(LABEL_JOB_ID)
+        if not job_id_str:
+            return None
 
-def _get_pod_phase_from_event(event_data: dict) -> str | None:
-    """Extract pod phase from stored event data."""
-    pod_data = event_data.get("object", {})
-    status = pod_data.get("status", {})
-    return status.get("phase")
+        try:
+            job_id = UUID(job_id_str)
+        except ValueError:
+            logger.warning(f"Invalid job_id label '{job_id_str}' for pod {pod_name}")
+            return None
+
+        status = pod_data.get("status", {})
+        phase = status.get("phase")
+
+        owner_refs = metadata.get("ownerReferences", [])
+        job_name = next((ref["name"] for ref in owner_refs if ref.get("kind") == "Job"), None)
+
+        container_statuses = status.get("containerStatuses", [])
+        container_running = any(cs.get("state", {}).get("running") for cs in container_statuses)
+
+        return EventCtx(
+            event_type=event_data.get("type", ""),
+            phase=phase,
+            job_id=job_id,
+            pod_name=pod_name,
+            job_name=job_name,
+            container_running=container_running,
+        )
 
 
 def _read_results_from_s3(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
@@ -152,14 +176,6 @@ def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> tuple[PureS
     return None, last_error
 
 
-def _get_job_name_from_event(event_data: dict) -> str | None:
-    """Get the parent Job name from pod event data."""
-    pod_data = event_data.get("object", {})
-    metadata = pod_data.get("metadata", {})
-    owner_refs = metadata.get("ownerReferences", [])
-    return next((ref["name"] for ref in owner_refs if ref.get("kind") == "Job"), None)
-
-
 def _delete_k8s_job(batch_v1: client.BatchV1Api, job_name: str):
     try:
         cfg = get_dispatch_config()
@@ -189,10 +205,8 @@ def _get_job_failure_reason(batch_v1: client.BatchV1Api, job_name: str) -> str |
     return None
 
 
-def _get_pod_error_from_event(event_data: dict, batch_v1: client.BatchV1Api) -> str:
+def _get_pod_error_from_event(event_data: dict, batch_v1: client.BatchV1Api, job_name: str | None = None) -> str:
     """Extract error info from stored event data and K8s Job status."""
-    # First try to get failure reason from parent Job
-    job_name = _get_job_name_from_event(event_data)
     if job_name:
         job_error = _get_job_failure_reason(batch_v1, job_name)
         if job_error:
@@ -589,57 +603,157 @@ def _update_job_status(
         logger.error(f"Failed to update job {job_id} status to {status}: {e}")
 
 
-def _is_container_running_from_event(event_data: dict) -> bool:
-    """Check if any container is running from stored event data."""
-    pod_data = event_data.get("object", {})
-    status = pod_data.get("status", {})
-    container_statuses = status.get("containerStatuses", [])
-    return any(cs.get("state", {}).get("running") for cs in container_statuses)
+def _check_terminal_and_cleanup(
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    ctx: EventCtx,
+) -> bool:
+    """If job already terminal: log, capture logs, delete k8s job, return True."""
+    job_request = stats_client.get_job(ctx.job_id)
+    if job_request.status not in (JobStatus.completed, JobStatus.failed):
+        return False
+    logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
+    capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
+    if ctx.job_name:
+        _delete_k8s_job(batch_v1, ctx.job_name)
+    return True
 
 
 @trace("tournament.event_processor.handle_succeeded")
 def _handle_pod_succeeded(
-    stats_client: StatsClient, core_v1: client.CoreV1Api, job_id: UUID, pod_name: str, event_data: dict
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    ctx: EventCtx,
+    event_data: dict,
 ):
-    # Deduplication: check if job is already in terminal state
-    job_request = stats_client.get_job(job_id)
-    if job_request.status in (JobStatus.completed, JobStatus.failed):
-        logger.info(f"Job {job_id} already {job_request.status.value}, skipping (pod {pod_name})")
+    if _check_terminal_and_cleanup(stats_client, core_v1, batch_v1, ctx):
         return
 
     cfg = get_dispatch_config()
-    results, read_error = _read_results_with_retry(job_id, cfg.EVAL_S3_BUCKET, job_results_key(job_id))
+    results, read_error = _read_results_with_retry(ctx.job_id, cfg.EVAL_S3_BUCKET, job_results_key(ctx.job_id))
     if not results:
         detail = f" (last error: {read_error})" if read_error else ""
         error_type = "result_missing" if not read_error or "NoSuchKey" in read_error else "result_error"
         _update_job_status(
             stats_client,
-            job_id,
+            ctx.job_id,
             JobStatus.failed,
             error=f"Pod exited with code 0 but results not found in S3{detail}",
             error_type=error_type,
         )
-        logger.warning(f"Job {job_id} completed (pod {pod_name}), no results in S3{detail}")
+        logger.warning(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), no results in S3{detail}")
+        capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
+        if ctx.job_name:
+            _delete_k8s_job(batch_v1, ctx.job_name)
         return
 
+    job_request = stats_client.get_job(ctx.job_id)
     try:
         result_data = _build_result_metadata(
             event_data,
             core_v1,
-            job_id,
+            ctx.job_id,
             dispatched_at=job_request.dispatched_at,
             running_at=job_request.running_at,
         )
 
         job = SingleEpisodeJob.model_validate(job_request.job)
-        replay_uri = copy_replay_to_public(job_id)
-        record_job_episode(job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)  # pyright: ignore[reportArgumentType]
-        _update_job_status(stats_client, job_id, JobStatus.completed)
-        logger.info(f"Job {job_id} completed (pod {pod_name})")
+        replay_uri = copy_replay_to_public(ctx.job_id)
+        record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)  # pyright: ignore[reportArgumentType]
+        _update_job_status(stats_client, ctx.job_id, JobStatus.completed)
+        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     except Exception as e:
-        logger.error(f"Failed to record episode for job {job_id}: {e}", exc_info=True)
-        _update_job_status(stats_client, job_id, JobStatus.completed)
-        logger.info(f"Job {job_id} completed (pod {pod_name}), episode recording failed")
+        logger.error(f"Failed to record episode for job {ctx.job_id}: {e}", exc_info=True)
+        _update_job_status(stats_client, ctx.job_id, JobStatus.completed)
+        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), episode recording failed")
+
+    capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
+    if ctx.job_name:
+        _delete_k8s_job(batch_v1, ctx.job_name)
+
+
+@trace("tournament.event_processor.handle_failed")
+def _handle_pod_failed(
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    ctx: EventCtx,
+    event_data: dict,
+):
+    if _check_terminal_and_cleanup(stats_client, core_v1, batch_v1, ctx):
+        return
+
+    # Capture logs first so they're available for extraction
+    capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
+
+    # Try to extract meaningful error from logs first
+    k8s_error = _get_pod_error_from_event(event_data, batch_v1, job_name=ctx.job_name)
+    log_error = _extract_error_from_logs_with_retry(ctx.job_id)
+
+    # Prefer log error if available, otherwise fall back to K8s error
+    error = log_error if log_error else k8s_error
+    error_type = _classify_error(error)
+
+    # Capture runner/runtime info for failed jobs too (parse failures happen before results upload).
+    job_request = stats_client.get_job(ctx.job_id)
+    fail_result = _build_result_metadata(
+        event_data,
+        core_v1,
+        ctx.job_id,
+        dispatched_at=job_request.dispatched_at,
+        running_at=job_request.running_at,
+    )
+
+    _update_job_status(
+        stats_client,
+        ctx.job_id,
+        JobStatus.failed,
+        error=error,
+        error_type=error_type,
+        result=fail_result or None,
+    )
+
+    # Log which error source was used for debugging
+    error_source = "logs" if log_error else "k8s"
+    logger.info(f"Job {ctx.job_id} failed (pod {ctx.pod_name}, error_source={error_source}): {error}")
+
+    if ctx.job_name:
+        _delete_k8s_job(batch_v1, ctx.job_name)
+
+
+def _handle_pod_running(
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    ctx: EventCtx,
+    event_data: dict,
+):
+    if ctx.container_running:
+        _update_job_status(stats_client, ctx.job_id, JobStatus.running, worker=ctx.pod_name)
+        logger.debug(f"Job {ctx.job_id} running (pod {ctx.pod_name})")
+
+
+def _handle_pod_deleted(
+    stats_client: StatsClient,
+    core_v1: client.CoreV1Api,
+    batch_v1: client.BatchV1Api,
+    ctx: EventCtx,
+    event_data: dict,
+):
+    if ctx.phase not in ("Succeeded", "Failed"):
+        _update_job_status(
+            stats_client, ctx.job_id, JobStatus.failed, error="Pod deleted unexpectedly", error_type="pod_deleted"
+        )
+        logger.warning(f"Job {ctx.job_id} failed: pod {ctx.pod_name} deleted unexpectedly (phase={ctx.phase})")
+
+
+_PHASE_HANDLERS: dict[str, Callable[..., None]] = {
+    "Succeeded": _handle_pod_succeeded,
+    "Failed": _handle_pod_failed,
+    "Running": _handle_pod_running,
+}
 
 
 @trace("tournament.event_processor.process_event")
@@ -650,80 +764,16 @@ def _process_event(
     event: K8sEvent,
 ) -> None:
     """Process a single k8s event."""
-    event_data = event.event
-    event_type = event_data.get("type")
-
-    info = _get_job_info_from_event(event_data)
-    if not info:
+    ctx = EventCtx.parse(event.event)
+    if not ctx:
         return
 
-    job_id, pod_name = info
-    phase = _get_pod_phase_from_event(event_data)
-
-    if event_type in ("ADDED", "MODIFIED"):
-        if phase == "Succeeded":
-            _handle_pod_succeeded(stats_client, core_v1, job_id, pod_name, event_data)
-            capture_pod_logs(core_v1, pod_name, job_id)
-            job_name = _get_job_name_from_event(event_data)
-            if job_name:
-                _delete_k8s_job(batch_v1, job_name)
-        elif phase == "Failed":
-            # Deduplication: check if job is already in terminal state
-            job_request = stats_client.get_job(job_id)
-            if job_request.status in (JobStatus.completed, JobStatus.failed):
-                logger.info(f"Job {job_id} already {job_request.status.value}, skipping failed event (pod {pod_name})")
-                capture_pod_logs(core_v1, pod_name, job_id)
-                job_name = _get_job_name_from_event(event_data)
-                if job_name:
-                    _delete_k8s_job(batch_v1, job_name)
-                return
-
-            # Capture logs first so they're available for extraction
-            capture_pod_logs(core_v1, pod_name, job_id)
-
-            # Try to extract meaningful error from logs first
-            k8s_error = _get_pod_error_from_event(event_data, batch_v1)
-            log_error = _extract_error_from_logs_with_retry(job_id)
-
-            # Prefer log error if available, otherwise fall back to K8s error
-            error = log_error if log_error else k8s_error
-            error_type = _classify_error(error)
-
-            # Capture runner/runtime info for failed jobs too (parse failures happen before results upload).
-            fail_result = _build_result_metadata(
-                event_data,
-                core_v1,
-                job_id,
-                dispatched_at=job_request.dispatched_at,
-                running_at=job_request.running_at,
-            )
-
-            _update_job_status(
-                stats_client,
-                job_id,
-                JobStatus.failed,
-                error=error,
-                error_type=error_type,
-                result=fail_result or None,
-            )
-
-            # Log which error source was used for debugging
-            error_source = "logs" if log_error else "k8s"
-            logger.info(f"Job {job_id} failed (pod {pod_name}, error_source={error_source}): {error}")
-
-            job_name = _get_job_name_from_event(event_data)
-            if job_name:
-                _delete_k8s_job(batch_v1, job_name)
-        elif phase == "Running" and _is_container_running_from_event(event_data):
-            _update_job_status(stats_client, job_id, JobStatus.running, worker=pod_name)
-            logger.debug(f"Job {job_id} running (pod {pod_name})")
-
-    elif event_type == "DELETED":
-        if phase not in ("Succeeded", "Failed"):
-            _update_job_status(
-                stats_client, job_id, JobStatus.failed, error="Pod deleted unexpectedly", error_type="pod_deleted"
-            )
-            logger.warning(f"Job {job_id} failed: pod {pod_name} deleted unexpectedly (phase={phase})")
+    if ctx.event_type in ("ADDED", "MODIFIED"):
+        handler = _PHASE_HANDLERS.get(ctx.phase or "")
+        if handler:
+            handler(stats_client, core_v1, batch_v1, ctx, event.event)
+    elif ctx.event_type == "DELETED":
+        _handle_pod_deleted(stats_client, core_v1, batch_v1, ctx, event.event)
 
 
 def _process_batch(
