@@ -164,14 +164,14 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     arch_type: str = "default_policy",
 ) -> tools.TrainTool:
-    resolved_curriculum = curriculum or make_curriculum()
+    curriculum = curriculum or make_curriculum()
 
     evaluator_cfg = EvaluatorConfig(
         simulations=make_navigation_eval_suite(),
     )
 
     return tools.TrainTool(
-        training_env=TrainingEnvironmentConfig(curriculum=resolved_curriculum),
+        training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         evaluator=evaluator_cfg,
         policy_assets={"learner0": PolicyAssetConfig(architecture=get_architecture(arch_type))},
     )

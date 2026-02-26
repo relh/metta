@@ -75,11 +75,10 @@ def train() -> tools.TrainTool:
     return tt
 
 
-def train_shaped(rewards: bool = True, converters: bool = True) -> tools.TrainTool:
+def train_shaped(rewards: bool = True) -> tools.TrainTool:
     """Train with GRPO loss on shaped rewards task.
 
-    This provides easier training with reward shaping and converters enabled,
-    using the critic-free GRPO algorithm.
+    This provides easier training with reward shaping using the critic-free GRPO algorithm.
     """
 
     # Get the base shaped training tool

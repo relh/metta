@@ -74,7 +74,7 @@ def simulations(env: Optional[MettaGridConfig] = None) -> list[SimulationConfig]
 def train(
     curriculum: Optional[CurriculumConfig] = None,
 ) -> tools.TrainTool:
-    resolved_curriculum = curriculum or make_curriculum()
+    curriculum = curriculum or make_curriculum()
 
     trainer_cfg = TrainerConfig()
 
@@ -87,7 +87,7 @@ def train(
 
     return tools.TrainTool(
         trainer=trainer_cfg,
-        training_env=TrainingEnvironmentConfig(curriculum=resolved_curriculum),
+        training_env=TrainingEnvironmentConfig(curriculum=curriculum),
         evaluator=evaluator_cfg,
     )
 

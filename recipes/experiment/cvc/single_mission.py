@@ -26,12 +26,11 @@ def train(
     sweep_mode: bool = False,
     use_clips_curriculum: bool = False,
 ) -> tools.TrainTool:
-    resolved_curriculum = curriculum
-    if resolved_curriculum is None and not use_clips_curriculum:
+    if curriculum is None and not use_clips_curriculum:
         env = cogsguard.make_env(num_agents=num_cogs, max_steps=max_steps, variants=variants, layout=layout)
-        resolved_curriculum = cc.env_curriculum(env)
+        curriculum = cc.env_curriculum(env)
     return cogsguard.train(
-        curriculum=resolved_curriculum,
+        curriculum=curriculum,
         policy_architecture=policy_architecture,
         teacher=teacher,
         variants=variants,

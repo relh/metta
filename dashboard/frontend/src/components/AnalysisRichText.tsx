@@ -234,7 +234,8 @@ function EpisodeChip({ value, episode }: { value: string; episode: DashboardEpis
           }}
         >
           <span style={{ display: 'block' }}>
-            with teammate <strong>{String(episode.opponent_name ?? '-')}</strong> ({String(episode.team_composition ?? '-')})
+            with teammate <strong>{String(episode.opponent_name ?? '-')}</strong> (
+            {String(episode.team_composition ?? '-')})
           </span>
           <span style={{ display: 'block' }}>
             reward {formatNumber(episode.reward, 3)} • steps {String(episode.steps ?? '-')} • created{' '}

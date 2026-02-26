@@ -54,10 +54,10 @@ def train(
         config_kwargs["model_name"] = model_name or "HuggingFaceTB/SmolLM2-135M"
         policy_architecture = SmolLLMConfig(**config_kwargs)
 
-    resolved_curriculum = curriculum or smollm_recipe.make_curriculum()
+    curriculum = curriculum or smollm_recipe.make_curriculum()
 
     tool = base_train(
-        curriculum=resolved_curriculum,
+        curriculum=curriculum,
         policy_architecture=policy_architecture,
     )
 
@@ -111,7 +111,6 @@ __all__ = [
     "evaluate",
     "evaluate_in_sweep",
     "sweep",
-    "sweep_async_progressive",
     "train",
 ]
 
@@ -124,17 +123,4 @@ def sweep(
 ) -> tools.SweepTool:
     """Expose the canonical arena sweep for SmolLLM LoRA recipes."""
 
-    return _delegate_sweep(sweep_name, **kwargs)
-
-
-def sweep_async_progressive(
-    sweep_name: str,
-    **kwargs: object,
-) -> tools.SweepTool:
-    """Backward-compatible alias maintained for historical CLI usage."""
-
-    return _delegate_sweep(sweep_name, **kwargs)
-
-
-def _delegate_sweep(sweep_name: str, **kwargs: object) -> tools.SweepTool:
     return _arena_sweep(sweep_name, **kwargs)

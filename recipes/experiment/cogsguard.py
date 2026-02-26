@@ -518,23 +518,17 @@ def train(
     use_clips_curriculum: bool = False,
     routed_adapter: RoutedAdapterConfig | None = None,
 ) -> tools.TrainTool:
-    if isinstance(teacher, dict):
-        teacher = TeacherConfig.model_validate(teacher)
-
     if isinstance(policy_architecture, str):
         policy_architecture = PolicyArchitecture.from_spec(policy_architecture)
 
     if sweep_mode and routed_adapter is None and policy_architecture is None:
         # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
-        routed_adapter = {
-            "rank": _TUNED_PARAMS["routed_adapter.rank"],
-            "trunk_lr_mult": _TUNED_PARAMS["routed_adapter.trunk_lr_mult"],
-        }
+        routed_adapter = RoutedAdapterConfig(
+            rank=8,
+            trunk_lr_mult=0.5476294593341358,
+            num_slots=num_agents,
+        )
 
-    if isinstance(routed_adapter, dict):
-        routed_adapter_overrides = dict(routed_adapter)
-        routed_adapter_overrides.setdefault("num_slots", num_agents)
-        routed_adapter = RoutedAdapterConfig.model_validate(routed_adapter_overrides)
     if routed_adapter is not None and not routed_adapter.enabled:
         routed_adapter = None
 
@@ -543,11 +537,10 @@ def train(
         if curriculum is None:
             curriculum = default_clips
         else:
-            overrides = curriculum if isinstance(curriculum, dict) else curriculum.model_dump(exclude_unset=True)
+            overrides = curriculum.model_dump(exclude_unset=True)
             curriculum = default_clips.model_copy(update=overrides, deep=True)
-        resolved_curriculum = curriculum
     else:
-        resolved_curriculum = curriculum or make_curriculum(
+        curriculum = curriculum or make_curriculum(
             variants=variants,
             layout=layout,
             num_agents=num_agents,
@@ -559,22 +552,21 @@ def train(
             event_profiles=event_profiles,
         )
     trainer_cfg = TrainerConfig()
-    if sweep_mode:
-        # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
-        trainer_cfg.sampling.method = _TUNED_PARAMS["trainer.sampling.method"]
-        trainer_cfg.sampling.prio_alpha = _TUNED_PARAMS["trainer.sampling.prio_alpha"]
-        trainer_cfg.sampling.prio_beta0 = _TUNED_PARAMS["trainer.sampling.prio_beta0"]
-        trainer_cfg.advantage.gae_lambda = _TUNED_PARAMS["trainer.advantage.gae_lambda"]
-        trainer_cfg.advantage.gamma = _TUNED_PARAMS["trainer.advantage.gamma"]
-        trainer_cfg.optimizer.learning_rate = _TUNED_PARAMS["trainer.optimizer.learning_rate"]
-        trainer_cfg.optimizer.momentum = _TUNED_PARAMS["trainer.optimizer.momentum"]
-        trainer_cfg.optimizer.weight_decay = _TUNED_PARAMS["trainer.optimizer.weight_decay"]
-        trainer_cfg.optimizer.eps = _TUNED_PARAMS["trainer.optimizer.eps"]
-        trainer_cfg.optimizer.warmup_steps = _TUNED_PARAMS["trainer.optimizer.warmup_steps"]
-        trainer_cfg.losses.ppo_actor.clip_coef = _TUNED_PARAMS["trainer.losses.ppo_actor.clip_coef"]
-        trainer_cfg.losses.ppo_actor.ent_coef = _TUNED_PARAMS["trainer.losses.ppo_actor.ent_coef"]
-        trainer_cfg.losses.ppo_critic.vf_coef = _TUNED_PARAMS["trainer.losses.ppo_critic.vf_coef"]
-    training_env_cfg = TrainingEnvironmentConfig(curriculum=resolved_curriculum)
+    # Tuned from relh.cg.adapters.0213.2_trial_0017_315178 (best full-length AUC).
+    trainer_cfg.sampling.method = "sequential"
+    trainer_cfg.sampling.prio_alpha = 0.0
+    trainer_cfg.sampling.prio_beta0 = 0.6
+    trainer_cfg.advantage.gae_lambda = 0.9354159832000732
+    trainer_cfg.advantage.gamma = 0.9986186027526855
+    trainer_cfg.optimizer.learning_rate = 0.00737503357231617
+    trainer_cfg.optimizer.momentum = 0.9794994592666626
+    trainer_cfg.optimizer.weight_decay = 0.3
+    trainer_cfg.optimizer.eps = 6.686864253424574e-06
+    trainer_cfg.optimizer.warmup_steps = 500
+    trainer_cfg.losses.ppo_actor.clip_coef = 0.36670681834220886
+    trainer_cfg.losses.ppo_actor.ent_coef = 0.02566424384713173
+    trainer_cfg.losses.ppo_critic.vf_coef = 1.4647305011749268
+    training_env_cfg = TrainingEnvironmentConfig(curriculum=curriculum)
     evaluator_cfg = EvaluatorConfig(simulations=simulations(variants=variants, layout=layout))
 
     default_architecture = DefaultPolicyConfig(
@@ -630,7 +622,7 @@ def train(
         _infer_td_key_cumulant_sizes_from_policy(
             cumulants=resolved_diff_horde_cumulants,
             policy_architecture=resolved_architecture,
-            curriculum=resolved_curriculum,
+            curriculum=curriculum,
         )
         resolved_architecture = _with_horde_num_cumulants(
             policy_architecture=resolved_architecture,
@@ -932,16 +924,13 @@ def evaluate(
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
 ) -> tools.EvaluateTool:
-    resolved_policy_uris: str | list[str]
     if policy_uris is None:
-        resolved_policy_uris = []
-    elif isinstance(policy_uris, str):
-        resolved_policy_uris = policy_uris
-    else:
-        resolved_policy_uris = list(policy_uris)
+        policy_uris = []
+    elif not isinstance(policy_uris, str):
+        policy_uris = list(policy_uris)
     return tools.EvaluateTool(
         simulations=simulations(variants=variants, layout=layout),
-        policy_uris=resolved_policy_uris,
+        policy_uris=policy_uris,
     )
 
 

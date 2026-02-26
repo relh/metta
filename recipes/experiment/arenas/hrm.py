@@ -22,30 +22,17 @@ def train(
     tool = base.train(
         curriculum=curriculum,
     )
-    # Update policy architecture
-    resolved_arch = policy_architecture or HRMTinyConfig()
-    learner_cfg = tool.policy_assets.get("learner0")
-    if learner_cfg is None:
-        tool.policy_assets["learner0"] = PolicyAssetConfig(architecture=resolved_arch)
-    else:
-        learner_cfg.architecture = resolved_arch
+    tool.policy_assets["learner0"] = PolicyAssetConfig(architecture=policy_architecture or HRMTinyConfig())
     return tool
 
 
 def train_shaped(
     rewards: bool = True,
-    converters: bool = True,
     policy_architecture: PolicyArchitecture | None = None,
 ):
     """Train with HRM policy architecture using shaped rewards (defaults to HRMTinyConfig)."""
-    tool = base.train_shaped(rewards=rewards, converters=converters)
-    # Update policy architecture
-    resolved_arch = policy_architecture or HRMTinyConfig()
-    learner_cfg = tool.policy_assets.get("learner0")  # this recipe assumes a single trainable policy
-    if learner_cfg is None:
-        tool.policy_assets["learner0"] = PolicyAssetConfig(architecture=resolved_arch)
-    else:
-        learner_cfg.architecture = resolved_arch
+    tool = base.train_shaped(rewards=rewards)
+    tool.policy_assets["learner0"] = PolicyAssetConfig(architecture=policy_architecture or HRMTinyConfig())
     return tool
 
 
