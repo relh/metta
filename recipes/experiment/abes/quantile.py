@@ -53,7 +53,6 @@ def make_curriculum(
 
     for item in ["ore_red", "battery_red", "laser", "armor"]:
         arena_tasks.add_bucket(f"game.agent.rewards.{item}.weight", [0, 0.1, 0.5, 0.9, 1.0])
-        arena_tasks.add_bucket(f"game.agent.rewards.{item}.max", [1, 2])
 
     # enable or disable attacks. we use cost instead of 'enabled'
     # to maintain action space consistency.

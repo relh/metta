@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 import mettagrid.builder.envs as eb
 from mettagrid.builder import building
+from mettagrid.config.game_value import SumGameValue
 from mettagrid.config.mettagrid_config import (
     ActionsConfig,
     AgentConfig,
@@ -21,6 +22,13 @@ from mettagrid.config.mettagrid_config import (
 )
 from mettagrid.config.reward_config import inventoryReward
 from mettagrid.map_builder.random_map import RandomMapBuilder
+
+
+def _reward_weight(agent_reward) -> float:
+    reward_expr = agent_reward.reward
+    assert isinstance(reward_expr, SumGameValue)
+    assert reward_expr.weights is not None
+    return reward_expr.weights[0]
 
 
 class TestProgrammaticEnvironments:
@@ -124,9 +132,9 @@ class TestProgrammaticEnvironments:
 
         # Verify custom rewards are set
         rewards = config.game.agent.rewards
-        assert rewards["heart"].weight == 1.0
-        assert rewards["ore_red"].weight == 0.5
-        assert rewards["battery_red"].weight == 0.8
+        assert _reward_weight(rewards["heart"]) == 1.0
+        assert _reward_weight(rewards["ore_red"]) == 0.5
+        assert _reward_weight(rewards["battery_red"]) == 0.8
 
         # Verify resource limits
         assert config.game.agent.inventory.get_limit("heart") == 255
@@ -185,9 +193,9 @@ class TestProgrammaticEnvironments:
         assert team_1_count == 3
         # Check rewards are set correctly
         for agent in config.game.agents[:3]:
-            assert agent.rewards["heart"].weight == 2
+            assert _reward_weight(agent.rewards["heart"]) == 2
         for agent in config.game.agents[3:]:
-            assert agent.rewards["heart"].weight == 1
+            assert _reward_weight(agent.rewards["heart"]) == 1
 
         # This would be a good addition to the test, but we don't currently expose cpp_config.objects.
         # cpp_config = convert_to_cpp_game_config(config.game)

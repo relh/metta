@@ -41,7 +41,6 @@ def _make_arena_tasks(arena_env: MettaGridConfig):
     arena_tasks = cc.bucketed(arena_env)
     for item in ["ore_red", "battery_red", "laser", "armor"]:
         arena_tasks.add_bucket(f"game.agent.rewards.{item}.weight", [0, 0.1, 0.5, 0.9, 1.0])
-        arena_tasks.add_bucket(f"game.agent.rewards.{item}.max", [1, 2])
     arena_tasks.add_bucket("game.actions.attack.consumed_resources.laser", [1, 100])
     return arena_tasks
 

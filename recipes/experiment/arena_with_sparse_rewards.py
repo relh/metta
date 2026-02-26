@@ -55,7 +55,6 @@ def make_curriculum(
 
     # Only vary heart rewards (final objective) in curriculum
     arena_tasks.add_bucket("game.agent.rewards.heart.weight", [0.5, 1.0, 2.0])
-    arena_tasks.add_bucket("game.agent.rewards.heart.max", [10, 50, 100])
 
     # Enable/disable attacks for variety
     arena_tasks.add_bucket("game.actions.attack.consumed_resources.laser", [1, 100])
