@@ -54,7 +54,7 @@ def test_env_config_generate_with_map_seed_sets_seed_without_mutating_input() ->
     env_config = make_cogsguard_env(seed=11, num_agents=4).model_dump(mode="json")
     env_row = MettagridEnvConfig(config_hash="abc123", config=env_config)
     seeded = env_row.generate_with_map_seed(map_seed=97)
-    assert seeded.model_dump(mode="json")["game"]["map_builder"]["seed"] == 97
+    assert seeded["game"]["map_builder"]["seed"] == 97
     assert env_row.config["game"]["map_builder"]["seed"] == 11
 
 
@@ -64,6 +64,25 @@ def test_env_config_generate_with_map_seed_requires_existing_seed_field() -> Non
     env_row = MettagridEnvConfig(config_hash="abc123", config=env_config)
     with pytest.raises(KeyError, match="env_config\\.game\\.map_builder\\.seed"):
         env_row.generate_with_map_seed(map_seed=97)
+
+
+def test_env_config_generate_with_map_seed_keeps_legacy_payload_shape() -> None:
+    env_config = make_cogsguard_env(seed=11, num_agents=4).model_dump(mode="json")
+    env_config["game"]["agents"][0]["rewards"]["aligned_junction_held"] = {
+        "max": None,
+        "nums": [{"tag": "net:cogs"}],
+        "denoms": [],
+        "weight": 0.001,
+        "aggregation": "sum",
+    }
+    env_config["game"]["render"]["assets"]["hub"] = "hub"
+    env_row = MettagridEnvConfig(config_hash="abc123", config=env_config)
+
+    seeded = env_row.generate_with_map_seed(map_seed=97)
+
+    assert seeded["game"]["map_builder"]["seed"] == 97
+    assert seeded["game"]["render"]["assets"]["hub"] == "hub"
+    assert seeded["game"]["agents"][0]["rewards"]["aligned_junction_held"]["aggregation"] == "sum"
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,6 @@ from sqlalchemy.dialects.postgresql import ARRAY, INTEGER, JSONB
 from sqlmodel import Field, Relationship, SQLModel
 
 from metta.app_backend.models.policies import PolicyVersion
-from mettagrid.config.mettagrid_config import MettaGridConfig
 
 if TYPE_CHECKING:
     from metta.app_backend.models.job_request import JobRequest
@@ -60,13 +59,13 @@ class MettagridEnvConfig(SQLModel, table=True):
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
 
-    def generate_with_map_seed(self, map_seed: int) -> MettaGridConfig:
+    def generate_with_map_seed(self, map_seed: int) -> dict[str, Any]:
         seeded_config = copy.deepcopy(self.config)
         map_builder = seeded_config["game"]["map_builder"]
         if "seed" not in map_builder:
             raise KeyError("env_config.game.map_builder.seed is required")
         map_builder["seed"] = map_seed
-        return MettaGridConfig.model_validate(seeded_config)
+        return seeded_config
 
 
 class Season(SQLModel, table=True):

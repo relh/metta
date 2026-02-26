@@ -53,7 +53,6 @@ from metta.app_backend.tournament.settings import (
 )
 from metta.common.compat_version import get_compat_version
 from metta.common.otel.tracing import trace
-from mettagrid.runner.types import SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 tracer = otel_trace.get_tracer(__name__)
@@ -742,13 +741,13 @@ class CommissionerBase(ABC):
                 tags["scheduler_git_ref"] = git_ref
 
             env_config = self._require_pool_env_config(pool)
-            job_spec = SingleEpisodeJob(
-                policy_uris=[f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
-                assignments=request.assignments,
-                env=env_config.generate_with_map_seed(request.map_seed),
-                seed=request.seed,
-                episode_tags=tags,
-            ).model_dump()
+            job_spec = {
+                "policy_uris": [f"metta://policy/{pv_ids[pp_id]}" for pp_id in request.pool_player_ids],
+                "assignments": request.assignments,
+                "env": env_config.generate_with_map_seed(request.map_seed),
+                "seed": request.seed,
+                "episode_tags": tags,
+            }
 
             if env_config.compat_version is not None:
                 job_spec["episode_runner_image"] = build_episode_runner_compat_image(env_config.compat_version)
