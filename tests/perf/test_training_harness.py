@@ -184,6 +184,28 @@ class TestCompareMultiple:
         with pytest.raises(FileNotFoundError):
             compare_multiple([missing], current_stats, "current")
 
+    def test_overlapping_output_and_baseline(self, tmp_path: Path):
+        """compare_multiple must read the baseline before save_results overwrites it.
+
+        Simulates --output X --baseline X: iterative benchmarking where the
+        same file holds the previous run's results and receives the new run's.
+        """
+        path = tmp_path / "results.json"
+
+        # Previous run: 100k SPS.
+        baseline_stats = compute_training_statistics(_make_artifact(sps=100000.0, sps_noise=1000.0))
+        save_results(baseline_stats, {}, "baseline", path)
+
+        # Current run: 120k SPS (~20% improvement).
+        current_stats = compute_training_statistics(_make_artifact(sps=120000.0, sps_noise=1000.0))
+
+        # Correct order: read baseline, then overwrite with new results.
+        comparisons = compare_multiple([path], current_stats, "opt1")
+        save_results(current_stats, {}, "opt1", path)
+
+        # If save happened before compare, this would be ~0% (self-comparison).
+        assert comparisons[0].sps_improvement_pct > 15
+
 
 class TestLoadArtifact:
     def test_missing_file(self, tmp_path: Path):

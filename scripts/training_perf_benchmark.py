@@ -185,26 +185,29 @@ def main() -> int:
 
     print_phase_breakdown(stats)
 
-    if args.output:
-        output_path = Path(args.output)
-        save_results(stats, config_info, args.phase, output_path)
+    try:
+        if args.baseline:
+            print(f"\n{'=' * 60}")
+            print("Comparisons")
+            print(f"{'=' * 60}")
+            baseline_paths = [Path(p) for p in args.baseline]
+            comparisons = compare_multiple(baseline_paths, stats, args.phase or "current")
+            for comparison in comparisons:
+                print_comparison(comparison)
 
-    if args.baseline:
-        print(f"\n{'=' * 60}")
-        print("Comparisons")
-        print(f"{'=' * 60}")
-        baseline_paths = [Path(p) for p in args.baseline]
-        comparisons = compare_multiple(baseline_paths, stats, args.phase or "current")
-        for comparison in comparisons:
-            print_comparison(comparison)
-
-    print_scorecard_row(
-        stats,
-        config_label=config_label,
-        phase=args.phase,
-        baseline_paths=[Path(p) for p in args.baseline] if args.baseline else None,
-        output_path=Path(args.output) if args.output else None,
-    )
+        print_scorecard_row(
+            stats,
+            config_label=config_label,
+            phase=args.phase,
+            baseline_paths=[Path(p) for p in args.baseline] if args.baseline else None,
+            output_path=Path(args.output) if args.output else None,
+        )
+    finally:
+        # Persist results even if comparison fails (missing/corrupt baseline).
+        # Positioned after baseline reads to avoid overwriting a file used as both --output and --baseline.
+        if args.output:
+            output_path = Path(args.output)
+            save_results(stats, config_info, args.phase, output_path)
 
     if stats.cv > 0.20:
         print("\nPerformance measurement unstable!", file=sys.stderr)
