@@ -11,12 +11,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: sync-cortex-child-repo
+  group: sync-cortex-child-repo-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
   CI_APP_ID: ${{ secrets.CI_APP_ID }}
   CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+  CORTEX_PUSH_TOKEN: ${{ secrets.CORTEX_SYNC_PAT }}
 
 jobs:
   sync:
@@ -43,10 +44,15 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          echo "::add-mask::${{ steps.ci-token.outputs.token }}"
-          git config --global url."https://x-access-token:${{ steps.ci-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://x-access-token:${{ steps.ci-token.outputs.token }}@github.com/".insteadOf "git@github.com:"
-          git config --global url."https://x-access-token:${{ steps.ci-token.outputs.token }}@github.com/".insteadOf "ssh://git@github.com/"
+          if [ -z "${{ env.CORTEX_PUSH_TOKEN }}" ]; then
+            echo "::error::Missing required secret CORTEX_SYNC_PAT. Set a GitHub PAT with contents:write access to Metta-AI/cortex."
+            exit 1
+          fi
+
+          echo "::add-mask::${{ env.CORTEX_PUSH_TOKEN }}"
+          git config --global url."https://x-access-token:${{ env.CORTEX_PUSH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git config --global --add url."https://x-access-token:${{ env.CORTEX_PUSH_TOKEN }}@github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://x-access-token:${{ env.CORTEX_PUSH_TOKEN }}@github.com/".insteadOf "ssh://git@github.com/"
 
       - name: Install git-filter-repo
         run: |
