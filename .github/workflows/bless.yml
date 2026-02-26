@@ -1,0 +1,60 @@
+name: Bless PR
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  bless:
+    if: github.event.label.name == 'blessed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify author is allowed to self-approve
+        id: check
+        run: |
+          LABELER="${{ github.event.sender.login }}"
+          PR_AUTHOR="${{ github.event.pull_request.user.login }}"
+
+          if [ "$LABELER" != "$PR_AUTHOR" ]; then
+            echo "Labeler ($LABELER) is not the PR author ($PR_AUTHOR), removing label"
+            gh pr edit ${{ github.event.pull_request.number }} --remove-label "blessed"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Approve PR
+        if: steps.check.outputs.allowed == 'true'
+        run: |
+          gh pr review ${{ github.event.pull_request.number }} --approve \
+            --body "Blessed by @${{ github.event.sender.login }} (self-approved)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Discord
+        if: steps.check.outputs.allowed == 'true'
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "No Discord webhook configured, skipping"
+            exit 0
+          fi
+
+          MSG=$(jq -n --arg author "$PR_AUTHOR" --arg num "$PR_NUM" --arg title "$PR_TITLE" --arg url "$PR_URL" \
+            '"**Self-approved:** @\($author) blessed [#\($num) \($title)](\($url))"')
+
+          curl -sf -X POST "$WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": $MSG, \"flags\": 4}"
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_BLESS_WEBHOOK_URL }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }}

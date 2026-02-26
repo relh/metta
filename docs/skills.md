@@ -56,6 +56,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `n.observatory-up`
 - `n.setup-worktree-ide-themes`
 - `pr.address-review`
+- `pr.bless`
 - `pr.check-ci`
 - `pr.conform`
 - `pr.context`

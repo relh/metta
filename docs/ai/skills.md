@@ -49,6 +49,7 @@ Shared skills live in `skills/`:
 - `n.monitor-infra`
 - `n.observatory-up`
 - `pr.address-review`
+- `pr.bless`
 - `pr.check-ci`
 - `pr.context`
 - `pr.context-cool`
