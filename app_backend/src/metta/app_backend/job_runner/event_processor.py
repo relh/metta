@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = 5
 BATCH_SIZE = 100
 RECONCILE_INTERVAL_SECONDS = 60
-RECONCILE_GRACE_PERIOD_SECONDS = 300
+RECONCILE_GRACE_PERIOD_SECONDS = 86400  # 1 day — last-resort safety net for truly stuck jobs
 
 _db_engine = None
 
@@ -831,7 +831,7 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
             active_job_ids.add(info[0])
 
     try:
-        running_jobs = stats_client.list_jobs(statuses=[JobStatus.running, JobStatus.dispatched])
+        running_jobs = stats_client.list_jobs(statuses=[JobStatus.running, JobStatus.dispatched], limit=1000)
     except Exception as e:
         logger.error(f"Failed to list running jobs for reconciliation: {e}")
         return
@@ -900,11 +900,12 @@ def run_event_processor():
                 else:
                     time.sleep(POLL_INTERVAL_SECONDS)
 
-                # Periodic reconciliation for missed events
-                now = time.monotonic()
-                if now - last_reconcile >= RECONCILE_INTERVAL_SECONDS:
-                    _reconcile_stale_jobs(stats_client, core_v1)
-                    last_reconcile = now
+                # Only reconcile when event queue is drained
+                if processed == 0:
+                    now = time.monotonic()
+                    if now - last_reconcile >= RECONCILE_INTERVAL_SECONDS:
+                        _reconcile_stale_jobs(stats_client, core_v1)
+                        last_reconcile = now
 
             except Exception as e:
                 logger.error(f"Event processor error: {e}", exc_info=True)
