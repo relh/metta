@@ -25,7 +25,22 @@ const DASHBOARD_RESPONSE: DashboardResponse = {
 afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
+  window.sessionStorage.clear()
+  document.cookie = 'observatory_auth_token=; path=/; max-age=0'
+  window.history.replaceState({}, '', '/')
 })
+
+function mockDashboardFetch() {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(DASHBOARD_RESPONSE)))
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+function readAuthHeader(fetchMock: ReturnType<typeof vi.fn>): string | undefined {
+  const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit
+  const headers = requestInit.headers as Record<string, string>
+  return headers['X-Auth-Token']
+}
 
 describe('dashboard api', () => {
   it('falls back from /default/data to /default + /{id}/data during rolling deploy mismatch', async () => {
@@ -65,5 +80,49 @@ describe('dashboard api', () => {
 
     expect(response.policy.id).toBe(DASHBOARD_RESPONSE.policy.id)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('prefers URL hash token over cookie, stores it in sessionStorage, and scrubs it from the URL', async () => {
+    const fetchMock = mockDashboardFetch()
+    document.cookie = 'observatory_auth_token=cookie-token'
+    window.history.replaceState({}, '', '/?policyVersionId=test-policy#hash-token')
+
+    await fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
+
+    expect(readAuthHeader(fetchMock)).toBe('hash-token')
+    expect(window.sessionStorage.getItem('policy-dashboard-auth-token')).toBe('hash-token')
+    expect(new URL(window.location.href).hash).toBe('')
+  })
+
+  it('ignores query-string authToken and falls back to cookie', async () => {
+    const fetchMock = mockDashboardFetch()
+    document.cookie = 'observatory_auth_token=cookie-token'
+    window.history.replaceState({}, '', '/?policyVersionId=test-policy&authToken=query-token')
+
+    await fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
+
+    expect(readAuthHeader(fetchMock)).toBe('cookie-token')
+  })
+
+  it('uses sessionStorage auth token when URL fragment is gone', async () => {
+    const fetchMock = mockDashboardFetch()
+    window.sessionStorage.setItem('policy-dashboard-auth-token', 'session-token')
+    document.cookie = 'observatory_auth_token=cookie-token'
+    window.history.replaceState({}, '', '/?policyVersionId=test-policy')
+
+    await fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
+
+    expect(readAuthHeader(fetchMock)).toBe('session-token')
+  })
+
+  it('overrides stored session token when a fresh hash token appears', async () => {
+    const fetchMock = mockDashboardFetch()
+    window.sessionStorage.setItem('policy-dashboard-auth-token', 'old-session-token')
+    window.history.replaceState({}, '', '/?policyVersionId=test-policy#fresh-hash-token')
+
+    await fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
+
+    expect(readAuthHeader(fetchMock)).toBe('fresh-hash-token')
+    expect(window.sessionStorage.getItem('policy-dashboard-auth-token')).toBe('fresh-hash-token')
   })
 })

@@ -1,24 +1,52 @@
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8010'
 const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
+const DASHBOARD_AUTH_TOKEN_SESSION_STORAGE_KEY = 'policy-dashboard-auth-token'
 
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
+
+function trimToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+function readAuthTokenFromUrlFragment(): string | null {
+  if (typeof window === 'undefined') return null
+  const currentUrl = new URL(window.location.href)
+  const rawFragment = currentUrl.hash.startsWith('#') ? currentUrl.hash.slice(1) : currentUrl.hash
+  if (!rawFragment) return null
+
+  let decodedFragment = rawFragment
+  try {
+    decodedFragment = decodeURIComponent(rawFragment)
+  } catch {
+    return null
+  }
+  const token = trimToNull(decodedFragment)
+  if (!token) return null
+
+  window.sessionStorage.setItem(DASHBOARD_AUTH_TOKEN_SESSION_STORAGE_KEY, token)
+  window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}`)
+  return token
+}
 
 function readAuthTokenFromCookies(): string | null {
   if (typeof document === 'undefined') return null
   const parts = document.cookie.split('; ')
   for (const part of parts) {
     if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
-    const value = part.slice(AUTH_COOKIE_NAME.length + 1).trim()
-    if (!value) return null
-    return value
+    return trimToNull(part.slice(AUTH_COOKIE_NAME.length + 1))
   }
   return null
 }
 
 function getDashboardRequestHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = readAuthTokenFromCookies()
+  const sessionToken =
+    typeof window === 'undefined'
+      ? null
+      : trimToNull(window.sessionStorage.getItem(DASHBOARD_AUTH_TOKEN_SESSION_STORAGE_KEY))
+  const token = readAuthTokenFromUrlFragment() ?? sessionToken ?? readAuthTokenFromCookies()
   if (token) {
     headers['X-Auth-Token'] = token
   }
