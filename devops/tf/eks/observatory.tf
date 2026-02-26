@@ -4,6 +4,9 @@ module "observatory_irsa" {
   version = "~> 5.34"
 
   role_name = "observatory-backend"
+  # Dispatcher mints presigned S3 URLs for long-running jobs. Use a longer
+  # web-identity session so signing credentials outlive job uploads.
+  max_session_duration = 43200
 
   oidc_providers = {
     main = {
@@ -38,8 +41,8 @@ resource "aws_iam_policy" "observatory_s3" {
         ]
       },
       {
-        Effect = "Allow"
-        Action = "sts:AssumeRole"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
         Resource = "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
       }
     ]
@@ -48,6 +51,6 @@ resource "aws_iam_policy" "observatory_s3" {
 
 # Output the role ARN for reference
 output "observatory_irsa_role_arn" {
-  value = module.observatory_irsa.iam_role_arn
+  value       = module.observatory_irsa.iam_role_arn
   description = "ARN of the IAM role for observatory service account"
 }

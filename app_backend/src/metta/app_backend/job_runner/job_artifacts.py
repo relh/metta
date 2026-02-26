@@ -39,7 +39,7 @@ class JobArtifact(Enum):
 
     @classmethod
     def presigned(cls) -> list["JobArtifact"]:
-        """Artifacts that need presigned URLs passed to the runner."""
+        """Artifacts that need URI env vars passed to the runner."""
         return [a for a in cls if a.env_var is not None]
 
 

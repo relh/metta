@@ -1,8 +1,11 @@
 import json
 import logging
-from typing import Literal
+import os
+from pathlib import Path
+from typing import Any, Literal
 
 import boto3
+from botocore import UNSIGNED
 from botocore.config import Config as BotoConfig
 from kubernetes import client
 from kubernetes.config.kube_config import load_kube_config
@@ -19,6 +22,53 @@ from metta.app_backend.models.job_request import JobRequest, JobType
 from metta.app_backend.tournament.settings import JOB_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
+
+_MAX_ASSUME_ROLE_DURATION_SECONDS = 12 * 60 * 60
+_PRESIGN_ROLE_SESSION_NAME = "job-artifact-presign"
+_PRESIGN_ROLE_DURATION_BUFFER_SECONDS = 900
+
+
+def _assume_role_with_web_identity(
+    role_arn: str,
+    role_session_name: str,
+    duration_seconds: int,
+    web_identity_token_file: str,
+) -> dict[str, str]:
+    token = Path(web_identity_token_file).read_text(encoding="utf-8").strip()
+    assumed = boto3.client("sts", config=BotoConfig(signature_version=UNSIGNED)).assume_role_with_web_identity(
+        RoleArn=role_arn,
+        RoleSessionName=role_session_name,
+        DurationSeconds=duration_seconds,
+        WebIdentityToken=token,
+    )
+    creds = assumed["Credentials"]
+    return {
+        "aws_access_key_id": creds["AccessKeyId"],
+        "aws_secret_access_key": creds["SecretAccessKey"],
+        "aws_session_token": creds["SessionToken"],
+    }
+
+
+def _build_presign_s3_client(expiration: int, endpoint: str | None) -> Any:
+    client_kwargs = {
+        "config": BotoConfig(signature_version="s3v4"),
+        **({"endpoint_url": endpoint} if endpoint else {}),
+    }
+    requested_duration = expiration + _PRESIGN_ROLE_DURATION_BUFFER_SECONDS
+    duration = min(_MAX_ASSUME_ROLE_DURATION_SECONDS, max(900, requested_duration))
+    presign_role_arn = os.environ.get("AWS_ROLE_ARN")
+    web_identity_token_file = os.environ.get("AWS_WEB_IDENTITY_TOKEN_FILE")
+
+    if presign_role_arn and web_identity_token_file:
+        web_identity_creds = _assume_role_with_web_identity(
+            role_arn=presign_role_arn,
+            role_session_name=_PRESIGN_ROLE_SESSION_NAME,
+            duration_seconds=duration,
+            web_identity_token_file=web_identity_token_file,
+        )
+        return boto3.client("s3", **web_identity_creds, **client_kwargs)
+
+    return boto3.client("s3", **client_kwargs)
 
 
 def get_k8s_client() -> client.BatchV1Api:
@@ -57,8 +107,9 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
 
     exp = JOB_TIMEOUT_SECONDS + 3600
     endpoint = cfg.S3_PRESIGNED_ENDPOINT
+    presign_s3_client = _build_presign_s3_client(exp, endpoint)
     job_spec["policy_uris"] = [
-        presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, endpoint) for k in resolved_s3_keys
+        presign_operation("get", cfg.POLICY_S3_BUCKET, k, exp, presign_s3_client) for k in resolved_s3_keys
     ]
     s3_client = boto3.client("s3")
     spec_key = JobArtifact.SPEC.key(job.id)
@@ -71,7 +122,13 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     env_vars: list[client.V1EnvVar] = [
         client.V1EnvVar(
             name=artifact.env_var,
-            value=presign_operation(artifact.direction, cfg.EVAL_S3_BUCKET, artifact.key(job.id), exp, endpoint),
+            value=presign_operation(
+                artifact.direction,
+                cfg.EVAL_S3_BUCKET,
+                artifact.key(job.id),
+                exp,
+                presign_s3_client,
+            ),
         )
         for artifact in JobArtifact.presigned()
         if artifact.env_var is not None
@@ -82,7 +139,7 @@ def create_episode_job(job: JobRequest, policy_s3_keys: dict[int, str] | None = 
     policy_log_urls: dict[str, str] = {}
     for agent_idx in range(len(assignments)):
         key = job_policy_log_key(job.id, agent_idx)
-        url = presign_operation("put", cfg.EVAL_S3_BUCKET, key, exp, endpoint)
+        url = presign_operation("put", cfg.EVAL_S3_BUCKET, key, exp, presign_s3_client)
         policy_log_urls[str(agent_idx)] = url
     if policy_log_urls:
         env_vars.append(
@@ -194,13 +251,8 @@ def presign_operation(
     bucket: str,
     key: str,
     expiration: int,
-    endpoint: str | None,
+    s3_client: Any,
 ) -> str:
-    s3_client = boto3.client(
-        "s3",
-        config=BotoConfig(signature_version="s3v4"),
-        **({"endpoint_url": endpoint} if endpoint else {}),
-    )
     return s3_client.generate_presigned_url(
         f"{operation}_object",
         Params={"Bucket": bucket, "Key": key},
