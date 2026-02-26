@@ -132,7 +132,7 @@ class PolicyAutoBuilder(Policy):
         return state
 
     def __setstate__(self, state: dict[str, Any]) -> None:
-        self.__dict__.update(state)
+        self.__dict__.update(state)  # type: ignore
         self._sdpa_context = ExitStack()
 
     def reset_memory(self):
