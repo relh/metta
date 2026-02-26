@@ -1,0 +1,116 @@
+name: Chore bump cortexcore version
+
+on:
+  schedule:
+    # Daily auto-bump at 16:00 UTC.
+    - cron: "0 16 * * *"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Semver bump type"
+        required: true
+        default: patch
+        type: choice
+        options: [patch, minor, major]
+      version:
+        description: "Exact version override (X.Y.Z). If set, overrides bump input"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-and-open-pr:
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Decide whether bump is needed
+        id: should_bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_bump=yes" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          LAST_BUMP_COMMIT=$(git log -n 1 --format=%H -G '^version = "[0-9]+\.[0-9]+\.[0-9]+"$' -- packages/cortex/pyproject.toml || true)
+          if [[ -z "$LAST_BUMP_COMMIT" ]]; then
+            echo "No prior cortex version bump commit found; running bump."
+            echo "should_bump=yes" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mapfile -t CHANGED < <(git diff --name-only "${LAST_BUMP_COMMIT}..HEAD" -- packages/cortex/ uv.lock)
+          NEED_BUMP=no
+          for f in "${CHANGED[@]}"; do
+            [[ -z "$f" ]] && continue
+            if [[ "$f" != "packages/cortex/pyproject.toml" && "$f" != "uv.lock" ]]; then
+              NEED_BUMP=yes
+              break
+            fi
+          done
+
+          echo "should_bump=${NEED_BUMP}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump cortexcore version
+        if: steps.should_bump.outputs.should_bump == 'yes'
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BEFORE=$(python -c "import pathlib,re; t=pathlib.Path('packages/cortex/pyproject.toml').read_text(); m=re.search(r'(?m)^version = \\\"(\\\\d+\\\\.\\\\d+\\\\.\\\\d+)\\\"$', t); print(m.group(1) if m else '')")
+          VERSION_INPUT="${{ github.event_name == 'workflow_dispatch' && inputs.version || '' }}"
+          BUMP_INPUT="${{ github.event_name == 'workflow_dispatch' && inputs.bump || 'patch' }}"
+
+          if [[ -n "$VERSION_INPUT" ]]; then
+            python scripts/bump_cortexcore_version.py --version "$VERSION_INPUT"
+          else
+            python scripts/bump_cortexcore_version.py --bump "$BUMP_INPUT"
+          fi
+
+          AFTER=$(python -c "import pathlib,re; t=pathlib.Path('packages/cortex/pyproject.toml').read_text(); m=re.search(r'(?m)^version = \\\"(\\\\d+\\\\.\\\\d+\\\\.\\\\d+)\\\"$', t); print(m.group(1) if m else '')")
+
+          if [[ "$BEFORE" == "$AFTER" ]]; then
+            echo "Version did not change ($BEFORE)."
+            exit 1
+          fi
+
+          echo "before=$BEFORE" >> "$GITHUB_OUTPUT"
+          echo "after=$AFTER" >> "$GITHUB_OUTPUT"
+
+      - name: Create bump PR
+        if: steps.should_bump.outputs.should_bump == 'yes'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/cortexcore-bump
+          commit-message: "chore(cortex): bump cortexcore to ${{ steps.bump.outputs.after }}"
+          title: "chore(cortex): bump cortexcore to ${{ steps.bump.outputs.after }}"
+          reviewers: subho406
+          body: |
+            Automated cortexcore version bump.
+
+            Summary:
+            - from: `${{ steps.bump.outputs.before }}`
+            - to: `${{ steps.bump.outputs.after }}`
+            - files: `packages/cortex/pyproject.toml`, `uv.lock`
+
+            After merge to `main`, `auto-dispatch-cortexcore-publish.yml` will auto-dispatch
+            `release-cortexcore.yml` to publish this version to PyPI from `main`.
+          delete-branch: true
+
+      - name: Skip summary
+        if: steps.should_bump.outputs.should_bump != 'yes'
+        run: echo "No non-version cortex changes since the last cortex version bump; skipping."

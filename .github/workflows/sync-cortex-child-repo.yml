@@ -44,6 +44,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           echo "::add-mask::${{ steps.ci-token.outputs.token }}"
+          git config --global url."https://x-access-token:${{ steps.ci-token.outputs.token }}@github.com/".insteadOf "https://github.com/"
           git config --global url."https://x-access-token:${{ steps.ci-token.outputs.token }}@github.com/".insteadOf "git@github.com:"
           git config --global url."https://x-access-token:${{ steps.ci-token.outputs.token }}@github.com/".insteadOf "ssh://git@github.com/"
 
@@ -70,4 +71,4 @@ jobs:
         env:
           PYTHONPATH: common/src:packages/gitta/src
         run: |
-          ./devops/git/push_child_repo.py --target-branch main -y cortex
+          ./devops/git/push_child_repo.py --target-branch main --use-https -y cortex

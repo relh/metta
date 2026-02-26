@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
-"""Bump cortexcore version and dispatch release-cortexcore GitHub workflow."""
+"""Bump cortexcore version metadata in packages/cortex and uv.lock."""
 
 from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 from pathlib import Path
-
-
-def run(cmd: list[str], cwd: Path | None = None) -> str:
-    result = subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True, text=True, capture_output=True)
-    return result.stdout.strip()
 
 
 def parse_version(version: str) -> tuple[int, int, int]:
@@ -33,6 +27,14 @@ def bump_version(version: str, bump: str) -> str:
     raise ValueError(f"Unsupported bump type: {bump}")
 
 
+def read_pyproject_version(pyproject: Path) -> str:
+    text = pyproject.read_text()
+    m = re.search(r'(?m)^version = "(\d+\.\d+\.\d+)"$', text)
+    if not m:
+        raise RuntimeError(f"Could not find version in {pyproject}")
+    return m.group(1)
+
+
 def update_pyproject(pyproject: Path, new_version: str) -> str:
     text = pyproject.read_text()
     m = re.search(r'(?m)^version = "(\d+\.\d+\.\d+)"$', text)
@@ -42,14 +44,6 @@ def update_pyproject(pyproject: Path, new_version: str) -> str:
     updated = text[: m.start(1)] + new_version + text[m.end(1) :]
     pyproject.write_text(updated)
     return old_version
-
-
-def read_pyproject_version(pyproject: Path) -> str:
-    text = pyproject.read_text()
-    m = re.search(r'(?m)^version = "(\d+\.\d+\.\d+)"$', text)
-    if not m:
-        raise RuntimeError(f"Could not find version in {pyproject}")
-    return m.group(1)
 
 
 def update_uv_lock(uv_lock: Path, old_version: str, new_version: str) -> None:
@@ -65,42 +59,13 @@ def update_uv_lock(uv_lock: Path, old_version: str, new_version: str) -> None:
     uv_lock.write_text(updated)
 
 
-def git_branch(repo: Path) -> str:
-    return run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=repo)
-
-
-def gh_repo_name(repo: Path) -> str:
-    return run(["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"], cwd=repo)
-
-
-def dispatch_release(repo: Path, ref: str, target: str) -> None:
-    repo_name = gh_repo_name(repo)
-    cmd = [
-        "gh",
-        "workflow",
-        "run",
-        "release-cortexcore.yml",
-        "--repo",
-        repo_name,
-        "--ref",
-        ref,
-        "-f",
-        "publish=yes",
-        "-f",
-        f"target={target}",
-    ]
-    run(cmd, cwd=repo)
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bump cortexcore version and dispatch release workflow")
-    default_repo = Path(__file__).resolve().parents[3]
+    parser = argparse.ArgumentParser(description="Bump cortexcore version metadata")
+    default_repo = Path(__file__).resolve().parents[1]
     parser.add_argument("--repo", type=Path, default=default_repo)
     parser.add_argument("--version", help="Exact target version (X.Y.Z)")
     parser.add_argument("--bump", choices=["patch", "minor", "major"], default="patch")
-    parser.add_argument("--target", choices=["testpypi", "pypi"], default="testpypi")
-    parser.add_argument("--ref", help="Git ref for workflow dispatch (default: current branch)")
-    parser.add_argument("--no-dispatch", action="store_true", help="Only edit version files")
+    parser.add_argument("--dry-run", action="store_true", help="Print actions without modifying files")
     args = parser.parse_args()
 
     repo = args.repo.resolve()
@@ -114,31 +79,22 @@ def main() -> int:
     new_version = args.version if args.version else bump_version(old_version, args.bump)
     parse_version(new_version)
 
+    if args.dry_run:
+        print(f"Dry run: would update cortexcore version {old_version} -> {new_version}")
+        return 0
+
     update_pyproject(pyproject, new_version)
     update_uv_lock(uv_lock, old_version=old_version, new_version=new_version)
-
     print(f"Updated cortexcore version: {old_version} -> {new_version}")
     print(f"Modified: {pyproject}")
     print(f"Modified: {uv_lock}")
-
-    if args.no_dispatch:
-        return 0
-
-    if not args.ref:
-        args.ref = git_branch(repo)
-
-    dispatch_release(repo, ref=args.ref, target=args.target)
-    print(f"Dispatched release-cortexcore.yml (target={args.target}, publish=yes, ref={args.ref}).")
-    print("Check runs with: gh run list --workflow release-cortexcore.yml --limit 5")
+    print("Next: commit/push a PR and merge to main before publishing.")
     return 0
 
 
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except subprocess.CalledProcessError as exc:
-        sys.stderr.write(exc.stderr or str(exc))
-        raise SystemExit(exc.returncode) from exc
     except Exception as exc:  # pragma: no cover
         sys.stderr.write(f"ERROR: {exc}\n")
         raise SystemExit(1) from exc

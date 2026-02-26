@@ -72,14 +72,20 @@ def transform_pyproject_for_external(filtered_path: Path) -> bool:
     return True
 
 
-def sync_repo(package_name: str, dry_run: bool = False, skip_confirmation: bool = False, target_branch: str = "main"):
+def sync_repo(
+    package_name: str,
+    dry_run: bool = False,
+    skip_confirmation: bool = False,
+    target_branch: str = "main",
+    use_https: bool = False,
+):
     """Filter and push repository subset to configured remote."""
 
     # Assume all packages are in packages/<repo_name>
     package_path = f"packages/{package_name}"
     paths = [package_path + "/"]
 
-    remote_url = get_remote_url(package_name)
+    remote_url = get_remote_url(package_name, use_https=use_https)
 
     print(f"Syncing: {package_name}")
     print(f"Paths: {', '.join(paths)}")
@@ -183,11 +189,18 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Show what would be pushed")
     parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts")
     parser.add_argument("--target-branch", default="main", help="Target branch in child repo (default: main)")
+    parser.add_argument("--use-https", action="store_true", help="Use HTTPS remote URL instead of SSH")
 
     args = parser.parse_args()
 
     try:
-        sync_repo(args.package, args.dry_run, args.yes, args.target_branch)
+        sync_repo(
+            args.package,
+            args.dry_run,
+            args.yes,
+            args.target_branch,
+            use_https=args.use_https,
+        )
     except KeyboardInterrupt:
         print("\nAborted")
         sys.exit(1)
