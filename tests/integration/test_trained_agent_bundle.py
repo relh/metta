@@ -21,6 +21,8 @@ from mettagrid.runner.types import EpisodeSpec
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SETUP_SCRIPT = Path("packages/cogames-agents/trained_setup_script.py")
 AGENT_DIR = Path("agent")
+CORTEX_PYPROJECT = Path("packages/cortex/pyproject.toml")
+CORTEX_SRC = Path("packages/cortex/src")
 
 
 @pytest.fixture
@@ -41,6 +43,10 @@ def _create_bundle_workdir(tmp_path: Path, checkpoint_dir: Path) -> Path:
     workdir.mkdir()
     shutil.copytree(checkpoint_dir, workdir / "checkpoint")
     shutil.copytree(REPO_ROOT / AGENT_DIR, workdir / AGENT_DIR, symlinks=True)
+    cortex_dest = workdir / CORTEX_PYPROJECT
+    cortex_dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(REPO_ROOT / CORTEX_PYPROJECT, cortex_dest)
+    shutil.copytree(REPO_ROOT / CORTEX_SRC, workdir / CORTEX_SRC)
     setup_dest = workdir / SETUP_SCRIPT
     setup_dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(REPO_ROOT / SETUP_SCRIPT, setup_dest)
@@ -61,6 +67,8 @@ def _create_bundle_zip(workdir: Path, checkpoint_dir: Path) -> Path:
     include_paths = [
         Path("checkpoint") / submission_spec.data_path,
         SETUP_SCRIPT,
+        CORTEX_PYPROJECT,
+        CORTEX_SRC,
         AGENT_DIR,
     ]
     validated = [p for p in include_paths if (workdir / p).exists()]

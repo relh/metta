@@ -6,9 +6,10 @@ third-party dependencies.
 
 ```bash
 # From the repo root:
-cogames upload \
+uv run cogames upload \
   -p ./train_dir/<run>/checkpoints/<run>:<version> \
   --include-files agent \
+  --include-files packages/cortex \
   --setup-script packages/cogames-agents/trained_setup_script.py \
   -n <submission-name> \
   --dry-run
@@ -17,14 +18,15 @@ cogames upload \
 Example:
 
 ```bash
-cogames upload \
+uv run cogames upload \
   -p ./train_dir/my_run/checkpoints/my_run:v30 \
   --include-files agent \
+  --include-files packages/cortex \
   --setup-script packages/cogames-agents/trained_setup_script.py \
   -n my-trained-policy \
   --dry-run
 ```
 
-The `trained_setup_script.py` installs the `agent/` package (which brings `pufferlib-core` and `einops`) and additional
-dependencies (`cortexcore`, `torchrl`, `safetensors`, `optree`). `torch` and `pufferlib-core` are already present in the
-isolated venv from mettagrid.
+The `trained_setup_script.py` installs `packages/cortex` (the `cortexcore` library) and the `agent/` package (which
+brings `pufferlib-core` and `einops`) along with additional dependencies (`torchrl`, `safetensors`, `optree`). `torch`
+and `pufferlib-core` are already present in the isolated venv from mettagrid.
