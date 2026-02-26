@@ -36,6 +36,7 @@ dependencies = [
   "matplotlib>=3.10.3",
   "metta-agent",
   "metta-app-backend",
+  "metta-chatprop",
   "metta-common",
   "numpy==2.3.3",
   "ninja>=1.11.1",
@@ -120,6 +121,7 @@ mcp-servers = ["metta-pr-similarity-mcp"]
 dev = [{ include-group = "testing" }, { include-group = "lint" }, { include-group = "mcp-servers" }]
 
 [project.scripts]
+chatprop = "metta.chatprop.cli:main"
 metta = "metta.setup.metta_cli:cli_entry"
 skypilot = "devops.skypilot.launch:cli_entry"
 skypilot-sandbox = "devops.skypilot.sandbox:cli_entry"
@@ -158,6 +160,7 @@ members = [
   "packages/pufferlib-core",
   "softmax",
   "mcp_servers/pr_similarity",
+  "chatprop",
 ]
 
 [tool.uv.sources]
@@ -172,4 +175,5 @@ metta-common = { workspace = true }
 pufferlib-core = { workspace = true }
 softmax = { workspace = true }
 metta-pr-similarity-mcp = { workspace = true }
+metta-chatprop = { workspace = true }
 tribal-village = { git = "https://github.com/Metta-AI/tribal-village.git" }

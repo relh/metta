@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metta-chatprop"
+version = "0.1.0"
+description = "Analyze coding agent transcripts to improve CLAUDE.md"
+requires-python = ">=3.11"
+dependencies = ["pydantic>=2.0.0", "click>=8.0.0"]
+
+[project.scripts]
+chatprop = "metta.chatprop.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+include = ["metta.chatprop", "metta.chatprop.*"]
+
+[tool.setuptools.package-data]
+"metta.chatprop" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["metta.chatprop"]

@@ -18,6 +18,7 @@ members = [
     "metta",
     "metta-agent",
     "metta-app-backend",
+    "metta-chatprop",
     "metta-common",
     "metta-pr-similarity-mcp",
     "mettagrid",
@@ -2389,6 +2390,7 @@ dependencies = [
     { name = "matplotlib" },
     { name = "metta-agent" },
     { name = "metta-app-backend" },
+    { name = "metta-chatprop" },
     { name = "metta-common" },
     { name = "ninja" },
     { name = "numpy" },
@@ -2526,6 +2528,7 @@ requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "metta-agent", editable = "agent" },
     { name = "metta-app-backend", editable = "app_backend" },
+    { name = "metta-chatprop", editable = "chatprop" },
     { name = "metta-common", editable = "common" },
     { name = "ninja", specifier = ">=1.11.1" },
     { name = "numpy", specifier = "==2.3.3" },
@@ -2738,6 +2741,21 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.1.1" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.11.13" },
+]
+
+[[package]]
+name = "metta-chatprop"
+version = "0.1.0"
+source = { editable = "chatprop" }
+dependencies = [
+    { name = "click" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.0.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
 ]
 
 [[package]]

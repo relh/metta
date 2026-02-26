@@ -4,9 +4,10 @@
 
 ## Summary
 
-A system that uploads full Claude Code and Codex transcripts to S3, then analyzes them on PR merge to find predictable
-fork-in-the-road moments and propose CLAUDE.md updates. Named after backpropagation: compare what landed against what
-was first attempted, adjust the "model" (CLAUDE.md, skills) accordingly.
+A CLI tool that searches local Claude Code and Codex transcripts for sessions related to specific branches/PRs, analyzes
+them against the final PR diff to find "fork in the road" moments, and opens a PR with proposed CLAUDE.md updates. Named
+after backpropagation: compare what landed against what was first attempted, adjust the "model" (CLAUDE.md, skills)
+accordingly.
 
 ## Problem
 
@@ -16,164 +17,100 @@ captures or learns from them. Learnings stay trapped in individual sessions and 
 
 ## Solution
 
-Two-phase system:
+A local CLI tool that:
 
-1. **Collection**: Local daemon uploads full transcripts to S3.
-2. **Analysis**: GitHub Actions workflow on PR merge finds relevant transcripts, compares each "done" signal against the
-   final merged state, and opens a PR with proposed CLAUDE.md updates.
+1. Greps local transcript files for branch/PR names to find relevant sessions
+2. Gets the final PR diff via `gh pr diff`
+3. Sends transcripts + diffs + current CLAUDE.md to Claude for analysis
+4. Opens a PR with proposed CLAUDE.md updates
+
+No cloud infrastructure needed — everything runs locally against files already on disk.
 
 ## Goals
 
-- [ ] All Claude Code and Codex transcripts uploaded to S3 automatically
-- [ ] Transcripts indexed by branch name for fast lookup
-- [ ] On PR merge, relevant transcripts are identified and analyzed
-- [ ] Analysis produces actionable CLAUDE.md update PRs
+- [ ] Find transcripts matching branch names across Claude Code and Codex
+- [ ] Analyze transcripts against final PR diffs to find correctable patterns
+- [ ] Propose CLAUDE.md updates as a PR
 
 ## Non-Goals
 
+- S3 upload or cloud storage (future phase)
 - Real-time transcript analysis during sessions
 - Perfect reconstruction of intermediate git states (lossy comparison is fine)
-- Codex hook integration (Codex has no Stop hook; daemon handles it via polling)
+- Automated triggering on PR merge (future phase — run manually for now)
 
 ## Design
 
 ### Architecture
 
 ```
-LOCAL MACHINE                               S3 (chatprop-transcripts)
-                                            ├── transcripts/
-~/.claude/projects/*/*.jsonl ──┐            │   ├── claude-code/
-~/.codex/sessions/**/*.jsonl ──┼── daemon ──┤   └── codex/
-                               │  (30s poll)├── metadata/
-                               └────────────└── index.json
+LOCAL MACHINE
 
-GITHUB ACTIONS (on PR merge)
-  1. Read index.json from S3
-  2. Find transcripts matching merged branch
-  3. Download matched transcripts + get PR diff
-  4. Spawn claude --headless for analysis
-  5. Open PR with proposed CLAUDE.md updates
+~/.claude/projects/*/*.jsonl ──┐
+~/.codex/sessions/**/*.jsonl ──┼── chatprop find <branches>
+                               │     grep for branch names
+                               └── matched transcripts
+                                        │
+                                        ▼
+                               chatprop analyze <branches>
+                                 1. Read matched transcripts
+                                 2. Get PR diff via gh pr diff
+                                 3. Send to claude --print
+                                 4. Output analysis results
+                                        │
+                                        ▼
+                               chatprop propose <branches>
+                                 1. Run analysis
+                                 2. Apply CLAUDE.md changes
+                                 3. Open PR via gh pr create
 ```
 
-### Phase 1: Transcript Collection
+### Transcript Sources
 
-#### Daemon
+- **Claude Code**: `~/.claude/projects/<project-slug>/<session-id>.jsonl` — JSONL with `user`, `assistant`, `progress`
+  (tool calls), `system` message types. Contains `gitBranch` field, full model responses, tool inputs/outputs.
+- **Codex**: `~/.codex/sessions/<year>/<month>/<day>/rollout-<timestamp>-<id>.jsonl` — similar JSONL format with session
+  metadata and tool calls.
 
-Polling daemon that watches transcript directories and uploads completed sessions to S3. Deliberately dumb — no semantic
-parsing, no done-signal detection, no PR correlation.
+### CLI
 
-Core loop (every 30 seconds):
+- `chatprop find <branch1> <branch2> ...` — find matching transcripts
+- `chatprop analyze <branch1> ... [--dry-run]` — analyze transcripts (dry-run shows context without calling Claude)
+- `chatprop propose <branch1> ...` — analyze and open PR with CLAUDE.md updates
 
-1. Scan `~/.claude/projects/*/` and `~/.codex/sessions/` for `.jsonl` files
-2. Compare `(path, mtime, size)` against local manifest (`~/.chatprop/manifest.json`)
-3. If file is new/changed and inactive >60s, upload raw transcript to S3
-4. Write minimal metadata sidecar, update manifest
+### Analysis
 
-Metadata (per transcript):
+The analysis prompt asks Claude to:
 
-```python
-class TranscriptMetadata(BaseModel):
-    session_id: str
-    source: Literal["claude-code", "codex"]
-    started_at: datetime
-    ended_at: datetime
-    transcript_s3_key: str
-    size_bytes: int
-```
+1. Identify "done signal" moments where the agent thought work was complete
+2. Compare the agent's state at each done signal against the final merged diff
+3. Find generalizable patterns (not one-off issues)
+4. Propose specific, minimal CLAUDE.md updates
 
-#### Index
+Comparison is intentionally lossy — force-pushes from `gt sync` make intermediate SHAs unreliable, so we reconstruct
+intent from transcript content (tool calls, file writes) rather than git history.
 
-Separate indexing step scans transcripts in S3, extracts `gitBranch` fields from JSONL content, and builds `index.json`
-mapping branch names to transcript S3 keys. Updated incrementally after each upload. This avoids downloading all
-transcripts during analysis.
-
-#### CLI
-
-- `chatprop daemon` — run polling loop (foreground)
-- `chatprop daemon --install` — install macOS launchd plist
-- `chatprop upload <session-id>` — manual upload
-- `chatprop status` — daemon status and manifest stats
-
-#### Config
-
-`~/.chatprop/config.toml`:
-
-```toml
-[s3]
-bucket = "chatprop-transcripts"
-region = "us-east-1"
-
-[sources.claude-code]
-path = "~/.claude/projects"
-
-[sources.codex]
-path = "~/.codex/sessions"
-
-[daemon]
-poll_interval_seconds = 30
-inactivity_threshold_seconds = 60
-```
-
-#### S3 Key Structure
+### Package Structure
 
 ```
-s3://chatprop-transcripts/
-  transcripts/claude-code/<session-id>.jsonl
-  transcripts/codex/<session-id>.jsonl
-  metadata/<session-id>.json
-  index.json
+chatprop/
+  pyproject.toml
+  src/metta/chatprop/
+    __init__.py
+    analyze.py       # Build context, call claude --print
+    cli.py           # Click CLI
+    config.py        # Source paths
+    scanner.py       # Find and read transcripts
 ```
 
-#### Package Structure
+## Future Work
 
-```
-metta/chatprop/
-  __init__.py
-  daemon.py
-  s3.py
-  indexer.py
-  config.py
-  models.py
-  cli.py
-  launchd.py
-```
-
-### Phase 2: Analysis Pipeline
-
-#### Trigger
-
-GitHub Actions: `on: pull_request: types: [closed]`, filtered to `merged == true`.
-
-#### Steps
-
-1. **Find transcripts**: Read `index.json`, find transcripts referencing the merged branch (from `gitBranch` fields,
-   `git push` calls, `gh pr create` output).
-
-2. **Build timeline**: Parse matched transcripts to identify "done signals" — points where the agent signaled
-   completion:
-   - Tool calls to `gh pr create` / `gt create`
-   - Tool calls to `git push` after a PR exists
-   - Assistant messages indicating completion
-
-3. **Compare against ground truth**: Final merged PR diff (`gh pr diff`) is ground truth. Compare against the agent's
-   file write/edit tool calls around each done signal. Intentionally lossy — force-pushes from `gt sync` make
-   intermediate SHAs unreliable, so we reconstruct intent from transcript content rather than git history.
-
-4. **Claude analysis**: Spawn `claude --headless` with transcripts, PR diff, current CLAUDE.md. Ask it to identify
-   predictable, generalizable lessons and propose specific CLAUDE.md updates.
-
-5. **Open PR**: Branch `chatprop/learnings-<pr-number>` with proposed changes and reasoning in the description.
-
-#### What Analysis Looks For
-
-- Patterns the agent consistently gets wrong that the human corrects
-- Architectural decisions that always get revised
-- Missing CLAUDE.md context that would have prevented a class of correction
-- Workflow patterns (forgetting tests, wrong branch conventions)
+- **S3 sync**: Daemon or hook to upload transcripts to S3 for team-wide analysis
+- **GitHub Actions trigger**: Auto-run analysis on PR merge
+- **Cross-PR aggregation**: Analyze multiple PRs together to find broader patterns
+- **Transcript indexing**: Pre-built index mapping branches to transcript keys for faster lookup
 
 ## Open Questions
 
-1. Should the index be a single `index.json` or sharded per-project/per-month?
-2. What's the right `claude --headless` invocation for the analysis step? Need to verify CLI supports this or whether to
-   use the API directly.
-3. Should analysis aggregate across multiple PRs to find cross-PR patterns, or strictly analyze one PR at a time?
+1. Should analysis aggregate across multiple PRs to find cross-PR patterns, or strictly analyze one PR at a time?
+2. What's the right context window strategy when transcripts are very large (>100k tokens)?
