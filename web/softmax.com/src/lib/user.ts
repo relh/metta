@@ -1,6 +1,7 @@
 import crypto from "crypto";
 
 import { prisma } from "@/lib/db/prisma";
+import { isDevMode } from "@/observatory/config";
 
 export type UserInfo = {
   id: string;
@@ -40,7 +41,7 @@ export async function loadUserByMachineToken(
     data: { lastUsedAt: new Date() },
   });
 
-  const isSoftmaxTeamMember = !!(await prisma.gitHubTeamMember.findFirst({
+  let isSoftmaxTeamMember = !!(await prisma.gitHubTeamMember.findFirst({
     where: {
       userId: {
         in: machineToken.user.accounts
@@ -49,6 +50,9 @@ export async function loadUserByMachineToken(
       },
     },
   }));
+  if (isDevMode()) {
+    isSoftmaxTeamMember = true;
+  }
 
   const discordId =
     machineToken.user.accounts.find((a) => a.provider === "discord")
@@ -75,7 +79,7 @@ export async function loadUserById(id: string): Promise<UserInfo | null> {
     return null;
   }
 
-  const isSoftmaxTeamMember = !!(await prisma.gitHubTeamMember.findFirst({
+  let isSoftmaxTeamMember = !!(await prisma.gitHubTeamMember.findFirst({
     where: {
       userId: {
         in: dbUser.accounts
@@ -84,6 +88,9 @@ export async function loadUserById(id: string): Promise<UserInfo | null> {
       },
     },
   }));
+  if (isDevMode()) {
+    isSoftmaxTeamMember = true;
+  }
 
   const discordId =
     dbUser.accounts.find((a) => a.provider === "discord")?.providerAccountId ??
@@ -137,9 +144,13 @@ export async function loadUsersByIds(
       .filter((a) => a.provider === "github")
       .map((a) => a.providerAccountId);
 
-    const isSoftmaxTeamMember = gitHubAccountIds.some((id) =>
+    let isSoftmaxTeamMember = gitHubAccountIds.some((id) =>
       teamMemberIds.has(id),
     );
+
+    if (isDevMode()) {
+      isSoftmaxTeamMember = true;
+    }
 
     const discordId =
       dbUser.accounts.find((a) => a.provider === "discord")

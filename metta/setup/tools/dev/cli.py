@@ -397,6 +397,7 @@ def softmax_com(
 ):
     env = base_env()
     env["NEXTAUTH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
+    env["SITE_URL"] = f"http://{LOCALHOST}:3002"
     env["NEXTAUTH_SECRET"] = "dev-nextauth-secret"
     env["DATABASE_URL"] = get_db_uri("softmax-com")
 

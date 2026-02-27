@@ -3,7 +3,10 @@ import { NextRequest } from "next/server";
 import { getApiHeadersFromSession } from "@/observatory/auth/server";
 
 async function proxy(req: NextRequest, method: string, path: string) {
-  const headers = await getApiHeadersFromSession();
+  const headers: Record<string, string> = {
+    ...(await getApiHeadersFromSession()),
+    ...Object.fromEntries(req.headers.entries()),
+  };
 
   const url = new URL(`${process.env.OBSERVATORY_API_URL}/${path}`);
   req.nextUrl.searchParams.forEach((value, key) => {
