@@ -1,116 +1,150 @@
-# Chatprop: Transcript-Driven CLAUDE.md Improvement
+# Chatprop: Unified Transcript Backprop Framework (Local-First)
 
-> **Status:** Draft **Author:** Nishad **Created:** 2026-02-26
+> **Status:** Draft  
+> **Authors:** Nishad + Richard  
+> **Updated:** 2026-02-27
 
 ## Summary
 
-A CLI tool that searches local Claude Code and Codex transcripts for sessions related to specific branches/PRs, analyzes
-them against the final PR diff to find "fork in the road" moments, and opens a PR with proposed CLAUDE.md updates. Named
-after backpropagation: compare what landed against what was first attempted, adjust the "model" (CLAUDE.md, skills)
-accordingly.
+Chatprop is one framework under `metta.chatprop` with two integrated tracks:
+
+1. **Branch analysis/proposal** (`find/analyze/propose`) for CLAUDE.md and skill updates.
+2. **Local collection + GUI wrapper** (`daemon/upload/status/serve`) for transcript archive, index, and exploration.
+
+This keeps Nishad's existing command model as the primary surface and adds local backend/frontend capabilities as an
+augmentation, not a separate product.
 
 ## Problem
 
-When working with coding agents to build and ship PRs, there are predictable points where a different decision by the
-human or agent would have led to a better outcome. These patterns are visible in hindsight but currently no system
-captures or learns from them. Learnings stay trapped in individual sessions and human memory.
+Coding-agent sessions contain repeated decision patterns, but teams lack a tight loop that:
 
-## Solution
+1. captures local transcript evidence,
+2. structures that evidence into workflow/skill paths, and
+3. feeds lessons back into CLAUDE.md and skill docs.
 
-A local CLI tool that:
+## Skill Ontology and Placement Policy
 
-1. Greps local transcript files for branch/PR names to find relevant sessions
-2. Gets the final PR diff via `gh pr diff`
-3. Sends transcripts + diffs + current CLAUDE.md to Claude for analysis
-4. Opens a PR with proposed CLAUDE.md updates
+Chatprop treats prompts and skills with one model:
 
-No cloud infrastructure needed — everything runs locally against files already on disk.
+1. Every prompt is a manually instantiated skill (explicit or implicit).
+2. `CLAUDE.md` and `AGENTS.md` are ALWAYS-true facets of skill behavior.
+3. Skill files encode scoped variants, not universal policy.
+
+Placement rules for proposed updates:
+
+- If guidance should apply to all prompts/skills, write it to both `CLAUDE.md` and `AGENTS.md`.
+- If guidance is specific to one skill, write it to that skill's `SKILL.md`.
+- If many prompts are semantically the same request, refactor them into one reusable skill on topic `X`.
+- If prompts consistently compose two specific topics, refactor into a combined skill on topics `X` and `Y`.
+
+Chatprop analysis/proposal should classify each recommendation into one of these buckets before generating edits.
 
 ## Goals
 
-- [ ] Find transcripts matching branch names across Claude Code and Codex
-- [ ] Analyze transcripts against final PR diffs to find correctable patterns
-- [ ] Propose CLAUDE.md updates as a PR
+- [ ] Keep a single canonical `chatprop` CLI and package (`metta.chatprop`)
+- [ ] Preserve Nishad's `find/analyze/propose` workflow
+- [ ] Add local archive/index backend and GUI wrapper inside the same framework
+- [ ] Keep v1 local-first with no mandatory cloud dependencies
+- [ ] Make branch analysis and local archive/index operate on a shared config model
+- [ ] Route recommendations to `CLAUDE.md`, `AGENTS.md`, or `SKILL.md` by policy scope
+- [ ] Convert repeated semantic prompt patterns into named reusable skills
 
 ## Non-Goals
 
-- S3 upload or cloud storage (future phase)
-- Real-time transcript analysis during sessions
-- Perfect reconstruction of intermediate git states (lossy comparison is fine)
-- Automated triggering on PR merge (future phase — run manually for now)
+- A second standalone chatprop product/package in the repo
+- Mandatory cloud or S3 sync for v1
+- Fully automatic merge-triggered analysis in v1
 
-## Design
+## Architecture
 
-### Architecture
+```text
+metta.chatprop (single framework)
 
-```
-LOCAL MACHINE
+  Analysis track
+    find/analyze/propose
+      - locate branch transcripts
+      - compare against final PR diff
+      - classify scope (global vs skill-specific)
+      - propose updates to CLAUDE.md + AGENTS.md (global) or SKILL.md (scoped)
 
-~/.claude/projects/*/*.jsonl ──┐
-~/.codex/sessions/**/*.jsonl ──┼── chatprop find <branches>
-                               │     grep for branch names
-                               └── matched transcripts
-                                        │
-                                        ▼
-                               chatprop analyze <branches>
-                                 1. Read matched transcripts
-                                 2. Get PR diff via gh pr diff
-                                 3. Send to claude --print
-                                 4. Output analysis results
-                                        │
-                                        ▼
-                               chatprop propose <branches>
-                                 1. Run analysis
-                                 2. Apply CLAUDE.md changes
-                                 3. Open PR via gh pr create
+  Local data + UX track
+    daemon/upload/status
+      - archive raw transcripts under ~/.chatprop
+      - maintain manifest + metadata + branch index
+    serve
+      - render local workflow frontend
+      - provide GUI wrappers for branch analysis (`find`, context preview, `analyze`)
 ```
 
-### Transcript Sources
+Local storage layout:
 
-- **Claude Code**: `~/.claude/projects/<project-slug>/<session-id>.jsonl` — JSONL with `user`, `assistant`, `progress`
-  (tool calls), `system` message types. Contains `gitBranch` field, full model responses, tool inputs/outputs.
-- **Codex**: `~/.codex/sessions/<year>/<month>/<day>/rollout-<timestamp>-<id>.jsonl` — similar JSONL format with session
-  metadata and tool calls.
-
-### CLI
-
-- `chatprop find <branch1> <branch2> ...` — find matching transcripts
-- `chatprop analyze <branch1> ... [--dry-run]` — analyze transcripts (dry-run shows context without calling Claude)
-- `chatprop propose <branch1> ...` — analyze and open PR with CLAUDE.md updates
-
-### Analysis
-
-The analysis prompt asks Claude to:
-
-1. Identify "done signal" moments where the agent thought work was complete
-2. Compare the agent's state at each done signal against the final merged diff
-3. Find generalizable patterns (not one-off issues)
-4. Propose specific, minimal CLAUDE.md updates
-
-Comparison is intentionally lossy — force-pushes from `gt sync` make intermediate SHAs unreliable, so we reconstruct
-intent from transcript content (tool calls, file writes) rather than git history.
-
-### Package Structure
-
+```text
+~/.chatprop/
+  config.toml
+  manifest.json
+  archive/
+    transcripts/claude-code/<session-id>-<mtime>.jsonl
+    transcripts/codex/<session-id>-<mtime>.jsonl
+    metadata/<session-id>.json
+    index.json
 ```
-chatprop/
-  pyproject.toml
-  src/metta/chatprop/
-    __init__.py
-    analyze.py       # Build context, call claude --print
-    cli.py           # Click CLI
-    config.py        # Source paths
-    scanner.py       # Find and read transcripts
+
+## CLI Surface
+
+Primary analysis commands (Nishad framework):
+
+- `chatprop find <branch...>`
+- `chatprop analyze <branch...> [--dry-run]`
+- `chatprop propose <branch...>`
+
+Augmenting local data/UI commands:
+
+- `chatprop daemon [--once] [--install]`
+- `chatprop upload <session-id>`
+- `chatprop status`
+- `chatprop serve`
+
+## Package Structure
+
+```text
+chatprop/src/metta/chatprop/
+  cli.py
+  config.py
+  scanner.py
+  analyze.py
+  local/
+    daemon.py
+    indexer.py
+    models.py
+    launchd.py
+    backend/
+    frontend/
+```
+
+`local/` modules are implementation details that augment the core `metta.chatprop` framework. The public command surface
+remains one `chatprop` CLI.
+
+## Config
+
+`~/.chatprop/config.toml`:
+
+```toml
+[sources.claude-code]
+path = "~/.claude/projects"
+
+[sources.codex]
+path = "~/.codex/sessions"
+
+[daemon]
+poll_interval_seconds = 30
+inactivity_threshold_seconds = 60
+
+[state]
+dir = "~/.chatprop"
 ```
 
 ## Future Work
 
-- **S3 sync**: Daemon or hook to upload transcripts to S3 for team-wide analysis
-- **GitHub Actions trigger**: Auto-run analysis on PR merge
-- **Cross-PR aggregation**: Analyze multiple PRs together to find broader patterns
-- **Transcript indexing**: Pre-built index mapping branches to transcript keys for faster lookup
-
-## Open Questions
-
-1. Should analysis aggregate across multiple PRs to find cross-PR patterns, or strictly analyze one PR at a time?
-2. What's the right context window strategy when transcripts are very large (>100k tokens)?
+- Machine-readable proposal output for ranking/triage
+- Cross-PR aggregation and pattern confidence tracking
+- Optional team sync/cloud export as a non-default mode

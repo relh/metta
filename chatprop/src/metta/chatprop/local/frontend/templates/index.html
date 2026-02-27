@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>chatprop local landscape</title>
+    <style>
+      :root {
+        --bg0: #08111a;
+        --bg1: #0f1d2d;
+        --panel: rgba(7, 15, 24, 0.88);
+        --panel-soft: rgba(8, 19, 30, 0.7);
+        --line: #294159;
+        --line-soft: #1d3044;
+        --text: #e3eef8;
+        --muted: #8fa5bc;
+        --accent: #31c48d;
+        --warn: #f59e0b;
+        --error: #ef4444;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(1200px 800px at 10% -10%, #133252, transparent 60%),
+          radial-gradient(1000px 700px at 100% 0%, #1e3a5f, transparent 60%),
+          linear-gradient(180deg, var(--bg1), var(--bg0));
+        color: var(--text);
+        font-family: "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(1600px, 96vw);
+        margin: 20px auto 30px;
+      }
+      .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--panel);
+        backdrop-filter: blur(6px);
+      }
+      .hero-main {
+        display: block;
+      }
+      .hero-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .title {
+        margin: 0;
+        font-size: 30px;
+        letter-spacing: 0.02em;
+      }
+      .subtitle {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .controls {
+        display: flex;
+        gap: 6px;
+        flex-wrap: nowrap;
+        margin-left: auto;
+      }
+      .cards {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 6px;
+        margin-top: 0;
+        min-width: 0;
+        overflow-x: auto;
+      }
+      .card {
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        padding: 5px 10px;
+        background: var(--panel-soft);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .card-label {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .card-value {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+      #generatedAt {
+        font-size: 12px;
+      }
+      .status {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .status.error {
+        color: #fda4af;
+      }
+      .progress-wrap {
+        margin-top: 8px;
+      }
+      .progress-wrap.hidden {
+        display: none;
+      }
+      .progress-track {
+        width: 100%;
+        height: 9px;
+        border-radius: 999px;
+        background: #102235;
+        border: 1px solid #1f3950;
+        overflow: hidden;
+      }
+      .progress-bar {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #1ea97a, #34d399);
+        transition: width 0.25s ease-out;
+      }
+      .progress-text {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      button,
+      input {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: rgba(7, 16, 26, 0.9);
+        color: var(--text);
+        padding: 7px 9px;
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button.primary {
+        background: linear-gradient(90deg, #1d6d52, #1f7556);
+        border-color: #2a8966;
+      }
+      button.ghost {
+        background: rgba(10, 24, 37, 0.75);
+      }
+      .split {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1.2fr;
+        gap: 12px;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--panel);
+        padding: 12px;
+        min-height: 0;
+      }
+      .panel h2 {
+        margin: 0;
+        font-size: 17px;
+      }
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      .table-wrap {
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        overflow: auto;
+        max-height: 420px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 640px;
+        font-size: 11px;
+      }
+      .branch-table {
+        min-width: 760px;
+        table-layout: fixed;
+      }
+      .branch-table th:nth-child(1),
+      .branch-table td:nth-child(1) {
+        width: 86px;
+      }
+      .branch-table th:nth-child(2),
+      .branch-table td:nth-child(2) {
+        width: 126px;
+      }
+      .branch-table th:nth-child(3),
+      .branch-table td:nth-child(3) {
+        width: 64px;
+      }
+      .branch-table th:nth-child(4),
+      .branch-table td:nth-child(4) {
+        width: 78px;
+      }
+      .branch-table th:nth-child(5),
+      .branch-table td:nth-child(5) {
+        width: 88px;
+      }
+      .branch-table th:nth-child(6),
+      .branch-table td:nth-child(6) {
+        width: 100px;
+      }
+      .branch-table th:nth-child(7),
+      .branch-table td:nth-child(7) {
+        width: 145px;
+      }
+      .branch-table th:nth-child(8),
+      .branch-table td:nth-child(8) {
+        width: 82px;
+      }
+      .session-table {
+        min-width: 760px;
+        table-layout: fixed;
+      }
+      .session-table th:nth-child(1),
+      .session-table td:nth-child(1) {
+        width: 184px;
+      }
+      .session-table th:nth-child(2),
+      .session-table td:nth-child(2) {
+        width: 70px;
+      }
+      .session-table th:nth-child(3),
+      .session-table td:nth-child(3),
+      .session-table th:nth-child(4),
+      .session-table td:nth-child(4) {
+        width: 102px;
+      }
+      .session-table th:nth-child(5),
+      .session-table td:nth-child(5) {
+        width: 66px;
+      }
+      th,
+      td {
+        border-bottom: 1px solid #1a2a3b;
+        padding: 6px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .truncate {
+        display: inline-block;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        vertical-align: top;
+      }
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #0b1725;
+        color: #b7d0e8;
+        font-weight: 600;
+      }
+      .mono {
+        font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+      }
+      .branch-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .branch-sequence {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .tag {
+        border: 1px solid #2d485f;
+        border-radius: 999px;
+        padding: 2px 6px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .badge {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .badge-merged {
+        background: rgba(49, 196, 141, 0.18);
+        color: #86efac;
+      }
+      .badge-open {
+        background: rgba(14, 165, 233, 0.2);
+        color: #7dd3fc;
+      }
+      .badge-closed {
+        background: rgba(245, 158, 11, 0.18);
+        color: #fcd34d;
+      }
+      .badge-none {
+        background: rgba(148, 163, 184, 0.2);
+        color: #cbd5e1;
+      }
+      .action-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .analysis-input {
+        width: 100%;
+        margin-bottom: 8px;
+      }
+      pre {
+        margin: 0;
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: #07121e;
+        min-height: 220px;
+        max-height: 440px;
+        overflow: auto;
+        padding: 10px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+      }
+      a {
+        color: #8bd6ff;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      @media (max-width: 1100px) {
+        .hero-meta {
+          flex-wrap: wrap;
+        }
+        .controls {
+          margin-left: 0;
+        }
+        .split {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="hero-main">
+          <h1 class="title">chatprop landscape</h1>
+          <p class="subtitle">
+            Branch analysis tools + local session/branch catalog across <span class="mono">~/.chatprop</span> and source logs.
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div class="cards">
+            <article class="card">
+              <span class="card-label">Sessions</span>
+              <span class="card-value" id="sessionsCount">0</span>
+            </article>
+            <article class="card">
+              <span class="card-label">Branches</span>
+              <span class="card-value" id="branchesCount">0</span>
+            </article>
+            <article class="card">
+              <span class="card-label">Merged PRs</span>
+              <span class="card-value" id="mergedCount">0</span>
+            </article>
+            <article class="card">
+              <span class="card-label">Generated</span>
+              <span class="card-value" id="generatedAt">-</span>
+            </article>
+          </div>
+          <div class="controls">
+            <button type="button" id="reloadCatalogBtn" class="ghost">Reload</button>
+            <button type="button" id="refreshCatalogBtn" class="primary">Refresh Branch Outcomes</button>
+          </div>
+        </div>
+      </section>
+      <div class="status" id="catalogStatus">Loading catalog...</div>
+      <div id="catalogProgressWrap" class="progress-wrap hidden">
+        <div class="progress-track"><div id="catalogProgressBar" class="progress-bar"></div></div>
+        <div id="catalogProgressText" class="progress-text">Preparing catalog...</div>
+      </div>
+
+      <section class="split">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Branch Outcomes</h2>
+            <input id="branchFilter" placeholder="Filter branches / PR title" />
+          </div>
+          <div class="table-wrap">
+            <table class="branch-table">
+              <thead>
+                <tr>
+                  <th>Repo</th>
+                  <th>Branch</th>
+                  <th>Sessions</th>
+                  <th>PR</th>
+                  <th>Status</th>
+                  <th>Merged / Closed</th>
+                  <th>Commits (first/last)</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="branchTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Sessions</h2>
+            <input id="sessionFilter" placeholder="Filter session, branch, source" />
+          </div>
+          <div class="table-wrap">
+            <table class="session-table">
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Source</th>
+                  <th>Started</th>
+                  <th>Ended</th>
+                  <th>Size</th>
+                  <th>Branches</th>
+                </tr>
+              </thead>
+              <tbody id="sessionTableBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel" style="margin-top: 12px">
+        <h2 style="margin-bottom: 10px">Branch Analysis Workflow</h2>
+        <input
+          class="analysis-input"
+          id="analysisBranches"
+          placeholder="Branches (comma separated), e.g. richard-skillpropport"
+        />
+        <div class="action-row">
+          <button id="analysisFindBtn" type="button" class="ghost">1) Find Transcripts</button>
+          <button id="analysisContextBtn" type="button" class="ghost">2) Preview Context</button>
+          <button id="analysisRunBtn" type="button" class="primary">3) Run Analysis</button>
+        </div>
+        <pre id="analysisOutput">Select a branch from the table or type one above.</pre>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

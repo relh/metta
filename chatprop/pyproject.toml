@@ -18,7 +18,12 @@ namespaces = true
 include = ["metta.chatprop", "metta.chatprop.*"]
 
 [tool.setuptools.package-data]
-"metta.chatprop" = ["py.typed"]
+"metta.chatprop" = [
+  "py.typed",
+  "local/py.typed",
+  "local/frontend/templates/*",
+  "local/frontend/static/*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
