@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import devops.datadog.dashboards as dashboards
 import devops.datadog.monitors as monitors
+from devops.stable.stable_check_groups import StableCheckGroup
 from devops.stable.stable_check_lifecycle import StableCheckLifecycle
 from devops.stable.stable_check_metrics import (
     STABLE_CHECK_ACCEPTANCE_CRITERION_STATUS_METRIC,
@@ -79,10 +80,17 @@ def test_stable_monitors_generated_per_job(monkeypatch) -> None:
             SimpleNamespace(
                 func=SimpleNamespace(__module__="recipes.prod.job_a", __name__="check"),
                 lifecycle=StableCheckLifecycle.ACTIVE,
+                check_group=StableCheckGroup.LIVE_TESTS_LIGHT,
             ),
             SimpleNamespace(
                 func=SimpleNamespace(__module__="recipes.prod.job_b", __name__="check"),
                 lifecycle=StableCheckLifecycle.QUARANTINED,
+                check_group=StableCheckGroup.LIVE_TESTS_LIGHT,
+            ),
+            SimpleNamespace(
+                func=SimpleNamespace(__module__="recipes.prod.job_c", __name__="check"),
+                lifecycle=StableCheckLifecycle.ACTIVE,
+                check_group=StableCheckGroup.INTERNAL_TRAINING_HEAVY,
             ),
         ],
     )
@@ -93,6 +101,8 @@ def test_stable_monitors_generated_per_job(monkeypatch) -> None:
     assert "[Stable] prod_job_a_check latest failed" in names
     assert "[Stable] prod_job_b_check stale (28h)" not in names
     assert "[Stable] prod_job_b_check latest failed" not in names
+    assert "[Stable] prod_job_c_check stale (28h)" not in names
+    assert "[Stable] prod_job_c_check latest failed" not in names
 
     stable_configs = [config for config in configs if config["name"].startswith("[Stable] ")]
     assert len(stable_configs) == 2

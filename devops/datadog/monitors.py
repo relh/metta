@@ -6,6 +6,7 @@ To preview:       uv run python -m devops.datadog.cli monitors sync --dry-run
 
 from __future__ import annotations
 
+from devops.stable.stable_check_groups import StableCheckGroup
 from devops.stable.stable_check_lifecycle import StableCheckLifecycle
 from devops.stable.stable_check_metrics import (
     STABLE_CHECK_COMPLETED_AT_METRIC,
@@ -693,10 +694,20 @@ def _stable_runner_failed_monitor(job_tag: str) -> dict:
     }
 
 
+def _should_create_stable_monitors(check: object) -> bool:
+    lifecycle = getattr(check, "lifecycle", None)
+    if lifecycle is not StableCheckLifecycle.ACTIVE:
+        return False
+    check_group = getattr(check, "check_group", None)
+    if check_group is StableCheckGroup.INTERNAL_TRAINING_HEAVY:
+        return False
+    return True
+
+
 def get_all_monitor_configs() -> list[dict]:
     configs = [m() for m in ALL_MONITORS]
     for check in discover_stable_checks():
-        if check.lifecycle is not StableCheckLifecycle.ACTIVE:
+        if not _should_create_stable_monitors(check):
             continue
         check_path = f"{check.func.__module__}.{check.func.__name__}"
         job_tag = job_path_to_job_tag(check_path)
