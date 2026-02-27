@@ -726,7 +726,7 @@ class CoreTrainingLoop:
                         slice_advantage_cfg.vtrace_c_clip,
                     )
                     advantages_full[row_indices] = advantages
-            else:  # av is this redundant with the advantages_full zeros above?
+            else:
                 # Value-free setups still need a tensor shaped like the buffer for sampling.
                 advantages_full = torch.zeros(
                     self.experience.buffer.batch_size,
@@ -818,27 +818,23 @@ class CoreTrainingLoop:
                         if mb_idx == 0:
                             mb_data["advantages_full"] = NonTensorData(advantages_full)
 
-                        combined_logratio = None
-                        for loss_key in runtime_slice.cfg.losses:
-                            loss_obj = self.losses.get(loss_key)
-                            if not isinstance(loss_obj, PPOActor):
-                                continue
-                            log_prob_key = loss_obj.cfg.log_prob_key
-                            if log_prob_key not in mb_view.keys() or log_prob_key not in td_view.keys():
-                                continue
-                            old_logprob = mb_view[log_prob_key]
-                            new_logprob = td_view[log_prob_key].reshape(old_logprob.shape)
-                            logratio = new_logprob - old_logprob
-                            if combined_logratio is None:
-                                combined_logratio = logratio
-                            else:
-                                combined_logratio = combined_logratio + logratio
-                        if combined_logratio is None and (
-                            "act_log_prob" in mb_view.keys() and "act_log_prob" in td_view.keys()
-                        ):
-                            old_logprob = mb_view["act_log_prob"]
-                            new_logprob = td_view["act_log_prob"].reshape(old_logprob.shape)
-                            combined_logratio = new_logprob - old_logprob
+                        ppo_log_prob_keys = tuple(
+                            self.losses[loss_key].cfg.log_prob_key
+                            for loss_key in runtime_slice.cfg.losses
+                            if isinstance(self.losses[loss_key], PPOActor)
+                        )
+                        for log_prob_keys in (ppo_log_prob_keys, ("act_log_prob",)):
+                            combined_logratio = None
+                            for log_prob_key in log_prob_keys:
+                                if log_prob_key not in mb_view or log_prob_key not in td_view:
+                                    continue
+                                old_logprob = mb_view[log_prob_key]
+                                logratio = td_view[log_prob_key].reshape(old_logprob.shape) - old_logprob
+                                combined_logratio = (
+                                    logratio if combined_logratio is None else combined_logratio + logratio
+                                )
+                            if combined_logratio is not None:
+                                break
                         if combined_logratio is not None:
                             mb_data["importance_sampling_ratio"] = torch.clamp(combined_logratio, -10, 10).exp()
 
