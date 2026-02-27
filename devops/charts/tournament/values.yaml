@@ -1,7 +1,7 @@
 pools:
   - name: jobs-warm
     workload: jobs
-    replicas: 2
+    replicas: 10
     expireAfter: 2h
     requirements:
       - key: karpenter.sh/capacity-type
@@ -23,7 +23,7 @@ pools:
 
       - key: eks.amazonaws.com/instance-cpu
         operator: In
-        values: ["4", "8", "12", "16"]
+        values: ["8", "12", "16"]
 
       - key: eks.amazonaws.com/instance-memory
         operator: Gt
