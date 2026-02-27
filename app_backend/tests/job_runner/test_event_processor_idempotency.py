@@ -217,17 +217,17 @@ def test_event_processor_idempotency(event_processor_db, mock_k8s_clients, mock_
                 "episode_recorded": mock_record.call_count - initial_episode_count,
             }
 
-    # Verify idempotency: states should be identical
-    assert first_state == second_state, (
-        f"Event reprocessing produced different state:\nFirst:  {first_state}\nSecond: {second_state}"
-    )
+    # Verify status and error are identical on replay
+    assert first_state["status"] == second_state["status"]
+    assert first_state["error"] == second_state["error"]
 
     # Verify job ended up in correct final state
     assert first_state["status"] == JobStatus.completed
     assert first_state["error"] is None
 
-    # Verify episode was recorded only once (deduplication working)
+    # Verify episode was recorded exactly once (deduplication working)
     # On second pass, the job is already completed, so episode recording should be skipped
+    assert first_state["episode_recorded"] == 1, "Episode should be recorded on first pass"
     assert second_state["episode_recorded"] == 0, "Episode should not be recorded twice"
 
 

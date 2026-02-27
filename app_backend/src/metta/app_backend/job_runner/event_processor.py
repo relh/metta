@@ -42,6 +42,7 @@ from metta.app_backend.models.k8s_events import K8sEvent
 from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
+from mettagrid.base_config import LENIENT_CONTEXT
 from mettagrid.runner.types import PureSingleEpisodeResult, RunnerError, RuntimeInfo, SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
@@ -628,7 +629,7 @@ def _handle_pod_succeeded(
             running_at=job_request.running_at,
         )
 
-        job = SingleEpisodeJob.model_validate(job_request.job)
+        job = SingleEpisodeJob.model_validate(job_request.job, context=LENIENT_CONTEXT)
         replay_uri = copy_replay_to_public(ctx.job_id)
         record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)  # pyright: ignore[reportArgumentType]
         _update_job_status(stats_client, ctx.job_id, JobStatus.completed)
