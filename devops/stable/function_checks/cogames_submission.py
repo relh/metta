@@ -185,6 +185,11 @@ def _wait_for_submission_status(*, ref_payload: dict[str, str], expected_status:
                 # matches while others are still pending/failed.
                 if completed > 0:
                     return
+                if failed > 0 and pending == 0:
+                    raise AssertionError(
+                        f"Submission `{policy_name}` reached terminal non-success state "
+                        f"(completed={completed}, failed={failed}, pending={pending})."
+                    )
             elif expected_status == "failed":
                 if failed > 0 and completed == 0 and pending == 0:
                     return
