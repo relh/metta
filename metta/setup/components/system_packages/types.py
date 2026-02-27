@@ -16,7 +16,7 @@ class BrewPackageConfig(BaseModel):
         if self.version:
             name = f"{name}@{self.version}"
         if self.tap:
-            name = f"{self.tap}/{name}"
+            return f"{self.tap}/{name}"
         return name
 
     def __repr__(self) -> str:

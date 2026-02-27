@@ -32,8 +32,7 @@ def td_lambda_reverse_scan_cuda(delta: Tensor, mask_next: Tensor, gamma_lambda: 
     start_state = torch.zeros((batch_size,), device=delta.device, dtype=delta.dtype)
     x_rev = delta.flip(1).transpose(0, 1)
     discounts_rev = discounts.flip(1).transpose(0, 1)
-    out_rev = discounted_sum_cuda(start_state, x_rev, discounts_rev)
-    return out_rev.transpose(0, 1).flip(1)
+    return discounted_sum_cuda(start_state, x_rev, discounts_rev).transpose(0, 1).flip(1)
 
 
 def td_lambda_reverse_scan(delta: Tensor, mask_next: Tensor, gamma_lambda: float) -> Tensor:

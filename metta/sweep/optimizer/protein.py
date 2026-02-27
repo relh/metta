@@ -127,8 +127,7 @@ class ProteinOptimizer:
             parameters=numeric_params,
             settings=self.config.settings,
         )
-        protein_dict = numeric_config.to_protein_dict()
-        return protein_dict
+        return numeric_config.to_protein_dict()
 
     def _encode_categoricals(self, suggestion: dict) -> dict:
         """Map categorical values to indices using learned maps (flat keys)."""

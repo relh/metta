@@ -22,8 +22,7 @@ class FilterRepoSetup(SetupModule):
     def check_installed(self) -> bool:
         """Check if git-filter-repo is installed."""
         try:
-            result = subprocess.run(["git", "filter-repo", "--version"], capture_output=True, text=True)
-            return result.returncode == 0
+            return subprocess.run(["git", "filter-repo", "--version"], capture_output=True, text=True).returncode == 0
         except Exception:
             return False
 

@@ -187,8 +187,7 @@ class LSPClient:
                     "params": {"textDocument": {"uri": uri}},
                 },
             )
-            resp = self.recv_id(req_id)
-            return resp.get("result")
+            return self.recv_id(req_id).get("result")
 
     def get_hover(self, file_path: pathlib.Path, line: int, column: int):
         with self.with_file(file_path) as uri:
@@ -201,8 +200,7 @@ class LSPClient:
                     "params": {"textDocument": {"uri": uri}, "position": {"line": line, "character": column}},
                 },
             )
-            resp = self.recv_id(req_id)
-            return resp.get("result")
+            return self.recv_id(req_id).get("result")
 
     def get_hover_bulk(self, file_path: pathlib.Path, positions: list[tuple[int, int]]):
         with self.with_file(file_path) as uri:

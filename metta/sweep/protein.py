@@ -48,7 +48,7 @@ class Linear(Space):
         zero_one = (value + 1) / 2
         value = zero_one * (self.max - self.min) + self.min
         if self.is_integer:
-            value = round(value)
+            return round(value)
         return value
 
 
@@ -96,7 +96,7 @@ class Log(Space):
         )
         value = self.base**log_spaced
         if self.is_integer:
-            value = round(value)
+            return round(value)
         return value
 
 
@@ -301,8 +301,7 @@ class Protein:
             Acquisition scores"""
         target = (1 + self.expansion_rate) * np.random.rand()
         weight = np.maximum(1 - abs(target - gp_log_c_norm), 0.0)
-        suggestion_scores = self.hyperparameters.optimize_direction * max_c_mask * (gp_y_norm * weight)
-        return suggestion_scores
+        return self.hyperparameters.optimize_direction * max_c_mask * (gp_y_norm * weight)
 
     def suggest(self, n_suggestions=1, fill=None):
         info = {}

@@ -110,8 +110,7 @@ class TerrainFromNumpy(MapBuilder[TerrainFromNumpyConfig], ABC):
         valid_mask[:, -1] = False
 
         # Get coordinates of valid positions
-        valid_positions = list(zip(*np.where(valid_mask), strict=False))
-        return valid_positions
+        return list(zip(*np.where(valid_mask), strict=False))
 
     def clean_grid(self, grid: MapGrid):
         grid[grid == "agent.agent"] = "empty"
@@ -192,8 +191,7 @@ class NavigationFromNumpy(MapBuilder[NavigationFromNumpyConfig]):
         valid_mask[:, -1] = False
 
         # Get coordinates of valid positions
-        valid_positions = list(zip(*np.where(valid_mask), strict=False))
-        return valid_positions
+        return list(zip(*np.where(valid_mask), strict=False))
 
     def clean_grid(self, grid: MapGrid):
         """Clean grid - copied from TerrainFromNumpy."""

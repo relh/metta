@@ -67,8 +67,7 @@ def parse_game_version_args(argv: list[str]) -> tuple[str | None, list[str]]:
 
 
 def strip_game_version_args(argv: list[str]) -> list[str]:
-    _, filtered = parse_game_version_args(argv)
-    return filtered
+    return parse_game_version_args(argv)[1]
 
 
 def resolve_full_commit_hash(repo_root: Path | str, commit: str) -> str:
@@ -135,5 +134,4 @@ def run_in_game_version(version: str, argv: list[str], command: list[str]) -> in
     env["METTA_GAME_VERSION_ACTIVE"] = "1"
     env["METTA_GAME_VERSION_NAME"] = version
     env["METTA_GAME_VERSION_COMMIT"] = commit
-    result = subprocess.run([*command, *argv], cwd=str(worktree_path), env=env)
-    return result.returncode
+    return subprocess.run([*command, *argv], cwd=str(worktree_path), env=env).returncode

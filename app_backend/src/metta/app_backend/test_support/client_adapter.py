@@ -47,9 +47,7 @@ class TestClientAdapter:
             headers.update(get_user_headers(self.user))
 
         # Make the sync request
-        response = self.test_client.request(method, url, headers=headers, **kwargs)
-
-        return response
+        return self.test_client.request(method, url, headers=headers, **kwargs)
 
     def post(self, url: str, **kwargs) -> httpx.Response:
         """Make a POST request using the TestClient synchronously."""

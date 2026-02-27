@@ -37,8 +37,7 @@ def _load_wrapper_types() -> Tuple[type, type]:
                 "or disable Mamba-based recipes."
             ) from exc
         raise
-    _WRAPPER_TYPES = (wrapper_config, wrapper_model)
-    return _WRAPPER_TYPES
+    return wrapper_config, wrapper_model
 
 
 @dataclass

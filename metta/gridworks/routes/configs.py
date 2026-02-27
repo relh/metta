@@ -108,7 +108,6 @@ def make_configs_router() -> APIRouter:
         else:
             map_builder_config = config_to_map_builder(cfg.maker())
 
-        storable_map = StorableMap.from_cfg(map_builder_config)
-        return storable_map.to_dict()
+        return StorableMap.from_cfg(map_builder_config).to_dict()
 
     return router

@@ -58,8 +58,7 @@ async def create_sweep(name: str, project: str, entity: str, wandb_sweep_id: str
 @with_db
 async def get_sweep_by_name(name: str) -> Sweep | None:
     session = get_db()
-    result = await session.execute(select(Sweep).filter_by(name=name))
-    return result.scalar_one_or_none()
+    return (await session.execute(select(Sweep).filter_by(name=name))).scalar_one_or_none()
 
 
 @with_db

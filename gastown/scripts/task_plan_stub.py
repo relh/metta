@@ -15,8 +15,7 @@ DEFAULT_OUTPUT_DIR = Path("gastown/generated/plans")
 
 
 def _slugify(value: str) -> str:
-    slug = re.sub(r"[^a-zA-Z0-9]+", "-", value.lower()).strip("-")
-    return slug or "task"
+    return re.sub(r"[^a-zA-Z0-9]+", "-", value.lower()).strip("-") or "task"
 
 
 def _fetch_task(task_gid: str, token: str) -> dict[str, Any]:

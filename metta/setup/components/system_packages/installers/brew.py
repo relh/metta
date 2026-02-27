@@ -11,8 +11,7 @@ class BrewInstaller(PackageInstaller[BrewPackageConfig]):
         return "brew"
 
     def is_available(self) -> bool:
-        result = subprocess.run(["which", "brew"], check=False, capture_output=True)
-        return result.returncode == 0
+        return subprocess.run(["which", "brew"], check=False, capture_output=True).returncode == 0
 
     def _get_list_cmd(self, cmd: list[str]) -> list[str]:
         return subprocess.run(cmd, text=True, check=True, capture_output=True).stdout.strip().split("\n")

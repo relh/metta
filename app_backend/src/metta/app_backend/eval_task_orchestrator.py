@@ -110,9 +110,7 @@ class EvalTaskOrchestrator:
 
     def _compute_memory_request(self, parallelism: int) -> int:
         """Compute the memory to request for a given parallelism. We request 3GB per parallel process."""
-        parallelism = max(1, parallelism)
-        parallelism = min(16, parallelism)
-        return parallelism * 3
+        return min(16, max(1, parallelism)) * 3
 
     def _spawn_workers_for_tasks(self) -> None:
         """Create one worker per unassigned task and claim the task for that worker."""

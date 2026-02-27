@@ -43,6 +43,4 @@ def isolated_test_schema_uri(base_uri: str) -> str:
         conn.commit()
 
     # Create URI that uses the isolated schema
-    schema_uri = create_isolated_schema_uri(base_uri, schema_name)
-
-    return schema_uri
+    return create_isolated_schema_uri(base_uri, schema_name)

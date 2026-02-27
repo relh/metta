@@ -171,7 +171,7 @@ def https_remote_url(url: str) -> str:
     # Handle HTTPS format: https://github.com/Owner/repo[.git]
     if url.startswith("https://github.com/"):
         if url.endswith(".git"):
-            url = url[:-4]
+            return url[:-4]
         return url
 
     # Return as-is for non-GitHub URLs

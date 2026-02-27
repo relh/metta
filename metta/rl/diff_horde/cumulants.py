@@ -352,7 +352,7 @@ class DiffHordeCumulantExtractor:
         if spec.scale != 1.0:
             out = out * float(spec.scale)
         if spec.clip is not None:
-            out = out.clamp(min=float(spec.clip[0]), max=float(spec.clip[1]))
+            return out.clamp(min=float(spec.clip[0]), max=float(spec.clip[1]))
         return out
 
     @staticmethod
