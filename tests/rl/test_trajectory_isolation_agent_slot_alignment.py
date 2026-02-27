@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 import torch
 from tensordict import TensorDict
 
@@ -144,7 +145,7 @@ def test_slice_row_indices_cached_per_slice() -> None:
     assert first.data_ptr() == second.data_ptr()
 
 
-def test_slice_row_indices_out_of_range_slots_fallback() -> None:
+def test_slice_row_indices_out_of_range_slots_raise() -> None:
     isolator, runtime_slices = _build_agent_range_runtime()
     miner_slice = runtime_slices["miner"]
     experience = SimpleNamespace(
@@ -156,8 +157,8 @@ def test_slice_row_indices_out_of_range_slots_fallback() -> None:
         device=torch.device("cpu"),
     )
 
-    miner_rows = isolator._slice_row_indices(experience, miner_slice)
-    torch.testing.assert_close(miner_rows, torch.tensor([0], dtype=torch.long))
+    with pytest.raises(RuntimeError, match="agent_slot_ids must be in"):
+        isolator._slice_row_indices(experience, miner_slice)
 
 
 def test_split_rollout_td_uses_shallow_policy_clones() -> None:

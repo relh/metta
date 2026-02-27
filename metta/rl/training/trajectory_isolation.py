@@ -774,17 +774,14 @@ class TrajectoryIsolator(TrainerComponent):
             self._slice_row_indices_cache[runtime_slice.name] = empty
             return empty
 
-        # Fast path: slice mask is keyed by agent-slot id.
-        if (
-            agent_slot_ids.numel()
-            and 0 <= int(agent_slot_ids.min())
-            and int(agent_slot_ids.max()) < int(slice_mask_by_agent_slot.numel())
-        ):
-            mask = slice_mask_by_agent_slot.index_select(0, agent_slot_ids)
-        else:
-            # Defensive fallback for malformed/out-of-range slot ids.
-            slice_agent_slot_ids = torch.nonzero(slice_mask_by_agent_slot, as_tuple=False).flatten()
-            mask = torch.isin(agent_slot_ids, slice_agent_slot_ids)
+        if agent_slot_ids.numel():
+            min_slot = int(agent_slot_ids.min())
+            max_slot = int(agent_slot_ids.max())
+            upper_bound = int(slice_mask_by_agent_slot.numel())
+            if min_slot < 0 or max_slot >= upper_bound:
+                raise RuntimeError(f"agent_slot_ids must be in [0, {upper_bound}); got min={min_slot}, max={max_slot}.")
+
+        mask = slice_mask_by_agent_slot.index_select(0, agent_slot_ids)
 
         row_indices = torch.nonzero(mask, as_tuple=False).flatten().to(dtype=torch.long)
         self._slice_row_indices_cache[runtime_slice.name] = row_indices
