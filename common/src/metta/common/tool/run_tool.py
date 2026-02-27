@@ -252,8 +252,7 @@ def type_parse(value: Any, annotation: Any) -> Any:
     """Type-aware coercion using Pydantic when a function annotation is present."""
     if annotation is inspect._empty:
         return value
-    adapter = TypeAdapter(annotation)
-    return adapter.validate_python(value)
+    return TypeAdapter(annotation).validate_python(value)
 
 
 def list_tool_arguments(tool_maker: Any, console: Console) -> None:

@@ -63,8 +63,7 @@ class AWSSetup(SetupModule):
             import boto3  # noqa: PLC0415
 
             sts = boto3.client("sts")
-            response = sts.get_caller_identity()
-            return response["Account"]
+            return sts.get_caller_identity()["Account"]
         except Exception:
             return None
 

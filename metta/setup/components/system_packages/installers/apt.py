@@ -23,8 +23,7 @@ class AptInstaller(PackageInstaller[AptPackageConfig]):
         return [line.split("\t")[0] for line in lines if "\tinstall" in line]
 
     def _is_package_available(self, package: str) -> bool:
-        result = subprocess.run(["apt-cache", "show", package], capture_output=True, check=False)
-        return result.returncode == 0
+        return subprocess.run(["apt-cache", "show", package], capture_output=True, check=False).returncode == 0
 
     def _ensure_updated(self) -> None:
         if not self._apt_updated:

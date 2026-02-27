@@ -129,10 +129,7 @@ def forward_policy_for_training(
 
     policy.reset_memory()
     policy_td = policy.forward(policy_td, action=flat_actions)
-
-    policy_td = policy_td.reshape(B, TT)
-
-    return policy_td
+    return policy_td.reshape(B, TT)
 
 
 def should_run(

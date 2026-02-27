@@ -71,5 +71,6 @@ def resolve_torch_dtype(dtype_str: str | None) -> torch.dtype:
     if dtype_str is None:
         return torch.float32
     s = str(dtype_str).lower()
-    mapping = {"float16": torch.float16, "fp16": torch.float16, "bfloat16": torch.bfloat16, "bf16": torch.bfloat16}
-    return mapping.get(s, torch.float32)
+    return {"float16": torch.float16, "fp16": torch.float16, "bfloat16": torch.bfloat16, "bf16": torch.bfloat16}.get(
+        s, torch.float32
+    )

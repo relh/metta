@@ -95,8 +95,7 @@ def github_client(
 def run_gh(*args: str) -> str:
     """Run a GitHub CLI command and return its output."""
     try:
-        result = subprocess.run(["gh", *args], capture_output=True, text=True, check=True)
-        return result.stdout.strip()
+        return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout.strip()
     except subprocess.CalledProcessError as e:
         raise GitError(f"GitHub CLI command failed ({e.returncode}): {e.stderr.strip()}") from e
     except FileNotFoundError as e:
@@ -165,8 +164,7 @@ async def get_latest_commit(repo: str, branch: str = "main") -> str:
             headers={"Accept": "application/vnd.github.v3+json"},
         )
         response.raise_for_status()
-        commit_data = response.json()
-        return commit_data["sha"]
+        return response.json()["sha"]
 
 
 def post_commit_status(

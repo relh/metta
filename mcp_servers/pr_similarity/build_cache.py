@@ -431,8 +431,7 @@ def _get_api_key() -> str:
     # Try AWS Secrets Manager
     try:
         client = boto3.client("secretsmanager", region_name="us-east-1")
-        response = client.get_secret_value(SecretId="GEMINI-API-KEY")
-        return response["SecretString"].strip()
+        return client.get_secret_value(SecretId="GEMINI-API-KEY")["SecretString"].strip()
     except Exception as e:
         raise EnvironmentError(
             f"Set {API_KEY_ENV} environment variable or ensure AWS Secrets Manager access to 'GEMINI-API-KEY': {e}"

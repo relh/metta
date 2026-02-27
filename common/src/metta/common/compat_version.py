@@ -4,8 +4,7 @@ from metta.common.util.fs import get_repo_root
 
 
 def get_compat_version() -> str:
-    path = get_repo_root() / "COMPAT_VERSION"
-    return path.read_text().strip()
+    return (get_repo_root() / "COMPAT_VERSION").read_text().strip()
 
 
 def parse_compat_version(version_string: str) -> str | None:
