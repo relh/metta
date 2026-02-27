@@ -140,7 +140,7 @@ def roll_season(
 
     commissioner_cls = SEASONS.get(season_name)
     if not commissioner_cls:
-        raise ValueError(f"Unknown season '{season_name}', expected one of {list(SEASONS.keys())}")
+        raise ValueError(f"Unknown season '{season_name}', expected one of {list(SEASONS)}")
     entry_pool = commissioner_cls.entry_pool
     copy_existing_pools = commissioner_cls.roll_copy_existing_pools
     initial_season_fields = commissioner_cls.get_initial_season_fields()
@@ -170,13 +170,13 @@ def main() -> None:
     from metta.app_backend.tournament.registry import SEASONS  # noqa: PLC0415
 
     parser = argparse.ArgumentParser(description="Roll a tournament season to a new version")
-    parser.add_argument("season_name", help=f"Season to roll (one of {list(SEASONS.keys())})")
+    parser.add_argument("season_name", help=f"Season to roll (one of {list(SEASONS)})")
     parser.add_argument("--migrate-players", action="store_true", help="Migrate active players to the new season")
     parser.add_argument("--compat-version", help="Set compat version on the new season (default: carry forward)")
     args = parser.parse_args()
 
     if args.season_name not in SEASONS:
-        parser.error(f"Unknown season '{args.season_name}', expected one of {list(SEASONS.keys())}")
+        parser.error(f"Unknown season '{args.season_name}', expected one of {list(SEASONS)}")
     roll_season(
         args.season_name,
         migrate_players=args.migrate_players,

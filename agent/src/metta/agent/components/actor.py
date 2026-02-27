@@ -170,7 +170,7 @@ class ActionProbs(nn.Module):
         if action.dim() == 2:
             if action.size(1) > column:
                 return action[:, column].to(dtype=torch.long)
-            if fallback_key in td.keys():
+            if fallback_key in td:
                 return td[fallback_key].reshape(-1).to(dtype=torch.long)
             raise ValueError(f"Expected action column {column}, but action shape is {tuple(action.shape)}")
 

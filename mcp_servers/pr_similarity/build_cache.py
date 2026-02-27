@@ -476,7 +476,7 @@ def main() -> None:
 
     eligible_numbers = {snapshot.pr_number for snapshot in eligible_snapshots}
     removed = 0
-    for pr_number in list(existing_records.keys()):
+    for pr_number in list(existing_records):
         if pr_number not in eligible_numbers:
             existing_records.pop(pr_number)
             removed += 1

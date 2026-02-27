@@ -17,7 +17,7 @@ def extend_config(config: Config | list[Config] | dict[str, Config]) -> ConfigWi
         def with_prefix(field: str) -> str:
             return f"{prefix}.{field}" if prefix else field
 
-        model_fields = set(type(obj).model_fields.keys())
+        model_fields = set(type(obj).model_fields)
         model_fields_unset = model_fields - obj.model_fields_set
         for field in model_fields_unset:
             fields_unset.append(with_prefix(field))

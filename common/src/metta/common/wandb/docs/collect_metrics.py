@@ -41,7 +41,7 @@ def get_run_metrics(entity: str, project: str, run_id: str) -> set[str] | None:
         history = run.history(samples=1)
         if history and len(history) > 0:
             sample = history[0]
-            for key in sample.keys():
+            for key in sample:
                 if key not in ["_timestamp", "_runtime", "_step", "_wandb"]:
                     metrics.add(key)
     except Exception as e:

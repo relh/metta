@@ -72,7 +72,7 @@ class CudaTeacherRunner:
         _discover_cuda_teachers()
 
         if short_name not in _CUDA_TEACHER_REGISTRY:
-            available = ", ".join(sorted(_CUDA_TEACHER_REGISTRY.keys())) or "(none)"
+            available = ", ".join(sorted(_CUDA_TEACHER_REGISTRY)) or "(none)"
             raise ValueError(f"No CUDA teacher registered for '{short_name}'. Available: {available}")
 
         self._policy = _CUDA_TEACHER_REGISTRY[short_name](policy_env_info, device)

@@ -626,7 +626,7 @@ class CoreTrainingLoop:
             # Ship actions to the environment
             with context.stopwatch("_rollout.send"):
                 td_actions3: Tensor = td["actions"]
-                td_vibe_actions3: Optional[Tensor] = td["vibe_actions"] if "vibe_actions" in td.keys() else None
+                td_vibe_actions3: Optional[Tensor] = td["vibe_actions"] if "vibe_actions" in td else None
                 if td_vibe_actions3 is not None:
                     num_vibe_actions = len(env.policy_env_info.vibe_action_names)
                     if num_vibe_actions <= 0:
@@ -696,7 +696,7 @@ class CoreTrainingLoop:
         epochs_trained = 0
 
         for _ in range(update_epochs):
-            if "values" in self.experience.buffer.keys():
+            if "values" in self.experience.buffer:
                 base_values = self.experience.buffer["values"]
                 if base_values.dim() > 2:
                     base_values = base_values.mean(dim=-1)

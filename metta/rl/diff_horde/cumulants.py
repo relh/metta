@@ -215,7 +215,7 @@ class DiffHordeCumulantsConfig(Config):
         if not isinstance(policy_td, TensorDict):
             raise TypeError(f"Expected policy forward to return TensorDict, got {type(policy_td).__name__}")
         for spec in unresolved:
-            if spec.key in policy_td.keys():
+            if spec.key in policy_td:
                 values = policy_td[spec.key]
                 if values.shape[0] != batch_size:
                     raise ValueError(
@@ -357,7 +357,7 @@ class DiffHordeCumulantExtractor:
 
     @staticmethod
     def _extract_td_key(*, spec: TDKeyCumulantSpec, student_td: TensorDict, batch_size: int) -> Tensor:
-        if spec.key not in student_td.keys():
+        if spec.key not in student_td:
             raise RuntimeError(f"Missing td_key cumulant source '{spec.key}'")
 
         values = student_td[spec.key].detach()
@@ -408,7 +408,7 @@ class DiffHordeCumulantExtractor:
         student_td: TensorDict,
         batch_size: int,
     ) -> Tensor:
-        if "env_obs" not in student_td.keys():
+        if "env_obs" not in student_td:
             raise RuntimeError(f"Missing env_obs for env_obs_feature cumulant '{spec.name}'")
 
         env_obs = student_td["env_obs"].detach()
@@ -451,12 +451,12 @@ class DiffHordeCumulantExtractor:
 
     @staticmethod
     def _extract_info_scalar(*, spec: InfoScalarCumulantSpec, student_td: TensorDict, batch_size: int) -> Tensor:
-        if "env_info" not in student_td.keys():
+        if "env_info" not in student_td:
             raise RuntimeError(f"Missing env_info for info_scalar cumulant '{spec.name}'")
         env_info = student_td["env_info"]
         if not isinstance(env_info, TensorDict):
             raise RuntimeError(f"Expected env_info TensorDict, got {type(env_info).__name__}")
-        if spec.key not in env_info.keys():
+        if spec.key not in env_info:
             raise RuntimeError(f"Missing env_info key '{spec.key}' for info_scalar cumulant '{spec.name}'")
 
         values = env_info[spec.key].detach()

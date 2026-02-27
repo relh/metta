@@ -74,8 +74,8 @@ class PolicyAssetRegistry:
         self._policies = dict(policies)
 
         # Validate that configs and policies have matching keys
-        config_keys = set(self._configs.keys())
-        policy_keys = set(self._policies.keys())
+        config_keys = set(self._configs)
+        policy_keys = set(self._policies)
         if config_keys != policy_keys:
             missing_in_policies = config_keys - policy_keys
             missing_in_configs = policy_keys - config_keys
@@ -113,12 +113,12 @@ class PolicyAssetRegistry:
 
     def get(self, name: str) -> Policy:
         if name not in self._policies:
-            available = sorted(self._policies.keys())
+            available = sorted(self._policies)
             raise KeyError(f"Policy '{name}' not found in PolicyAssetRegistry. Available policies: {available}")
         return self._policies[name]
 
     def get_config(self, name: str) -> PolicyAssetConfig:
         if name not in self._configs:
-            available = sorted(self._configs.keys())
+            available = sorted(self._configs)
             raise KeyError(f"Policy config '{name}' not found in PolicyAssetRegistry. Available configs: {available}")
         return self._configs[name]

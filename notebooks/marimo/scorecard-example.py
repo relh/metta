@@ -101,7 +101,7 @@ async def _(client, group_by, mo, training_run_selector):
     category_selectors = {}
     ui_elements = []
 
-    for cat_key in sorted(eval_by_category.keys()):
+    for cat_key in sorted(eval_by_category):
         cat_evals = eval_by_category[cat_key]
         # Format eval names nicely for display
 

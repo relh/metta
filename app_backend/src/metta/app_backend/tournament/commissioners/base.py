@@ -117,7 +117,7 @@ class CommissionerBase(ABC):
         referees = getattr(cls, "referees", None)
         if referees is None:
             return
-        pool_names = set(referees.keys())
+        pool_names = set(referees)
         for attr in ("leaderboard_pool", "entry_pool"):
             value = getattr(cls, attr, None)
             if value is not None and value not in pool_names:
@@ -200,7 +200,7 @@ class CommissionerBase(ABC):
         referees = self.get_referees(season.version)
 
         pools = await self._ensure_pools_exist(season, referees)
-        logger.info(f"[{self.season_name}] pools loaded: {list(pools.keys())} (rss={_rss_mb()})")
+        logger.info(f"[{self.season_name}] pools loaded: {list(pools)} (rss={_rss_mb()})")
 
         status_changed = await self._sync_match_statuses()
         logger.info(f"[{self.season_name}] match statuses synced, changed={status_changed} (rss={_rss_mb()})")
@@ -722,7 +722,7 @@ class CommissionerBase(ABC):
             )
             pv_ids = {row[0]: row[1] for row in pv_result.all()}
 
-            missing = set(request.pool_player_ids) - set(pv_ids.keys())
+            missing = set(request.pool_player_ids) - set(pv_ids)
             if missing:
                 logger.error(f"PoolPlayers not found when creating match: {missing}")
                 span.set_attribute("job.enqueue.outcome", "failure")

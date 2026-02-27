@@ -155,7 +155,7 @@ def check_no_dual_specification(data: dict, file_path: Path) -> list[str]:
         return errors
 
     # Check for fields that exist both statically and in dynamic
-    static_fields = set(project.keys()) - {"dynamic"}
+    static_fields = set(project) - {"dynamic"}
     dual_specified = static_fields & dynamic_fields
 
     for field in sorted(dual_specified):
@@ -354,7 +354,7 @@ def main() -> int:
                 errors_by_category_global.setdefault(category, []).append((file_path, errors))
 
         # Print errors grouped by category
-        for category in sorted(errors_by_category_global.keys()):
+        for category in sorted(errors_by_category_global):
             category_name = format_category_name(category)
             file_errors_list = errors_by_category_global[category]
             total_category_errors = sum(len(errors) for _, errors in file_errors_list)

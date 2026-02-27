@@ -18,7 +18,7 @@ MOVE_DELTAS: dict[str, tuple[int, int]] = {
     "east": (0, 1),
     "west": (0, -1),
 }
-DIRECTIONS = list(MOVE_DELTAS.keys())
+DIRECTIONS = list(MOVE_DELTAS)
 
 
 class Navigator:
@@ -76,9 +76,7 @@ class Navigator:
         h = self._history
         if len(h) >= 6 and len(set(h[-6:])) <= 2:
             return True
-        if len(h) >= 20 and h[:-10].count(h[-1]) >= 2:
-            return True
-        return False
+        return len(h) >= 20 and h[:-10].count(h[-1]) >= 2
 
     def _break_stuck(self, pos: tuple[int, int], map: EntityMap) -> Action:
         self._cached_path = None

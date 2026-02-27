@@ -193,16 +193,16 @@ class Curriculum(StatsLogger):
         """Choose a task from the population using algorithm guidance."""
         if self._algorithm is not None:
             # Get algorithm's task selection preferences
-            task_scores = self._algorithm.score_tasks(list(self._tasks.keys()))
+            task_scores = self._algorithm.score_tasks(list(self._tasks))
             selected_id = sample_task_id_from_scores(
-                task_ids=list(self._tasks.keys()),
+                task_ids=list(self._tasks),
                 scores=task_scores,
                 rng=self._rng,
             )
             return self._tasks[selected_id]
 
         # Fallback to random selection
-        return self._tasks[self._rng.choice(list(self._tasks.keys()))]
+        return self._tasks[self._rng.choice(list(self._tasks))]
 
     def _create_task(self) -> CurriculumTask:
         """Create a new task."""

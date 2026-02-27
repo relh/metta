@@ -97,10 +97,10 @@ class ActionSupervised(Loss):
             student_td["actions"][teacher_mask] = teacher_actions[teacher_mask]
             if "act_log_prob" in student_td:
                 student_td["act_log_prob"][teacher_mask] = 0.0
-            if "vibe_actions" in student_td.keys():
+            if "vibe_actions" in student_td:
                 vibe_actions = teacher_vibe_actions.to(dtype=student_td["vibe_actions"].dtype)
                 student_td["vibe_actions"][teacher_mask] = vibe_actions[teacher_mask]
-                if "vibe_act_log_prob" in student_td.keys():
+                if "vibe_act_log_prob" in student_td:
                     student_td["vibe_act_log_prob"][teacher_mask] = 0.0
 
     def run_train(
@@ -130,7 +130,7 @@ class ActionSupervised(Loss):
 
         vibe_loss = self._zero()
         effective_valid_teacher_vibe_actions = torch.zeros_like(valid_teacher_vibe_actions)
-        if self.num_vibe_actions > 0 and "vibe_full_log_probs" in policy_td.keys():
+        if self.num_vibe_actions > 0 and "vibe_full_log_probs" in policy_td:
             vibe_full_log_probs = policy_td["vibe_full_log_probs"].reshape(minibatch.shape[0], minibatch.shape[1], -1)
             student_vibe_log_probs = vibe_full_log_probs.gather(dim=-1, index=teacher_vibe_actions.unsqueeze(-1))
             student_vibe_log_probs = student_vibe_log_probs.reshape(minibatch.shape[0], minibatch.shape[1])

@@ -74,9 +74,7 @@ class ExploreHubGoal(Goal):
         if found >= 4:
             return True
         # Time limit: don't explore forever, but give more time (30 steps)
-        if ctx.step > 30:
-            return True
-        return False
+        return ctx.step > 30
 
     def execute(self, ctx: CogasContext) -> Optional[Action]:
         # Find actual hub position from observations

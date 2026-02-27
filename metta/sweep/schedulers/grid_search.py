@@ -56,7 +56,7 @@ class GridSearchScheduler:
         self.state = SchedulerState()
         # Precompute full grid suggestions
         dims = self._flatten_dims(config.parameters)
-        self._dim_names: list[str] = list(dims.keys())
+        self._dim_names: list[str] = list(dims)
         self._grid: list[dict[str, Any]] = self._cartesian_product(dims)
         logger.info("[GridSearchScheduler] Initialized with grid size=%s", len(self._grid))
 
@@ -210,7 +210,7 @@ class GridSearchScheduler:
 
     def _cartesian_product(self, dims: Dict[str, List[Any]]) -> List[Dict[str, Any]]:
         """Build the Cartesian product of dimensions as a list of suggestion dicts."""
-        names = list(dims.keys())
+        names = list(dims)
         values: Iterable[Tuple[Any, ...]] = itertools.product(*(dims[name] for name in names))
         suggestions: list[dict[str, Any]] = []
         for combo in values:

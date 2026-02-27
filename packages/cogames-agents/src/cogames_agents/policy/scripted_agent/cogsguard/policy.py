@@ -1816,9 +1816,7 @@ class CogsguardGeneralistImpl(CogsguardAgentPolicyImpl):
             )
             if has_neutral:
                 return True
-        if s.step_count < s.role_lock_until_step:
-            return False
-        return True
+        return not (s.step_count < s.role_lock_until_step)
 
     def _role_is_ready(self, s: CogsguardAgentState, role: Role) -> bool:
         if role in (Role.ALIGNER, Role.SCRAMBLER) and s.stations.get("hub") is None:

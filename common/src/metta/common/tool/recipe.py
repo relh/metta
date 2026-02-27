@@ -86,7 +86,7 @@ class Recipe:
 
     def get_all_tool_maker_names(self) -> set[str]:
         """Get all tool maker names available from this recipe."""
-        return set(self._maker_name_to_tool_maker.keys())
+        return set(self._maker_name_to_tool_maker)
 
     def get_tool_maker(self, name: str) -> ToolMaker | None:
         """Get a tool maker by maker name or tool type.

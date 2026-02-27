@@ -386,7 +386,7 @@ def analyze_topology_performance(topology: dict[str, Any]) -> dict[str, Any]:
         return analysis
 
     matrix = topology["matrix"]
-    gpu_list = list(matrix.keys())
+    gpu_list = list(matrix)
 
     # Find NVLink pairs
     for gpu_src in gpu_list:
@@ -712,7 +712,7 @@ def format_gpu_diagnostics(diagnostics: dict[str, Any]) -> str:
 
         # Show connection matrix
         matrix = topology["matrix"]
-        gpu_list = sorted(matrix.keys())
+        gpu_list = sorted(matrix)
 
         if gpu_list:
             # Header

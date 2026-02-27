@@ -201,7 +201,7 @@ def _build_eval_categories_from_names(
     eval_lookup = {e["name"]: e for e in evaluations}
 
     # print(f"📂 Eval names: {eval_names}")
-    # print(f"📂 Eval lookup keys: {list(eval_lookup.keys())}")
+    # print(f"📂 Eval lookup keys: {list(eval_lookup)}")
 
     for eval_name in eval_names:
         if "/" not in eval_name or eval_name not in eval_lookup:

@@ -55,7 +55,7 @@ def compute_policy_placement_scores(
         for policy_version_id in {tpv.policy_version_id for tpv in team.policy_versions}:
             positions_by_policy[policy_version_id].append(position)
 
-    target_policy_ids = list(policy_ids) if policy_ids is not None else list(positions_by_policy.keys())
+    target_policy_ids = list(policy_ids) if policy_ids is not None else list(positions_by_policy)
     penalty_position = len(ranked_teams) + 1
     results: dict[UUID, tuple[float, list[int]]] = {}
     for policy_version_id in target_policy_ids:

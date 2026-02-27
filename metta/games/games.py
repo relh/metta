@@ -36,7 +36,7 @@ def make_game(
 ) -> MettaGridConfig:
     """Create a game environment by name. Use cogs=N to set num_agents."""
     if game not in GAMES:
-        raise ValueError(f"Unknown game {game!r}. Available: {list(GAMES.keys())}")
+        raise ValueError(f"Unknown game {game!r}. Available: {list(GAMES)}")
     n = cogs if cogs is not None else num_agents
     info = GAMES[game]
     mission_cls = info["mission_class"]

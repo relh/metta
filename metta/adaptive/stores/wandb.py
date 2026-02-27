@@ -73,7 +73,7 @@ class WandbStore:
             if initial_summary:
                 for key, value in initial_summary.items():
                     run.summary[key] = value
-                logger.info(f"[WandbStore] Set initial summary data for {run_id}: {list(initial_summary.keys())}")
+                logger.info(f"[WandbStore] Set initial summary data for {run_id}: {list(initial_summary)}")
 
             # Finish immediately - the actual training process will resume this run
             wandb.finish()
@@ -172,8 +172,7 @@ class WandbStore:
 
         # Debug log the summary to see what's available
         logger.debug(
-            f"[WandbStore] Run {run.id} summary keys: "
-            f"{list(summary.keys()) if isinstance(summary, dict) else 'not a dict'}"
+            f"[WandbStore] Run {run.id} summary keys: {list(summary) if isinstance(summary, dict) else 'not a dict'}"
         )
         logger.debug(
             f"[WandbStore] Run {run.id} has_started_eval in summary: "
@@ -223,7 +222,7 @@ class WandbStore:
             has_evaluator_metrics = any(k.startswith(self.evaluator_prefix) for k in summary)  # type: ignore
         else:
             # Backward-compatible behavior: any evaluator/* metric counts
-            has_evaluator_metrics = any(k.startswith("evaluator/") for k in summary.keys())  # type: ignore
+            has_evaluator_metrics = any(k.startswith("evaluator/") for k in summary)  # type: ignore
 
         if has_evaluator_metrics:
             has_started_eval = True

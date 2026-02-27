@@ -163,7 +163,7 @@ class ThreadWorkerManager(AbstractWorkerManager):
         logger.info("Shutting down all workers")
 
         with self._lock:
-            worker_names = list(self._workers.keys())
+            worker_names = list(self._workers)
 
         for worker_name in worker_names:
             try:

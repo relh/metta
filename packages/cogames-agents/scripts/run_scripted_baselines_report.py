@@ -685,7 +685,7 @@ def _collect_role_conditional_reward_keys() -> dict[str, set[str]]:
         role = role_order[role_id]
         if role not in SHAPED_REWARD_ALIGNMENT_RULES:
             continue
-        reward_keys_by_role[role] = set(agent.rewards.keys())
+        reward_keys_by_role[role] = set(agent.rewards)
 
     missing_roles = [role for role in SHAPED_REWARD_ALIGNMENT_RULES if role not in reward_keys_by_role]
     if missing_roles:

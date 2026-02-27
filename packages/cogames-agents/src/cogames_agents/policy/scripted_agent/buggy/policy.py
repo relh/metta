@@ -284,9 +284,7 @@ class PlankyBrain(StatefulPolicyImpl[PlankyAgentState]):
     def _should_trace(self, agent_state: PlankyAgentState) -> bool:
         if not self._trace_enabled:
             return False
-        if self._trace_agent >= 0 and self._agent_id != self._trace_agent:
-            return False
-        return True
+        return not (self._trace_agent >= 0 and self._agent_id != self._trace_agent)
 
     def _detect_useful_action(self, state: StateSnapshot, agent_state: PlankyAgentState) -> None:
         """Detect if a useful action occurred by comparing state changes.

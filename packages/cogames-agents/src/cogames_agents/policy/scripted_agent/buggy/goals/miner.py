@@ -82,9 +82,7 @@ class ExploreHubGoal(Goal):
         if found >= 4:
             return True
         # Time limit: don't explore forever
-        if ctx.step > 15:
-            return True
-        return False
+        return ctx.step > 15
 
     def execute(self, ctx: PlankyContext) -> Optional[Action]:
         from cogames_agents.policy.scripted_agent.buggy.policy import SPAWN_POS  # noqa: PLC0415

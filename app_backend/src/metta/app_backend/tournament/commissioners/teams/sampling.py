@@ -20,7 +20,7 @@ def sample_teams(
     num_teams: int,
     min_teams_per_policy: int,
 ) -> list[list[UUID]]:
-    policy_ids = list(policy_scores.keys())
+    policy_ids = list(policy_scores)
     if not policy_ids:
         raise ValueError("Need at least one policy to sample teams")
 

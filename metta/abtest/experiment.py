@@ -133,7 +133,7 @@ def materialize_runs(
             merged["wandb.tags"] = list(dict.fromkeys(merged_tags))
 
             # Keep deterministic ordering for readability and testability.
-            args = [f"{k}={_jsonish(merged[k])}" for k in sorted(merged.keys())]
+            args = [f"{k}={_jsonish(merged[k])}" for k in sorted(merged)]
             runs.append(
                 ABRun(
                     experiment=exp.name,

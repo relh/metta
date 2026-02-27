@@ -204,7 +204,7 @@ def configure_component(component_name: str):
 
     if not (module := module_map.get(component_name)):
         error(f"Unknown component: {component_name}")
-        info(f"Available components: {', '.join(sorted(module_map.keys()))}")
+        info(f"Available components: {', '.join(sorted(module_map))}")
         raise typer.Exit(1)
 
     options = module.get_configuration_options()
@@ -405,7 +405,7 @@ def cmd_run(
 
     if not (module := module_map.get(component)):
         error(f"Unknown component: {component}")
-        info(f"Available components: {', '.join(sorted(module_map.keys()))}")
+        info(f"Available components: {', '.join(sorted(module_map))}")
         raise typer.Exit(1)
 
     module.run(args or [])

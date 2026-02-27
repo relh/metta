@@ -501,7 +501,7 @@ def main():
         print("-" * 40)
 
         # Get teams from final generation for show_assignments
-        teams = list(result.team_scores.keys())
+        teams = list(result.team_scores)
     else:
         print()
         # Single generation

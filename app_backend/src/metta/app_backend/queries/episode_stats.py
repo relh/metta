@@ -128,7 +128,7 @@ def compute_episode_stats(
         policy_agents[policy_idx].append((agent_id, agent_metrics, reward))
 
     policy_results: list[PolicyResult] = []
-    for position in sorted(policy_agents.keys()):
+    for position in sorted(policy_agents):
         agents = policy_agents[position]
         policy_summary = policy_map.get(position, PolicyVersionSummary(id=UUID(int=0), name=None, version=None))
 

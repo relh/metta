@@ -105,7 +105,7 @@ def command(
 ) -> None:
     mettagrid_dir = str(get_repo_root() / "packages" / "mettagrid")
     targets = {k: v for k, v in [("benchmark", benchmark), ("test", test)] if v}
-    for target in targets.keys() or ["test"]:
+    for target in targets or ["test"]:
         if target == "test":
             _run_test(mettagrid_dir)
         elif target == "benchmark":

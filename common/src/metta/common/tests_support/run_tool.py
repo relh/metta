@@ -61,8 +61,8 @@ def _restore_logger_state(logger: logging.Logger, state: _LoggerState) -> None:
 def _restore_environment(snapshot: Mapping[str, str]) -> None:
     """Restore environment variables to a prior snapshot."""
 
-    current_keys = set(os.environ.keys())
-    snapshot_keys = set(snapshot.keys())
+    current_keys = set(os.environ)
+    snapshot_keys = set(snapshot)
 
     for key in current_keys - snapshot_keys:
         os.environ.pop(key, None)
