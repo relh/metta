@@ -327,25 +327,27 @@ def test_event_processor_handles_failed_events_idempotently(event_processor_db, 
 
     core_v1, batch_v1 = mock_k8s_clients
 
-    # First processing
-    _process_batch(mock_stats_client, core_v1, batch_v1)
+    # Mock _read_runner_error since it makes an S3 call (runner error file not available in test)
+    with patch("metta.app_backend.job_runner.event_processor._read_runner_error", return_value=None):
+        # First processing
+        _process_batch(mock_stats_client, core_v1, batch_v1)
 
-    first_status = mock_stats_client._job_state[job_id].status
-    first_error = mock_stats_client._job_state[job_id].error
+        first_status = mock_stats_client._job_state[job_id].status
+        first_error = mock_stats_client._job_state[job_id].error
 
-    # Mark as unprocessed and reprocess
-    with Session(engine) as session:
-        stmt = select(K8sEvent)
-        events = list(session.exec(stmt).all())
-        for event in events:
-            event.processed_at = None
-            session.add(event)
-        session.commit()
+        # Mark as unprocessed and reprocess
+        with Session(engine) as session:
+            stmt = select(K8sEvent)
+            events = list(session.exec(stmt).all())
+            for event in events:
+                event.processed_at = None
+                session.add(event)
+            session.commit()
 
-    _process_batch(mock_stats_client, core_v1, batch_v1)
+        _process_batch(mock_stats_client, core_v1, batch_v1)
 
-    second_status = mock_stats_client._job_state[job_id].status
-    second_error = mock_stats_client._job_state[job_id].error
+        second_status = mock_stats_client._job_state[job_id].status
+        second_error = mock_stats_client._job_state[job_id].error
 
     # Verify idempotency
     assert first_status == second_status == JobStatus.failed

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from typing import Any, Callable, cast
 from uuid import UUID
 
+from botocore.exceptions import ClientError
 from kubernetes import client
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
@@ -41,7 +42,7 @@ from metta.app_backend.models.k8s_events import K8sEvent
 from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
-from mettagrid.runner.types import PureSingleEpisodeResult, RuntimeInfo, SingleEpisodeJob
+from mettagrid.runner.types import PureSingleEpisodeResult, RunnerError, RuntimeInfo, SingleEpisodeJob
 
 logger = logging.getLogger(__name__)
 
@@ -436,61 +437,16 @@ def _extract_error_from_logs_with_retry(job_id: UUID) -> str | None:
 
 
 def _classify_error(error: str) -> str:
-    """Classify error into a low-cardinality bucket for metrics.
+    """Classify error when the runner didn't write structured error_info.
 
-    Errors from spawning policy servers or policy server failures are classified as policy_error.
+    This only handles infrastructure-level failures where the runner was killed
+    externally (OOM, timeout) and couldn't report its own error.
     """
     error_lower = error.lower()
-
-    # Infrastructure errors take precedence
     if "timeout" in error_lower or "deadline" in error_lower:
         return "timeout"
     if "oom" in error_lower or "out of memory" in error_lower or "oomkilled" in error_lower:
         return "oom"
-
-    # Exclude known infrastructure errors (image pull, container runtime) from policy classification
-    infra_markers = (
-        "image pull",
-        "imagepullbackoff",
-        "errimagepull",
-        "pull access denied",
-        "manifest not found",
-        "container runtime",
-        "failed to pull image",
-    )
-    if any(marker in error_lower for marker in infra_markers):
-        return "unknown"
-
-    # Policy-related errors: includes spawning failures and server errors
-    policy_markers = (
-        # Explicit policy references
-        "policy",
-        "policy_uri",
-        "policy_uris",
-        "policy server",
-        "policy-server",
-        # File/loading errors (often policy artifacts)
-        "file not found",
-        "no such file",
-        "does_not_exist",
-        "zipfile",
-        # gRPC and server connectivity (policy server communication)
-        "grpc",
-        "rpc error",
-        "connection refused",
-        "connection error",
-        "connection failed",
-        "failed to connect",
-        "cannot connect",
-        # Server-side errors from policy execution
-        "server error",
-        "server failed",
-        "server crashed",
-    )
-
-    if any(marker in error_lower for marker in policy_markers):
-        return "policy_error"
-
     return "unknown"
 
 
@@ -535,6 +491,23 @@ def _read_runtime_info(job_id: UUID) -> RuntimeInfo:
         return RuntimeInfo.model_validate_json(response["Body"].read())
     except Exception:
         return RuntimeInfo()
+
+
+def _read_runner_error(job_id: UUID) -> RunnerError | None:
+    """Read structured error_info.json written by the runner on failure.
+
+    Returns None only when the artifact is missing (runner was killed before
+    it could write). Other failures are raised to avoid silent misclassification.
+    """
+    cfg = get_dispatch_config()
+    s3 = get_s3_client()
+    try:
+        response = s3.get_object(Bucket=cfg.EVAL_S3_BUCKET, Key=JobArtifact.ERROR_INFO.key(job_id))
+        return RunnerError.model_validate_json(response["Body"].read())
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchKey":
+            return None
+        raise
 
 
 def _build_result_metadata(
@@ -684,13 +657,21 @@ def _handle_pod_failed(
     # Capture logs first so they're available for extraction
     capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
 
-    # Try to extract meaningful error from logs first
-    k8s_error = _get_pod_error_from_event(event_data, batch_v1, job_name=ctx.job_name)
-    log_error = _extract_error_from_logs_with_retry(ctx.job_id)
-
-    # Prefer log error if available, otherwise fall back to K8s error
-    error = log_error if log_error else k8s_error
-    error_type = _classify_error(error)
+    # Try structured error from runner first (written by executor.py on failure)
+    runner_error = _read_runner_error(ctx.job_id)
+    if runner_error:
+        error = runner_error.message
+        error_type = runner_error.error_type
+        error_source = "runner"
+    else:
+        # Runner was killed before it could report — fall back to k8s/log extraction.
+        # K8s reason is authoritative for infra classification (OOMKilled, DeadlineExceeded),
+        # log error is preferred for human-readable detail.
+        k8s_error = _get_pod_error_from_event(event_data, batch_v1, job_name=ctx.job_name)
+        log_error = _extract_error_from_logs_with_retry(ctx.job_id)
+        error_type = _classify_error(k8s_error)
+        error = log_error if log_error else k8s_error
+        error_source = "logs" if log_error else "k8s"
 
     # Capture runner/runtime info for failed jobs too (parse failures happen before results upload).
     job_request = stats_client.get_job(ctx.job_id)
@@ -701,7 +682,6 @@ def _handle_pod_failed(
         dispatched_at=job_request.dispatched_at,
         running_at=job_request.running_at,
     )
-
     _update_job_status(
         stats_client,
         ctx.job_id,
@@ -711,8 +691,6 @@ def _handle_pod_failed(
         result=fail_result or None,
     )
 
-    # Log which error source was used for debugging
-    error_source = "logs" if log_error else "k8s"
     logger.info(f"Job {ctx.job_id} failed (pod {ctx.pod_name}, error_source={error_source}): {error}")
 
     if ctx.job_name:

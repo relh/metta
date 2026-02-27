@@ -60,6 +60,7 @@ def test_failed_event_updates_job_with_runtime_info() -> None:
 
     with (
         patch("metta.app_backend.job_runner.event_processor.capture_pod_logs"),
+        patch("metta.app_backend.job_runner.event_processor._read_runner_error", return_value=None),
         patch("metta.app_backend.job_runner.event_processor._extract_error_from_logs_with_retry", return_value="boom"),
         patch("metta.app_backend.job_runner.event_processor._get_pod_error_from_event", return_value="Pod failed"),
         patch(

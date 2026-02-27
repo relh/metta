@@ -194,11 +194,11 @@ def job_failure_rate_monitor() -> dict:
         "type": "query alert",
         "query": (
             "sum(last_15m):sum:job.state_transition{"
-            "to_status:failed,!error_type:policy_error,service:observatory-backend"
+            "to_status:failed,!error_type:policy_error,!error_type:config_error,service:observatory-backend"
             "}.as_count() > 20"
         ),
         "message": (
-            "{{value}} infrastructure job failures in the last 15 minutes (excludes policy errors).\n\n"
+            "{{value}} infrastructure job failures in the last 15 minutes (excludes policy and config errors).\n\n"
             "Check error types in Datadog or: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
@@ -441,11 +441,66 @@ def job_daily_cost_monitor() -> dict:
     }
 
 
+def job_config_error_monitor() -> dict:
+    """Monitor for config/validation errors indicating runner image is out of date."""
+    return {
+        "name": "[Tournament] Config Validation Errors",
+        "type": "query alert",
+        "query": (
+            "sum(last_15m):sum:job.state_transition{"
+            "to_status:failed,error_type:config_error,service:observatory-backend"
+            "}.as_count() > 10"
+        ),
+        "message": (
+            "{{value}} config validation errors in the last 15 minutes.\n\n"
+            "This usually means the episode-runner image is out of date and doesn't "
+            "recognize new config fields. Rebuild and redeploy the runner image.\n\n"
+            "Check: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 10},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
+def job_total_failure_rate_monitor() -> dict:
+    """Monitor for total job failure rate (all error types)."""
+    return {
+        "name": "[Tournament] High Job Failure Rate",
+        "type": "query alert",
+        "query": (
+            "sum(last_15m):sum:job.state_transition{to_status:failed,service:observatory-backend}.as_count() > 50"
+        ),
+        "message": (
+            "{{value}} total job failures in the last 15 minutes (all error types).\n\n"
+            "Check specific monitors for breakdown by error type (infra, config).\n\n"
+            "Check: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 50},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
 ALL_MONITORS = [
     k8s_deployment_replicas_monitor,
     k8s_crashloopbackoff_monitor,
     k8s_node_count_monitor,
     job_failure_rate_monitor,
+    job_config_error_monitor,
+    job_total_failure_rate_monitor,
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
     job_daily_cost_monitor,

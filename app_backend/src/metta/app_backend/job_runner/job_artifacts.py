@@ -27,6 +27,7 @@ class JobArtifact(Enum):
     REPLAY = ("replay.json.z", "REPLAY_URI", "put", "application/octet-stream")
     DEBUG = ("debug.zip", "DEBUG_URI", "put", "application/zip")
     LOGS = ("logs.txt", None, "put", "text/plain")  # written by event processor, not runner
+    ERROR_INFO = ("error_info.json", "ERROR_INFO_URI", "put", "application/json")
 
     def __init__(self, filename: str, env_var: str | None, direction: str, content_type: str):
         self.filename = filename
