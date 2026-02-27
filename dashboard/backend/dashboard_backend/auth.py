@@ -19,8 +19,7 @@ class User(BaseModel):
 
 
 def _is_local_request(request: Request) -> bool:
-    hostname = (request.url.hostname or "").lower()
-    return hostname in {"localhost", "127.0.0.1", "::1"}
+    return (request.url.hostname or "").lower() in {"localhost", "127.0.0.1", "::1"}
 
 
 def _dev_user(request: Request) -> User:

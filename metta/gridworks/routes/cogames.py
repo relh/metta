@@ -21,9 +21,7 @@ def _get_mission(site_name: str, mission_name: str, variants: str = "") -> AnyMi
         parsed_variants = parse_variants(variant_names)
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
-    mission = mission.with_variants(parsed_variants)
-
-    return mission
+    return mission.with_variants(parsed_variants)
 
 
 def make_cogames_routes() -> APIRouter:
@@ -42,8 +40,7 @@ def make_cogames_routes() -> APIRouter:
     def get_mission_map(site_name: str, mission_name: str, variants: str = "") -> StorableMapDict:
         mission = _get_mission(site_name, mission_name, variants)
         env = mission.make_env()
-        storable_map = StorableMap.from_cfg(env.game.map_builder)
-        return storable_map.to_dict()
+        return StorableMap.from_cfg(env.game.map_builder).to_dict()
 
     @router.get("/missions/{site_name}.{mission_name}/env")
     def get_mission_env(site_name: str, mission_name: str, variants: str = "") -> ConfigWithExtraInfo:

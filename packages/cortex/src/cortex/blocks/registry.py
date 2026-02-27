@@ -70,8 +70,7 @@ def get_block_config_class(tag: str) -> type[BlockConfig]:
 
 def build_block(config: BlockConfig, d_hidden: int, cell: MemoryCell) -> BaseBlock:
     """Instantiate block from configuration using registry lookup."""
-    block_class = get_block_class(config)
-    return block_class(config=config, d_hidden=d_hidden, cell=cell)
+    return get_block_class(config)(config=config, d_hidden=d_hidden, cell=cell)
 
 
 __all__ = ["register_block", "get_block_class", "build_block", "get_block_config_class"]

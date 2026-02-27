@@ -30,5 +30,4 @@ def calculate_prioritized_sampling_params(
 ) -> float:
     """Calculate annealed beta for prioritized experience replay."""
     total_epochs = max(1, total_timesteps // batch_size)
-    anneal_beta = prio_beta0 + (1 - prio_beta0) * prio_alpha * epoch / total_epochs
-    return anneal_beta
+    return prio_beta0 + (1 - prio_beta0) * prio_alpha * epoch / total_epochs

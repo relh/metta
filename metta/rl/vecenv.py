@@ -49,9 +49,7 @@ def make_env_func(
         step_info_keys=step_info_keys,
         buf=buf,
     )
-    env = CurriculumEnv(env, curriculum)
-
-    return env
+    return CurriculumEnv(env, curriculum)
 
 
 @validate_call(config={"arbitrary_types_allowed": True})

@@ -38,8 +38,7 @@ class SequenceClassifier(nn.Module):
         if y.dtype != target_head_dtype:
             y = y.to(dtype=target_head_dtype)
         # Last timestep pooling by default
-        logits = self.classifier(y[:, -1, :])
-        return logits, next_state
+        return self.classifier(y[:, -1, :]), next_state
 
 
 __all__ = ["SequenceClassifier"]

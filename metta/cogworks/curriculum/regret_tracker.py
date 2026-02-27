@@ -97,9 +97,7 @@ class RegretTracker:
         """Get current EMA regret for a task."""
         if task_id not in self._task_regret:
             return None
-
-        _, _, _, _, ema_regret = self._task_regret[task_id]
-        return ema_regret
+        return self._task_regret[task_id][4]
 
     def get_regret_progress(self, task_id: int) -> Optional[float]:
         """Get regret progress (fast_ema - slow_ema)."""

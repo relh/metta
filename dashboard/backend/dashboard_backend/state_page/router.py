@@ -187,8 +187,7 @@ def _preferred_pool_names_for_season(season_name: str) -> list[str]:
         return []
     commissioner_cls = SEASONS[season_name]
     preferred_names = [commissioner_cls.leaderboard_pool, commissioner_cls.entry_pool]
-    deduped = list(dict.fromkeys([name for name in preferred_names if name]))
-    return deduped
+    return list(dict.fromkeys([name for name in preferred_names if name]))
 
 
 async def _select_role_pool_for_policy(session: Any, policy_version_id: UUID) -> Pool | None:

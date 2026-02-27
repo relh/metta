@@ -43,8 +43,7 @@ class Tool(Config):
             class_name = class_name[:-4]
 
         # Convert CamelCase to snake_case
-        snake_case = re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
-        return snake_case
+        return re.sub(r"(?<!^)(?=[A-Z])", "_", class_name).lower()
 
     @abstractmethod
     def invoke(self, args: dict[str, str]) -> int | None: ...

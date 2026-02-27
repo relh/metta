@@ -24,8 +24,7 @@ def resolve_policy_version_id(uri: str, stats_client: StatsClient) -> uuid.UUID 
     if not uri.startswith("metta://"):
         return None
     try:
-        resolver = MettaSchemeResolver(stats_client=stats_client)
-        return resolver.get_policy_version_id(uri)
+        return MettaSchemeResolver(stats_client=stats_client).get_policy_version_id(uri)
     except Exception:
         return None
 

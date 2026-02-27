@@ -42,7 +42,6 @@ def architecture_names() -> list[str]:
 def get_architecture(name: str) -> PolicyArchitecture:
     """Return a PolicyArchitecture from a short name or dotted spec string."""
     if name in _ARCHITECTURE_SPECS:
-        cls = load_symbol(_ARCHITECTURE_SPECS[name])
-        return cls().model_copy(deep=True)
+        return load_symbol(_ARCHITECTURE_SPECS[name])().model_copy(deep=True)
     # Allow fully qualified specs to keep advanced usage flexible.
     return PolicyArchitecture.from_spec(name)

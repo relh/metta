@@ -62,8 +62,7 @@ def get_cell_config_class(tag: str) -> type[CellConfig]:
 
 def build_cell(config: CellConfig) -> MemoryCell:
     """Instantiate cell from configuration using registry lookup."""
-    cell_class = get_cell_class(config)
-    return cell_class(config)
+    return get_cell_class(config)(config)
 
 
 __all__ = [

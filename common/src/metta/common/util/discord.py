@@ -65,10 +65,7 @@ def sanitize_discord_content(content: str) -> str:
     content = content.replace("@here", "@\u200bhere")
 
     # Also handle variations with extra spaces
-    content = content.replace("@ everyone", "@ \u200beveryone")
-    content = content.replace("@ here", "@ \u200bhere")
-
-    return content
+    return content.replace("@ everyone", "@ \u200beveryone").replace("@ here", "@ \u200bhere")
 
 
 def send_to_discord(webhook_url: str, content: str, suppress_embeds: bool = True) -> bool:

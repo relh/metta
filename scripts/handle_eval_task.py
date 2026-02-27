@@ -10,5 +10,4 @@ async def complete_remote_eval(eval_task_id: str):
     client = EvalTaskClient(backend_url)
     task_executor = SimTaskExecutor(backend_url)
     task = client.get_task_by_id(eval_task_id)
-    task_result = await task_executor.execute_task(task)
-    return task_result
+    return await task_executor.execute_task(task)

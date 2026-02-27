@@ -91,8 +91,7 @@ def get_display_id(run_id: str) -> str:
     """
     if "_trial_" in run_id:
         # Extract everything after "_trial_"
-        trial_part = run_id.split("_trial_")[-1]
-        run_id = trial_part
+        return run_id.split("_trial_")[-1]
     return run_id
 
 
