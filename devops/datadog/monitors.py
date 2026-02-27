@@ -171,7 +171,12 @@ def job_queue_buildup_monitor() -> dict:
             "Check: https://observatory.softmax-research.net/episode-jobs\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 280},
         "options": {
@@ -202,7 +207,12 @@ def job_failure_rate_monitor() -> dict:
             "Check error types in Datadog or: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 2,
         "thresholds": {"critical": 20},
         "options": {
@@ -233,7 +243,12 @@ def job_stuck_pending_monitor() -> dict:
             "Check pending queue: https://observatory.softmax-research.net/episode-jobs?status=pending\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 5, "warning": 10},
         "options": {
@@ -271,7 +286,12 @@ def job_lifecycle_failure_rate_monitor() -> dict:
             "Pod health: `kubectl get pods -n metta`\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 2,
         "thresholds": {"critical": 15, "warning": 10},
         "options": {
@@ -306,7 +326,12 @@ def job_high_oom_rate_monitor() -> dict:
             "Check: https://observatory.softmax-research.net/episode-jobs?status=failed&error_type=oom\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 2,
         "thresholds": {"critical": 10, "warning": 5},
         "options": {
@@ -336,7 +361,12 @@ def job_high_pending_queue_monitor() -> dict:
             "- https://observatory.softmax-research.net/episode-jobs?status=pending\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 100},
         "options": {
@@ -366,7 +396,12 @@ def job_slow_dispatch_monitor() -> dict:
             "Check: `kubectl get nodes` and `kubectl describe nodes`\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 180, "warning": 120},
         "options": {
@@ -400,7 +435,12 @@ def job_no_activity_monitor() -> dict:
             "- DB connectivity\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 1},
         "options": {
@@ -430,7 +470,12 @@ def job_daily_cost_monitor() -> dict:
             "- Consider pausing tournaments if spend is unexpected\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 2,
         "thresholds": {"critical": 10000, "warning": 8000},
         "options": {
@@ -458,7 +503,12 @@ def job_config_error_monitor() -> dict:
             "Check: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 10},
         "options": {
@@ -483,12 +533,58 @@ def job_total_failure_rate_monitor() -> dict:
             "Check: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
             f"{WEBHOOK_DISCORD}"
         ),
-        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
         "priority": 3,
         "thresholds": {"critical": 50},
         "options": {
             "notify_no_data": False,
             "renotify_interval": 60,
+            "include_tags": False,
+        },
+    }
+
+
+def episode_recording_failure_monitor() -> dict:
+    """Monitor for episode recording failures in the event processor.
+
+    Fires when the event processor successfully receives results from a pod but
+    fails to write them to observatory (e.g. due to schema changes, S3 errors).
+    Jobs end up marked completed but with no episode/replay data stored.
+    """
+    return {
+        "name": "[Tournament] Episode Recording Failures",
+        "type": "log alert",
+        "query": (
+            'logs("service:k8s-event-processor \\"Failed to record episode for job\\"").index("*")'
+            '.rollup("count").last("5m") > 3'
+        ),
+        "message": (
+            "{{value}} episode recording failures in the last 5 minutes.\n\n"
+            "Jobs are completing but episode/replay data is NOT being saved to observatory. "
+            "This is a silent data loss — users won't see results.\n\n"
+            "Common causes:\n"
+            "- Schema validation error (mettagrid/cogames update changed job fields)\n"
+            "- S3 write failure\n"
+            "- DuckDB error during bulk upload\n\n"
+            "Check k8s-event-processor logs for the full traceback.\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": [
+            "env:production",
+            "team:infra",
+            "managed-by:code",
+            "service:tournament",
+        ],
+        "priority": 2,
+        "thresholds": {"critical": 3},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
             "include_tags": False,
         },
     }
@@ -501,6 +597,7 @@ ALL_MONITORS = [
     job_failure_rate_monitor,
     job_config_error_monitor,
     job_total_failure_rate_monitor,
+    episode_recording_failure_monitor,
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
     job_daily_cost_monitor,

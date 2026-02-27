@@ -14,7 +14,7 @@ from metta.app_backend.episode_stats_db import (
 from metta.app_backend.metta_scheme_resolver import MettaSchemeResolver
 from metta.app_backend.models.job_request import JobRequestUpdate
 from metta.app_backend.otel.job_metrics import get_job_metrics
-from mettagrid.runner.types import PureSingleEpisodeResult, SingleEpisodeJob
+from mettagrid.runner.types import EpisodeJobSummary, PureSingleEpisodeResult
 from mettagrid.util.file import http_url
 
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ def write_single_episode_to_observatory(
 
 def record_job_episode(
     job_id: uuid.UUID,
-    job: SingleEpisodeJob,
+    job: EpisodeJobSummary,
     results: PureSingleEpisodeResult,
     stats_client: StatsClient,
     result_data: dict[str, str] | None = None,

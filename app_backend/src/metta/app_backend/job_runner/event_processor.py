@@ -33,7 +33,7 @@ from metta.app_backend.job_runner.config import (
     LABEL_JOB_ID,
     get_dispatch_config,
 )
-from metta.app_backend.job_runner.episode_recording import record_job_episode
+from metta.app_backend.job_runner.episode_recording import EpisodeJobSummary, record_job_episode
 from metta.app_backend.job_runner.job_artifacts import JobArtifact
 from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to_public, get_s3_client
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
@@ -42,8 +42,7 @@ from metta.app_backend.models.k8s_events import K8sEvent
 from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
-from mettagrid.base_config import LENIENT_CONTEXT
-from mettagrid.runner.types import PureSingleEpisodeResult, RunnerError, RuntimeInfo, SingleEpisodeJob
+from mettagrid.runner.types import PureSingleEpisodeResult, RunnerError, RuntimeInfo
 
 logger = logging.getLogger(__name__)
 
@@ -629,9 +628,9 @@ def _handle_pod_succeeded(
             running_at=job_request.running_at,
         )
 
-        job = SingleEpisodeJob.model_validate(job_request.job, context=LENIENT_CONTEXT)
+        job = EpisodeJobSummary.model_validate(job_request.job)
         replay_uri = copy_replay_to_public(ctx.job_id)
-        record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)  # pyright: ignore[reportArgumentType]
+        record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)
         _update_job_status(stats_client, ctx.job_id, JobStatus.completed)
         logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     except Exception as e:
