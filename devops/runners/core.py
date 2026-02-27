@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 from collections import defaultdict
@@ -190,6 +191,18 @@ class Runner:
         job.status = JobStatus.RUNNING
         job.started_at = _now()
         job.logs_path = str(self.logs_dir / f"{job.name}.log")
+        self._emit_check_event(
+            "CHECK_START",
+            job,
+            executor=job.executor.ex_type.value,
+            is_remote=job.is_remote,
+            timeout_s=job.timeout_s,
+            dependencies=job.dependencies,
+            command=job.cmd,
+            log_path=job.logs_path,
+            check_group=job.metadata.get("check_group"),
+            lifecycle=job.metadata.get("lifecycle"),
+        )
 
         if job.is_remote:
             self._print(f"[{job.name}] Launching remote: {' '.join(job.cmd)}")
@@ -219,6 +232,7 @@ class Runner:
 
         if job.remote_id:
             self._remote_not_found_deadline[job.name] = _now() + self._REMOTE_NOT_FOUND_GRACE
+            self._emit_check_event("CHECK_REMOTE_LAUNCHED", job, remote_id=job.remote_id)
             self._print(f"[{job.name}] Launched: job_id={job.remote_id}")
             return
         else:
@@ -282,6 +296,17 @@ class Runner:
 
         duration = f"{job.duration_s:.0f}s" if job.duration_s is not None else "-"
         self._print(f"[{job.name}] {result} (duration={duration})")
+        self._emit_check_event(
+            "CHECK_END",
+            job,
+            status=job.status.value,
+            result=result,
+            exit_code=job.exit_code,
+            duration_s=job.duration_s,
+            acceptance_passed=job.acceptance_passed,
+            error=job.error,
+            log_path=job.logs_path,
+        )
 
         self._on_job_terminal(job)
 
@@ -302,7 +327,17 @@ class Runner:
         job.exit_code = 0
         job.error = reason
         self._print(f"[{job.name}] SKIPPED: {reason}")
+        self._emit_check_event("CHECK_SKIP", job, reason=reason)
         self._on_job_terminal(job)
+
+    def _emit_check_event(self, event: str, job: Job, **fields: object) -> None:
+        payload = {
+            "timestamp": _now().isoformat(timespec="seconds"),
+            "event": event,
+            "job_name": job.name,
+        }
+        payload.update(fields)
+        self._print(f"[CHECK_EVENT] {json.dumps(payload, sort_keys=True, default=str)}")
 
     def _wait_for_progress(self, next_remote_poll: float) -> None:
         futures: list[Future] = []
