@@ -64,6 +64,11 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
           >
             {SEASON_STATUS_LABELS[season.status]}
           </span>
+          {!season.public && (
+            <span className="inline-flex items-center rounded-full border border-yellow-500/40 px-1.5 py-0 text-[11px] font-medium text-yellow-700 dark:text-yellow-300">
+              private
+            </span>
+          )}
         </div>
         {season.summary && (
           <div className="text-foreground-muted mt-0.5 text-sm">

@@ -91,6 +91,57 @@ async def seed_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
 
 
 @pytest_asyncio.fixture
+async def seed_public_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
+    async with db_session() as session:
+        season = Season(name="beta-cvc", canonical=True, public=True)
+        session.add(season)
+        await session.flush()
+
+        pool = Pool(season_id=season.id, name="test-pool")
+        session.add(pool)
+        await session.flush()
+
+        policy = Policy(name=f"public-smoke-policy-{uuid4().hex[:8]}", user_id="test-user")
+        session.add(policy)
+        await session.flush()
+
+        pv = PolicyVersion(policy_id=policy.id, version=1)
+        session.add(pv)
+        await session.flush()
+
+        pool_player = PoolPlayer(pool_id=pool.id, policy_version_id=pv.id)
+        session.add(pool_player)
+        await session.flush()
+
+        job = JobRequest(
+            job_type=JobType.episode,
+            job={"assignments": [0]},
+            user_id="test-user",
+            status=JobStatus.completed,
+            result={"episode_id": str(uuid4())},
+        )
+        session.add(job)
+        await session.flush()
+
+        jpv = JobPolicyVersion(job_id=job.id, position=0, policy_version_id=pv.id)
+        session.add(jpv)
+        await session.flush()
+
+        match = Match(pool_id=pool.id, job_id=job.id, assignments=[0], status=MatchStatus.completed)
+        session.add(match)
+        await session.flush()
+
+        session.add(MatchPlayer(match_id=match.id, pool_player_id=pool_player.id, policy_index=0, score=1.0))
+        await session.flush()
+
+        return {
+            "season_name": season.name,
+            "match_id": str(match.id),
+            "policy_version_id": str(pv.id),
+        }
+
+
+@pytest_asyncio.fixture
 async def seed_or_logic_season(stats_repo: str) -> dict:  # type: ignore[unused-arg]
     """Fixture for testing OR logic in policy_version_ids filter.
 
@@ -253,9 +304,7 @@ class TestTournamentRouteSmoke:
 
     @pytest.mark.asyncio
     async def test_get_season(self, test_client: TestClient, softmax_headers: dict, seed_season: dict):
-        r = test_client.get(
-            f"/tournament/seasons/{seed_season['season_name']}?include_hidden=true", headers=softmax_headers
-        )
+        r = test_client.get(f"/tournament/seasons/{seed_season['season_name']}", headers=softmax_headers)
         assert r.status_code == 200
         season = r.json()
         assert season["display_name"]
@@ -270,9 +319,7 @@ class TestTournamentRouteSmoke:
 
     @pytest.mark.asyncio
     async def test_get_matches(self, test_client: TestClient, softmax_headers: dict, seed_season: dict):
-        r = test_client.get(
-            f"/tournament/seasons/{seed_season['season_name']}/matches?include_hidden=true", headers=softmax_headers
-        )
+        r = test_client.get(f"/tournament/seasons/{seed_season['season_name']}/matches", headers=softmax_headers)
         assert r.status_code == 200
         data = r.json()
         assert isinstance(data, list)
@@ -286,7 +333,7 @@ class TestTournamentRouteSmoke:
     @pytest.mark.asyncio
     async def test_get_leaderboard(self, test_client: TestClient, softmax_headers: dict, seed_season: dict):
         r = test_client.get(
-            f"/tournament/seasons/{seed_season['season_name']}/leaderboard?include_hidden=true",
+            f"/tournament/seasons/{seed_season['season_name']}/leaderboard",
             headers=softmax_headers,
         )
         assert r.status_code == 200
@@ -310,8 +357,7 @@ class TestTournamentRouteSmoke:
         # With AND logic (bug): would return 0 matches
         r = test_client.get(
             f"/tournament/seasons/{seed_or_logic_season['season_name']}/matches"
-            f"?include_hidden=true"
-            f"&policy_version_ids={seed_or_logic_season['pv_a_id']}"
+            f"?policy_version_ids={seed_or_logic_season['pv_a_id']}"
             f"&policy_version_ids={seed_or_logic_season['pv_b_id']}",
             headers=softmax_headers,
         )
@@ -333,7 +379,7 @@ class TestTournamentRouteSmoke:
             new=AsyncMock(return_value=["0.6"]),
         ):
             response = test_client.post(
-                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
                 json={"compat_version": "0.6"},
                 headers=softmax_headers,
             )
@@ -381,7 +427,7 @@ class TestTournamentRouteSmoke:
         self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
     ):
         response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
             json={"compat_version": "   "},
             headers=softmax_headers,
         )
@@ -393,7 +439,7 @@ class TestTournamentRouteSmoke:
         self, test_client: TestClient, seed_rollable_freeplay_season: dict
     ):
         response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
             json={"compat_version": "0.6"},
         )
         assert response.status_code == 401
@@ -404,7 +450,7 @@ class TestTournamentRouteSmoke:
         self, test_client: TestClient, regular_headers: dict, seed_rollable_freeplay_season: dict
     ):
         response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
             json={"compat_version": "0.6"},
             headers=regular_headers,
         )
@@ -420,7 +466,7 @@ class TestTournamentRouteSmoke:
             new=AsyncMock(return_value=["0.6"]),
         ):
             response = test_client.post(
-                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
                 json={"compat_version": "0.6"},
                 headers=softmax_headers,
             )
@@ -438,13 +484,13 @@ class TestTournamentRouteSmoke:
             new=AsyncMock(return_value=["0.6"]),
         ):
             response = test_client.post(
-                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
                 json={"compat_version": "0.6", "migrate_active_players": True},
                 headers=softmax_headers,
             )
         assert response.status_code == 200
         season_name = seed_rollable_freeplay_season["season_name"]
-        detail = test_client.get(f"/tournament/seasons/{season_name}?include_hidden=true", headers=softmax_headers)
+        detail = test_client.get(f"/tournament/seasons/{season_name}", headers=softmax_headers)
         assert detail.status_code == 200
         payload = detail.json()
         assert payload["version"] == 2
@@ -460,7 +506,7 @@ class TestTournamentRouteSmoke:
             new=AsyncMock(return_value=["0.5"]),
         ):
             response = test_client.post(
-                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll?include_hidden=true",
+                f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/roll",
                 json={"compat_version": "0.6"},
                 headers=softmax_headers,
             )
@@ -477,7 +523,7 @@ class TestTournamentRouteSmoke:
         ):
             response = test_client.post(
                 f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}"
-                "/update-current-season-compat-version?include_hidden=true",
+                "/update-current-season-compat-version",
                 json={"compat_version": "0.7"},
                 headers=softmax_headers,
             )
@@ -493,8 +539,7 @@ class TestTournamentRouteSmoke:
         self, test_client: TestClient, softmax_headers: dict, seed_rollable_freeplay_season: dict
     ):
         response = test_client.post(
-            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}"
-            "/update-current-season-compat-version?include_hidden=true",
+            f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}/update-current-season-compat-version",
             json={"compat_version": "   "},
             headers=softmax_headers,
         )
@@ -511,7 +556,7 @@ class TestTournamentRouteSmoke:
         ):
             response = test_client.post(
                 f"/tournament/seasons/{seed_rollable_freeplay_season['season_id']}"
-                "/update-current-season-compat-version?include_hidden=true",
+                "/update-current-season-compat-version",
                 json={"compat_version": "0.7"},
                 headers=softmax_headers,
             )
@@ -519,7 +564,7 @@ class TestTournamentRouteSmoke:
         assert response.json()["detail"].startswith("compat_version 0.7 is not available in")
 
     @pytest.mark.asyncio
-    async def test_list_match_policy_logs_owner(self, test_client: TestClient, seed_season: dict):
+    async def test_list_match_policy_logs_owner(self, test_client: TestClient, seed_public_season: dict):
         """Policy owner can list their policy logs in a match."""
         owner_headers = get_user_headers(User(id="test-user", email="test@example.com", is_softmax_team_member=False))
         files = ["policy_agent_0.txt"]
@@ -529,7 +574,7 @@ class TestTournamentRouteSmoke:
             mock_boto.return_value = mock_s3
 
             r = test_client.get(
-                f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs",
+                f"/tournament/matches/{seed_public_season['match_id']}/{seed_public_season['policy_version_id']}/policy-logs",
                 headers=owner_headers,
             )
 
@@ -537,7 +582,7 @@ class TestTournamentRouteSmoke:
         assert r.json() == files
 
     @pytest.mark.asyncio
-    async def test_get_match_policy_log_owner(self, test_client: TestClient, seed_season: dict):
+    async def test_get_match_policy_log_owner(self, test_client: TestClient, seed_public_season: dict):
         """Policy owner can get a specific agent's policy log."""
         owner_headers = get_user_headers(User(id="test-user", email="test@example.com", is_softmax_team_member=False))
         with patch("boto3.client") as mock_boto:
@@ -546,7 +591,7 @@ class TestTournamentRouteSmoke:
             mock_boto.return_value = mock_s3
 
             r = test_client.get(
-                f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs/0",
+                f"/tournament/matches/{seed_public_season['match_id']}/{seed_public_season['policy_version_id']}/policy-logs/0",
                 headers=owner_headers,
             )
 
@@ -555,32 +600,32 @@ class TestTournamentRouteSmoke:
 
     @pytest.mark.asyncio
     async def test_match_policy_logs_forbidden_for_non_owner(
-        self, test_client: TestClient, regular_headers: dict, seed_season: dict
+        self, test_client: TestClient, regular_headers: dict, seed_public_season: dict
     ):
         """Non-owner gets 403 when accessing another user's policy logs."""
         r = test_client.get(
-            f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs",
+            f"/tournament/matches/{seed_public_season['match_id']}/{seed_public_season['policy_version_id']}/policy-logs",
             headers=regular_headers,
         )
         assert r.status_code == 403
 
     @pytest.mark.asyncio
     async def test_match_policy_logs_forbidden_for_softmax_non_owner(
-        self, test_client: TestClient, softmax_headers: dict, seed_season: dict
+        self, test_client: TestClient, softmax_headers: dict, seed_public_season: dict
     ):
         """Softmax team members get 403 when accessing another user's policy logs."""
         r = test_client.get(
-            f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs",
+            f"/tournament/matches/{seed_public_season['match_id']}/{seed_public_season['policy_version_id']}/policy-logs",
             headers=softmax_headers,
         )
         assert r.status_code == 403
 
     @pytest.mark.asyncio
-    async def test_get_match_policy_log_wrong_agent_forbidden(self, test_client: TestClient, seed_season: dict):
+    async def test_get_match_policy_log_wrong_agent_forbidden(self, test_client: TestClient, seed_public_season: dict):
         """Requesting a log for an agent that doesn't run the specified policy returns 403."""
         owner_headers = get_user_headers(User(id="test-user", email="test@example.com", is_softmax_team_member=False))
         r = test_client.get(
-            f"/tournament/matches/{seed_season['match_id']}/{seed_season['policy_version_id']}/policy-logs/99",
+            f"/tournament/matches/{seed_public_season['match_id']}/{seed_public_season['policy_version_id']}/policy-logs/99",
             headers=owner_headers,
         )
         assert r.status_code == 403

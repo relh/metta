@@ -60,7 +60,7 @@ from metta.app_backend.tournament.progress import StageStats, TeamTournamentProg
 from metta.app_backend.tournament.referees.teams.score_stage import ScoreStageReferee
 from metta.app_backend.tournament.scripts.roll_season import roll_season_version
 from metta.app_backend.tournament.season_resolver import get_season_versions, parse_season_ref, resolve_season
-from metta.app_backend.tournament.settings import DEFAULT_SEASON, HIDDEN_SEASONS
+from metta.app_backend.tournament.settings import DEFAULT_SEASON
 from metta.app_backend.tournament.stage_stats import build_stage_stats_row, load_stage_stats_counts
 
 logger = logging.getLogger(__name__)
@@ -219,6 +219,7 @@ class SeasonSummary(BaseModel):
     is_default: bool = Field(description="Whether this is the default season")
     compat_version: str | None = Field(default=None, description="Compatibility version string (e.g. '0.4')")
     created_at: str = Field(description="ISO 8601 timestamp when this season version was created")
+    public: bool = Field(description="Whether this season is visible to non-Softmax users")
     tournament_type: Literal["freeplay", "team"] = Field(description="Tournament format")
     pools: list[PoolInfo] = Field(description="Pools in this season")
 
@@ -242,6 +243,7 @@ class SeasonSummary(BaseModel):
                 is_default=False,
                 compat_version=season.compat_version,
                 created_at=season.created_at.isoformat(),
+                public=season.public,
                 tournament_type=season.tournament_type,
                 pools=[],
             )
@@ -261,6 +263,7 @@ class SeasonSummary(BaseModel):
             is_default=season_name == DEFAULT_SEASON,
             compat_version=season.compat_version,
             created_at=season.created_at.isoformat(),
+            public=season.public,
             tournament_type=season.tournament_type,
             pools=[
                 PoolInfo(
@@ -324,6 +327,7 @@ class SeasonDetail(SeasonSummary):
                 )
                 for p in desc.pools
             ],
+            public=season.public,
             status=status,
             display_name=commissioner.display_name,
             created_at=season.created_at.isoformat(),
@@ -358,29 +362,30 @@ async def _resolve_season_or_404(
     session: AsyncSession,
     season_name: str,
     *,
-    allow_hidden: bool = False,
+    user: User | None = None,
 ) -> tuple[str, Season]:
     name, version = parse_season_ref(season_name)
-    if name not in tournament_registry.SEASONS or (name in HIDDEN_SEASONS and not allow_hidden):
+    if name not in tournament_registry.SEASONS:
         raise HTTPException(status_code=404, detail="Season not found")
     season = await resolve_season(session, name, version)
     if not season:
         raise HTTPException(status_code=404, detail="Season version not found")
+    is_softmax = user is not None and user.is_softmax_team_member
+    if not season.public and not is_softmax:
+        raise HTTPException(status_code=404, detail="Season not found")
     return name, season
 
 
 async def _resolve_canonical_season_by_id_or_404(
     session: AsyncSession,
     season_id: UUID,
-    *,
-    allow_hidden: bool = False,
 ) -> tuple[str, Season]:
     season = (await session.execute(select(Season).where(Season.id == season_id))).scalar_one_or_none()
     if not season:
         raise HTTPException(status_code=404, detail="Season not found")
     if not season.canonical:
         raise HTTPException(status_code=400, detail="Rolling a season version is not supported")
-    if season.name not in tournament_registry.SEASONS or (season.name in HIDDEN_SEASONS and not allow_hidden):
+    if season.name not in tournament_registry.SEASONS:
         raise HTTPException(status_code=404, detail="Season not found")
     return season.name, season
 
@@ -410,9 +415,9 @@ async def _resolve_season_and_commissioner_or_404(
     session: AsyncSession,
     season_name: str,
     *,
-    allow_hidden: bool = False,
+    user: User | None = None,
 ) -> tuple[str, Season, CommissionerBase]:
-    name, season = await _resolve_season_or_404(session, season_name, allow_hidden=allow_hidden)
+    name, season = await _resolve_season_or_404(session, season_name, user=user)
     commissioner = await build_commissioner(name, season_id=season.id)
     return name, season, commissioner
 
@@ -421,13 +426,13 @@ async def _resolve_team_commissioner_or_400(
     session: AsyncSession,
     season_name: str,
     *,
-    allow_hidden: bool = False,
+    user: User | None = None,
     detail: str,
 ) -> tuple[str, Season, TeamCommissionerBase]:
     name, season, commissioner = await _resolve_season_and_commissioner_or_404(
         session,
         season_name,
-        allow_hidden=allow_hidden,
+        user=user,
     )
     if not isinstance(commissioner, TeamCommissionerBase):
         raise HTTPException(status_code=400, detail=detail)
@@ -573,16 +578,14 @@ def create_tournament_router() -> APIRouter:
 
     @router.get("/seasons")
     @timed_http_handler
-    async def list_seasons(_user: NoAuthRequired, session: AsyncSession = Depends(get_session)) -> list[SeasonSummary]:
-        seasons = (
-            (
-                await session.execute(
-                    select(Season).where(col(Season.name).not_in(HIDDEN_SEASONS), col(Season.canonical).is_(True))
-                )
-            )
-            .scalars()
-            .all()
-        )
+    async def list_seasons(
+        user: MaybeAuthenticatedUser, session: AsyncSession = Depends(get_session)
+    ) -> list[SeasonSummary]:
+        query = select(Season).where(col(Season.canonical).is_(True))
+        is_softmax = user is not None and user.is_softmax_team_member
+        if not is_softmax:
+            query = query.where(col(Season.public).is_(True))
+        seasons = (await session.execute(query)).scalars().all()
         results: list[SeasonSummary] = []
         for season in seasons:
             pools_by_name = await _get_pools_by_name(session, season.id)
@@ -593,11 +596,10 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_season(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
     ) -> SeasonDetail:
-        name, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+        name, season = await _resolve_season_or_404(session, season_name, user=user)
         entrant_count = (
             await session.execute(
                 select(func.count(func.distinct(PoolPlayer.policy_version_id)))
@@ -633,9 +635,9 @@ def create_tournament_router() -> APIRouter:
     @router.get("/seasons/{season_name}/pools/{pool_name}/config")
     @timed_http_handler
     async def get_pool_config(
-        season_name: str, pool_name: str, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
+        season_name: str, pool_name: str, user: MaybeAuthenticatedUser, session: AsyncSession = Depends(get_session)
     ) -> JSONResponse:
-        _, season = await _resolve_season_or_404(session, season_name)
+        _, season = await _resolve_season_or_404(session, season_name, user=user)
         pool = (
             await session.execute(
                 select(Pool)
@@ -667,9 +669,10 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def list_season_versions(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
     ) -> list[SeasonVersionInfo]:
+        await _resolve_season_or_404(session, season_name, user=user)
         name, _ = parse_season_ref(season_name)
         versions = await get_season_versions(session, name)
         if not versions:
@@ -694,9 +697,8 @@ def create_tournament_router() -> APIRouter:
         request: RollSeasonRequest,
         _user: SoftmaxUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include hidden seasons (for testing)"),
     ) -> SeasonSummary:
-        name, season = await _resolve_canonical_season_by_id_or_404(session, season_id, allow_hidden=include_hidden)
+        name, season = await _resolve_canonical_season_by_id_or_404(session, season_id)
         commissioner_cls = tournament_registry.SEASONS[name]
 
         compat_version = request.compat_version.strip()
@@ -730,9 +732,8 @@ def create_tournament_router() -> APIRouter:
         request: UpdateCurrentSeasonCompatVersionRequest,
         _user: SoftmaxUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include hidden seasons (for testing)"),
     ) -> SeasonSummary:
-        name, season = await _resolve_canonical_season_by_id_or_404(session, season_id, allow_hidden=include_hidden)
+        name, season = await _resolve_canonical_season_by_id_or_404(session, season_id)
 
         compat_version = request.compat_version.strip()
         if not compat_version:
@@ -754,15 +755,14 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_leaderboard(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
         pool: str | None = Query(default=None, description="Pool name to scope leaderboard to (overrides default)"),
     ) -> list[LeaderboardEntry]:
         _, _, commissioner = await _resolve_season_and_commissioner_or_404(
             session,
             season_name,
-            allow_hidden=include_hidden,
+            user=user,
         )
         return await _build_policy_leaderboard(session, commissioner, pool_name=pool)
 
@@ -770,14 +770,13 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_score_policies_leaderboard(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
     ) -> list[ScorePoliciesLeaderboardEntry]:
         _, _, commissioner = await _resolve_team_commissioner_or_400(
             session,
             season_name,
-            allow_hidden=include_hidden,
+            user=user,
             detail="Score-policies leaderboard is only available for team seasons",
         )
         return await _build_score_policies_leaderboard(session, commissioner)
@@ -789,11 +788,8 @@ def create_tournament_router() -> APIRouter:
         user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
         mine: bool = Query(default=False, description="Filter to only policies owned by the authenticated user"),
-        include_hidden: bool = Query(
-            default=False, description="Include policies that are part of a hidden season (for testing)"
-        ),
     ) -> list[PolicySummary]:
-        _, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+        _, season = await _resolve_season_or_404(session, season_name, user=user)
         query = (
             select(PolicyVersion)
             .join(PolicyVersion.pool_players)
@@ -914,15 +910,14 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_matches(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
         limit: int = 50,
         offset: int = 0,
-        include_hidden: bool = Query(default=False, description="Include matches of a hidden season (for testing)"),
         pool_names: list[str] | None = Query(default=None),
         policy_version_ids: list[UUID] | None = Query(default=None),
     ) -> list[MatchResponse]:
-        name, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+        name, season = await _resolve_season_or_404(session, season_name, user=user)
         query = (
             select(Match, JobRequest.episode_id, JobRequest.error)
             .outerjoin(Match.job)
@@ -971,7 +966,7 @@ def create_tournament_router() -> APIRouter:
     @router.get("/matches/{match_id}")
     @timed_http_handler
     async def get_match(
-        match_id: UUID, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
+        match_id: UUID, user: MaybeAuthenticatedUser, session: AsyncSession = Depends(get_session)
     ) -> MatchResponse:
         query = (
             select(Match)
@@ -1019,6 +1014,10 @@ def create_tournament_router() -> APIRouter:
         episode_id_str = job.episode_id if job else None
         error = job.error if job else None
         season_name = m.pool.season.name if m.pool and m.pool.season else "unknown"
+        season_obj = m.pool.season if m.pool else None
+        is_softmax = user is not None and user.is_softmax_team_member
+        if season_obj and not season_obj.public and not is_softmax:
+            raise HTTPException(status_code=404, detail="Match not found")
 
         episode_resp: EpisodeResponse | None = None
         if job and job.episode_jobs:
@@ -1049,11 +1048,16 @@ def create_tournament_router() -> APIRouter:
                     .selectinload(PoolPlayer.policy_version)
                     .selectinload(PolicyVersion.policy)
                     .raiseload("*"),
+                    selectinload(Match.pool).selectinload(Pool.season).raiseload("*"),
                     raiseload("*"),
                 )
             )
         ).scalar_one_or_none()
         if not match:
+            raise HTTPException(status_code=404, detail="Match not found")
+        season_obj = match.pool.season if match.pool else None
+        is_softmax = user.is_softmax_team_member
+        if season_obj and not season_obj.public and not is_softmax:
             raise HTTPException(status_code=404, detail="Match not found")
         if not match.job_id:
             raise HTTPException(status_code=404, detail="Match has no associated job")
@@ -1178,30 +1182,25 @@ def create_tournament_router() -> APIRouter:
     @router.get("/policies/{policy_version_id}/memberships")
     @timed_http_handler
     async def get_policy_memberships(
-        policy_version_id: UUID, _user: NoAuthRequired, session: AsyncSession = Depends(get_session)
+        policy_version_id: UUID, user: MaybeAuthenticatedUser, session: AsyncSession = Depends(get_session)
     ) -> list[MembershipHistoryEntry]:
-        changes = (
-            (
-                await session.execute(
-                    select(MembershipChange)
-                    .join(MembershipChange.pool_player)
-                    .join(PoolPlayer.pool)
-                    .join(Pool.season)
-                    .where(PoolPlayer.policy_version_id == policy_version_id)
-                    .order_by(
-                        col(MembershipChange.created_at).desc(),
-                        col(MembershipChange.action).asc(),
-                    )
-                    .options(
-                        selectinload(MembershipChange.pool_player)
-                        .selectinload(PoolPlayer.pool)
-                        .selectinload(Pool.season)
-                    )
-                )
+        query = (
+            select(MembershipChange)
+            .join(MembershipChange.pool_player)
+            .join(PoolPlayer.pool)
+            .join(Pool.season)
+            .where(PoolPlayer.policy_version_id == policy_version_id)
+            .order_by(
+                col(MembershipChange.created_at).desc(),
+                col(MembershipChange.action).asc(),
             )
-            .scalars()
-            .all()
+            .options(selectinload(MembershipChange.pool_player).selectinload(PoolPlayer.pool).selectinload(Pool.season))
         )
+        is_softmax = user is not None and user.is_softmax_team_member
+        if not is_softmax:
+            query = query.where(col(Season.public).is_(True))
+
+        changes = (await session.execute(query)).scalars().all()
 
         return [
             MembershipHistoryEntry(
@@ -1224,17 +1223,18 @@ def create_tournament_router() -> APIRouter:
 
         Returns a mapping of policy_version_id -> list of season names.
         """
-        rows = (
-            await session.execute(
-                select(PoolPlayer.policy_version_id, Season.name)
-                .join(PoolPlayer.pool)
-                .join(Pool.season)
-                .join(PoolPlayer.policy_version)
-                .join(PolicyVersion.policy)
-                .where(Policy.user_id == user.id)
-                .distinct()
-            )
-        ).all()
+        query = (
+            select(PoolPlayer.policy_version_id, Season.name)
+            .join(PoolPlayer.pool)
+            .join(Pool.season)
+            .join(PoolPlayer.policy_version)
+            .join(PolicyVersion.policy)
+            .where(Policy.user_id == user.id)
+            .distinct()
+        )
+        if not user.is_softmax_team_member:
+            query = query.where(col(Season.public).is_(True))
+        rows = (await session.execute(query)).all()
 
         result: dict[str, list[str]] = {}
         for pv_id, season_name in rows:
@@ -1249,14 +1249,13 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_progress(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include hidden season progress (for testing)"),
     ) -> TeamTournamentProgress:
         _, _, commissioner = await _resolve_team_commissioner_or_400(
             session,
             season_name,
-            allow_hidden=include_hidden,
+            user=user,
             detail="Progress not available for this season type",
         )
         return await commissioner.get_progress()
@@ -1267,12 +1266,11 @@ def create_tournament_router() -> APIRouter:
         season_name: str,
         _user: SoftmaxUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include hidden seasons (for testing)"),
     ) -> TeamTournamentProgress:
         _, season, commissioner = await _resolve_team_commissioner_or_400(
             session,
             season_name,
-            allow_hidden=include_hidden,
+            user=_user,
             detail="Only team seasons can be started",
         )
         if season.started_at is not None:
@@ -1287,16 +1285,15 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_teams(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
         limit: int = 50,
         offset: int = 0,
         pool_name: str | None = Query(default=None),
         eliminated: bool | None = Query(default=None),
         policy_version_id: UUID | None = Query(default=None),
-        include_hidden: bool = Query(default=False, description="Include hidden season teams (for testing)"),
     ) -> list[TeamSummary]:
-        _, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+        _, season = await _resolve_season_or_404(session, season_name, user=user)
         return await _build_team_summaries(
             session,
             season_id=season.id,
@@ -1311,11 +1308,10 @@ def create_tournament_router() -> APIRouter:
     @timed_http_handler
     async def get_stages(
         season_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include hidden season stages (for testing)"),
     ) -> list[StageStats]:
-        _, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+        _, season = await _resolve_season_or_404(session, season_name, user=user)
         pools = (
             (await session.execute(select(Pool).where(Pool.season_id == season.id).order_by(Pool.created_at)))
             .scalars()
@@ -1341,20 +1337,19 @@ def create_tournament_router() -> APIRouter:
         season_name: str,
         leaderboard_type: Literal["policy", "team", "score-policies"],
         pool_name: str,
-        _user: NoAuthRequired,
+        user: MaybeAuthenticatedUser,
         session: AsyncSession = Depends(get_session),
-        include_hidden: bool = Query(default=False, description="Include leaderboard of a hidden season (for testing)"),
     ) -> list[LeaderboardEntry] | list[TeamSummary] | list[ScorePoliciesLeaderboardEntry]:
         if leaderboard_type == "policy":
             _, _, commissioner = await _resolve_season_and_commissioner_or_404(
                 session,
                 season_name,
-                allow_hidden=include_hidden,
+                user=user,
             )
             return await _build_policy_leaderboard(session, commissioner, pool_name=pool_name)
 
         if leaderboard_type == "team":
-            _, season = await _resolve_season_or_404(session, season_name, allow_hidden=include_hidden)
+            _, season = await _resolve_season_or_404(session, season_name, user=user)
             return await _build_team_summaries(
                 session,
                 season_id=season.id,
@@ -1364,7 +1359,7 @@ def create_tournament_router() -> APIRouter:
         _, _, commissioner = await _resolve_team_commissioner_or_400(
             session,
             season_name,
-            allow_hidden=include_hidden,
+            user=user,
             detail="Score-policies leaderboard is only available for team seasons",
         )
         if pool_name != commissioner.leaderboard_pool:

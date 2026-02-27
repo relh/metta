@@ -59,6 +59,7 @@ async def roll_season_version(
         version=old_season.version + 1,
         canonical=True,
         disabled_at=None,
+        public=old_season.public,
         compat_version=compat_version,
         team_tournament_config=effective_team_config,
     )

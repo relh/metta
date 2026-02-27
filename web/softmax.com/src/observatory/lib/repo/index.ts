@@ -631,8 +631,6 @@ export class Repo {
   ): Promise<LeaderboardEntry[]> {
     const searchParams = new URLSearchParams();
     if (params?.pool) searchParams.append("pool", params.pool);
-    if (params?.include_hidden !== undefined)
-      searchParams.append("include_hidden", params.include_hidden.toString());
     const query = searchParams.toString();
     return this.apiCall<LeaderboardEntry[]>(
       `/tournament/seasons/${encodePathSegment(seasonName)}/leaderboard${query ? `?${query}` : ""}`,
@@ -665,10 +663,7 @@ export class Repo {
   ): Promise<
     LeaderboardEntry[] | TeamSummary[] | ScorePoliciesLeaderboardEntry[]
   > {
-    const searchParams = new URLSearchParams();
-    if (params?.include_hidden !== undefined)
-      searchParams.append("include_hidden", params.include_hidden.toString());
-    const query = searchParams.toString();
+    const query = "";
     return this.apiCall<
       LeaderboardEntry[] | TeamSummary[] | ScorePoliciesLeaderboardEntry[]
     >(

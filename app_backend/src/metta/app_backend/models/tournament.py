@@ -84,6 +84,7 @@ class Season(SQLModel, table=True):
     disabled_at: datetime | None = Field(default=None)
     compat_version: str | None = Field(default=None)
     started_at: datetime | None = Field(default=None)
+    public: bool = Field(default=False, sa_column_kwargs={"server_default": text("false")})
     description: str | None = None
     team_tournament_config: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
     created_at: datetime = Field(

@@ -157,15 +157,19 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
   const seasonOptions: SeasonOption[] = useMemo(() => {
     const options = tabSeasons.map((season) => ({
       value: season.name,
-      label: season.display_name,
+      label: season.public
+        ? season.display_name
+        : `${season.display_name} (private)`,
     }));
     if (
       selectedSeasonName &&
       !options.some((option) => option.value === selectedSeasonName)
     ) {
+      const isPublic = selectedSeason?.public ?? true;
+      const displayName = selectedSeason?.display_name ?? selectedSeasonName;
       options.unshift({
         value: selectedSeasonName,
-        label: selectedSeason?.display_name ?? selectedSeasonName,
+        label: isPublic ? displayName : `${displayName} (private)`,
       });
     }
     return options;

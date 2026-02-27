@@ -314,9 +314,8 @@ async def test_get_policy_version_detail_is_public(test_client: TestClient) -> N
         policy_id=policy_id, s3_path=None, git_hash=None, policy_spec={}, attributes={}
     )
 
-    # Submit to a public season so anonymous users can see it
     async with db_session() as session:
-        season = Season(name="beta-cvc", canonical=True)
+        season = Season(name="beta-cvc", canonical=True, public=True)
         session.add(season)
         await session.flush()
         pool = Pool(season_id=season.id, name="public-pool")
@@ -381,9 +380,13 @@ async def test_bulk_upload_requires_softmax(
 
 
 async def _create_policy_with_season(
-    session: AsyncSession, policy_name: str, user_id: str, season_name: str | None
+    session: AsyncSession,
+    policy_name: str,
+    user_id: str,
+    season_name: str | None,
+    *,
+    season_public: bool = False,
 ) -> tuple[uuid.UUID, uuid.UUID]:
-    """Helper to create a policy with a version, optionally submitted to a season."""
     policy = Policy(name=policy_name, user_id=user_id)
     session.add(policy)
     await session.flush()
@@ -393,11 +396,9 @@ async def _create_policy_with_season(
     await session.flush()
 
     if season_name is not None:
-        # Check if season exists, otherwise create it
-
         season = (await session.execute(select(Season).filter_by(name=season_name))).scalar_one_or_none()
         if not season:
-            season = Season(name=season_name, canonical=True)
+            season = Season(name=season_name, canonical=True, public=season_public)
             session.add(season)
             await session.flush()
 
@@ -441,12 +442,11 @@ async def test_visibility_policies_not_in_season_hidden_from_anonymous(test_clie
 
 
 @pytest.mark.asyncio
-async def test_visibility_policies_in_hidden_season_hidden_from_anonymous(test_client: TestClient) -> None:
-    """Test that policies in hidden seasons (test-season, beta) are hidden from anonymous users."""
+async def test_visibility_policies_in_private_season_hidden_from_anonymous(test_client: TestClient) -> None:
+    """Test that policies in non-public seasons are hidden from anonymous users."""
     async with db_session() as session:
-        # Create a policy submitted to a hidden season ("test-season" is in HIDDEN_SEASONS)
         policy_id, pv_id = await _create_policy_with_season(
-            session, "hidden-season-policy", "some-user@example.com", "test-season"
+            session, "hidden-season-policy", "some-user@example.com", "test-season", season_public=False
         )
 
     # Anonymous request should not see this policy
@@ -463,11 +463,10 @@ async def test_visibility_policies_in_hidden_season_hidden_from_anonymous(test_c
 
 @pytest.mark.asyncio
 async def test_visibility_policies_in_public_season_visible_to_anonymous(test_client: TestClient) -> None:
-    """Test that policies in non-hidden seasons (e.g., beta-cvc) are visible to anonymous users."""
+    """Test that policies in public seasons are visible to anonymous users."""
     async with db_session() as session:
-        # Create a policy submitted to a non-hidden season ("beta-cvc" is not in HIDDEN_SEASONS)
         policy_id, pv_id = await _create_policy_with_season(
-            session, "public-season-policy", "some-user@example.com", "beta-cvc"
+            session, "public-season-policy", "some-user@example.com", "beta-cvc", season_public=True
         )
 
     # Anonymous request should see this policy
@@ -573,8 +572,7 @@ async def test_visibility_versions_for_policy_filtered(
         session.add(pv2)
         await session.flush()
 
-        # Submit version 1 to a public season
-        season = Season(name="beta-cvc-versions-test", canonical=True)
+        season = Season(name="beta-cvc-versions-test", canonical=True, public=True)
         session.add(season)
         await session.flush()
 

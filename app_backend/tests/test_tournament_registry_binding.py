@@ -35,7 +35,7 @@ async def test_build_commissioner_uses_live_registry_mapping(monkeypatch: pytest
 
 @pytest.mark.asyncio
 async def test_resolve_season_uses_live_registry_mapping(monkeypatch: pytest.MonkeyPatch) -> None:
-    seeded_season = Season(name="dynamic-season", canonical=True)
+    seeded_season = Season(name="dynamic-season", canonical=True, public=True)
     monkeypatch.setattr(tournament_registry, "SEASONS", {"dynamic-season": _DynamicCommissioner})
 
     async def _fake_resolve_season(_session: object, _name: str, _version: int | None = None) -> Season:

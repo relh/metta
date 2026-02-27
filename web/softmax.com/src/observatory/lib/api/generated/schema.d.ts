@@ -2424,6 +2424,11 @@ export interface components {
        */
       created_at: string;
       /**
+       * Public
+       * @description Whether this season is visible to non-Softmax users
+       */
+      public: boolean;
+      /**
        * Tournament Type
        * @description Tournament format
        * @enum {string}
@@ -2524,6 +2529,11 @@ export interface components {
        * @description ISO 8601 timestamp when this season version was created
        */
       created_at: string;
+      /**
+       * Public
+       * @description Whether this season is visible to non-Softmax users
+       */
+      public: boolean;
       /**
        * Tournament Type
        * @description Tournament format
@@ -4371,10 +4381,7 @@ export interface operations {
   };
   get_season_tournament_seasons__season_name__get: {
     parameters: {
-      query?: {
-        /** @description Include leaderboard of a hidden season (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_name: string;
@@ -4519,10 +4526,7 @@ export interface operations {
   };
   roll_season_tournament_seasons__season_id__roll_post: {
     parameters: {
-      query?: {
-        /** @description Include hidden seasons (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_id: string;
@@ -4557,10 +4561,7 @@ export interface operations {
   };
   update_current_season_compat_version_tournament_seasons__season_id__update_current_season_compat_version_post: {
     parameters: {
-      query?: {
-        /** @description Include hidden seasons (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_id: string;
@@ -4596,8 +4597,6 @@ export interface operations {
   get_leaderboard_tournament_seasons__season_name__leaderboard_get: {
     parameters: {
       query?: {
-        /** @description Include leaderboard of a hidden season (for testing) */
-        include_hidden?: boolean;
         /** @description Pool name to scope leaderboard to (overrides default) */
         pool?: string | null;
       };
@@ -4631,10 +4630,7 @@ export interface operations {
   };
   get_score_policies_leaderboard_tournament_seasons__season_name__score_policies_leaderboard_get: {
     parameters: {
-      query?: {
-        /** @description Include leaderboard of a hidden season (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_name: string;
@@ -4668,8 +4664,6 @@ export interface operations {
       query?: {
         /** @description Filter to only policies owned by the authenticated user */
         mine?: boolean;
-        /** @description Include policies that are part of a hidden season (for testing) */
-        include_hidden?: boolean;
       };
       header?: never;
       path: {
@@ -4704,8 +4698,6 @@ export interface operations {
       query?: {
         limit?: number;
         offset?: number;
-        /** @description Include matches of a hidden season (for testing) */
-        include_hidden?: boolean;
         pool_names?: string[] | null;
         policy_version_ids?: string[] | null;
       };
@@ -4956,10 +4948,7 @@ export interface operations {
   };
   get_progress_tournament_seasons__season_name__progress_get: {
     parameters: {
-      query?: {
-        /** @description Include hidden season progress (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_name: string;
@@ -4990,10 +4979,7 @@ export interface operations {
   };
   start_season_tournament_seasons__season_name__start_post: {
     parameters: {
-      query?: {
-        /** @description Include hidden seasons (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_name: string;
@@ -5030,8 +5016,6 @@ export interface operations {
         pool_name?: string | null;
         eliminated?: boolean | null;
         policy_version_id?: string | null;
-        /** @description Include hidden season teams (for testing) */
-        include_hidden?: boolean;
       };
       header?: never;
       path: {
@@ -5063,10 +5047,7 @@ export interface operations {
   };
   get_stages_tournament_seasons__season_name__stages_get: {
     parameters: {
-      query?: {
-        /** @description Include hidden season stages (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_name: string;
@@ -5097,10 +5078,7 @@ export interface operations {
   };
   get_stage_leaderboard_by_type_tournament_seasons__season_name__leaderboard__leaderboard_type___pool_name__get: {
     parameters: {
-      query?: {
-        /** @description Include leaderboard of a hidden season (for testing) */
-        include_hidden?: boolean;
-      };
+      query?: never;
       header?: never;
       path: {
         season_name: string;

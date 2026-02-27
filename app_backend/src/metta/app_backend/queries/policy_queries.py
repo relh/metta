@@ -13,22 +13,11 @@ from sqlmodel import col, select
 from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.policies import Policy, PolicyVersion, PolicyVersionTag
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
-from metta.app_backend.tournament.settings import HIDDEN_SEASONS
 
 
 def _visible_pv_ids_subquery(user_id: str | None) -> Any:
-    """Return a subquery of policy_version IDs visible to the given user (or anonymous if None).
-
-    A policy version is visible if:
-    - It belongs to a policy owned by the user (if user_id is provided), OR
-    - It is submitted to a non-hidden tournament season (via PoolPlayer -> Pool -> Season)
-    """
-    # Policy versions in non-hidden seasons
     in_public_season = (
-        select(PoolPlayer.policy_version_id)
-        .join(PoolPlayer.pool)
-        .join(Pool.season)
-        .where(col(Season.name).not_in(HIDDEN_SEASONS))
+        select(PoolPlayer.policy_version_id).join(PoolPlayer.pool).join(Pool.season).where(col(Season.public).is_(True))
     )
 
     if user_id is None:
