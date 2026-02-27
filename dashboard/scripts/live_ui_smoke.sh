@@ -91,13 +91,9 @@ PY
 }
 
 run_tab overview 'h2:has-text("Outcome Summary")'
-run_tab episodes 'h2:has-text("Filters & Export")'
-run_tab opponents 'h2:has-text("Teammate Breakdown")'
-run_tab health 'h2:has-text("Failed Episodes")'
-run_tab roles 'h2:has-text("Parses")'
-run_tab capabilities 'h2:has-text("Capability Grid")'
-run_tab cogames_diagnose 'h2:has-text("Diagnose")'
-run_tab analysis 'h2:has-text("Analysis")'
+run_tab performance 'h2:has-text("Filters & Export")'
+run_tab coordination 'h2:has-text("Teammate Breakdown")'
+run_tab capabilities 'h2:has-text("Diagnose")'
 
 echo
 echo "summary: failures=$failures warnings=$warnings artifacts=$ARTIFACT_DIR"

@@ -22,18 +22,23 @@ from dashboard.backend.dashboard_backend.anthropic import (
     request_anthropic_message,
 )
 from dashboard.backend.dashboard_backend.auth import SoftmaxUser
+from dashboard.backend.dashboard_backend.cogames_diagnose.router import list_run_summaries
 from dashboard.backend.dashboard_backend.config import settings
 from dashboard.backend.dashboard_backend.database import db_session
 from dashboard.backend.dashboard_backend.state_page import diagnostics as claude_dashboard
 from dashboard.backend.dashboard_backend.state_page.capability_audit import build_capability_code_audit
 from dashboard.backend.dashboard_backend.state_page.diagnostics import (
     DashboardDerived,
+    DashboardDiagnoseRunSummary,
     DashboardEpisode,
     DashboardResponse,
+    DashboardRolePercentilesResponse,
     DerivedMetrics,
     EpisodeSelectionMetadata,
     FailureSummary,
     PolicyInfo,
+    RoleMetricDef,
+    RolePercentileRow,
     compute_action_summary,
     compute_confidence_summary,
     compute_crash_dump_summary,
@@ -70,6 +75,8 @@ DASHBOARD_LIMIT = 100
 # TODO: persistent rate limiter for multi-instance deployments
 _analysis_rate_limit: dict[str, list[float]] = {}
 ANALYSIS_RATE_LIMIT = 10  # requests per hour
+INCLUDE_ROLE_PERCENTILES = "role_percentiles"
+INCLUDE_DIAGNOSE_RUNS = "diagnose_runs"
 
 
 class DashboardAnalysisResponse(BaseModel):
@@ -77,26 +84,8 @@ class DashboardAnalysisResponse(BaseModel):
     data_sources: list[str]
 
 
-class RoleMetricDef(BaseModel):
-    key: str
-    source_names: list[str]
-    higher_is_better: bool
-
-
-class RolePercentileRow(BaseModel):
+class RouterRolePercentileRow(RolePercentileRow):
     model_config = ConfigDict(from_attributes=True)
-
-    role: str
-    percentile: float
-    details: dict[str, Any]
-    updated_at: datetime
-
-
-class DashboardRolePercentilesResponse(BaseModel):
-    pool_id: UUID | None
-    pool_name: str | None
-    roles: dict[str, list[RoleMetricDef]]
-    rows: list[RolePercentileRow]
 
 
 async def _latest_default_season(session: Any) -> Season | None:
@@ -180,6 +169,12 @@ def _role_metric_definitions() -> dict[str, list[RoleMetricDef]]:
         ]
         for role, metrics in ROLE_METRICS.items()
     }
+
+
+def _parse_include_flags(include: str | None) -> set[str]:
+    if include is None:
+        return set()
+    return {token.strip().lower() for token in include.split(",") if token.strip()}
 
 
 def _preferred_pool_names_for_season(season_name: str) -> list[str]:
@@ -289,6 +284,34 @@ async def _select_role_pool_and_rows(
             return pool, rows
 
     return candidate_pools[0], []
+
+
+async def _build_role_percentiles_response(policy_version_id: UUID) -> DashboardRolePercentilesResponse:
+    roles = _role_metric_definitions()
+    async with db_session(read_only=True) as session:
+        preferred_pool, rows = await _select_role_pool_and_rows(session, policy_version_id)
+
+    if preferred_pool is None:
+        return DashboardRolePercentilesResponse(
+            pool_id=None,
+            pool_name=None,
+            roles=roles,
+            rows=[],
+        )
+
+    return DashboardRolePercentilesResponse(
+        pool_id=str(preferred_pool.id),
+        pool_name=preferred_pool.name,
+        roles=roles,
+        rows=[RouterRolePercentileRow.model_validate(row) for row in rows],
+    )
+
+
+def _build_diagnose_run_summaries() -> list[DashboardDiagnoseRunSummary]:
+    return [
+        DashboardDiagnoseRunSummary(run_id=summary.run_id, manifest=summary.manifest)
+        for summary in list_run_summaries()
+    ]
 
 
 async def _build_sorted_dashboard_episodes(
@@ -401,17 +424,22 @@ def create_dashboard_router() -> APIRouter:
 
     @router.get("/default/data")
     @timed_http_handler
-    async def get_default_dashboard_data(user: SoftmaxUser) -> DashboardResponse:
+    async def get_default_dashboard_data(user: SoftmaxUser, include: str | None = None) -> DashboardResponse:
         async with db_session(read_only=True) as session:
             policy_version_id, _season = await _default_winner_policy_version_id(session)
         if not policy_version_id:
             raise HTTPException(status_code=404, detail="No default policy version available")
-        return await get_dashboard_data(policy_version_id, user)
+        return await get_dashboard_data(policy_version_id, user, include=include)
 
     @router.get("/{policy_version_id}/data")
     @timed_http_handler
-    async def get_dashboard_data(policy_version_id: str, user: SoftmaxUser) -> DashboardResponse:
+    async def get_dashboard_data(
+        policy_version_id: str,
+        user: SoftmaxUser,
+        include: str | None = None,
+    ) -> DashboardResponse:
         """Compute dashboard data for a policy version."""
+        include_flags = _parse_include_flags(include)
         pv_id, pv = await _require_policy_version(policy_version_id)
         raw_episodes, policy_jobs = await _fetch_policy_dashboard_sources(pv_id, DASHBOARD_LIMIT)
 
@@ -611,6 +639,10 @@ def create_dashboard_router() -> APIRouter:
             pattern_summary,
         )
         capability_code_audit = build_capability_code_audit()
+        role_percentiles_summary = (
+            await _build_role_percentiles_response(pv_id) if INCLUDE_ROLE_PERCENTILES in include_flags else None
+        )
+        diagnose_runs_summary = _build_diagnose_run_summaries() if INCLUDE_DIAGNOSE_RUNS in include_flags else None
 
         return DashboardResponse(
             policy=policy_info,
@@ -618,6 +650,8 @@ def create_dashboard_router() -> APIRouter:
             season=season_name,
             generated_at=datetime.now().isoformat(),
             selection=selection_metadata,
+            role_percentiles=role_percentiles_summary,
+            diagnose_runs=diagnose_runs_summary,
             derived=DashboardDerived(
                 kpis=derived,
                 team_comp=team_comp_stats,
@@ -769,24 +803,6 @@ def create_dashboard_router() -> APIRouter:
         user: SoftmaxUser,
     ) -> DashboardRolePercentilesResponse:
         pv_id, _pv = await _require_policy_version(policy_version_id)
-        roles = _role_metric_definitions()
-
-        async with db_session(read_only=True) as session:
-            preferred_pool, rows = await _select_role_pool_and_rows(session, pv_id)
-
-        if preferred_pool is None:
-            return DashboardRolePercentilesResponse(
-                pool_id=None,
-                pool_name=None,
-                roles=roles,
-                rows=[],
-            )
-
-        return DashboardRolePercentilesResponse(
-            pool_id=preferred_pool.id,
-            pool_name=preferred_pool.name,
-            roles=roles,
-            rows=[RolePercentileRow.model_validate(row) for row in rows],
-        )
+        return await _build_role_percentiles_response(pv_id)
 
     return router

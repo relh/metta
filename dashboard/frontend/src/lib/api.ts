@@ -510,6 +510,8 @@ export type DashboardResponse = {
   episodes: DashboardEpisode[]
   derived: DashboardDerived
   selection: DashboardSelection
+  role_percentiles?: DashboardRolePercentilesResponse | null
+  diagnose_runs?: DiagnoseRunSummary[] | null
   [key: string]: unknown
 }
 
@@ -786,8 +788,9 @@ async function dashboardRequest<T>(
 }
 
 export async function fetchDashboardData(policyVersionId: string): Promise<DashboardResponse> {
+  const query = new URLSearchParams({ include: 'role_percentiles,diagnose_runs' }).toString()
   return await dashboardRequest<DashboardResponse>(
-    `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/data`
+    `/dashboard/v1/policies/versions/${encodeURIComponent(policyVersionId)}/data?${query}`
   )
 }
 
@@ -796,8 +799,9 @@ type DashboardDefaultPolicyVersionResponse = {
 }
 
 export async function fetchDashboardDefaultData(): Promise<DashboardResponse> {
+  const query = new URLSearchParams({ include: 'role_percentiles,diagnose_runs' }).toString()
   try {
-    return await dashboardRequest<DashboardResponse>('/dashboard/v1/policies/versions/default/data')
+    return await dashboardRequest<DashboardResponse>(`/dashboard/v1/policies/versions/default/data?${query}`)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     const needsFallback = message.startsWith('422: Invalid policy version id format') || message.startsWith('404:')

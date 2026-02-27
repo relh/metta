@@ -17,7 +17,6 @@ import {
   type DashboardResponse,
   type DashboardRolePercentilesResponse,
   type DashboardStatsInventorySummary,
-  type DashboardTeamCompStats,
   type DashboardTrendExplorerSummary,
   type DashboardTrendPoint,
   type DashboardTrendSummary,
@@ -34,34 +33,16 @@ import {
   fetchDashboardRolePercentiles,
 } from '../lib/api'
 import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
-import { CogamesDiagnosePanel } from './CogamesDiagnosePanel'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab =
-  | 'overview'
-  | 'episodes'
-  | 'opponents'
-  | 'health'
-  | 'roles'
-  | 'capabilities'
-  | 'cogames_diagnose'
-  | 'analysis'
+type DashboardTab = 'overview' | 'performance' | 'coordination' | 'capabilities'
 
 type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
 type SortDir = 'asc' | 'desc'
 
-const DASHBOARD_TABS: DashboardTab[] = [
-  'overview',
-  'capabilities',
-  'roles',
-  'opponents',
-  'episodes',
-  'health',
-  'cogames_diagnose',
-  'analysis',
-]
+const DASHBOARD_TABS: DashboardTab[] = ['overview', 'coordination', 'capabilities', 'performance']
 
 const OPPONENT_COLORS = [
   '#3b82f6',
@@ -455,6 +436,14 @@ function manifestTimestamp(manifest: DiagnoseManifest | null | undefined): numbe
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY
 }
 
+function sortDiagnoseRuns(runs: DiagnoseRunSummary[]): DiagnoseRunSummary[] {
+  return [...runs].sort((left, right) => {
+    const byCreatedAt = manifestTimestamp(right.manifest) - manifestTimestamp(left.manifest)
+    if (byCreatedAt !== 0) return byCreatedAt
+    return right.run_id.localeCompare(left.run_id)
+  })
+}
+
 function runLikelyMatchesPolicy(run: DiagnoseRunSummary, policy: DashboardResponse['policy']): boolean {
   if (!run.manifest) return false
   const policyVersionId = String(policy.id).toLowerCase()
@@ -801,13 +790,6 @@ function matchesTagQuery(episode: DashboardEpisode, query: string): boolean {
   )
 }
 
-function asTeamCompRows(value: unknown): DashboardTeamCompStats[] {
-  if (!Array.isArray(value)) return []
-  return value
-    .filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry))
-    .map((entry) => entry as DashboardTeamCompStats)
-}
-
 function asMatchupSlices(value: unknown): DashboardMatchupSlice[] {
   if (!Array.isArray(value)) return []
   return value
@@ -872,6 +854,19 @@ function asOrchestration(value: unknown): DashboardOrchestrationSummary | null {
   return value as DashboardOrchestrationSummary
 }
 
+function asEmbeddedRolePercentiles(value: unknown): DashboardRolePercentilesResponse | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as DashboardRolePercentilesResponse
+}
+
+function asEmbeddedDiagnoseRuns(value: unknown): DiagnoseRunSummary[] | null {
+  if (!Array.isArray(value)) return null
+  return value.filter(
+    (entry): entry is DiagnoseRunSummary =>
+      !!entry && typeof entry === 'object' && typeof (entry as { run_id?: unknown }).run_id === 'string'
+  )
+}
+
 function buildDashboardFeedbackUrl(
   payload: {
     policyVersionId: string
@@ -912,8 +907,9 @@ function KPIStatCard({
   detail?: string
   severity: 'good' | 'warn' | 'bad'
 }) {
+  const longValue = value.length > 16
   return (
-    <article className="card" style={{ padding: 12, borderWidth: 2, ...severityStyle(severity) }}>
+    <article className="card" style={{ padding: 12, borderWidth: 2, minWidth: 0, ...severityStyle(severity) }}>
       <p
         style={{
           margin: 0,
@@ -921,12 +917,42 @@ function KPIStatCard({
           letterSpacing: 0.3,
           textTransform: 'uppercase',
           color: 'var(--kpi-label-ink)',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
         }}
+        title={label}
       >
         {label}
       </p>
-      <p style={{ margin: '6px 0 0', fontSize: 24, fontWeight: 700 }}>{value}</p>
-      {detail && <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--kpi-detail-ink)' }}>{detail}</p>}
+      <p
+        style={{
+          margin: '6px 0 0',
+          fontSize: longValue ? 18 : 24,
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+        title={value}
+      >
+        {value}
+      </p>
+      {detail && (
+        <p
+          style={{
+            margin: '6px 0 0',
+            fontSize: 12,
+            color: 'var(--kpi-detail-ink)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+          title={detail}
+        >
+          {detail}
+        </p>
+      )}
     </article>
   )
 }
@@ -1038,12 +1064,21 @@ export function DashboardClient() {
   }, [loadLabel, loadProgress, loading])
 
   const preloadRolePercentiles = useCallback(
-    async (policyVersionIdRaw: string, generatedAtRaw: string | null | undefined) => {
+    async (
+      policyVersionIdRaw: string,
+      generatedAtRaw: string | null | undefined,
+      embeddedRolePercentiles: DashboardRolePercentilesResponse | null = null
+    ) => {
       const policyVersionId = policyVersionIdRaw.trim()
       if (!policyVersionId) return
 
       const cacheKey = rolePercentilesCacheKey(policyVersionId, generatedAtRaw)
       if (!cacheKey) return
+      if (embeddedRolePercentiles) {
+        cacheRolePercentiles(cacheKey, embeddedRolePercentiles)
+        setRolePercentiles(embeddedRolePercentiles)
+        return
+      }
       const cachedPercentiles = getCachedRolePercentiles(cacheKey)
       if (cachedPercentiles) {
         setRolePercentiles(cachedPercentiles)
@@ -1054,7 +1089,7 @@ export function DashboardClient() {
         const response = await getOrFetchRolePercentiles(cacheKey, policyVersionId)
         setRolePercentiles(response)
       } catch {
-        // Best-effort preload: tab-specific fetch will surface any errors when Parses is opened.
+        // Best-effort preload: tab-specific fetch will surface any errors when Coordination is opened.
       }
     },
     []
@@ -1106,11 +1141,36 @@ export function DashboardClient() {
   const trendExplorer = useMemo(() => asTrendExplorer(data?.derived?.trend_explorer), [data])
   const confidence = useMemo(() => asConfidence(data?.derived?.confidence), [data])
   const patterns = useMemo(() => asPattern(data?.derived?.patterns), [data])
+  const showConfidenceIntervals = Boolean(confidence)
+  const showPatternExtraction = Boolean(patterns?.evidence_sufficient)
+  const trendRightColumnCardCount = 1 + (showConfidenceIntervals ? 1 : 0) + (showPatternExtraction ? 1 : 0)
   const unsupported = useMemo(() => asUnsupported(data?.derived?.unsupported), [data])
   const instrumentation = useMemo(() => asInstrumentation(data?.derived?.instrumentation), [data])
   const statsInventory = useMemo(() => asStatsInventory(data?.derived?.stats_inventory), [data])
   const actionSummary = useMemo(() => asActions(data?.derived?.actions), [data])
   const orchestration = useMemo(() => asOrchestration(data?.derived?.orchestration), [data])
+  const instrumentationTemplateShort = useMemo(() => {
+    const template = String(instrumentation?.template_version ?? '-')
+    if (!template || template === '-') return '-'
+    const versionMatch = template.match(/(?:^|-)v(\d+)$/i)
+    if (versionMatch) return `v${versionMatch[1]}`
+    return template.length > 14 ? `${template.slice(0, 11)}...` : template
+  }, [instrumentation?.template_version])
+  const unsupportedIssues = useMemo(() => unsupported?.issues ?? [], [unsupported])
+  const unsupportedIssueCount = unsupportedIssues.length
+  const unsupportedMaxAffectedCount = useMemo(
+    () => unsupportedIssues.reduce((max, issue) => Math.max(max, toFiniteNumber(issue.affected_count) ?? 0), 0),
+    [unsupportedIssues]
+  )
+  const instrumentationChecks = useMemo(() => instrumentation?.checks ?? [], [instrumentation])
+  const instrumentationFailCount = useMemo(
+    () =>
+      instrumentationChecks.filter((check) => {
+        const status = String(check.status ?? '').toLowerCase()
+        return status.length > 0 && status !== 'pass' && status !== 'ok' && status !== 'success'
+      }).length,
+    [instrumentationChecks]
+  )
 
   const opponentRows = useMemo<OpponentSummaryRow[]>(() => {
     const metrics = data?.derived?.opponent_metrics
@@ -1251,19 +1311,6 @@ export function DashboardClient() {
       }))
   }, [episodes])
 
-  const replayLookupByRef = useMemo(() => {
-    const lookup: Record<string, string> = {}
-    for (const episode of episodes) {
-      if (!episode.replay_url) continue
-      const replayUrl = String(episode.replay_url)
-      const episodeId = String(episode.episode_id ?? episode.id ?? '').trim()
-      if (episodeId) lookup[episodeId] = replayUrl
-      const jobId = String(episode.job_id ?? '').trim()
-      if (jobId) lookup[jobId] = replayUrl
-    }
-    return lookup
-  }, [episodes])
-
   const replayEpisodes = useMemo(() => {
     return completedEpisodes
       .filter((episode) => Boolean(episode.replay_url))
@@ -1378,8 +1425,21 @@ export function DashboardClient() {
     }
   }, [overviewTrendPoints])
 
-  const teamCompRows = useMemo(() => asTeamCompRows(data?.derived?.team_comp), [data])
   const trendPoints = useMemo(() => asTrendPoints(trend?.points), [trend])
+  const trendCoveredVersionCount = useMemo(
+    () =>
+      trendPoints.filter(
+        (point) =>
+          toFiniteNumber(point.score) !== null ||
+          toFiniteNumber(point.rank) !== null ||
+          (toFiniteNumber(point.matches) ?? 0) > 0
+      ).length,
+    [trendPoints]
+  )
+  const trendTotalMatches = useMemo(
+    () => trendPoints.reduce((sum, point) => sum + (toFiniteNumber(point.matches) ?? 0), 0),
+    [trendPoints]
+  )
 
   const trendSeries = useMemo(() => {
     if (!trendExplorer?.series || !Array.isArray(trendExplorer.series)) return []
@@ -1442,14 +1502,17 @@ export function DashboardClient() {
       setRolePercentiles(null)
       setRoleError(null)
       setRoleLoading(false)
-      void prefetchDiagnoseRuns()
 
       const cachedResponse = getCachedDashboardResponse(trimmedPolicyVersionId)
       if (cachedResponse) {
         clearLoadProgressTimers()
         setLoading(false)
         setLoadProgress(0)
-        void preloadRolePercentiles(trimmedPolicyVersionId, cachedResponse.generated_at)
+        void preloadRolePercentiles(
+          trimmedPolicyVersionId,
+          cachedResponse.generated_at,
+          asEmbeddedRolePercentiles(cachedResponse.role_percentiles)
+        )
         setData(cachedResponse)
         setSelectedEpisodeId(null)
         if (typeof window !== 'undefined') {
@@ -1468,7 +1531,11 @@ export function DashboardClient() {
         cacheDashboardResponse(response)
         setData(response)
         setSelectedEpisodeId(null)
-        void preloadRolePercentiles(String(response.policy?.id ?? trimmedPolicyVersionId), response.generated_at)
+        void preloadRolePercentiles(
+          String(response.policy?.id ?? trimmedPolicyVersionId),
+          response.generated_at,
+          asEmbeddedRolePercentiles(response.role_percentiles)
+        )
         if (typeof window !== 'undefined') {
           const url = new URL(window.location.href)
           if (url.searchParams.get('policyVersionId') !== trimmedPolicyVersionId) {
@@ -1483,13 +1550,7 @@ export function DashboardClient() {
         finishDashboardLoadProgress()
       }
     },
-    [
-      beginDashboardLoadProgress,
-      clearLoadProgressTimers,
-      finishDashboardLoadProgress,
-      prefetchDiagnoseRuns,
-      preloadRolePercentiles,
-    ]
+    [beginDashboardLoadProgress, clearLoadProgressTimers, finishDashboardLoadProgress, preloadRolePercentiles]
   )
 
   const onLoad = async () => {
@@ -1588,10 +1649,18 @@ export function DashboardClient() {
   useEffect(() => {
     const loadedPolicyVersionId = data?.policy?.id
     if (!loadedPolicyVersionId) return
-    const shouldShowRoleLoadState = activeTab === 'roles'
+    const shouldShowRoleLoadState = activeTab === 'coordination'
     if (!shouldShowRoleLoadState) return
     const policyVersionKey = String(loadedPolicyVersionId)
     const cacheKey = rolePercentilesCacheKey(policyVersionKey, data?.generated_at) ?? policyVersionKey
+    const embeddedRolePercentiles = asEmbeddedRolePercentiles(data?.role_percentiles)
+    if (embeddedRolePercentiles) {
+      cacheRolePercentiles(cacheKey, embeddedRolePercentiles)
+      setRolePercentiles(embeddedRolePercentiles)
+      setRoleLoading(false)
+      setRoleError(null)
+      return
+    }
 
     const cachedPercentiles = getCachedRolePercentiles(cacheKey)
     if (cachedPercentiles) {
@@ -1624,7 +1693,7 @@ export function DashboardClient() {
     return () => {
       cancelled = true
     }
-  }, [activeTab, data?.policy?.id, data?.generated_at])
+  }, [activeTab, data?.generated_at, data?.policy?.id, data?.role_percentiles])
 
   useEffect(() => {
     if (!data) {
@@ -1637,6 +1706,24 @@ export function DashboardClient() {
       return
     }
 
+    const embeddedDiagnoseRuns = asEmbeddedDiagnoseRuns(data.diagnose_runs)
+    if (embeddedDiagnoseRuns) {
+      const sortedRuns = sortDiagnoseRuns(embeddedDiagnoseRuns)
+      diagnoseRunsCacheRef.current = sortedRuns
+      setDiagnoseRuns(sortedRuns)
+      setDiagnoseError(null)
+      setDiagnoseLoading(false)
+      setSelectedDiagnoseRunId((current) => {
+        if (current && sortedRuns.some((run) => run.run_id === current)) return current
+        const preferred =
+          sortedRuns.find((run) => runLikelyMatchesPolicy(run, data.policy)) ??
+          sortedRuns.find((run) => Boolean(run.manifest)) ??
+          sortedRuns[0]
+        return preferred?.run_id ?? null
+      })
+      return
+    }
+
     let cancelled = false
     setDiagnoseLoading(true)
     setDiagnoseError(null)
@@ -1644,11 +1731,7 @@ export function DashboardClient() {
     void prefetchDiagnoseRuns()
       .then((runs) => {
         if (cancelled) return
-        const sortedRuns = [...runs].sort((left, right) => {
-          const byCreatedAt = manifestTimestamp(right.manifest) - manifestTimestamp(left.manifest)
-          if (byCreatedAt !== 0) return byCreatedAt
-          return right.run_id.localeCompare(left.run_id)
-        })
+        const sortedRuns = sortDiagnoseRuns(runs)
 
         setDiagnoseRuns(sortedRuns)
         setSelectedDiagnoseRunId((current) => {
@@ -1731,12 +1814,15 @@ export function DashboardClient() {
 
     let cancelled = false
     const initialize = async () => {
-      void prefetchDiagnoseRuns()
       if (initialPolicyVersionId) {
         setPolicyVersionId(initialPolicyVersionId)
         const cachedResponse = getCachedDashboardResponse(initialPolicyVersionId)
         if (cachedResponse) {
-          void preloadRolePercentiles(initialPolicyVersionId, cachedResponse.generated_at)
+          void preloadRolePercentiles(
+            initialPolicyVersionId,
+            cachedResponse.generated_at,
+            asEmbeddedRolePercentiles(cachedResponse.role_percentiles)
+          )
           setData(cachedResponse)
           setError(null)
           return
@@ -1751,7 +1837,11 @@ export function DashboardClient() {
         setLoading(false)
         setLoadProgress(0)
         const defaultPolicyVersionId = String(cachedDefault.policy?.id ?? '').trim()
-        void preloadRolePercentiles(defaultPolicyVersionId, cachedDefault.generated_at)
+        void preloadRolePercentiles(
+          defaultPolicyVersionId,
+          cachedDefault.generated_at,
+          asEmbeddedRolePercentiles(cachedDefault.role_percentiles)
+        )
         setData(cachedDefault)
         setError(null)
         if (!defaultPolicyVersionId) return
@@ -1773,7 +1863,11 @@ export function DashboardClient() {
         cacheDashboardResponse(response, true)
         setData(response)
         setError(null)
-        void preloadRolePercentiles(defaultPolicyVersionId, response.generated_at)
+        void preloadRolePercentiles(
+          defaultPolicyVersionId,
+          response.generated_at,
+          asEmbeddedRolePercentiles(response.role_percentiles)
+        )
         if (!defaultPolicyVersionId) return
 
         setPolicyVersionId(defaultPolicyVersionId)
@@ -1802,7 +1896,6 @@ export function DashboardClient() {
     clearLoadProgressTimers,
     finishDashboardLoadProgress,
     loadDashboardData,
-    prefetchDiagnoseRuns,
     preloadRolePercentiles,
   ])
 
@@ -1816,6 +1909,60 @@ export function DashboardClient() {
   const noopRate = toFiniteNumber(kpis?.noop_rate)
   const rewardConsistency = toFiniteNumber(kpis?.reward_consistency)
   const trainingFocus = deriveTrainingFocus(kpis)
+  const completedWithReplayCount = completedEpisodes.filter((episode) => Boolean(episode.replay_url)).length
+  const replayCoverage = completedEpisodes.length > 0 ? completedWithReplayCount / completedEpisodes.length : null
+  const roleParseCount = rolePercentiles?.rows?.length ?? 0
+  const selectedDiagnoseRun = selectedDiagnoseRunId
+    ? (diagnoseRuns.find((run) => run.run_id === selectedDiagnoseRunId) ?? null)
+    : null
+  const selectedDiagnoseStage =
+    diagnoseNote?.stage_status ??
+    diagnoseManifest?.stage_status ??
+    selectedDiagnoseRun?.manifest?.stage_status ??
+    selectedDiagnoseRun?.manifest?.run_status ??
+    null
+  const selectedDiagnoseDominantIssue = diagnoseNote?.dominant_issue ?? null
+  const diagnoseProbeTotal = diagnoseNote?.stage1_probe_evaluations?.length ?? 0
+  const diagnoseProbePassed = (diagnoseNote?.stage1_probe_evaluations ?? []).filter((probe) => probe.passed).length
+  const diagnoseCoreAxisChecks = ['stability', 'efficiency', 'control'].map((axis) => {
+    const score = (diagnoseNote?.axes ?? []).find((entry) => entry.axis === axis)
+    return Boolean(score?.confirmed)
+  })
+  const diagnoseCoreReady = diagnoseCoreAxisChecks.every((check) => check)
+  const selectedDiagnoseSymptom = [...(diagnoseNote?.symptoms ?? [])].sort(
+    (left, right) => right.severity - left.severity
+  )[0]
+  const selectedDiagnosePrescription = selectedDiagnoseSymptom
+    ? ((diagnoseNote?.prescriptions ?? []).find((entry) => entry.symptom_id === selectedDiagnoseSymptom.symptom_id) ??
+      null)
+    : ((diagnoseNote?.prescriptions ?? [])[0] ?? null)
+  const selectedDiagnoseSocialConfirmed =
+    diagnoseNote && typeof diagnoseNote.social_review === 'object' && diagnoseNote.social_review !== null
+      ? Boolean(diagnoseNote.social_review.confirmed)
+      : null
+  const capabilityStatuses = Object.values(data?.derived?.capability_code_audit?.capabilities ?? {})
+  const capabilityStatusTotal = capabilityStatuses.length
+  const capabilityStatusYes = capabilityStatuses.filter((status) => status.status === 'yes').length
+  const capabilityStatusPartial = capabilityStatuses.filter((status) => status.status === 'partial').length
+  const capabilityCoverage = capabilityStatusTotal > 0 ? capabilityStatusYes / capabilityStatusTotal : null
+  const outcomeVerdict = String(data?.derived?.outcome?.verdict ?? '').toLowerCase()
+  const outcomeSeverity: 'good' | 'warn' | 'bad' =
+    outcomeVerdict === 'success' || outcomeVerdict === 'pass'
+      ? 'good'
+      : outcomeVerdict === 'inconclusive'
+        ? 'warn'
+        : outcomeVerdict
+          ? 'bad'
+          : 'warn'
+  const trendDirection = String(trend?.direction ?? '').toLowerCase()
+  const trendDirectionSeverity: 'good' | 'warn' | 'bad' =
+    trendDirection === 'up' || trendDirection === 'improving' || trendDirection === 'positive'
+      ? 'good'
+      : trendDirection === 'flat' || trendDirection === 'insufficient'
+        ? 'warn'
+        : trendDirection
+          ? 'bad'
+          : 'warn'
   const autoTrainingCommand = useMemo(() => {
     const policyName = String(data?.policy?.name ?? 'policy')
       .toLowerCase()
@@ -1929,6 +2076,13 @@ export function DashboardClient() {
             </button>
             <button
               type="button"
+              onClick={() => activateTab('coordination')}
+              className={activeTab === 'coordination' ? 'active-tab' : ''}
+            >
+              Coordination
+            </button>
+            <button
+              type="button"
               onClick={() => activateTab('capabilities')}
               className={activeTab === 'capabilities' ? 'active-tab' : ''}
             >
@@ -1936,45 +2090,10 @@ export function DashboardClient() {
             </button>
             <button
               type="button"
-              onClick={() => activateTab('roles')}
-              className={activeTab === 'roles' ? 'active-tab' : ''}
+              onClick={() => activateTab('performance')}
+              className={activeTab === 'performance' ? 'active-tab' : ''}
             >
-              Parses
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('opponents')}
-              className={activeTab === 'opponents' ? 'active-tab' : ''}
-            >
-              Teammates
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('episodes')}
-              className={activeTab === 'episodes' ? 'active-tab' : ''}
-            >
-              Episodes
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('health')}
-              className={activeTab === 'health' ? 'active-tab' : ''}
-            >
-              Health
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('cogames_diagnose')}
-              className={activeTab === 'cogames_diagnose' ? 'active-tab' : ''}
-            >
-              Diagnose
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('analysis')}
-              className={activeTab === 'analysis' ? 'active-tab' : ''}
-            >
-              Analysis
+              Performance
             </button>
           </section>
 
@@ -1982,11 +2101,7 @@ export function DashboardClient() {
             <>
               <section
                 className="grid"
-                style={{
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 220px))',
-                  justifyContent: 'center',
-                  gap: 10,
-                }}
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
               >
                 <KPIStatCard
                   label="Avg Reward"
@@ -2004,6 +2119,11 @@ export function DashboardClient() {
                   severity={kpiSeverity(actionSuccess, 0.9, 0.7)}
                 />
                 <KPIStatCard
+                  label="Junction Control"
+                  value={formatPercent(junctionControl, 0)}
+                  severity={kpiSeverity(junctionControl, 0.6, 0.2)}
+                />
+                <KPIStatCard
                   label="Resource Retention"
                   value={formatPercent(resourceRetention, 0)}
                   severity={kpiSeverity(resourceRetention, 0.5, 0.2)}
@@ -2014,11 +2134,6 @@ export function DashboardClient() {
                   severity={kpiSeverity(freezeVulnerability, 0.05, 0.15, false)}
                 />
                 <KPIStatCard
-                  label="Junction Control"
-                  value={formatPercent(junctionControl, 0)}
-                  severity={kpiSeverity(junctionControl, 0.6, 0.2)}
-                />
-                <KPIStatCard
                   label="Noop Rate"
                   value={formatPercent(noopRate, 1)}
                   severity={kpiSeverity(noopRate, 0.1, 0.25, false)}
@@ -2027,6 +2142,43 @@ export function DashboardClient() {
                   label="Reward Consistency"
                   value={formatPercent(rewardConsistency, 0)}
                   severity={kpiSeverity(rewardConsistency, 0.6, 0.2)}
+                />
+                <KPIStatCard
+                  label="Outcome Verdict"
+                  value={String(data.derived?.outcome?.verdict ?? '-')}
+                  severity={outcomeSeverity}
+                />
+                <KPIStatCard
+                  label="Version Trend"
+                  value={String(trend?.direction ?? 'insufficient')}
+                  severity={trendDirectionSeverity}
+                />
+                <KPIStatCard
+                  label="Unsupported Issues"
+                  value={String(unsupportedIssueCount)}
+                  detail={
+                    unsupportedIssueCount > 0
+                      ? `max ${unsupportedMaxAffectedCount}/${episodes.length} episodes`
+                      : 'none'
+                  }
+                  severity={unsupportedIssueCount > 0 ? 'warn' : 'good'}
+                />
+                <KPIStatCard
+                  label="Instrumentation Score"
+                  value={formatPercent(toFiniteNumber(instrumentation?.score), 0)}
+                  severity={kpiSeverity(toFiniteNumber(instrumentation?.score), 0.85, 0.6)}
+                />
+                <KPIStatCard
+                  label="Check Failures"
+                  value={String(instrumentationFailCount)}
+                  detail={`${instrumentationChecks.length} checks`}
+                  severity={instrumentationFailCount > 0 ? 'warn' : 'good'}
+                />
+                <KPIStatCard
+                  label="Template"
+                  value={instrumentationTemplateShort}
+                  detail={instrumentation?.compliant ? 'compliant' : 'incomplete'}
+                  severity={instrumentation?.compliant ? 'good' : 'warn'}
                 />
               </section>
 
@@ -2113,7 +2265,7 @@ export function DashboardClient() {
                             style={{ margin: 0, width: 'auto', minWidth: 0, flex: 1 }}
                           >
                             <option value="selected" disabled={!selectedReplayEpisodeFromTable}>
-                              selected from Episodes tab
+                              selected from Performance tab
                             </option>
                             <option value="worst">worst reward with replay</option>
                             <option value="median">median reward with replay</option>
@@ -2291,593 +2443,631 @@ export function DashboardClient() {
                 </div>
               </section>
 
-              {(unsupported || instrumentation) && (
-                <section className="card" style={{ display: 'grid', gap: 10 }}>
-                  <h2 style={{ margin: 0 }}>Data Quality Gates</h2>
-                  {unsupported?.has_unsupported_state ? (
-                    <div className="grid" style={{ gap: 8 }}>
-                      <p style={{ margin: 0, color: '#b42318' }}>
-                        Unsupported-state warnings detected ({(unsupported.issues ?? []).length}).
+              <section className="grid two overview-dense-grid" style={{ alignItems: 'start' }}>
+                {(unsupported || instrumentation) && (
+                  <section className="card" style={{ display: 'grid', gap: 10 }}>
+                    <h2 style={{ margin: 0 }}>Data Quality Gates</h2>
+                    {unsupported?.has_unsupported_state ? (
+                      <div className="grid" style={{ gap: 8 }}>
+                        <p style={{ margin: 0, color: '#b42318' }}>
+                          Unsupported-state warnings detected ({unsupportedIssueCount}).
+                        </p>
+                        <div style={{ overflowX: 'auto' }}>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Issue</th>
+                                <th>Severity</th>
+                                <th>Coverage</th>
+                                <th>Next Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {unsupportedIssues.map((issue) => (
+                                <tr key={String(issue.code ?? issue.message ?? 'unsupported')}>
+                                  <td>{String(issue.message ?? issue.code ?? '-')}</td>
+                                  <td>{String(issue.severity ?? 'warn')}</td>
+                                  <td>
+                                    {String(toFiniteNumber(issue.affected_count) ?? 0)}/
+                                    {String(toFiniteNumber(issue.total_count) ?? 0)}
+                                  </td>
+                                  <td>{String(issue.recommended_action ?? '-')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ margin: 0 }}>Unsupported-state checks are clean for the sampled episode set.</p>
+                    )}
+
+                    {instrumentation && (
+                      <div className="grid" style={{ gap: 8 }}>
+                        <p style={{ margin: 0 }}>
+                          Instrumentation: <strong>{instrumentation.compliant ? 'compliant' : 'incomplete'}</strong> ·
+                          score <code>{formatPercent(toFiniteNumber(instrumentation.score), 0)}</code> · template{' '}
+                          <code>{String(instrumentation.template_version ?? '-')}</code>
+                        </p>
+                        {instrumentationChecks.length > 0 && (
+                          <details>
+                            <summary>Instrumentation Checks ({instrumentationChecks.length})</summary>
+                            <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>Key</th>
+                                    <th>Kind</th>
+                                    <th>Status</th>
+                                    <th>Coverage</th>
+                                    <th>Message</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {instrumentationChecks.map((check) => (
+                                    <tr key={String(check.key ?? 'check')}>
+                                      <td>
+                                        <code>{String(check.key ?? '-')}</code>
+                                      </td>
+                                      <td>{String(check.kind ?? '-')}</td>
+                                      <td>{String(check.status ?? '-')}</td>
+                                      <td>{formatPercent(toFiniteNumber(check.coverage), 0)}</td>
+                                      <td>{String(check.message ?? '-')}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </details>
+                        )}
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                <div className="grid" style={{ gap: 10, minWidth: 0 }}>
+                  {actionSummary && (
+                    <section className="card" style={{ display: 'grid', gap: 8 }}>
+                      <h2 style={{ margin: 0 }}>Next Actions</h2>
+                      <p style={{ margin: 0 }}>
+                        <strong>{String(actionSummary.headline ?? 'No action summary available.')}</strong>
                       </p>
+                      <p style={{ margin: 0, fontSize: 13 }}>
+                        Rollout gate: <code>{String(actionSummary.rollout_recommendation ?? '-')}</code>
+                      </p>
+                      {(actionSummary.actions ?? []).length > 0 && (
+                        <ul style={{ margin: 0 }}>
+                          {(actionSummary.actions ?? []).map((action) => (
+                            <li key={action}>{action}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="card" style={{ padding: 10, background: 'var(--panel-soft-bg-1)' }}>
+                        <p style={{ marginTop: 0, marginBottom: 6 }}>
+                          <strong>Auto next run</strong> · focus <code>{trainingFocus}</code>
+                        </p>
+                        <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+                          Suggested curriculum: <code>{autoTrainingHint}</code>
+                        </p>
+                        <code style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{autoTrainingCommand}</code>
+                        <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          <button type="button" onClick={copyAutoTrainingCommand}>
+                            {autoCommandCopied ? 'Copied' : 'Copy run command'}
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {!actionSummary && (
+                    <section className="card" style={{ display: 'grid', gap: 8 }}>
+                      <h2 style={{ margin: 0 }}>Auto Next Run</h2>
+                      <p style={{ margin: 0 }}>
+                        Focus area inferred from current weaknesses: <code>{trainingFocus}</code>
+                      </p>
+                      <p style={{ margin: 0, fontSize: 13 }}>
+                        Suggested curriculum: <code>{autoTrainingHint}</code>
+                      </p>
+                      <code style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{autoTrainingCommand}</code>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button type="button" onClick={copyAutoTrainingCommand}>
+                          {autoCommandCopied ? 'Copied' : 'Copy run command'}
+                        </button>
+                      </div>
+                    </section>
+                  )}
+
+                  {orchestration && (
+                    <section className="card" style={{ display: 'grid', gap: 8 }}>
+                      <h2 style={{ margin: 0 }}>Experiment Orchestration</h2>
+                      <p style={{ margin: 0 }}>
+                        {String(orchestration.headline ?? '-')} · mode <code>{String(orchestration.mode ?? '-')}</code>
+                      </p>
+                      {(orchestration.experiments ?? []).length > 0 && (
+                        <div className="grid" style={{ gap: 8 }}>
+                          {(orchestration.experiments ?? []).map((experiment) => (
+                            <article key={String(experiment.id ?? 'exp')} className="diagnose-list-item">
+                              <p style={{ marginTop: 0, marginBottom: 4 }}>
+                                <strong>
+                                  P{String(toFiniteNumber(experiment.priority) ?? 0)} {String(experiment.title ?? '-')}
+                                </strong>
+                              </p>
+                              <p style={{ margin: '0 0 6px', fontSize: 13 }}>{String(experiment.objective ?? '-')}</p>
+                              <p style={{ margin: '0 0 6px', fontSize: 12, color: '#546b8a' }}>
+                                {String(experiment.rationale ?? '-')}
+                              </p>
+                              {(experiment.actions ?? []).length > 0 && (
+                                <ul style={{ margin: 0 }}>
+                                  {(experiment.actions ?? []).map((action) => (
+                                    <li key={action}>{action}</li>
+                                  ))}
+                                </ul>
+                              )}
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </div>
+
+                {trend && (
+                  <section
+                    className="card"
+                    style={{
+                      display: 'grid',
+                      gap: 12,
+                      gridColumn: '1 / 2',
+                      ...(trendRightColumnCardCount > 1 ? { gridRow: `span ${trendRightColumnCardCount}` } : {}),
+                    }}
+                  >
+                    <h2 style={{ margin: 0 }}>Version Trend</h2>
+                    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
+                      <span>
+                        Direction:{' '}
+                        <strong style={{ textTransform: 'uppercase' }}>
+                          {String(trend.direction ?? 'insufficient')}
+                        </strong>
+                      </span>
+                      <span>
+                        Evidence: <strong>{trend.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
+                      </span>
+                      <span>
+                        Covered versions: <code>{trendCoveredVersionCount}</code>/<code>{trendPoints.length}</code>
+                      </span>
+                      <span>
+                        Total matches: <code>{trendTotalMatches}</code>
+                      </span>
+                    </div>
+                    <p style={{ margin: 0 }}>{String(trend.reason ?? '')}</p>
+
+                    {trendPoints.length > 0 && (
                       <div style={{ overflowX: 'auto' }}>
                         <table>
                           <thead>
                             <tr>
-                              <th>Issue</th>
-                              <th>Severity</th>
-                              <th>Coverage</th>
-                              <th>Next Action</th>
+                              <th>Version</th>
+                              <th>Score</th>
+                              <th>Rank</th>
+                              <th>Matches</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {(unsupported.issues ?? []).map((issue) => (
-                              <tr key={String(issue.code ?? issue.message ?? 'unsupported')}>
-                                <td>{String(issue.message ?? issue.code ?? '-')}</td>
-                                <td>{String(issue.severity ?? 'warn')}</td>
+                            {trendPoints.map((point) => (
+                              <tr key={String(point.id ?? `${point.name}-${point.version}`)}>
                                 <td>
-                                  {String(toFiniteNumber(issue.affected_count) ?? 0)}/
-                                  {String(toFiniteNumber(issue.total_count) ?? 0)}
+                                  <code>v{String(point.version ?? '-')}</code>
                                 </td>
-                                <td>{String(issue.recommended_action ?? '-')}</td>
+                                <td>{formatNumber(toFiniteNumber(point.score), 3)}</td>
+                                <td>{point.rank === null || point.rank === undefined ? '-' : `#${point.rank}`}</td>
+                                <td>{toFiniteNumber(point.matches) ?? '-'}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                    </div>
-                  ) : (
-                    <p style={{ margin: 0 }}>Unsupported-state checks are clean for the sampled episode set.</p>
-                  )}
+                    )}
 
-                  {instrumentation && (
-                    <div className="grid" style={{ gap: 8 }}>
-                      <p style={{ margin: 0 }}>
-                        Instrumentation: <strong>{instrumentation.compliant ? 'compliant' : 'incomplete'}</strong> ·
-                        score <code>{formatPercent(toFiniteNumber(instrumentation.score), 0)}</code> · template{' '}
-                        <code>{String(instrumentation.template_version ?? '-')}</code>
-                      </p>
-                      {(instrumentation.checks ?? []).length > 0 && (
-                        <details>
-                          <summary>Instrumentation Checks ({(instrumentation.checks ?? []).length})</summary>
-                          <div style={{ overflowX: 'auto', marginTop: 10 }}>
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>Key</th>
-                                  <th>Kind</th>
-                                  <th>Status</th>
-                                  <th>Coverage</th>
-                                  <th>Message</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(instrumentation.checks ?? []).map((check) => (
-                                  <tr key={String(check.key ?? 'check')}>
-                                    <td>
-                                      <code>{String(check.key ?? '-')}</code>
-                                    </td>
-                                    <td>{String(check.kind ?? '-')}</td>
-                                    <td>{String(check.status ?? '-')}</td>
-                                    <td>{formatPercent(toFiniteNumber(check.coverage), 0)}</td>
-                                    <td>{String(check.message ?? '-')}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {actionSummary && (
-                <section className="card" style={{ display: 'grid', gap: 8 }}>
-                  <h2 style={{ margin: 0 }}>Next Actions</h2>
-                  <p style={{ margin: 0 }}>
-                    <strong>{String(actionSummary.headline ?? 'No action summary available.')}</strong>
-                  </p>
-                  <p style={{ margin: 0, fontSize: 13 }}>
-                    Rollout gate: <code>{String(actionSummary.rollout_recommendation ?? '-')}</code>
-                  </p>
-                  {(actionSummary.actions ?? []).length > 0 && (
-                    <ul style={{ margin: 0 }}>
-                      {(actionSummary.actions ?? []).map((action) => (
-                        <li key={action}>{action}</li>
-                      ))}
-                    </ul>
-                  )}
-                  <div className="card" style={{ padding: 10, background: 'var(--panel-soft-bg-1)' }}>
-                    <p style={{ marginTop: 0, marginBottom: 6 }}>
-                      <strong>Auto next run</strong> · focus <code>{trainingFocus}</code>
-                    </p>
-                    <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
-                      Suggested curriculum: <code>{autoTrainingHint}</code>
-                    </p>
-                    <code style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{autoTrainingCommand}</code>
-                    <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button type="button" onClick={copyAutoTrainingCommand}>
-                        {autoCommandCopied ? 'Copied' : 'Copy run command'}
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {!actionSummary && (
-                <section className="card" style={{ display: 'grid', gap: 8 }}>
-                  <h2 style={{ margin: 0 }}>Auto Next Run</h2>
-                  <p style={{ margin: 0 }}>
-                    Focus area inferred from current weaknesses: <code>{trainingFocus}</code>
-                  </p>
-                  <p style={{ margin: 0, fontSize: 13 }}>
-                    Suggested curriculum: <code>{autoTrainingHint}</code>
-                  </p>
-                  <code style={{ display: 'block', whiteSpace: 'pre-wrap' }}>{autoTrainingCommand}</code>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button type="button" onClick={copyAutoTrainingCommand}>
-                      {autoCommandCopied ? 'Copied' : 'Copy run command'}
-                    </button>
-                  </div>
-                </section>
-              )}
-
-              {orchestration && (
-                <section className="card" style={{ display: 'grid', gap: 8 }}>
-                  <h2 style={{ margin: 0 }}>Experiment Orchestration</h2>
-                  <p style={{ margin: 0 }}>
-                    {String(orchestration.headline ?? '-')} · mode <code>{String(orchestration.mode ?? '-')}</code>
-                  </p>
-                  {(orchestration.experiments ?? []).length > 0 && (
-                    <div className="grid" style={{ gap: 8 }}>
-                      {(orchestration.experiments ?? []).map((experiment) => (
-                        <article key={String(experiment.id ?? 'exp')} className="diagnose-list-item">
-                          <p style={{ marginTop: 0, marginBottom: 4 }}>
-                            <strong>
-                              P{String(toFiniteNumber(experiment.priority) ?? 0)} {String(experiment.title ?? '-')}
-                            </strong>
-                          </p>
-                          <p style={{ margin: '0 0 6px', fontSize: 13 }}>{String(experiment.objective ?? '-')}</p>
-                          <p style={{ margin: '0 0 6px', fontSize: 12, color: '#546b8a' }}>
-                            {String(experiment.rationale ?? '-')}
-                          </p>
-                          {(experiment.actions ?? []).length > 0 && (
-                            <ul style={{ margin: 0 }}>
-                              {(experiment.actions ?? []).map((action) => (
-                                <li key={action}>{action}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </article>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              )}
-
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>Team Composition</h2>
-                {teamCompRows.length === 0 ? (
-                  <p style={{ marginBottom: 0 }}>No team composition data available.</p>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Composition</th>
-                          <th>Count</th>
-                          <th>Avg Reward</th>
-                          <th>Move Eff.</th>
-                          <th>Avg Junction Aligned</th>
-                          <th>Avg Resource Gained</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {teamCompRows.map((row) => (
-                          <tr key={String(row.composition ?? 'unknown')}>
-                            <td>
-                              <code>{String(row.composition ?? '-')}</code>
-                            </td>
-                            <td>{toFiniteNumber(row.count) ?? '-'}</td>
-                            <td>{formatNumber(toFiniteNumber(row.avg_reward), 2)}</td>
-                            <td>{formatPercent(toFiniteNumber(row.avg_move_efficiency), 0)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.avg_junction_aligned), 2)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.avg_resource_gained), 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-
-              {trend && (
-                <section className="card" style={{ display: 'grid', gap: 12 }}>
-                  <h2 style={{ margin: 0 }}>Version Trend</h2>
-                  <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13 }}>
-                    <span>
-                      Direction:{' '}
-                      <strong style={{ textTransform: 'uppercase' }}>
-                        {String(trend.direction ?? 'insufficient')}
-                      </strong>
-                    </span>
-                    <span>
-                      Score delta: <code>{formatSigned(toFiniteNumber(trend.score_delta_from_oldest), 3)}</code>
-                    </span>
-                    <span>
-                      Rank delta: <code>{formatSigned(toFiniteNumber(trend.rank_delta_from_oldest), 0)}</code>
-                    </span>
-                    <span>
-                      Evidence: <strong>{trend.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
-                    </span>
-                  </div>
-                  <p style={{ margin: 0 }}>{String(trend.reason ?? '')}</p>
-
-                  {trendPoints.length > 0 && (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Version</th>
-                            <th>Score</th>
-                            <th>Rank</th>
-                            <th>Matches</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {trendPoints.map((point) => (
-                            <tr key={String(point.id ?? `${point.name}-${point.version}`)}>
-                              <td>
-                                <code>v{String(point.version ?? '-')}</code>
-                              </td>
-                              <td>{formatNumber(toFiniteNumber(point.score), 3)}</td>
-                              <td>{point.rank === null || point.rank === undefined ? '-' : `#${point.rank}`}</td>
-                              <td>{toFiniteNumber(point.matches) ?? '-'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-
-                  {selectedTrendSeries && (
-                    <details>
-                      <summary>Trend Explorer</summary>
-                      <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-                        <label style={{ display: 'grid', gap: 6, maxWidth: 360 }}>
-                          Metric
-                          <select
-                            value={selectedTrendSeries.key}
-                            onChange={(event) => setSelectedTrendMetric(event.target.value)}
-                          >
-                            {trendSeries.map((series) => (
-                              <option key={series.key} value={series.key}>
-                                {series.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <p style={{ margin: 0, fontSize: 13 }}>
-                          <strong style={{ textTransform: 'uppercase' }}>
-                            {String(selectedTrendSeries.direction ?? 'insufficient')}
-                          </strong>
-                          : {String(selectedTrendSeries.reason ?? 'No trend reason provided.')}
-                        </p>
-
-                        {selectedTrendOverlay && (
-                          <div className="card" style={{ background: 'var(--panel-soft-bg-1)' }}>
-                            <p style={{ marginTop: 0, marginBottom: 8 }}>
-                              Policy Relative to Team/Population Overlay (
-                              {selectedTrendOverlay.signal ?? 'insufficient'})
-                            </p>
-                            <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
-                              {selectedTrendOverlay.reason ?? '-'}
-                            </p>
-                            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
-                              <span>
-                                Current:{' '}
-                                <code>
-                                  {formatTrendValue(selectedTrendOverlay.current_value, selectedTrendSeries.key)}
-                                </code>
-                              </span>
-                              <span>
-                                Team mean:{' '}
-                                <code>
-                                  {formatTrendValue(selectedTrendOverlay.team?.mean ?? null, selectedTrendSeries.key)}
-                                </code>
-                              </span>
-                              <span>
-                                Population mean:{' '}
-                                <code>
-                                  {formatTrendValue(
-                                    selectedTrendOverlay.population?.mean ?? null,
-                                    selectedTrendSeries.key
-                                  )}
-                                </code>
-                              </span>
-                              <span>
-                                Delta to team:{' '}
-                                <code>
-                                  {formatSigned(
-                                    toFiniteNumber(selectedTrendOverlay.delta_vs_team_mean),
-                                    selectedTrendSeries.key === 'rank' ? 0 : 3
-                                  )}
-                                </code>
-                              </span>
-                              <span>
-                                Delta to population:{' '}
-                                <code>
-                                  {formatSigned(
-                                    toFiniteNumber(selectedTrendOverlay.delta_vs_population_mean),
-                                    selectedTrendSeries.key === 'rank' ? 0 : 3
-                                  )}
-                                </code>
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        {Array.isArray(selectedTrendSeries.values) && Array.isArray(selectedTrendSeries.deltas) && (
-                          <div style={{ overflowX: 'auto' }}>
-                            <table>
-                              <thead>
-                                <tr>
-                                  <th>Version</th>
-                                  <th>Value</th>
-                                  <th>Delta to prev</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {((trendExplorer?.version_labels ?? []) as string[]).map((label, index) => {
-                                  const value = selectedTrendSeries.values?.[index] ?? null
-                                  const delta = selectedTrendSeries.deltas?.[index] ?? null
-                                  return (
-                                    <tr key={`${label}-${index}`}>
-                                      <td>
-                                        <code>{label}</code>
-                                      </td>
-                                      <td>{formatTrendValue(value, selectedTrendSeries.key)}</td>
-                                      <td>
-                                        {delta === null
-                                          ? '-'
-                                          : formatSigned(delta, selectedTrendSeries.key === 'rank' ? 0 : 3)}
-                                      </td>
-                                    </tr>
-                                  )
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-
-                        {selectedTrendPatternGroups.length > 0 && (
-                          <div className="card" style={{ background: 'var(--panel-soft-bg-2)' }}>
-                            <h3 style={{ marginTop: 0 }}>Cross-Submission Pattern Groups</h3>
-                            <div style={{ display: 'grid', gap: 8 }}>
-                              {selectedTrendPatternGroups.map((group, index) => (
-                                <article
-                                  key={`${String(group.code ?? 'group')}-${String(group.metric_key ?? '')}-${String(group.title ?? '')}-${index}`}
-                                  className="card"
-                                  style={{ padding: 12 }}
-                                >
-                                  <p style={{ marginTop: 0, marginBottom: 6 }}>
-                                    <strong>{String(group.title ?? group.code ?? 'Pattern')}</strong>{' '}
-                                    <span style={{ color: '#4b617f' }}>
-                                      ({String(group.count ?? 0)}, {String(group.severity ?? 'info')})
-                                    </span>
-                                  </p>
-                                  <p style={{ margin: '0 0 4px', fontSize: 13 }}>{String(group.evidence ?? '')}</p>
-                                  <p style={{ margin: '0 0 4px', fontSize: 13 }}>{String(group.next_action ?? '')}</p>
-                                  <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                                    Versions: {Array.isArray(group.versions) ? group.versions.join(', ') : '-'}
-                                  </p>
-                                </article>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </details>
-                  )}
-                </section>
-              )}
-
-              {confidence && (
-                <section className="card" style={{ display: 'grid', gap: 8 }}>
-                  <h2 style={{ margin: 0 }}>Confidence Intervals</h2>
-                  <p style={{ margin: 0 }}>
-                    Evidence: <strong>{confidence.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
-                  </p>
-                  <details>
-                    <summary>Interval Details</summary>
-                    <div style={{ overflowX: 'auto', marginTop: 10 }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Metric</th>
-                            <th>Point Δ</th>
-                            <th>CI Low</th>
-                            <th>CI High</th>
-                            <th>Samples</th>
-                            <th>Interpretation</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(confidence.intervals ?? []).map((interval) => (
-                            <tr key={String(interval.key ?? interval.label ?? 'interval')}>
-                              <td>{String(interval.label ?? interval.key ?? '-')}</td>
-                              <td>{formatSigned(toFiniteNumber(interval.point_estimate), 3)}</td>
-                              <td>{formatNumber(toFiniteNumber(interval.lower), 3)}</td>
-                              <td>{formatNumber(toFiniteNumber(interval.upper), 3)}</td>
-                              <td>
-                                {(toFiniteNumber(interval.current_samples) ?? 0).toString()}/
-                                {(toFiniteNumber(interval.baseline_samples) ?? 0).toString()}
-                              </td>
-                              <td>{String(interval.interpretation ?? '-')}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </details>
-                  {(confidence.recommended_actions ?? []).length > 0 && (
-                    <ul style={{ margin: 0 }}>
-                      {(confidence.recommended_actions ?? []).map((action) => (
-                        <li key={action}>{action}</li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              )}
-
-              {patterns?.evidence_sufficient && (
-                <section className="card" style={{ display: 'grid', gap: 10 }}>
-                  <h2 style={{ margin: 0 }}>Pattern Extraction</h2>
-                  <p style={{ margin: 0 }}>{String(patterns.headline ?? '-')}</p>
-                  {(patterns.signals ?? []).length > 0 && (
-                    <details>
-                      <summary>Detected Signals ({(patterns.signals ?? []).length})</summary>
-                      <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-                        {(patterns.signals ?? []).map((signal) => {
-                          const severity = String(signal.severity ?? 'info')
-                          const severityClass =
-                            severity === 'high'
-                              ? 'pattern-signal-high'
-                              : severity === 'warn'
-                                ? 'pattern-signal-warn'
-                                : 'pattern-signal-info'
-                          return (
-                            <article
-                              key={String(signal.code ?? signal.title ?? 'signal')}
-                              className={`card pattern-signal-card ${severityClass}`}
-                              style={{ padding: 12 }}
+                    {selectedTrendSeries && (
+                      <details>
+                        <summary>Trend Explorer</summary>
+                        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                          <label style={{ display: 'grid', gap: 6, maxWidth: 360 }}>
+                            Metric
+                            <select
+                              value={selectedTrendSeries.key}
+                              onChange={(event) => setSelectedTrendMetric(event.target.value)}
                             >
-                              <p style={{ marginTop: 0, marginBottom: 6 }}>
-                                <strong>{String(signal.title ?? signal.code ?? 'Signal')}</strong>{' '}
-                                <span className="pattern-signal-meta" style={{ fontSize: 12 }}>
-                                  ({String(signal.confidence ?? 'unknown')} confidence)
-                                </span>
+                              {trendSeries.map((series) => (
+                                <option key={series.key} value={series.key}>
+                                  {series.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <p style={{ margin: 0, fontSize: 13 }}>
+                            <strong style={{ textTransform: 'uppercase' }}>
+                              {String(selectedTrendSeries.direction ?? 'insufficient')}
+                            </strong>
+                            : {String(selectedTrendSeries.reason ?? 'No trend reason provided.')}
+                          </p>
+
+                          {selectedTrendOverlay && (
+                            <div className="card" style={{ background: 'var(--panel-soft-bg-1)' }}>
+                              <p style={{ marginTop: 0, marginBottom: 8 }}>
+                                Policy Relative to Team/Population Overlay (
+                                {selectedTrendOverlay.signal ?? 'insufficient'})
                               </p>
-                              <p style={{ margin: '0 0 6px', fontSize: 13 }}>{String(signal.evidence ?? '')}</p>
-                              <p style={{ margin: 0, fontSize: 13 }}>{String(signal.next_action ?? '')}</p>
-                            </article>
-                          )
-                        })}
+                              <p style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+                                {selectedTrendOverlay.reason ?? '-'}
+                              </p>
+                              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+                                <span>
+                                  Current:{' '}
+                                  <code>
+                                    {formatTrendValue(selectedTrendOverlay.current_value, selectedTrendSeries.key)}
+                                  </code>
+                                </span>
+                                <span>
+                                  Team mean:{' '}
+                                  <code>
+                                    {formatTrendValue(selectedTrendOverlay.team?.mean ?? null, selectedTrendSeries.key)}
+                                  </code>
+                                </span>
+                                <span>
+                                  Population mean:{' '}
+                                  <code>
+                                    {formatTrendValue(
+                                      selectedTrendOverlay.population?.mean ?? null,
+                                      selectedTrendSeries.key
+                                    )}
+                                  </code>
+                                </span>
+                                <span>
+                                  Delta to team:{' '}
+                                  <code>
+                                    {formatSigned(
+                                      toFiniteNumber(selectedTrendOverlay.delta_vs_team_mean),
+                                      selectedTrendSeries.key === 'rank' ? 0 : 3
+                                    )}
+                                  </code>
+                                </span>
+                                <span>
+                                  Delta to population:{' '}
+                                  <code>
+                                    {formatSigned(
+                                      toFiniteNumber(selectedTrendOverlay.delta_vs_population_mean),
+                                      selectedTrendSeries.key === 'rank' ? 0 : 3
+                                    )}
+                                  </code>
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
+                          {Array.isArray(selectedTrendSeries.values) && Array.isArray(selectedTrendSeries.deltas) && (
+                            <div style={{ overflowX: 'auto' }}>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>Version</th>
+                                    <th>Value</th>
+                                    <th>Delta to prev</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {((trendExplorer?.version_labels ?? []) as string[]).map((label, index) => {
+                                    const value = selectedTrendSeries.values?.[index] ?? null
+                                    const delta = selectedTrendSeries.deltas?.[index] ?? null
+                                    return (
+                                      <tr key={`${label}-${index}`}>
+                                        <td>
+                                          <code>{label}</code>
+                                        </td>
+                                        <td>{formatTrendValue(value, selectedTrendSeries.key)}</td>
+                                        <td>
+                                          {delta === null
+                                            ? '-'
+                                            : formatSigned(delta, selectedTrendSeries.key === 'rank' ? 0 : 3)}
+                                        </td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {selectedTrendPatternGroups.length > 0 && (
+                            <div className="card" style={{ background: 'var(--panel-soft-bg-2)' }}>
+                              <h3 style={{ marginTop: 0 }}>Cross-Submission Pattern Groups</h3>
+                              <div style={{ display: 'grid', gap: 8 }}>
+                                {selectedTrendPatternGroups.map((group, index) => (
+                                  <article
+                                    key={`${String(group.code ?? 'group')}-${String(group.metric_key ?? '')}-${String(group.title ?? '')}-${index}`}
+                                    className="card"
+                                    style={{ padding: 12 }}
+                                  >
+                                    <p style={{ marginTop: 0, marginBottom: 6 }}>
+                                      <strong>{String(group.title ?? group.code ?? 'Pattern')}</strong>{' '}
+                                      <span style={{ color: '#4b617f' }}>
+                                        ({String(group.count ?? 0)}, {String(group.severity ?? 'info')})
+                                      </span>
+                                    </p>
+                                    <p style={{ margin: '0 0 4px', fontSize: 13 }}>{String(group.evidence ?? '')}</p>
+                                    <p style={{ margin: '0 0 4px', fontSize: 13 }}>{String(group.next_action ?? '')}</p>
+                                    <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                                      Versions: {Array.isArray(group.versions) ? group.versions.join(', ') : '-'}
+                                    </p>
+                                  </article>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    )}
+                  </section>
+                )}
+
+                {confidence && (
+                  <section
+                    className="card"
+                    style={{ display: 'grid', gap: 8, ...(trend ? { gridColumn: '2 / 3' } : {}) }}
+                  >
+                    <h2 style={{ margin: 0 }}>Confidence Intervals</h2>
+                    <p style={{ margin: 0 }}>
+                      Evidence: <strong>{confidence.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
+                    </p>
+                    <details>
+                      <summary>Interval Details</summary>
+                      <div style={{ overflowX: 'auto', marginTop: 10 }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Metric</th>
+                              <th>Point Δ</th>
+                              <th>CI Low</th>
+                              <th>CI High</th>
+                              <th>Samples</th>
+                              <th>Interpretation</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(confidence.intervals ?? []).map((interval) => (
+                              <tr key={String(interval.key ?? interval.label ?? 'interval')}>
+                                <td>{String(interval.label ?? interval.key ?? '-')}</td>
+                                <td>{formatSigned(toFiniteNumber(interval.point_estimate), 3)}</td>
+                                <td>{formatNumber(toFiniteNumber(interval.lower), 3)}</td>
+                                <td>{formatNumber(toFiniteNumber(interval.upper), 3)}</td>
+                                <td>
+                                  {(toFiniteNumber(interval.current_samples) ?? 0).toString()}/
+                                  {(toFiniteNumber(interval.baseline_samples) ?? 0).toString()}
+                                </td>
+                                <td>{String(interval.interpretation ?? '-')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </details>
-                  )}
-                </section>
-              )}
+                    {(confidence.recommended_actions ?? []).length > 0 && (
+                      <ul style={{ margin: 0 }}>
+                        {(confidence.recommended_actions ?? []).map((action) => (
+                          <li key={action}>{action}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                )}
 
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>Feedback</h2>
-                <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
-                  Report dashboard bugs/features with policy, tab, metric, filter, and selected-episode context
-                  prefilled.
-                </p>
-                <a href={feedbackUrl} target="_blank" rel="noreferrer">
-                  Open dashboard feedback issue
-                </a>
+                {patterns?.evidence_sufficient && (
+                  <section
+                    className="card"
+                    style={{ display: 'grid', gap: 10, ...(trend ? { gridColumn: '2 / 3' } : {}) }}
+                  >
+                    <h2 style={{ margin: 0 }}>Pattern Extraction</h2>
+                    <p style={{ margin: 0 }}>{String(patterns.headline ?? '-')}</p>
+                    {(patterns.signals ?? []).length > 0 && (
+                      <details>
+                        <summary>Detected Signals ({(patterns.signals ?? []).length})</summary>
+                        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                          {(patterns.signals ?? []).map((signal) => {
+                            const severity = String(signal.severity ?? 'info')
+                            const severityClass =
+                              severity === 'high'
+                                ? 'pattern-signal-high'
+                                : severity === 'warn'
+                                  ? 'pattern-signal-warn'
+                                  : 'pattern-signal-info'
+                            return (
+                              <article
+                                key={String(signal.code ?? signal.title ?? 'signal')}
+                                className={`card pattern-signal-card ${severityClass}`}
+                                style={{ padding: 12 }}
+                              >
+                                <p style={{ marginTop: 0, marginBottom: 6 }}>
+                                  <strong>{String(signal.title ?? signal.code ?? 'Signal')}</strong>{' '}
+                                  <span className="pattern-signal-meta" style={{ fontSize: 12 }}>
+                                    ({String(signal.confidence ?? 'unknown')} confidence)
+                                  </span>
+                                </p>
+                                <p style={{ margin: '0 0 6px', fontSize: 13 }}>{String(signal.evidence ?? '')}</p>
+                                <p style={{ margin: 0, fontSize: 13 }}>{String(signal.next_action ?? '')}</p>
+                              </article>
+                            )
+                          })}
+                        </div>
+                      </details>
+                    )}
+                  </section>
+                )}
+
+                <section
+                  className="card"
+                  style={{ display: 'grid', gap: 8, ...(trend ? { gridColumn: '2 / 3' } : {}) }}
+                >
+                  <h2 style={{ marginTop: 0 }}>Feedback</h2>
+                  <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
+                    Report dashboard bugs/features with policy, tab, metric, filter, and selected-episode context
+                    prefilled.
+                  </p>
+                  <a href={feedbackUrl} target="_blank" rel="noreferrer">
+                    Open dashboard feedback issue
+                  </a>
+                </section>
               </section>
             </>
           )}
 
-          {activeTab === 'analysis' && (
-            <section className="card">
-              <div className="dashboard-title-line" style={{ marginBottom: 10 }}>
-                <h2 style={{ margin: 0 }}>Analysis</h2>
-                <span className="dashboard-title-subline">
-                  Run diagnostics analysis to generate a natural-language summary.
-                </span>
-              </div>
-              <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
-                <label style={{ display: 'grid', gap: 6, maxWidth: 560 }}>
-                  Anthropic API key (optional, bring your own)
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    placeholder="sk-ant-..."
-                    value={analysisApiKey}
-                    onChange={(event) => setAnalysisApiKey(event.target.value)}
-                  />
-                </label>
-                <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                  Key is sent only with this analysis request as <code>X-Anthropic-Api-Key</code>; it is not persisted.
-                </p>
-                <div>
-                  <button
-                    type="button"
-                    onClick={onRunAnalysis}
-                    disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
-                  >
-                    {analysis ? 'Re-run diagnostics analysis' : 'Run diagnostics analysis'}
-                  </button>
+          {activeTab === 'overview' && (
+            <section className="grid" style={{ alignItems: 'start' }}>
+              <section className="card">
+                <div className="dashboard-title-line" style={{ marginBottom: 10 }}>
+                  <h2 style={{ margin: 0 }}>Analysis</h2>
+                  <span className="dashboard-title-subline">
+                    Run diagnostics analysis to generate a natural-language summary.
+                  </span>
                 </div>
-              </div>
-              {analysisError && (
-                <div className="card" style={{ padding: 12, borderColor: '#fecdca', background: '#fff7f6' }}>
-                  <p style={{ marginTop: 0, marginBottom: 6, color: '#b42318' }}>
-                    <strong>Analysis unavailable:</strong> {analysisError}
+                <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+                  <label style={{ display: 'grid', gap: 6, maxWidth: 560 }}>
+                    Anthropic API key (optional, bring your own)
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      placeholder="sk-ant-..."
+                      value={analysisApiKey}
+                      onChange={(event) => setAnalysisApiKey(event.target.value)}
+                    />
+                  </label>
+                  <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                    Key is sent only with this analysis request as <code>X-Anthropic-Api-Key</code>; it is not
+                    persisted.
                   </p>
-                  {isAnalysisKeyMissingError(analysisError) && (
-                    <p style={{ margin: 0, fontSize: 13, color: '#6b2c2c' }}>
-                      No shared key is configured for this backend. Bring your own key above, or run your own backend
-                      with <code>ANTHROPIC_API_KEY</code> exported.
-                    </p>
-                  )}
-                </div>
-              )}
-              {!analysis && !analysisLoading && (
-                <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
-                  <p style={{ margin: 0, color: '#546b8a' }}>
-                    No analysis generated yet for this session. Run the action above when ready.
-                  </p>
-                </div>
-              )}
-              {analysisLoading && (
-                <AnalysisLoadingQuips
-                  policyName={String(data?.policy?.name ?? 'policy')}
-                  opponentStats={data?.derived?.opponent_metrics ?? {}}
-                />
-              )}
-              {analysis && (
-                <div style={{ display: 'grid', gap: 10 }}>
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
-                      {showAnalysis ? 'Hide analysis' : 'Show analysis'}
+                  <div>
+                    <button
+                      type="button"
+                      onClick={onRunAnalysis}
+                      disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
+                    >
+                      {analysis ? 'Re-run diagnostics analysis' : 'Run diagnostics analysis'}
                     </button>
                   </div>
-                  <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                    Data sources: {analysis.data_sources.join(', ') || '-'}
-                  </p>
-                  {showAnalysis &&
-                    (data ? (
-                      <AnalysisRichText
-                        text={analysis.analysis}
-                        episodes={episodes}
-                        opponentStats={data.derived.opponent_metrics}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          border: '1px solid var(--panel-soft-border)',
-                          borderRadius: 10,
-                          padding: 12,
-                          background: 'var(--panel-soft-bg-1)',
-                          whiteSpace: 'pre-wrap',
-                        }}
-                      >
-                        {analysis.analysis}
-                      </div>
-                    ))}
                 </div>
-              )}
+                {analysisError && (
+                  <div className="card" style={{ padding: 12, borderColor: '#fecdca', background: '#fff7f6' }}>
+                    <p style={{ marginTop: 0, marginBottom: 6, color: '#b42318' }}>
+                      <strong>Analysis unavailable:</strong> {analysisError}
+                    </p>
+                    {isAnalysisKeyMissingError(analysisError) && (
+                      <p style={{ margin: 0, fontSize: 13, color: '#6b2c2c' }}>
+                        No shared key is configured for this backend. Bring your own key above, or run your own backend
+                        with <code>ANTHROPIC_API_KEY</code> exported.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {!analysis && !analysisLoading && (
+                  <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+                    <p style={{ margin: 0, color: '#546b8a' }}>
+                      No analysis generated yet for this session. Run the action above when ready.
+                    </p>
+                  </div>
+                )}
+                {analysisLoading && (
+                  <AnalysisLoadingQuips
+                    policyName={String(data?.policy?.name ?? 'policy')}
+                    opponentStats={data?.derived?.opponent_metrics ?? {}}
+                  />
+                )}
+                {analysis && (
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
+                        {showAnalysis ? 'Hide analysis' : 'Show analysis'}
+                      </button>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                      Data sources: {analysis.data_sources.join(', ') || '-'}
+                    </p>
+                    {showAnalysis &&
+                      (data ? (
+                        <AnalysisRichText
+                          text={analysis.analysis}
+                          episodes={episodes}
+                          opponentStats={data.derived.opponent_metrics}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            border: '1px solid var(--panel-soft-border)',
+                            borderRadius: 10,
+                            padding: 12,
+                            background: 'var(--panel-soft-bg-1)',
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {analysis.analysis}
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </section>
             </section>
           )}
 
-          {activeTab === 'episodes' && (
+          {activeTab === 'performance' && (
             <>
+              <section
+                className="grid"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
+              >
+                <KPIStatCard
+                  label="Failed Episodes"
+                  value={String(toFiniteNumber(failures.failed_episodes) ?? 0)}
+                  detail={formatPercent(toFiniteNumber(failures.failed_rate), 1)}
+                  severity={kpiSeverity(toFiniteNumber(failures.failed_rate), 0.03, 0.1, false)}
+                />
+                <KPIStatCard
+                  label="Replay Coverage"
+                  value={formatPercent(replayCoverage, 0)}
+                  detail={`${completedWithReplayCount}/${completedEpisodes.length} completed`}
+                  severity={kpiSeverity(replayCoverage, 0.7, 0.4)}
+                />
+                <KPIStatCard
+                  label="Timeout Failures"
+                  value={String(toFiniteNumber(failures.timeout_failures) ?? 0)}
+                  severity={(toFiniteNumber(failures.timeout_failures) ?? 0) > 0 ? 'bad' : 'good'}
+                />
+                <KPIStatCard
+                  label="OOM Failures"
+                  value={String(toFiniteNumber(failures.oom_failures) ?? 0)}
+                  severity={(toFiniteNumber(failures.oom_failures) ?? 0) > 0 ? 'bad' : 'good'}
+                />
+                <KPIStatCard
+                  label="Crash/Other"
+                  value={String(
+                    (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0)
+                  )}
+                  detail={`${String(toFiniteNumber(failures.crash_failures) ?? 0)} crash + ${String(toFiniteNumber(failures.other_failures) ?? 0)} other`}
+                  severity={
+                    (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0) > 0
+                      ? 'bad'
+                      : 'good'
+                  }
+                />
+                <KPIStatCard
+                  label="Freeze-Heavy"
+                  value={String(toFiniteNumber(failures.freeze_heavy_completed) ?? 0)}
+                  severity={(toFiniteNumber(failures.freeze_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
+                />
+                <KPIStatCard
+                  label="Noop-Heavy"
+                  value={String(toFiniteNumber(failures.noop_heavy_completed) ?? 0)}
+                  severity={(toFiniteNumber(failures.noop_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
+                />
+              </section>
+
               <section className="card grid" style={{ gap: 10 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 2 }}>Filters & Export</h2>
                 <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
@@ -2935,7 +3125,7 @@ export function DashboardClient() {
                     Export full bundle JSON
                   </button>
                   <span style={{ fontSize: 12, color: '#4b617f' }}>
-                    Feedback episode: <code>{selectedEpisodeId ?? '-'}</code>
+                    Feedback episode: <code>{selectedEpisodeId ?? '-'}</code> (click a row to set)
                   </span>
                   <span style={{ marginLeft: 'auto', fontSize: 12, color: '#4b617f' }}>
                     {sortedEpisodes.length}/{episodes.length} rows • order: {String(data.selection?.ordering ?? 'n/a')}{' '}
@@ -2944,609 +3134,737 @@ export function DashboardClient() {
                 </div>
               </section>
 
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>
-                  Episodes ({sortedEpisodes.length} filtered / {episodes.length} sampled)
-                </h2>
-                {sortedEpisodes.length === 0 ? (
-                  <p style={{ marginBottom: 0 }}>No episodes match current filters.</p>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>
-                            <button
-                              type="button"
-                              onClick={() => onEpisodeSort('created_at')}
-                              style={SORT_HEADER_BUTTON_STYLE}
+              <section className="grid two coordination-layout" style={{ alignItems: 'start' }}>
+                <section className="card">
+                  <h2 style={{ marginTop: 0 }}>
+                    Episodes ({sortedEpisodes.length} filtered / {episodes.length} sampled)
+                  </h2>
+                  {sortedEpisodes.length === 0 ? (
+                    <p style={{ marginBottom: 0 }}>No episodes match current filters.</p>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>
+                              <button
+                                type="button"
+                                onClick={() => onEpisodeSort('created_at')}
+                                style={SORT_HEADER_BUTTON_STYLE}
+                              >
+                                Created {episodeSort === 'created_at' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
+                              </button>
+                            </th>
+                            <th>
+                              <button
+                                type="button"
+                                onClick={() => onEpisodeSort('opponent')}
+                                style={SORT_HEADER_BUTTON_STYLE}
+                              >
+                                Teammate {episodeSort === 'opponent' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
+                              </button>
+                            </th>
+                            <th>
+                              <button
+                                type="button"
+                                onClick={() => onEpisodeSort('team')}
+                                style={SORT_HEADER_BUTTON_STYLE}
+                              >
+                                Team {episodeSort === 'team' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
+                              </button>
+                            </th>
+                            <th>
+                              <button
+                                type="button"
+                                onClick={() => onEpisodeSort('reward')}
+                                style={SORT_HEADER_BUTTON_STYLE}
+                              >
+                                Reward {episodeSort === 'reward' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
+                              </button>
+                            </th>
+                            <th>Status</th>
+                            <th>Replay</th>
+                            <th>Diagnostics</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {sortedEpisodes.slice(0, 200).map((episode) => {
+                            const id = episodeIdentifier(episode)
+                            const reward = toFiniteNumber(episode.reward ?? episode.avg_reward)
+                            const tags = asStringArray(episode.diagnostic_tags)
+                            return (
+                              <tr
+                                key={id}
+                                onClick={() => setSelectedEpisodeId(id)}
+                                style={
+                                  id === selectedEpisodeId
+                                    ? { background: 'var(--panel-soft-bg-1)', cursor: 'pointer' }
+                                    : { cursor: 'pointer' }
+                                }
+                              >
+                                <td>
+                                  <code>{formatDateTime(episode.created_at)}</code>
+                                </td>
+                                <td>
+                                  <span
+                                    style={{
+                                      display: 'inline-block',
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: '50%',
+                                      background: colorMap[String(episode.opponent_name ?? 'unknown')] ?? '#94a3b8',
+                                      marginRight: 6,
+                                    }}
+                                  />
+                                  {String(episode.opponent_name ?? '-')}
+                                  {episode.opponent_version === null || episode.opponent_version === undefined
+                                    ? ''
+                                    : ` v${episode.opponent_version}`}
+                                </td>
+                                <td>
+                                  <code>{String(episode.team_composition ?? '-')}</code>
+                                </td>
+                                <td>{formatNumber(reward, 3)}</td>
+                                <td>{String(episode.status ?? '-')}</td>
+                                <td>
+                                  {episode.replay_url ? (
+                                    <a href={String(episode.replay_url)} target="_blank" rel="noreferrer">
+                                      Open
+                                    </a>
+                                  ) : (
+                                    '-'
+                                  )}
+                                </td>
+                                <td style={{ maxWidth: 360 }}>{tags.join(', ') || '-'}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      {sortedEpisodes.length > 200 && (
+                        <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: '#4b617f' }}>
+                          Showing first 200 rows of {sortedEpisodes.length} filtered episodes.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </section>
+
+                <div className="grid" style={{ gap: 10 }}>
+                  {(statsInventory || topTagStats.length > 0) && (
+                    <section className="card" style={{ display: 'grid', gap: 10 }}>
+                      <h2 style={{ margin: 0 }}>Tag + Instrumentation Inventory</h2>
+                      {statsInventory && (
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
+                          <span>
+                            Distinct metrics:{' '}
+                            <code>{String(toFiniteNumber(statsInventory.distinct_metric_keys) ?? 0)}</code>
+                          </span>
+                          <span>
+                            Distinct tags: <code>{String(toFiniteNumber(statsInventory.distinct_tag_keys) ?? 0)}</code>
+                          </span>
+                          <span>
+                            Episodes:{' '}
+                            <code>{String(toFiniteNumber(statsInventory.total_episodes) ?? episodes.length)}</code>
+                          </span>
+                        </div>
+                      )}
+                      {topTagStats.length > 0 ? (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Behavior Slice (Tag)</th>
+                                <th>Count</th>
+                                <th>Coverage</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {topTagStats.map((row) => (
+                                <tr key={row.tag}>
+                                  <td>
+                                    <code>{row.tag}</code>
+                                  </td>
+                                  <td>{row.count}</td>
+                                  <td>{formatPercent(row.coverage, 0)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p style={{ margin: 0 }}>No diagnostic/raw tags found in sampled episodes.</p>
+                      )}
+                      {(statsInventory?.notes ?? []).length > 0 && (
+                        <ul style={{ margin: 0 }}>
+                          {(statsInventory?.notes ?? []).map((note) => (
+                            <li key={note}>{note}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </section>
+                  )}
+
+                  <section className="card">
+                    <details>
+                      <summary>Failed Episodes ({failedEpisodes.length})</summary>
+                      <div style={{ marginTop: 10 }}>
+                        {failedEpisodes.length === 0 ? (
+                          <p style={{ marginBottom: 0 }}>No failed episodes in the sampled data.</p>
+                        ) : (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Job ID</th>
+                                  <th>Error Type</th>
+                                  <th>Error Message</th>
+                                  <th>Teammate</th>
+                                  <th>Team</th>
+                                  <th>Created</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {failedEpisodes.map((episode) => {
+                                  const key = String(
+                                    episode.episode_id ??
+                                      episode.id ??
+                                      episode.job_id ??
+                                      `${episode.opponent_name ?? 'unknown'}-${episode.created_at ?? 'na'}-${episode.team_composition ?? 'na'}`
+                                  )
+                                  return (
+                                    <tr key={key}>
+                                      <td>
+                                        <code>{String(episode.job_id ?? '-')}</code>
+                                      </td>
+                                      <td>{String(episode.error_type ?? 'unknown')}</td>
+                                      <td>{String(episode.error_message ?? '-')}</td>
+                                      <td>{String(episode.opponent_name ?? '-')}</td>
+                                      <td>
+                                        <code>{String(episode.team_composition ?? '-')}</code>
+                                      </td>
+                                      <td>{formatDateTime(episode.created_at)}</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  </section>
+
+                  {data.derived?.crash_dump && (
+                    <section className="card">
+                      <details>
+                        <summary>Crash Dump Report</summary>
+                        <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
+                          <p style={{ margin: 0 }}>{String(data.derived.crash_dump.headline ?? '-')}</p>
+
+                          {(data.derived.crash_dump.signatures ?? []).length > 0 && (
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                                gap: 8,
+                              }}
                             >
-                              Created {episodeSort === 'created_at' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
-                            </button>
-                          </th>
-                          <th>
-                            <button
-                              type="button"
-                              onClick={() => onEpisodeSort('opponent')}
-                              style={SORT_HEADER_BUTTON_STYLE}
-                            >
-                              Teammate {episodeSort === 'opponent' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
-                            </button>
-                          </th>
-                          <th>
-                            <button
-                              type="button"
-                              onClick={() => onEpisodeSort('team')}
-                              style={SORT_HEADER_BUTTON_STYLE}
-                            >
-                              Team {episodeSort === 'team' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
-                            </button>
-                          </th>
-                          <th>
-                            <button
-                              type="button"
-                              onClick={() => onEpisodeSort('reward')}
-                              style={SORT_HEADER_BUTTON_STYLE}
-                            >
-                              Reward {episodeSort === 'reward' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
-                            </button>
-                          </th>
-                          <th>
-                            <button
-                              type="button"
-                              onClick={() => onEpisodeSort('steps')}
-                              style={SORT_HEADER_BUTTON_STYLE}
-                            >
-                              Steps {episodeSort === 'steps' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
-                            </button>
-                          </th>
-                          <th>
-                            <button
-                              type="button"
-                              onClick={() => onEpisodeSort('noop_rate')}
-                              style={SORT_HEADER_BUTTON_STYLE}
-                            >
-                              Noop % {episodeSort === 'noop_rate' ? (episodeSortDir === 'asc' ? '▲' : '▼') : ''}
-                            </button>
-                          </th>
-                          <th>Status</th>
-                          <th>Replay</th>
-                          <th>Diagnostics</th>
-                          <th>Feedback Context</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedEpisodes.slice(0, 200).map((episode) => {
-                          const id = episodeIdentifier(episode)
-                          const reward = toFiniteNumber(episode.reward ?? episode.avg_reward)
-                          const noop = episodeNoopRate(episode)
-                          const tags = asStringArray(episode.diagnostic_tags)
-                          return (
-                            <tr
-                              key={id}
-                              style={id === selectedEpisodeId ? { background: 'var(--panel-soft-bg-1)' } : undefined}
-                            >
-                              <td>
-                                <code>{formatDateTime(episode.created_at)}</code>
-                              </td>
-                              <td>
-                                <span
-                                  style={{
-                                    display: 'inline-block',
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: '50%',
-                                    background: colorMap[String(episode.opponent_name ?? 'unknown')] ?? '#94a3b8',
-                                    marginRight: 6,
-                                  }}
-                                />
-                                {String(episode.opponent_name ?? '-')}
-                                {episode.opponent_version === null || episode.opponent_version === undefined
-                                  ? ''
-                                  : ` v${episode.opponent_version}`}
-                              </td>
-                              <td>
-                                <code>{String(episode.team_composition ?? '-')}</code>
-                              </td>
-                              <td>{formatNumber(reward, 3)}</td>
-                              <td>{toFiniteNumber(episode.steps) ?? '-'}</td>
-                              <td>{(noop * 100).toFixed(1)}%</td>
-                              <td>{String(episode.status ?? '-')}</td>
-                              <td>
-                                {episode.replay_url ? (
-                                  <a href={String(episode.replay_url)} target="_blank" rel="noreferrer">
-                                    Open
-                                  </a>
-                                ) : (
-                                  '-'
-                                )}
-                              </td>
-                              <td style={{ maxWidth: 360 }}>{tags.join(', ') || '-'}</td>
-                              <td>
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedEpisodeId(id)}
-                                  disabled={id === selectedEpisodeId}
+                              {(data.derived.crash_dump.signatures ?? []).map((signature) => (
+                                <article
+                                  key={String(signature.signature ?? signature.error_type ?? 'signature')}
+                                  className="card"
+                                  style={{ padding: 10 }}
                                 >
-                                  {id === selectedEpisodeId ? 'Selected' : 'Use'}
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                    {sortedEpisodes.length > 200 && (
-                      <p style={{ marginTop: 10, marginBottom: 0, fontSize: 12, color: '#4b617f' }}>
-                        Showing first 200 rows of {sortedEpisodes.length} filtered episodes.
-                      </p>
-                    )}
-                  </div>
-                )}
+                                  <p style={{ marginTop: 0, marginBottom: 6 }}>
+                                    <strong>{String(signature.error_type ?? 'unknown')}</strong> (
+                                    {String(signature.count ?? 0)})
+                                  </p>
+                                  <p style={{ margin: 0, fontSize: 12 }}>{String(signature.example_message ?? '-')}</p>
+                                </article>
+                              ))}
+                            </div>
+                          )}
+
+                          {(data.derived.crash_dump.entries ?? []).length > 0 && (
+                            <div style={{ overflowX: 'auto' }}>
+                              <table>
+                                <thead>
+                                  <tr>
+                                    <th>Job</th>
+                                    <th>Type</th>
+                                    <th>Message</th>
+                                    <th>Analyze Command</th>
+                                    <th>Replay</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(data.derived.crash_dump.entries ?? []).map((entry) => (
+                                    <tr key={String(entry.episode_id ?? entry.job_id ?? 'entry')}>
+                                      <td>
+                                        <code>{String(entry.job_id ?? '-')}</code>
+                                      </td>
+                                      <td>{String(entry.error_type ?? 'unknown')}</td>
+                                      <td>{String(entry.error_message ?? '-')}</td>
+                                      <td>
+                                        <code>{String(entry.analysis_command ?? '-')}</code>
+                                      </td>
+                                      <td>
+                                        {entry.replay_url ? (
+                                          <a href={String(entry.replay_url)} target="_blank" rel="noreferrer">
+                                            Open
+                                          </a>
+                                        ) : (
+                                          '-'
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    </section>
+                  )}
+                </div>
               </section>
             </>
           )}
 
-          {activeTab === 'opponents' && (
-            <>
-              <section className="grid two">
-                <article className="card">
-                  <h2 style={{ marginTop: 0 }}>Best Teammate Pairing</h2>
-                  {bestWorstOpponents?.best ? (
-                    <p style={{ marginBottom: 0 }}>
-                      <strong>{bestWorstOpponents.best.opponent}</strong> (avg reward{' '}
-                      {formatNumber(bestWorstOpponents.best.avgReward, 3)})
-                    </p>
-                  ) : (
-                    <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
-                  )}
-                </article>
-                <article className="card">
-                  <h2 style={{ marginTop: 0 }}>Lowest-Reward Teammate Pairing</h2>
-                  {bestWorstOpponents?.worst ? (
-                    <p style={{ marginBottom: 0 }}>
-                      <strong>{bestWorstOpponents.worst.opponent}</strong> (avg reward{' '}
-                      {formatNumber(bestWorstOpponents.worst.avgReward, 3)})
-                    </p>
-                  ) : (
-                    <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
-                  )}
-                </article>
-              </section>
-
-              {matchup && (
-                <section className="card" style={{ display: 'grid', gap: 10 }}>
-                  <h2 style={{ margin: 0 }}>Teammate Pairing Diagnosis</h2>
-                  <p style={{ margin: 0 }}>{String(matchup.reason ?? '-')}</p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCurrentAvgRewardSeverity) }}
-                    >
-                      Current avg reward: <code>{formatNumber(matchupCurrentAvgReward, 3)}</code>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupBaselineAvgRewardSeverity) }}
-                    >
-                      Baseline avg reward: <code>{formatNumber(matchupBaselineAvgReward, 3)}</code>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupGlobalDeltaSeverity) }}
-                    >
-                      Global delta: <code>{formatSigned(matchupGlobalDelta, 3)}</code>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupEvidenceSeverity) }}
-                    >
-                      Evidence: <strong>{matchup.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
-                    >
-                      Teammate spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
-                    >
-                      Best/Worst teammate:{' '}
-                      <code>
-                        {String(matchup.best_opponent ?? '-')} / {String(matchup.worst_opponent ?? '-')}
-                      </code>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
-                    >
-                      Composition spread: <code>{formatNumber(matchupCompositionSpread, 3)}</code>
-                    </div>
-                    <div
-                      className="card"
-                      style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
-                    >
-                      Best/Worst composition:{' '}
-                      <code>
-                        {String(matchup.best_composition ?? '-')} / {String(matchup.worst_composition ?? '-')}
-                      </code>
-                    </div>
-                  </div>
-                </section>
-              )}
-
-              {matchup && asMatchupSlices(matchup.opponent_slices).length > 0 && (
-                <section className="card">
-                  <h2 style={{ marginTop: 0 }}>Teammate Pairing Slices (Current Relative to Baseline)</h2>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Paired Policy</th>
-                          <th>Current Avg</th>
-                          <th>Baseline Avg</th>
-                          <th>Delta to Baseline</th>
-                          <th>Delta to Policy Mean</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {asMatchupSlices(matchup.opponent_slices).map((slice) => (
-                          <tr key={String(slice.key ?? 'slice')}>
-                            <td>{String(slice.key ?? '-')}</td>
-                            <td>
-                              {formatNumber(toFiniteNumber(slice.avg_reward), 2)} ({toFiniteNumber(slice.count) ?? 0})
-                            </td>
-                            <td>
-                              {slice.baseline_avg_reward === null || slice.baseline_avg_reward === undefined
-                                ? '-'
-                                : `${formatNumber(slice.baseline_avg_reward, 2)} (${toFiniteNumber(slice.baseline_count) ?? 0})`}
-                            </td>
-                            <td>{formatSigned(toFiniteNumber(slice.delta_vs_baseline), 2)}</td>
-                            <td>{formatSigned(toFiniteNumber(slice.delta_vs_policy), 2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
-
-              {matchup && asMatchupSlices(matchup.composition_slices).length > 0 && (
-                <section className="card">
-                  <h2 style={{ marginTop: 0 }}>Composition Slices</h2>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Composition</th>
-                          <th>Current Avg</th>
-                          <th>Baseline Avg</th>
-                          <th>Delta to Baseline</th>
-                          <th>Delta to Policy Mean</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {asMatchupSlices(matchup.composition_slices).map((slice) => (
-                          <tr key={String(slice.key ?? 'comp')}>
-                            <td>
-                              <code>{String(slice.key ?? '-')}</code>
-                            </td>
-                            <td>
-                              {formatNumber(toFiniteNumber(slice.avg_reward), 2)} ({toFiniteNumber(slice.count) ?? 0})
-                            </td>
-                            <td>
-                              {slice.baseline_avg_reward === null || slice.baseline_avg_reward === undefined
-                                ? '-'
-                                : `${formatNumber(slice.baseline_avg_reward, 2)} (${toFiniteNumber(slice.baseline_count) ?? 0})`}
-                            </td>
-                            <td>{formatSigned(toFiniteNumber(slice.delta_vs_baseline), 2)}</td>
-                            <td>{formatSigned(toFiniteNumber(slice.delta_vs_policy), 2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
-
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>Teammate Breakdown</h2>
-                {opponentRows.length === 0 ? (
-                  <p style={{ marginBottom: 0 }}>No teammate metrics available.</p>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Teammate</th>
-                          <th>Games</th>
-                          <th>Completed</th>
-                          <th>Avg Reward</th>
-                          <th>Total Reward</th>
-                          <th>Win Rate</th>
-                          <th>Agg</th>
-                          <th>Def</th>
-                          <th>Res</th>
-                          <th>Jnc</th>
-                          <th>Mob</th>
-                          <th>Top Profile</th>
-                          <th>Source</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {opponentRows.map((row) => (
-                          <tr key={row.opponent}>
-                            <td>
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: '50%',
-                                  background: colorMap[row.opponent] ?? '#94a3b8',
-                                  marginRight: 6,
-                                }}
-                              />
-                              {row.opponent}
-                            </td>
-                            <td>{row.count}</td>
-                            <td>{row.completed}</td>
-                            <td>{formatNumber(row.avgReward, 2)}</td>
-                            <td>{formatNumber(row.totalReward, 2)}</td>
-                            <td>{formatPercent(row.winRate, 0)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.strategyProfile?.aggressive), 0)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.strategyProfile?.defensive), 0)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.strategyProfile?.resource_hoarder), 0)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.strategyProfile?.junction_hunter), 0)}</td>
-                            <td>{formatNumber(toFiniteNumber(row.strategyProfile?.mobile_scout), 0)}</td>
-                            <td>{row.bestProfile ?? '-'}</td>
-                            <td>{row.source}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-
-          {activeTab === 'health' && (
-            <>
+          {activeTab === 'coordination' && (
+            <section className="grid" style={{ gap: 10 }}>
               <section
                 className="grid"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
               >
                 <KPIStatCard
-                  label="Failed Episodes"
-                  value={String(toFiniteNumber(failures.failed_episodes) ?? 0)}
-                  detail={`${formatPercent(toFiniteNumber(failures.failed_rate), 1)} of sampled episodes`}
-                  severity={kpiSeverity(toFiniteNumber(failures.failed_rate), 0.03, 0.1, false)}
+                  label="Global Reward Delta"
+                  value={formatSigned(matchupGlobalDelta, 3)}
+                  severity={kpiSeverity(matchupGlobalDelta, 5, 0)}
                 />
                 <KPIStatCard
-                  label="Timeout Failures"
-                  value={String(toFiniteNumber(failures.timeout_failures) ?? 0)}
-                  severity={(toFiniteNumber(failures.timeout_failures) ?? 0) > 0 ? 'bad' : 'good'}
+                  label="Teammate Spread"
+                  value={formatNumber(matchupOpponentSpread, 3)}
+                  severity={kpiSeverity(matchupOpponentSpread, 20, 40, false)}
                 />
                 <KPIStatCard
-                  label="OOM Failures"
-                  value={String(toFiniteNumber(failures.oom_failures) ?? 0)}
-                  severity={(toFiniteNumber(failures.oom_failures) ?? 0) > 0 ? 'bad' : 'good'}
+                  label="Composition Spread"
+                  value={formatNumber(matchupCompositionSpread, 3)}
+                  severity={kpiSeverity(matchupCompositionSpread, 12, 24, false)}
                 />
                 <KPIStatCard
-                  label="Crash/Other"
-                  value={String(
-                    (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0)
+                  label="Best Teammate"
+                  value={String(bestWorstOpponents?.best?.opponent ?? '-')}
+                  detail={formatNumber(bestWorstOpponents?.best?.avgReward ?? null, 2)}
+                  severity={bestWorstOpponents?.best ? 'good' : 'warn'}
+                />
+                <KPIStatCard
+                  label="Worst Teammate"
+                  value={String(bestWorstOpponents?.worst?.opponent ?? '-')}
+                  detail={formatNumber(bestWorstOpponents?.worst?.avgReward ?? null, 2)}
+                  severity={bestWorstOpponents?.worst ? 'warn' : 'bad'}
+                />
+                <KPIStatCard
+                  label="Role Parse Rows"
+                  value={String(roleParseCount)}
+                  detail={String(rolePercentiles?.pool_name ?? '-')}
+                  severity={roleParseCount > 0 ? 'good' : roleLoading ? 'warn' : 'bad'}
+                />
+                <KPIStatCard
+                  label="Matchup Evidence"
+                  value={matchup?.evidence_sufficient ? 'sufficient' : 'limited'}
+                  severity={matchup?.evidence_sufficient ? 'good' : 'warn'}
+                />
+              </section>
+
+              <section className="grid two coordination-pairing-layout" style={{ alignItems: 'start' }}>
+                <div className="grid" style={{ gap: 10, minWidth: 0 }}>
+                  <section
+                    className="grid"
+                    style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}
+                  >
+                    <article className="card">
+                      <h2 style={{ marginTop: 0 }}>Best Teammate Pairing</h2>
+                      {bestWorstOpponents?.best ? (
+                        <p style={{ marginBottom: 0 }}>
+                          <strong>{bestWorstOpponents.best.opponent}</strong> (avg reward{' '}
+                          {formatNumber(bestWorstOpponents.best.avgReward, 3)})
+                        </p>
+                      ) : (
+                        <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
+                      )}
+                    </article>
+                    <article className="card">
+                      <h2 style={{ marginTop: 0 }}>Lowest-Reward Teammate Pairing</h2>
+                      {bestWorstOpponents?.worst ? (
+                        <p style={{ marginBottom: 0 }}>
+                          <strong>{bestWorstOpponents.worst.opponent}</strong> (avg reward{' '}
+                          {formatNumber(bestWorstOpponents.worst.avgReward, 3)})
+                        </p>
+                      ) : (
+                        <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
+                      )}
+                    </article>
+                  </section>
+
+                  {matchup && (
+                    <section className="card" style={{ display: 'grid', gap: 10 }}>
+                      <h2 style={{ margin: 0 }}>Teammate Pairing Diagnosis</h2>
+                      <p style={{ margin: 0 }}>{String(matchup.reason ?? '-')}</p>
+                      <div className="coordination-diagnosis-pills" style={{ display: 'grid', gap: 8 }}>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCurrentAvgRewardSeverity) }}
+                        >
+                          Current avg reward: <code>{formatNumber(matchupCurrentAvgReward, 3)}</code>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupBaselineAvgRewardSeverity) }}
+                        >
+                          Baseline avg reward: <code>{formatNumber(matchupBaselineAvgReward, 3)}</code>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupGlobalDeltaSeverity) }}
+                        >
+                          Global delta: <code>{formatSigned(matchupGlobalDelta, 3)}</code>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupEvidenceSeverity) }}
+                        >
+                          Evidence: <strong>{matchup.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
+                        >
+                          Teammate spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
+                        >
+                          Best/Worst teammate:{' '}
+                          <code>
+                            {String(matchup.best_opponent ?? '-')} / {String(matchup.worst_opponent ?? '-')}
+                          </code>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
+                        >
+                          Composition spread: <code>{formatNumber(matchupCompositionSpread, 3)}</code>
+                        </div>
+                        <div
+                          className="card"
+                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
+                        >
+                          Best/Worst composition:{' '}
+                          <code>
+                            {String(matchup.best_composition ?? '-')} / {String(matchup.worst_composition ?? '-')}
+                          </code>
+                        </div>
+                      </div>
+                    </section>
                   )}
-                  detail={`${String(toFiniteNumber(failures.crash_failures) ?? 0)} crash + ${String(toFiniteNumber(failures.other_failures) ?? 0)} other`}
+
+                  {matchup && asMatchupSlices(matchup.opponent_slices).length > 0 && (
+                    <section className="card">
+                      <h2 style={{ marginTop: 0 }}>Teammate Pairing Slices (Current Relative to Baseline)</h2>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Paired Policy</th>
+                              <th>Current Avg</th>
+                              <th>Delta to Baseline</th>
+                              <th>Delta to Policy Mean</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {asMatchupSlices(matchup.opponent_slices).map((slice) => (
+                              <tr key={String(slice.key ?? 'slice')}>
+                                <td>{String(slice.key ?? '-')}</td>
+                                <td>
+                                  {formatNumber(toFiniteNumber(slice.avg_reward), 2)} (
+                                  {toFiniteNumber(slice.count) ?? 0})
+                                </td>
+                                <td>{formatSigned(toFiniteNumber(slice.delta_vs_baseline), 2)}</td>
+                                <td>{formatSigned(toFiniteNumber(slice.delta_vs_policy), 2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
+
+                  {matchup && asMatchupSlices(matchup.composition_slices).length > 0 && (
+                    <section className="card">
+                      <h2 style={{ marginTop: 0 }}>Composition Slices</h2>
+                      <div style={{ overflowX: 'auto' }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Composition</th>
+                              <th>Current Avg</th>
+                              <th>Delta to Baseline</th>
+                              <th>Delta to Policy Mean</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {asMatchupSlices(matchup.composition_slices).map((slice) => (
+                              <tr key={String(slice.key ?? 'comp')}>
+                                <td>
+                                  <code>{String(slice.key ?? '-')}</code>
+                                </td>
+                                <td>
+                                  {formatNumber(toFiniteNumber(slice.avg_reward), 2)} (
+                                  {toFiniteNumber(slice.count) ?? 0})
+                                </td>
+                                <td>{formatSigned(toFiniteNumber(slice.delta_vs_baseline), 2)}</td>
+                                <td>{formatSigned(toFiniteNumber(slice.delta_vs_policy), 2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
+                </div>
+                <div className="grid" style={{ gap: 10, minWidth: 0 }}>
+                  <section className="card">
+                    <h2 style={{ marginTop: 0 }}>Teammate Breakdown</h2>
+                    {opponentRows.length === 0 ? (
+                      <p style={{ marginBottom: 0 }}>No teammate metrics available.</p>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Teammate</th>
+                              <th>Games</th>
+                              <th>Avg Reward</th>
+                              <th>Win Rate</th>
+                              <th>Agg</th>
+                              <th>Def</th>
+                              <th>Res</th>
+                              <th>Jnc</th>
+                              <th>Mob</th>
+                              <th>Top Profile</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {opponentRows.map((row) => (
+                              <tr key={row.opponent}>
+                                <td>
+                                  <span
+                                    style={{
+                                      display: 'inline-block',
+                                      width: 8,
+                                      height: 8,
+                                      borderRadius: '50%',
+                                      background: colorMap[row.opponent] ?? '#94a3b8',
+                                      marginRight: 6,
+                                    }}
+                                  />
+                                  {row.opponent}
+                                </td>
+                                <td>{row.count}</td>
+                                <td>{formatNumber(row.avgReward, 2)}</td>
+                                <td>{formatPercent(row.winRate, 0)}</td>
+                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.aggressive), 0)}</td>
+                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.defensive), 0)}</td>
+                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.resource_hoarder), 0)}</td>
+                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.junction_hunter), 0)}</td>
+                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.mobile_scout), 0)}</td>
+                                <td>{row.bestProfile ?? '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+                  <section className="card">
+                    <h2 style={{ marginTop: 0 }}>Role Parses</h2>
+                    <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />
+                  </section>
+                </div>
+              </section>
+            </section>
+          )}
+          {activeTab === 'capabilities' && (
+            <section className="grid" style={{ gap: 10 }}>
+              <section
+                className="grid"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
+              >
+                <KPIStatCard
+                  label="Diagnose Runs"
+                  value={String(diagnoseRuns.length)}
+                  severity={diagnoseRuns.length > 0 ? 'good' : diagnoseLoading ? 'warn' : 'bad'}
+                />
+                <KPIStatCard
+                  label="Selected Run"
+                  value={selectedDiagnoseRunId ? `${selectedDiagnoseRunId.slice(0, 12)}...` : '-'}
+                  severity={selectedDiagnoseRunId ? 'good' : 'warn'}
+                />
+                <KPIStatCard
+                  label="Diagnose Stage"
+                  value={String(selectedDiagnoseStage ?? '-')}
                   severity={
-                    (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0) > 0
-                      ? 'bad'
-                      : 'good'
+                    selectedDiagnoseStage?.includes('complete') || selectedDiagnoseStage?.includes('ready')
+                      ? 'good'
+                      : selectedDiagnoseStage
+                        ? 'warn'
+                        : 'bad'
                   }
                 />
                 <KPIStatCard
-                  label="Freeze-Heavy"
-                  value={String(toFiniteNumber(failures.freeze_heavy_completed) ?? 0)}
-                  severity={(toFiniteNumber(failures.freeze_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
+                  label="Probe Pass Rate"
+                  value={diagnoseProbeTotal > 0 ? formatPercent(diagnoseProbePassed / diagnoseProbeTotal, 0) : '-'}
+                  detail={diagnoseProbeTotal > 0 ? `${diagnoseProbePassed}/${diagnoseProbeTotal}` : 'no probes'}
+                  severity={
+                    diagnoseProbeTotal > 0 ? kpiSeverity(diagnoseProbePassed / diagnoseProbeTotal, 0.75, 0.45) : 'warn'
+                  }
                 />
                 <KPIStatCard
-                  label="Noop-Heavy"
-                  value={String(toFiniteNumber(failures.noop_heavy_completed) ?? 0)}
-                  severity={(toFiniteNumber(failures.noop_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
+                  label="Capability Coverage"
+                  value={formatPercent(capabilityCoverage, 0)}
+                  detail={
+                    capabilityStatusTotal > 0
+                      ? `${capabilityStatusYes} yes · ${capabilityStatusPartial} partial / ${capabilityStatusTotal}`
+                      : 'no audit rows'
+                  }
+                  severity={kpiSeverity(capabilityCoverage, 0.6, 0.35)}
+                />
+                <KPIStatCard
+                  label="Dominant Issue"
+                  value={String(selectedDiagnoseDominantIssue ?? '-')}
+                  severity={selectedDiagnoseDominantIssue ? 'warn' : 'good'}
+                />
+                <KPIStatCard
+                  label="Manifest Valid"
+                  value={diagnoseManifest ? (diagnoseManifest.diagnose_validity?.valid ? 'valid' : 'invalid') : '-'}
+                  severity={diagnoseManifest ? (diagnoseManifest.diagnose_validity?.valid ? 'good' : 'bad') : 'warn'}
                 />
               </section>
 
-              {(statsInventory || topTagStats.length > 0) && (
-                <section className="card" style={{ display: 'grid', gap: 10 }}>
-                  <h2 style={{ margin: 0 }}>Tag + Instrumentation Inventory</h2>
-                  {statsInventory && (
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 13 }}>
-                      <span>
-                        Distinct metrics:{' '}
-                        <code>{String(toFiniteNumber(statsInventory.distinct_metric_keys) ?? 0)}</code>
-                      </span>
-                      <span>
-                        Distinct tags: <code>{String(toFiniteNumber(statsInventory.distinct_tag_keys) ?? 0)}</code>
-                      </span>
-                      <span>
-                        Episodes:{' '}
-                        <code>{String(toFiniteNumber(statsInventory.total_episodes) ?? episodes.length)}</code>
-                      </span>
-                    </div>
-                  )}
-                  {topTagStats.length > 0 ? (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Behavior Slice (Tag)</th>
-                            <th>Count</th>
-                            <th>Coverage</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {topTagStats.map((row) => (
-                            <tr key={row.tag}>
-                              <td>
-                                <code>{row.tag}</code>
-                              </td>
-                              <td>{row.count}</td>
-                              <td>{formatPercent(row.coverage, 0)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p style={{ margin: 0 }}>No diagnostic/raw tags found in sampled episodes.</p>
-                  )}
-                  {(statsInventory?.notes ?? []).length > 0 && (
-                    <ul style={{ margin: 0 }}>
-                      {(statsInventory?.notes ?? []).map((note) => (
-                        <li key={note}>{note}</li>
-                      ))}
-                    </ul>
-                  )}
-                </section>
-              )}
+              <section className="grid" style={{ gap: 10 }}>
+                <section
+                  className="grid"
+                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start', gap: 10 }}
+                >
+                  <section className="card grid" style={{ gap: 10 }}>
+                    <h2 style={{ margin: 0 }}>Diagnose Control</h2>
+                    {diagnoseLoading ? (
+                      <p style={{ margin: 0 }}>Loading diagnose runs...</p>
+                    ) : diagnoseError ? (
+                      <p style={{ margin: 0, color: '#b42318' }}>
+                        <strong>Error:</strong> {diagnoseError}
+                      </p>
+                    ) : diagnoseRuns.length === 0 ? (
+                      <p style={{ margin: 0 }}>No diagnose runs found for this environment.</p>
+                    ) : (
+                      <>
+                        <label style={{ display: 'grid', gap: 6 }}>
+                          Diagnose run
+                          <select
+                            value={selectedDiagnoseRunId ?? ''}
+                            onChange={(event) => setSelectedDiagnoseRunId(event.target.value)}
+                          >
+                            {diagnoseRuns.map((run) => (
+                              <option key={run.run_id} value={run.run_id}>
+                                {run.run_id}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                          <span>
+                            policy:{' '}
+                            <strong>{diagnoseManifest?.policy ?? selectedDiagnoseRun?.manifest?.policy ?? '-'}</strong>
+                          </span>
+                          <span>
+                            stage: <strong>{selectedDiagnoseStage ?? '-'}</strong>
+                          </span>
+                          <span>
+                            created:{' '}
+                            <strong>
+                              {formatDateTime(
+                                diagnoseManifest?.created_at ?? selectedDiagnoseRun?.manifest?.created_at
+                              )}
+                            </strong>
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    {selectedDiagnoseRunId && (
+                      <a
+                        href={`/diagnose/${encodeURIComponent(selectedDiagnoseRunId)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open full diagnose report
+                      </a>
+                    )}
+                  </section>
 
-              <section className="card">
-                <h2 style={{ marginTop: 0 }}>Failed Episodes ({failedEpisodes.length})</h2>
-                {failedEpisodes.length === 0 ? (
-                  <p style={{ marginBottom: 0 }}>No failed episodes in the sampled data.</p>
-                ) : (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Job ID</th>
-                          <th>Error Type</th>
-                          <th>Error Message</th>
-                          <th>Teammate</th>
-                          <th>Team</th>
-                          <th>Created</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {failedEpisodes.map((episode) => {
-                          const key = String(
-                            episode.episode_id ??
-                              episode.id ??
-                              episode.job_id ??
-                              `${episode.opponent_name ?? 'unknown'}-${episode.created_at ?? 'na'}-${episode.team_composition ?? 'na'}`
-                          )
-                          return (
-                            <tr key={key}>
-                              <td>
-                                <code>{String(episode.job_id ?? '-')}</code>
-                              </td>
-                              <td>{String(episode.error_type ?? 'unknown')}</td>
-                              <td>{String(episode.error_message ?? '-')}</td>
-                              <td>{String(episode.opponent_name ?? '-')}</td>
-                              <td>
-                                <code>{String(episode.team_composition ?? '-')}</code>
-                              </td>
-                              <td>{formatDateTime(episode.created_at)}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                  <section className="card grid" style={{ gap: 8 }}>
+                    <h2 style={{ margin: 0 }}>Diagnose Snapshot</h2>
+                    {diagnoseNoteLoading ? (
+                      <p style={{ margin: 0 }}>Loading doctor note...</p>
+                    ) : diagnoseNoteError ? (
+                      <p style={{ margin: 0, color: '#b42318' }}>
+                        <strong>Error:</strong> {diagnoseNoteError}
+                      </p>
+                    ) : !diagnoseNote ? (
+                      <p style={{ margin: 0 }}>Select a diagnose run to load findings.</p>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                        <span>
+                          dominant issue: <strong>{selectedDiagnoseDominantIssue ?? '-'}</strong>
+                        </span>
+                        <span>
+                          core stage-1 gate: <strong>{diagnoseCoreReady ? 'ready' : 'blocked'}</strong>
+                        </span>
+                        <span>
+                          top symptom:{' '}
+                          <strong>
+                            {selectedDiagnoseSymptom
+                              ? `${selectedDiagnoseSymptom.symptom_id} (${selectedDiagnoseSymptom.axis})`
+                              : '-'}
+                          </strong>
+                        </span>
+                        <span>
+                          primary prescription: <strong>{selectedDiagnosePrescription?.owner ?? '-'}</strong>
+                        </span>
+                        <span>
+                          social confirmed:{' '}
+                          <strong>
+                            {selectedDiagnoseSocialConfirmed === null
+                              ? 'n/a'
+                              : selectedDiagnoseSocialConfirmed
+                                ? 'true'
+                                : 'false'}
+                          </strong>
+                        </span>
+                        <span>
+                          note: <strong>{diagnoseNote.notes?.[0] ?? '-'}</strong>
+                        </span>
+                      </div>
+                    )}
+                  </section>
+                </section>
+
+                <SkillTreePanel data={data} diagnoseNote={diagnoseNote} diagnoseManifest={diagnoseManifest} />
               </section>
-
-              {data.derived?.crash_dump && (
-                <section className="card" style={{ display: 'grid', gap: 10 }}>
-                  <h2 style={{ margin: 0 }}>Crash Dump Report</h2>
-                  <p style={{ margin: 0 }}>{String(data.derived.crash_dump.headline ?? '-')}</p>
-
-                  {(data.derived.crash_dump.signatures ?? []).length > 0 && (
-                    <div
-                      style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}
-                    >
-                      {(data.derived.crash_dump.signatures ?? []).map((signature) => (
-                        <article
-                          key={String(signature.signature ?? signature.error_type ?? 'signature')}
-                          className="card"
-                          style={{ padding: 10 }}
-                        >
-                          <p style={{ marginTop: 0, marginBottom: 6 }}>
-                            <strong>{String(signature.error_type ?? 'unknown')}</strong> ({String(signature.count ?? 0)}
-                            )
-                          </p>
-                          <p style={{ margin: 0, fontSize: 12 }}>{String(signature.example_message ?? '-')}</p>
-                        </article>
-                      ))}
-                    </div>
-                  )}
-
-                  {(data.derived.crash_dump.entries ?? []).length > 0 && (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Job</th>
-                            <th>Type</th>
-                            <th>Message</th>
-                            <th>Analyze Command</th>
-                            <th>Replay</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(data.derived.crash_dump.entries ?? []).map((entry) => (
-                            <tr key={String(entry.episode_id ?? entry.job_id ?? 'entry')}>
-                              <td>
-                                <code>{String(entry.job_id ?? '-')}</code>
-                              </td>
-                              <td>{String(entry.error_type ?? 'unknown')}</td>
-                              <td>{String(entry.error_message ?? '-')}</td>
-                              <td>
-                                <code>{String(entry.analysis_command ?? '-')}</code>
-                              </td>
-                              <td>
-                                {entry.replay_url ? (
-                                  <a href={String(entry.replay_url)} target="_blank" rel="noreferrer">
-                                    Open
-                                  </a>
-                                ) : (
-                                  '-'
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </section>
-              )}
-            </>
-          )}
-
-          {activeTab === 'roles' && (
-            <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />
-          )}
-          {activeTab === 'capabilities' && (
-            <SkillTreePanel data={data} diagnoseNote={diagnoseNote} diagnoseManifest={diagnoseManifest} />
-          )}
-          {activeTab === 'cogames_diagnose' && (
-            <CogamesDiagnosePanel
-              runs={diagnoseRuns}
-              loading={diagnoseLoading}
-              error={diagnoseError}
-              selectedRunId={selectedDiagnoseRunId}
-              onSelectRun={setSelectedDiagnoseRunId}
-              note={diagnoseNote}
-              noteLoading={diagnoseNoteLoading}
-              noteError={diagnoseNoteError}
-              manifest={diagnoseManifest}
-              replayLookupByRef={replayLookupByRef}
-              policyVersionId={data?.policy?.id ? String(data.policy.id) : null}
-            />
+            </section>
           )}
         </>
       )}

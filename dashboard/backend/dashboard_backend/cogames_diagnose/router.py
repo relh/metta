@@ -25,6 +25,16 @@ class DiagnoseRunsResponse(BaseModel):
     runs: list[DiagnoseRunSummary]
 
 
+def list_run_summaries() -> list[DiagnoseRunSummary]:
+    diagnose_root = _resolve_diagnose_root()
+    if diagnose_root is None:
+        return []
+    return [
+        DiagnoseRunSummary(run_id=run_id, manifest=_load_manifest(diagnose_root, run_id))
+        for run_id in _list_run_ids(diagnose_root)
+    ]
+
+
 def _assert_safe_name(value: str, field_name: str) -> None:
     if not _RUN_ID_RE.fullmatch(value):
         raise HTTPException(status_code=422, detail=f"Invalid {field_name}: {value}")
@@ -146,14 +156,7 @@ def create_cogames_diagnose_router() -> APIRouter:
     @timed_http_handler
     async def list_runs(user: SoftmaxUser) -> DiagnoseRunsResponse:
         del user
-        diagnose_root = _resolve_diagnose_root()
-        if diagnose_root is None:
-            return DiagnoseRunsResponse(runs=[])
-        run_summaries = [
-            DiagnoseRunSummary(run_id=run_id, manifest=_load_manifest(diagnose_root, run_id))
-            for run_id in _list_run_ids(diagnose_root)
-        ]
-        return DiagnoseRunsResponse(runs=run_summaries)
+        return DiagnoseRunsResponse(runs=list_run_summaries())
 
     @router.get("/runs/{run_id}/manifest")
     @timed_http_handler

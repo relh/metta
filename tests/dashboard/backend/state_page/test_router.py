@@ -192,6 +192,103 @@ def test_dashboard_data_builds_commissioner_with_season_id(
     assert "orchestration" in derived
 
 
+def test_dashboard_data_embeds_role_percentiles_when_requested(monkeypatch: Any) -> None:
+    policy_version_id = uuid4()
+    policy_id = uuid4()
+
+    fake_policy_version = SimpleNamespace(
+        id=policy_version_id,
+        version=3,
+        policy_id=policy_id,
+        policy=SimpleNamespace(name="gimpy"),
+    )
+
+    async def fake_require_policy_version(_policy_version_id: str) -> tuple[Any, Any]:
+        return policy_version_id, fake_policy_version
+
+    async def fake_fetch_sources(_policy_version_id: Any, _limit: int) -> tuple[list[Any], list[Any]]:
+        return [], []
+
+    async def fake_build_sorted_dashboard_episodes(*_args: Any, **_kwargs: Any) -> list[Any]:
+        return []
+
+    include_calls: list[Any] = []
+
+    async def fake_build_role_percentiles_response(pv_id: Any) -> dict[str, Any]:
+        include_calls.append(pv_id)
+        return {
+            "pool_id": "pool-1",
+            "pool_name": "leaderboard",
+            "roles": {},
+            "rows": [],
+        }
+
+    def fake_build_diagnose_run_summaries() -> list[dict[str, Any]]:
+        return [
+            {
+                "run_id": "run-1",
+                "manifest": {"run_id": "run-1", "created_at": "2026-02-25T00:00:00Z"},
+            }
+        ]
+
+    @asynccontextmanager
+    async def fake_db_session(*, read_only: bool = False) -> Any:
+        assert read_only
+        session = _FakeSession(
+            [
+                _ExecuteResult(scalar=None),
+                _ExecuteResult(scalar=None),
+                _ExecuteResult(scalar_values=[]),
+            ]
+        )
+        yield session
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._require_policy_version",
+        fake_require_policy_version,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._fetch_policy_dashboard_sources",
+        fake_fetch_sources,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._build_sorted_dashboard_episodes",
+        fake_build_sorted_dashboard_episodes,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._build_role_percentiles_response",
+        fake_build_role_percentiles_response,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router._build_diagnose_run_summaries",
+        fake_build_diagnose_run_summaries,
+    )
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.db_session",
+        fake_db_session,
+    )
+
+    app = FastAPI()
+    app.include_router(create_dashboard_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get(
+        f"/dashboard/v1/policies/versions/{policy_version_id}/data?include=role_percentiles,diagnose_runs"
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["role_percentiles"]["pool_id"] == "pool-1"
+    assert payload["diagnose_runs"][0]["run_id"] == "run-1"
+    assert include_calls == [policy_version_id]
+
+    response_without_include = client.get(f"/dashboard/v1/policies/versions/{policy_version_id}/data")
+    assert response_without_include.status_code == 200
+    payload_without_include = response_without_include.json()
+    assert payload_without_include["role_percentiles"] is None
+    assert payload_without_include["diagnose_runs"] is None
+    assert include_calls == [policy_version_id]
+
+
 def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:
     policy_version_id = uuid4()
     first_pool_id = uuid4()

@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import random
 import statistics
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -420,6 +421,31 @@ class CapabilityCodeAudit(BaseModel):
     sources: dict[str, CapabilityCodeStatus] = Field(default_factory=dict)
 
 
+class RoleMetricDef(BaseModel):
+    key: str
+    source_names: list[str] = Field(default_factory=list)
+    higher_is_better: bool = True
+
+
+class RolePercentileRow(BaseModel):
+    role: str
+    percentile: float
+    details: dict[str, Any] = Field(default_factory=dict)
+    updated_at: datetime | None = None
+
+
+class DashboardRolePercentilesResponse(BaseModel):
+    pool_id: str | None = None
+    pool_name: str | None = None
+    roles: dict[str, list[RoleMetricDef]] = Field(default_factory=dict)
+    rows: list[RolePercentileRow] = Field(default_factory=list)
+
+
+class DashboardDiagnoseRunSummary(BaseModel):
+    run_id: str
+    manifest: dict[str, Any] | None = None
+
+
 class DashboardDerived(BaseModel):
     kpis: DerivedMetrics
     team_comp: list[TeamCompStats]
@@ -456,6 +482,8 @@ class DashboardResponse(BaseModel):
     generated_at: str
     selection: EpisodeSelectionMetadata
     derived: DashboardDerived
+    role_percentiles: DashboardRolePercentilesResponse | None = None
+    diagnose_runs: list[DashboardDiagnoseRunSummary] | None = None
 
 
 # === Pure computation functions ===

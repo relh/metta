@@ -42,14 +42,10 @@ uv run python -m dashboard.backend.dashboard_backend.main
 - Standalone dashboard UI that fetches from dashboard backend directly
 - Loads dashboard data by policy-version UUID
 - Tabs in the UI:
-  - `Overview`: policy metadata, KPI snapshot, diagnostics, quality gates, rollout actions
-  - `Capabilities`: unified capability grid with diagnose evidence overlays
-  - `Parses`: role-percentile table backed by `/dashboard/v1/policies/versions/{id}/role-percentiles`
-  - `Teammates`: teammate-pairing diagnosis and teammate/composition slice tables
-  - `Episodes`: per-episode filters/export, replay links, and diagnostics tags
-  - `Health`: failure and crash-dump summaries, tag/instrumentation inventory
-  - `Diagnose`: run selector, stage gating, spider chart, probes, symptoms, prescriptions
-  - `Analysis`: AI-generated narrative with replay/opponent inline enrichments
+  - `Overview`: policy metadata, KPI snapshot, diagnostics, quality gates, rollout actions, and AI analysis
+  - `Performance`: per-episode filters/export, replay links, health KPIs, failure/crash summaries, and tag inventory
+  - `Coordination`: teammate-pairing diagnosis, teammate/composition slice tables, and role-percentile parses
+  - `Capabilities`: unified capability tree plus diagnose run selector, stage gates, probes, symptoms, and prescriptions
 
 ### Run
 
@@ -204,7 +200,7 @@ invariants.
 - The dashboard backend supports two key sources for AI Analysis:
   - Request-scoped header: `X-Anthropic-Api-Key` (preferred for BYO usage)
   - Backend env var: `ANTHROPIC_API_KEY` (optional fallback)
-- We do not require a shared deployed key. Users can bring their own key per request from the UI Analysis tab.
+- We do not require a shared deployed key. Users can bring their own key per request from the Overview analysis section.
 - For local/self-hosted backend usage, exporting `ANTHROPIC_API_KEY` still works.
 
 ## Live Smoke Scripts

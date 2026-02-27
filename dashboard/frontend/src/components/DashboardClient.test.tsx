@@ -191,7 +191,7 @@ describe('DashboardClient', () => {
     })
   })
 
-  it('prefetches diagnose runs in parallel with dashboard fetch', async () => {
+  it('loads diagnose runs after dashboard data resolves when not embedded', async () => {
     const response: DashboardResponse = {
       policy: { id: 'policy-prefetch', name: 'glanky', version: 6, rank: 1, score: 2.6, matches: 11 },
       episodes: [],
@@ -224,15 +224,70 @@ describe('DashboardClient', () => {
     await waitFor(() => {
       expect(api.fetchDashboardData).toHaveBeenCalledWith('policy-prefetch')
     })
-    expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(1)
+    expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(0)
 
     pendingDashboard.resolve(response)
     pendingDiagnoseRuns.resolve({ runs: [] })
 
     await waitFor(() => {
+      expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
       expect(screen.queryByRole('progressbar')).toBeNull()
     })
     expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips diagnose run fetch when dashboard payload embeds diagnose runs', async () => {
+    const response: DashboardResponse = {
+      policy: { id: 'policy-embedded-diagnose', name: 'glanky', version: 7, rank: 1, score: 2.7, matches: 12 },
+      episodes: [],
+      season: 'beta-cvc',
+      generated_at: '2026-02-25T09:20:00Z',
+      derived: {
+        kpis: {},
+        failures: {},
+        opponent_metrics: {},
+      },
+      selection: {
+        sampled_episode_count: 0,
+      },
+      diagnose_runs: [
+        {
+          run_id: 'embedded-run-1',
+          manifest: {
+            run_id: 'embedded-run-1',
+            created_at: '2026-02-25T09:19:59Z',
+            command: 'uv run cogames diagnose',
+            policy: 'glanky:v7',
+            pack_id: 'cogsguard',
+            pack_version: 'v1',
+            stage_status: 'stage1_complete',
+            run_status: 'completed',
+            artifact_files: [],
+            diagnose_validity: { valid: true, failed_check_ids: [], checks: [] },
+            interpretation_stability: { stable: true, snapshot_count: 1, notes: [] },
+          },
+        },
+      ],
+    }
+
+    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
+      pool_id: 'pool-1',
+      pool_name: 'default',
+      roles: {},
+      rows: [],
+    })
+    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+
+    window.history.replaceState({}, '', '/?policyVersionId=policy-embedded-diagnose')
+    render(<DashboardClient />)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    })
+    expect(api.fetchDiagnoseRuns).toHaveBeenCalledTimes(0)
   })
 
   it('does not block dashboard render on parses preload', async () => {
@@ -314,7 +369,7 @@ describe('DashboardClient', () => {
     })
   })
 
-  it('does not refetch parses percentiles when switching non-parses tabs', async () => {
+  it('does not refetch parse percentiles when switching non-coordination tabs', async () => {
     const response: DashboardResponse = {
       policy: { id: 'policy-123', name: 'glanky', version: 2, rank: 1, score: 1.5, matches: 12 },
       episodes: [],
@@ -348,9 +403,9 @@ describe('DashboardClient', () => {
       expect(api.fetchDashboardRolePercentiles).toHaveBeenCalledTimes(1)
     })
 
+    fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
     fireEvent.click(screen.getByRole('button', { name: 'Capabilities' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Episodes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Health' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }))
 
     expect(api.fetchDashboardRolePercentiles).toHaveBeenCalledTimes(1)
   })

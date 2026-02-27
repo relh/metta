@@ -296,8 +296,52 @@ main {
   min-width: 0;
 }
 
+.overview-dense-grid > * {
+  min-width: 0;
+}
+
+.coordination-layout {
+  grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+}
+
+.coordination-pairing-layout {
+  grid-template-columns: minmax(160px, 0.42fr) minmax(0, 1.58fr);
+}
+
+.coordination-pairing-layout > * {
+  min-width: 0;
+}
+
+.coordination-diagnosis-pills {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  justify-content: start;
+}
+
+.coordination-diagnosis-pills > .card {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.coordination-diagnosis-pills code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 @media (max-width: 900px) {
   .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .coordination-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .coordination-pairing-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .coordination-diagnosis-pills {
     grid-template-columns: 1fr;
   }
 }

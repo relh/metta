@@ -159,7 +159,7 @@ export function RolePercentilesPanel({
         {parseMetricRows.length > 0 && (
           <div style={{ display: 'grid', gap: 4, marginBottom: 10 }}>
             {parseMetricRows.map((row) => (
-              <p key={row.role} style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+              <p key={row.role} style={{ margin: 0, fontSize: 12, color: '#4b617f', overflowWrap: 'anywhere' }}>
                 <strong>{ROLE_LABELS[row.role] ?? row.role}:</strong> {row.keys.join(', ')}
               </p>
             ))}
