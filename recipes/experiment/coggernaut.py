@@ -28,6 +28,7 @@ from metta.rl.training.trajectory_isolation import (
     TrajectoryIsolationConfig,
     TrajectoryIsolationSliceConfig,
 )
+from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_run_name
 from mettagrid.config.game_value import inv
 from mettagrid.config.mettagrid_config import MettaGridConfig
@@ -37,6 +38,9 @@ from recipes.experiment.cogsguard import (
     DEFAULT_LAYOUT,
     DEFAULT_NUM_AGENTS,
     _CogsGuardLayout,
+)
+from recipes.experiment.cogsguard import (
+    make_env as _cg_make_env,
 )
 from recipes.experiment.cogsguard import (
     train as _cg_train,
@@ -198,6 +202,26 @@ def build_two_policy_role_train_tool(
     tt.trainer.total_timesteps = 2_000_000_000
 
     return tt
+
+
+def play(
+    policy_uris: list[str] | None = None,
+    variants: str | Sequence[str] | None = ("no_objective", "randomize_spawns", "tin_man"),
+    layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    num_agents: int = DEFAULT_NUM_AGENTS,
+    max_steps: int = 1000,
+    role_ids: Sequence[int] = (0, 0, 0, 0, 1, 1, 2, 2),
+) -> tools.PlayTool:
+    """Interactive play with coggernaut three-role policies."""
+    env = _cg_make_env(variants=variants, layout=layout, num_agents=num_agents, max_steps=max_steps)
+    _apply_role_ids(env, role_ids)
+    apply_reward_variants(env, variants=["role_conditional"])
+    sim = SimulationConfig(suite="cogsguard", name=f"coggernaut_{layout}", env=env)
+    return tools.PlayTool(
+        sim=sim,
+        policy_uris=policy_uris or [],
+        assignments=list(role_ids),
+    )
 
 
 def train(

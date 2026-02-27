@@ -849,6 +849,13 @@ class CoreTrainingLoop:
                         context.current_slice_cfg = None
                         offset += count
 
+                    # Synchronize early-stop decision across all ranks so no rank
+                    # skips backward() while another calls it (DDP all-reduce deadlock).
+                    if distributed_world_size > 1:
+                        stop_flag = torch.tensor(int(stop_update_epoch_mb), device=self.device)
+                        torch.distributed.all_reduce(stop_flag, op=torch.distributed.ReduceOp.MAX)
+                        stop_update_epoch_mb = stop_flag.item() > 0
+
                     if stop_update_epoch_mb:
                         stop_update_epoch = True
                         break
