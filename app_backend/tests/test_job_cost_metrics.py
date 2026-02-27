@@ -9,7 +9,11 @@ from uuid import uuid4
 import pytest
 
 import metta.app_backend.ec2_pricing as pricing_mod
-from devops.datadog.monitors import ALL_MONITORS, job_daily_cost_monitor
+from devops.datadog.monitors import (
+    ALL_MONITORS,
+    episode_length_spike_monitor,
+    job_daily_cost_monitor,
+)
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.app_backend.ec2_pricing import get_instance_hourly_cost
 from metta.app_backend.job_runner.event_processor import _build_result_metadata
@@ -327,6 +331,11 @@ class TestDatadogMonitor:
     def test_monitor_has_discord_webhook(self):
         m = job_daily_cost_monitor()
         assert "@webhook-Discord" in m["message"]
+
+    def test_episode_length_spike_monitor_pages_oncall(self):
+        m = episode_length_spike_monitor()
+        assert "@webhook-Discord" in m["message"]
+        assert "@oncall-on-call" in m["message"]
 
 
 # ── Episode-length histogram ──────────────────────────────────────────

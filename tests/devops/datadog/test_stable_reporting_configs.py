@@ -17,12 +17,26 @@ from devops.stable.stable_check_metrics import (
 )
 
 
+def _iter_widgets(widgets: list[dict]) -> list[dict]:
+    flattened: list[dict] = []
+    for widget in widgets:
+        flattened.append(widget)
+        nested_widgets = widget["definition"].get("widgets", [])
+        flattened.extend(_iter_widgets(nested_widgets))
+    return flattened
+
+
 def test_stable_dashboard_exists_with_expected_queries() -> None:
     configs = dashboards.get_all_dashboard_configs()
     stable = next(config for config in configs if config["title"] == "Stable Runner V2")
+    all_widgets = _iter_widgets(stable["widgets"])
+    titles = {widget["definition"].get("title") for widget in all_widgets}
+    note_contents = {
+        widget["definition"].get("content") for widget in all_widgets if widget["definition"].get("type") == "note"
+    }
     query_bits: list[str] = []
-    for widget in stable["widgets"]:
-        for request in widget["definition"]["requests"]:
+    for widget in all_widgets:
+        for request in widget["definition"].get("requests", []):
             maybe_q = request.get("q")
             if maybe_q:
                 query_bits.append(maybe_q)
@@ -30,15 +44,23 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
                 maybe_query = query.get("query")
                 if maybe_query:
                     query_bits.append(maybe_query)
+        monitor_query = widget["definition"].get("query")
+        if monitor_query:
+            query_bits.append(monitor_query)
     query_text = "\n".join(query_bits)
 
-    assert any(widget["definition"]["title"] == "Stable Runner - Key Metrics" for widget in stable["widgets"])
-    assert any(widget["definition"]["title"] == "Failure Breakdown" for widget in stable["widgets"])
-    assert any(widget["definition"]["title"] == "Stage Durations (p50 / p90)" for widget in stable["widgets"])
-    assert any(widget["definition"]["title"] == "Concurrent Running Jobs" for widget in stable["widgets"])
-    assert any(widget["definition"]["title"] == "Job Status Transitions (count)" for widget in stable["widgets"])
-    assert any(widget["definition"]["title"] == "Episode Length (10m avg)" for widget in stable["widgets"])
-    assert any(widget["definition"]["title"] == "Episode Length Trend (episode jobs)" for widget in stable["widgets"])
+    assert "Stable Runner Checks" in note_contents
+    assert "Episode + Job Runtime Health" in note_contents
+    assert "Managed Monitors" in note_contents
+    assert "Stable Runner - Key Metrics" in titles
+    assert "Failure Breakdown" in titles
+    assert "Stage Durations (p50 / p90)" in titles
+    assert "Concurrent Running Jobs" in titles
+    assert "Job Status Transitions (count)" in titles
+    assert "Episode Length (10m avg)" in titles
+    assert "Episode Length Trend (episode jobs)" in titles
+    assert "Stable Monitor Alerts" in titles
+    assert "Non-Stable Monitor Alerts" in titles
     assert STABLE_CHECK_RAW_STATUS_METRIC in query_text
     assert STABLE_CHECK_EFFECTIVE_STATUS_METRIC in query_text
     assert STABLE_CHECK_COMPLETED_AT_METRIC in query_text
@@ -55,21 +77,38 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "to_status:failed" in query_text
     assert "by {error_type}.as_count().rollup(sum, 60)" in query_text
     assert "episode.length" in query_text
-    assert "service:observatory-backend,job_type:episode" in query_text
+    assert "tag:service:stable-runner tag:managed-by:code" in query_text
+    assert "tag:managed-by:code -tag:service:stable-runner" in query_text
     assert "criterion:runs_success" in query_text
     assert "'last', 'desc'" in query_text
-    assert any(
-        widget["definition"]["title"] == "Latest Summary Status by Job (-1=red,0=yellow,1=green)"
-        for widget in stable["widgets"]
-    )
     latest_summary = next(
         widget
-        for widget in stable["widgets"]
-        if widget["definition"]["title"] == "Latest Summary Status by Job (-1=red,0=yellow,1=green)"
+        for widget in all_widgets
+        if widget["definition"].get("title") == "Latest Summary Status by Job (-1=red,0=yellow,1=green)"
     )
     latest_summary_queries = latest_summary["definition"]["requests"][0]["queries"]
-    assert latest_summary_queries[0]["query"] == f"last:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by {{job}}"
-    assert latest_summary_queries[1]["query"] == f"last:{STABLE_CHECK_COMPLETED_AT_METRIC}{{*}} by {{job}}"
+    assert latest_summary_queries[0]["query"] == f"max:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by {{job}}"
+    assert latest_summary_queries[1]["query"] == f"max:{STABLE_CHECK_COMPLETED_AT_METRIC}{{*}} by {{job}}"
+    non_stable_widgets = [
+        widget
+        for widget in all_widgets
+        if widget["definition"].get("type") == "manage_status"
+        and widget["definition"].get("query") == "tag:managed-by:code -tag:service:stable-runner"
+    ]
+    assert len(non_stable_widgets) == 1
+
+
+def test_episode_recording_failures_monitor_config() -> None:
+    config = monitors.episode_recording_failures_monitor()
+    assert config["name"] == monitors.TOURNAMENT_EPISODE_RECORDING_FAILURES_MONITOR_NAME
+    assert config["type"] == "log alert"
+    assert "service:k8s-event-processor" in config["query"]
+    assert "env:production" in config["query"]
+    assert "Failed to record episode for job" in config["query"]
+    assert '.last("5m") > 3' in config["query"]
+    assert config["priority"] == 2
+    assert config["thresholds"]["critical"] == 3
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in config["message"]
 
 
 def test_stable_monitors_generated_per_job(monkeypatch) -> None:

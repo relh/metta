@@ -6,6 +6,8 @@ To preview:       uv run python -m devops.datadog.cli monitors sync --dry-run
 
 from __future__ import annotations
 
+import re
+
 from devops.stable.stable_check_groups import StableCheckGroup
 from devops.stable.stable_check_lifecycle import StableCheckLifecycle
 from devops.stable.stable_check_metrics import (
@@ -18,10 +20,24 @@ from devops.stable.stable_check_registry import discover_stable_checks
 WEBHOOK_DISCORD = "@webhook-Discord"
 WEBHOOK_ONCALL = "@oncall-on-call"
 WEBHOOK_STABLE_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
+WEBHOOK_TOURNAMENT_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
+TOURNAMENT_EPISODE_RECORDING_FAILURES_MONITOR_NAME = "[Tournament] Episode Recording Failures"
 
 STABLE_STALE_HOURS = 28
 STABLE_STALE_QUERY_LOOKBACK = f"last_{STABLE_STALE_HOURS}h"
 STABLE_FAILED_SERVICE_CHECK_LAST_COUNT = 1
+
+
+def monitor_key_tag_for_name(monitor_name: str) -> str:
+    monitor_name_without_templates = re.sub(r"\{\{[^}]+\}\}", "", monitor_name)
+    normalized_name = re.sub(r"[^a-z0-9]+", "_", monitor_name_without_templates.lower()).strip("_")
+    return f"monitor_key:{normalized_name}"
+
+
+def _add_monitor_key_tag(config: dict) -> dict:
+    monitor_key_tag = monitor_key_tag_for_name(config["name"])
+    config["tags"] = [*config["tags"], monitor_key_tag] if monitor_key_tag not in config["tags"] else config["tags"]
+    return config
 
 
 def k8s_deployment_replicas_monitor() -> dict:
@@ -492,12 +508,14 @@ def episode_length_spike_monitor() -> dict:
     return {
         "name": "[Tournament] Episode Length Spike: {{value}} avg steps",
         "type": "query alert",
-        "query": "avg(last_10m):avg:episode.length{service:observatory-backend,job_type:episode} > 11000",
+        "query": (
+            "avg(last_10m):avg:episode.length{service:observatory-backend,env:production,job_type:episode} > 11000"
+        ),
         "message": (
             "Average episode length is {{value}} steps over the last 10 minutes.\n\n"
             "Normal baseline is ~8k-10k steps. A sustained spike can indicate environment or rollout regressions.\n\n"
             "Check: https://observatory.softmax-research.net/episode-jobs\n\n"
-            f"{WEBHOOK_DISCORD}"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
         ),
         "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
         "priority": 3,
@@ -507,6 +525,31 @@ def episode_length_spike_monitor() -> dict:
             "renotify_interval": 60,
             "include_tags": False,
             "require_full_window": True,
+        },
+    }
+
+
+def episode_recording_failures_monitor() -> dict:
+    """Monitor repeated episode recording failures in the event processor."""
+    return {
+        "name": TOURNAMENT_EPISODE_RECORDING_FAILURES_MONITOR_NAME,
+        "type": "log alert",
+        "query": (
+            'logs("service:k8s-event-processor env:production \\"Failed to record episode for job\\"")'
+            '.index("*").rollup("count").last("5m") > 3'
+        ),
+        "message": (
+            "k8s-event-processor failed to record episodes more than 3 times in 5 minutes.\n\n"
+            'Check logs: service:k8s-event-processor "Failed to record episode for job"\n\n'
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 3},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
         },
     }
 
@@ -626,6 +669,7 @@ ALL_MONITORS = [
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
     job_daily_cost_monitor,
+    episode_recording_failures_monitor,
     episode_length_spike_monitor,
     # Removed to avoid false positives:
     # job_stuck_pending_monitor,  # Too noisy - depends on tournament schedule
@@ -705,12 +749,12 @@ def _should_create_stable_monitors(check: object) -> bool:
 
 
 def get_all_monitor_configs() -> list[dict]:
-    configs = [m() for m in ALL_MONITORS]
+    configs = [_add_monitor_key_tag(m()) for m in ALL_MONITORS]
     for check in discover_stable_checks():
         if not _should_create_stable_monitors(check):
             continue
         check_path = f"{check.func.__module__}.{check.func.__name__}"
         job_tag = job_path_to_job_tag(check_path)
-        configs.append(_stable_runner_stale_monitor(job_tag))
-        configs.append(_stable_runner_failed_monitor(job_tag))
+        configs.append(_add_monitor_key_tag(_stable_runner_stale_monitor(job_tag)))
+        configs.append(_add_monitor_key_tag(_stable_runner_failed_monitor(job_tag)))
     return configs
