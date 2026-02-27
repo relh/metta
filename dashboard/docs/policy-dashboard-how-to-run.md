@@ -27,10 +27,10 @@ Open:
 ## 2) Embedded In Observatory
 
 ```bash
-OBSERVATORY_POLICY_DASHBOARD_URL=http://127.0.0.1:5174 metta observatory frontend --backend local
+OBSERVATORY_POLICY_DASHBOARD_URL=http://127.0.0.1:5174 metta dev softmax-com --backend local
 ```
 
-Then open Observatory at `/policy-dashboard?policyVersionId=<uuid>`.
+Then open Observatory at `/observatory/policy-dashboard?policyVersionId=<uuid>`.
 
 ## 3) Offline HTML Artifact (Skill Generator)
 

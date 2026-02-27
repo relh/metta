@@ -15,13 +15,13 @@ High level overview:
 Ensure k8s are enabled in your Docker environment and you've ran:
 
 ```
-metta observatory local-k8s setup
+metta dev local-k8s setup
 ```
 
 Ensure local servers are started:
 
 ```
-metta observatory up
+metta dev up
 ```
 
 In another terminal issue the command:

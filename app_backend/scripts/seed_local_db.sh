@@ -11,7 +11,7 @@
 # Prerequisites:
 #   - AWS CLI configured with access to the main EKS cluster
 #   - kubectl installed
-#   - Local postgres running (metta observatory postgres up -d)
+#   - Local postgres running (metta dev postgres up -d)
 #
 # Usage:
 #   bash app_backend/scripts/seed_local_db.sh                     # full dump + restore
@@ -247,7 +247,7 @@ DOCKER_CONTAINER="app_backend-postgres-1"
 echo "==> Checking local postgres..."
 if ! docker exec "${DOCKER_CONTAINER}" pg_isready -U "${LOCAL_USER}" -q 2> /dev/null; then
   echo "ERROR: Local postgres container '${DOCKER_CONTAINER}' is not running."
-  echo "Start it with: metta observatory postgres up -d"
+  echo "Start it with: metta dev postgres up -d"
   exit 1
 fi
 
@@ -292,8 +292,8 @@ docker exec "${DOCKER_CONTAINER}" psql -U "${LOCAL_USER}" -d "${LOCAL_DB}" -c "
 
 echo ""
 echo "==> Next steps:"
-echo "   1. Start the backend:  metta observatory up"
-echo "   2. Open:               http://localhost:5173/policies"
+echo "   1. Start the backend:  metta dev up"
+echo "   2. Open:               http://localhost:3002/observatory/policies"
 echo "   3. Pick a policy version and open its dashboard"
 echo ""
 echo "Note: S3 URIs (replay links, data_uri) point to prod buckets and"

@@ -15,7 +15,7 @@
 //
 // 2. DOCKER SOCKET MOUNT (/var/run/docker.sock)
 //    Allows docker commands inside the container to control host Docker.
-//    This means `metta observatory postgres up` starts postgres on the HOST,
+//    This means `metta dev postgres up` starts postgres on the HOST,
 //    not nested inside the devcontainer. See Dockerfile comments.
 //
 // 3. KUBECONFIG MOUNT (~/.kube) + HOSTNAME OVERRIDE (--add-host)
@@ -78,12 +78,12 @@
     "source=${localEnv:HOME}/.config/devdotfiles,target=/root/.config/devdotfiles,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.netrc,target=/root/.netrc,type=bind,consistency=cached",
     "source=${localEnv:HOME}/.sky,target=/root/.sky,type=bind,consistency=cached",
-    // KUBERNETES CONFIG - Required for metta observatory
+    // KUBERNETES CONFIG - Required for metta dev
     // local_k8s.py reads this and creates a modified version for container access
     "source=${localEnv:HOME}/.kube,target=/root/.kube,type=bind,consistency=cached",
     // AWS CREDENTIALS - Required for Observatory job pods to access S3
     "source=${localEnv:HOME}/.aws,target=/root/.aws,type=bind,consistency=cached",
-    // DOCKER SOCKET - Critical for metta observatory
+    // DOCKER SOCKET - Critical for metta dev
     // Allows docker commands to control host's Docker daemon
     // This means postgres runs on host, accessible via host.docker.internal
     "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"

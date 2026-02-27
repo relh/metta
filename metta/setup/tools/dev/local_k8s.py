@@ -12,12 +12,12 @@ Observatory needs Kubernetes to run job pods (policy evaluation). The challenge
 is supporting two different development scenarios:
 
 1. DIRECT MAC DEVELOPMENT (OrbStack)
-   Developer runs `metta observatory` directly on macOS.
+   Developer runs `metta dev` directly on macOS.
    OrbStack provides K8s and shares Docker images automatically.
    Kubeconfig uses 127.0.0.1 - works directly.
 
 2. DEVCONTAINER DEVELOPMENT (k3d or OrbStack-via-container)
-   Developer runs `metta observatory` inside a devcontainer.
+   Developer runs `metta dev` inside a devcontainer.
 
    Option A: Use k3d (k3s-in-Docker) - creates K8s inside the container
    Option B: Connect to host's OrbStack from inside the container
@@ -322,7 +322,7 @@ def _check_runtime(runtime: K8sRuntime) -> None:
             error("Then restart OrbStack.")
         else:
             error(f"k3d cluster '{K3D_CLUSTER_NAME}' is not running.")
-            error("Create it with: metta observatory local-k8s setup")
+            error("Create it with: metta dev local-k8s setup")
         sys.exit(1)
 
 

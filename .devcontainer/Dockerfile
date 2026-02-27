@@ -86,7 +86,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # docker-compose to start postgres. Because of the socket mount, this postgres
 # container runs on the HOST's Docker (not nested inside the devcontainer).
 # This means postgres is accessible at host.docker.internal:5432 from the
-# devcontainer, which is handled by cli.py's _get_db_uri() function.
+# devcontainer, which is handled by cli.py's get_db_uri() function.
 RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.5.1.tgz \
     | tar -xz -C /usr/local/bin --strip-components=1 docker/docker && \
     mkdir -p /usr/local/lib/docker/cli-plugins && \

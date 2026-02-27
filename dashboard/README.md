@@ -87,7 +87,7 @@ Best for day-to-day development. You run dashboard against local Postgres seeded
 1. Start local Postgres:
 
 ```bash
-metta observatory postgres up -d
+metta dev postgres up -d
 ```
 
 2. Seed local DB from production (first run):

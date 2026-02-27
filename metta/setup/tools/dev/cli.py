@@ -17,7 +17,7 @@ This CLI supports running inside a devcontainer on macOS. The key challenges:
 1. DATABASE CONNECTION
    PostgreSQL runs via docker-compose on the HOST's Docker (not in devcontainer).
    From inside the container, we connect via host.docker.internal:5432.
-   See _get_db_uri() for the implementation.
+   See get_db_uri() for the implementation.
 
 2. KUBERNETES ACCESS
    The devcontainer connects to the host's OrbStack K8s cluster.
@@ -35,34 +35,27 @@ This CLI supports running inside a devcontainer on macOS. The key challenges:
 import functools
 import json
 import os
-import platform
-import shutil
 import subprocess
-import tempfile
-import uuid
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 import typer
-from dotenv import dotenv_values
 
-from metta.app_backend.clients.stats_client import StatsClient
 from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI
 from metta.common.util.fs import get_repo_root
+from metta.setup.tools.dev.env import base_env, postgres_env
 from metta.setup.tools.dev.local_k8s import (
-    IMAGE,
     K3D_CLUSTER_NAME,
+    _get_orbstack_kubeconfig_for_container,
     detect_k8s_runtime,
     get_host_address,
     get_k8s_context,
     local_k8s_app,
 )
+from metta.setup.tools.dev.postgres import get_db_uri, postgres_cmd
+from metta.setup.tools.dev.run_episode import run_episode_cmd
 from metta.setup.tools.dev.utils import LOCAL_METTA_POLICY_EVAL_IMG_NAME
 from metta.setup.utils import error, info
-from metta.tools.utils.auto_config import auto_stats_server_uri
-from mettagrid.runner.episode_runner import run_episode_isolated
-from mettagrid.runner.types import SingleEpisodeJob
-from mettagrid.util.uri_resolvers.schemes import localize_uri
 from softmax.aws.secrets_manager import get_secretsmanager_secret
 
 repo_root = get_repo_root()
@@ -72,13 +65,9 @@ repo_root = get_repo_root()
 # =============================================================================
 # These values are used for the local development environment.
 # LOCALHOST is used for services binding and health checks.
-# For container->host communication, we use host.docker.internal (see _get_db_uri).
+# For container->host communication, we use host.docker.internal (see get_db_uri).
 
 LOCALHOST = "127.0.0.1"
-POSTGRES_PORT = 5432
-POSTGRES_USER = "postgres"
-POSTGRES_PASSWORD = "password"
-POSTGRES_DB = "metta"
 SERVER_PORT = 8000
 PROCESS_COMPOSE_PORT = 8090
 LOCALSTACK_PORT = 4566
@@ -196,17 +185,6 @@ app = typer.Typer(
 )
 
 
-def _base_env() -> dict[str, str]:
-    env = os.environ.copy()
-    env.pop("VIRTUAL_ENV", None)
-    # .env provides defaults — real env vars take precedence.
-    # dotenv_values returns None for keys with no value; we skip those.
-    for key, value in dotenv_values(repo_root / ".env").items():
-        if key not in env and value is not None:
-            env[key] = value
-    return env
-
-
 def _kill_stale_processes() -> None:
     """Kill any leftover processes from a previous run."""
     result = subprocess.run(
@@ -227,36 +205,9 @@ def _kill_stale_processes() -> None:
             subprocess.run(["kill", *pids.split("\n")])
 
 
-def _get_db_uri(db: Literal["metta", "softmax-com"]) -> str:
-    """Get the database URI, using host.docker.internal when in a container.
-
-    CONTAINER NETWORKING EXPLAINED:
-    When running in a devcontainer, PostgreSQL runs via docker-compose on the
-    HOST's Docker daemon (not inside the devcontainer). This is because:
-    1. We mount /var/run/docker.sock from the host
-    2. docker-compose commands run against the host's Docker
-    3. The postgres container runs in the host's Docker network
-
-    From inside the devcontainer, 127.0.0.1:5432 refers to the devcontainer
-    itself, not the host. We use Docker's host.docker.internal DNS name
-    which resolves to the host machine from any container.
-
-    DIRECT MAC DEVELOPMENT:
-    When running directly on macOS (not in a container), 127.0.0.1 works
-    because postgres runs on the same machine.
-    """
-    from metta.setup.tools.dev.local_k8s import _is_running_in_container  # noqa: PLC0415
-
-    host = LOCALHOST
-    if _is_running_in_container():
-        # Postgres runs on the host's Docker, so use host.docker.internal
-        host = "host.docker.internal"
-    return f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{host}:{POSTGRES_PORT}/{db}"
-
-
 def _local_dev_env() -> dict[str, str]:
-    env = _base_env()
-    env["STATS_DB_URI"] = _get_db_uri("metta")
+    env = base_env()
+    env["STATS_DB_URI"] = get_db_uri("metta")
     env["RUN_MIGRATIONS"] = "true"
     env["EPISODE_RUNNER_IMAGE"] = LOCAL_METTA_POLICY_EVAL_IMG_NAME
     env["MACHINE_TOKEN"] = LOCAL_MACHINE_TOKEN
@@ -283,16 +234,6 @@ def _local_dev_env() -> dict[str, str]:
     return env
 
 
-def _postgres_env() -> dict[str, str]:
-    env = _base_env()
-    env["POSTGRES_HOST"] = LOCALHOST
-    env["POSTGRES_PORT"] = str(POSTGRES_PORT)
-    env["POSTGRES_USER"] = POSTGRES_USER
-    env["POSTGRES_PASSWORD"] = POSTGRES_PASSWORD
-    env["POSTGRES_DB"] = POSTGRES_DB
-    return env
-
-
 def _process_compose_env() -> dict[str, str]:
     """Environment for process-compose including K8s runtime detection.
 
@@ -312,12 +253,10 @@ def _process_compose_env() -> dict[str, str]:
     These allow process-compose services to work identically whether running
     directly on Mac or inside a devcontainer.
     """
-    from metta.setup.tools.dev.local_k8s import (  # noqa: PLC0415
-        _get_orbstack_kubeconfig_for_container,
-        _is_running_in_container,
-    )
 
-    env = _postgres_env()
+    # some postgres vars are needed for health checks or other processes, so can't be localized to postgres process
+    env = postgres_env()
+
     env["SERVER_HOST"] = LOCALHOST
     env["SERVER_PORT"] = str(SERVER_PORT)
 
@@ -336,13 +275,6 @@ def _process_compose_env() -> dict[str, str]:
     modified_kubeconfig = _get_orbstack_kubeconfig_for_container()
     if modified_kubeconfig:
         env["KUBECONFIG"] = modified_kubeconfig
-
-    # POSTGRES READINESS PROBE:
-    # The postgres readiness probe in process-compose.yaml checks if postgres
-    # is accepting connections. In a container, postgres runs on the host's
-    # Docker, so we probe host.docker.internal instead of 127.0.0.1.
-    if _is_running_in_container():
-        env["POSTGRES_PROBE_HOST"] = "host.docker.internal"
 
     return env
 
@@ -411,19 +343,11 @@ def stop(
         )
 
 
-@app.command(
+app.command(
     name="postgres",
     context_settings={"allow_extra_args": True, "allow_interspersed_args": False},
     help="Manage postgres. Usage: metta dev postgres [up|down|logs]",
-)
-@handle_errors
-def postgres(ctx: typer.Context):
-    cmd = ["docker", "compose", "-f", str(repo_root / "metta" / "setup" / "tools" / "dev" / "docker-compose.yml")]
-    args = ctx.args if ctx.args else ["up"]
-    if "up" in args and "-d" in args and "--wait" not in args:
-        args = args + ["--wait"]
-    cmd.extend(args)
-    subprocess.run(cmd, env=_postgres_env(), check=True)
+)(handle_errors(postgres_cmd))
 
 
 @app.command(name="server", help="Run the backend server on host")
@@ -471,10 +395,10 @@ def server(
 def softmax_com(
     backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
 ):
-    env = _base_env()
+    env = base_env()
     env["NEXTAUTH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
     env["NEXTAUTH_SECRET"] = "dev-nextauth-secret"
-    env["DATABASE_URL"] = _get_db_uri("softmax-com")
+    env["DATABASE_URL"] = get_db_uri("softmax-com")
 
     # These are tied to a sandbox oauth app under nishu-builder's account.
     # These are not production keys.
@@ -513,8 +437,8 @@ def softmax_com(
 @app.command(name="softmax-com-db-migrate", help="Apply Prisma migrations to the local softmax_com database")
 @handle_errors
 def db_migrate():
-    env = _base_env()
-    env["DATABASE_URL"] = _get_db_uri("softmax-com")
+    env = base_env()
+    env["DATABASE_URL"] = get_db_uri("softmax-com")
     info("Applying Prisma migrations to local softmax_com database")
     subprocess.run(["pnpm", "db:migrate"], env=env, check=True, cwd=repo_root / "web/softmax.com")
 
@@ -563,165 +487,7 @@ def generate_api_types():
         subprocess.run(["pnpm", "run", "generate-api-types"], cwd=root, check=True)
 
 
-PROD_IMAGE = "ghcr.io/metta-ai/episode-runner:latest"
-
-
-def _resolve_job_id(client: StatsClient, uuid_id: uuid.UUID) -> uuid.UUID:
-    """Resolve a UUID to a job ID, trying both job_id and episode_id lookups."""
-    try:
-        job_request = client.get_job(job_id=uuid_id)
-        return job_request.id
-    except Exception:
-        pass
-    result = client.sql_query(f"SELECT id FROM job_requests WHERE result->>'episode_id' = '{uuid_id}' LIMIT 1")
-    if result.rows:
-        return uuid.UUID(result.rows[0][0])
-    raise ValueError(f"No job found for job_id or episode_id: {uuid_id}")
-
-
-def _load_job(source: str) -> SingleEpisodeJob:
-    source_path = Path(source).expanduser()
-    if source_path.exists():
-        return SingleEpisodeJob.model_validate_json(source_path.read_text())
-    uuid_id = uuid.UUID(source)
-    stats_uri = auto_stats_server_uri()
-    if not stats_uri:
-        raise ValueError("No stats server URI configured")
-    client = StatsClient.create(stats_server_uri=stats_uri)
-    job_id = _resolve_job_id(client, uuid_id)
-    job_request = client.get_job(job_id)
-    job = SingleEpisodeJob.model_validate(job_request.job)
-    info(f"Fetched job {job_id}")
-    return job
-
-
-def _run_episode_local(job: SingleEpisodeJob, out: Path) -> None:
-    results_path = out / "results.json"
-    replay_path = out / "replay.json.z"
-    debug_dir = out / "debug"
-    debug_dir.mkdir(exist_ok=True)
-    run_episode_isolated(job.episode_spec(), results_path, replay_path=replay_path, debug_dir=debug_dir)
-    info(f"Results written to {results_path}")
-
-
-def _localize_policy_for_docker(uri: str, index: int, volume_mounts: list[str]) -> str:
-    """Resolve a policy URI on the host and return a file:// URI for the container."""
-    local_path = localize_uri(uri)
-    if local_path is None:
-        raise ValueError(f"Cannot localize policy URI: {uri}")
-    container_target = f"/workspace/policies/{index}"
-    if local_path.is_dir():
-        container_uri = f"file://{container_target}"
-    else:
-        container_uri = f"file://{container_target}/{local_path.name}"
-        container_target = f"{container_target}/{local_path.name}"
-    volume_mounts.extend(["-v", f"{local_path.resolve()}:{container_target}:ro"])
-    return container_uri
-
-
-def _run_episode_docker(job: SingleEpisodeJob, out: Path, image: str, docker_platform: str) -> None:
-    with tempfile.TemporaryDirectory(prefix="observatory_run_episode_") as workspace:
-        workspace_path = Path(workspace)
-        spec_path = workspace_path / "spec.json"
-
-        volume_mounts: list[str] = []
-        container_policy_uris = [
-            _localize_policy_for_docker(uri, i, volume_mounts) for i, uri in enumerate(job.policy_uris)
-        ]
-
-        docker_job = SingleEpisodeJob(
-            policy_uris=container_policy_uris,
-            assignments=job.assignments,
-            env=job.env,
-            seed=job.seed,
-            max_action_time_ms=job.max_action_time_ms,
-        )
-        spec_path.write_text(docker_job.model_dump_json())
-
-        cmd = [
-            "docker",
-            "run",
-            "--rm",
-            "--platform",
-            docker_platform,
-            "-e",
-            "JOB_SPEC_URI=file:///workspace/io/spec.json",
-            "-e",
-            "RESULTS_URI=file:///workspace/io/results.json",
-            "-e",
-            "REPLAY_URI=file:///workspace/io/replay.json.z",
-            "-e",
-            "DEBUG_URI=file:///workspace/io/debug.zip",
-            "-v",
-            f"{workspace}:/workspace/io:rw",
-            *volume_mounts,
-            image,
-        ]
-        info(f"Running episode in Docker ({image}) for {docker_platform}")
-        subprocess.run(cmd, check=True, timeout=600)
-
-        for name in ("results.json", "replay.json.z", "debug.zip"):
-            src = workspace_path / name
-            if src.exists():
-                (out / name).write_bytes(src.read_bytes())
-        info(f"Results written to {out}")
-
-
-def _check_docker_prerequisites(image: str) -> None:
-    if not shutil.which("docker"):
-        error("Docker not found. Install OrbStack: https://orbstack.dev")
-        error("  Or use --mode local to skip Docker.")
-        raise typer.Exit(1)
-    if subprocess.run(["docker", "info"], capture_output=True).returncode != 0:
-        error("Docker daemon not running. Start OrbStack first:")
-        error("  orb start")
-        error("  Or use --mode local to skip Docker.")
-        raise typer.Exit(1)
-    result = subprocess.run(["docker", "images", image, "--format", "{{.Repository}}"], capture_output=True, text=True)
-    if not result.stdout.strip():
-        error(f"Image {image} not found. Build it first:")
-        error("  metta dev local-k8s build-image")
-        error("  Or use --mode local to skip Docker.")
-        raise typer.Exit(1)
-
-
-@app.command(name="run-episode")
-@handle_errors
-def run_episode(
-    source: Annotated[str, typer.Argument(help="Path to job spec JSON, or observatory job/episode UUID")],
-    mode: Annotated[str, typer.Option("--mode", "-m", help="local, local-image, or prod-image")] = "local",
-    output_dir: Annotated[str, typer.Option("--output-dir", "-o", help="Directory for results")] = "./episode-results",
-    image: Annotated[
-        str | None, typer.Option("--image", help="Override Docker image (local-image/prod-image modes)")
-    ] = None,
-):
-    """Run a single episode locally or in a Docker image.
-
-    Modes:
-      local       - subprocess isolation, no Docker (default)
-      local-image - uses episode-runner-local:latest (built from source)
-      prod-image  - uses ghcr.io/metta-ai/episode-runner:latest (linux/amd64)
-    """
-    job = _load_job(source)
-    out = Path(output_dir).resolve()
-    out.mkdir(parents=True, exist_ok=True)
-
-    if mode == "local":
-        _run_episode_local(job, out)
-    elif mode == "local-image":
-        img = image or IMAGE
-        _check_docker_prerequisites(img)
-        docker_platform = "linux/arm64" if platform.machine() in ("arm64", "aarch64") else "linux/amd64"
-        _run_episode_docker(job, out, img, docker_platform)
-    elif mode == "prod-image":
-        img = image or PROD_IMAGE
-        _check_docker_prerequisites(img)
-        info(f"Pulling {img}...")
-        subprocess.run(["docker", "pull", "--platform", "linux/amd64", img], check=True, timeout=300)
-        _run_episode_docker(job, out, img, "linux/amd64")
-    else:
-        error(f"Unknown mode: {mode}. Use local, local-image, or prod-image")
-        raise typer.Exit(1)
+app.command(name="run-episode")(handle_errors(run_episode_cmd))
 
 
 tournament_app = typer.Typer(help="Tournament management", rich_markup_mode="rich", no_args_is_help=True)

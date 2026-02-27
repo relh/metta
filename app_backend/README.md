@@ -5,7 +5,7 @@ Backend API for https://observatory.softmax-research.net/
 ## Local Development
 
 ```bash
-metta observatory --help
+metta dev --help
 ```
 
 ## Mock Team Tournament (Development)
@@ -21,7 +21,7 @@ export ENABLE_MOCK_TOURNAMENTS=true
 2. Start the local stack:
 
 ```bash
-metta observatory up
+metta dev up
 ```
 
 3. Open `teams-mock` in Observatory:
@@ -39,7 +39,7 @@ Notes:
 If a run is already in progress, roll the season to a new canonical version:
 
 ```bash
-ENABLE_MOCK_TOURNAMENTS=true metta observatory tournament roll-season teams-mock
+ENABLE_MOCK_TOURNAMENTS=true metta dev tournament roll-season teams-mock
 ```
 
 For team seasons, roll creates a clean version with only the entry pool pre-created (it does not copy intermediate stage
@@ -48,7 +48,7 @@ pools from the prior version).
 To carry active entrants into the new version:
 
 ```bash
-ENABLE_MOCK_TOURNAMENTS=true metta observatory tournament roll-season teams-mock --migrate-players
+ENABLE_MOCK_TOURNAMENTS=true metta dev tournament roll-season teams-mock --migrate-players
 ```
 
 Version behavior:

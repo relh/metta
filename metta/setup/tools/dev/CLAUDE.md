@@ -16,14 +16,14 @@ Observatory is the tournament and job orchestration platform. It includes:
 
 ## Quick Start
 
-Run `metta observatory -h` for full command reference. Typical workflow:
+Run `metta dev -h` for full command reference. Typical workflow:
 
 ```bash
 # One-time: enable K8s and setup
-metta observatory local-k8s setup
+metta dev local-k8s setup
 
 # Start services
-metta observatory up
+metta dev up
 ```
 
 ## Service URLs
@@ -46,14 +46,14 @@ from metta.app_backend.clients.stats_client import StatsClient
 client = StatsClient.create("http://127.0.0.1:8000")
 ```
 
-**Migrations:** Managed via Alembic. Observatory must be running (`metta observatory up`) so postgres is available. To
-create a new migration after changing ORM models: `cd app_backend && alembic revision --autogenerate -m "description"`.
-Review the generated file in `app_backend/alembic/versions/`, then commit. CI runs `test_autogenerate_is_empty` to catch
+**Migrations:** Managed via Alembic. Observatory must be running (`metta dev up`) so postgres is available. To create a
+new migration after changing ORM models: `cd app_backend && alembic revision --autogenerate -m "description"`. Review
+the generated file in `app_backend/alembic/versions/`, then commit. CI runs `test_autogenerate_is_empty` to catch
 ORM/migration drift.
 
 ## Useful Commands
 
-See `metta observatory -h` and `metta observatory local-k8s -h` for available commands.
+See `metta dev -h` and `metta dev local-k8s -h` for available commands.
 
 ## Debugging
 
@@ -74,19 +74,19 @@ When debugging Observatory issues:
 3. **Check K8s pods:**
 
    ```bash
-   metta observatory local-k8s get-pods
+   metta dev local-k8s get-pods
    ```
 
 4. **View logs:**
 
    ```bash
-   metta observatory local-k8s logs [pod-name]  # K8s job logs
+   metta dev local-k8s logs [pod-name]  # K8s job logs
    ```
 
 5. **Restart services if needed:**
    ```bash
    # Stop process-compose (Ctrl+C), then:
-   metta observatory up
+   metta dev up
    ```
 
 ## Common Issues
@@ -99,7 +99,7 @@ When debugging Observatory issues:
 
 ### Jobs not running
 
-- Verify K8s is available: `metta observatory local-k8s status`
+- Verify K8s is available: `metta dev local-k8s status`
 - Check namespace exists: `kubectl get namespace jobs`
 - Verify image is available (OrbStack shares automatically, k3d needs import)
 
@@ -107,7 +107,7 @@ When debugging Observatory issues:
 
 - Check tournament service is running in process-compose
 - Verify watcher is running and processing job results
-- Check job completed successfully: `metta observatory local-k8s get-pods`
+- Check job completed successfully: `metta dev local-k8s get-pods`
 
 ## Local Episode Runner Image
 
@@ -128,9 +128,9 @@ First build is slow (full C++ compile + dependency downloads); subsequent rebuil
 **Rebuild after code changes:**
 
 ```bash
-metta observatory local-k8s build-image   # Rebuild with local source
-metta observatory local-k8s get-pods      # Check running pods
-metta observatory local-k8s logs          # Follow pod logs
+metta dev local-k8s build-image   # Rebuild with local source
+metta dev local-k8s get-pods      # Check running pods
+metta dev local-k8s logs          # Follow pod logs
 ```
 
 **Version pinning:** cogames pins `mettagrid==X.Y.Z` in its dependencies. The local Dockerfile uses
@@ -139,17 +139,17 @@ produces) is accepted alongside cogames.
 
 ## Running Single Episodes
 
-`metta observatory run-episode` runs a single episode for debugging/testing. Three modes:
+`metta dev run-episode` runs a single episode for debugging/testing. Three modes:
 
 - **local** (default): subprocess isolation, no Docker. Fastest for iteration.
 - **local-image**: uses `episode-runner-local:latest` built from source via `local-k8s build-image`.
 - **prod-image**: pulls `ghcr.io/metta-ai/episode-runner:latest` (linux/amd64).
 
 ```bash
-metta observatory run-episode job.json                  # Local subprocess
-metta observatory run-episode job.json -m local-image   # Local Docker image
-metta observatory run-episode job.json -m prod-image    # Production image
-metta observatory run-episode <job-uuid> -m local-image # Fetch from observatory
+metta dev run-episode job.json                  # Local subprocess
+metta dev run-episode job.json -m local-image   # Local Docker image
+metta dev run-episode job.json -m prod-image    # Production image
+metta dev run-episode <job-uuid> -m local-image # Fetch from observatory
 ```
 
 Source can be a path to a job spec JSON file or an observatory job UUID.
