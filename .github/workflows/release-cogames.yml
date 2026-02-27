@@ -317,6 +317,9 @@ jobs:
     needs: [build, test, publish, verify-pypi-install]
     if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v6
         with:

@@ -83,6 +83,9 @@ jobs:
     needs: [build-and-deploy-backend, deploy-orchestrator]
     if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v6
         with:
