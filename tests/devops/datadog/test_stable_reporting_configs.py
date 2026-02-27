@@ -32,18 +32,43 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     query_text = "\n".join(query_bits)
 
     assert any(widget["definition"]["title"] == "Stable Runner - Key Metrics" for widget in stable["widgets"])
+    assert any(widget["definition"]["title"] == "Failure Breakdown" for widget in stable["widgets"])
+    assert any(widget["definition"]["title"] == "Stage Durations (p50 / p90)" for widget in stable["widgets"])
+    assert any(widget["definition"]["title"] == "Concurrent Running Jobs" for widget in stable["widgets"])
+    assert any(widget["definition"]["title"] == "Job Status Transitions (count)" for widget in stable["widgets"])
+    assert any(widget["definition"]["title"] == "Episode Length (10m avg)" for widget in stable["widgets"])
+    assert any(widget["definition"]["title"] == "Episode Length Trend (episode jobs)" for widget in stable["widgets"])
     assert STABLE_CHECK_RAW_STATUS_METRIC in query_text
     assert STABLE_CHECK_EFFECTIVE_STATUS_METRIC in query_text
     assert STABLE_CHECK_COMPLETED_AT_METRIC in query_text
     assert STABLE_CHECK_ACCEPTANCE_CRITERION_VALUE_METRIC in query_text
     assert STABLE_CHECK_ACCEPTANCE_CRITERION_TARGET_METRIC in query_text
     assert STABLE_CHECK_ACCEPTANCE_CRITERION_STATUS_METRIC in query_text
+    assert "service:observatory-backend,env:production,job_type:episode" in query_text
+    assert "sum:job.running_count" in query_text
+    assert "p50:job.stage_duration" in query_text
+    assert "p90:job.stage_duration" in query_text
+    assert "to_status:completed" in query_text
+    assert "to_status:running" in query_text
+    assert "to_status:dispatched" in query_text
+    assert "to_status:failed" in query_text
+    assert "by {error_type}.as_count().rollup(sum, 60)" in query_text
+    assert "episode.length" in query_text
+    assert "service:observatory-backend,job_type:episode" in query_text
     assert "criterion:runs_success" in query_text
     assert "'last', 'desc'" in query_text
     assert any(
         widget["definition"]["title"] == "Latest Summary Status by Job (-1=red,0=yellow,1=green)"
         for widget in stable["widgets"]
     )
+    latest_summary = next(
+        widget
+        for widget in stable["widgets"]
+        if widget["definition"]["title"] == "Latest Summary Status by Job (-1=red,0=yellow,1=green)"
+    )
+    latest_summary_queries = latest_summary["definition"]["requests"][0]["queries"]
+    assert latest_summary_queries[0]["query"] == f"last:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by {{job}}"
+    assert latest_summary_queries[1]["query"] == f"last:{STABLE_CHECK_COMPLETED_AT_METRIC}{{*}} by {{job}}"
 
 
 def test_stable_monitors_generated_per_job(monkeypatch) -> None:

@@ -486,6 +486,30 @@ def job_daily_cost_monitor() -> dict:
     }
 
 
+def episode_length_spike_monitor() -> dict:
+    """Monitor for sustained episode-length spikes in episode jobs."""
+    return {
+        "name": "[Tournament] Episode Length Spike: {{value}} avg steps",
+        "type": "query alert",
+        "query": "avg(last_10m):avg:episode.length{service:observatory-backend,job_type:episode} > 11000",
+        "message": (
+            "Average episode length is {{value}} steps over the last 10 minutes.\n\n"
+            "Normal baseline is ~8k-10k steps. A sustained spike can indicate environment or rollout regressions.\n\n"
+            "Check: https://observatory.softmax-research.net/episode-jobs\n\n"
+            f"{WEBHOOK_DISCORD}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 3,
+        "thresholds": {"critical": 11000},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
 def job_config_error_monitor() -> dict:
     """Monitor for config/validation errors indicating runner image is out of date."""
     return {
@@ -601,6 +625,7 @@ ALL_MONITORS = [
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
     job_daily_cost_monitor,
+    episode_length_spike_monitor,
     # Removed to avoid false positives:
     # job_stuck_pending_monitor,  # Too noisy - depends on tournament schedule
     # job_no_activity_monitor,    # Alerts during legitimate downtime

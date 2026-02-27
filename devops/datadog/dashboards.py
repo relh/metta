@@ -126,12 +126,12 @@ def stable_runner_health_dashboard() -> dict:
                                 {
                                     "name": "latest_status",
                                     "data_source": "metrics",
-                                    "query": (f"max:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by {{job}}"),
+                                    "query": (f"last:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by {{job}}"),
                                 },
                                 {
                                     "name": "latest_status_at",
                                     "data_source": "metrics",
-                                    "query": (f"max:{STABLE_CHECK_COMPLETED_AT_METRIC}{{*}} by {{job}}"),
+                                    "query": (f"last:{STABLE_CHECK_COMPLETED_AT_METRIC}{{*}} by {{job}}"),
                                 },
                             ],
                             "formulas": [
@@ -257,6 +257,208 @@ def stable_runner_health_dashboard() -> dict:
                     "time": {"live_span": STABLE_TIMEFRAME},
                 },
                 "layout": {"x": 6, "y": 19, "width": 6, "height": 4},
+            },
+            {
+                "definition": {
+                    "title": "Failure Breakdown",
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "queries": [
+                                {
+                                    "data_source": "metrics",
+                                    "name": "failures",
+                                    "query": (
+                                        "sum:job.state_transition{to_status:failed,"
+                                        "service:observatory-backend,env:production,job_type:episode} "
+                                        "by {error_type}.as_count().rollup(sum, 60)"
+                                    ),
+                                }
+                            ],
+                            "formulas": [{"formula": "failures"}],
+                            "response_format": "timeseries",
+                            "style": {
+                                "palette": "warm",
+                                "line_type": "solid",
+                                "line_width": "normal",
+                            },
+                            "display_type": "bars",
+                        }
+                    ],
+                    "yaxis": {"include_zero": True},
+                    "time": {"live_span": STABLE_TIMEFRAME},
+                },
+                "layout": {"x": 0, "y": 23, "width": 12, "height": 4},
+            },
+            {
+                "definition": {
+                    "title": "Stage Durations (p50 / p90)",
+                    "type": "query_table",
+                    "requests": [
+                        {
+                            "queries": [
+                                {
+                                    "data_source": "metrics",
+                                    "name": "p50_stage",
+                                    "query": (
+                                        "p50:job.stage_duration{service:observatory-backend,env:production,"
+                                        "job_type:episode} by {stage}"
+                                    ),
+                                },
+                                {
+                                    "data_source": "metrics",
+                                    "name": "p90_stage",
+                                    "query": (
+                                        "p90:job.stage_duration{service:observatory-backend,env:production,"
+                                        "job_type:episode} by {stage}"
+                                    ),
+                                },
+                            ],
+                            "response_format": "scalar",
+                            "sort": {
+                                "count": 500,
+                                "order_by": [{"type": "formula", "index": 1, "order": "desc"}],
+                            },
+                            "formulas": [
+                                {
+                                    "formula": "p50_stage",
+                                    "alias": "p50",
+                                    "cell_display_mode": "bar",
+                                    "number_format": {
+                                        "unit": {
+                                            "type": "canonical_unit",
+                                            "unit_name": "second",
+                                        }
+                                    },
+                                },
+                                {
+                                    "formula": "p90_stage",
+                                    "alias": "p90",
+                                    "cell_display_mode": "bar",
+                                    "number_format": {
+                                        "unit": {
+                                            "type": "canonical_unit",
+                                            "unit_name": "second",
+                                        }
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                    "has_search_bar": "auto",
+                    "time": {"live_span": STABLE_TIMEFRAME},
+                },
+                "layout": {"x": 0, "y": 27, "width": 12, "height": 6},
+            },
+            {
+                "definition": {
+                    "title": "Concurrent Running Jobs",
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "queries": [
+                                {
+                                    "data_source": "metrics",
+                                    "name": "running",
+                                    "query": (
+                                        "sum:job.running_count{service:observatory-backend,"
+                                        "env:production,job_type:episode}"
+                                    ),
+                                }
+                            ],
+                            "formulas": [{"formula": "running", "alias": "running"}],
+                            "response_format": "timeseries",
+                            "display_type": "line",
+                        }
+                    ],
+                    "yaxis": {"include_zero": True},
+                    "time": {"live_span": STABLE_TIMEFRAME},
+                },
+                "layout": {"x": 0, "y": 33, "width": 12, "height": 4},
+            },
+            {
+                "definition": {
+                    "title": "Job Status Transitions (count)",
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "queries": [
+                                {
+                                    "data_source": "metrics",
+                                    "name": "completed",
+                                    "query": (
+                                        "sum:job.state_transition{to_status:completed,service:observatory-backend,"
+                                        "env:production,job_type:episode}.as_count().rollup(sum, 60)"
+                                    ),
+                                },
+                                {
+                                    "data_source": "metrics",
+                                    "name": "running",
+                                    "query": (
+                                        "sum:job.state_transition{to_status:running,service:observatory-backend,"
+                                        "env:production,job_type:episode}.as_count().rollup(sum, 60)"
+                                    ),
+                                },
+                                {
+                                    "data_source": "metrics",
+                                    "name": "dispatched",
+                                    "query": (
+                                        "sum:job.state_transition{to_status:dispatched,service:observatory-backend,"
+                                        "env:production,job_type:episode}.as_count().rollup(sum, 60)"
+                                    ),
+                                },
+                                {
+                                    "data_source": "metrics",
+                                    "name": "failed",
+                                    "query": (
+                                        "sum:job.state_transition{to_status:failed,service:observatory-backend,"
+                                        "env:production,job_type:episode}.as_count().rollup(sum, 60)"
+                                    ),
+                                },
+                            ],
+                            "formulas": [
+                                {"formula": "completed", "alias": "completed"},
+                                {"formula": "running", "alias": "running"},
+                                {"formula": "dispatched", "alias": "dispatched"},
+                                {"formula": "failed", "alias": "failed"},
+                            ],
+                            "response_format": "timeseries",
+                            "display_type": "bars",
+                        }
+                    ],
+                    "yaxis": {"include_zero": True},
+                    "time": {"live_span": STABLE_TIMEFRAME},
+                },
+                "layout": {"x": 0, "y": 37, "width": 12, "height": 4},
+            },
+            {
+                "definition": {
+                    "type": "query_value",
+                    "title": "Episode Length (10m avg)",
+                    "requests": [
+                        {
+                            "q": "avg:episode.length{service:observatory-backend,job_type:episode}",
+                            "aggregator": "avg",
+                        }
+                    ],
+                    "time": {"live_span": STABLE_TIMEFRAME},
+                    "precision": 0,
+                },
+                "layout": {"x": 0, "y": 41, "width": 4, "height": 3},
+            },
+            {
+                "definition": {
+                    "title": "Episode Length Trend (episode jobs)",
+                    "type": "timeseries",
+                    "requests": [
+                        {
+                            "q": "avg:episode.length{service:observatory-backend,job_type:episode}",
+                            "display_type": "line",
+                        }
+                    ],
+                    "time": {"live_span": STABLE_TIMEFRAME},
+                },
+                "layout": {"x": 4, "y": 41, "width": 8, "height": 3},
             },
         ],
     }
