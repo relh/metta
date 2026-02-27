@@ -113,10 +113,7 @@ class ScheduleRule(Config):
         values = stats_reporter.state.rollout_stats.get(self.metric_key)
         if not values:
             return None
-        try:
-            return float(np.mean(values))
-        except Exception:
-            return None
+        return float(np.mean(values))
 
     def _smooth_and_clamp(self, value: float) -> float:
         if self.ema_beta is not None:
@@ -137,10 +134,7 @@ class ScheduleRule(Config):
         if metric is None:
             return
         if self.transform is not None:
-            try:
-                metric = float(self.transform(metric))
-            except Exception:
-                return
+            metric = float(self.transform(metric))
         _set_attr_path(obj, self.target_path, self._smooth_and_clamp(metric))
 
     # -------------- main apply --------------
