@@ -90,9 +90,7 @@ class CogamesCliExecutor(JobExecutor):
 
             deadline = remote_not_found_deadline.get(job.name)
             try:
-                matches = self.client.get_season_matches(
-                    "test-season", include_hidden_seasons=True, policy_version_ids=[UUID(job.remote_id)]
-                )
+                matches = self.client.get_season_matches("test-season", policy_version_ids=[UUID(job.remote_id)])
 
                 if not matches:
                     if deadline and now > deadline:
