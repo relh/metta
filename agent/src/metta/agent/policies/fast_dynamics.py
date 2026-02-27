@@ -34,7 +34,7 @@ def forward(self, td: TensorDict, action: Optional[torch.Tensor] = None) -> Tens
     self.reward_pred(td)
     self.future_latent_pred(td)
     td["values"] = td["values"].flatten()
-    if "h_values" in td.keys():
+    if "h_values" in td:
         td["h_values"] = td["h_values"].flatten()
     return td
 

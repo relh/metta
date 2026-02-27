@@ -207,7 +207,7 @@ class DiffHordeCumulantsConfig(Config):
         sample_td["bptt"] = torch.ones(batch_size, dtype=torch.int64)
         inferred_sizes: dict[str, int] = {}
         for spec in unresolved:
-            if spec.key in sample_td.keys():
+            if spec.key in sample_td:
                 inferred_sizes[spec.key] = _flattened_size(values=sample_td[spec.key], batch_size=batch_size)
 
         with torch.no_grad():

@@ -62,7 +62,7 @@ def get_single_char_symbols() -> Iterable[str]:
 
     bases: List[str] = []
     seen = set()
-    for k in _BUILDERS.keys():
+    for k in _BUILDERS:
         base = k.rstrip("^")
         if len(base) == 1 and base not in seen:
             bases.append(base)

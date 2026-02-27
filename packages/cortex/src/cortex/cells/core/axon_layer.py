@@ -66,7 +66,7 @@ class AxonLayer(nn.Module):
             raise ValueError("AxonLayer requires an explicit parent TensorDict state.")
 
         # Parent state path: create group/key lazily
-        if self._state_group not in state.keys():
+        if self._state_group not in state:
             state[self._state_group] = TensorDict({}, batch_size=[batch])
         group_td = state.get(self._state_group)
         assert group_td is not None

@@ -32,7 +32,7 @@ def get_run_metrics(entity: str, project: str, run_id: str) -> set[str] | None:
     # Get metrics from summary
     summary = run.summary
     if summary:
-        for key in summary.keys():
+        for key in summary:
             if key not in ["_timestamp", "_runtime", "_step", "_wandb"]:
                 metrics.add(key)
 

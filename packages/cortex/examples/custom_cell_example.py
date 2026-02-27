@@ -153,7 +153,7 @@ def test_custom_cell():
 
     # Check state structure
     print("\nState structure:")
-    for key in new_state.keys():
+    for key in new_state:
         block_state = new_state[key]
         if "cell" in block_state:
             cell_state = block_state["cell"]

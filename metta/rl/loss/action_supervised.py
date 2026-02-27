@@ -95,7 +95,7 @@ class ActionSupervised(Loss):
         teacher_actions = core_teacher_actions.to(dtype=student_td["actions"].dtype)
         if bool(teacher_mask.any()):
             student_td["actions"][teacher_mask] = teacher_actions[teacher_mask]
-            if "act_log_prob" in student_td.keys():
+            if "act_log_prob" in student_td:
                 student_td["act_log_prob"][teacher_mask] = 0.0
             if "vibe_actions" in student_td.keys():
                 vibe_actions = teacher_vibe_actions.to(dtype=student_td["vibe_actions"].dtype)

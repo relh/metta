@@ -249,7 +249,7 @@ class Runner:
         for j in running:
             running_jobs_per_executor[j.executor.ex_type].append(j)
 
-        for k in running_jobs_per_executor.keys():
+        for k in running_jobs_per_executor:
             executor = running_jobs_per_executor[k][0].executor
             try:
                 result = executor.poll(running_jobs_per_executor[k], self._remote_not_found_deadline)

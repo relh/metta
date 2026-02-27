@@ -37,7 +37,7 @@ def test_rollout_updates_and_resets_cache():
 
     out = component(td)
     assert out["core"].shape == torch.Size([2, component.config.d_model])
-    assert "transformer_position" in out.keys()
+    assert "transformer_position" in out
 
     pos = out["transformer_position"]
     assert torch.all(pos > 0)

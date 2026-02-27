@@ -393,14 +393,13 @@ def live_monitor_runs(
             table = make_rich_monitor_table(runs, score_metric)
 
             # Create a renderable group
-            display = Group(
+            return Group(
                 banner,
                 Text(""),  # Empty line
                 table,
                 Text(""),  # Empty line
                 Text("(CMD + Click to see run in WandB)", style="dim"),
             )
-            return display
 
         except Exception as e:
             error_msg = f"Error fetching run data: {str(e)}"
@@ -502,14 +501,13 @@ def live_monitor_runs_test(
         table = make_rich_monitor_table(runs)
 
         # Create a renderable group
-        display = Group(
+        return Group(
             Text(banner),
             Text(""),  # Empty line
             table,
             Text(""),  # Empty line
             Text("🧪 TEST MODE - Mock data displayed above", style="bright_magenta"),
         )
-        return display
 
     console.print(f"Starting TEST live monitor for group: {group or 'test_group'}")
     console.print(f"Refresh interval: {refresh_interval} seconds")

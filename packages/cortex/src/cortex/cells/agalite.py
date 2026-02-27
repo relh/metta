@@ -88,7 +88,7 @@ class AGaLiTeCell(MemoryCell):
             raise ValueError(f"Expected last dim {self.hidden_size}, got {H}")
 
         # Prepare/validate state
-        if state is None or not all(k in state.keys() for k in ("tilde_k", "tilde_v", "s", "tick")):
+        if state is None or not all(k in state for k in ("tilde_k", "tilde_v", "s", "tick")):
             st = self.init_state(B, device=x_seq.device, dtype=x_seq.dtype)
         else:
             st = state

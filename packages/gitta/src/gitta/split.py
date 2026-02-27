@@ -380,8 +380,7 @@ Return a JSON response with this exact structure:
         import datetime  # noqa: PLC0415
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        new_name = f"{base_name}-{timestamp}"
-        return new_name
+        return f"{base_name}-{timestamp}"
 
     def create_github_pr(self, branch: str, title: str, body: str) -> str | None:
         if not self.github_token:

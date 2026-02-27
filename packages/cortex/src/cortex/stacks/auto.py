@@ -122,7 +122,7 @@ def _apply_overrides_model(model: BaseModel, overrides: Iterable[BaseModel]) -> 
     # Build a shallow clone to avoid mutating the input instance
     cloned = _clone_model(model)
     fields = getattr(cloned, "model_fields", None) or getattr(cloned, "__fields__", {})
-    for name in fields.keys():
+    for name in fields:
         value = getattr(cloned, name, None)
         new_value = _apply_overrides_value(value, overrides)
         if new_value is not value:

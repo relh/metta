@@ -16,7 +16,7 @@ def _infer_tensordict_device(td: TensorDict) -> torch.device:
         return device
 
     # Infer device from the first tensor in the TensorDict.
-    for key in td.keys():
+    for key in td:
         val = td[key]
         if isinstance(val, Tensor):
             return val.device

@@ -199,7 +199,7 @@ def test_split_rollout_td_uses_shallow_policy_clones() -> None:
 
     # Policy containers remain independent for outputs.
     learner_td["actions"] = torch.zeros(learner_td.batch_size, dtype=torch.int32)
-    assert "actions" not in teacher_td.keys()
+    assert "actions" not in teacher_td
 
 
 def test_build_rollout_policy_batches_single_slice_fast_path() -> None:

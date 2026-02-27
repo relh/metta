@@ -589,7 +589,7 @@ class CoreTrainingLoop:
                     f"received tensor of shape {tuple(raw_actions.shape)}"
                 )
             raw_vibe_actions: Optional[Tensor] = None
-            if "vibe_actions" in td.keys():
+            if "vibe_actions" in td:
                 raw_vibe_actions = td["vibe_actions"].detach()
                 if raw_vibe_actions.dim() != 1:
                     raise ValueError(

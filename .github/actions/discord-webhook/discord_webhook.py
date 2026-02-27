@@ -54,8 +54,7 @@ def _sanitize_content(content: str) -> str:
     content = content.replace("@everyone", "@\u200beveryone")
     content = content.replace("@here", "@\u200bhere")
     content = content.replace("@ everyone", "@ \u200beveryone")
-    content = content.replace("@ here", "@ \u200bhere")
-    return content
+    return content.replace("@ here", "@ \u200bhere")
 
 
 def _send_to_discord(webhook_url: str, content: str, suppress_embeds: bool) -> bool:

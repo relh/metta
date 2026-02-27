@@ -216,7 +216,7 @@ class Policy(MultiAgentPolicy, nn.Module):
         action_idx = int(td["actions"][0].item())
         action_name = self._policy_env_info.action_names[action_idx]
         vibe_name: str | None = None
-        if self._policy_env_info.vibe_action_names and "vibe_actions" in td.keys():
+        if self._policy_env_info.vibe_action_names and "vibe_actions" in td:
             vibe_idx = int(td["vibe_actions"][0].item())
             vibe_name = self._policy_env_info.vibe_action_names[vibe_idx]
         return Action(name=action_name, vibe=vibe_name), new_state

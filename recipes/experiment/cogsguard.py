@@ -367,8 +367,7 @@ def _resolve_max_steps_buckets(max_steps: int, max_steps_buckets: Sequence[int] 
     buckets = sorted(set(int(steps) for steps in buckets if 0 < steps <= max_steps))
     if max_steps not in buckets:
         buckets.append(max_steps)
-    buckets = sorted(set(buckets))
-    return buckets
+    return sorted(set(buckets))
 
 
 def _supports_seed_bucket(env: MettaGridConfig) -> bool:

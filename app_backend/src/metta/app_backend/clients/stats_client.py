@@ -99,14 +99,12 @@ class StatsClient(BaseAppBackendClient):
         # Step 3: Notify backend to process the uploaded file
 
         completion_request = CompleteBulkUploadRequest(upload_id=presigned_response.upload_id)
-        completion_response = self._make_request(
+        return self._make_request(
             BulkEpisodeUploadResponse,
             "POST",
             "/stats/episodes/bulk_upload/complete",
             json=completion_request.model_dump(mode="json"),
         )
-
-        return completion_response
 
     def update_policy_version_tags(self, policy_version_id: uuid.UUID, tags: dict[str, str]) -> UUIDResponse:
         return self._make_request(UUIDResponse, "PUT", f"/stats/policy-versions/{policy_version_id}/tags", json=tags)

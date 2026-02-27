@@ -80,8 +80,7 @@ class CurriculumTestHelper:
         from mettagrid.config.mettagrid_config import MettaGridConfig  # noqa: PLC0415
 
         task_gen_config = SingleTaskGenerator.Config(env=MettaGridConfig())
-        config = CurriculumConfig(task_generator=task_gen_config, num_active_tasks=capacity, **kwargs)
-        return config
+        return CurriculumConfig(task_generator=task_gen_config, num_active_tasks=capacity, **kwargs)
 
     @staticmethod
     def create_test_curriculum(curriculum_type: str = "basic", **kwargs):

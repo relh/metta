@@ -33,8 +33,7 @@ def get_existing_clusters():
     """Get existing clusters."""
     with spinner("Fetching existing clusters", style=cyan):
         request_id = sky.status()
-        cluster_records = sky.get(request_id)
-    return cluster_records
+    return sky.get(request_id)
 
 
 def get_user_sandboxes(clusters):

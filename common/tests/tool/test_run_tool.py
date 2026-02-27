@@ -18,7 +18,7 @@ def with_extra_imports_root(monkeypatch):
 
     # Clear cached imports and recipe registry to prevent CI flakiness
     # when tests are retried or run in parallel (Datadog retries, pytest-xdist)
-    test_modules = [k for k in sys.modules.keys() if k.startswith("mypackage")]
+    test_modules = [k for k in sys.modules if k.startswith("mypackage")]
     for mod_name in test_modules:
         sys.modules.pop(mod_name, None)
     recipe_registry.clear()

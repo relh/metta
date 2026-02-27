@@ -154,7 +154,7 @@ class Curriculum(StatsLogger):
             if self._algorithm is not None:
                 evictable_tasks = [
                     tid
-                    for tid in self._tasks.keys()
+                    for tid in self._tasks
                     if self._algorithm.should_evict_task(tid, self._config.min_presentations_for_eviction)
                 ]
                 if evictable_tasks:

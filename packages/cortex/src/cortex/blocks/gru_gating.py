@@ -28,8 +28,7 @@ class GRUGatingUnit(nn.Module):
         r = self.sigmoid(self.Wr(y) + self.Ur(x))
         z = self.sigmoid(self.Wz(y) + self.Uz(x) - self.bg)
         h = self.tanh(self.Wg(y) + self.Ug(r * x))
-        g = (1 - z) * x + z * h
-        return g
+        return (1 - z) * x + z * h
 
 
 __all__ = ["GRUGatingUnit"]

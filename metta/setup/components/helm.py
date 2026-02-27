@@ -31,7 +31,7 @@ class HelmSetup(SetupModule):
             return False
 
         installed_plugins = self.get_installed_plugins()
-        for plugin in self.HELM_PLUGINS.keys():
+        for plugin in self.HELM_PLUGINS:
             if plugin not in installed_plugins:
                 return False
         return True

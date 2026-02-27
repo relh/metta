@@ -37,7 +37,7 @@ def test_axon_layer_state_auto_parent_and_reset() -> None:
     # First call creates state under state["axon"]["proj"]
     y = layer(x, state=state, resets=None)
     assert y.shape == (B, T, Hout)
-    assert "axon" in state.keys()
+    assert "axon" in state
     axon_group = state.get("axon")
     assert axon_group is not None and "proj" in axon_group.keys()
 

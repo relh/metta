@@ -281,7 +281,7 @@ def find_cycles(graph: dict[str, dict]) -> list[list[str]]:
             if len(scc) > 1:
                 sccs.append(scc)
 
-    for node in graph.keys():
+    for node in graph:
         if node not in index:
             strongconnect(node)
 

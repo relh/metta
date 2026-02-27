@@ -659,7 +659,7 @@ constructor/function vs configuration overrides based on introspection.
                         consumed_keys.add(name)
 
                     # Mark all dotted keys that start with this parameter name as consumed
-                    for k in cli_args.keys():
+                    for k in cli_args:
                         if k.startswith(name + "."):
                             consumed_keys.add(k)
 

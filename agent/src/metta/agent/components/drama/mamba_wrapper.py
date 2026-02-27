@@ -139,8 +139,7 @@ class PositionalEncoding1D(nn.Module):
         pos_emb = self.pos_emb(torch.arange(self.max_length, device=feat.device))
         pos_emb = repeat(pos_emb, "L D -> B L D", B=feat.shape[0])
 
-        feat = feat + pos_emb[:, : feat.shape[1], :]
-        return feat
+        return feat + pos_emb[:, : feat.shape[1], :]
 
     def forward_with_position(self, feat, position):
         assert feat.shape[1] == 1

@@ -114,7 +114,7 @@ class Test03SimulationGridObjectsInterface:
 
         # Assert: Return type is correct
         assert isinstance(objects, dict), "grid_objects() should return dict"
-        assert all(isinstance(k, int) for k in objects.keys()), "object IDs should be ints"
+        assert all(isinstance(k, int) for k in objects), "object IDs should be ints"
         assert all(isinstance(v, dict) for v in objects.values()), "object data should be dicts"
 
         # Assert: Objects have required keys

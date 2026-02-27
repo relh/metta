@@ -65,8 +65,7 @@ def get_token_hash(user_token: str) -> str:
     """
     (_, token) = parse_token_prefix(user_token)
     b64_decoded = base64.urlsafe_b64decode(token)
-    hashed = hashlib.sha256(b64_decoded).hexdigest()
-    return hashed
+    return hashlib.sha256(b64_decoded).hexdigest()
 
 
 def compare_tokens(given: str, stored: str) -> bool:

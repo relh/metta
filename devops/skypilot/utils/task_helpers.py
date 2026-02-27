@@ -47,7 +47,7 @@ def patch_task(
                 raise Exception(f"Unexpected accelerator type: {res.accelerators}, {type(res.accelerators)}")
 
             patched_accelerators = copy.deepcopy(res.accelerators)
-            patched_accelerators = {gpu_type: gpus for gpu_type in patched_accelerators.keys()}
+            patched_accelerators = {gpu_type: gpus for gpu_type in patched_accelerators}
             new_resources = res.copy(accelerators=patched_accelerators)
             new_resources_list.append(new_resources)
 

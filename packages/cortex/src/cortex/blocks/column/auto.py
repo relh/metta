@@ -106,8 +106,7 @@ def build_column_auto_config(
 
         experts.append(_clone_model(cfg))  # new instance per expert
 
-    col_cfg = ColumnBlockConfig(experts=experts, router=(router or RouterConfig()))
-    return col_cfg
+    return ColumnBlockConfig(experts=experts, router=(router or RouterConfig()))
 
 
 def build_column_auto_block(

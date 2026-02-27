@@ -38,12 +38,11 @@ class DiscordNotifier(NotificationBase):
             ]
         )
 
-        payload = {
+        return {
             "webhook_url": job_config.discord_webhook_url,
             "content": "\n".join(content_parts),
             "suppress_embeds": True,
         }
-        return payload
 
     def _send(self, payload: dict[str, Any]) -> None:
         send_to_discord(**payload)
