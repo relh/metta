@@ -21,6 +21,14 @@ from .task_generator import (
     TaskGeneratorSet,
 )
 from .task_tracker import TaskTracker
+from .tree_curriculum import (
+    MechanicsTreeDefinition,
+    TreeNode,
+    TreeTaskGenerator,
+    build_tree_nodes,
+    make_tree_curriculum,
+    make_tree_curriculum_from_definition,
+)
 from .types import CurriculumAlgorithm, CurriculumAlgorithmConfig, CurriculumTask
 
 __all__ = [
@@ -46,6 +54,12 @@ __all__ = [
     "TaskGeneratorSet",
     "CyclicTaskGeneratorSet",
     "BucketedTaskGenerator",
+    "TreeNode",
+    "MechanicsTreeDefinition",
+    "TreeTaskGenerator",
+    "build_tree_nodes",
+    "make_tree_curriculum",
+    "make_tree_curriculum_from_definition",
     "Span",
     "bucketed",
     "single_task",

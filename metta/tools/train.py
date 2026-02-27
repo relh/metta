@@ -24,7 +24,6 @@ from metta.common.wandb.context import WandbConfig, WandbContext, WandbRun
 from metta.rl.checkpoint_manager import CheckpointManager
 from metta.rl.loss.diff_horde import DiffHordeLossConfig
 from metta.rl.loss.losses import LossesConfig
-from metta.rl.loss.ppo_actor import PPOActorConfig
 from metta.rl.policy_assets import PolicyAssetConfig, PolicyAssetRegistry
 from metta.rl.trainer import Trainer
 from metta.rl.trainer_config import TorchProfilerConfig, TrainerConfig
@@ -68,7 +67,6 @@ from metta.tools.utils.auto_config import (
 )
 from mettagrid.policy.loader import resolve_policy_class_path
 from mettagrid.policy.policy import PolicySpec
-from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri, resolve_uri
 
 logger = getRankAwareLogger(__name__)
@@ -191,42 +189,6 @@ class TrainTool(Tool):
                     self.training_env.forward_pass_minibatch_target_size,
                 )
             self.training_env.seed += rank
-
-        self._prune_vibe_actor_losses_if_disabled()
-
-    def _prune_vibe_actor_losses_if_disabled(self) -> None:
-        """Drop vibe-specific actor losses when the environment has no vibe actions.
-
-        CLI overrides can disable change_vibe after the recipe wires losses, so re-check
-        the environment here (post-override) and remove any losses that require vibe outputs.
-        """
-        curriculum = Curriculum(self.training_env.curriculum)
-        env_cfg = curriculum.get_task().get_env_cfg()
-        policy_env_info = PolicyEnvInterface.from_mg_cfg(env_cfg)
-
-        if policy_env_info.vibe_action_names:
-            return
-
-        losses_cfg = self.losses or self.trainer.losses
-        to_remove: list[str] = []
-        for name, cfg in list(losses_cfg.losses.items()):
-            if isinstance(cfg, PPOActorConfig) and (
-                cfg.actor_name == "vibe"
-                or cfg.log_prob_key.startswith("vibe_")
-                or "vibe_actions" in cfg.extra_action_keys
-            ):
-                to_remove.append(name)
-
-        if not to_remove:
-            return
-
-        for name in to_remove:
-            losses_cfg.losses.pop(name, None)
-
-        for slice_cfg in self.trajectory_isolation.slices:
-            losses = getattr(slice_cfg, "losses", None)
-            if isinstance(losses, list):
-                slice_cfg.losses = [loss for loss in losses if loss not in to_remove]
 
     def _sanitize_checkpoint_namespace(self, value: str) -> str:
         sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
@@ -717,8 +679,12 @@ class TrainTool(Tool):
         )
         expected_batch_size = num_envs * num_agents * self.trainer.bptt_horizon
 
-        self.trainer.minibatch_size = expected_batch_size
-        self.trainer.batch_size = expected_batch_size
+        self.trainer = self.trainer.model_copy(
+            update={
+                "batch_size": expected_batch_size,
+                "minibatch_size": expected_batch_size,
+            }
+        )
 
         self.checkpointer.epoch_interval = min(self.checkpointer.epoch_interval, 10)
         self.evaluator.epoch_interval = min(self.evaluator.epoch_interval, 10)

@@ -24,6 +24,7 @@ from rich.table import Table
 
 import gitta as git
 from devops.datadog.cli import app as datadog_app
+from metta.common.tool.tool_path import resolve_and_load_tool_maker
 from metta.common.util.fs import get_repo_root
 from metta.common.util.log_config import init_logging
 from metta.setup.components.base import SetupModuleStatus
@@ -678,6 +679,50 @@ def cmd_report_env_details():
         info(f"Git Commit: {commit}")
 
 
+def _run_recipe(recipe: str, args: list[str]) -> None:
+    cmd = [
+        sys.executable,
+        str(get_repo_root() / "tools" / "run.py"),
+        recipe,
+        *args,
+    ]
+    try:
+        subprocess.run(cmd, cwd=get_repo_root(), check=True)
+    except subprocess.CalledProcessError as e:
+        raise typer.Exit(e.returncode) from e
+
+
+def _run_game_recipe(recipe: str, game: str, extra_args: list[str]) -> None:
+    _run_recipe(recipe, [f"game={game}", *extra_args])
+
+
+def _normalize_train_target(target: str) -> str:
+    if target.startswith("game."):
+        return target.split(".", 1)[1]
+    return target
+
+
+def _resolve_train_recipe(target: str, extra_args: list[str]) -> tuple[str, list[str]]:
+    normalized_target = _normalize_train_target(target)
+    if resolve_and_load_tool_maker(f"{normalized_target}.train") is not None:
+        return f"{normalized_target}.train", extra_args
+    return "game.train", [f"game={normalized_target}", *extra_args]
+
+
+@app.command(
+    name="train",
+    help="Train on a registered game (e.g. metta train hunger)",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def cmd_train(
+    game: Annotated[str, typer.Argument(help="Game to train on (e.g. hunger)")],
+    ctx: typer.Context,
+):
+    """Train a registered game via the recipe system."""
+    recipe, args = _resolve_train_recipe(game, list(ctx.args))
+    _run_recipe(recipe, args)
+
+
 @app.command(
     name="play",
     help="Play a game interactively (e.g. metta play hunger)",
@@ -688,17 +733,7 @@ def cmd_play(
     ctx: typer.Context,
 ):
     """Play a registered game via the recipe system."""
-    cmd = [
-        sys.executable,
-        str(get_repo_root() / "tools" / "run.py"),
-        "game.play",
-        f"game={game}",
-        *ctx.args,
-    ]
-    try:
-        subprocess.run(cmd, cwd=get_repo_root(), check=True)
-    except subprocess.CalledProcessError as e:
-        raise typer.Exit(e.returncode) from e
+    _run_game_recipe("game.play", game, list(ctx.args))
 
 
 @app.command(name="gridworks", help="Start the Gridworks web UI", context_settings={"allow_extra_args": True})

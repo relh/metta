@@ -5,6 +5,7 @@ import torch
 from torchrl.data import Composite
 
 from metta.common.util.log_config import getRankAwareLogger
+from metta.rl.loss.losses import LossesConfig
 from metta.rl.policy_assets import PolicyAssetRegistry
 from metta.rl.system_config import SystemConfig
 from metta.rl.trainer_config import TrainerConfig
@@ -68,6 +69,12 @@ class Trainer:
         self._components: list[TrainerComponent] = []
         self.timer = Stopwatch(log_level=logger.getEffectiveLevel())
         self.timer.start()
+
+        if isinstance(losses_cfg, LossesConfig):
+            losses_cfg.configure_for_policy_env(
+                policy_env_info=self._env.policy_env_info,
+                trajectory_isolation=self._trajectory_isolation,
+            )
 
         # Initialize all policy assets (trainable and non-trainable) but only wrap if trainable.
         for name, pol in list(policy_assets.policies.items()):
