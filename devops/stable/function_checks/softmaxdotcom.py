@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 from urllib.request import Request, urlopen
 
+from devops.runners.metta_constants import PROD_STATS_SERVER_URI
 from devops.stable.stable_check_context import StableCheckContext
 from devops.stable.stable_check_groups import StableCheckGroup
 from devops.stable.stable_function_check_registry import stable_function_check
 
 ALIGNMENTLEAGUE_URL = "https://softmax.com/alignmentleague"
 HEALTH_URL = "https://softmax.com/api/health"
-SEASONS_URL = "https://softmax.com/api/tournament/seasons"
+SEASONS_URL = f"{PROD_STATS_SERVER_URI}/tournament/seasons"
 
 
 def _get(url: str, *, timeout_s: float = 15.0, user_agent: str = "metta-stable-health-check/1.0") -> tuple[int, str]:
