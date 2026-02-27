@@ -84,18 +84,53 @@ jobs:
 
       - name: Run stable release process
         id: release
+        shell: bash
         run: |
-          CMD=(./devops/stable/stable_check_cli.py)
-          if [[ -n "${{ inputs.check_groups }}" ]]; then
-            IFS=',' read -ra GROUPS <<< "${{ inputs.check_groups }}"
-            for group in "${GROUPS[@]}"; do
-              trimmed="$(echo "$group" | xargs)"
-              if [[ -n "$trimmed" ]]; then
-                CMD+=(--check-group "$trimmed")
+          mkdir -p devops/stable/state/logs
+
+          export STABLE_CHECK_GROUPS="${{ inputs.check_groups }}"
+
+          set +e
+          python - <<'PY' > devops/stable/state/logs/stable_release_process.log 2>&1
+          import os
+          import shlex
+          import subprocess
+          import sys
+
+          cmd = ["python", "-u", "./devops/stable/stable_check_cli.py"]
+          raw_groups = os.environ.get("STABLE_CHECK_GROUPS", "")
+          for group in raw_groups.split(","):
+              group = group.strip()
+              if group:
+                  cmd.extend(["--check-group", group])
+
+          print(f"stable_check_cli command: {shlex.join(cmd)}", flush=True)
+          proc = subprocess.run(cmd)
+          print(f"stable_check_cli exit code: {proc.returncode}", flush=True)
+          sys.exit(proc.returncode)
+          PY
+          release_exit_code=$?
+          set -e
+          cat devops/stable/state/logs/stable_release_process.log
+
+          if [ "$release_exit_code" -ne 0 ] && [ ! -f devops/stable/state/discord_summary.txt ]; then
+            mkdir -p devops/stable/state
+            {
+              echo "Stable release failed before summary generation."
+              echo ""
+              echo "Check groups: ${{ inputs.check_groups }}"
+              echo "Exit code: ${release_exit_code}"
+              echo ""
+              echo "Tail of stable release output:"
+              if [ -f devops/stable/state/logs/stable_release_process.log ]; then
+                tail -n 50 devops/stable/state/logs/stable_release_process.log
+              else
+                echo "<stable_release_process.log missing>"
               fi
-            done
+            } > devops/stable/state/discord_summary.txt
           fi
-          "${CMD[@]}"
+
+          exit $release_exit_code
         env:
           WANDB_API_KEY: ${{ secrets.WANDB_API_KEY }}
           STABLE_RELEASE_SERVICE_TOKEN: ${{ secrets.STABLE_RELEASE_SERVICE_TOKEN }}

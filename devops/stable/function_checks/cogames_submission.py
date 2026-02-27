@@ -222,7 +222,6 @@ def install_cogames(_ctx: StableCheckContext) -> None:
 @stable_function_check(
     timeout_s=900,
     check_group=StableCheckGroup.LIVE_TESTS_LIGHT,
-    lifecycle=StableCheckLifecycle.QUARANTINED,
     depends_on=install_cogames,
     output_references={"good_submission_ref_path": GOOD_SUBMISSION_REF_PATH_TEMPLATE},
 )
@@ -243,7 +242,6 @@ def upload_canary_good_policy(ctx: StableCheckContext) -> None:
 @stable_function_check(
     timeout_s=900,
     check_group=StableCheckGroup.LIVE_TESTS_LIGHT,
-    lifecycle=StableCheckLifecycle.QUARANTINED,
     depends_on=install_cogames,
     output_references={"bad_submission_ref_path": BAD_SUBMISSION_REF_PATH_TEMPLATE},
 )
