@@ -69,10 +69,18 @@ const formatSeasonVersionLabel = (version: SeasonVersionInfo): string => {
   return seasonLabel;
 };
 
-export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
+export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
+  seasons: allSeasons,
+}) => {
   const seasonRef = useSelectedLayoutSegment();
   const searchParams = useSearchParams();
   const { repo, isSoftmaxTeamMember } = use(AppContext);
+
+  const seasons = useMemo(
+    () =>
+      isSoftmaxTeamMember ? allSeasons : allSeasons.filter((s) => s.public),
+    [allSeasons, isSoftmaxTeamMember],
+  );
   const [rollError, setRollError] = useState<string | null>(null);
   const [updateCompatError, setUpdateCompatError] = useState<string | null>(
     null,
@@ -163,13 +171,14 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({ seasons }) => {
     }));
     if (
       selectedSeasonName &&
+      selectedSeason &&
       !options.some((option) => option.value === selectedSeasonName)
     ) {
-      const isPublic = selectedSeason?.public ?? true;
-      const displayName = selectedSeason?.display_name ?? selectedSeasonName;
       options.unshift({
         value: selectedSeasonName,
-        label: isPublic ? displayName : `${displayName} (private)`,
+        label: selectedSeason.public
+          ? selectedSeason.display_name
+          : `${selectedSeason.display_name} (private)`,
       });
     }
     return options;
