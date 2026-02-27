@@ -1,9 +1,10 @@
 #!/usr/bin/env -S uv run
-"""Observatory CLI - Local development environment for the Observatory web app.
+"""CLI for running local dev services.
 
-This module orchestrates all Observatory services for local development:
+This module orchestrates all services for local development:
 - PostgreSQL database
 - FastAPI backend server
+- Softmax.com website frontend
 - K8s job watcher
 - Tournament commissioner
 
@@ -40,14 +41,15 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import typer
 from dotenv import dotenv_values
 
 from metta.app_backend.clients.stats_client import StatsClient
+from metta.common.util.constants import DEV_STATS_SERVER_URI, PROD_STATS_SERVER_URI
 from metta.common.util.fs import get_repo_root
-from metta.setup.tools.observatory.local_k8s import (
+from metta.setup.tools.dev.local_k8s import (
     IMAGE,
     K3D_CLUSTER_NAME,
     detect_k8s_runtime,
@@ -55,7 +57,7 @@ from metta.setup.tools.observatory.local_k8s import (
     get_k8s_context,
     local_k8s_app,
 )
-from metta.setup.tools.observatory.utils import LOCAL_METTA_POLICY_EVAL_IMG_NAME
+from metta.setup.tools.dev.utils import LOCAL_METTA_POLICY_EVAL_IMG_NAME
 from metta.setup.utils import error, info
 from metta.tools.utils.auto_config import auto_stats_server_uri
 from mettagrid.runner.episode_runner import run_episode_isolated
@@ -84,9 +86,6 @@ LOCALSTACK_ENDPOINT_HOST = f"http://{LOCALHOST}:{LOCALSTACK_PORT}"
 LOCALSTACK_ENDPOINT_K8S = f"http://host.docker.internal:{LOCALSTACK_PORT}"
 LOCAL_EVAL_BUCKET = "eval-bucket"
 
-# LOCAL_DB_URI is for direct Mac development (127.0.0.1 works).
-# For container development, _get_db_uri() returns a different URI.
-LOCAL_DB_URI = f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{LOCALHOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 LOCAL_BACKEND_URL = f"http://{LOCALHOST}:{SERVER_PORT}"
 LOCAL_MACHINE_TOKEN = "local-dev-user@example.com"
 LOCAL_AWS_PROFILE = "softmax"
@@ -141,7 +140,7 @@ def handle_errors(fn):
 
 
 HELP_TEXT = f"""
-Observatory local development.
+Run services for local development.
 
 [bold]Prerequisites:[/bold]
   On macOS: OrbStack is installed via 'metta install' (profile=softmax).
@@ -151,18 +150,18 @@ Observatory local development.
   In devcontainer/Linux: k3d is pre-installed. The setup command creates the cluster.
 
 [bold]Quick start:[/bold]
-  metta observatory local-k8s setup  # One-time: build image and create jobs namespace
-  metta observatory up               # Start all services (postgres, server, watcher, tournament)
+  metta dev local-k8s setup  # One-time: build image and create jobs namespace
+  metta dev up               # Start all services (postgres, server, watcher, tournament)
 
 [bold]Start specific services:[/bold]
-  metta observatory up server  # Only server
+  metta dev up server  # Only server
 
 [bold]Individual services:[/bold]
-  metta observatory postgres up -d   # Backgrounded postgres for api server
-  metta observatory server           # API server (uses LocalStack for S3)
-  metta observatory watcher          # Watches k8s jobs, reads results from S3
-  metta observatory tournament run    # Tournament commissioner (creates matches, updates scores)
-  metta observatory tournament roll-season <name>  # Roll a season to a new version
+  metta dev postgres up -d   # Backgrounded postgres for api server
+  metta dev server           # API server (uses LocalStack for S3)
+  metta dev watcher          # Watches k8s jobs, reads results from S3
+  metta dev tournament run    # Tournament commissioner (creates matches, updates scores)
+  metta dev tournament roll-season <name>  # Roll a season to a new version
 
 [bold]Upload policy:[/bold]
   uv run cogames submit -p baseline --server {LOCAL_BACKEND_URL} --skip-validation -n <your-policy-name>
@@ -171,23 +170,23 @@ Observatory local development.
   uv run python app_backend/scripts/submit_test_jobs.py --policy-uri metta://policy/<your-policy-name>
 
 [bold]Monitor:[/bold]
-  metta observatory local-k8s status   # Show K8s runtime and context
-  metta observatory local-k8s get-pods # List job pods
-  metta observatory local-k8s logs     # Follow job logs
+  metta dev local-k8s status   # Show K8s runtime and context
+  metta dev local-k8s get-pods # List job pods
+  metta dev local-k8s logs     # Follow job logs
 
 [bold]Teardown:[/bold]
-  metta observatory down             # Stop all services
-  metta observatory postgres down
-  metta observatory local-k8s clean
+  metta dev down             # Stop all services
+  metta dev postgres down
+  metta dev local-k8s clean
 
 [bold]Run a single episode:[/bold]
-  metta observatory run-episode job.json                        # Local subprocess (default)
-  metta observatory run-episode job.json -m local-image         # In locally-built Docker image
-  metta observatory run-episode job.json -m prod-image          # In production Docker image
-  metta observatory run-episode <uuid> -m local-image           # Fetch from observatory, run in Docker
+  metta dev run-episode job.json                        # Local subprocess (default)
+  metta dev run-episode job.json -m local-image         # In locally-built Docker image
+  metta dev run-episode job.json -m prod-image          # In production Docker image
+  metta dev run-episode <uuid> -m local-image           # Fetch from observatory, run in Docker
 
 [bold]Rebuild job runner image:[/bold]
-  metta observatory local-k8s build-image
+  metta dev local-k8s build-image
 """
 
 app = typer.Typer(
@@ -208,15 +207,15 @@ def _base_env() -> dict[str, str]:
     return env
 
 
-def _kill_stale_observatory() -> None:
-    """Kill any leftover observatory processes from a previous run."""
+def _kill_stale_processes() -> None:
+    """Kill any leftover processes from a previous run."""
     result = subprocess.run(
         ["process-compose", "down", "-p", str(PROCESS_COMPOSE_PORT)],
         capture_output=True,
         timeout=10,
     )
     if result.returncode == 0:
-        info("Stopped previous observatory instance")
+        info("Stopped previous instance")
         return
 
     # Fallback: kill anything holding our ports (process-compose was likely hard-killed)
@@ -228,7 +227,7 @@ def _kill_stale_observatory() -> None:
             subprocess.run(["kill", *pids.split("\n")])
 
 
-def _get_db_uri() -> str:
+def _get_db_uri(db: Literal["metta", "softmax-com"]) -> str:
     """Get the database URI, using host.docker.internal when in a container.
 
     CONTAINER NETWORKING EXPLAINED:
@@ -246,17 +245,18 @@ def _get_db_uri() -> str:
     When running directly on macOS (not in a container), 127.0.0.1 works
     because postgres runs on the same machine.
     """
-    from metta.setup.tools.observatory.local_k8s import _is_running_in_container  # noqa: PLC0415
+    from metta.setup.tools.dev.local_k8s import _is_running_in_container  # noqa: PLC0415
 
+    host = LOCALHOST
     if _is_running_in_container():
         # Postgres runs on the host's Docker, so use host.docker.internal
-        return f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@host.docker.internal:{POSTGRES_PORT}/{POSTGRES_DB}"
-    return LOCAL_DB_URI
+        host = "host.docker.internal"
+    return f"postgres://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{host}:{POSTGRES_PORT}/{db}"
 
 
 def _local_dev_env() -> dict[str, str]:
     env = _base_env()
-    env["STATS_DB_URI"] = _get_db_uri()
+    env["STATS_DB_URI"] = _get_db_uri("metta")
     env["RUN_MIGRATIONS"] = "true"
     env["EPISODE_RUNNER_IMAGE"] = LOCAL_METTA_POLICY_EVAL_IMG_NAME
     env["MACHINE_TOKEN"] = LOCAL_MACHINE_TOKEN
@@ -312,7 +312,7 @@ def _process_compose_env() -> dict[str, str]:
     These allow process-compose services to work identically whether running
     directly on Mac or inside a devcontainer.
     """
-    from metta.setup.tools.observatory.local_k8s import (  # noqa: PLC0415
+    from metta.setup.tools.dev.local_k8s import (  # noqa: PLC0415
         _get_orbstack_kubeconfig_for_container,
         _is_running_in_container,
     )
@@ -347,18 +347,16 @@ def _process_compose_env() -> dict[str, str]:
     return env
 
 
-@app.command(name="up", help="Start all observatory services (postgres, server, watcher)")
+@app.command(name="up", help="Start all services (postgres, server, watcher)")
 @handle_errors
 def up(
     services: Annotated[list[str] | None, typer.Argument(help="Services to start (default: all)")] = None,
     tui: Annotated[bool, typer.Option("-t", "--tui", help="Enable TUI mode")] = False,
     login_server: Annotated[str, typer.Option("--login-server", "-l", help="Login server: local or prod")] = "local",
-    force: Annotated[
-        bool, typer.Option("--force", "-f", help="Kill stale observatory processes before starting")
-    ] = False,
+    force: Annotated[bool, typer.Option("--force", "-f", help="Kill stale processes before starting")] = False,
 ):
     if force:
-        _kill_stale_observatory()
+        _kill_stale_processes()
     compose_file = Path(__file__).parent / "process-compose.yaml"
     env = _process_compose_env()
 
@@ -378,7 +376,7 @@ def up(
     subprocess.run(cmd, cwd=repo_root, env=env, check=True)
 
 
-@app.command(name="down", help="Stop all observatory services")
+@app.command(name="down", help="Stop all dev services")
 @handle_errors
 def down():
     subprocess.run(
@@ -387,7 +385,7 @@ def down():
     )
 
 
-@app.command(name="restart", help="Restart one or more observatory services (e.g. metta observatory restart server)")
+@app.command(name="restart", help="Restart one or more dev services (e.g. metta dev restart server)")
 @handle_errors
 def restart(
     services: Annotated[list[str], typer.Argument(help="Services to restart")],
@@ -400,7 +398,7 @@ def restart(
         )
 
 
-@app.command(name="stop", help="Stop one or more observatory services (e.g. metta observatory stop server)")
+@app.command(name="stop", help="Stop one or more services (e.g. metta dev stop server)")
 @handle_errors
 def stop(
     services: Annotated[list[str], typer.Argument(help="Services to stop")],
@@ -416,11 +414,11 @@ def stop(
 @app.command(
     name="postgres",
     context_settings={"allow_extra_args": True, "allow_interspersed_args": False},
-    help="Manage postgres. Usage: metta observatory postgres [up|down|logs]",
+    help="Manage postgres. Usage: metta dev postgres [up|down|logs]",
 )
 @handle_errors
 def postgres(ctx: typer.Context):
-    cmd = ["docker", "compose", "-f", str(repo_root / "app_backend" / "docker-compose.dev.yml")]
+    cmd = ["docker", "compose", "-f", str(repo_root / "metta" / "setup" / "tools" / "dev" / "docker-compose.yml")]
     args = ctx.args if ctx.args else ["up"]
     if "up" in args and "-d" in args and "--wait" not in args:
         args = args + ["--wait"]
@@ -463,6 +461,62 @@ def server(
         env=env,
         check=True,
     )
+
+
+@app.command(
+    name="softmax-com",
+    help="Start the Softmax.com frontend. Usage: metta dev softmax-com [--backend local|prod]",
+)
+@handle_errors
+def softmax_com(
+    backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
+):
+    env = _base_env()
+    env["NEXTAUTH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
+    env["NEXTAUTH_SECRET"] = "dev-nextauth-secret"
+    env["DATABASE_URL"] = _get_db_uri("softmax-com")
+
+    # These are tied to a sandbox oauth app under nishu-builder's account.
+    # These are not production keys.
+    # In production, we use a custom Github App, which require two more fields:
+    # GITHUB_INSTALLATION_ID and GITHUB_APP_PEM.
+    # Those two fields are optional but allow us to populate GitHubTeamMember table.
+    github_oauth_raw = get_secretsmanager_secret("github/oauth-dev", require_exists=False)
+    if github_oauth_raw is not None:
+        github_oauth_secret = json.loads(github_oauth_raw)
+        env["GITHUB_CLIENT_ID"] = github_oauth_secret["GITHUB_CLIENT_ID"]
+        env["GITHUB_CLIENT_SECRET"] = github_oauth_secret["GITHUB_CLIENT_SECRET"]
+
+    discord_oauth_raw = get_secretsmanager_secret("discord/oauth-dev", require_exists=False)
+    if discord_oauth_raw is not None:
+        discord_oauth_secret = json.loads(discord_oauth_raw)
+        env["DISCORD_CLIENT_ID"] = discord_oauth_secret["DISCORD_CLIENT_ID"]
+        env["DISCORD_CLIENT_SECRET"] = discord_oauth_secret["DISCORD_CLIENT_SECRET"]
+
+    # Respect OBSERVATORY_API_URL from environment (set by `up` command), otherwise use --backend flag
+    if "OBSERVATORY_API_URL" not in env:
+        if backend == "local":
+            env["OBSERVATORY_API_URL"] = DEV_STATS_SERVER_URI
+            env["OBSERVATORY_AUTH_SECRET"] = LOCAL_OBSERVATORY_AUTH_SECRET
+        else:
+            env["OBSERVATORY_API_URL"] = PROD_STATS_SERVER_URI
+
+    info(f"Observatory API URL: {env.get('OBSERVATORY_API_URL')}")
+    info("Generating Prisma client")
+    subprocess.run(["pnpm", "db:generate"], env=env, check=True, cwd=repo_root / "web/softmax.com")
+
+    info("Starting Softmax.com frontend")
+
+    subprocess.run(["pnpm", "run", "dev"], env=env, check=True, cwd=repo_root / "web/softmax.com")
+
+
+@app.command(name="softmax-com-db-migrate", help="Apply Prisma migrations to the local softmax_com database")
+@handle_errors
+def db_migrate():
+    env = _base_env()
+    env["DATABASE_URL"] = _get_db_uri("softmax-com")
+    info("Applying Prisma migrations to local softmax_com database")
+    subprocess.run(["pnpm", "db:migrate"], env=env, check=True, cwd=repo_root / "web/softmax.com")
 
 
 @app.command(name="watcher", help="Run the job watcher on host")
@@ -626,7 +680,7 @@ def _check_docker_prerequisites(image: str) -> None:
     result = subprocess.run(["docker", "images", image, "--format", "{{.Repository}}"], capture_output=True, text=True)
     if not result.stdout.strip():
         error(f"Image {image} not found. Build it first:")
-        error("  metta observatory local-k8s build-image")
+        error("  metta dev local-k8s build-image")
         error("  Or use --mode local to skip Docker.")
         raise typer.Exit(1)
 

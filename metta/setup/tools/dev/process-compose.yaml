@@ -1,8 +1,8 @@
 # =============================================================================
-# OBSERVATORY PROCESS-COMPOSE CONFIGURATION
+# DEV PROCESS-COMPOSE CONFIGURATION
 # =============================================================================
 #
-# This file orchestrates all Observatory services for local development.
+# This file orchestrates all services for local development.
 # It works in two environments:
 #
 # 1. DIRECT MAC DEVELOPMENT
@@ -88,7 +88,7 @@ processes:
   # - Direct Mac: defaults to POSTGRES_HOST (127.0.0.1)
   # - Devcontainer: set to host.docker.internal (postgres runs on host)
   postgres:
-    command: metta observatory postgres up
+    command: metta dev postgres up
     depends_on:
       k8s:
         condition: process_healthy
@@ -99,6 +99,17 @@ processes:
       initial_delay_seconds: 1
       period_seconds: 2
 
+  # Creates the softmax-com database needed by the softmax.com website
+  postgres-init:
+    command: |
+      docker compose -f metta/setup/tools/dev/docker-compose.yml exec -T postgres createdb -U "${POSTGRES_USER}" "softmax-com" 2>/dev/null || true
+      echo "PostgreSQL softmax-com database ready"
+    availability:
+      exit_on_end: false
+    depends_on:
+      postgres:
+        condition: process_healthy
+
   # ===========================================================================
   # BACKEND SERVER (FastAPI)
   # ===========================================================================
@@ -108,7 +119,7 @@ processes:
   # The server uses _get_db_uri() which returns the appropriate postgres URI
   # (127.0.0.1 for direct Mac, host.docker.internal for devcontainer).
   server:
-    command: metta observatory server
+    command: metta dev server
     depends_on:
       postgres:
         condition: process_healthy
@@ -128,7 +139,7 @@ processes:
   # Watches K8s pods in the "jobs" namespace and reports status to the backend.
   # Uses the K8S_CONTEXT and KUBECONFIG env vars for kubectl access.
   watcher:
-    command: metta observatory watcher
+    command: metta dev watcher
     depends_on:
       server:
         condition: process_healthy
@@ -142,7 +153,7 @@ processes:
   # S3, records episodes, and updates job statuses (completed/failed). Without
   # this, job statuses never transition and match statuses never update.
   event-processor:
-    command: metta observatory event-processor
+    command: metta dev event-processor
     depends_on:
       server:
         condition: process_healthy
@@ -154,7 +165,7 @@ processes:
   # ===========================================================================
   # Runs tournament commissioners (one per season) that create matches and update scores.
   tournament:
-    command: metta observatory tournament run
+    command: metta dev tournament run
     depends_on:
       server:
         condition: process_healthy
@@ -170,3 +181,9 @@ processes:
     depends_on:
       k8s:
         condition: process_healthy
+
+  softmax-com:
+    command: metta dev softmax-com
+    depends_on:
+      postgres-init:
+        condition: process_completed_successfully

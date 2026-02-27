@@ -132,8 +132,8 @@ STATS_DB_URI="postgres://postgres:password@127.0.0.1:5432/metta" \
 | Season resolver           | `app_backend/src/metta/app_backend/tournament/season_resolver.py`     |
 | Roll season script        | `app_backend/src/metta/app_backend/tournament/scripts/roll_season.py` |
 | Tournament CLI            | `app_backend/src/metta/app_backend/tournament/cli.py`                 |
-| Docker compose (postgres) | `app_backend/docker-compose.dev.yml`                                  |
-| K8s management            | `metta/setup/tools/observatory/local_k8s.py`                          |
+| Docker compose (postgres) | `metta/setup/tools/dev/docker-compose.yml`                            |
+| K8s management            | `metta/setup/tools/dev/local_k8s.py`                                  |
 | Python client             | `app_backend/src/metta/app_backend/clients/stats_client.py`           |
 | Auth config reader        | `common/src/metta/common/auth/auth_config_reader_writer.py`           |
 | Design notes              | `.devcontainer/observatory_design_notes.md`                           |
