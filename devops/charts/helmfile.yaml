@@ -34,7 +34,7 @@ releases:
       - env:
           - name: AWS_DEFAULT_REGION
             value: us-east-1
-        policy: sync
+        policy: upsert-only
         serviceAccount:
           annotations:
             # created by terraform
