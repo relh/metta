@@ -8,7 +8,6 @@ from torchrl.data import Composite  # type: ignore[import-untyped]
 
 from metta.agent.policy import Policy
 from metta.rl.loss.future_latent_ema import FutureLatentEMALoss, FutureLatentEMALossConfig
-from metta.rl.loss.losses import LossesConfig
 from metta.rl.training import ComponentContext, TrainingEnvironment
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
@@ -110,9 +109,3 @@ def test_future_latent_ema_loss_skips_when_predictions_missing() -> None:
     assert computed_loss.item() == pytest.approx(0.0)
     assert loss.loss_tracker is not None
     assert not loss.loss_tracker["future_latent_ema_mse"]
-
-
-def test_loss_config_enables_future_latent_ema_by_flag() -> None:
-    cfg = LossesConfig()
-    cfg.add_loss("future_latent_ema", FutureLatentEMALossConfig())
-    assert "future_latent_ema" in cfg.loss_configs

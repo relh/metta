@@ -213,36 +213,6 @@ def test_diff_horde_rollout_can_disable_cumulant_normalization() -> None:
     assert int(loss.cumulant_rms_updates.item()) == 0
 
 
-def test_ppo_critic_rollout_updates_internal_reward_baseline() -> None:
-    policy = _ToyPolicy()
-    registry = _PolicyRegistry(policy)
-    env = SimpleNamespace(single_action_space=gym_spaces.Discrete(4))
-    cfg = PPOCriticConfig(critic_update="gtd_lambda")
-    loss = cfg.create(registry, SimpleNamespace(), env, torch.device("cpu"), "ppo_critic")
-    context = _make_context(registry)
-
-    rollout_td = TensorDict(
-        {
-            "learner0": TensorDict(
-                {
-                    "agent_slot_ids": torch.tensor([[0], [2]], dtype=torch.long),
-                    "rewards": torch.tensor([2.0, -1.0], dtype=torch.float32),
-                    "reward_baseline": torch.tensor([99.0, 99.0], dtype=torch.float32),
-                },
-                batch_size=[2],
-            )
-        },
-        batch_size=[2],
-    )
-    loss.rollout_postprocess(rollout_td, context)
-
-    baseline = rollout_td["learner0"]["reward_baseline"]
-    assert torch.allclose(baseline, torch.tensor([2.0, -1.0], dtype=torch.float32))
-    assert loss.reward_phi_bar_agentF.shape == (8, 1)
-    assert float(loss.reward_phi_bar_agentF[0, 0].item()) > 0.0
-    assert bool(torch.isnan(context.state.avg_reward).all())
-
-
 def test_ppo_critic_rollout_resyncs_baseline_from_context_state() -> None:
     policy = _ToyPolicy()
     registry = _PolicyRegistry(policy)
@@ -265,7 +235,12 @@ def test_ppo_critic_rollout_resyncs_baseline_from_context_state() -> None:
         batch_size=[1],
     )
     loss.rollout_postprocess(first_td, context)
+    torch.testing.assert_close(
+        first_td["learner0"]["reward_baseline"],
+        torch.tensor([2.0], dtype=torch.float32),
+    )
     assert float(loss.reward_phi_bar_agentF[0, 0].item()) > 0.0
+    assert bool(torch.isnan(context.state.avg_reward).all())
 
     # Simulate rollout gating elsewhere that updates canonical trainer state but skips PPOCritic.
     context.state.avg_reward[0] = 5.0

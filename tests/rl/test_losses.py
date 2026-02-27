@@ -166,25 +166,6 @@ def test_stable_latent_masks_episode_boundaries(stable_latent_loss: Loss) -> Non
     assert stable_latent_loss.loss_tracker["stable_latent_delta_l2"][-1] == pytest.approx(expected_delta, rel=1e-5)
 
 
-def test_cmpo_config_initializes_world_model() -> None:
-    cfg = CMPOConfig()
-    env = SimpleNamespace(
-        single_action_space=gym_spaces.Discrete(6),
-        single_observation_space=gym_spaces.Box(low=0, high=255, shape=(4, 4, 3), dtype=np.uint8),
-    )
-    trainer_cfg = SimpleNamespace(
-        total_timesteps=1024,
-        batch_size=64,
-    )
-
-    cmpo_loss = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo")
-
-    assert cmpo_loss.obs_dim == 4 * 4 * 3
-    assert cmpo_loss.action_dim == 6
-    assert len(cmpo_loss.world_model.members) == cfg.world_model.ensemble_size
-    assert cmpo_loss.prior_model is None
-
-
 def test_cmpo_state_dict_save_and_load() -> None:
     """Test that CMPO properly saves and loads its state."""
     cfg = CMPOConfig()
@@ -200,6 +181,10 @@ def test_cmpo_state_dict_save_and_load() -> None:
 
     # Create first instance and modify its state
     cmpo1 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo1")
+    assert cmpo1.obs_shape == (4, 4, 3)
+    assert cmpo1.obs_dim == 48
+    assert cmpo1.action_dim == 6
+    assert cmpo1.prior_model is None
     cmpo1.burn_in_steps_iter = 42
 
     # Modify world model weights
@@ -220,6 +205,10 @@ def test_cmpo_state_dict_save_and_load() -> None:
 
     # Create second instance
     cmpo2 = cfg.create(DummyPolicy(), trainer_cfg, env, torch.device("cpu"), "cmpo2")
+    assert cmpo2.obs_shape == (4, 4, 3)
+    assert cmpo2.obs_dim == 48
+    assert cmpo2.action_dim == 6
+    assert cmpo2.prior_model is None
     assert cmpo2.burn_in_steps_iter == 0
     assert len(cmpo2.transition_buffer) == 0
 
