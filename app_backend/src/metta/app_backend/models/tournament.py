@@ -101,6 +101,8 @@ class Season(SQLModel, table=True):
     def implied_status(self) -> Literal["not_started", "in_progress", "complete"]:
         if self.disabled_at is not None:
             return "complete"
+        if self.tournament_type == "freeplay":
+            return "in_progress"
         if self.started_at is None:
             return "not_started"
         return "in_progress"
