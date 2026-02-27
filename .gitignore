@@ -183,3 +183,6 @@ docs/plans/
 
 # Can be created by sandboxed agents
 .pnpm-store/
+
+# Gas Town (added by gt)
+.claude/commands/
