@@ -16,7 +16,6 @@ from devops.stable.function_checks._helpers.isolated_venv import (
 )
 from devops.stable.stable_check_context import StableCheckContext
 from devops.stable.stable_check_groups import StableCheckGroup
-from devops.stable.stable_check_lifecycle import StableCheckLifecycle
 from devops.stable.stable_function_check_registry import stable_function_check
 
 SUBMISSION_SEASON = "test-season"
@@ -268,7 +267,6 @@ def upload_canary_bad_policy(ctx: StableCheckContext) -> None:
 @stable_function_check(
     timeout_s=1500,
     check_group=StableCheckGroup.LIVE_TESTS_HEAVY,
-    lifecycle=StableCheckLifecycle.QUARANTINED,
     depends_on=upload_canary_bad_policy,
     input_references={"submission_ref_path": "bad_submission_ref_path"},
 )
@@ -282,7 +280,6 @@ def check_canary_bad_policy_submission_results(ctx: StableCheckContext) -> None:
 @stable_function_check(
     timeout_s=1500,
     check_group=StableCheckGroup.LIVE_TESTS_HEAVY,
-    lifecycle=StableCheckLifecycle.QUARANTINED,
     depends_on=upload_canary_good_policy,
     input_references={"submission_ref_path": "good_submission_ref_path"},
 )
