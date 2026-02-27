@@ -26,7 +26,6 @@ class PPOActorConfig(LossConfig):
     log_prob_key: str = "act_log_prob"
     entropy_key: str = "entropy"
     importance_sampling_ratio_key: str | None = "importance_sampling_ratio"
-    allow_global_ratio_fallback: bool = True
     replay_ratio_key: str = "ratio"
     extra_action_keys: list[str] = Field(default_factory=list)
 
@@ -147,8 +146,6 @@ class PPOActor(Loss):
         importance_sampling_ratio = None
         if self.cfg.importance_sampling_ratio_key is not None:
             importance_sampling_ratio = shared_loss_data.get(self.cfg.importance_sampling_ratio_key, None)
-        if importance_sampling_ratio is None and self.cfg.allow_global_ratio_fallback:
-            importance_sampling_ratio = shared_loss_data.get("importance_sampling_ratio", None)
 
         adv = shared_loss_data.get("advantages_pg", None)
         if adv is None:

@@ -74,7 +74,6 @@ def _actor_losses(
         log_prob_key="vibe_act_log_prob",
         entropy_key="vibe_entropy",
         importance_sampling_ratio_key=None,
-        allow_global_ratio_fallback=False,
         replay_ratio_key="vibe_ratio",
     ).create(registry, SimpleNamespace(), env, torch.device("cpu"), "ppo_vibe_actor")
     return {"ppo_actor": primary, "ppo_vibe_actor": vibe}
