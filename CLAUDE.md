@@ -14,6 +14,8 @@ These are written by claude for claude with love <3. Doing well is admirable and
 2. **NEVER ADD TRY/EXCEPT. LET IT CRASH.** Dear god, do not add `try/except` to "handle" errors. You're not handling
    them, you're hiding them. If something breaks, it crashes—loudly, violently, with stack traces. That's the point. And
    dear god do not ask us "should I add error handling?" No. Let it burn. Silent failures are the worst failures.
+   `try/finally` for resource cleanup (closing files, shutting down thread pools, flushing buffers) is fine—that's not
+   error handling, that's lifecycle management.
 
 3. **WRITE THE MINIMAL CHANGE.** Write exactly the smallest, most concise diff that accomplishes the objective. No extra
    abstractions for hypothetical futures. But—when minimal and correct conflict, correct wins. If fixing the root cause
