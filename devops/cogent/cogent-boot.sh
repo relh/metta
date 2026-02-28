@@ -17,48 +17,30 @@ if ! command -v aws &> /dev/null; then
   rm -rf /tmp/aws /tmp/awscliv2.zip
 fi
 
-# Node.js 22 + Claude Code
+# Node.js 22 + Claude Code + Codex CLI
 curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt-get install -y -qq nodejs
-npm install -g @anthropic-ai/claude-code
+npm install -g @anthropic-ai/claude-code @openai/codex
 
-# --- Pull secrets from Secrets Manager ---
+# SSM agent (for keyless SSH via AWS Session Manager)
+if ! snap list amazon-ssm-agent &> /dev/null; then
+  snap install amazon-ssm-agent --classic
+fi
+systemctl enable snap.amazon-ssm-agent.amazon-ssm-agent
+systemctl start snap.amazon-ssm-agent.amazon-ssm-agent
+
+# --- Pull boot-time secrets from Secrets Manager ---
+# Runtime secrets are fetched on-demand by credentials.py — nothing persisted to disk.
 
 REGION="us-east-1"
 get_secret() { aws secretsmanager get-secret-value --secret-id "$1" --query SecretString --output text --region "$REGION"; }
 get_secret_optional() { aws secretsmanager get-secret-value --secret-id "$1" --query SecretString --output text --region "$REGION" 2> /dev/null || echo ""; }
 
-ANTHROPIC_API_KEY=$(get_secret "anthropic/agent-api-key")
 OPENAI_API_KEY=$(get_secret_optional "openai/agent-api-key")
-WANDB_API_KEY=$(get_secret "wandb/api-key")
-DISCORD_WEBHOOK_URL=$(get_secret_optional "discord/agent-webhook-url")
-GITHUB_APP_ID=$(get_secret "github/agent-app-id")
-GITHUB_APP_PRIVATE_KEY=$(get_secret "github/agent-app-private-key")
-
-mkdir -p /home/ubuntu/.config/metta
-cat > /home/ubuntu/.config/metta/credentials.sh << CRED
-export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
-export OPENAI_API_KEY="${OPENAI_API_KEY}"
-export WANDB_API_KEY="${WANDB_API_KEY}"
-export DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL}"
-export AGENT_GITHUB_APP_ID="${GITHUB_APP_ID}"
-export AGENT_GITHUB_APP_PRIVATE_KEY="${GITHUB_APP_PRIVATE_KEY}"
-CRED
-chmod 600 /home/ubuntu/.config/metta/credentials.sh
-
-# --- WandB netrc ---
-
-cat > /home/ubuntu/.netrc << NETRC
-machine api.wandb.ai
-login user
-password ${WANDB_API_KEY}
-NETRC
-chmod 600 /home/ubuntu/.netrc
-chown ubuntu:ubuntu /home/ubuntu/.netrc
 
 # --- Generate GitHub App installation token ---
 
-pip3 install --quiet PyJWT cryptography
+pip3 install --quiet --break-system-packages --ignore-installed PyJWT cryptography pydantic
 
 GITHUB_TOKEN=$(
   python3 << 'PYEOF'
@@ -76,7 +58,7 @@ pem = subprocess.check_output(
     text=True).strip()
 
 now = int(time.time())
-payload = {"iat": now - 60, "exp": now + 600, "iss": int(app_id)}
+payload = {"iat": now - 60, "exp": now + 600, "iss": app_id}
 encoded = jwt.encode(payload, pem, algorithm="RS256")
 
 req = urllib.request.Request("https://api.github.com/app/installations",
@@ -92,35 +74,63 @@ print(token)
 PYEOF
 )
 
-# --- Configure git credentials with the token ---
+# --- Git credential helper (serves token from GITHUB_TOKEN env var, nothing on disk) ---
 
-git config --global credential.helper store
-echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > /root/.git-credentials
-chmod 600 /root/.git-credentials
+mkdir -p /home/ubuntu/.agent
+cat > /home/ubuntu/.agent/git-credential-helper << 'HELPER'
+#!/bin/bash
+if [ "$1" = "get" ]; then
+  while IFS= read -r line && [ -n "$line" ]; do :; done
+  echo "username=x-access-token"
+  echo "password=$GITHUB_TOKEN"
+fi
+HELPER
+chmod +x /home/ubuntu/.agent/git-credential-helper
+
+git config --global credential.helper /home/ubuntu/.agent/git-credential-helper
+export GITHUB_TOKEN
 
 # --- Clone repos (full history, needed for branch operations) ---
 
 git clone https://github.com/Metta-AI/metta.git /home/ubuntu/metta
 git clone https://github.com/Metta-AI/cogents.git /home/ubuntu/cogents
 
-# Move git credentials to ubuntu user (root was needed for clone)
-mv /root/.git-credentials /home/ubuntu/.git-credentials
-chown ubuntu:ubuntu /home/ubuntu/.git-credentials
-su - ubuntu -c "git config --global credential.helper store"
+# --- Git config for ubuntu user ---
+
+su - ubuntu -c "git config --global credential.helper /home/ubuntu/.agent/git-credential-helper"
 
 # --- Git identity ---
 
 su - ubuntu -c 'git config --global user.name "softmax-cogent[bot]"'
 su - ubuntu -c 'git config --global user.email "softmax-cogent[bot]@users.noreply.github.com"'
 
-# --- Bashrc: source credentials, cd to metta ---
+# --- Bashrc: load-secrets helper for interactive sessions, cd to metta ---
 
 cat >> /home/ubuntu/.bashrc << 'BASHRC'
-if [ -f ~/.config/metta/credentials.sh ]; then
-  source ~/.config/metta/credentials.sh
-fi
+load-secrets() { eval "$(python3 /home/ubuntu/metta/devops/cogent/credentials.py --export)"; }
 cd /home/ubuntu/metta
 BASHRC
+
+# --- Bedrock configuration (uses instance IAM role, no API key needed) ---
+
+cat >> /home/ubuntu/.bashrc << 'BEDROCK'
+export CLAUDE_CODE_USE_BEDROCK=1
+export AWS_REGION=us-east-1
+BEDROCK
+
+# --- Crontab: poller runs every minute with Bedrock env vars ---
+
+su - ubuntu -c 'crontab -' << 'CRON'
+CLAUDE_CODE_USE_BEDROCK=1
+AWS_REGION=us-east-1
+* * * * * /usr/bin/python3 /home/ubuntu/cron_poller.py >> /home/ubuntu/.agent/logs/poller.log 2>&1
+CRON
+
+# --- Codex CLI auth ---
+
+if [ -n "${OPENAI_API_KEY}" ]; then
+  su - ubuntu -c 'codex login --with-api-key' <<< "${OPENAI_API_KEY}"
+fi
 
 # --- Agent log directory ---
 
@@ -128,6 +138,7 @@ mkdir -p /home/ubuntu/.agent/logs
 
 # --- Fix ownership ---
 
+mkdir -p /home/ubuntu/.config
 chown -R ubuntu:ubuntu /home/ubuntu/.config
 chown -R ubuntu:ubuntu /home/ubuntu/metta
 chown -R ubuntu:ubuntu /home/ubuntu/cogents

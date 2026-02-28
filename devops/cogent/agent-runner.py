@@ -1,56 +1,37 @@
 #!/usr/bin/env python3
-"""Cogent agent runner — executes a skill or prompt via Claude Code on a target branch."""
+"""Cogent agent runner — executes a skill or prompt via an AI agent CLI on a target branch.
+
+Each run creates isolated git worktrees for both repos so multiple runs can
+execute concurrently on different branches without interfering with each other.
+Worktrees are cleaned up in a finally block, and stale worktrees from crashed
+runs are pruned at startup.
+"""
 
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 import urllib.request
+import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
 
 import jwt
+from credentials import load_credentials
 
 METTA_DIR = Path("/home/ubuntu/metta")
 COGENTS_DIR = Path("/home/ubuntu/cogents")
-PROMPT_DIR = COGENTS_DIR / "prompts"
-CREDENTIALS_FILE = Path.home() / ".config/metta/credentials.sh"
+WORKTREE_BASE = Path("/home/ubuntu/.agent/worktrees")
 LOG_DIR = Path.home() / ".agent/logs"
 DEFAULT_TIMEOUT_MIN = 60
-DEFAULT_COGAMES_POLICY = "metta://policy/role_py"
-DEFAULT_COGAMES_SEASON = "beta-cvc"
-ResearcherProfile = Literal["experienced", "neophyte"]
-
-
-CREDENTIAL_KEYS = [
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "WANDB_API_KEY",
-    "DISCORD_WEBHOOK_URL",
-    "AGENT_GITHUB_APP_ID",
-    "AGENT_GITHUB_APP_PRIVATE_KEY",
-]
-
-
-def load_credentials():
-    """Source credentials.sh and load specific env vars (preserves multiline values)."""
-    script = f"source {CREDENTIALS_FILE}\n"
-    for key in CREDENTIAL_KEYS:
-        script += f'printf "%s\\0" "${{{key}}}"\n'
-
-    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
-    values = result.stdout.split("\0")
-    for key, value in zip(CREDENTIAL_KEYS, values, strict=False):
-        if value:
-            os.environ[key] = value
 
 
 def generate_github_token() -> str:
     """Generate a short-lived GitHub App installation token."""
-    app_id = int(os.environ["AGENT_GITHUB_APP_ID"])
+    app_id = os.environ["AGENT_GITHUB_APP_ID"]
     private_key = os.environ["AGENT_GITHUB_APP_PRIVATE_KEY"]
 
     now = int(time.time())
@@ -75,152 +56,192 @@ def generate_github_token() -> str:
 
 
 def configure_git(token: str):
-    """Write token to git credential store."""
-    cred_path = Path.home() / ".git-credentials"
-    cred_path.write_text(f"https://x-access-token:{token}@github.com\n")
-    cred_path.chmod(0o600)
-    subprocess.run(["git", "config", "--global", "credential.helper", "store"], check=True)
+    """Set GITHUB_TOKEN env var for the credential helper (no secrets written to disk)."""
+    os.environ["GITHUB_TOKEN"] = token
 
 
-def checkout_repo(repo_dir: Path, branch: str, fallback_to_main: bool = False):
-    """Fetch and checkout a branch. If fallback_to_main, use main when branch doesn't exist."""
-    subprocess.run(["git", "fetch", "--all", "--prune"], cwd=repo_dir, check=True)
-
-    if fallback_to_main:
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", f"origin/{branch}"],
-            cwd=repo_dir,
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            branch = "main"
-
-    subprocess.run(["git", "checkout", branch], cwd=repo_dir, check=True)
-    subprocess.run(["git", "pull", "--ff-only"], cwd=repo_dir, check=True)
+# ---------------------------------------------------------------------------
+# Worktree management
+# ---------------------------------------------------------------------------
 
 
-def read_content(skill: str | None, prompt: str | None) -> tuple[str, str]:
-    """Read skill or prompt content. Returns (content, label).
+def _rmtree_force(path: Path):
+    """Remove a directory tree, handling read-only dirs (e.g. Bazel output)."""
 
-    Skills and prompts are both read from the cogents repo.
+    def _on_error(func, fpath, _exc_info):
+        p = Path(fpath)
+        # For scandir/listdir failures, the dir itself needs +rx.
+        # For unlink/rmdir failures, the parent needs +w.
+        if p.is_dir():
+            p.chmod(p.stat().st_mode | 0o700)
+        p.parent.chmod(p.parent.stat().st_mode | 0o700)
+        func(fpath)
+
+    shutil.rmtree(path, onerror=_on_error)
+
+
+def prune_worktrees():
+    """Remove stale worktrees from crashed runs. Safe to call concurrently."""
+    for repo_dir in (METTA_DIR, COGENTS_DIR):
+        subprocess.run(["git", "worktree", "prune"], cwd=repo_dir, capture_output=True)
+
+    if not WORKTREE_BASE.exists():
+        return
+    for entry in WORKTREE_BASE.iterdir():
+        if not entry.is_dir():
+            continue
+        pid_file = entry / ".cogent_pid"
+        if not pid_file.exists():
+            _rmtree_force(entry)
+            continue
+        pid = int(pid_file.read_text().strip())
+        if not _pid_alive(pid):
+            _rmtree_force(entry)
+
+
+def _pid_alive(pid: int) -> bool:
+    """Check if a process is running (UNIX only)."""
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def resolve_branch(repo_dir: Path, branch: str) -> str:
+    """Resolve branch to a remote ref, returning 'main' as fallback for cogents."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", f"origin/{branch}"],
+        cwd=repo_dir,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return "main"
+    return branch
+
+
+def create_worktree(repo_dir: Path, branch: str, run_dir: Path, name: str) -> Path:
+    """Create a git worktree for a branch. Returns the worktree path."""
+    wt_path = run_dir / name
+    ref = f"origin/{branch}"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(wt_path), ref],
+        cwd=repo_dir,
+        check=True,
+        capture_output=True,
+    )
+    return wt_path
+
+
+def remove_worktree(repo_dir: Path, wt_path: Path):
+    """Remove a worktree and its directory."""
+    subprocess.run(
+        ["git", "worktree", "remove", "--force", str(wt_path)],
+        cwd=repo_dir,
+        capture_output=True,
+    )
+    if wt_path.exists():
+        _rmtree_force(wt_path)
+
+
+# ---------------------------------------------------------------------------
+# Content reading
+# ---------------------------------------------------------------------------
+
+
+def read_content(
+    skill: str | None, prompt: str | None, prompt_text: str | None, cogents_wt: Path, metta_wt: Path
+) -> tuple[str, str]:
+    """Read skill and/or prompt content. Returns (content, label).
+
+    Skills are read from the cogents worktree. Prompts are read from the metta
+    worktree (branch-specific). Both can be provided together — skill content
+    comes first, prompt content is appended as additional context.
     """
+    parts: list[str] = []
+    label_parts: list[str] = []
+
     if skill:
-        path = COGENTS_DIR / "skills" / skill / "SKILL.md"
+        path = cogents_wt / "skills" / skill / "SKILL.md"
         if not path.exists():
             print(f"ERROR: Skill file not found: {path}", file=sys.stderr)
             sys.exit(1)
-        return path.read_text(), f"skill-{skill}"
+        parts.append(path.read_text())
+        label_parts.append(f"skill-{skill}")
 
-    path = PROMPT_DIR / prompt
-    if not path.exists():
-        print(f"ERROR: Prompt file not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    return path.read_text(), f"prompt-{Path(prompt).stem}"
+    if prompt:
+        prompt_dir = metta_wt / "devops" / "cogent" / "prompts"
+        path = prompt_dir / prompt
+        if not path.exists():
+            print(f"ERROR: Prompt file not found: {path}", file=sys.stderr)
+            sys.exit(1)
+        parts.append(path.read_text())
+        label_parts.append(f"prompt-{Path(prompt).stem}")
 
+    if prompt_text:
+        parts.append(prompt_text)
+        if not label_parts:
+            label_parts.append("inline-prompt")
 
-def build_competitor_command(
-    policy: str,
-    policy_name: str,
-    season: str,
-    output_root: str,
-    cogames_bin: str,
-    researcher_profile: ResearcherProfile,
-) -> list[str]:
-    return [
-        "uv",
-        "run",
-        "./packages/cogames-rl-researcher/scripts/run_ai_researcher_startup.py",
-        "--policy",
-        policy,
-        "--policy-name",
-        policy_name,
-        "--season",
-        season,
-        "--researcher-profile",
-        researcher_profile,
-        "--output-root",
-        output_root,
-        "--cogames-bin",
-        cogames_bin,
-    ]
+    return "\n\n".join(parts), "-".join(label_parts)
 
 
-def run_claude(content: str, timeout_min: int) -> subprocess.CompletedProcess:
-    """Invoke claude -p with the given content piped via stdin."""
+# ---------------------------------------------------------------------------
+# Agent invocation
+# ---------------------------------------------------------------------------
+
+AGENT_COMMANDS = {
+    "claude": ["claude", "-p", "--verbose", "--dangerously-skip-permissions"],
+    "codex": ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", "-"],
+}
+
+
+def run_agent(content: str, timeout_min: int, agent: str, cwd: Path) -> subprocess.CompletedProcess:
+    """Invoke the chosen agent CLI with the given content piped via stdin."""
+    cmd = AGENT_COMMANDS[agent]
     return subprocess.run(
-        ["claude", "-p", "--verbose"],
+        cmd,
         input=content,
-        cwd=METTA_DIR,
+        cwd=cwd,
         capture_output=True,
         text=True,
         timeout=timeout_min * 60,
     )
 
 
-def run_command(command: list[str], timeout_min: int) -> subprocess.CompletedProcess:
-    return subprocess.run(
-        command,
-        cwd=METTA_DIR,
-        capture_output=True,
-        text=True,
-        timeout=timeout_min * 60,
-    )
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
 def main():
     parser = argparse.ArgumentParser(description="Cogent agent runner")
-    parser.add_argument("--branch", default="main", help="Git branch to check out (default: main)")
+    parser.add_argument("--branch", required=True, help="Git branch to check out")
     parser.add_argument("--skill", help="Skill name (reads from cogents/skills/<name>/SKILL.md)")
-    parser.add_argument("--prompt", help="Prompt path (reads from cogents/prompts/<path>)")
-    parser.add_argument(
-        "--neophyte-competitor-bot",
-        action="store_true",
-        help="Run cogames researcher startup using the neophyte profile",
-    )
-    parser.add_argument(
-        "--experienced-competitor-bot",
-        action="store_true",
-        help="Run cogames researcher startup using the experienced profile",
-    )
-    parser.add_argument("--policy", default=DEFAULT_COGAMES_POLICY, help="Policy URI/path for researcher startup")
-    parser.add_argument("--policy-name", help="Policy name for researcher upload/submit")
-    parser.add_argument("--season", default=DEFAULT_COGAMES_SEASON, help="Tournament season")
-    parser.add_argument("--output-root", default="./artifacts/ai_researcher", help="Researcher artifact output root")
-    parser.add_argument("--cogames-bin", default="cogames", help="Cogames binary path for researcher startup")
+    parser.add_argument("--prompt", help="Prompt path (reads from devops/cogent/prompts/<path> in metta repo)")
+    parser.add_argument("--prompt-text", help="Raw prompt text (used by poller for inline branch job prompts)")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_MIN, help="Timeout in minutes (default: 60)")
+    parser.add_argument(
+        "--agent", choices=list(AGENT_COMMANDS), default="codex", help="Agent CLI to use (default: codex)"
+    )
+    parser.add_argument("--asana-task-id", help="Asana task GID — post results back as a comment on completion")
+    parser.add_argument("--create-branch", help="Create a new branch with this name off --branch before running")
     args = parser.parse_args()
 
-    competitor_profile: ResearcherProfile | None = None
-    if args.neophyte_competitor_bot and args.experienced_competitor_bot:
-        parser.error("Use only one of --neophyte-competitor-bot or --experienced-competitor-bot")
-    if args.neophyte_competitor_bot:
-        competitor_profile = "neophyte"
-    if args.experienced_competitor_bot:
-        competitor_profile = "experienced"
-
-    if competitor_profile is not None:
-        if args.skill or args.prompt:
-            parser.error("Competitor bot flags cannot be combined with --skill/--prompt")
-        if not args.policy_name:
-            parser.error("--policy-name is required with competitor bot flags")
-    else:
-        if not args.skill and not args.prompt:
-            parser.error("One of --skill or --prompt is required")
-        if args.skill and args.prompt:
-            parser.error("Only one of --skill or --prompt can be specified")
+    if not args.skill and not args.prompt and not args.prompt_text:
+        parser.error("At least one of --skill, --prompt, or --prompt-text is required")
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    WORKTREE_BASE.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    if competitor_profile is not None:
-        label = f"{competitor_profile}-competitor-bot"
-    elif args.skill:
-        label = f"skill-{args.skill}"
-    else:
-        label = f"prompt-{Path(args.prompt).stem}"
-    log_path = LOG_DIR / f"{timestamp}-{label}.log"
+    run_id = f"{timestamp}-{uuid.uuid4().hex[:8]}"
+    run_dir = WORKTREE_BASE / run_id
 
-    print(f"[cogent] branch={args.branch} {label} timeout={args.timeout}m")
-    print(f"[cogent] log: {log_path}")
+    print(f"[cogent] branch={args.branch} agent={args.agent} timeout={args.timeout}m run={run_id}")
+
+    prune_worktrees()
 
     load_credentials()
 
@@ -228,49 +249,98 @@ def main():
     token = generate_github_token()
     configure_git(token)
 
-    print(f"[cogent] Checking out {args.branch} on metta...")
-    checkout_repo(METTA_DIR, args.branch)
+    # Write PID file so stale worktree cleanup can detect crashed runs
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / ".cogent_pid").write_text(str(os.getpid()))
 
-    print(f"[cogent] Checking out {args.branch} on cogents (fallback to main)...")
-    checkout_repo(COGENTS_DIR, args.branch, fallback_to_main=True)
-
-    mode = "claude"
-    if competitor_profile is not None:
-        command = build_competitor_command(
-            policy=args.policy,
-            policy_name=args.policy_name,
-            season=args.season,
-            output_root=args.output_root,
-            cogames_bin=args.cogames_bin,
-            researcher_profile=competitor_profile,
-        )
-        print(f"[cogent] Running {competitor_profile} competitor bot: {' '.join(command)}")
-        run_target = run_command
-        run_args = (command, args.timeout)
-        mode = f"{competitor_profile} competitor bot"
-    else:
-        content, label = read_content(args.skill, args.prompt)
-        print(f"[cogent] Running claude ({len(content)} chars)...")
-        run_target = run_claude
-        run_args = (content, args.timeout)
+    metta_wt = None
+    cogents_wt = None
+    push_branch = args.branch
+    exit_code = 1
 
     try:
-        result = run_target(*run_args)
-    except subprocess.TimeoutExpired:
-        msg = f"TIMEOUT: {mode} exceeded {args.timeout} minute limit"
-        print(f"[cogent] {msg}", file=sys.stderr)
-        log_path.write_text(msg + "\n")
-        sys.exit(1)
+        print(f"[cogent] Creating metta worktree for {args.branch}...")
+        metta_wt = create_worktree(METTA_DIR, args.branch, run_dir, "metta")
 
-    output = (
-        f"=== STDOUT ===\n{result.stdout}\n\n"
-        f"=== STDERR ===\n{result.stderr}\n\n"
-        f"=== EXIT CODE: {result.returncode} ===\n"
-    )
-    log_path.write_text(output)
-    print(f"[cogent] Done. exit_code={result.returncode} log={log_path}")
+        if args.create_branch:
+            push_branch = args.create_branch
+            print(f"[cogent] Creating branch {push_branch}...")
+            subprocess.run(
+                ["git", "checkout", "-B", push_branch],
+                cwd=metta_wt,
+                check=True,
+                capture_output=True,
+            )
+        else:
+            push_branch = args.branch
+            subprocess.run(
+                ["git", "checkout", "-B", push_branch, f"origin/{args.branch}"],
+                cwd=metta_wt,
+                check=True,
+                capture_output=True,
+            )
 
-    sys.exit(result.returncode)
+        cogents_branch = resolve_branch(COGENTS_DIR, args.branch)
+        print(f"[cogent] Creating cogents worktree for {cogents_branch}...")
+        cogents_wt = create_worktree(COGENTS_DIR, cogents_branch, run_dir, "cogents")
+
+        content, label = read_content(args.skill, args.prompt, args.prompt_text, cogents_wt, metta_wt)
+        log_path = LOG_DIR / f"{timestamp}-{label}.log"
+
+        print(f"[cogent] Running {args.agent} ({len(content)} chars)...")
+        try:
+            result = run_agent(content, args.timeout, args.agent, cwd=metta_wt)
+        except subprocess.TimeoutExpired:
+            msg = f"TIMEOUT: {args.agent} exceeded {args.timeout} minute limit"
+            print(f"[cogent] {msg}", file=sys.stderr)
+            log_path.write_text(msg + "\n")
+            exit_code = 1
+
+        output = (
+            f"=== STDOUT ===\n{result.stdout}\n\n"
+            f"=== STDERR ===\n{result.stderr}\n\n"
+            f"=== EXIT CODE: {result.returncode} ===\n"
+        )
+        log_path.write_text(output)
+        print(f"[cogent] Done. exit_code={result.returncode} log={log_path}")
+
+        if args.asana_task_id:
+            print(f"===AGENT_RESULT_START===\n{result.stdout}\n===AGENT_RESULT_END===")
+
+        exit_code = result.returncode
+
+    finally:
+        if metta_wt:
+            has_commits = subprocess.run(
+                ["git", "log", f"origin/{args.branch}..HEAD", "--oneline"],
+                cwd=metta_wt,
+                capture_output=True,
+                text=True,
+            )
+            if has_commits.returncode == 0 and has_commits.stdout.strip():
+                print(f"[cogent] Pushing branch {push_branch}...")
+                push_result = subprocess.run(
+                    ["git", "push", "-u", "origin", push_branch],
+                    cwd=metta_wt,
+                    capture_output=True,
+                    text=True,
+                )
+                if push_result.returncode != 0:
+                    print(
+                        f"[cogent] ERROR: push failed for {push_branch}: {push_result.stderr.strip()}",
+                        file=sys.stderr,
+                    )
+                    exit_code = 1
+
+        print(f"[cogent] Cleaning up worktrees for {run_id}...")
+        if metta_wt:
+            remove_worktree(METTA_DIR, metta_wt)
+        if cogents_wt:
+            remove_worktree(COGENTS_DIR, cogents_wt)
+        if run_dir.exists():
+            _rmtree_force(run_dir)
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":
