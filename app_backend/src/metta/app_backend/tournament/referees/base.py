@@ -12,6 +12,7 @@ from sqlmodel import col, select
 from metta.app_backend.models.episodes import EpisodePolicy
 from metta.app_backend.models.job_request import JobRequest
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, PoolPlayer
+from metta.app_backend.tournament.referees.envs import GameEnvGenerator
 from metta.app_backend.tournament.referees.leaderboard_rows import group_match_rows
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
@@ -104,6 +105,7 @@ class RefereeBase(ABC):
     description: str = ""
     env_name: str = ""
     num_agents: int | None = None
+    game: GameEnvGenerator | None = None
     scorer: Scorer = WeightedScorer()
 
     @abstractmethod

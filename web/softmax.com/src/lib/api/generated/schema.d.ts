@@ -1268,6 +1268,12 @@ export interface components {
        */
       summary: string;
       /**
+       * Game Description
+       * @description Markdown description of the game and its rules
+       * @default
+       */
+      game_description: string;
+      /**
        * Entry Pool
        * @description Name of the pool where new policies are submitted
        */
@@ -1373,6 +1379,12 @@ export interface components {
        * @description Human-readable description of the season
        */
       summary: string;
+      /**
+       * Game Description
+       * @description Markdown description of the game and its rules
+       * @default
+       */
+      game_description: string;
       /**
        * Entry Pool
        * @description Name of the pool where new policies are submitted

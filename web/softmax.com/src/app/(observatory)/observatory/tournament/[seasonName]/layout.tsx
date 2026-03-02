@@ -4,6 +4,7 @@ import { FC, Suspense } from "react";
 import { AutoRefresh } from "@observatory/components/AutoRefresh";
 import { type LinkTab, LinkTabs } from "@observatory/components/LinkTabs";
 import { Spinner } from "@observatory/components/Spinner";
+import { GameDescription } from "@observatory/components/tournament/GameDescription";
 import { TournamentDescriptionMeta } from "@observatory/components/tournament/TournamentDescriptionMeta";
 import type { SeasonDetail } from "@observatory/lib/api";
 import { ServerDebugDrain } from "@observatory/lib/debug/ServerDebugDrain";
@@ -89,6 +90,9 @@ const SeasonDetails: FC<{ seasonName: string }> = async ({ seasonName }) => {
         )}
         <TournamentDescriptionMeta season={season} />
       </div>
+      {season.game_description && (
+        <GameDescription description={season.game_description} />
+      )}
     </div>
   );
 };

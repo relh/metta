@@ -207,6 +207,13 @@ class UpdateCurrentSeasonCompatVersionRequest(BaseModel):
     compat_version: str = Field(min_length=1, description="Compatibility version for the current canonical season")
 
 
+def _extract_game_description(commissioner: CommissionerBase, season_version: int) -> str:
+    for referee in commissioner.get_referees(season_version).values():
+        if referee.game is not None and referee.game.game_description:
+            return referee.game.game_description
+    return ""
+
+
 class SeasonSummary(BaseModel):
     id: UUID = Field(description="Unique season identifier")
     name: str = Field(description="Short name of the season")
@@ -214,6 +221,7 @@ class SeasonSummary(BaseModel):
     version: int = Field(description="Season version number")
     canonical: bool = Field(description="Whether this is the canonical (active) version")
     summary: str = Field(description="Human-readable description of the season")
+    game_description: str = Field(default="", description="Markdown description of the game and its rules")
     entry_pool: str | None = Field(default=None, description="Name of the pool where new policies are submitted")
     leaderboard_pool: str | None = Field(default=None, description="Name of the pool used for the leaderboard")
     is_default: bool = Field(description="Whether this is the default season")
@@ -258,6 +266,7 @@ class SeasonSummary(BaseModel):
             version=season.version,
             canonical=season.canonical,
             summary=desc.summary,
+            game_description=_extract_game_description(commissioner, season.version),
             entry_pool=commissioner.entry_pool,
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,
@@ -314,6 +323,7 @@ class SeasonDetail(SeasonSummary):
             version=season.version,
             canonical=season.canonical,
             summary=desc.summary,
+            game_description=_extract_game_description(commissioner, season.version),
             entry_pool=commissioner.entry_pool,
             leaderboard_pool=commissioner.leaderboard_pool,
             is_default=season_name == DEFAULT_SEASON,

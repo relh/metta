@@ -47,6 +47,7 @@ def build_pending_team_match_schedule(
 
 
 class TeamStageReferee(RefereeBase):
+    game: GameEnvGenerator
     description: str = "Team evaluation rounds"
 
     def __init__(

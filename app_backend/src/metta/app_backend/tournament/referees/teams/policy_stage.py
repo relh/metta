@@ -29,6 +29,7 @@ def _generate_combos(
 
 
 class PolicyStageReferee(RefereeBase):
+    game: GameEnvGenerator
     description: str = "Exhaustive team evaluation: all combinations of given team size"
 
     def __init__(
