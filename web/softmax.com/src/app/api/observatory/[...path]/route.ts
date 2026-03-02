@@ -18,11 +18,15 @@ async function proxy(req: NextRequest, method: string, path: string) {
     headers["Content-Type"] = contentType;
   }
 
+  // Buffer request bodies before proxying. Forwarding the ReadableStream
+  // directly requires `duplex: "half"` in Node fetch and throws at runtime.
+  const body = method === "POST" ? await req.arrayBuffer() : undefined;
+
   const response = await fetch(url, {
     method,
     redirect: "follow",
     headers,
-    body: method === "POST" ? req.body : undefined,
+    body,
     cache: "no-store",
   });
 
