@@ -44,10 +44,12 @@ resource "aws_iam_role_policy" "eks_access" {
   })
 }
 
-# Grant the cross-account role admin access to the EKS cluster
+# Grant the cross-account role admin access to the EKS cluster (namespace-scoped for jobs)
+# and add it to the node-reader group for cluster-scoped node label reads.
 resource "aws_eks_access_entry" "primary_account" {
-  cluster_name  = module.eks.cluster_name
-  principal_arn = aws_iam_role.primary_account_eks_access.arn
+  cluster_name      = module.eks.cluster_name
+  principal_arn     = aws_iam_role.primary_account_eks_access.arn
+  kubernetes_groups = ["primary-account-node-reader"]
 }
 
 resource "aws_eks_access_policy_association" "primary_account" {
@@ -58,6 +60,41 @@ resource "aws_eks_access_policy_association" "primary_account" {
   access_scope {
     type       = "namespace"
     namespaces = [var.jobs_namespace]
+  }
+}
+
+# Minimal ClusterRole: only get/list/watch on nodes (cluster-scoped resource).
+# This lets the watcher read node labels to capture instance_type/capacity_type
+# without granting any broader cluster-wide read (e.g. secrets).
+resource "kubernetes_cluster_role" "node_reader" {
+  metadata {
+    name = "primary-account-node-reader"
+  }
+
+  rule {
+    api_groups = [""]
+    resources  = ["nodes"]
+    verbs      = ["get", "list", "watch"]
+  }
+
+  depends_on = [aws_eks_access_entry.primary_account]
+}
+
+resource "kubernetes_cluster_role_binding" "primary_account_node_reader" {
+  metadata {
+    name = "primary-account-node-reader"
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.node_reader.metadata[0].name
+  }
+
+  subject {
+    kind      = "Group"
+    name      = "primary-account-node-reader"
+    api_group = "rbac.authorization.k8s.io"
   }
 }
 

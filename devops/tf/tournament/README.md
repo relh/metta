@@ -19,7 +19,8 @@ primary infrastructure. This provides isolation for untrusted user-submitted cod
 The primary account (751442549699) accesses this cluster via:
 
 1. **IAM Role**: `PrimaryAccountEKSAccess` can be assumed by primary account
-2. **EKS Access Entry**: Role has admin access scoped to `jobs` namespace
+2. **EKS Access Entry**: Role has admin access scoped to `jobs` namespace (for job dispatch/watch) plus a custom
+   `ClusterRole` granting `get/list/watch` on `nodes` only (for reading node labels to capture instance type)
 
 Dispatcher and Watcher use this pattern:
 
