@@ -1157,12 +1157,12 @@ def create_tournament_router() -> APIRouter:
     @router.post("/seasons/{season_name}/submissions")
     @timed_http_handler
     async def submit_policy(
-        season_name: str, request: SubmitRequest, _user: ExternalUser, session: AsyncSession = Depends(get_session)
+        season_name: str, request: SubmitRequest, user: ExternalUser, session: AsyncSession = Depends(get_session)
     ) -> SubmitResponse:
         _, version = parse_season_ref(season_name)
         if version is not None:
             raise HTTPException(status_code=400, detail="Submitting to a season version is not supported")
-        _, season, commissioner = await _resolve_season_and_commissioner_or_404(session, season_name)
+        _, season, commissioner = await _resolve_season_and_commissioner_or_404(session, season_name, user=user)
         existing = (
             await session.execute(
                 select(PoolPlayer)
