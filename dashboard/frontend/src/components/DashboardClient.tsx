@@ -537,6 +537,40 @@ function kpiSeverity(
   return 'warn'
 }
 
+function kpiSeverityBandDetail(
+  value: number | null,
+  goodThreshold: number,
+  badThreshold: number,
+  higherIsBetter: boolean,
+  formatThreshold: (threshold: number) => string
+): string {
+  if (value === null) return 'threshold context unavailable (missing value)'
+  const good = formatThreshold(goodThreshold)
+  const bad = formatThreshold(badThreshold)
+  if (higherIsBetter) {
+    if (value >= goodThreshold) return `green: at or above ${good}`
+    if (value <= badThreshold) return `red: at or below ${bad}`
+    return `yellow: between ${bad} and ${good}`
+  }
+  if (value <= goodThreshold) return `green: at or below ${good}`
+  if (value >= badThreshold) return `red: at or above ${bad}`
+  return `yellow: between ${good} and ${bad}`
+}
+
+export function percentileRank(value: number | null, sample: number[]): number | null {
+  if (value === null || sample.length === 0) return null
+  let lessOrEqual = 0
+  let finiteCount = 0
+  for (const entry of sample) {
+    if (!Number.isFinite(entry)) continue
+    finiteCount += 1
+    if (entry <= value) lessOrEqual += 1
+  }
+  if (finiteCount === 0) return null
+  if (lessOrEqual === 0) return 0
+  return (lessOrEqual / finiteCount) * 100
+}
+
 function severityStyle(severity: 'good' | 'warn' | 'bad'): CSSProperties {
   if (severity === 'good') {
     return {
@@ -900,11 +934,13 @@ function KPIStatCard({
   label,
   value,
   detail,
+  detailSecondary,
   severity,
 }: {
   label: string
   value: string
   detail?: string
+  detailSecondary?: string
   severity: 'good' | 'warn' | 'bad'
 }) {
   const longValue = value.length > 16
@@ -944,13 +980,28 @@ function KPIStatCard({
             margin: '6px 0 0',
             fontSize: 12,
             color: 'var(--kpi-detail-ink)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
+            lineHeight: 1.3,
           }}
           title={detail}
         >
           {detail}
+        </p>
+      )}
+      {detailSecondary && (
+        <p
+          style={{
+            margin: '2px 0 0',
+            fontSize: 12,
+            color: 'var(--kpi-detail-ink)',
+            whiteSpace: 'normal',
+            overflowWrap: 'anywhere',
+            lineHeight: 1.3,
+          }}
+          title={detailSecondary}
+        >
+          {detailSecondary}
         </p>
       )}
     </article>
@@ -1149,20 +1200,14 @@ export function DashboardClient() {
   const statsInventory = useMemo(() => asStatsInventory(data?.derived?.stats_inventory), [data])
   const actionSummary = useMemo(() => asActions(data?.derived?.actions), [data])
   const orchestration = useMemo(() => asOrchestration(data?.derived?.orchestration), [data])
-  const instrumentationTemplateShort = useMemo(() => {
-    const template = String(instrumentation?.template_version ?? '-')
-    if (!template || template === '-') return '-'
-    const versionMatch = template.match(/(?:^|-)v(\d+)$/i)
-    if (versionMatch) return `v${versionMatch[1]}`
-    return template.length > 14 ? `${template.slice(0, 11)}...` : template
-  }, [instrumentation?.template_version])
   const unsupportedIssues = useMemo(() => unsupported?.issues ?? [], [unsupported])
   const unsupportedIssueCount = unsupportedIssues.length
-  const unsupportedMaxAffectedCount = useMemo(
-    () => unsupportedIssues.reduce((max, issue) => Math.max(max, toFiniteNumber(issue.affected_count) ?? 0), 0),
+  const unsupportedErrorCount = useMemo(
+    () => unsupportedIssues.filter((issue) => String(issue.severity ?? '').toLowerCase() === 'error').length,
     [unsupportedIssues]
   )
   const instrumentationChecks = useMemo(() => instrumentation?.checks ?? [], [instrumentation])
+  const instrumentationKnown = instrumentation !== null
   const instrumentationFailCount = useMemo(
     () =>
       instrumentationChecks.filter((check) => {
@@ -1171,6 +1216,25 @@ export function DashboardClient() {
       }).length,
     [instrumentationChecks]
   )
+  const dataQualitySeverity: 'good' | 'warn' | 'bad' =
+    unsupportedErrorCount > 0
+      ? 'bad'
+      : !instrumentationKnown || unsupportedIssueCount > 0 || instrumentationFailCount > 0 || instrumentation?.compliant !== true
+        ? 'warn'
+        : 'good'
+  const dataQualityLabel = dataQualitySeverity === 'good' ? 'clean' : dataQualitySeverity === 'bad' ? 'blocked' : 'partial'
+  const dataQualityDetail = instrumentationKnown
+    ? `${unsupportedIssueCount} issues · ${instrumentationFailCount}/${instrumentationChecks.length} checks`
+    : `${unsupportedIssueCount} issues · instrumentation missing`
+  const dataQualityDetailSecondary =
+    !instrumentationKnown
+      ? 'instrumentation summary missing from payload'
+      : dataQualitySeverity === 'good'
+      ? 'all required quality gates are passing'
+      : dataQualitySeverity === 'bad'
+        ? 'blocking quality issues detected'
+        : 'quality gaps may skew KPI interpretation'
+  const showExtendedOverviewKpis = instrumentation?.compliant === true
 
   const opponentRows = useMemo<OpponentSummaryRow[]>(() => {
     const metrics = data?.derived?.opponent_metrics
@@ -1901,13 +1965,70 @@ export function DashboardClient() {
 
   const kpis = data?.derived?.kpis
   const avgReward = toFiniteNumber(kpis?.avg_reward ?? kpis?.mean_reward)
-  const moveEfficiency = toFiniteNumber(kpis?.move_efficiency)
   const actionSuccess = toFiniteNumber(kpis?.action_success_rate)
   const resourceRetention = toFiniteNumber(kpis?.resource_retention)
   const freezeVulnerability = toFiniteNumber(kpis?.freeze_vulnerability)
   const junctionControl = toFiniteNumber(kpis?.junction_control_rate)
   const noopRate = toFiniteNumber(kpis?.noop_rate)
   const rewardConsistency = toFiniteNumber(kpis?.reward_consistency)
+  const avgRewardSeverity = kpiSeverity(avgReward, 2.0, 0.5)
+  const avgRewardBandDetail = kpiSeverityBandDetail(avgReward, 2.0, 0.5, true, (threshold) => formatNumber(threshold, 2))
+  const completedRewardSample = useMemo(
+    () =>
+      completedEpisodes
+        .map((episode) => toFiniteNumber(episode.reward ?? episode.avg_reward))
+        .filter((reward): reward is number => reward !== null),
+    [completedEpisodes]
+  )
+  const parseRewardPercentile = useMemo(() => {
+    const rows = rolePercentiles?.rows
+    if (!rows || rows.length === 0) return null
+    const percentiles: number[] = []
+    for (const row of rows) {
+      if (!row || typeof row !== 'object') continue
+      const details = (row as Record<string, unknown>).details
+      if (!details || typeof details !== 'object' || Array.isArray(details)) continue
+      const metrics = (details as Record<string, unknown>).metrics
+      if (!metrics || typeof metrics !== 'object' || Array.isArray(metrics)) continue
+      const rewardMetric = (metrics as Record<string, unknown>).reward
+      if (!rewardMetric || typeof rewardMetric !== 'object' || Array.isArray(rewardMetric)) continue
+      const percentile = toFiniteNumber((rewardMetric as Record<string, unknown>).percentile)
+      if (percentile !== null) percentiles.push(percentile)
+    }
+    if (percentiles.length === 0) return null
+    return percentiles.reduce((sum, value) => sum + value, 0) / percentiles.length
+  }, [rolePercentiles])
+  const avgRewardPercentile = useMemo(() => percentileRank(avgReward, completedRewardSample), [avgReward, completedRewardSample])
+  const avgRewardPercentileDetail =
+    parseRewardPercentile !== null && avgRewardPercentile !== null
+      ? `pool reward percentile: P${formatNumber(parseRewardPercentile, 0)} (sample P${formatNumber(avgRewardPercentile, 0)})`
+      : parseRewardPercentile !== null
+        ? `pool reward percentile: P${formatNumber(parseRewardPercentile, 0)}`
+        : avgRewardPercentile !== null
+          ? `sample reward percentile: P${formatNumber(avgRewardPercentile, 0)}`
+          : 'reward percentile unavailable'
+  const actionSuccessSeverity = kpiSeverity(actionSuccess, 0.9, 0.7)
+  const actionSuccessBandDetail = kpiSeverityBandDetail(actionSuccess, 0.9, 0.7, true, (threshold) =>
+    formatPercent(threshold, 0)
+  )
+  const junctionControlSeverity = kpiSeverity(junctionControl, 0.6, 0.2)
+  const junctionControlBandDetail = kpiSeverityBandDetail(junctionControl, 0.6, 0.2, true, (threshold) =>
+    formatPercent(threshold, 0)
+  )
+  const noopRateSeverity = kpiSeverity(noopRate, 0.1, 0.25, false)
+  const noopRateBandDetail = kpiSeverityBandDetail(noopRate, 0.1, 0.25, false, (threshold) => formatPercent(threshold, 0))
+  const resourceRetentionSeverity = kpiSeverity(resourceRetention, 0.5, 0.2)
+  const resourceRetentionBandDetail = kpiSeverityBandDetail(resourceRetention, 0.5, 0.2, true, (threshold) =>
+    formatPercent(threshold, 0)
+  )
+  const freezeVulnerabilitySeverity = kpiSeverity(freezeVulnerability, 0.05, 0.15, false)
+  const freezeVulnerabilityBandDetail = kpiSeverityBandDetail(freezeVulnerability, 0.05, 0.15, false, (threshold) =>
+    formatPercent(threshold, 1)
+  )
+  const rewardConsistencySeverity = kpiSeverity(rewardConsistency, 0.6, 0.2)
+  const rewardConsistencyBandDetail = kpiSeverityBandDetail(rewardConsistency, 0.6, 0.2, true, (threshold) =>
+    formatPercent(threshold, 0)
+  )
   const trainingFocus = deriveTrainingFocus(kpis)
   const completedWithReplayCount = completedEpisodes.filter((episode) => Boolean(episode.replay_url)).length
   const replayCoverage = completedEpisodes.length > 0 ? completedWithReplayCount / completedEpisodes.length : null
@@ -1945,24 +2066,6 @@ export function DashboardClient() {
   const capabilityStatusYes = capabilityStatuses.filter((status) => status.status === 'yes').length
   const capabilityStatusPartial = capabilityStatuses.filter((status) => status.status === 'partial').length
   const capabilityCoverage = capabilityStatusTotal > 0 ? capabilityStatusYes / capabilityStatusTotal : null
-  const outcomeVerdict = String(data?.derived?.outcome?.verdict ?? '').toLowerCase()
-  const outcomeSeverity: 'good' | 'warn' | 'bad' =
-    outcomeVerdict === 'success' || outcomeVerdict === 'pass'
-      ? 'good'
-      : outcomeVerdict === 'inconclusive'
-        ? 'warn'
-        : outcomeVerdict
-          ? 'bad'
-          : 'warn'
-  const trendDirection = String(trend?.direction ?? '').toLowerCase()
-  const trendDirectionSeverity: 'good' | 'warn' | 'bad' =
-    trendDirection === 'up' || trendDirection === 'improving' || trendDirection === 'positive'
-      ? 'good'
-      : trendDirection === 'flat' || trendDirection === 'insufficient'
-        ? 'warn'
-        : trendDirection
-          ? 'bad'
-          : 'warn'
   const autoTrainingCommand = useMemo(() => {
     const policyName = String(data?.policy?.name ?? 'policy')
       .toLowerCase()
@@ -2106,80 +2209,59 @@ export function DashboardClient() {
                 <KPIStatCard
                   label="Avg Reward"
                   value={formatNumber(avgReward, 2)}
-                  severity={kpiSeverity(avgReward, 2.0, 0.5)}
-                />
-                <KPIStatCard
-                  label="Move Efficiency"
-                  value={formatPercent(moveEfficiency, 0)}
-                  severity={kpiSeverity(moveEfficiency, 0.8, 0.5)}
+                  detail={avgRewardBandDetail}
+                  detailSecondary={avgRewardPercentileDetail}
+                  severity={avgRewardSeverity}
                 />
                 <KPIStatCard
                   label="Action Success"
                   value={formatPercent(actionSuccess, 0)}
-                  severity={kpiSeverity(actionSuccess, 0.9, 0.7)}
+                  detail={actionSuccessBandDetail}
+                  severity={actionSuccessSeverity}
                 />
                 <KPIStatCard
                   label="Junction Control"
                   value={formatPercent(junctionControl, 0)}
-                  severity={kpiSeverity(junctionControl, 0.6, 0.2)}
-                />
-                <KPIStatCard
-                  label="Resource Retention"
-                  value={formatPercent(resourceRetention, 0)}
-                  severity={kpiSeverity(resourceRetention, 0.5, 0.2)}
-                />
-                <KPIStatCard
-                  label="Freeze Vulnerability"
-                  value={formatPercent(freezeVulnerability, 1)}
-                  severity={kpiSeverity(freezeVulnerability, 0.05, 0.15, false)}
+                  detail={junctionControlBandDetail}
+                  severity={junctionControlSeverity}
                 />
                 <KPIStatCard
                   label="Noop Rate"
                   value={formatPercent(noopRate, 1)}
-                  severity={kpiSeverity(noopRate, 0.1, 0.25, false)}
+                  detail={noopRateBandDetail}
+                  severity={noopRateSeverity}
                 />
                 <KPIStatCard
-                  label="Reward Consistency"
-                  value={formatPercent(rewardConsistency, 0)}
-                  severity={kpiSeverity(rewardConsistency, 0.6, 0.2)}
+                  label="Data Quality"
+                  value={dataQualityLabel}
+                  detail={dataQualityDetail}
+                  detailSecondary={dataQualityDetailSecondary}
+                  severity={dataQualitySeverity}
                 />
-                <KPIStatCard
-                  label="Outcome Verdict"
-                  value={String(data.derived?.outcome?.verdict ?? '-')}
-                  severity={outcomeSeverity}
-                />
-                <KPIStatCard
-                  label="Version Trend"
-                  value={String(trend?.direction ?? 'insufficient')}
-                  severity={trendDirectionSeverity}
-                />
-                <KPIStatCard
-                  label="Unsupported Issues"
-                  value={String(unsupportedIssueCount)}
-                  detail={
-                    unsupportedIssueCount > 0
-                      ? `max ${unsupportedMaxAffectedCount}/${episodes.length} episodes`
-                      : 'none'
-                  }
-                  severity={unsupportedIssueCount > 0 ? 'warn' : 'good'}
-                />
-                <KPIStatCard
-                  label="Instrumentation Score"
-                  value={formatPercent(toFiniteNumber(instrumentation?.score), 0)}
-                  severity={kpiSeverity(toFiniteNumber(instrumentation?.score), 0.85, 0.6)}
-                />
-                <KPIStatCard
-                  label="Check Failures"
-                  value={String(instrumentationFailCount)}
-                  detail={`${instrumentationChecks.length} checks`}
-                  severity={instrumentationFailCount > 0 ? 'warn' : 'good'}
-                />
-                <KPIStatCard
-                  label="Template"
-                  value={instrumentationTemplateShort}
-                  detail={instrumentation?.compliant ? 'compliant' : 'incomplete'}
-                  severity={instrumentation?.compliant ? 'good' : 'warn'}
-                />
+                {showExtendedOverviewKpis && (
+                  <KPIStatCard
+                    label="Resource Retention"
+                    value={formatPercent(resourceRetention, 0)}
+                    detail={resourceRetentionBandDetail}
+                    severity={resourceRetentionSeverity}
+                  />
+                )}
+                {showExtendedOverviewKpis && (
+                  <KPIStatCard
+                    label="Freeze Vulnerability"
+                    value={formatPercent(freezeVulnerability, 1)}
+                    detail={freezeVulnerabilityBandDetail}
+                    severity={freezeVulnerabilitySeverity}
+                  />
+                )}
+                {showExtendedOverviewKpis && (
+                  <KPIStatCard
+                    label="Reward Consistency"
+                    value={formatPercent(rewardConsistency, 0)}
+                    detail={rewardConsistencyBandDetail}
+                    severity={rewardConsistencySeverity}
+                  />
+                )}
               </section>
 
               <section className="grid" style={{ gap: 10 }}>

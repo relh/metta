@@ -13,10 +13,14 @@ from metta.app_backend.queries import episode_queries, policy_queries, role_perc
 DEFAULT_AGENT_METRICS = [
     (0, "miner.gained", 10.0),
     (1, "miner.gained", 10.0),
+    (0, "reward", 8.0),
+    (1, "reward", 8.0),
     (0, "junction.aligned_by_agent", 4.0),
     (1, "junction.aligned_by_agent", 4.0),
     (2, "miner.gained", 1.0),
     (3, "miner.gained", 1.0),
+    (2, "reward", 1.0),
+    (3, "reward", 1.0),
     (2, "junction.aligned_by_agent", 1.0),
     (3, "junction.aligned_by_agent", 1.0),
 ]
@@ -121,11 +125,14 @@ async def test_role_percentiles_get(test_client: TestClient) -> None:
     miner_row1 = _role_row(rows1, "miner")
     assert miner_row1["percentile"] == pytest.approx(100.0)
     assert miner_row1["details"]["metrics"]["miner.gained"]["avg"] == pytest.approx(10.0)
+    assert miner_row1["details"]["metrics"]["reward"]["percentile"] == pytest.approx(100.0)
+    assert miner_row1["details"]["metrics"]["reward"]["include_in_overall"] is False
 
     rows2 = test_client.get(f"/stats/roles/pools/{pool_id}/policy-versions/{pv2_id}").json()
     miner_row2 = _role_row(rows2, "miner")
     assert miner_row2["percentile"] == pytest.approx(0.0)
     assert miner_row2["details"]["metrics"]["miner.gained"]["avg"] == pytest.approx(1.0)
+    assert miner_row2["details"]["metrics"]["reward"]["percentile"] == pytest.approx(0.0)
 
 
 @pytest.mark.asyncio

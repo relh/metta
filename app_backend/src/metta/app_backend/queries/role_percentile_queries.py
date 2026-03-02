@@ -23,6 +23,7 @@ class RoleMetric:
     key: str
     source_names: tuple[str, ...]
     higher_is_better: bool
+    include_in_overall: bool = True
 
 
 @dataclass(frozen=True)
@@ -45,10 +46,12 @@ class RolePercentileRow:
 
 
 DEATH_SOURCE_NAMES = ("death",)
+REWARD_SOURCE_NAMES = ("reward",)
 
 ROLE_METRICS: dict[str, list[RoleMetric]] = {
     "miner": [
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=True),
+        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric("germanium.deposited", ("germanium.deposited", "germanium.lost"), higher_is_better=True),
         RoleMetric("silicon.deposited", ("silicon.deposited", "silicon.lost"), higher_is_better=True),
         RoleMetric("carbon.deposited", ("carbon.deposited", "carbon.lost"), higher_is_better=True),
@@ -61,6 +64,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
     ],
     "scout": [
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=True),
+        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric("cell.visited", ("cell.visited",), higher_is_better=True),
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
@@ -69,6 +73,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
     ],
     "scrambler": [
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=True),
+        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric(
             "junction.scrambled",
             ("junction.scrambled_by_agent", "junction.scrambled"),
@@ -82,6 +87,7 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
     ],
     "aligner": [
         RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=True),
+        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric(
             "junction.aligned",
             ("junction.aligned_by_agent", "junction.aligned"),
@@ -236,12 +242,14 @@ async def _compute_role_percentile_payloads(
                     "avg": float(row["avg_value"]),
                     "percentile": percentile,
                     "higher_is_better": metric.higher_is_better,
+                    "include_in_overall": metric.include_in_overall,
                     "samples": int(row["sample_count"]),
                     "source_names": list(metric.source_names),
                     "source_metrics": row["source_metrics"],
                 }
-                payload["percentile_sum"] += percentile
-                payload["percentile_count"] += 1
+                if metric.include_in_overall:
+                    payload["percentile_sum"] += percentile
+                    payload["percentile_count"] += 1
 
     role_rows: list[dict[str, Any]] = []
     for (pv_id, role), payload in role_payloads.items():
