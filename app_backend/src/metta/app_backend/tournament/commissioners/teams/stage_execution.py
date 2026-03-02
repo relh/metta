@@ -16,6 +16,7 @@ from metta.app_backend.tournament.commissioners.teams.config import (
     ScoreStage,
     TeamEvalStage,
     ThresholdElim,
+    TopKElim,
 )
 from metta.app_backend.tournament.commissioners.teams.db_helpers import TeamMembershipChangeRequest
 from metta.app_backend.tournament.commissioners.teams.sampling import sample_teams
@@ -57,6 +58,7 @@ class TeamStageExecutionMixin:
         output_pool_name: str,
         survivor_ids: set[UUID],
         failed_out_policy_ids: set[UUID],
+        demoted_ids: set[UUID] | None = None,
     ) -> list[MembershipChangeRequest]:
         changes = [
             MembershipChangeRequest(
@@ -79,6 +81,16 @@ class TeamStageExecutionMixin:
             )
             for policy_version_id in sorted(failed_out_policy_ids)
         )
+        if demoted_ids:
+            changes.extend(
+                MembershipChangeRequest(
+                    pool_name=output_pool_name,
+                    policy_version_id=policy_version_id,
+                    action=MembershipAction.remove,
+                    notes=f"Demoted from {output_pool_name}: no longer in top survivors from {input_pool_name}",
+                )
+                for policy_version_id in sorted(demoted_ids)
+            )
         return changes
 
     async def _schedule_with_referee(
@@ -174,6 +186,9 @@ class TeamStageExecutionMixin:
                         ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
                         cutoff = max(1, int(len(ranked) * (1 - fraction)))
                         survivors = {pv_id for pv_id, _ in ranked[:cutoff]}
+                    case TopKElim(max_policies=max_policies):
+                        ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
+                        survivors = {pv_id for pv_id, _ in ranked[:max_policies]}
 
         if failed_out_policy_ids:
             survivors -= failed_out_policy_ids
@@ -207,23 +222,26 @@ class TeamStageExecutionMixin:
 
         survivor_ids = {pp.policy_version_id for pp in current_players if pp.policy_version_id in survivors}
         new_survivor_ids = survivor_ids - existing_output_policy_ids
+        demoted_ids = existing_output_policy_ids - survivor_ids
         changes = self._build_policy_stage_membership_changes(
             input_pool_name=input_pool_name,
             output_pool_name=output_pool_name,
             survivor_ids=new_survivor_ids,
             failed_out_policy_ids=failed_out_policy_ids,
+            demoted_ids=demoted_ids,
         )
         await self._apply_membership_changes(changes)
 
-        changed = created_output_pool or bool(new_survivor_ids) or bool(failed_out_policy_ids)
+        changed = created_output_pool or bool(new_survivor_ids) or bool(failed_out_policy_ids) or bool(demoted_ids)
         if changed:
             logger.info(
-                "[%s] policy stage advanced: %s -> %s (%s survivors, %s newly promoted)",
+                "[%s] policy stage advanced: %s -> %s (%s survivors, %s newly promoted, %s demoted)",
                 self.season_name,
                 input_pool_name,
                 output_pool_name,
                 len(survivors),
                 len(new_survivor_ids),
+                len(demoted_ids),
             )
         return changed
 

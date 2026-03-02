@@ -1,13 +1,12 @@
 from metta.app_backend.tournament.commissioners.teams.beta import BetaTeamsCommissioner
 from metta.app_backend.tournament.commissioners.teams.config import (
-    FractionElim,
     GameEnvGenerator,
     PolicyEvalStage,
     SampleStage,
     ScoreStage,
     TeamEvalStage,
     TeamTournamentConfig,
-    ThresholdElim,
+    TopKElim,
 )
 
 
@@ -20,18 +19,23 @@ class BetaTeamsSmallCommissioner(BetaTeamsCommissioner):
             PolicyEvalStage(
                 display_name="Play-ins: one-player",
                 policies_per_team=1,
-                matches_per_combo=2,
+                matches_per_combo=5,
                 min_policies=8,
-                elim=ThresholdElim(min_score=0.01),
+                elim=TopKElim(max_policies=32),
             ),
             PolicyEvalStage(
                 display_name="Play-ins: two-player",
                 policies_per_team=2,
                 matches_per_combo=2,
                 min_policies=8,
-                elim=FractionElim(fraction=0.05),
+                elim=TopKElim(max_policies=16),
             ),
-            PolicyEvalStage(display_name="Play-ins: four-player", policies_per_team=4, matches_per_combo=2),
+            PolicyEvalStage(
+                display_name="Play-ins: four-player",
+                policies_per_team=4,
+                matches_per_combo=2,
+                elim=TopKElim(max_policies=16),
+            ),
             SampleStage(display_name="Sampling: eight-player", team_size=8, num_teams=64, min_per_policy=4),
             TeamEvalStage(display_name="Playoffs: eight-player", matches_per_team=10, cull_fraction=0.5),
             TeamEvalStage(display_name="Playoffs: eight-player", matches_per_team=10, cull_fraction=0.5),

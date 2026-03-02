@@ -17,7 +17,11 @@ class FractionElim(BaseModel):
     fraction: float = Field(description="Fraction of lowest-scoring policies to eliminate (0.0-1.0)")
 
 
-Elimination = ThresholdElim | FractionElim
+class TopKElim(BaseModel):
+    max_policies: int = Field(ge=1, description="Keep at most this many top-scoring policies")
+
+
+Elimination = ThresholdElim | FractionElim | TopKElim
 TeamTournamentStageKind = Literal["policy_eval", "sample_teams", "team_eval", "score_policies"]
 
 
@@ -37,6 +41,8 @@ class PolicyEvalStage(BaseModel):
                 desc += f", eliminate below {ms} score"
             case FractionElim(fraction=f):
                 desc += f", eliminate bottom {int(f * 100)}%"
+            case TopKElim(max_policies=k):
+                desc += f", keep top {k}"
         return desc
 
 
