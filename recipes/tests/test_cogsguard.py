@@ -258,8 +258,8 @@ def test_sweep_sweeps_hypers_and_fixes_variants_and_timesteps() -> None:
     assert isinstance(space["trainer.losses.ppo_actor.clip_coef"], ParameterConfig)
 
 
-def test_role_progress_metric_canonicalizes_milestones_2_factor() -> None:
-    key, display = cogsguard._role_progress_metric(variants="milestones_2:10")
+def test_role_progress_metric_canonicalizes_objective_mine_factor() -> None:
+    key, display = cogsguard._role_progress_metric(variants="objective_mine:10")
 
-    assert key == "env_per_label_rewards/cogsguard_machina_1.basic.milestones_2"
-    assert display == "milestones_2"
+    assert key == "env_per_label_rewards/cogsguard_machina_1.basic.objective_mine"
+    assert display == "objective_mine"

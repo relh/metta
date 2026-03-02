@@ -701,9 +701,9 @@ def _role_progress_metric(
     names: set[str] = set()
     for name in normalize_variant_names(variants):
         # Keep metric labels aligned with apply_reward_variants, which canonicalizes
-        # milestones_2:<factor> to the base reward variant name.
-        if name.startswith("milestones_2:"):
-            names.add("milestones_2")
+        # objective_mine:<factor> to the base reward variant name.
+        if name.startswith("objective_mine:"):
+            names.add("objective_mine")
             continue
         names.add(name)
     suffix = ".".join(v for v in AVAILABLE_REWARD_VARIANTS if v != "objective" and v in names)
