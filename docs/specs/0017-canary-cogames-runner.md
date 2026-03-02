@@ -1,4 +1,6 @@
-# Canary - The Cogames E2E Runner
+# Canary - The Cogames E2E Runner (DEPRECATED)
+
+> [!NOTE] Canary runner has been sunsetted in favor of `devops/stable/function_checks/cogames_submission.py`
 
 A daily job, with a workflow setup similar to `stable-release.yml`.
 

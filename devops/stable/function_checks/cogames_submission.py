@@ -7,8 +7,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from devops.canary.cogames_login import CogamesAuthenticator
 from devops.runners.metta_constants import OBSERVATORY_AUTH_SERVER_URL, PROD_STATS_SERVER_URI
+from devops.stable.cogames_login import CogamesAuthenticator
 from devops.stable.function_checks._helpers.isolated_venv import (
     isolated_venv,
     run_command_in_venv,
