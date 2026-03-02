@@ -1,18 +1,17 @@
-
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{ .Release.Name }}
   annotations:
     cert-manager.io/cluster-issuer: {{ .Values.cert_manager_issuer | required "cert_manager_issuer is required" }}
-
+    nginx.ingress.kubernetes.io/server-snippet: |
+      return 301 https://softmax.com/observatory$request_uri;
 spec:
   ingressClassName: nginx
   rules:
   - host: "{{ .Values.host | required "host is required" }}"
     http:
       paths:
-      # / –> frontend
       - path: /
         pathType: Prefix
         backend:

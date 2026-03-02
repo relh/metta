@@ -1,26 +1,2 @@
 host: observatory.softmax-research.net
-
-apiUrl: https://api.observatory.softmax-research.net
-
-policyDashboardUrl: https://policy-dashboard.softmax-research.net
-
-image:
-  registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
-  name: metta-app-frontend
-  tag: "" # will be set by CI/CD pipeline
-
 cert_manager_issuer: letsencrypt
-
-replicaCount: 2
-
-resources:
-  requests:
-    cpu: 1000m
-    memory: 256Mi
-  limits:
-    cpu: 2000m
-    memory: 1Gi
-
-datadog:
-  enabled: true
-  env: "" # will be set by CI/CD pipeline
