@@ -19,10 +19,18 @@ from typing import Any
 
 from metta.chatprop.analyze import build_analysis_context, run_analysis
 from metta.chatprop.config import ChatpropConfig, load_config
+from metta.chatprop.local.flowchart_core import render_mermaid_flowchart, write_flowchart_outputs
 from metta.chatprop.local.indexer import (
+    BranchSegment,
     extract_branch_segments_from_transcript,
     extract_branches_from_transcript,
     extract_work_branches_from_segments,
+)
+from metta.chatprop.local.workflow import (
+    SkillGraphAccumulator,
+    analyze_session_feature_chunks,
+    build_feature_chunks_from_segments,
+    load_explicit_skills,
 )
 from metta.chatprop.scanner import find_transcripts_for_branches, scan_archived
 
@@ -32,10 +40,24 @@ CATALOG_JOB_TTL = timedelta(hours=2)
 DEFAULT_GH_AUTHOR = "relh"
 MERGED_PR_CACHE_SCOPE = "author_all_repos_v2"
 DEFAULT_GRAPHITE_CLOSED_REPO = "Metta-AI/metta"
+DEFAULT_FLOWCHART_MIN_NODE_COUNT = 1
+DEFAULT_FLOWCHART_MIN_EDGE_COUNT = 1
+DEFAULT_FLOWCHART_MAX_NODES = 120
+DEFAULT_FLOWCHART_MAX_EDGES = 350
+DEFAULT_FLOWCHART_EXPORT_RELATIVE_MERMAID = Path("exports/chatprop_flowchart.mmd")
+DEFAULT_FLOWCHART_EXPORT_RELATIVE_JSON = Path("exports/chatprop_flowchart.json")
 PR_NUMBER_IN_SUBJECT = re.compile(r"\(#(\d+)\)")
 
 _catalog_jobs_lock = threading.Lock()
 _catalog_jobs: dict[str, dict[str, Any]] = {}
+
+
+def _repo_root_for_explicit_skills() -> Path:
+    module_path = Path(__file__).resolve()
+    for candidate in module_path.parents:
+        if (candidate / "skills").is_dir():
+            return candidate
+    return module_path.parent
 
 
 def _normalize_catalog_branch_name(branch: str) -> str:
@@ -64,6 +86,111 @@ def _extract_branches(payload: dict[str, Any]) -> list[str]:
         seen.add(branch)
         cleaned.append(branch)
     return cleaned
+
+
+def _parse_bounded_int(raw: Any, *, minimum: int, maximum: int) -> int | None:
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        value = raw
+    elif isinstance(raw, str):
+        text = raw.strip()
+        if text.startswith("+"):
+            text = text[1:]
+        if not text.isdigit():
+            return None
+        value = int(text)
+    else:
+        return None
+    if value < minimum or value > maximum:
+        return None
+    return value
+
+
+def _flowchart_options_from_payload(payload: dict[str, Any]) -> dict[str, int] | None:
+    min_node_count_raw = payload.get("min_node_count", DEFAULT_FLOWCHART_MIN_NODE_COUNT)
+    min_edge_count_raw = payload.get("min_edge_count", DEFAULT_FLOWCHART_MIN_EDGE_COUNT)
+    max_nodes_raw = payload.get("max_nodes", DEFAULT_FLOWCHART_MAX_NODES)
+    max_edges_raw = payload.get("max_edges", DEFAULT_FLOWCHART_MAX_EDGES)
+
+    min_node_count = _parse_bounded_int(min_node_count_raw, minimum=1, maximum=100_000)
+    min_edge_count = _parse_bounded_int(min_edge_count_raw, minimum=1, maximum=100_000)
+    max_nodes = _parse_bounded_int(max_nodes_raw, minimum=1, maximum=10_000)
+    max_edges = _parse_bounded_int(max_edges_raw, minimum=1, maximum=20_000)
+    if min_node_count is None or min_edge_count is None or max_nodes is None or max_edges is None:
+        return None
+
+    return {
+        "min_node_count": min_node_count,
+        "min_edge_count": min_edge_count,
+        "max_nodes": max_nodes,
+        "max_edges": max_edges,
+    }
+
+
+def _flowchart_export_defaults(config: ChatpropConfig) -> tuple[Path, Path]:
+    export_root = config.state_dir.expanduser() / "cache"
+    return (
+        export_root / DEFAULT_FLOWCHART_EXPORT_RELATIVE_MERMAID,
+        export_root / DEFAULT_FLOWCHART_EXPORT_RELATIVE_JSON,
+    )
+
+
+def _flowchart_payload(
+    workflow_graph: dict[str, Any],
+    *,
+    options: dict[str, int],
+    catalog_generated_at: str | None = None,
+    session_count: int | None = None,
+    branch_count: int | None = None,
+) -> dict[str, Any]:
+    rendered = render_mermaid_flowchart(
+        workflow_graph,
+        min_node_count=options["min_node_count"],
+        min_edge_count=options["min_edge_count"],
+        max_nodes=options["max_nodes"],
+        max_edges=options["max_edges"],
+    )
+    payload: dict[str, Any] = {
+        "generated_at": _iso_utc(datetime.now(tz=UTC)),
+        "workflow_graph": workflow_graph,
+        "selected_graph": rendered["selected_graph"],
+        "mermaid": rendered["mermaid"],
+        "options": options,
+    }
+    if catalog_generated_at:
+        payload["catalog_generated_at"] = catalog_generated_at
+    if session_count is not None:
+        payload["session_count"] = session_count
+    if branch_count is not None:
+        payload["branch_count"] = branch_count
+    return payload
+
+
+def _flowchart_payload_with_catalog(
+    workflow_graph: dict[str, Any],
+    *,
+    options: dict[str, int],
+    catalog: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return _flowchart_payload(
+        workflow_graph,
+        options=options,
+        catalog_generated_at=catalog.get("generated_at") if catalog is not None else None,
+        session_count=catalog.get("session_count") if catalog is not None else None,
+        branch_count=catalog.get("branch_count") if catalog is not None else None,
+    )
+
+
+def _parse_output_path(raw_value: Any) -> Path | None:
+    if raw_value is None:
+        return None
+    if not isinstance(raw_value, str):
+        return None
+    text = raw_value.strip()
+    if not text:
+        return None
+    return Path(text).expanduser().resolve()
 
 
 def _resolve_frontend_target(base: Path, file_name: str) -> Path | None:
@@ -1131,6 +1258,7 @@ def _build_catalog(
         branch_sequence = [segment.branch for segment in segments]
         if not branch_sequence:
             branch_sequence = list(branches)
+        feature_chunks = build_feature_chunks_from_segments(segments)
 
         started_at: str
         ended_at: str
@@ -1151,6 +1279,16 @@ def _build_catalog(
             started_at, ended_at = _extract_session_window(transcript.path)
         cwd = _extract_session_cwd(transcript.path)
         repo = _repo_from_cwd(cwd, cache=repo_lookup_cache) if cwd else None
+        session_segments = segments
+        if not session_segments and len(branches) == 1:
+            session_segments = [
+                BranchSegment(
+                    branch=branches[0],
+                    started_at=started_at,
+                    ended_at=ended_at,
+                )
+            ]
+            feature_chunks = build_feature_chunks_from_segments(session_segments)
 
         sessions.append(
             {
@@ -1170,7 +1308,16 @@ def _build_catalog(
                         "started_at": segment.started_at,
                         "ended_at": segment.ended_at,
                     }
-                    for segment in segments
+                    for segment in session_segments
+                ],
+                "feature_chunks": feature_chunks,
+                "_branch_segments_internal": [
+                    {
+                        "branch": segment.branch,
+                        "started_at": segment.started_at,
+                        "ended_at": segment.ended_at,
+                    }
+                    for segment in session_segments
                 ],
             }
         )
@@ -1280,6 +1427,9 @@ def _build_catalog(
         row["session_ids"] = sorted(row["session_ids"])
         row["repo"] = primary_repo
         row["repos"] = repo_names
+        row["feature_count"] = 0
+        row["revision_feature_count"] = 0
+        row["sessions_with_revision_count"] = 0
         row.update(
             {
                 "commit_first_at": outcome.get("commit_first_at"),
@@ -1302,6 +1452,94 @@ def _build_catalog(
                 phase_message=f"Enriching branches {index}/{branch_total}",
             )
 
+    merged_branches = {name for name, row in branch_rows.items() if row.get("pr_state") == "merged"}
+    explicit_skills = load_explicit_skills(_repo_root_for_explicit_skills())
+    skill_graph = SkillGraphAccumulator(explicit_skills)
+    feature_rollups: dict[str, dict[str, Any]] = {}
+
+    for session in sessions:
+        raw_segments = session.pop("_branch_segments_internal", [])
+        segments: list[BranchSegment] = []
+        if isinstance(raw_segments, list):
+            for raw in raw_segments:
+                if not isinstance(raw, dict):
+                    continue
+                branch = raw.get("branch")
+                started_at = raw.get("started_at")
+                ended_at = raw.get("ended_at")
+                if isinstance(branch, str):
+                    segments.append(
+                        BranchSegment(
+                            branch=branch,
+                            started_at=started_at if isinstance(started_at, str) else None,
+                            ended_at=ended_at if isinstance(ended_at, str) else None,
+                        )
+                    )
+
+        if segments:
+            try:
+                analyzed_chunks = analyze_session_feature_chunks(
+                    transcript_path=Path(str(session["path"])),
+                    branch_segments=segments,
+                    explicit_skills=explicit_skills,
+                )
+            except OSError:
+                analyzed_chunks = build_feature_chunks_from_segments(segments)
+            session["feature_chunks"] = analyzed_chunks
+        elif not session.get("feature_chunks"):
+            session["feature_chunks"] = build_feature_chunks_from_segments(segments)
+
+        feature_chunks = session.get("feature_chunks", [])
+        revision_feature_count = 0
+        feature_count = 0
+        if isinstance(feature_chunks, list):
+            for chunk in feature_chunks:
+                if not isinstance(chunk, dict):
+                    continue
+                branch = chunk.get("branch")
+                if not isinstance(branch, str):
+                    continue
+                is_merged_branch = branch in merged_branches
+                chunk["is_merged_branch"] = is_merged_branch
+                feature_count += 1
+                has_revision = chunk.get("has_revision") is True
+                if has_revision:
+                    revision_feature_count += 1
+                skill_graph.add_feature_chunk(
+                    session_id=str(session.get("session_id", "")),
+                    repo=session.get("repo") if isinstance(session.get("repo"), str) else None,
+                    chunk=chunk,
+                    include_revision_prevention=is_merged_branch,
+                )
+                rollup = feature_rollups.setdefault(
+                    branch,
+                    {
+                        "feature_count": 0,
+                        "revision_feature_count": 0,
+                        "sessions_with_revision": set(),
+                    },
+                )
+                rollup["feature_count"] = int(rollup["feature_count"]) + 1
+                if has_revision:
+                    rollup["revision_feature_count"] = int(rollup["revision_feature_count"]) + 1
+                    sessions_with_revision = rollup.get("sessions_with_revision")
+                    if isinstance(sessions_with_revision, set):
+                        sessions_with_revision.add(str(session.get("session_id", "")))
+
+        session["feature_count"] = feature_count
+        session["revision_feature_count"] = revision_feature_count
+
+    for branch, rollup in feature_rollups.items():
+        row = branch_rows.get(branch)
+        if row is None:
+            continue
+        row["feature_count"] = int(rollup.get("feature_count", 0))
+        row["revision_feature_count"] = int(rollup.get("revision_feature_count", 0))
+        sessions_with_revision = rollup.get("sessions_with_revision")
+        row["sessions_with_revision_count"] = (
+            len(sessions_with_revision) if isinstance(sessions_with_revision, set) else 0
+        )
+
     _write_branch_cache(config, cache)
 
     sessions.sort(key=lambda row: row.get("ended_at") or "", reverse=True)
@@ -1311,13 +1549,43 @@ def _build_catalog(
         reverse=True,
     )
 
+    workflow_graph = {
+        **skill_graph.to_dict(),
+        "graph_scope": "all_feature_chunks",
+        "revision_prevention_scope": "merged_feature_chunks_only",
+    }
+    flowchart_options = {
+        "min_node_count": DEFAULT_FLOWCHART_MIN_NODE_COUNT,
+        "min_edge_count": DEFAULT_FLOWCHART_MIN_EDGE_COUNT,
+        "max_nodes": DEFAULT_FLOWCHART_MAX_NODES,
+        "max_edges": DEFAULT_FLOWCHART_MAX_EDGES,
+    }
+    flowchart_payload = _flowchart_payload(
+        workflow_graph,
+        options=flowchart_options,
+        session_count=len(sessions),
+        branch_count=len(branches_sorted),
+    )
+
     return {
         "generated_at": _iso_utc(datetime.now(tz=UTC)),
         "session_count": len(sessions),
         "branch_count": len(branches_sorted),
         "sessions": sessions,
         "branches": branches_sorted,
+        "workflow_graph": workflow_graph,
+        "workflow_flowchart": flowchart_payload,
     }
+
+
+def build_catalog_snapshot(
+    config: ChatpropConfig | None = None,
+    *,
+    refresh: bool = False,
+) -> dict[str, Any]:
+    """Public helper for one-off local catalog analysis/export."""
+    resolved = config or load_config()
+    return _build_catalog(resolved, refresh=refresh)
 
 
 @dataclass
@@ -1363,6 +1631,12 @@ class ChatPropHandler(BaseHTTPRequestHandler):
             return
         if self.path == "/api/analysis/run":
             self._serve_analysis_run()
+            return
+        if self.path == "/api/flowchart/render":
+            self._serve_flowchart_render()
+            return
+        if self.path == "/api/flowchart/save":
+            self._serve_flowchart_save()
             return
 
         self.send_error(404, "Not found")
@@ -1452,6 +1726,95 @@ class ChatPropHandler(BaseHTTPRequestHandler):
             {
                 "branches": branches,
                 "output": output,
+            }
+        )
+
+    def _resolve_flowchart_graph(
+        self,
+        graph_raw: Any,
+        *,
+        config: ChatpropConfig | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any] | None] | None:
+        if graph_raw is not None and not isinstance(graph_raw, dict):
+            self.send_error(400, "workflow_graph must be an object")
+            return None
+
+        workflow_graph = graph_raw
+        catalog: dict[str, Any] | None = None
+        if workflow_graph is None:
+            resolved_config = config or load_config()
+            catalog = _build_catalog(resolved_config, refresh=False)
+            workflow_graph = catalog.get("workflow_graph")
+            if not isinstance(workflow_graph, dict):
+                self.send_error(500, "Catalog missing workflow graph")
+                return None
+
+        return workflow_graph, catalog
+
+    def _serve_flowchart_render(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            return
+
+        options = _flowchart_options_from_payload(payload)
+        if options is None:
+            self.send_error(400, "Invalid flowchart options")
+            return
+
+        resolved = self._resolve_flowchart_graph(payload.get("workflow_graph"))
+        if resolved is None:
+            return
+        workflow_graph, catalog = resolved
+        rendered = _flowchart_payload_with_catalog(workflow_graph, options=options, catalog=catalog)
+        self._serve_json(rendered)
+
+    def _serve_flowchart_save(self) -> None:
+        payload = self._read_json_body()
+        if payload is None:
+            return
+
+        options = _flowchart_options_from_payload(payload)
+        if options is None:
+            self.send_error(400, "Invalid flowchart options")
+            return
+
+        config = load_config()
+        resolved = self._resolve_flowchart_graph(payload.get("workflow_graph"), config=config)
+        if resolved is None:
+            return
+        workflow_graph, catalog = resolved
+        rendered = _flowchart_payload_with_catalog(workflow_graph, options=options, catalog=catalog)
+
+        default_mermaid_path, default_json_path = _flowchart_export_defaults(config)
+        mermaid_path_raw = payload.get("mermaid_path")
+        json_path_raw = payload.get("json_path")
+
+        mermaid_path = _parse_output_path(mermaid_path_raw)
+        if mermaid_path is None:
+            if mermaid_path_raw is not None and not (
+                isinstance(mermaid_path_raw, str) and not mermaid_path_raw.strip()
+            ):
+                self.send_error(400, "mermaid_path must be a path string")
+                return
+            mermaid_path = default_mermaid_path
+
+        json_path = _parse_output_path(json_path_raw)
+        if json_path is None:
+            if json_path_raw is None:
+                json_path = default_json_path
+            elif not (isinstance(json_path_raw, str) and not json_path_raw.strip()):
+                self.send_error(400, "json_path must be a path string")
+                return
+
+        write_flowchart_outputs(payload=rendered, mermaid_path=mermaid_path, json_path=json_path)
+        self._serve_json(
+            {
+                "saved": True,
+                "mermaid_path": str(mermaid_path),
+                "json_path": str(json_path) if json_path is not None else None,
+                "node_count": rendered["selected_graph"]["node_count"],
+                "edge_count": rendered["selected_graph"]["edge_count"],
+                "generated_at": rendered["generated_at"],
             }
         )
 

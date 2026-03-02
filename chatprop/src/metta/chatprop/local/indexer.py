@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,12 @@ from typing import Any
 from metta.chatprop.local.models import BranchIndex, utc_now_iso
 
 MAIN_LIKE_BRANCHES = {"main", "master", "head"}
+_BRANCH_TOKEN = r"[A-Za-z0-9._/\-]+"
+_CHECKOUT_PATTERN = re.compile(rf"\bgit\s+(?:checkout|switch)(?:\s+-[cbCB]\s+|\s+)(?P<branch>{_BRANCH_TOKEN})")
+_GT_CREATE_PATTERN = re.compile(rf"\bgt\s+(?:create|checkout)\s+(?P<branch>{_BRANCH_TOKEN})")
+_GIT_STATUS_PATTERN = re.compile(r"##\s+(?P<branch>[A-Za-z0-9._/\-]+?)(?:\.\.\.|$)")
+_SWITCHED_PATTERN = re.compile(rf"Switched to branch ['\"](?P<branch>{_BRANCH_TOKEN})['\"]")
+_ON_BRANCH_PATTERN = re.compile(rf"\bOn branch (?P<branch>{_BRANCH_TOKEN})\b")
 
 
 @dataclass(frozen=True)
@@ -32,6 +39,60 @@ def _iter_branch_fields(obj: Any):
     elif isinstance(obj, list):
         for item in obj:
             yield from _iter_branch_fields(item)
+
+
+def _iter_command_like_text(obj: Any, parent_key: str = ""):
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            key_lower = key.lower()
+            if isinstance(value, str) and key_lower in {
+                "arguments",
+                "command",
+                "output",
+                "stdout",
+                "stderr",
+                "message",
+                "content",
+                "input",
+            }:
+                yield value
+            elif isinstance(value, list) and key_lower in {"command"}:
+                command_text = " ".join(str(item) for item in value if isinstance(item, str))
+                if command_text:
+                    yield command_text
+            yield from _iter_command_like_text(value, key_lower)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _iter_command_like_text(item, parent_key)
+    elif isinstance(obj, str) and parent_key in {"arguments", "input"}:
+        yield obj
+
+
+def _extract_branches_from_text(text: str) -> list[str]:
+    lowered = text.lower()
+    if not any(token in lowered for token in ("git", "branch", "## ", "gt create", "gt checkout")):
+        return []
+
+    candidates: list[str] = []
+    for pattern in (_CHECKOUT_PATTERN, _GT_CREATE_PATTERN, _GIT_STATUS_PATTERN, _SWITCHED_PATTERN, _ON_BRANCH_PATTERN):
+        for match in pattern.finditer(text):
+            branch = match.group("branch")
+            if branch:
+                candidates.append(branch)
+    return candidates
+
+
+def _extract_branches_from_payload(payload: Any) -> list[str]:
+    extracted: list[str] = []
+    for text in _iter_command_like_text(payload):
+        extracted.extend(_extract_branches_from_text(text))
+        if text.startswith("{") and text.endswith("}"):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            extracted.extend(_extract_branches_from_payload(parsed))
+    return extracted
 
 
 def _normalize_branch_name(branch: str) -> str:
@@ -74,6 +135,7 @@ def extract_branch_segments_from_transcript(path: Path) -> list[BranchSegment]:
             timestamp = timestamp_raw if isinstance(timestamp_raw, str) and timestamp_raw.strip() else None
 
             branches = [_normalize_branch_name(branch) for branch in _iter_branch_fields(payload)]
+            branches.extend(_normalize_branch_name(branch) for branch in _extract_branches_from_payload(payload))
             for branch in branches:
                 if not branch:
                     continue

@@ -1,18 +1,37 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import metta.chatprop.local.backend.server as server_module
+from metta.chatprop.config import ChatPropConfig, DaemonConfig, SourceConfig
 from metta.chatprop.local.backend.server import (
     _branch_outcome_from_sources,
+    _build_catalog,
     _cached_outcome_is_fresh,
     _extract_branches,
     _extract_session_cwd,
+    _flowchart_options_from_payload,
     _normalize_closed_pr_record,
     _parse_archived_session_id,
+    _parse_output_path,
     _repo_from_cwd,
+    _repo_root_for_explicit_skills,
     _resolve_frontend_target,
     _select_pr_record,
     parse_args,
 )
+from metta.chatprop.scanner import TranscriptFile
+
+
+def _make_config(tmp_path: Path) -> ChatPropConfig:
+    return ChatPropConfig(
+        claude_code=SourceConfig(path=tmp_path / "claude"),
+        codex=SourceConfig(path=tmp_path / "codex"),
+        daemon=DaemonConfig(
+            poll_interval_seconds=1,
+            inactivity_threshold_seconds=0,
+        ),
+        state_dir=tmp_path / "state",
+    )
 
 
 def test_resolve_frontend_target_blocks_path_traversal(tmp_path: Path) -> None:
@@ -197,3 +216,129 @@ def test_normalize_closed_pr_record_marks_landed_via_closed_main_match() -> None
     assert normalized["mergedAt"] == "2026-02-27T18:24:22Z"
     assert normalized["closedAt"] == "2026-02-27T18:24:22Z"
     assert normalized["landedVia"] == "closed_pr_number_on_main"
+
+
+def test_flowchart_options_from_payload_defaults() -> None:
+    options = _flowchart_options_from_payload({})
+    assert options is not None
+    assert options["min_node_count"] == 1
+    assert options["min_edge_count"] == 1
+    assert options["max_nodes"] == 120
+    assert options["max_edges"] == 350
+
+
+def test_flowchart_options_from_payload_accepts_string_numbers() -> None:
+    options = _flowchart_options_from_payload(
+        {
+            "min_node_count": "2",
+            "min_edge_count": "3",
+            "max_nodes": "150",
+            "max_edges": "400",
+        }
+    )
+    assert options is not None
+    assert options == {
+        "min_node_count": 2,
+        "min_edge_count": 3,
+        "max_nodes": 150,
+        "max_edges": 400,
+    }
+
+
+def test_flowchart_options_from_payload_rejects_invalid_values() -> None:
+    assert _flowchart_options_from_payload({"max_nodes": 0}) is None
+    assert _flowchart_options_from_payload({"max_edges": "abc"}) is None
+    assert _flowchart_options_from_payload({"min_node_count": True}) is None
+
+
+def test_parse_output_path_handles_blank_and_expands() -> None:
+    assert _parse_output_path("") is None
+    assert _parse_output_path("   ") is None
+    parsed = _parse_output_path("~/tmp/chatprop-flowchart.mmd")
+    assert parsed is not None
+    assert parsed.is_absolute()
+
+
+def test_build_catalog_keeps_single_indexed_branch_feature_chunk(tmp_path: Path, monkeypatch) -> None:
+    config = _make_config(tmp_path)
+    transcript_path = tmp_path / "session.jsonl"
+    transcript_path.write_text("", encoding="utf-8")
+    transcript = TranscriptFile(
+        path=transcript_path,
+        session_id="session-1",
+        source="codex",
+        size_bytes=0,
+    )
+    analyzed_segment_counts: list[int] = []
+
+    def _unexpected_segment_inference(_path: Path) -> list[object]:
+        raise AssertionError("segment inference should be skipped for single indexed branch sessions")
+
+    def _fake_analyze(
+        *,
+        transcript_path: Path,
+        branch_segments: list[object],
+        explicit_skills: list[str],
+    ) -> list[dict[str, object]]:
+        del transcript_path, explicit_skills
+        analyzed_segment_counts.append(len(branch_segments))
+        return server_module.build_feature_chunks_from_segments(branch_segments)
+
+    monkeypatch.setattr(
+        server_module,
+        "_read_archive_index",
+        lambda _config: {transcript_path.resolve(): {"feature/solo"}},
+    )
+    monkeypatch.setattr(server_module, "_read_archive_metadata_windows", lambda _config: {})
+    monkeypatch.setattr(server_module, "scan_archived", lambda _config: [transcript])
+    monkeypatch.setattr(server_module, "extract_branch_segments_from_transcript", _unexpected_segment_inference)
+    monkeypatch.setattr(
+        server_module,
+        "_extract_session_window",
+        lambda _path: ("2026-02-27T10:00:00Z", "2026-02-27T10:10:00Z"),
+    )
+    monkeypatch.setattr(server_module, "_extract_session_cwd", lambda _path: None)
+    monkeypatch.setattr(server_module, "_load_branch_cache", lambda _config: {})
+    monkeypatch.setattr(server_module, "_load_merged_pr_index", lambda _config: {"by_branch": {}, "by_repo_branch": {}})
+    monkeypatch.setattr(server_module, "_get_branch_outcome", lambda *args, **kwargs: {})
+    monkeypatch.setattr(server_module, "_write_branch_cache", lambda _config, _cache: None)
+    monkeypatch.setattr(server_module, "analyze_session_feature_chunks", _fake_analyze)
+    monkeypatch.setattr(server_module, "load_explicit_skills", lambda _repo_root: [])
+
+    payload = _build_catalog(config, refresh=False)
+
+    assert analyzed_segment_counts == [1]
+    assert payload["session_count"] == 1
+    session = payload["sessions"][0]
+    assert session["feature_count"] == 1
+    assert [chunk["branch"] for chunk in session["feature_chunks"]] == ["feature/solo"]
+
+    branch_row = payload["branches"][0]
+    assert branch_row["name"] == "feature/solo"
+    assert branch_row["feature_count"] == 1
+
+
+def test_build_catalog_loads_explicit_skills_from_repo_root_not_cwd(tmp_path: Path, monkeypatch) -> None:
+    config = _make_config(tmp_path)
+    fake_cwd = tmp_path / "chatprop"
+    fake_cwd.mkdir(parents=True)
+    loaded_roots: list[Path] = []
+
+    monkeypatch.setattr(server_module.Path, "cwd", classmethod(lambda cls: fake_cwd))
+    monkeypatch.setattr(server_module, "_read_archive_index", lambda _config: {})
+    monkeypatch.setattr(server_module, "_read_archive_metadata_windows", lambda _config: {})
+    monkeypatch.setattr(server_module, "scan_archived", lambda _config: [])
+    monkeypatch.setattr(server_module, "_load_branch_cache", lambda _config: {})
+    monkeypatch.setattr(server_module, "_load_merged_pr_index", lambda _config: {"by_branch": {}, "by_repo_branch": {}})
+    monkeypatch.setattr(server_module, "_write_branch_cache", lambda _config, _cache: None)
+    monkeypatch.setattr(
+        server_module,
+        "load_explicit_skills",
+        lambda repo_root: loaded_roots.append(repo_root) or [],
+    )
+
+    _build_catalog(config, refresh=False)
+
+    assert loaded_roots == [_repo_root_for_explicit_skills()]
+    assert loaded_roots[0] != fake_cwd
+    assert (loaded_roots[0] / "skills").is_dir()

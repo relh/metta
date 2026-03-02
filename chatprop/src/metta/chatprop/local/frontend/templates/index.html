@@ -292,6 +292,11 @@
         font-size: 11px;
         white-space: nowrap;
       }
+      .metrics-line {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+      }
       .badge {
         display: inline-block;
         border-radius: 999px;
@@ -345,6 +350,49 @@
       a:hover {
         text-decoration: underline;
       }
+      .insights-grid {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .hint-line {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .flowchart-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .flowchart-controls input {
+        width: 90px;
+      }
+      .flowchart-paths {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .flowchart-canvas {
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: #07121e;
+        min-height: 220px;
+        max-height: 620px;
+        overflow: auto;
+        padding: 8px;
+      }
+      .flowchart-canvas svg {
+        max-width: none;
+      }
+      .flowchart-source {
+        margin-top: 8px;
+        min-height: 140px;
+        max-height: 280px;
+      }
       @media (max-width: 1100px) {
         .hero-meta {
           flex-wrap: wrap;
@@ -353,6 +401,9 @@
           margin-left: 0;
         }
         .split {
+          grid-template-columns: 1fr;
+        }
+        .flowchart-paths {
           grid-template-columns: 1fr;
         }
       }
@@ -444,6 +495,85 @@
             </table>
           </div>
         </article>
+      </section>
+
+      <section class="insights-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Skill Graph</h2>
+            <div id="workflowSummary" class="mono" style="font-size: 12px; color: var(--muted)">nodes=0 edges=0</div>
+          </div>
+          <div class="table-wrap" style="max-height: 260px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Skill Node</th>
+                  <th>Kind</th>
+                  <th>Count</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody id="skillNodesBody"></tbody>
+            </table>
+          </div>
+          <div class="table-wrap" style="max-height: 220px; margin-top: 10px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Edge</th>
+                  <th>Phase</th>
+                  <th>Count</th>
+                </tr>
+              </thead>
+              <tbody id="skillEdgesBody"></tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Revision Prevention</h2>
+            <div class="mono" style="font-size: 12px; color: var(--muted)">from merged feature chunks</div>
+          </div>
+          <div class="table-wrap" style="max-height: 500px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Planning Skill</th>
+                  <th>Revision Skill</th>
+                  <th>Count</th>
+                  <th>Suggested Adjustment</th>
+                </tr>
+              </thead>
+              <tbody id="revisionHintsBody"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel" style="margin-top: 12px">
+        <div class="panel-head">
+          <h2>Weighted Flowchart</h2>
+          <div id="flowchartSummary" class="mono" style="font-size: 12px; color: var(--muted)">nodes=0 edges=0</div>
+        </div>
+        <div class="flowchart-controls">
+          <label class="mono">min node <input id="flowchartMinNodeCount" type="number" min="1" value="1" /></label>
+          <label class="mono">min edge <input id="flowchartMinEdgeCount" type="number" min="1" value="1" /></label>
+          <label class="mono">max nodes <input id="flowchartMaxNodes" type="number" min="1" value="120" /></label>
+          <label class="mono">max edges <input id="flowchartMaxEdges" type="number" min="1" value="350" /></label>
+          <button id="flowchartRenderBtn" type="button" class="ghost">Render</button>
+          <button id="flowchartSaveBtn" type="button" class="primary">Save</button>
+        </div>
+        <div class="flowchart-paths">
+          <input id="flowchartMermaidPath" placeholder="Mermaid output path (defaults to ~/.chatprop/cache/exports/chatprop_flowchart.mmd)" />
+          <input id="flowchartJsonPath" placeholder="JSON output path (leave blank to skip JSON)" />
+        </div>
+        <div class="status" id="flowchartStatus">Flowchart will render after catalog load.</div>
+        <div id="flowchartCanvas" class="flowchart-canvas"></div>
+        <details style="margin-top: 8px">
+          <summary class="mono" style="cursor: pointer; color: var(--muted)">Mermaid source</summary>
+          <pre id="flowchartSource" class="flowchart-source"></pre>
+        </details>
       </section>
 
       <section class="panel" style="margin-top: 12px">

@@ -1,11 +1,24 @@
 const MAX_BRANCH_ROWS = 500;
 const MAX_SESSION_ROWS = 800;
+const DEFAULT_FLOWCHART_OPTIONS = {
+  minNodeCount: 1,
+  minEdgeCount: 1,
+  maxNodes: 120,
+  maxEdges: 350,
+};
 
 const state = {
   catalog: null,
   branchFilter: "",
   sessionFilter: "",
+  flowchart: {
+    mermaid: "",
+    selectedGraph: null,
+    options: { ...DEFAULT_FLOWCHART_OPTIONS },
+  },
 };
+
+let mermaidClientPromise = null;
 
 function parseBranchList(rawValue) {
   const values = (rawValue || "")
@@ -75,6 +88,13 @@ function formatBytes(value) {
   return `${(raw / 1024 ** 3).toFixed(2)} GB`;
 }
 
+function formatConfidenceRange(low, high) {
+  const lowNumber = Number(low);
+  const highNumber = Number(high);
+  if (!Number.isFinite(lowNumber) || !Number.isFinite(highNumber)) return "-";
+  return `${lowNumber.toFixed(2)}-${highNumber.toFixed(2)}`;
+}
+
 function setCatalogStatus(text, isError = false) {
   const node = document.getElementById("catalogStatus");
   if (!node) return;
@@ -83,6 +103,199 @@ function setCatalogStatus(text, isError = false) {
     node.classList.add("error");
   } else {
     node.classList.remove("error");
+  }
+}
+
+function setFlowchartStatus(text, isError = false) {
+  const node = document.getElementById("flowchartStatus");
+  if (!node) return;
+  node.textContent = text;
+  if (isError) {
+    node.classList.add("error");
+  } else {
+    node.classList.remove("error");
+  }
+}
+
+function parseBoundedInt(rawValue, fallback, minValue, maxValue) {
+  const value = Number.parseInt(String(rawValue ?? ""), 10);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(minValue, Math.min(maxValue, value));
+}
+
+function readFlowchartOptions() {
+  const minNodeInput = document.getElementById("flowchartMinNodeCount");
+  const minEdgeInput = document.getElementById("flowchartMinEdgeCount");
+  const maxNodesInput = document.getElementById("flowchartMaxNodes");
+  const maxEdgesInput = document.getElementById("flowchartMaxEdges");
+  const minNodeCount = parseBoundedInt(
+    minNodeInput ? minNodeInput.value : DEFAULT_FLOWCHART_OPTIONS.minNodeCount,
+    DEFAULT_FLOWCHART_OPTIONS.minNodeCount,
+    1,
+    100000,
+  );
+  const minEdgeCount = parseBoundedInt(
+    minEdgeInput ? minEdgeInput.value : DEFAULT_FLOWCHART_OPTIONS.minEdgeCount,
+    DEFAULT_FLOWCHART_OPTIONS.minEdgeCount,
+    1,
+    100000,
+  );
+  const maxNodes = parseBoundedInt(
+    maxNodesInput ? maxNodesInput.value : DEFAULT_FLOWCHART_OPTIONS.maxNodes,
+    DEFAULT_FLOWCHART_OPTIONS.maxNodes,
+    1,
+    10000,
+  );
+  const maxEdges = parseBoundedInt(
+    maxEdgesInput ? maxEdgesInput.value : DEFAULT_FLOWCHART_OPTIONS.maxEdges,
+    DEFAULT_FLOWCHART_OPTIONS.maxEdges,
+    1,
+    20000,
+  );
+  const options = { minNodeCount, minEdgeCount, maxNodes, maxEdges };
+  state.flowchart.options = options;
+  return options;
+}
+
+function flowchartRequestPayload(options) {
+  return {
+    workflow_graph: state.catalog?.workflow_graph || {},
+    min_node_count: options.minNodeCount,
+    min_edge_count: options.minEdgeCount,
+    max_nodes: options.maxNodes,
+    max_edges: options.maxEdges,
+  };
+}
+
+function renderFlowchartSummary(selectedGraph) {
+  const node = document.getElementById("flowchartSummary");
+  if (!node) return;
+  const nodeCount = Number(selectedGraph?.node_count || 0).toLocaleString();
+  const edgeCount = Number(selectedGraph?.edge_count || 0).toLocaleString();
+  const graphScope = selectedGraph?.graph_scope || "unknown_scope";
+  const revisionScope = selectedGraph?.revision_prevention_scope || "unknown_scope";
+  node.textContent = `nodes=${nodeCount} edges=${edgeCount} | ${graphScope} | ${revisionScope}`;
+}
+
+function renderFlowchartSource(mermaidText) {
+  const node = document.getElementById("flowchartSource");
+  if (!node) return;
+  node.textContent = mermaidText || "";
+}
+
+async function ensureMermaidClient() {
+  if (!mermaidClientPromise) {
+    mermaidClientPromise = import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs").then(
+      (module) => {
+        const mermaid = module.default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "loose",
+          flowchart: { htmlLabels: true, useMaxWidth: false },
+        });
+        return mermaid;
+      },
+    );
+  }
+  return mermaidClientPromise;
+}
+
+async function renderFlowchartCanvas(mermaidText) {
+  const canvas = document.getElementById("flowchartCanvas");
+  if (!canvas) return;
+  if (!mermaidText) {
+    canvas.innerHTML = '<div class="hint-line">No flowchart data yet.</div>';
+    return;
+  }
+
+  try {
+    const mermaid = await ensureMermaidClient();
+    const renderId = `chatprop_flowchart_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const rendered = await mermaid.render(renderId, mermaidText);
+    canvas.innerHTML = rendered.svg;
+  } catch (error) {
+    canvas.innerHTML = `<pre>${escapeHtml(mermaidText)}</pre>`;
+    throw error;
+  }
+}
+
+function applyFlowchartPayload(payload) {
+  state.flowchart.mermaid = payload?.mermaid || "";
+  state.flowchart.selectedGraph = payload?.selected_graph || null;
+  renderFlowchartSummary(state.flowchart.selectedGraph);
+  renderFlowchartSource(state.flowchart.mermaid);
+}
+
+async function renderFlowchartFromCatalog() {
+  const graph = state.catalog?.workflow_graph;
+  if (!graph || typeof graph !== "object") {
+    setFlowchartStatus("Flowchart unavailable: workflow graph missing.", true);
+    return;
+  }
+
+  const cachedPayload = state.catalog?.workflow_flowchart;
+  if (cachedPayload && typeof cachedPayload === "object" && typeof cachedPayload.mermaid === "string") {
+    applyFlowchartPayload(cachedPayload);
+    try {
+      await renderFlowchartCanvas(state.flowchart.mermaid);
+      setFlowchartStatus(
+        `Flowchart ready: ${Number(state.flowchart.selectedGraph?.node_count || 0).toLocaleString()} nodes, ${Number(state.flowchart.selectedGraph?.edge_count || 0).toLocaleString()} edges.`,
+      );
+    } catch (error) {
+      setFlowchartStatus(`Flowchart rendered as Mermaid text fallback: ${error.message}`, true);
+    }
+    return;
+  }
+
+  await renderFlowchartWithCurrentOptions();
+}
+
+async function renderFlowchartWithCurrentOptions() {
+  const graph = state.catalog?.workflow_graph;
+  if (!graph || typeof graph !== "object") {
+    setFlowchartStatus("Load catalog first to render flowchart.", true);
+    return;
+  }
+
+  const options = readFlowchartOptions();
+  setFlowchartStatus("Rendering flowchart...");
+  try {
+    const payload = await fetchJsonWithPayload("/api/flowchart/render", flowchartRequestPayload(options));
+    applyFlowchartPayload(payload);
+    await renderFlowchartCanvas(state.flowchart.mermaid);
+    setFlowchartStatus(
+      `Flowchart ready: ${Number(payload.selected_graph?.node_count || 0).toLocaleString()} nodes, ${Number(payload.selected_graph?.edge_count || 0).toLocaleString()} edges.`,
+    );
+  } catch (error) {
+    setFlowchartStatus(`Flowchart render failed: ${error.message}`, true);
+  }
+}
+
+async function saveFlowchartArtifacts() {
+  const graph = state.catalog?.workflow_graph;
+  if (!graph || typeof graph !== "object") {
+    setFlowchartStatus("Load catalog first before saving flowchart.", true);
+    return;
+  }
+
+  const options = readFlowchartOptions();
+  const mermaidPathInput = document.getElementById("flowchartMermaidPath");
+  const jsonPathInput = document.getElementById("flowchartJsonPath");
+  const mermaidPath = mermaidPathInput ? mermaidPathInput.value.trim() : "";
+  const jsonPath = jsonPathInput ? jsonPathInput.value.trim() : "";
+
+  setFlowchartStatus("Saving flowchart artifacts...");
+  try {
+    const payload = await fetchJsonWithPayload("/api/flowchart/save", {
+      ...flowchartRequestPayload(options),
+      mermaid_path: mermaidPath,
+      json_path: jsonPath,
+    });
+    setFlowchartStatus(
+      `Saved flowchart: ${payload.mermaid_path}${payload.json_path ? ` | ${payload.json_path}` : ""}`,
+    );
+  } catch (error) {
+    setFlowchartStatus(`Flowchart save failed: ${error.message}`, true);
   }
 }
 
@@ -234,7 +447,10 @@ function renderBranchTable() {
         <tr>
           <td class="mono"><span class="truncate" title="${escapeHtml(repoLabel)}">${escapeHtml(repoLabel)}</span></td>
           <td class="mono"><span class="truncate" title="${escapeHtml(row.name || "")}">${escapeHtml(row.name || "")}</span></td>
-          <td>${Number(row.session_count || 0).toLocaleString()}</td>
+          <td>
+            <div>${Number(row.session_count || 0).toLocaleString()}</div>
+            <div class="metrics-line">features: ${Number(row.feature_count || 0).toLocaleString()} | revisions: ${Number(row.revision_feature_count || 0).toLocaleString()}</div>
+          </td>
           <td>${prLink}${prTitle}</td>
           <td><span class="${badgeClassForState(row.pr_state)}">${escapeHtml(row.pr_state || "no_pr")}</span></td>
           <td>${escapeHtml(formatDate(mergedOrClosed))}</td>
@@ -279,6 +495,12 @@ function renderSessionTable() {
       const sequenceLine = hasSequenceContext
         ? `<div class="branch-sequence mono">${escapeHtml(`seq: ${sequencePreview}${sequenceSuffix}`)}</div>`
         : "";
+      const featureCount = Number(row.feature_count || 0);
+      const revisionFeatureCount = Number(row.revision_feature_count || 0);
+      const featureLine =
+        featureCount > 0
+          ? `<div class="metrics-line">features: ${featureCount.toLocaleString()} | revisions: ${revisionFeatureCount.toLocaleString()}</div>`
+          : "";
 
       return `
         <tr>
@@ -287,11 +509,99 @@ function renderSessionTable() {
           <td><span title="${escapeHtml(formatDate(row.started_at))}">${escapeHtml(formatDateCompact(row.started_at))}</span></td>
           <td><span title="${escapeHtml(formatDate(row.ended_at))}">${escapeHtml(formatDateCompact(row.ended_at))}</span></td>
           <td>${escapeHtml(formatBytes(row.size_bytes))}</td>
-          <td><div class="branch-tags">${branchTags}${moreTag}</div>${sequenceLine}</td>
+          <td><div class="branch-tags">${branchTags}${moreTag}</div>${sequenceLine}${featureLine}</td>
         </tr>
       `;
     })
     .join("");
+}
+
+function renderWorkflowGraphPanel() {
+  const summaryNode = document.getElementById("workflowSummary");
+  const nodeBody = document.getElementById("skillNodesBody");
+  const edgeBody = document.getElementById("skillEdgesBody");
+  const hintBody = document.getElementById("revisionHintsBody");
+  if (!summaryNode || !nodeBody || !edgeBody || !hintBody) return;
+
+  const graph = state.catalog?.workflow_graph || {};
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes.slice() : [];
+  const edges = Array.isArray(graph.edges) ? graph.edges.slice() : [];
+  const hints = Array.isArray(graph.revision_prevention) ? graph.revision_prevention.slice() : [];
+  const nodeCount = Number(graph.node_count || 0);
+  const edgeCount = Number(graph.edge_count || 0);
+  const graphScope = graph.graph_scope || "unknown_scope";
+  const revisionScope = graph.revision_prevention_scope || "unknown_scope";
+  summaryNode.textContent = `nodes=${nodeCount.toLocaleString()} edges=${edgeCount.toLocaleString()} | ${graphScope} | ${revisionScope}`;
+
+  const topNodes = nodes.sort((a, b) => Number(b.count || 0) - Number(a.count || 0)).slice(0, 18);
+  if (topNodes.length === 0) {
+    nodeBody.innerHTML = '<tr><td colspan="4">No skill nodes inferred yet.</td></tr>';
+  } else {
+    nodeBody.innerHTML = topNodes
+      .map((node) => {
+        const label = node.label || node.id || "-";
+        const kind = node.kind || "-";
+        const count = Number(node.count || 0).toLocaleString();
+        const confidence = formatConfidenceRange(node.confidence_low, node.confidence_high);
+        const args = Array.isArray(node.argument_samples) ? node.argument_samples.slice(0, 2).join(", ") : "";
+        const argsLine = args ? `<div class="hint-line mono">args: ${escapeHtml(args)}</div>` : "";
+        return `
+          <tr>
+            <td><span class="mono truncate" title="${escapeHtml(label)}">${escapeHtml(label)}</span>${argsLine}</td>
+            <td>${escapeHtml(kind)}</td>
+            <td>${escapeHtml(count)}</td>
+            <td>${escapeHtml(confidence)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  const topEdges = edges.sort((a, b) => Number(b.count || 0) - Number(a.count || 0)).slice(0, 18);
+  if (topEdges.length === 0) {
+    edgeBody.innerHTML = '<tr><td colspan="3">No skill edges inferred yet.</td></tr>';
+  } else {
+    edgeBody.innerHTML = topEdges
+      .map((edge) => {
+        const source = edge.source || "-";
+        const target = edge.target || "-";
+        const pair = `${source} -> ${target}`;
+        const phase = edge.phase || "-";
+        const count = Number(edge.count || 0).toLocaleString();
+        return `
+          <tr>
+            <td><span class="mono truncate" title="${escapeHtml(pair)}">${escapeHtml(pair)}</span></td>
+            <td>${escapeHtml(phase)}</td>
+            <td>${escapeHtml(count)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
+
+  const topHints = hints.sort((a, b) => Number(b.count || 0) - Number(a.count || 0)).slice(0, 25);
+  if (topHints.length === 0) {
+    hintBody.innerHTML = '<tr><td colspan="4">No revision-prevention suggestions yet.</td></tr>';
+  } else {
+    hintBody.innerHTML = topHints
+      .map((hint) => {
+        const planningSkill = hint.planning_skill || "-";
+        const revisionSkill = hint.revision_skill || "-";
+        const count = Number(hint.count || 0).toLocaleString();
+        const adjustment = hint.suggested_adjustment || "-";
+        const branches = Array.isArray(hint.example_branches) ? hint.example_branches.slice(0, 3).join(", ") : "";
+        const hintLine = branches ? `<div class="hint-line mono">branches: ${escapeHtml(branches)}</div>` : "";
+        return `
+          <tr>
+            <td><span class="mono truncate" title="${escapeHtml(planningSkill)}">${escapeHtml(planningSkill)}</span></td>
+            <td><span class="mono truncate" title="${escapeHtml(revisionSkill)}">${escapeHtml(revisionSkill)}</span></td>
+            <td>${escapeHtml(count)}</td>
+            <td>${escapeHtml(adjustment)}${hintLine}</td>
+          </tr>
+        `;
+      })
+      .join("");
+  }
 }
 
 function renderCatalogCards() {
@@ -324,6 +634,7 @@ function renderCatalog() {
   renderCatalogCards();
   renderBranchTable();
   renderSessionTable();
+  renderWorkflowGraphPanel();
 }
 
 function sleepMs(ms) {
@@ -372,6 +683,7 @@ async function loadCatalog({ refresh }) {
     const payload = await runCatalogJob(refresh);
     state.catalog = payload;
     renderCatalog();
+    await renderFlowchartFromCatalog();
     const pendingCount = (payload.branches || []).filter((row) => row.pr_state === "pending_lookup").length;
     const lookupNote =
       pendingCount > 0 ? ` (${pendingCount.toLocaleString()} PR states pending lookup)` : "";
@@ -433,6 +745,38 @@ function bindCatalogControls() {
   });
 }
 
+function bindFlowchartControls() {
+  const renderBtn = document.getElementById("flowchartRenderBtn");
+  const saveBtn = document.getElementById("flowchartSaveBtn");
+  const optionInputs = [
+    document.getElementById("flowchartMinNodeCount"),
+    document.getElementById("flowchartMinEdgeCount"),
+    document.getElementById("flowchartMaxNodes"),
+    document.getElementById("flowchartMaxEdges"),
+  ];
+
+  if (renderBtn) {
+    renderBtn.addEventListener("click", () => {
+      void renderFlowchartWithCurrentOptions();
+    });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      void saveFlowchartArtifacts();
+    });
+  }
+
+  optionInputs.forEach((input) => {
+    if (!input) return;
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void renderFlowchartWithCurrentOptions();
+      }
+    });
+  });
+}
+
 function bindAnalysisControls() {
   const findBtn = document.getElementById("analysisFindBtn");
   const contextBtn = document.getElementById("analysisContextBtn");
@@ -455,6 +799,7 @@ function bindAnalysisControls() {
 
 async function initialize() {
   bindCatalogControls();
+  bindFlowchartControls();
   bindAnalysisControls();
   await loadCatalog({ refresh: false });
 }

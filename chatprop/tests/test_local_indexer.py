@@ -8,7 +8,13 @@ from metta.chatprop.local.indexer import (
 
 
 def _write_jsonl(path: Path, lines: list[str]) -> None:
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    serialized: list[str] = []
+    for line in lines:
+        if isinstance(line, str):
+            serialized.append(line)
+        else:
+            serialized.append(str(line))
+    path.write_text("\n".join(serialized) + "\n", encoding="utf-8")
 
 
 def test_extract_work_branches_treats_main_as_prelude(tmp_path: Path) -> None:
@@ -60,3 +66,39 @@ def test_extract_work_branches_normalizes_main_like_branches(tmp_path: Path) -> 
     assert [segment.branch for segment in segments] == ["main"]
     assert extract_work_branches_from_transcript(transcript) == ["main"]
     assert extract_branches_from_transcript(transcript) == {"main"}
+
+
+def test_extract_work_branches_from_git_switch_command_text(tmp_path: Path) -> None:
+    transcript = tmp_path / "session.jsonl"
+    _write_jsonl(
+        transcript,
+        [
+            '{"timestamp":"2026-02-27T10:00:00Z","gitBranch":"main"}',
+            (
+                '{"timestamp":"2026-02-27T10:01:00Z","type":"response_item","payload":{"type":"function_call",'
+                '"name":"shell","arguments":"{\\"command\\":[\\"bash\\",\\"-lc\\",\\"git switch feature/c\\"]}"}}'
+            ),
+        ],
+    )
+
+    segments = extract_branch_segments_from_transcript(transcript)
+    assert [segment.branch for segment in segments] == ["main", "feature/c"]
+    assert extract_work_branches_from_transcript(transcript) == ["feature/c"]
+
+
+def test_extract_work_branches_from_git_status_output_text(tmp_path: Path) -> None:
+    transcript = tmp_path / "session.jsonl"
+    _write_jsonl(
+        transcript,
+        [
+            '{"timestamp":"2026-02-27T10:00:00Z","gitBranch":"main"}',
+            (
+                '{"timestamp":"2026-02-27T10:02:00Z","type":"response_item","payload":{"type":"function_call_output",'
+                '"output":"## feature/d...origin/feature/d"}}'
+            ),
+        ],
+    )
+
+    segments = extract_branch_segments_from_transcript(transcript)
+    assert [segment.branch for segment in segments] == ["main", "feature/d"]
+    assert extract_work_branches_from_transcript(transcript) == ["feature/d"]

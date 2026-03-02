@@ -12,8 +12,31 @@ from metta.chatprop.analyze import build_analysis_context, run_analysis
 from metta.chatprop.config import default_config_path, load_config
 from metta.chatprop.local.backend.server import run_server as run_local_server
 from metta.chatprop.local.daemon import get_status, run_daemon_forever, run_daemon_once, upload_session
+from metta.chatprop.local.flowchart import build_flowchart_artifacts, write_flowchart_outputs
 from metta.chatprop.local.launchd import install_launchd_plist
 from metta.chatprop.scanner import find_transcripts_for_branches, read_transcript
+
+
+def _render_local_config_toml(
+    *,
+    claude_code_path: str,
+    codex_path: str,
+    state_dir: str,
+) -> str:
+    return (
+        "[sources]\n"
+        "[sources.claude-code]\n"
+        f'path = "{claude_code_path}"\n'
+        "[sources.codex]\n"
+        f'path = "{codex_path}"\n'
+        "\n"
+        "[state]\n"
+        f'dir = "{state_dir}"\n'
+        "\n"
+        "[daemon]\n"
+        "poll_interval_seconds = 30\n"
+        "inactivity_threshold_seconds = 60\n"
+    )
 
 
 def _has_transcript_content(paths: list[Path]) -> bool:
@@ -192,6 +215,40 @@ def serve(host: str, port: int) -> None:
     run_local_server(SimpleNamespace(host=host, port=port))
 
 
+@main.command(name="init")
+@click.option("--config", "config_path", default=str(default_config_path()))
+@click.option("--force", is_flag=True, help="Overwrite existing config file.")
+@click.option("--claude-code-path", default="~/.claude/projects")
+@click.option("--codex-path", default="~/.codex/sessions")
+@click.option("--state-dir", default="~/.chatprop")
+def init_local_config(
+    config_path: str,
+    force: bool,
+    claude_code_path: str,
+    codex_path: str,
+    state_dir: str,
+) -> None:
+    """Write a standalone local chatprop config file."""
+    target = Path(config_path).expanduser()
+    if target.exists() and not force:
+        click.echo(f"Config already exists: {target}. Re-run with --force to overwrite.")
+        sys.exit(1)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        _render_local_config_toml(
+            claude_code_path=claude_code_path,
+            codex_path=codex_path,
+            state_dir=state_dir,
+        ),
+        encoding="utf-8",
+    )
+    click.echo(f"Wrote config: {target}")
+    click.echo(f"  claude-code: {claude_code_path}")
+    click.echo(f"  codex: {codex_path}")
+    click.echo(f"  state dir: {state_dir}")
+
+
 @main.command()
 @click.option("--config", "config_path", default=str(default_config_path()))
 @click.option("--once", is_flag=True)
@@ -237,6 +294,59 @@ def local_status(config_path: str) -> None:
     click.echo(f"metadata={status.metadata_count}")
     click.echo(f"indexed_branches={status.indexed_branch_count}")
     click.echo(f"manifest_entries={status.manifest_entry_count}")
+
+
+@main.command(name="flowchart")
+@click.option("--config", "config_path", default=str(default_config_path()))
+@click.option("--refresh", is_flag=True, help="Refresh branch outcome lookup before export.")
+@click.option(
+    "--output",
+    "output_path",
+    default="chatprop_flowchart.mmd",
+    help="Path to Mermaid flowchart output.",
+)
+@click.option(
+    "--json-output",
+    "json_output_path",
+    default="chatprop_flowchart.json",
+    help="Path to JSON graph export.",
+)
+@click.option("--max-nodes", type=int, default=120, show_default=True)
+@click.option("--max-edges", type=int, default=350, show_default=True)
+@click.option("--min-node-count", type=int, default=1, show_default=True)
+@click.option("--min-edge-count", type=int, default=1, show_default=True)
+def flowchart(
+    config_path: str,
+    refresh: bool,
+    output_path: str,
+    json_output_path: str,
+    max_nodes: int,
+    max_edges: int,
+    min_node_count: int,
+    min_edge_count: int,
+) -> None:
+    """Export weighted skill-flow chart from local chatprop catalog."""
+    config = load_config(Path(config_path).expanduser())
+    payload = build_flowchart_artifacts(
+        config=config,
+        refresh=refresh,
+        min_node_count=max(1, min_node_count),
+        min_edge_count=max(1, min_edge_count),
+        max_nodes=max(1, max_nodes),
+        max_edges=max(1, max_edges),
+    )
+
+    mermaid_path = Path(output_path).expanduser()
+    json_path = Path(json_output_path).expanduser() if json_output_path.strip() else None
+    write_flowchart_outputs(payload=payload, mermaid_path=mermaid_path, json_path=json_path)
+
+    selected = payload.get("selected_graph", {})
+    nodes = int(selected.get("node_count", 0)) if isinstance(selected, dict) else 0
+    edges = int(selected.get("edge_count", 0)) if isinstance(selected, dict) else 0
+    click.echo(f"flowchart exported: nodes={nodes} edges={edges}")
+    click.echo(f"  mermaid: {mermaid_path.resolve()}")
+    if json_path is not None:
+        click.echo(f"  json: {json_path.resolve()}")
 
 
 if __name__ == "__main__":
