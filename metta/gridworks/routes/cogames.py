@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from cogames.cli.mission import parse_variants
+from cogames.cogs_vs_clips.cogsguard_curriculum import split_variants
 from cogames.cogs_vs_clips.mission import CoGameMissionVariant as MissionVariant
 from cogames.cogs_vs_clips.mission import CvCMission as AnyMission
 from cogames.cogs_vs_clips.missions import MISSIONS
@@ -18,7 +18,10 @@ def _get_mission(site_name: str, mission_name: str, variants: str = "") -> AnyMi
 
     variant_names = [v for v in variants.split(",") if v]
     try:
-        parsed_variants = parse_variants(variant_names)
+        parsed_variants, reward_variants = split_variants(variant_names)
+        if reward_variants:
+            reward_list = ", ".join(reward_variants)
+            raise ValueError(f"Reward variants are not supported in this context: {reward_list}")
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     return mission.with_variants(parsed_variants)

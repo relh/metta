@@ -490,8 +490,9 @@ def simulations(
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
+    max_steps: int = DEFAULT_MAX_STEPS,
 ) -> list[SimulationConfig]:
-    env = env or make_env(variants=variants, layout=layout, num_agents=num_agents)
+    env = env or make_env(variants=variants, layout=layout, num_agents=num_agents, max_steps=max_steps)
 
     return [
         SimulationConfig(suite="cogsguard", name=f"basic_{layout}", env=env),
@@ -922,13 +923,14 @@ def evaluate(
     policy_uris: str | Sequence[str] | None = None,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
+    max_steps: int = DEFAULT_MAX_STEPS,
 ) -> tools.EvaluateTool:
     if policy_uris is None:
         policy_uris = []
     elif not isinstance(policy_uris, str):
         policy_uris = list(policy_uris)
     return tools.EvaluateTool(
-        simulations=simulations(variants=variants, layout=layout),
+        simulations=simulations(variants=variants, layout=layout, max_steps=max_steps),
         policy_uris=policy_uris,
     )
 
@@ -938,11 +940,14 @@ def play(
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
+    max_steps: int = DEFAULT_MAX_STEPS,
+    seed: int = 42,
 ) -> tools.PlayTool:
     """Interactive play with a policy."""
     return tools.PlayTool(
-        sim=simulations(variants=variants, layout=layout, num_agents=num_agents)[0],
+        sim=simulations(variants=variants, layout=layout, num_agents=num_agents, max_steps=max_steps)[0],
         policy_uri=policy_uri,
+        seed=seed,
     )
 
 

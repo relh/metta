@@ -180,6 +180,18 @@ class TestCogsguardCurriculum:
             assert sim.suite == "cogsguard"
             assert sim.env is not None
 
+    def test_simulations_honors_max_steps(self) -> None:
+        sims = cogsguard.simulations(max_steps=321)
+        assert sims[0].env.game.max_steps == 321
+
+    def test_evaluate_honors_max_steps(self) -> None:
+        tool = cogsguard.evaluate(policy_uris=[], max_steps=654)
+        assert tool.simulations[0].env.game.max_steps == 654
+
+    def test_play_honors_max_steps(self) -> None:
+        tool = cogsguard.play(policy_uri="metta://policy/random", max_steps=987)
+        assert tool.sim.env.game.max_steps == 987
+
 
 def test_wave_only_variant_disables_followup_events() -> None:
     env_config = cogsguard.make_env(num_agents=4, max_steps=100, variants="clips_wave_only")

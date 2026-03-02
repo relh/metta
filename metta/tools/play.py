@@ -8,6 +8,7 @@ from metta_alo.scoring import allocate_counts, validate_proportions
 from pydantic import PrivateAttr
 from rich.console import Console
 
+from cogames.seed import seed_rollout_rng
 from metta.common.tool import Tool
 from metta.common.wandb.context import WandbConfig
 from metta.sim.simulation_config import SimulationConfig
@@ -121,15 +122,14 @@ class PlayTool(Tool):
         policy_specs = [policy_spec_from_uri(uri, device=str(device)) for uri in policy_uris]
         assignments = self._resolve_assignments(num_agents=env_cfg.game.num_agents, num_policies=len(policy_specs))
 
-        seed = self.seed
-        if seed is None:
-            seed = self.system.seed
+        seed = int(self.seed if self.seed is not None else self.system.seed)
+        seed_rollout_rng(seed)
 
         job = SingleEpisodeJob(
             policy_uris=list(policy_uris),
             assignments=list(assignments),
             env=env_cfg,
-            seed=int(seed),
+            seed=seed,
             max_action_time_ms=10000,
         )
         episode_results, _replay = run_episode_local(
