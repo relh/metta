@@ -95,6 +95,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `tr.perf-scorecard`
 - `tr.policy-save-load-audit`
 - `tr.recipe-curriculum-audit`
+- `tr.wandb-analyze`
 - `tr.wandb-inspect`
 - `wt.cleanup`
 

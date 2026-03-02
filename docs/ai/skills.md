@@ -86,6 +86,7 @@ Shared skills live in `skills/`:
 - `tr.perf-eval`
 - `tr.policy-save-load-audit`
 - `tr.recipe-curriculum-audit`
+- `tr.wandb-analyze`
 - `tr.wandb-inspect`
 - `wt.cleanup`
 
