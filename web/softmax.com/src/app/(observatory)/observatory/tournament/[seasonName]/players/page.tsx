@@ -8,6 +8,7 @@ import {
 } from "@observatory/lib/tournament/api";
 import { formatRelativeTime } from "@observatory/utils/datetime";
 
+import { StartTournamentButton } from "../StartTournamentButton";
 import { stageFlowLabel, stageLabel } from "../stageSelection";
 import { formatPolicyDisplay } from "../utils";
 import {
@@ -285,10 +286,16 @@ export default async function PlayersPage({
     <div className="space-y-4">
       <ServerDebugDrain />
       {tournamentNotStarted && (
-        <SubmitForm
-          seasonName={seasonName}
-          existingPolicyVersionIds={existingPolicyVersionIds}
-        />
+        <>
+          <StartTournamentButton
+            seasonName={seasonName}
+            policyCount={policies.length}
+          />
+          <SubmitForm
+            seasonName={seasonName}
+            existingPolicyVersionIds={existingPolicyVersionIds}
+          />
+        </>
       )}
       {showPendingState ? (
         <div className="text-foreground-muted py-4">
