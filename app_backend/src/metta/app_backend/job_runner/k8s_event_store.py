@@ -34,16 +34,21 @@ def _get_engine():
     return _engine
 
 
-def store_k8s_event(cluster: str, event_type: str, pod: client.V1Pod) -> None:
+def store_k8s_event(
+    cluster: str, event_type: str, pod: client.V1Pod, node_labels: dict[str, str] | None = None
+) -> None:
     engine = _get_engine()
     if engine is None:
         return
     raw = ApiClient().sanitize_for_serialization(pod)
     event_time = pod.metadata.creation_timestamp if pod.metadata else None
+    event_dict: dict = {"type": event_type, "object": raw}
+    if node_labels:
+        event_dict["node_labels"] = node_labels
     event = K8sEvent(
         cluster=cluster,
         event_time=event_time or datetime.now(UTC),
-        event={"type": event_type, "object": raw},
+        event=event_dict,
     )
     with Session(engine) as session:
         session.add(event)

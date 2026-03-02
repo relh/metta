@@ -462,16 +462,22 @@ def _get_runner_images_from_event(event_data: dict) -> tuple[str | None, str | N
 
 
 def _get_node_pricing_info(event_data: dict, core_v1: client.CoreV1Api) -> dict[str, str]:
-    """Extract instance_type and capacity_type from the node the pod ran on."""
-    pod_data = event_data.get("object", {})
-    node_name = pod_data.get("spec", {}).get("nodeName")
-    if not node_name:
-        return {}
-    try:
-        node = cast(client.V1Node, core_v1.read_node(node_name))
-    except ApiException:
-        return {}
-    labels = node.metadata.labels if node.metadata else {}
+    """Extract instance_type and capacity_type from the node the pod ran on.
+
+    Labels are pre-populated by the watcher at event store time (while the node is still
+    alive). Falls back to a live k8s lookup for events stored before this change.
+    """
+    labels: dict[str, str] = event_data.get("node_labels") or {}
+    if not labels:
+        pod_data = event_data.get("object", {})
+        node_name = pod_data.get("spec", {}).get("nodeName")
+        if not node_name:
+            return {}
+        try:
+            node = cast(client.V1Node, core_v1.read_node(node_name))
+        except ApiException:
+            return {}
+        labels = (node.metadata.labels or {}) if node.metadata else {}
     result: dict[str, str] = {}
     instance_type = (labels or {}).get("node.kubernetes.io/instance-type")
     if instance_type:

@@ -6,7 +6,7 @@ This watcher only stores events; processing is done by the event_processor.
 
 import logging
 import time
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 from kubernetes import (
     client,
@@ -57,10 +57,31 @@ class K8sPodWatchEvent(TypedDict):
     object: client.V1Pod
 
 
-def _maybe_store_event(cluster: str, event_type: str, pod: client.V1Pod) -> None:
-    """Store a pod event to the database."""
+def _maybe_store_event(
+    cluster: str,
+    event_type: str,
+    pod: client.V1Pod,
+    node_label_cache: dict[str, dict[str, str]],
+    core_v1: client.CoreV1Api | None = None,
+) -> None:
+    """Store a pod event, including node labels for terminal pods.
+
+    Node labels are fetched once per unique node and cached for the lifetime of
+    the watch session. The fetch happens on the first sighting of a node (usually
+    while the pod is Running), so by the time a terminal event arrives the labels
+    are already in cache and no extra REST call is needed.
+    """
     try:
-        store_k8s_event(cluster, event_type, pod)
+        node_name = pod.spec.node_name if pod.spec else None
+        if core_v1 and node_name and node_name not in node_label_cache:
+            try:
+                node = cast(client.V1Node, core_v1.read_node(node_name))
+                node_label_cache[node_name] = (node.metadata.labels or {}) if node.metadata else {}
+            except Exception:
+                node_label_cache[node_name] = {}  # cache miss to prevent retries
+        node_labels = node_label_cache.get(node_name) if node_name else None
+        phase = pod.status.phase if pod.status else None
+        store_k8s_event(cluster, event_type, pod, node_labels=node_labels if phase in ("Succeeded", "Failed") else None)
     except Exception:
         logger.error("Failed to persist k8s watch event", exc_info=True)
 
@@ -75,9 +96,11 @@ def _watch_pods_with_client(core_v1: client.CoreV1Api, cluster_name: str):
         logger.error(f"Invalid pod list on cluster={cluster_name}: {pod_list}")
         return
 
+    node_label_cache: dict[str, dict[str, str]] = {}
+
     # Store initial state of all pods
     for pod in pod_list.items:
-        _maybe_store_event(cluster_name, "ADDED", pod)
+        _maybe_store_event(cluster_name, "ADDED", pod, node_label_cache, core_v1)
 
     resource_version = pod_list.metadata.resource_version
     logger.info(f"Starting pod watch on cluster={cluster_name} from resourceVersion={resource_version}")
@@ -95,7 +118,7 @@ def _watch_pods_with_client(core_v1: client.CoreV1Api, cluster_name: str):
         update_heartbeat()
         event_type, pod = event["type"], event["object"]
         if event_type in ("ADDED", "MODIFIED", "DELETED"):
-            _maybe_store_event(cluster_name, event_type, pod)
+            _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
 
 
 def _watch_loop(cluster_name: str):
