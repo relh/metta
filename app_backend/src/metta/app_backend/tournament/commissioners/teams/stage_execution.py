@@ -10,13 +10,10 @@ from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.tournament import MembershipAction, Pool, PoolPlayer, Season, Team
 from metta.app_backend.tournament.commissioners.base import MembershipChangeRequest
 from metta.app_backend.tournament.commissioners.teams.config import (
-    FractionElim,
     PolicyEvalStage,
     SampleStage,
     ScoreStage,
     TeamEvalStage,
-    ThresholdElim,
-    TopKElim,
 )
 from metta.app_backend.tournament.commissioners.teams.db_helpers import TeamMembershipChangeRequest
 from metta.app_backend.tournament.commissioners.teams.sampling import sample_teams
@@ -176,20 +173,19 @@ class TeamStageExecutionMixin:
 
         if stage.elim is None:
             survivors = {pp.policy_version_id for pp in current_players}
+        elif not policy_scores:
+            survivors = set()
         else:
-            if not policy_scores:
-                survivors = set()
-            else:
-                match stage.elim:
-                    case ThresholdElim(min_score=threshold):
-                        survivors = {pv_id for pv_id, score in policy_scores.items() if score >= threshold}
-                    case FractionElim(fraction=fraction):
-                        ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
-                        cutoff = max(1, int(len(ranked) * (1 - fraction)))
-                        survivors = {pv_id for pv_id, _ in ranked[:cutoff]}
-                    case TopKElim(max_policies=max_policies):
-                        ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
-                        survivors = {pv_id for pv_id, _ in ranked[:max_policies]}
+            elim_result = stage.elim.apply(policy_scores)
+            survivors = elim_result.survivors
+            if elim_result.eliminated:
+                logger.info(
+                    "[%s] policy stage %s: eliminated %s policies: %s",
+                    self.season_name,
+                    input_pool_name,
+                    len(elim_result.eliminated),
+                    {str(pv_id)[:8]: reason for pv_id, reason in elim_result.eliminated.items()},
+                )
 
         if failed_out_policy_ids:
             survivors -= failed_out_policy_ids

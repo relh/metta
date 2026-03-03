@@ -1,11 +1,13 @@
 from metta.app_backend.tournament.commissioners.teams.beta import BetaTeamsCommissioner
 from metta.app_backend.tournament.commissioners.teams.config import (
+    AllOfElim,
     GameEnvGenerator,
     PolicyEvalStage,
     SampleStage,
     ScoreStage,
     TeamEvalStage,
     TeamTournamentConfig,
+    ThresholdElim,
     TopKElim,
 )
 
@@ -57,7 +59,7 @@ class BetaTeamsTinyFixedCommissioner(BetaTeamsCommissioner):
                 policies_per_team=1,
                 matches_per_combo=3,
                 min_policies=4,
-                elim=TopKElim(max_policies=16),
+                elim=AllOfElim(rules=[ThresholdElim(min_score=1), TopKElim(max_policies=16)]),
             ),
             PolicyEvalStage(
                 display_name="Play-ins: two-player",

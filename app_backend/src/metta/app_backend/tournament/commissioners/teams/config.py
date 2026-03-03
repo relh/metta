@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -8,20 +10,89 @@ from metta.app_backend.tournament.referees.envs import GameEnvGenerator
 from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
 
 
+@dataclass
+class ElimResult:
+    survivors: set[UUID]
+    eliminated: dict[UUID, str] = field(default_factory=dict)
+
+    def intersect(self, other: ElimResult) -> ElimResult:
+        new_survivors = self.survivors & other.survivors
+        eliminated = dict(self.eliminated)
+        eliminated.update(other.eliminated)
+        eliminated = {pv_id: reason for pv_id, reason in eliminated.items() if pv_id not in new_survivors}
+        return ElimResult(survivors=new_survivors, eliminated=eliminated)
+
+
 class ThresholdElim(BaseModel):
     min_score: float = Field(description="Policies scoring below this are eliminated")
+
+    def apply(self, policy_scores: dict[UUID, float]) -> ElimResult:
+        survivors: set[UUID] = set()
+        eliminated: dict[UUID, str] = {}
+        for pv_id, score in policy_scores.items():
+            if score >= self.min_score:
+                survivors.add(pv_id)
+            else:
+                eliminated[pv_id] = f"score {score} < threshold {self.min_score}"
+        return ElimResult(survivors=survivors, eliminated=eliminated)
 
 
 class FractionElim(BaseModel):
     fraction: float = Field(description="Fraction of lowest-scoring policies to eliminate (0.0-1.0)")
 
+    def apply(self, policy_scores: dict[UUID, float]) -> ElimResult:
+        ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
+        cutoff = max(1, int(len(ranked) * (1 - self.fraction)))
+        survivors = {pv_id for pv_id, _ in ranked[:cutoff]}
+        eliminated = {
+            pv_id: f"ranked {i + 1}/{len(ranked)}, bottom {int(self.fraction * 100)}% culled"
+            for i, (pv_id, _) in enumerate(ranked)
+            if pv_id not in survivors
+        }
+        return ElimResult(survivors=survivors, eliminated=eliminated)
+
 
 class TopKElim(BaseModel):
     max_policies: int = Field(ge=1, description="Keep at most this many top-scoring policies")
 
+    def apply(self, policy_scores: dict[UUID, float]) -> ElimResult:
+        ranked = sorted(policy_scores.items(), key=lambda row: row[1], reverse=True)
+        survivors = {pv_id for pv_id, _ in ranked[: self.max_policies]}
+        eliminated = {
+            pv_id: f"ranked {i + 1}/{len(ranked)}, top {self.max_policies} kept"
+            for i, (pv_id, _) in enumerate(ranked)
+            if pv_id not in survivors
+        }
+        return ElimResult(survivors=survivors, eliminated=eliminated)
 
-Elimination = ThresholdElim | FractionElim | TopKElim
+
+SingleElimination = ThresholdElim | FractionElim | TopKElim
+
+
+class AllOfElim(BaseModel):
+    rules: list[SingleElimination] = Field(description="All rules must pass; survivors are the intersection")
+
+    def apply(self, policy_scores: dict[UUID, float]) -> ElimResult:
+        result = ElimResult(survivors=set(policy_scores.keys()))
+        for rule in self.rules:
+            result = result.intersect(rule.apply(policy_scores))
+        return result
+
+
+Elimination = SingleElimination | AllOfElim
 TeamTournamentStageKind = Literal["policy_eval", "sample_teams", "team_eval", "score_policies"]
+
+
+def _elim_description(elim: Elimination) -> str:
+    match elim:
+        case ThresholdElim(min_score=ms):
+            return f"eliminate below {ms} score"
+        case FractionElim(fraction=f):
+            return f"eliminate bottom {int(f * 100)}%"
+        case TopKElim(max_policies=k):
+            return f"keep top {k}"
+        case AllOfElim(rules=rules):
+            return ", ".join(_elim_description(r) for r in rules)
 
 
 class PolicyEvalStage(BaseModel):
@@ -35,13 +106,8 @@ class PolicyEvalStage(BaseModel):
     @property
     def description(self) -> str:
         desc = f"{self.policies_per_team}-policy teams, {self.matches_per_combo} matches per combo"
-        match self.elim:
-            case ThresholdElim(min_score=ms):
-                desc += f", eliminate below {ms} score"
-            case FractionElim(fraction=f):
-                desc += f", eliminate bottom {int(f * 100)}%"
-            case TopKElim(max_policies=k):
-                desc += f", keep top {k}"
+        if self.elim is not None:
+            desc += f", {_elim_description(self.elim)}"
         return desc
 
 
