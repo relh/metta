@@ -53,6 +53,14 @@ resource "aws_iam_policy" "orchestrator_s3" {
         Resource = [
           "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess",
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "pricing:GetProducts",
+          "ec2:DescribeSpotPriceHistory",
+        ]
+        Resource = ["*"]
       }
     ]
   })
@@ -60,6 +68,6 @@ resource "aws_iam_policy" "orchestrator_s3" {
 
 # Output the role ARN for reference
 output "orchestrator_irsa_role_arn" {
-  value = module.orchestrator_irsa.iam_role_arn
+  value       = module.orchestrator_irsa.iam_role_arn
   description = "ARN of the IAM role for orchestrator service account"
 }
