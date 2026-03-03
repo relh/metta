@@ -37,7 +37,7 @@ from metta.app_backend.job_runner.episode_recording import EpisodeJobSummary, re
 from metta.app_backend.job_runner.job_artifacts import JobArtifact
 from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to_public, get_s3_client
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
-from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
+from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus
 from metta.app_backend.models.k8s_events import K8sEvent
 from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -578,21 +578,13 @@ def _update_job_status(
         logger.error(f"Failed to update job {job_id} status to {status}: {e}")
 
 
-def _check_terminal_and_cleanup(
-    stats_client: StatsClient,
-    core_v1: client.CoreV1Api,
-    batch_v1: client.BatchV1Api,
-    ctx: EventCtx,
-) -> bool:
-    """If job already terminal: log, capture logs, delete k8s job, return True."""
+def _fetch_job_if_actionable(stats_client: StatsClient, ctx: EventCtx) -> JobRequest | None:
+    """Fetch job from stats server. Returns None if already terminal (no work needed)."""
     job_request = stats_client.get_job(ctx.job_id)
-    if job_request.status not in (JobStatus.completed, JobStatus.failed):
-        return False
-    logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
-    capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
-    if ctx.job_name:
-        _delete_k8s_job(batch_v1, ctx.job_name)
-    return True
+    if job_request.status in (JobStatus.completed, JobStatus.failed):
+        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
+        return None
+    return job_request
 
 
 @trace("tournament.event_processor.handle_succeeded")
@@ -603,7 +595,8 @@ def _handle_pod_succeeded(
     ctx: EventCtx,
     event_data: dict,
 ):
-    if _check_terminal_and_cleanup(stats_client, core_v1, batch_v1, ctx):
+    job_request = _fetch_job_if_actionable(stats_client, ctx)
+    if job_request is None:
         return
 
     cfg = get_dispatch_config()
@@ -624,7 +617,6 @@ def _handle_pod_succeeded(
             _delete_k8s_job(batch_v1, ctx.job_name)
         return
 
-    job_request = stats_client.get_job(ctx.job_id)
     try:
         result_data = _build_result_metadata(
             event_data,
@@ -657,30 +649,24 @@ def _handle_pod_failed(
     ctx: EventCtx,
     event_data: dict,
 ):
-    if _check_terminal_and_cleanup(stats_client, core_v1, batch_v1, ctx):
+    job_request = _fetch_job_if_actionable(stats_client, ctx)
+    if job_request is None:
         return
 
-    # Capture logs first so they're available for extraction
     capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
 
-    # Try structured error from runner first (written by executor.py on failure)
     runner_error = _read_runner_error(ctx.job_id)
     if runner_error:
         error = runner_error.message
         error_type = runner_error.error_type
         error_source = "runner"
     else:
-        # Runner was killed before it could report — fall back to k8s/log extraction.
-        # K8s reason is authoritative for infra classification (OOMKilled, DeadlineExceeded),
-        # log error is preferred for human-readable detail.
         k8s_error = _get_pod_error_from_event(event_data, batch_v1, job_name=ctx.job_name)
         log_error = _extract_error_from_logs_with_retry(ctx.job_id)
         error_type = _classify_error(k8s_error)
         error = log_error if log_error else k8s_error
         error_source = "logs" if log_error else "k8s"
 
-    # Capture runner/runtime info for failed jobs too (parse failures happen before results upload).
-    job_request = stats_client.get_job(ctx.job_id)
     fail_result = _build_result_metadata(
         event_data,
         core_v1,
@@ -735,6 +721,21 @@ _PHASE_HANDLERS: dict[str, Callable[..., None]] = {
     "Running": _handle_pod_running,
 }
 
+_PHASE_PRIORITY: dict[str, int] = {
+    "Succeeded": 4,
+    "Failed": 3,
+    "Running": 1,
+}
+
+
+def _event_priority(ctx: EventCtx) -> int:
+    """Priority for dedup: higher = more terminal, more useful to process."""
+    if ctx.event_type in ("ADDED", "MODIFIED"):
+        return _PHASE_PRIORITY.get(ctx.phase or "", 0)
+    if ctx.event_type == "DELETED" and ctx.phase not in ("Succeeded", "Failed"):
+        return 2
+    return 0
+
 
 @trace("tournament.event_processor.process_event")
 def _process_event(
@@ -756,6 +757,27 @@ def _process_event(
         _handle_pod_deleted(stats_client, core_v1, batch_v1, ctx, event.event)
 
 
+def _deduplicate_events(events: list[K8sEvent]) -> tuple[list[K8sEvent], list[K8sEvent]]:
+    """Keep only the most terminal event per job_id. Returns (to_process, to_skip)."""
+    best_per_job: dict[UUID, tuple[K8sEvent, int]] = {}
+    unparseable: list[K8sEvent] = []
+
+    for event in events:
+        ctx = EventCtx.parse(event.event)
+        if ctx is None:
+            unparseable.append(event)
+            continue
+        priority = _event_priority(ctx)
+        existing = best_per_job.get(ctx.job_id)
+        if existing is None or priority > existing[1]:
+            best_per_job[ctx.job_id] = (event, priority)
+
+    winners = {id(ep[0]) for ep in best_per_job.values()}
+    to_process = unparseable + [ep for ep in events if id(ep) in winners]
+    to_skip = [ep for ep in events if id(ep) not in winners and ep not in unparseable]
+    return to_process, to_skip
+
+
 def _process_batch(
     stats_client: StatsClient,
     core_v1: client.CoreV1Api,
@@ -768,15 +790,21 @@ def _process_batch(
         if not events:
             return 0
 
-        processed_count = 0
-        for event in events:
+        to_process, to_skip = _deduplicate_events(events)
+
+        if to_skip:
+            logger.info(f"Dedup: {len(to_skip)} redundant events skipped, {len(to_process)} to process")
+            for event in to_skip:
+                _mark_processed(session, event)
+
+        processed_count = len(to_skip)
+        for event in to_process:
             try:
                 _process_event(stats_client, core_v1, batch_v1, event)
                 _mark_processed(session, event)
                 processed_count += 1
             except Exception:
                 logger.error(f"Failed to process event {event.id}", exc_info=True)
-                # Don't mark as processed - will retry on next batch
 
         return processed_count
 

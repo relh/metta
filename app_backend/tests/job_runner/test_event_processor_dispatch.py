@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from metta.app_backend.job_runner.event_processor import (
     EventCtx,
-    _check_terminal_and_cleanup,
+    _fetch_job_if_actionable,
     _handle_pod_deleted,
     _handle_pod_running,
     _process_event,
@@ -173,11 +173,11 @@ class TestProcessEventDispatch:
 
 
 # ---------------------------------------------------------------------------
-# _check_terminal_and_cleanup
+# _fetch_job_if_actionable
 # ---------------------------------------------------------------------------
 
 
-class TestCheckTerminalAndCleanup:
+class TestFetchJobIfActionable:
     def _make_job_request(self, status: JobStatus) -> JobRequest:
         return JobRequest(
             id=uuid4(),
@@ -187,37 +187,33 @@ class TestCheckTerminalAndCleanup:
             user_id="u",
         )
 
-    def test_terminal_completed_returns_true(self):
-        stats, core_v1, batch_v1 = _stub_clients()
+    def test_terminal_completed_returns_none(self):
+        stats = MagicMock()
         stats.get_job.return_value = self._make_job_request(JobStatus.completed)
         ctx = EventCtx.parse(_make_event(phase="Succeeded"))
         assert ctx is not None
 
-        with patch("metta.app_backend.job_runner.event_processor.capture_pod_logs") as mock_logs:
-            result = _check_terminal_and_cleanup(stats, core_v1, batch_v1, ctx)
-            assert result is True
-            mock_logs.assert_called_once()
-            batch_v1.delete_namespaced_job.assert_called_once()
+        result = _fetch_job_if_actionable(stats, ctx)
+        assert result is None
 
-    def test_non_terminal_returns_false(self):
-        stats, core_v1, batch_v1 = _stub_clients()
-        stats.get_job.return_value = self._make_job_request(JobStatus.running)
+    def test_terminal_failed_returns_none(self):
+        stats = MagicMock()
+        stats.get_job.return_value = self._make_job_request(JobStatus.failed)
+        ctx = EventCtx.parse(_make_event(phase="Failed"))
+        assert ctx is not None
+
+        result = _fetch_job_if_actionable(stats, ctx)
+        assert result is None
+
+    def test_non_terminal_returns_job_request(self):
+        stats = MagicMock()
+        job_req = self._make_job_request(JobStatus.running)
+        stats.get_job.return_value = job_req
         ctx = EventCtx.parse(_make_event(phase="Running"))
         assert ctx is not None
 
-        result = _check_terminal_and_cleanup(stats, core_v1, batch_v1, ctx)
-        assert result is False
-
-    def test_terminal_no_job_name_skips_delete(self):
-        stats, core_v1, batch_v1 = _stub_clients()
-        stats.get_job.return_value = self._make_job_request(JobStatus.failed)
-        ctx = EventCtx.parse(_make_event(phase="Failed", job_name=None))
-        assert ctx is not None
-
-        with patch("metta.app_backend.job_runner.event_processor.capture_pod_logs"):
-            result = _check_terminal_and_cleanup(stats, core_v1, batch_v1, ctx)
-            assert result is True
-            batch_v1.delete_namespaced_job.assert_not_called()
+        result = _fetch_job_if_actionable(stats, ctx)
+        assert result is job_req
 
 
 # ---------------------------------------------------------------------------
