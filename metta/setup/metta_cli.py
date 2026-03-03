@@ -692,21 +692,19 @@ def _run_recipe(recipe: str, args: list[str]) -> None:
         raise typer.Exit(e.returncode) from e
 
 
-def _run_game_recipe(recipe: str, game: str, extra_args: list[str]) -> None:
-    _run_recipe(recipe, [f"game={game}", *extra_args])
+def _canonical_game_name(target: str) -> str:
+    return target.removeprefix("game.")
 
 
-def _normalize_train_target(target: str) -> str:
-    if target.startswith("game."):
-        return target.split(".", 1)[1]
-    return target
-
-
-def _resolve_train_recipe(target: str, extra_args: list[str]) -> tuple[str, list[str]]:
-    normalized_target = _normalize_train_target(target)
-    if resolve_and_load_tool_maker(f"{normalized_target}.train") is not None:
-        return f"{normalized_target}.train", extra_args
-    return "game.train", [f"game={normalized_target}", *extra_args]
+def _resolve_game_recipe(target: str, action: str) -> str:
+    game_name = _canonical_game_name(target)
+    recipe = f"{game_name}.{action}"
+    if resolve_and_load_tool_maker(recipe) is not None:
+        return recipe
+    raise typer.BadParameter(
+        f"Unknown game '{game_name}'. Use a canonical game recipe name (for example 'hunger', 'cogsguard', "
+        "or 'cogs_vs_clips')."
+    )
 
 
 @app.command(
@@ -719,8 +717,8 @@ def cmd_train(
     ctx: typer.Context,
 ):
     """Train a registered game via the recipe system."""
-    recipe, args = _resolve_train_recipe(game, list(ctx.args))
-    _run_recipe(recipe, args)
+    recipe = _resolve_game_recipe(game, "train")
+    _run_recipe(recipe, list(ctx.args))
 
 
 @app.command(
@@ -733,7 +731,8 @@ def cmd_play(
     ctx: typer.Context,
 ):
     """Play a registered game via the recipe system."""
-    _run_game_recipe("game.play", game, list(ctx.args))
+    recipe = _resolve_game_recipe(game, "play")
+    _run_recipe(recipe, list(ctx.args))
 
 
 @app.command(name="gridworks", help="Start the Gridworks web UI", context_settings={"allow_extra_args": True})

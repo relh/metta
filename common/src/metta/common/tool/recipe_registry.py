@@ -8,6 +8,12 @@ import pkgutil
 
 from metta.common.tool.recipe import Recipe
 
+RECIPE_SEARCH_PREFIXES: tuple[str, ...] = (
+    "recipes.game",
+    "recipes.prod",
+    "recipes.experiment",
+)
+
 
 class RecipeRegistry:
     """Singleton registry for discovered recipes.
@@ -29,10 +35,7 @@ class RecipeRegistry:
     def _ensure_discovered(self) -> None:
         """Lazily discover all recipes on first access."""
         if not self._discovered:
-            # Discover from both prod and experiment locations
-            self.discover_all("recipes.prod")
-            self.discover_all("recipes.experiment")
-            self._discovered = True
+            self.discover_all()
 
     def get(self, module_path: str) -> Recipe | None:
         """Get a recipe by module path (tries both short and full paths)."""
@@ -42,61 +45,61 @@ class RecipeRegistry:
         if module_path in self.path_to_recipe:
             return self.path_to_recipe[module_path]
 
-        # Try with prefix if it's a short name
+        # Try with configured recipe prefixes if it's a short name.
         if not module_path.startswith("recipes."):
-            # Try prod first, then experiment
-            for prefix in ["recipes.prod", "recipes.experiment"]:
-                full_path = f"{prefix}.{module_path}"
-                if full_path in self.path_to_recipe:
-                    return self.path_to_recipe[full_path]
+            for prefix in RECIPE_SEARCH_PREFIXES:
+                if recipe := self.path_to_recipe.get(f"{prefix}.{module_path}"):
+                    return recipe
 
         # Try to load directly as a fallback for recipes outside recipes package
         # This supports test fixtures and external recipe packages
         recipe = Recipe.load(module_path)
-        if recipe:
-            # Check if it has tool makers (valid recipe)
-            if recipe.get_explicit_tool_makers():
-                # Cache it for future lookups
-                self.path_to_recipe[module_path] = recipe
-                return recipe
-
-        return None
+        if recipe is None:
+            return None
+        if not recipe.get_explicit_tool_makers():
+            return None
+        # Cache it for future lookups
+        self.path_to_recipe[module_path] = recipe
+        return recipe
 
     def get_all(self) -> list[Recipe]:
         """Get all discovered recipes."""
         self._ensure_discovered()
         return list(self.path_to_recipe.values())
 
-    def discover_all(self, base_package: str = "recipes.prod") -> None:
-        """Discover all recipe modules under a base package and add to registry.
+    def discover_all(self, base_package: str | None = None) -> None:
+        """Discover recipe modules and add them to registry.
 
-        Uses pkgutil.walk_packages() to recursively walk all subpackages.
-        Requires __init__.py files for proper package structure.
+        If ``base_package`` is provided, only that package is scanned.
+        If omitted, all configured recipe namespaces are scanned.
 
         Args:
-            base_package: Base package to search for recipes (e.g., recipes.prod, recipes.experiment)
+            base_package: Optional base package to search for recipes.
         """
-        if importlib.util.find_spec(base_package) is None:
-            return None
-        base_module = importlib.import_module(base_package)
+        packages = RECIPE_SEARCH_PREFIXES if base_package is None else (base_package,)
+        for package in packages:
+            if importlib.util.find_spec(package) is None:
+                continue
+            base_module = importlib.import_module(package)
 
-        # Get the package path
-        if not hasattr(base_module, "__path__"):
-            return
-
-        # Walk packages recursively
-        for _importer, modname, ispkg in pkgutil.walk_packages(path=base_module.__path__, prefix=f"{base_package}."):
-            # Skip private modules
-            if any(part.startswith("_") for part in modname.split(".")):
+            # Get the package path
+            if not hasattr(base_module, "__path__"):
                 continue
 
-            # Try to load as recipe (skip packages, only load modules)
-            if not ispkg:
+            # Walk packages recursively
+            for _importer, modname, ispkg in pkgutil.walk_packages(path=base_module.__path__, prefix=f"{package}."):
+                # Skip private modules
+                if any(part.startswith("_") for part in modname.split(".")):
+                    continue
+                if ispkg:
+                    continue
                 recipe = Recipe.load(modname)
-                if recipe:
-                    # Only include if it has tool makers
-                    if recipe.get_explicit_tool_makers():
-                        self.path_to_recipe[modname] = recipe
+                if recipe is None or not recipe.get_explicit_tool_makers():
+                    continue
+                self.path_to_recipe[modname] = recipe
+
+        if base_package is None:
+            self._discovered = True
 
     def clear(self) -> None:
         """Clear the registry (mainly for testing)."""

@@ -1,6 +1,7 @@
 from metta.cogworks.curriculum import Curriculum
 from metta.rl.training.batch import calculate_batch_sizes
-from recipes.experiment import cogsguard, game
+from recipes.experiment import cogsguard
+from recipes.game import hunger
 
 
 def test_minimize_config_keeps_agent_aligned_batch_sizes() -> None:
@@ -23,6 +24,6 @@ def test_minimize_config_keeps_agent_aligned_batch_sizes() -> None:
 
 
 def test_minimize_config_handles_non_divisible_initial_batches() -> None:
-    tool = game.train(game="hunger", num_agents=40, max_steps=250)
+    tool = hunger.train(num_agents=40, max_steps=250)
     tool._minimize_config_for_debugging()
     assert tool.trainer.batch_size == tool.trainer.minibatch_size
