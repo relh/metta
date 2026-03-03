@@ -203,7 +203,7 @@ def _role_metric_definitions() -> dict[str, list[RoleMetricDef]]:
 
 
 def _parse_include_flags(include: str | None) -> set[str]:
-    if include is None:
+    if not include:
         return set()
     return {token.strip().lower() for token in include.split(",") if token.strip()}
 
@@ -214,6 +214,19 @@ def _preferred_pool_names_for_season(season_name: str) -> list[str]:
     commissioner_cls = SEASONS[season_name]
     preferred_names = [commissioner_cls.leaderboard_pool, commissioner_cls.entry_pool]
     return list(dict.fromkeys([name for name in preferred_names if name]))
+
+
+def _append_unique_pool(pool: Pool, *, deduped: list[Pool], seen_pool_ids: set[UUID]) -> None:
+    if pool.id in seen_pool_ids:
+        return
+    seen_pool_ids.add(pool.id)
+    deduped.append(pool)
+
+
+def _apply_leaderboard_entry(policy: PolicyInfo, leaderboard_entry: tuple[int, float, int] | None) -> None:
+    if leaderboard_entry is None:
+        return
+    policy.rank, policy.score, policy.matches = leaderboard_entry
 
 
 async def _select_role_pool_for_policy(session: Any, policy_version_id: UUID) -> Pool | None:
@@ -284,20 +297,13 @@ async def _candidate_role_pools_for_policy(session: Any, policy_version_id: UUID
     seen_pool_ids: set[UUID] = set()
 
     for pool in ordered_default_pools:
-        if pool.id in seen_pool_ids:
-            continue
-        seen_pool_ids.add(pool.id)
-        deduped.append(pool)
+        _append_unique_pool(pool, deduped=deduped, seen_pool_ids=seen_pool_ids)
 
-    if selected is not None and selected.id not in seen_pool_ids:
-        seen_pool_ids.add(selected.id)
-        deduped.append(selected)
+    if selected is not None:
+        _append_unique_pool(selected, deduped=deduped, seen_pool_ids=seen_pool_ids)
 
     for pool in pools:
-        if pool.id in seen_pool_ids:
-            continue
-        seen_pool_ids.add(pool.id)
-        deduped.append(pool)
+        _append_unique_pool(pool, deduped=deduped, seen_pool_ids=seen_pool_ids)
     return deduped
 
 
@@ -522,11 +528,7 @@ def create_dashboard_router() -> APIRouter:
                         )
                         for rank, (lb_policy_id, score, match_count) in enumerate(leaderboard, start=1)
                     ]
-                    current_entry = leaderboard_by_policy_id.get(str(pv_id))
-                    if current_entry:
-                        policy_info.rank = current_entry[0]
-                        policy_info.score = current_entry[1]
-                        policy_info.matches = current_entry[2]
+                    _apply_leaderboard_entry(policy_info, leaderboard_by_policy_id.get(str(pv_id)))
 
             # Compare against immediate previous version of the same policy.
             baseline_query = (
@@ -549,10 +551,7 @@ def create_dashboard_router() -> APIRouter:
                     version=baseline_version.version,
                 )
                 baseline_entry = leaderboard_by_policy_id.get(str(baseline_version.id))
-                if baseline_entry:
-                    baseline_policy.rank = baseline_entry[0]
-                    baseline_policy.score = baseline_entry[1]
-                    baseline_policy.matches = baseline_entry[2]
+                _apply_leaderboard_entry(baseline_policy, baseline_entry)
 
                 baseline_policy_jobs = await _fetch_policy_episode_jobs(
                     session,
@@ -579,11 +578,7 @@ def create_dashboard_router() -> APIRouter:
                     name=recent.policy.name,
                     version=recent.version,
                 )
-                recent_entry = leaderboard_by_policy_id.get(str(recent.id))
-                if recent_entry:
-                    recent_point.rank = recent_entry[0]
-                    recent_point.score = recent_entry[1]
-                    recent_point.matches = recent_entry[2]
+                _apply_leaderboard_entry(recent_point, leaderboard_by_policy_id.get(str(recent.id)))
                 recent_policy_versions.append(recent_point)
 
         outcome_summary = compute_outcome_summary(policy_info, season_name, baseline_policy)

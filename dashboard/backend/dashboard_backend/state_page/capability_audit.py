@@ -36,10 +36,6 @@ def _read_ast(relative_path: str) -> ast.AST | None:
         return None
 
 
-def _exists(relative_path: str) -> bool:
-    return (_REPO_ROOT / relative_path).is_file()
-
-
 def _has_python_function(relative_path: str, function_name: str) -> bool:
     tree = _read_ast(relative_path)
     if tree is None:
@@ -68,14 +64,13 @@ def _iter_relative_files(roots: tuple[str, ...], suffixes: tuple[str, ...]) -> t
             if not suffixes or candidate.suffix in suffixes:
                 relative_files.add(str(candidate.relative_to(_REPO_ROOT)))
             continue
-        for path in candidate.rglob("*"):
-            if not path.is_file():
-                continue
-            if any(part in _SKIP_DIR_NAMES for part in path.parts):
-                continue
-            if suffixes and path.suffix not in suffixes:
-                continue
-            relative_files.add(str(path.relative_to(_REPO_ROOT)))
+        relative_files.update(
+            str(path.relative_to(_REPO_ROOT))
+            for path in candidate.rglob("*")
+            if path.is_file()
+            and not any(part in _SKIP_DIR_NAMES for part in path.parts)
+            and (not suffixes or path.suffix in suffixes)
+        )
     return tuple(sorted(relative_files))
 
 

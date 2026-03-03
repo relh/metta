@@ -40,9 +40,7 @@ def get_user_from_header(request: Request) -> Optional[User]:
     user_email = request.headers.get("X-User-Email", "")
     is_softmax_team_member = request.headers.get("X-User-Is-Softmax-Team-Member", "false").lower() == "true"
 
-    if user_id:
-        return User(id=user_id, email=user_email, is_softmax_team_member=is_softmax_team_member)
-    return None
+    return User(id=user_id, email=user_email, is_softmax_team_member=is_softmax_team_member) if user_id else None
 
 
 async def validate_token_via_login_service(token: str) -> Optional[User]:
@@ -53,8 +51,7 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
             is_softmax_team_member=True,
         )
 
-    is_service_account = any(token.startswith(prefix.value) for prefix in TokenPrefixType)
-    if is_service_account:
+    if any(token.startswith(prefix.value) for prefix in TokenPrefixType):
         try:
             service_account_user = await get_service_account_user(token)
             if not service_account_user:
@@ -107,22 +104,17 @@ async def get_user_from_token(request: Request) -> Optional[User]:
     token = request.headers.get("X-Auth-Token")
     if not token:
         authorization_header = request.headers.get("Authorization", "")
-        if authorization_header.lower().startswith("bearer "):
-            token = authorization_header.split(" ", 1)[1]
-
-    if token:
-        return await validate_token_via_login_service(token)
-
-    return None
+        scheme, _separator, value = authorization_header.partition(" ")
+        if scheme.lower() == "bearer":
+            token = value
+    return await validate_token_via_login_service(token) if token else None
 
 
 async def get_user(request: Request) -> Optional[User]:
-    user = get_user_from_header(request)
-    if user:
+    if user := get_user_from_header(request):
         return user
 
-    user = await get_user_from_token(request)
-    if user:
+    if user := await get_user_from_token(request):
         return user
 
     if settings.DASHBOARD_DEV_AUTH_BYPASS and _is_local_request(request):

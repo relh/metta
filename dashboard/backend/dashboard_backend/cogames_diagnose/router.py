@@ -85,24 +85,16 @@ def _resolve_repo_root() -> Path | None:
 def _resolve_diagnose_root() -> Path | None:
     if settings.DASHBOARD_COGAMES_DIAGNOSE_ROOT:
         return Path(settings.DASHBOARD_COGAMES_DIAGNOSE_ROOT)
-    repo_root = _resolve_repo_root()
-    if repo_root is None:
-        return None
-    return repo_root / "outputs" / "cogames-diagnose"
+    return repo_root / "outputs" / "cogames-diagnose" if (repo_root := _resolve_repo_root()) is not None else None
 
 
 def _list_run_ids(diagnose_root: Path) -> list[str]:
     if not diagnose_root.is_dir():
         return []
-    runs: list[str] = []
-    for entry in diagnose_root.iterdir():
-        if not entry.is_dir():
-            continue
-        if not _RUN_ID_RE.fullmatch(entry.name):
-            continue
-        runs.append(entry.name)
-    runs.sort(reverse=True)
-    return runs
+    return sorted(
+        (entry.name for entry in diagnose_root.iterdir() if entry.is_dir() and _RUN_ID_RE.fullmatch(entry.name)),
+        reverse=True,
+    )
 
 
 def _read_json_file(path: Path) -> Any:
@@ -126,6 +118,13 @@ def _required_run_dir(diagnose_root: Path, run_id: str) -> Path:
     if not run_dir.is_dir():
         raise HTTPException(status_code=404, detail="Diagnose run not found")
     return run_dir
+
+
+def _required_diagnose_run_dir(run_id: str) -> Path:
+    diagnose_root = _resolve_diagnose_root()
+    if diagnose_root is None:
+        raise HTTPException(status_code=404, detail="Diagnose run not found")
+    return _required_run_dir(diagnose_root, run_id)
 
 
 def _required_json(path: Path, detail: str) -> dict[str, Any]:
@@ -163,10 +162,7 @@ def create_cogames_diagnose_router() -> APIRouter:
     async def get_manifest(run_id: str, user: SoftmaxUser) -> dict[str, Any]:
         del user
         _assert_safe_name(run_id, "run id")
-        diagnose_root = _resolve_diagnose_root()
-        if diagnose_root is None:
-            raise HTTPException(status_code=404, detail="Diagnose run not found")
-        run_dir = _required_run_dir(diagnose_root, run_id)
+        run_dir = _required_diagnose_run_dir(run_id)
         return _required_json(run_dir / "manifest.json", detail="Manifest not found")
 
     @router.get("/runs/{run_id}/doctor-note")
@@ -174,10 +170,7 @@ def create_cogames_diagnose_router() -> APIRouter:
     async def get_doctor_note(run_id: str, user: SoftmaxUser) -> dict[str, Any]:
         del user
         _assert_safe_name(run_id, "run id")
-        diagnose_root = _resolve_diagnose_root()
-        if diagnose_root is None:
-            raise HTTPException(status_code=404, detail="Diagnose run not found")
-        run_dir = _required_run_dir(diagnose_root, run_id)
+        run_dir = _required_diagnose_run_dir(run_id)
         return _required_json(run_dir / "doctor_note.json", detail="Doctor note not found")
 
     @router.get("/runs/{run_id}/artifacts/{artifact_path:path}")
@@ -186,15 +179,9 @@ def create_cogames_diagnose_router() -> APIRouter:
         del user
         _assert_safe_name(run_id, "run id")
         artifact = _assert_safe_artifact_path(artifact_path)
-        diagnose_root = _resolve_diagnose_root()
-        if diagnose_root is None:
-            raise HTTPException(status_code=404, detail="Diagnose run not found")
-
-        run_dir = _required_run_dir(diagnose_root, run_id)
+        run_dir = _required_diagnose_run_dir(run_id)
         manifest = _required_json(run_dir / "manifest.json", detail="Manifest not found")
-        allowed = _required_manifest_artifact_files(manifest)
-        allowed.add("manifest.json")
-        allowed.add("doctor_note.json")
+        allowed = _required_manifest_artifact_files(manifest) | {"manifest.json", "doctor_note.json"}
 
         if artifact not in allowed:
             raise HTTPException(status_code=404, detail="Artifact not found")

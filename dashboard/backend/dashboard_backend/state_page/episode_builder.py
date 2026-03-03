@@ -31,7 +31,10 @@ def _parse_assignments(raw_value: Any) -> list[int]:
 
 def _resolve_policy_index(policy_version_id: str, raw_policy_version_ids: Any) -> int:
     policy_version_ids = [str(policy_id) for policy_id in _parse_tag_list(raw_policy_version_ids)]
-    return policy_version_ids.index(policy_version_id) if policy_version_id in policy_version_ids else 0
+    try:
+        return policy_version_ids.index(policy_version_id)
+    except ValueError:
+        return 0
 
 
 def _compute_team_comp(assignments: list[int], policy_index: int) -> str:
@@ -43,28 +46,45 @@ def _compute_team_comp(assignments: list[int], policy_index: int) -> str:
 
 def _extract_job_error_details(job: Any | None) -> tuple[str | None, dict[str, Any]]:
     if job is None:
-        return (None, {})
+        return None, {}
 
     error_message = job.error.strip() if isinstance(job.error, str) and job.error.strip() else None
     error_context: dict[str, Any] = {}
     if isinstance(job.result, dict):
         for key in ("error", "message", "traceback", "stderr", "exception"):
             value = job.result.get(key)
-            if isinstance(value, str) and value.strip():
+            if isinstance(value, str):
+                stripped_value = value.strip()
+                if not stripped_value:
+                    continue
                 if error_message is None and key in {"error", "message"}:
-                    error_message = value.strip()
-                error_context[key] = value.strip()
+                    error_message = stripped_value
+                error_context[key] = stripped_value
             elif isinstance(value, (int, float, bool)):
                 error_context[key] = value
-    return (error_message, error_context)
+    return error_message, error_context
 
 
 def _format_timestamp(value: Any) -> str | None:
+    if value is None:
+        return None
     if hasattr(value, "isoformat"):
         return value.isoformat()
-    if value is not None:
-        return str(value)
-    return None
+    return str(value)
+
+
+def _accumulate_numeric_metrics(target: dict[str, float], values: dict[str, Any]) -> None:
+    for key, value in values.items():
+        if value is not None and isinstance(value, (int, float)):
+            target[key] = target.get(key, 0) + value
+
+
+def _set_prefixed_numeric_metrics(target: dict[str, float], source: Any, *, prefix: str) -> None:
+    if not isinstance(source, dict):
+        return
+    for key, value in source.items():
+        if value is not None and isinstance(value, (int, float)):
+            target[f"{prefix}{key}"] = value
 
 
 async def build_dashboard_episodes(
@@ -132,21 +152,10 @@ async def build_dashboard_episodes(
             for idx in my_agent_indices:
                 if idx < len(agent_stats):
                     agent = agent_stats[idx]
-                    for key, value in agent.items():
-                        if value is not None and isinstance(value, (int, float)):
-                            metrics[key] = metrics.get(key, 0) + value
+                    _accumulate_numeric_metrics(metrics, agent)
 
-        team_stats = stats.get("team", {})
-        if isinstance(team_stats, dict):
-            for key, value in team_stats.items():
-                if value is not None and isinstance(value, (int, float)):
-                    metrics[f"team.{key}"] = value
-
-        game_stats = stats.get("game", {})
-        if isinstance(game_stats, dict):
-            for key, value in game_stats.items():
-                if value is not None and isinstance(value, (int, float)):
-                    metrics[f"game.{key}"] = value
+        _set_prefixed_numeric_metrics(metrics, stats.get("team", {}), prefix="team.")
+        _set_prefixed_numeric_metrics(metrics, stats.get("game", {}), prefix="game.")
 
         steps = attributes.get("steps", 0)
         job_info = job_info_by_id.get(job_id)

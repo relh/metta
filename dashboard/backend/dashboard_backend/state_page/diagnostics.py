@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import random
 import statistics
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -40,8 +41,6 @@ from dashboard.backend.dashboard_backend.state_page.kpi_math import (
     resource_retention as kpi_resource_retention,
 )
 
-# === Pydantic Models ===
-
 
 class DashboardEpisode(BaseModel):
     episode_id: str
@@ -65,40 +64,32 @@ class DashboardEpisode(BaseModel):
 
 
 class DerivedMetrics(BaseModel):
-    # Efficiency KPIs (0-1 scale)
     move_efficiency: float = 0.0
     action_success_rate: float = 0.0
     vibe_change_rate: float = 0.0
 
-    # Resource KPIs
     resource_retention: float = 0.0
 
-    # Vulnerability KPIs
     freeze_vulnerability: float = 0.0
 
-    # Junction KPIs
     junction_control_rate: float = 0.0
     alignment_stability: float = 0.0
     net_alignment_rate: float = 0.0
 
-    # Reward KPIs
     avg_reward: float = 0.0
 
-    # Additional KPIs
     noop_rate: float = 0.0
     resource_efficiency_per_step: float = 0.0
     hearts_to_junction_rate: float = 0.0
     reward_consistency: float = 0.0
     reward_nonzero_pct: float = 0.0
 
-    # Strategy profile scores (0-100)
     profile_aggressive: float = 0.0
     profile_defensive: float = 0.0
     profile_resource_hoarder: float = 0.0
     profile_junction_hunter: float = 0.0
     profile_mobile_scout: float = 0.0
 
-    # Diagnostic flags
     diagnostics: list[str] = Field(default_factory=list)
 
 
@@ -488,9 +479,6 @@ class DashboardResponse(BaseModel):
     diagnose_runs: list[DashboardDiagnoseRunSummary] | None = None
 
 
-# === Pure computation functions ===
-
-
 def _percentile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
@@ -598,6 +586,13 @@ def compute_episode_behavior_tags(episode: DashboardEpisode) -> list[str]:
     return tags
 
 
+def _metric_alias_note(metric_key: str) -> str:
+    aliases = metric_presence_aliases(metric_key)
+    if len(aliases) <= 1:
+        return ""
+    return f" (aliases: {', '.join(f'`{alias}`' for alias in aliases[1:])})"
+
+
 def compute_unsupported_state(episodes: list[DashboardEpisode]) -> UnsupportedStateSummary:
     issues: list[UnsupportedIssue] = []
 
@@ -667,17 +662,13 @@ def compute_unsupported_state(episodes: list[DashboardEpisode]) -> UnsupportedSt
         "junction.scrambled_by_agent",
     ]
     for metric_key in required_metric_keys:
-        aliases = metric_presence_aliases(metric_key)
         missing_metric = sum(1 for episode in completed if not metric_present(episode.metrics, metric_key))
         if missing_metric > 0:
-            alias_note = ""
-            if len(aliases) > 1:
-                alias_note = f" (aliases: {', '.join(f'`{alias}`' for alias in aliases[1:])})"
             issues.append(
                 UnsupportedIssue(
                     code=f"missing_metric::{metric_key}",
                     severity="warn",
-                    message=f"Metric `{metric_key}`{alias_note} is missing in part of the sample.",
+                    message=f"Metric `{metric_key}`{_metric_alias_note(metric_key)} is missing in part of the sample.",
                     affected_count=missing_metric,
                     total_count=len(completed),
                     recommended_action=(
@@ -721,17 +712,13 @@ def compute_instrumentation_validation(
         )
 
     def add_metric_check(metric_key: str) -> None:
-        aliases = metric_presence_aliases(metric_key)
         present = sum(1 for episode in completed if metric_present(episode.metrics, metric_key))
-        alias_note = ""
-        if len(aliases) > 1:
-            alias_note = f" (aliases: {', '.join(f'`{alias}`' for alias in aliases[1:])})"
         append_check(
             metric_key,
             "metric",
             present,
             completed_total,
-            f"Metric `{metric_key}`{alias_note} coverage across completed episodes.",
+            f"Metric `{metric_key}`{_metric_alias_note(metric_key)} coverage across completed episodes.",
         )
 
     def add_tag_check(tag_key: str) -> None:
@@ -1547,7 +1534,6 @@ def compute_derived_metrics(episodes: list[DashboardEpisode]) -> DerivedMetrics:
     def get(key: str, default: float = 0.0) -> float:
         return metric_value(totals, key, default)
 
-    # Efficiency KPIs
     move_success = get("action.move.success")
     move_failed = get("action.move.failed")
     move_efficiency = kpi_move_efficiency(totals)
@@ -1559,16 +1545,13 @@ def compute_derived_metrics(episodes: list[DashboardEpisode]) -> DerivedMetrics:
     vibe_change_success = get("action.change_vibe.success")
     vibe_change_rate = safe_div(vibe_change_success, total_actions)
 
-    # Resource KPIs
     total_amount = sum(get(f"{r}.amount") for r in RESOURCES)
     total_gained = sum(get(f"{r}.gained") for r in RESOURCES)
     resource_retention = kpi_resource_retention(totals)
 
-    # Vulnerability KPIs
     frozen_ticks = get("status.frozen.ticks")
     freeze_vulnerability = safe_div(frozen_ticks, total_steps) if total_steps > 0 else 0.0
 
-    # Junction KPIs
     junction_aligned = get("junction.aligned_by_agent")
     junction_scrambled = get("junction.scrambled_by_agent")
     junction_control_rate = kpi_junction_control_rate(totals)
@@ -1579,7 +1562,6 @@ def compute_derived_metrics(episodes: list[DashboardEpisode]) -> DerivedMetrics:
     alignment_stability = safe_div(aligned_held, aligned_gained) if aligned_gained > 0 else 0.0
     net_alignment_rate = safe_div(aligned_gained - aligned_lost, aligned_gained)
 
-    # Strategy profiles (0-100)
     profile_aggressive = min(100, (junction_scrambled / n_episodes) * 10 + (vibe_change_success / n_episodes) * 5)
 
     noop_count = get("action.noop.success")
@@ -1593,7 +1575,6 @@ def compute_derived_metrics(episodes: list[DashboardEpisode]) -> DerivedMetrics:
     noop_rate_profile = safe_div(noop_count, move_success + noop_count)
     profile_mobile_scout = min(100, move_efficiency * 50 + (1 - noop_rate_profile) * 50)
 
-    # Additional KPIs
     noop_rate = kpi_noop_rate(totals)
     resource_efficiency_per_step = safe_div(total_gained, total_steps) if total_steps > 0 else 0.0
 
@@ -1612,7 +1593,6 @@ def compute_derived_metrics(episodes: list[DashboardEpisode]) -> DerivedMetrics:
     nonzero_count = sum(1 for r in rewards if r > 0.1)
     reward_nonzero_pct = safe_div(nonzero_count, len(rewards))
 
-    # Diagnostics
     diagnostics = compute_diagnostics(
         episodes,
         completed,
@@ -1709,7 +1689,6 @@ def compute_diagnostics(
     if noop_rate > 0.15 and noop_count > n_episodes * 100:
         diagnostics.append(f"High noop rate ({noop_rate * 100:.1f}%) - policy may be indecisive or stuck")
 
-    # Matchup disparity
     by_opponent: dict[str, list[float]] = {}
     for e in completed:
         by_opponent.setdefault(e.opponent_name, []).append(e.reward)
@@ -1725,7 +1704,6 @@ def compute_diagnostics(
                 f"worst avg {worst_avg:.1f} with {worst_opp}"
             )
 
-    # Declining rewards
     if len(rewards) >= 10:
         n_r = len(rewards)
         x_mean = (n_r - 1) / 2.0
@@ -1737,7 +1715,6 @@ def compute_diagnostics(
             if slope < -0.05:
                 diagnostics.append(f"Declining rewards (slope={slope:.3f}) - recent episodes scoring worse")
 
-    # High freeze + low reward
     if len(completed) >= 5:
         avg_reward_all = sum(e.reward for e in completed) / n_episodes
         frozen_low_count = sum(
@@ -1753,7 +1730,6 @@ def compute_diagnostics(
                 f"({frozen_low_count / n_episodes * 100:.0f}%) - check combat avoidance"
             )
 
-    # Team comp red flag
     comp_rewards: dict[str, list[float]] = {}
     for e in completed:
         comp_rewards.setdefault(e.team_composition, []).append(e.reward)
@@ -1765,7 +1741,6 @@ def compute_diagnostics(
             f"(ratio {avg_6v2 / avg_2v6:.1f}x)"
         )
 
-    # Zero-count detection
     capability_metrics = [
         "junction.aligned_by_agent",
         "junction.scrambled_by_agent",
@@ -1875,6 +1850,45 @@ def compute_opponent_metrics(episodes: list[DashboardEpisode]) -> dict[str, Oppo
     return result
 
 
+def _slice_spread(slices: list[MatchupSlice]) -> tuple[float, str | None, str | None]:
+    if not slices:
+        return 0.0, None, None
+    if len(slices) == 1:
+        key = slices[0].key
+        return 0.0, key, key
+    worst = slices[0]
+    best = slices[-1]
+    return best.avg_reward - worst.avg_reward, best.key, worst.key
+
+
+def _interaction_specific_reason(
+    matched_slices: list[MatchupSlice],
+    *,
+    global_reward_delta: float | None,
+    concentration_label: str,
+    stable_label: str,
+) -> str | None:
+    if global_reward_delta is None or global_reward_delta > -0.1 or not matched_slices:
+        return None
+    worst_row = min(
+        matched_slices,
+        key=lambda row: row.delta_vs_baseline if row.delta_vs_baseline is not None else 0,
+    )
+    other_deltas = [
+        row.delta_vs_baseline
+        for row in matched_slices
+        if row.key != worst_row.key and row.delta_vs_baseline is not None
+    ]
+    other_delta_avg = statistics.mean(other_deltas) if other_deltas else worst_row.delta_vs_baseline
+    if (worst_row.delta_vs_baseline or 0) > -0.3 or (other_delta_avg or 0) < -0.05:
+        return None
+    return (
+        f"Regression is concentrated {concentration_label} "
+        f"{worst_row.key} ({worst_row.delta_vs_baseline:+.2f}) "
+        f"while {stable_label} are comparatively stable ({other_delta_avg:+.2f})."
+    )
+
+
 def compute_matchup_summary(
     current_episodes: list[DashboardEpisode],
     baseline_episodes: list[DashboardEpisode] | None = None,
@@ -1944,31 +1958,8 @@ def compute_matchup_summary(
     baseline_compositions = group_rewards(baseline_completed, "composition")
     composition_slices = build_slices(current_compositions, baseline_compositions)
 
-    opponent_spread = 0.0
-    best_opponent: str | None = None
-    worst_opponent: str | None = None
-    if len(opponent_slices) >= 2:
-        worst = opponent_slices[0]
-        best = opponent_slices[-1]
-        opponent_spread = best.avg_reward - worst.avg_reward
-        best_opponent = best.key
-        worst_opponent = worst.key
-    elif len(opponent_slices) == 1:
-        best_opponent = opponent_slices[0].key
-        worst_opponent = opponent_slices[0].key
-
-    composition_spread = 0.0
-    best_composition: str | None = None
-    worst_composition: str | None = None
-    if len(composition_slices) >= 2:
-        worst_comp = composition_slices[0]
-        best_comp = composition_slices[-1]
-        composition_spread = best_comp.avg_reward - worst_comp.avg_reward
-        best_composition = best_comp.key
-        worst_composition = worst_comp.key
-    elif len(composition_slices) == 1:
-        best_composition = composition_slices[0].key
-        worst_composition = composition_slices[0].key
+    opponent_spread, best_opponent, worst_opponent = _slice_spread(opponent_slices)
+    composition_spread, best_composition, worst_composition = _slice_spread(composition_slices)
 
     matched_opponent_slices = [row for row in opponent_slices if row.delta_vs_baseline is not None]
     matched_composition_slices = [row for row in composition_slices if row.delta_vs_baseline is not None]
@@ -1995,61 +1986,23 @@ def compute_matchup_summary(
                 "Teammate-pairing evidence is limited; collect more episodes before making pairing-specific claims."
             )
     else:
-        opponent_reason: str | None = None
-        if matched_opponent_slices:
-            worst_opponent_row = min(
-                matched_opponent_slices,
-                key=lambda row: row.delta_vs_baseline if row.delta_vs_baseline is not None else 0,
-            )
-            other_opponent_deltas = [
-                row.delta_vs_baseline
-                for row in matched_opponent_slices
-                if row.key != worst_opponent_row.key and row.delta_vs_baseline is not None
-            ]
-            other_opponent_delta_avg = (
-                statistics.mean(other_opponent_deltas)
-                if other_opponent_deltas
-                else worst_opponent_row.delta_vs_baseline
-            )
-            if (
-                global_reward_delta is not None
-                and global_reward_delta <= -0.1
-                and (worst_opponent_row.delta_vs_baseline or 0) <= -0.3
-                and (other_opponent_delta_avg or 0) >= -0.05
-            ):
-                interaction_specific_issue = True
-                opponent_reason = (
-                    "Regression is concentrated with teammate "
-                    f"{worst_opponent_row.key} ({worst_opponent_row.delta_vs_baseline:+.2f}) "
-                    f"while other teammate pairings are comparatively stable ({other_opponent_delta_avg:+.2f})."
-                )
-
-        composition_reason: str | None = None
-        if not interaction_specific_issue and matched_composition_slices:
-            worst_comp_row = min(
+        opponent_reason = _interaction_specific_reason(
+            matched_opponent_slices,
+            global_reward_delta=global_reward_delta,
+            concentration_label="with teammate",
+            stable_label="other teammate pairings",
+        )
+        composition_reason = (
+            None
+            if opponent_reason
+            else _interaction_specific_reason(
                 matched_composition_slices,
-                key=lambda row: row.delta_vs_baseline if row.delta_vs_baseline is not None else 0,
+                global_reward_delta=global_reward_delta,
+                concentration_label="in team composition",
+                stable_label="other compositions",
             )
-            other_comp_deltas = [
-                row.delta_vs_baseline
-                for row in matched_composition_slices
-                if row.key != worst_comp_row.key and row.delta_vs_baseline is not None
-            ]
-            other_comp_delta_avg = (
-                statistics.mean(other_comp_deltas) if other_comp_deltas else worst_comp_row.delta_vs_baseline
-            )
-            if (
-                global_reward_delta is not None
-                and global_reward_delta <= -0.1
-                and (worst_comp_row.delta_vs_baseline or 0) <= -0.3
-                and (other_comp_delta_avg or 0) >= -0.05
-            ):
-                interaction_specific_issue = True
-                composition_reason = (
-                    "Regression is concentrated in team composition "
-                    f"{worst_comp_row.key} ({worst_comp_row.delta_vs_baseline:+.2f}) "
-                    f"while other compositions are comparatively stable ({other_comp_delta_avg:+.2f})."
-                )
+        )
+        interaction_specific_issue = opponent_reason is not None or composition_reason is not None
 
         if interaction_specific_issue:
             reason = opponent_reason or composition_reason or "Interaction-specific regression detected."
@@ -2228,16 +2181,8 @@ def compute_stats_inventory_summary(
     metric_total = len(completed)
     tag_total = len(episodes)
 
-    metric_counts: dict[str, int] = {}
-    for episode in completed:
-        for key in episode.metrics:
-            metric_counts[key] = metric_counts.get(key, 0) + 1
-
-    tag_counts: dict[str, int] = {}
-    for episode in episodes:
-        for key, value in episode.raw_tags.items():
-            if value:
-                tag_counts[key] = tag_counts.get(key, 0) + 1
+    metric_counts = Counter(key for episode in completed for key in episode.metrics)
+    tag_counts = Counter(key for episode in episodes for key, value in episode.raw_tags.items() if value)
 
     top_metric_keys = sorted(metric_counts.items(), key=lambda item: (-item[1], item[0]))[:top_n]
     top_tag_keys = sorted(tag_counts.items(), key=lambda item: (-item[1], item[0]))[:top_n]
@@ -2283,12 +2228,20 @@ def compute_stats_inventory_summary(
     )
 
 
+def _action_summary(rollout_recommendation: str, headline: str, actions: list[str]) -> ActionSummary:
+    return ActionSummary(
+        rollout_recommendation=rollout_recommendation,
+        headline=headline,
+        actions=actions,
+    )
+
+
 def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) -> ActionSummary:
     if not outcome.evidence_sufficient:
-        return ActionSummary(
-            rollout_recommendation="hold",
-            headline="Evidence is insufficient for strong prescriptions.",
-            actions=[
+        return _action_summary(
+            "hold",
+            "Evidence is insufficient for strong prescriptions.",
+            [
                 "Collect more evaluation evidence (target at least 5 matched samples for current and baseline).",
                 "Keep teammate-pairing mix consistent while collecting evidence to avoid confounded deltas.",
                 "Re-run diagnosis after additional episodes before changing rollout policy.",
@@ -2296,10 +2249,10 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
         )
 
     if failures.timeout_failures > 0 or failures.oom_failures > 0 or failures.failed_rate >= 0.1:
-        return ActionSummary(
-            rollout_recommendation="block",
-            headline="Reliability regression risk detected. Fix reliability before rollout.",
-            actions=[
+        return _action_summary(
+            "block",
+            "Reliability regression risk detected. Fix reliability before rollout.",
+            [
                 "Prioritize timeout/OOM/crash root-cause analysis using failed job IDs.",
                 "Apply reliability fix and re-run the same evaluation slice for comparison.",
                 "Only proceed once failure rate and timeout/OOM counts return near baseline.",
@@ -2307,10 +2260,10 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
         )
 
     if outcome.verdict == "hurt":
-        return ActionSummary(
-            rollout_recommendation="hold",
-            headline="Performance regressed relative to baseline. Hold rollout.",
-            actions=[
+        return _action_summary(
+            "hold",
+            "Performance regressed relative to baseline. Hold rollout.",
+            [
                 "Start with the lowest-reward teammate pairing and episodes to isolate behavior regressions.",
                 (
                     "Target one dominant driver first "
@@ -2321,20 +2274,20 @@ def compute_action_summary(outcome: OutcomeSummary, failures: FailureSummary) ->
         )
 
     if outcome.verdict == "helped":
-        return ActionSummary(
-            rollout_recommendation="proceed_cautiously",
-            headline="Submission improved leaderboard performance.",
-            actions=[
+        return _action_summary(
+            "proceed_cautiously",
+            "Submission improved leaderboard performance.",
+            [
                 "Proceed with guarded rollout while monitoring failure and timeout rates.",
                 "Run one validation pack on recent teammate-pairing mix to confirm stability.",
                 "If reliability drifts upward, revert and prioritize performance-safe optimizations.",
             ],
         )
 
-    return ActionSummary(
-        rollout_recommendation="hold",
-        headline="Outcome is inconclusive. Gather targeted evidence before changing rollout state.",
-        actions=[
+    return _action_summary(
+        "hold",
+        "Outcome is inconclusive. Gather targeted evidence before changing rollout state.",
+        [
             "Increase sample size for the current submission and baseline.",
             (
                 "Inspect teammate-pairing-specific slices to determine whether regression is "
@@ -2506,9 +2459,6 @@ def compute_orchestration_hooks(
     )
 
 
-# === Claude analysis helpers ===
-
-
 _CORRELATION_METRICS = [
     "action.move.success",
     "action.move.failed",
@@ -2675,7 +2625,6 @@ def build_analysis_summary(
         for row in compute_team_comp_analysis(episodes)
     }
 
-    # Reward distribution
     reward_stats: dict[str, float] = {}
     if rewards:
         reward_stats = {
@@ -2738,7 +2687,6 @@ def build_analysis_summary(
     }
 
 
-# Cache the analysis guide at import time to avoid request-time file I/O.
 _ANALYSIS_GUIDE_PATH = Path(__file__).parents[4] / "skills" / "cg.policy-dashboard" / "analysis-guide.md"
 _ANALYSIS_GUIDE = (
     _ANALYSIS_GUIDE_PATH.read_text()
