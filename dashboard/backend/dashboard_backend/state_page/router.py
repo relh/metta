@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
-from dashboard.backend.dashboard_backend.anthropic import (
+from dashboard.backend.dashboard_backend.anthropic_client import (
     AnthropicConnectionError,
     AnthropicHTTPError,
     AnthropicResponseFormatError,
