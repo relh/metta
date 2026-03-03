@@ -292,8 +292,38 @@ main {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.grid.overview-insights-layout > * {
-  min-width: 0;
+.grid.kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+}
+
+.grid.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.grid.panel-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
+}
+
+.grid.table-pair-grid {
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  align-items: start;
+}
+
+.grid.parse-pill-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid.metric-pairs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid.outcome-meta-grid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.grid.crash-signature-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .overview-dense-grid > * {
@@ -333,6 +363,10 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .grid.metric-pairs {
+    grid-template-columns: 1fr;
+  }
+
   .coordination-layout {
     grid-template-columns: 1fr;
   }
@@ -342,6 +376,18 @@ main {
   }
 
   .coordination-diagnosis-pills {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 880px) {
+  .grid.parse-pill-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .grid.parse-pill-grid {
     grid-template-columns: 1fr;
   }
 }

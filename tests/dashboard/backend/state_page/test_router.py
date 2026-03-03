@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -9,7 +10,11 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from dashboard.backend.dashboard_backend.state_page.router import _agent_indices_from_tags, create_dashboard_router
+from dashboard.backend.dashboard_backend.state_page.router import (
+    _agent_indices_from_tags,
+    _default_winner_policy_version_id,
+    create_dashboard_router,
+)
 
 
 class _ScalarsResult:
@@ -85,6 +90,98 @@ def test_default_dashboard_data_returns_404_when_default_policy_missing(monkeypa
 
     assert response.status_code == 404
     assert response.json()["detail"] == "No default policy version available"
+
+
+def test_default_winner_policy_version_prefers_freeplay_leader(monkeypatch: Any) -> None:
+    freeplay_season_id = uuid4()
+    freeplay_policy_id = uuid4()
+    freeplay_season = SimpleNamespace(
+        id=freeplay_season_id,
+        name="beta-cvc",
+        canonical=True,
+        version=7,
+    )
+    calls: list[tuple[str, Any]] = []
+
+    class _FakeCommissioner:
+        async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[Any, float, int]]:
+            calls.append(("get_leaderboard", pool_name))
+            return [(freeplay_policy_id, 1.23, 9)]
+
+    async def fake_build_commissioner(season_name: str, *, season_id: Any) -> _FakeCommissioner:
+        calls.append(("build_commissioner", (season_name, season_id)))
+        return _FakeCommissioner()
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.build_commissioner",
+        fake_build_commissioner,
+    )
+
+    session = _FakeSession([_ExecuteResult(scalar_values=[freeplay_season])])
+    winner_policy_id, winner_season_name = asyncio.run(_default_winner_policy_version_id(session))
+
+    assert winner_policy_id == str(freeplay_policy_id)
+    assert winner_season_name == "beta-cvc"
+    assert calls == [
+        ("build_commissioner", ("beta-cvc", freeplay_season_id)),
+        ("get_leaderboard", None),
+    ]
+
+
+def test_default_winner_policy_version_falls_back_when_freeplay_has_no_leader(monkeypatch: Any) -> None:
+    freeplay_season_id = uuid4()
+    fallback_season_id = uuid4()
+    fallback_policy_id = uuid4()
+    freeplay_season = SimpleNamespace(
+        id=freeplay_season_id,
+        name="beta-cvc",
+        canonical=True,
+        version=7,
+    )
+    fallback_season = SimpleNamespace(
+        id=fallback_season_id,
+        name="beta-teams-small",
+        canonical=True,
+        version=2,
+    )
+    calls: list[tuple[str, Any]] = []
+
+    class _FakeCommissioner:
+        def __init__(self, leaderboard: list[tuple[Any, float, int]]) -> None:
+            self._leaderboard = leaderboard
+
+        async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[Any, float, int]]:
+            calls.append(("get_leaderboard", pool_name))
+            return self._leaderboard
+
+    async def fake_build_commissioner(season_name: str, *, season_id: Any) -> _FakeCommissioner:
+        calls.append(("build_commissioner", (season_name, season_id)))
+        if season_name == "beta-cvc":
+            return _FakeCommissioner([])
+        assert season_name == "beta-teams-small"
+        return _FakeCommissioner([(fallback_policy_id, 1.0, 10)])
+
+    monkeypatch.setattr(
+        "dashboard.backend.dashboard_backend.state_page.router.build_commissioner",
+        fake_build_commissioner,
+    )
+
+    session = _FakeSession(
+        [
+            _ExecuteResult(scalar_values=[freeplay_season]),
+            _ExecuteResult(scalar=fallback_season),
+        ]
+    )
+    winner_policy_id, winner_season_name = asyncio.run(_default_winner_policy_version_id(session))
+
+    assert winner_policy_id == str(fallback_policy_id)
+    assert winner_season_name == "beta-teams-small"
+    assert calls == [
+        ("build_commissioner", ("beta-cvc", freeplay_season_id)),
+        ("get_leaderboard", None),
+        ("build_commissioner", ("beta-teams-small", fallback_season_id)),
+        ("get_leaderboard", None),
+    ]
 
 
 def test_dashboard_data_builds_commissioner_with_season_id(

@@ -102,18 +102,41 @@ async def _latest_default_season(session: Any) -> Season | None:
     return (await session.execute(season_query)).scalar_one_or_none()
 
 
+async def _latest_freeplay_seasons(session: Any, *, limit: int = 10) -> list[Season]:
+    season_query = (
+        select(Season)
+        .where(col(Season.team_tournament_config).is_(None))
+        .order_by(
+            col(Season.canonical).desc(),
+            col(Season.version).desc(),
+            col(Season.created_at).desc(),
+        )
+        .limit(limit)
+    )
+    return list((await session.execute(season_query)).scalars().all())
+
+
 def _season_display_name(season: Season) -> str:
     return season.name if season.canonical else f"{season.name}:v{season.version}"
 
 
 async def _default_winner_policy_version_id(session: Any) -> tuple[str | None, str | None]:
+    freeplay_seasons = await _latest_freeplay_seasons(session)
+    for season in freeplay_seasons:
+        season_name = _season_display_name(season)
+        if season.name not in SEASONS:
+            continue
+        commissioner = await build_commissioner(season.name, season_id=season.id)
+        leaderboard = await commissioner.get_leaderboard()
+        if leaderboard:
+            return str(leaderboard[0][0]), season_name
+
     season = await _latest_default_season(session)
     if season is None:
         return None, None
     season_name = _season_display_name(season)
     if season.name not in SEASONS:
         return None, season_name
-
     commissioner = await build_commissioner(season.name, season_id=season.id)
     leaderboard = await commissioner.get_leaderboard()
     if not leaderboard:
@@ -164,6 +187,8 @@ def _role_metric_definitions() -> dict[str, list[RoleMetricDef]]:
                 key=metric.key,
                 source_names=list(metric.source_names),
                 higher_is_better=metric.higher_is_better,
+                include_in_overall=metric.include_in_overall,
+                overall_weight=metric.overall_weight,
             )
             for metric in metrics
         ]

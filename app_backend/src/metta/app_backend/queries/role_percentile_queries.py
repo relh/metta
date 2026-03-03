@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 # pyright: reportArgumentType=false
 # pyright: reportAttributeAccessIssue=false
 # pyright: reportOptionalMemberAccess=false
@@ -24,6 +26,7 @@ class RoleMetric:
     source_names: tuple[str, ...]
     higher_is_better: bool
     include_in_overall: bool = True
+    overall_weight: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -50,12 +53,32 @@ REWARD_SOURCE_NAMES = ("reward",)
 
 ROLE_METRICS: dict[str, list[RoleMetric]] = {
     "miner": [
+        RoleMetric(
+            "germanium.deposited",
+            ("germanium.deposited", "germanium.lost"),
+            higher_is_better=True,
+            overall_weight=5.0,
+        ),
+        RoleMetric(
+            "silicon.deposited",
+            ("silicon.deposited", "silicon.lost"),
+            higher_is_better=True,
+            overall_weight=5.0,
+        ),
+        RoleMetric(
+            "carbon.deposited",
+            ("carbon.deposited", "carbon.lost"),
+            higher_is_better=True,
+            overall_weight=5.0,
+        ),
+        RoleMetric(
+            "oxygen.deposited",
+            ("oxygen.deposited", "oxygen.lost"),
+            higher_is_better=True,
+            overall_weight=5.0,
+        ),
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=True),
         RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
-        RoleMetric("germanium.deposited", ("germanium.deposited", "germanium.lost"), higher_is_better=True),
-        RoleMetric("silicon.deposited", ("silicon.deposited", "silicon.lost"), higher_is_better=True),
-        RoleMetric("carbon.deposited", ("carbon.deposited", "carbon.lost"), higher_is_better=True),
-        RoleMetric("oxygen.deposited", ("oxygen.deposited", "oxygen.lost"), higher_is_better=True),
         RoleMetric("heart.gained", ("heart.gained",), higher_is_better=False),
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
         RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=False),
@@ -72,13 +95,14 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("death", DEATH_SOURCE_NAMES, higher_is_better=False),
     ],
     "scrambler": [
-        RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=True),
-        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric(
             "junction.scrambled",
             ("junction.scrambled_by_agent", "junction.scrambled"),
             higher_is_better=True,
+            overall_weight=5.0,
         ),
+        RoleMetric("scrambler.gained", ("scrambler.gained",), higher_is_better=True),
+        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric("heart.gained", ("heart.gained",), higher_is_better=True),
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
@@ -86,13 +110,14 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
         RoleMetric("death", DEATH_SOURCE_NAMES, higher_is_better=False),
     ],
     "aligner": [
-        RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=True),
-        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric(
             "junction.aligned",
             ("junction.aligned_by_agent", "junction.aligned"),
             higher_is_better=True,
+            overall_weight=5.0,
         ),
+        RoleMetric("aligner.gained", ("aligner.gained",), higher_is_better=True),
+        RoleMetric("reward", REWARD_SOURCE_NAMES, higher_is_better=True, include_in_overall=False),
         RoleMetric("heart.gained", ("heart.gained",), higher_is_better=True),
         RoleMetric("miner.gained", ("miner.gained",), higher_is_better=False),
         RoleMetric("scout.gained", ("scout.gained",), higher_is_better=False),
@@ -109,6 +134,11 @@ def _validate_role_metrics(role_metrics: dict[str, list[RoleMetric]]) -> None:
                 raise ValueError(f"Role metric {role}.{metric.key} must declare at least one source metric name")
             if len(set(metric.source_names)) != len(metric.source_names):
                 raise ValueError(f"Role metric {role}.{metric.key} has duplicate source metric names")
+            if not math.isfinite(metric.overall_weight) or metric.overall_weight <= 0:
+                raise ValueError(
+                    f"Role metric {role}.{metric.key} has invalid overall weight {metric.overall_weight!r}; "
+                    "weights must be finite and > 0."
+                )
 
 
 _validate_role_metrics(ROLE_METRICS)
@@ -232,8 +262,8 @@ async def _compute_role_percentile_payloads(
                     key,
                     {
                         "metrics": {},
-                        "percentile_sum": 0.0,
-                        "percentile_count": 0,
+                        "weighted_percentile_sum": 0.0,
+                        "weight_sum": 0.0,
                     },
                 )
                 percentile = float(row["percentile"])
@@ -243,20 +273,21 @@ async def _compute_role_percentile_payloads(
                     "percentile": percentile,
                     "higher_is_better": metric.higher_is_better,
                     "include_in_overall": metric.include_in_overall,
+                    "overall_weight": metric.overall_weight,
                     "samples": int(row["sample_count"]),
                     "source_names": list(metric.source_names),
                     "source_metrics": row["source_metrics"],
                 }
                 if metric.include_in_overall:
-                    payload["percentile_sum"] += percentile
-                    payload["percentile_count"] += 1
+                    payload["weighted_percentile_sum"] += percentile * metric.overall_weight
+                    payload["weight_sum"] += metric.overall_weight
 
     role_rows: list[dict[str, Any]] = []
     for (pv_id, role), payload in role_payloads.items():
-        score_count = int(payload["percentile_count"])
-        if score_count <= 0:
+        weight_sum = float(payload["weight_sum"])
+        if weight_sum <= 0:
             continue
-        overall = float(payload["percentile_sum"]) / float(score_count)
+        overall = float(payload["weighted_percentile_sum"]) / weight_sum
         role_rows.append(
             {
                 "policy_version_id": pv_id,

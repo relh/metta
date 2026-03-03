@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import literal, select
@@ -96,9 +96,46 @@ def test_role_metric_catalog_keeps_miner_deposits_and_death_metric() -> None:
 
     germanium_metric = next(metric for metric in rpq.ROLE_METRICS["miner"] if metric.key == "germanium.deposited")
     assert germanium_metric.source_names == ("germanium.deposited", "germanium.lost")
+    assert germanium_metric.overall_weight == pytest.approx(5.0)
 
     death_metric = next(metric for metric in rpq.ROLE_METRICS["miner"] if metric.key == "death")
     assert death_metric.source_names == ("death",)
+
+    # Priority metrics are listed first for visibility.
+    assert rpq.ROLE_METRICS["aligner"][0].key == "junction.aligned"
+    assert rpq.ROLE_METRICS["miner"][0].key == "germanium.deposited"
+    assert rpq.ROLE_METRICS["scrambler"][0].key == "junction.scrambled"
+
+
+@pytest.mark.asyncio
+async def test_compute_role_percentile_payloads_uses_metric_weights(monkeypatch: pytest.MonkeyPatch) -> None:
+    policy_id = uuid4()
+
+    async def _fake_metric_percentiles(_pool_id: UUID, metric: rpq.RoleMetric) -> list[dict[str, object]]:
+        # Force one low priority metric percentile and high others to verify weighted averaging.
+        percentile = 0.0 if metric.key == "junction.aligned" else 100.0
+        return [
+            {
+                "policy_version_id": policy_id,
+                "avg_value": 1.0,
+                "sample_count": 10,
+                "percentile": percentile,
+                "source_metrics": {metric.source_names[0]: {"avg": 1.0, "samples": 10}},
+            }
+        ]
+
+    monkeypatch.setattr(rpq, "_metric_percentiles", _fake_metric_percentiles)
+
+    rows = await rpq._compute_role_percentile_payloads(uuid4(), roles=("aligner",))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["role"] == "aligner"
+    assert row["policy_version_id"] == policy_id
+
+    # Aligner includes 7 overall metrics. With junction.aligned weighted x5:
+    # weighted avg = (0*5 + 100*6) / (5 + 6) = 54.545...
+    assert row["percentile"] == pytest.approx(54.5454545454)
+    assert row["details"]["metrics"]["junction.aligned"]["overall_weight"] == pytest.approx(5.0)
 
 
 def test_episode_agent_metric_allowlist_uses_canonical_death_metric() -> None:

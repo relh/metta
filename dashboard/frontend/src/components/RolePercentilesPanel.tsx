@@ -105,10 +105,14 @@ export function RolePercentilesPanel({
   roleData,
   loading,
   error,
+  mode = 'both',
+  suppressStateMessage = false,
 }: {
   roleData: DashboardRolePercentilesResponse | null
   loading: boolean
   error: string | null
+  mode?: 'both' | 'summary' | 'metrics'
+  suppressStateMessage?: boolean
 }) {
   const parsedRows = useMemo(() => {
     if (!roleData?.rows?.length) return []
@@ -133,54 +137,56 @@ export function RolePercentilesPanel({
   }, [roleData])
 
   if (loading) {
+    if (suppressStateMessage) return null
     return <RolePercentilesMessageCard message="Loading parse percentile metrics..." />
   }
 
   if (error) {
+    if (suppressStateMessage) return null
     return <RolePercentilesMessageCard message={error} color="#b42318" />
   }
 
   if (parsedRows.length === 0) {
+    if (suppressStateMessage) return null
     return (
       <RolePercentilesMessageCard message="No parse percentile data yet for this policy in the selected pool. This is expected on read-only/new environments until percentile backfill runs." />
     )
   }
 
-  return (
-    <section className="grid" style={{ gap: 12 }}>
-      <article className="card">
-        <h2 style={{ marginTop: 0 }}>Parse Percentile Summary</h2>
-        <p style={{ marginTop: 0, color: '#405a7d' }}>
-          {roleData?.pool_name ? `Pool: ${roleData.pool_name}` : 'Pool: unknown'} | Parses scored: {parsedRows.length}
-        </p>
-        <p style={{ marginTop: 0, marginBottom: 8, fontSize: 12, color: '#4b617f' }}>
-          Parses are backend percentile ranks computed from role-defining shaped metrics, plus deaths for every role.
-        </p>
-        {parseMetricRows.length > 0 && (
-          <div style={{ display: 'grid', gap: 4, marginBottom: 10 }}>
-            {parseMetricRows.map((row) => (
-              <p key={row.role} style={{ margin: 0, fontSize: 12, color: '#4b617f', overflowWrap: 'anywhere' }}>
-                <strong>{ROLE_LABELS[row.role] ?? row.role}:</strong> {row.keys.join(', ')}
-              </p>
-            ))}
-          </div>
-        )}
-        <div className="role-grid">
-          {parsedRows.map((row) => (
-            <div key={row.role} className="role-card">
-              <p className="role-card-title">{ROLE_LABELS[row.role] ?? row.role}</p>
-              <p className={`role-card-value ${percentileClass(row.percentile)}`}>P{row.percentile.toFixed(1)}</p>
-              <div className="role-progress">
-                <div
-                  className="role-progress-bar"
-                  style={{ width: `${Math.max(0, Math.min(row.percentile, 100))}%` }}
-                />
-              </div>
-            </div>
+  const summaryCard = (
+    <article className="card">
+      <h2 style={{ marginTop: 0 }}>Parse Percentile Summary</h2>
+      <p style={{ marginTop: 0, color: '#405a7d' }}>
+        {roleData?.pool_name ? `Pool: ${roleData.pool_name}` : 'Pool: unknown'} | Parses scored: {parsedRows.length}
+      </p>
+      <p style={{ marginTop: 0, marginBottom: 8, fontSize: 12, color: '#4b617f' }}>
+        Parses are backend percentile ranks computed from role-defining shaped metrics, plus deaths for every role.
+      </p>
+      {parseMetricRows.length > 0 && (
+        <div style={{ display: 'grid', gap: 4, marginBottom: 10 }}>
+          {parseMetricRows.map((row) => (
+            <p key={row.role} style={{ margin: 0, fontSize: 12, color: '#4b617f', overflowWrap: 'anywhere' }}>
+              <strong>{ROLE_LABELS[row.role] ?? row.role}:</strong> {row.keys.join(', ')}
+            </p>
           ))}
         </div>
-      </article>
+      )}
+      <div className="role-grid">
+        {parsedRows.map((row) => (
+          <div key={row.role} className="role-card">
+            <p className="role-card-title">{ROLE_LABELS[row.role] ?? row.role}</p>
+            <p className={`role-card-value ${percentileClass(row.percentile)}`}>P{row.percentile.toFixed(1)}</p>
+            <div className="role-progress">
+              <div className="role-progress-bar" style={{ width: `${Math.max(0, Math.min(row.percentile, 100))}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  )
 
+  const metricsGrid = (
+    <section className="grid two" style={{ gap: 12, alignItems: 'start' }}>
       {parsedRows.map((row) => (
         <article key={row.role} className="card">
           <h3 style={{ marginTop: 0 }}>{ROLE_LABELS[row.role] ?? row.role} Parse Metrics</h3>
@@ -218,6 +224,15 @@ export function RolePercentilesPanel({
           )}
         </article>
       ))}
+    </section>
+  )
+
+  if (mode === 'summary') return summaryCard
+  if (mode === 'metrics') return metricsGrid
+  return (
+    <section className="grid" style={{ gap: 12 }}>
+      {summaryCard}
+      {metricsGrid}
     </section>
   )
 }

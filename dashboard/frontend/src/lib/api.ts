@@ -524,6 +524,8 @@ export type DashboardRoleMetricDef = {
   key: string
   source_names: string[]
   higher_is_better: boolean
+  include_in_overall?: boolean
+  overall_weight?: number
 }
 
 export type DashboardRolePercentileMetric = {

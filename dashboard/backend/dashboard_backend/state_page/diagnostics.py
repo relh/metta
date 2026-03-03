@@ -425,6 +425,8 @@ class RoleMetricDef(BaseModel):
     key: str
     source_names: list[str] = Field(default_factory=list)
     higher_is_better: bool = True
+    include_in_overall: bool = True
+    overall_weight: float = 1.0
 
 
 class RolePercentileRow(BaseModel):
