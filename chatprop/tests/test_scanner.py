@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from metta.chatprop.config import ChatpropConfig, DaemonConfig, SourceConfig
-from metta.chatprop.scanner import find_transcripts_for_branches
+from metta.chatprop.scanner import find_transcripts_for_branches, read_transcript
 
 
 def _make_config(tmp_path: Path) -> ChatpropConfig:
@@ -42,3 +42,35 @@ def test_find_transcripts_uses_archive_index(tmp_path: Path) -> None:
     assert len(matches) == 1
     assert matches[0].session_id == "session-x"
     assert matches[0].matched_branches == ["feature/x"]
+
+
+def test_read_transcript_skips_unhashable_message_type(tmp_path: Path) -> None:
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": [], "message": {"content": "broken"}}),
+                json.dumps({"type": "user", "message": {"content": "hello"}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert read_transcript(transcript) == "[USER]: hello"
+
+
+def test_read_transcript_skips_unhashable_event_type(tmp_path: Path) -> None:
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        "\n".join(
+            [
+                json.dumps({"type": "event_msg", "payload": {"type": [], "message": "broken"}}),
+                json.dumps({"type": "event_msg", "payload": {"type": "user_message", "message": "hello"}}),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert read_transcript(transcript) == "[USER]: hello"

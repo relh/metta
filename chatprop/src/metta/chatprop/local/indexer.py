@@ -56,7 +56,7 @@ def _iter_command_like_text(obj: Any, parent_key: str = ""):
                 "input",
             }:
                 yield value
-            elif isinstance(value, list) and key_lower in {"command"}:
+            elif isinstance(value, list) and key_lower == "command":
                 command_text = " ".join(str(item) for item in value if isinstance(item, str))
                 if command_text:
                     yield command_text

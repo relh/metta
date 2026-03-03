@@ -60,17 +60,13 @@ def _scan_root(
 
 def scan_archived(config: ChatpropConfig) -> list[TranscriptFile]:
     root = _archive_root(config) / "transcripts"
-    results: list[TranscriptFile] = []
-    results.extend(_scan_root(root / "claude-code", "claude-code", archived=True))
-    results.extend(_scan_root(root / "codex", "codex", archived=True))
-    return results
+    return _scan_root(root / "claude-code", "claude-code", archived=True) + _scan_root(
+        root / "codex", "codex", archived=True
+    )
 
 
 def scan_sources(config: ChatpropConfig) -> list[TranscriptFile]:
-    results = []
-    results.extend(_scan_root(config.sources.claude_code_path, "claude-code"))
-    results.extend(_scan_root(config.sources.codex_path, "codex"))
-    return results
+    return _scan_root(config.claude_code.path, "claude-code") + _scan_root(config.codex.path, "codex")
 
 
 def scan_all(config: ChatpropConfig) -> list[TranscriptFile]:
@@ -189,14 +185,11 @@ def read_transcript(path: Path) -> str:
             except json.JSONDecodeError:
                 continue
             msg_type = obj.get("type")
-            if msg_type == "user":
+            if msg_type == "user" or msg_type == "assistant":
                 content = _extract_content(obj)
                 if content:
-                    lines.append(f"[USER]: {content}")
-            elif msg_type == "assistant":
-                content = _extract_content(obj)
-                if content:
-                    lines.append(f"[ASSISTANT]: {content}")
+                    role = "USER" if msg_type == "user" else "ASSISTANT"
+                    lines.append(f"[{role}]: {content}")
             elif msg_type == "event_msg":
                 content = _extract_event_message(obj)
                 if content:
@@ -243,12 +236,12 @@ def _extract_content_blocks(content: list[dict]) -> str:
 def _extract_event_message(obj: dict) -> str:
     payload = obj.get("payload", {})
     event_type = payload.get("type")
-    if event_type == "user_message":
+    if event_type == "user_message" or event_type == "agent_message":
         message = payload.get("message", "")
-        return f"[USER]: {message}" if message else ""
-    if event_type == "agent_message":
-        message = payload.get("message", "")
-        return f"[ASSISTANT]: {message}" if message else ""
+        if not message:
+            return ""
+        role = "USER" if event_type == "user_message" else "ASSISTANT"
+        return f"[{role}]: {message}"
     return ""
 
 

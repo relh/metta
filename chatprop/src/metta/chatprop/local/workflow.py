@@ -328,9 +328,7 @@ def _event_in_window(event: _Event, *, start: datetime | None, end: datetime | N
         return start is None and end is None
     if start is not None and event.timestamp < start:
         return False
-    if end is not None and event.timestamp > end:
-        return False
-    return True
+    return not (end is not None and event.timestamp > end)
 
 
 def _looks_done(text: str) -> bool:
@@ -408,14 +406,13 @@ def load_explicit_skills(repo_root: Path) -> list[str]:
     skill_root = repo_root / "skills"
     if not skill_root.is_dir():
         return []
-    names = sorted(
+    return sorted(
         {
             skill_dir.name
             for skill_dir in skill_root.iterdir()
             if skill_dir.is_dir() and (skill_dir / "SKILL.md").is_file()
         }
     )
-    return names
 
 
 def _skill_name_pattern(skill_name: str) -> re.Pattern[str]:

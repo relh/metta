@@ -9,12 +9,12 @@ from types import SimpleNamespace
 import click
 
 from metta.chatprop.analyze import build_analysis_context, run_analysis
-from metta.chatprop.config import default_config_path, load_config
+from metta.chatprop.config import ChatpropConfig, default_config_path, load_config
 from metta.chatprop.local.backend.server import run_server as run_local_server
 from metta.chatprop.local.daemon import get_status, run_daemon_forever, run_daemon_once, upload_session
 from metta.chatprop.local.flowchart import build_flowchart_artifacts, write_flowchart_outputs
 from metta.chatprop.local.launchd import install_launchd_plist
-from metta.chatprop.scanner import find_transcripts_for_branches, read_transcript
+from metta.chatprop.scanner import TranscriptFile, find_transcripts_for_branches, read_transcript
 
 
 def _render_local_config_toml(
@@ -53,6 +53,39 @@ def _current_branch() -> str:
     return result.stdout.strip()
 
 
+def _find_matches_or_exit(branch_list: list[str], config: ChatpropConfig) -> list[TranscriptFile]:
+    matches = find_transcripts_for_branches(config, branch_list)
+    if matches:
+        return matches
+    click.echo("No matching transcripts found.")
+    sys.exit(1)
+
+
+def _echo_match_summary(branch_list: list[str], matches: list[TranscriptFile], *, include_details: bool) -> None:
+    click.echo(f"Found {len(matches)} transcript(s) across {len(branch_list)} branch(es)")
+    if include_details:
+        for tf in matches:
+            click.echo(f"  {tf.source}: {tf.session_id} ({tf.size_bytes:,}B)")
+
+
+def _validate_match_content_or_exit(matches: list[TranscriptFile]) -> None:
+    if _has_transcript_content([tf.path for tf in matches]):
+        return
+    click.echo("Matched transcripts contain no parseable conversation/tool data. Aborting.")
+    sys.exit(1)
+
+
+def _run_analysis_or_exit(branch_list: list[str], config: ChatpropConfig) -> str:
+    click.echo("\nRunning analysis via claude --print ...")
+    output = run_analysis(branch_list, config)
+    if output:
+        click.echo("\n--- Analysis Results ---\n")
+        click.echo(output)
+        return output
+    click.echo("Analysis produced no output.")
+    sys.exit(1)
+
+
 @click.group()
 def main() -> None:
     """Chatprop: transcript analysis plus local archive and GUI wrapper tooling."""
@@ -68,10 +101,7 @@ def main() -> None:
 def find(branches: tuple[str, ...]) -> None:
     """Find local transcripts matching branch or PR names."""
     config = load_config()
-    matches = find_transcripts_for_branches(config, list(branches))
-    if not matches:
-        click.echo("No matching transcripts found.")
-        sys.exit(1)
+    matches = _find_matches_or_exit(list(branches), config)
     for tf in matches:
         click.echo(f"{tf.source} | {tf.session_id} | {tf.size_bytes:,}B | branches: {tf.matched_branches}")
         click.echo(f"  {tf.path}")
@@ -84,18 +114,9 @@ def analyze(branches: tuple[str, ...], dry_run: bool) -> None:
     """Analyze transcripts for branches and propose CLAUDE.md updates."""
     branch_list = list(branches)
     config = load_config()
-
-    matches = find_transcripts_for_branches(config, branch_list)
-    click.echo(f"Found {len(matches)} transcript(s) across {len(branch_list)} branch(es)")
-    if not matches:
-        click.echo("No matching transcripts found.")
-        sys.exit(1)
-    for tf in matches:
-        click.echo(f"  {tf.source}: {tf.session_id} ({tf.size_bytes:,}B)")
-
-    if not _has_transcript_content([tf.path for tf in matches]):
-        click.echo("Matched transcripts contain no parseable conversation/tool data. Aborting.")
-        sys.exit(1)
+    matches = _find_matches_or_exit(branch_list, config)
+    _echo_match_summary(branch_list, matches, include_details=True)
+    _validate_match_content_or_exit(matches)
 
     if dry_run:
         context = build_analysis_context(branch_list, config)
@@ -103,14 +124,7 @@ def analyze(branches: tuple[str, ...], dry_run: bool) -> None:
         click.echo(context)
         return
 
-    click.echo("\nRunning analysis via claude --print ...")
-    output = run_analysis(branch_list, config)
-    if not output:
-        click.echo("Analysis produced no output.")
-        sys.exit(1)
-
-    click.echo("\n--- Analysis Results ---\n")
-    click.echo(output)
+    _run_analysis_or_exit(branch_list, config)
 
 
 @main.command()
@@ -120,25 +134,10 @@ def propose(branches: tuple[str, ...], branch_name: str | None) -> None:
     """Analyze transcripts and open a PR with proposed CLAUDE.md updates."""
     branch_list = list(branches)
     config = load_config()
-
-    matches = find_transcripts_for_branches(config, branch_list)
-    click.echo(f"Found {len(matches)} transcript(s) across {len(branch_list)} branch(es)")
-    if not matches:
-        click.echo("No matching transcripts found.")
-        sys.exit(1)
-
-    if not _has_transcript_content([tf.path for tf in matches]):
-        click.echo("Matched transcripts contain no parseable conversation/tool data. Aborting.")
-        sys.exit(1)
-
-    click.echo("Running analysis via claude --print ...")
-    output = run_analysis(branch_list, config)
-    if not output:
-        click.echo("Analysis produced no output.")
-        sys.exit(1)
-
-    click.echo("\n--- Analysis Results ---\n")
-    click.echo(output)
+    matches = _find_matches_or_exit(branch_list, config)
+    _echo_match_summary(branch_list, matches, include_details=False)
+    _validate_match_content_or_exit(matches)
+    output = _run_analysis_or_exit(branch_list, config)
 
     pr_branch = branch_name or f"{branch_list[0]}-chatprop-proposal"
     claude_md = Path("CLAUDE.md")
@@ -288,12 +287,15 @@ def local_status(config_path: str) -> None:
     """Show local chatprop archive/index status."""
     config = load_config(Path(config_path).expanduser())
     status = get_status(config)
-    click.echo(f"state_dir={status.state_dir}")
-    click.echo(f"archive_root={status.archive_root}")
-    click.echo(f"transcripts={status.transcript_count}")
-    click.echo(f"metadata={status.metadata_count}")
-    click.echo(f"indexed_branches={status.indexed_branch_count}")
-    click.echo(f"manifest_entries={status.manifest_entry_count}")
+    for key, value in (
+        ("state_dir", status.state_dir),
+        ("archive_root", status.archive_root),
+        ("transcripts", status.transcript_count),
+        ("metadata", status.metadata_count),
+        ("indexed_branches", status.indexed_branch_count),
+        ("manifest_entries", status.manifest_entry_count),
+    ):
+        click.echo(f"{key}={value}")
 
 
 @main.command(name="flowchart")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import mimetypes
 import re
@@ -47,6 +48,32 @@ DEFAULT_FLOWCHART_MAX_EDGES = 350
 DEFAULT_FLOWCHART_EXPORT_RELATIVE_MERMAID = Path("exports/chatprop_flowchart.mmd")
 DEFAULT_FLOWCHART_EXPORT_RELATIVE_JSON = Path("exports/chatprop_flowchart.json")
 PR_NUMBER_IN_SUBJECT = re.compile(r"\(#(\d+)\)")
+_GH_PR_SEARCH_QUERY = """
+query($search: String!, $first: Int!, $after: String) {
+  search(query: $search, type: ISSUE, first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      ... on PullRequest {
+        number
+        title
+        url
+        mergedAt
+        closedAt
+        headRefName
+        baseRefName
+        updatedAt
+        repository {
+          name
+          nameWithOwner
+        }
+      }
+    }
+  }
+}
+""".strip()
 
 _catalog_jobs_lock = threading.Lock()
 _catalog_jobs: dict[str, dict[str, Any]] = {}
@@ -94,9 +121,7 @@ def _parse_bounded_int(raw: Any, *, minimum: int, maximum: int) -> int | None:
     if isinstance(raw, int):
         value = raw
     elif isinstance(raw, str):
-        text = raw.strip()
-        if text.startswith("+"):
-            text = text[1:]
+        text = raw.strip().removeprefix("+")
         if not text.isdigit():
             return None
         value = int(text)
@@ -574,41 +599,11 @@ def _normalize_closed_pr_record(record: dict[str, Any]) -> dict[str, Any] | None
     }
 
 
-def _search_merged_prs_via_github_api(
+def _search_pr_records_via_github_api(
     *,
-    author: str,
-    merged_since: str | None,
+    search_query: str,
+    normalizer: Callable[[dict[str, Any]], dict[str, Any] | None],
 ) -> list[dict[str, Any]]:
-    query = """
-query($search: String!, $first: Int!, $after: String) {
-  search(query: $search, type: ISSUE, first: $first, after: $after) {
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-    nodes {
-      ... on PullRequest {
-        number
-        title
-        url
-        mergedAt
-        closedAt
-        headRefName
-        baseRefName
-        updatedAt
-        repository {
-          name
-          nameWithOwner
-        }
-      }
-    }
-  }
-}
-""".strip()
-    search_query = f"is:pr is:merged author:{author} sort:updated-desc"
-    if merged_since:
-        search_query = f"{search_query} merged:>={merged_since}"
-
     records: list[dict[str, Any]] = []
     cursor: str | None = None
     for _ in range(20):
@@ -617,7 +612,7 @@ query($search: String!, $first: Int!, $after: String) {
             "api",
             "graphql",
             "-f",
-            f"query={query}",
+            f"query={_GH_PR_SEARCH_QUERY}",
             "-F",
             f"search={search_query}",
             "-F",
@@ -641,7 +636,7 @@ query($search: String!, $first: Int!, $after: String) {
             for node in nodes:
                 if not isinstance(node, dict):
                     continue
-                normalized = _normalize_merged_pr_record(node)
+                normalized = normalizer(node)
                 if normalized is not None:
                     records.append(normalized)
 
@@ -654,6 +649,17 @@ query($search: String!, $first: Int!, $after: String) {
         if not has_next or cursor is None:
             break
     return records
+
+
+def _search_merged_prs_via_github_api(
+    *,
+    author: str,
+    merged_since: str | None,
+) -> list[dict[str, Any]]:
+    search_query = f"is:pr is:merged author:{author} sort:updated-desc"
+    if merged_since:
+        search_query = f"{search_query} merged:>={merged_since}"
+    return _search_pr_records_via_github_api(search_query=search_query, normalizer=_normalize_merged_pr_record)
 
 
 def _search_closed_unmerged_prs_via_github_api(
@@ -662,81 +668,10 @@ def _search_closed_unmerged_prs_via_github_api(
     repo: str,
     closed_since: str | None,
 ) -> list[dict[str, Any]]:
-    query = """
-query($search: String!, $first: Int!, $after: String) {
-  search(query: $search, type: ISSUE, first: $first, after: $after) {
-    pageInfo {
-      hasNextPage
-      endCursor
-    }
-    nodes {
-      ... on PullRequest {
-        number
-        title
-        url
-        mergedAt
-        closedAt
-        headRefName
-        baseRefName
-        updatedAt
-        repository {
-          name
-          nameWithOwner
-        }
-      }
-    }
-  }
-}
-""".strip()
     search_query = f"repo:{repo} is:pr is:closed -is:merged author:{author} sort:updated-desc"
     if closed_since:
         search_query = f"{search_query} closed:>={closed_since}"
-
-    records: list[dict[str, Any]] = []
-    cursor: str | None = None
-    for _ in range(20):
-        cmd = [
-            "gh",
-            "api",
-            "graphql",
-            "-f",
-            f"query={query}",
-            "-F",
-            f"search={search_query}",
-            "-F",
-            "first=100",
-        ]
-        if cursor:
-            cmd.extend(["-F", f"after={cursor}"])
-
-        rc, output = _run_capture(cmd, timeout_seconds=8.0)
-        if rc != 0 or not output:
-            break
-        try:
-            payload = json.loads(output)
-        except json.JSONDecodeError:
-            break
-
-        data = payload.get("data") if isinstance(payload, dict) else None
-        search = data.get("search") if isinstance(data, dict) else None
-        nodes = search.get("nodes") if isinstance(search, dict) else None
-        if isinstance(nodes, list):
-            for node in nodes:
-                if not isinstance(node, dict):
-                    continue
-                normalized = _normalize_closed_pr_record(node)
-                if normalized is not None:
-                    records.append(normalized)
-
-        page_info = search.get("pageInfo") if isinstance(search, dict) else None
-        if not isinstance(page_info, dict):
-            break
-        has_next = page_info.get("hasNextPage") is True
-        cursor_raw = page_info.get("endCursor")
-        cursor = cursor_raw if isinstance(cursor_raw, str) and cursor_raw else None
-        if not has_next or cursor is None:
-            break
-    return records
+    return _search_pr_records_via_github_api(search_query=search_query, normalizer=_normalize_closed_pr_record)
 
 
 def _landed_pr_numbers_on_main(base_ref: str = "origin/main") -> set[int]:
@@ -787,9 +722,12 @@ def _select_newer_merged_pr(candidate: dict[str, Any], existing: dict[str, Any] 
         return candidate
     candidate_merged_at = candidate.get("mergedAt")
     existing_merged_at = existing.get("mergedAt")
-    if isinstance(candidate_merged_at, str) and isinstance(existing_merged_at, str):
-        if candidate_merged_at > existing_merged_at:
-            return candidate
+    if (
+        isinstance(candidate_merged_at, str)
+        and isinstance(existing_merged_at, str)
+        and candidate_merged_at > existing_merged_at
+    ):
+        return candidate
     return existing
 
 
@@ -1391,7 +1329,7 @@ def _build_catalog(
             phase_message=f"Refreshed merged PR index for @{DEFAULT_GH_AUTHOR}",
         )
 
-    branch_names = list(branch_rows.keys())
+    branch_names = list(branch_rows)
     branch_total = len(branch_names)
     if refresh:
         _emit_progress(
@@ -1884,10 +1822,8 @@ def run_server(args: argparse.Namespace) -> None:
     config = ServerConfig(host=args.host, port=args.port)
     server = ThreadingHTTPServer((config.host, config.port), ChatPropHandler)
     print(f"chatprop: serving on http://{config.host}:{config.port}", flush=True)
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
-    except KeyboardInterrupt:
-        pass
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

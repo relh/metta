@@ -18,25 +18,11 @@ class DaemonConfig:
 
 
 @dataclass(frozen=True)
-class SourcesConfig:
-    claude_code_path: Path
-    codex_path: Path
-
-
-@dataclass(frozen=True)
 class ChatpropConfig:
     claude_code: SourceConfig
     codex: SourceConfig
     daemon: DaemonConfig
     state_dir: Path
-
-    @property
-    def sources(self) -> SourcesConfig:
-        # Compatibility view for existing analysis code.
-        return SourcesConfig(
-            claude_code_path=self.claude_code.path,
-            codex_path=self.codex.path,
-        )
 
 
 ChatPropConfig = ChatpropConfig

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import time
@@ -163,11 +164,10 @@ def _archive_transcript(
 
 
 def _iter_source_files(config: ChatPropConfig):
-    sources: list[tuple[TranscriptSource, Path]] = [
+    for source, root in (
         ("claude-code", config.claude_code.path.expanduser()),
         ("codex", config.codex.path.expanduser()),
-    ]
-    for source, root in sources:
+    ):
         if not root.is_dir():
             continue
         for path in root.rglob("*.jsonl"):
@@ -176,6 +176,13 @@ def _iter_source_files(config: ChatPropConfig):
 
 def _timestamp_to_iso(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, tz=UTC).isoformat()
+
+
+def _mtime_ns_from_stat(stat: os.stat_result) -> int:
+    mtime_ns = getattr(stat, "st_mtime_ns", None)
+    if isinstance(mtime_ns, int):
+        return mtime_ns
+    return int(stat.st_mtime * 1_000_000_000)
 
 
 def _extract_session_details(path: Path) -> tuple[str, str, str]:
@@ -220,7 +227,7 @@ def _archive_path(
 ) -> tuple[ManifestEntry, BranchIndex]:
     session_id, started_at, ended_at = _extract_session_details(transcript_path)
     stat = transcript_path.stat()
-    mtime_ns = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000))
+    mtime_ns = _mtime_ns_from_stat(stat)
     archive_key = _archive_transcript(config, source, session_id, mtime_ns, transcript_path)
     metadata = TranscriptMetadata(
         session_id=session_id,
@@ -260,7 +267,7 @@ def run_daemon_once(config: ChatPropConfig) -> DaemonRunStats:
             stat = path.stat()
         except OSError:
             continue
-        mtime_ns = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000))
+        mtime_ns = _mtime_ns_from_stat(stat)
         resolved = str(path.resolve())
         previous = manifest.get(resolved)
         if previous and previous.mtime_ns == mtime_ns and previous.size_bytes == stat.st_size:
