@@ -20,12 +20,10 @@ const InnerSeasonSelect: FC = async () => {
 export default function TournamentLayout({ children }: PropsWithChildren) {
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <div className="space-y-6">
-        <Suspense fallback={<SeasonSelect seasons={[]} />}>
-          <InnerSeasonSelect />
-          {children}
-        </Suspense>
-      </div>
+      <Suspense fallback={<SeasonSelect seasons={[]} />}>
+        <InnerSeasonSelect />
+      </Suspense>
+      {children}
     </div>
   );
 }

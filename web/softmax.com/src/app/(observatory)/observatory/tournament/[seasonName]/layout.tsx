@@ -145,22 +145,26 @@ export default async function SeasonPage({
         <SeasonDetails seasonName={seasonName} />
       </Suspense>
       {stageContext.progress && (
-        <StageProgress
-          stageFlow={stageContext.progress.stage_flow}
-          stages={stageContext.progress.stages}
-          defaultStage={defaultSelectedStage(
-            stageContext.progress.stages,
-            stageContext.progress.stage_flow,
-            stageContext.progress.started,
-          )}
-          started={stageContext.progress.started}
-        />
+        <Suspense>
+          <StageProgress
+            stageFlow={stageContext.progress.stage_flow}
+            stages={stageContext.progress.stages}
+            defaultStage={defaultSelectedStage(
+              stageContext.progress.stages,
+              stageContext.progress.stage_flow,
+              stageContext.progress.started,
+            )}
+            started={stageContext.progress.started}
+          />
+        </Suspense>
       )}
-      <LinkTabs
-        tabs={tabs}
-        stageKindsByPool={stageKindsByPool}
-        defaultStage={stageContext.selectedStage}
-      />
+      <Suspense>
+        <LinkTabs
+          tabs={tabs}
+          stageKindsByPool={stageKindsByPool}
+          defaultStage={stageContext.selectedStage}
+        />
+      </Suspense>
       {children}
     </div>
   );

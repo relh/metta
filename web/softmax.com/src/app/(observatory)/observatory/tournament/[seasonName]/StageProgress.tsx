@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FC, Fragment } from "react";
+import { FC, Fragment, useTransition } from "react";
 
 import type { ProgressResponse, StageStats } from "@observatory/lib/api";
 import { buildStageProgressItems } from "@observatory/lib/tournament/viewModels";
@@ -20,6 +20,7 @@ export const StageProgress: FC<{
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [, startTransition] = useTransition();
   const progressItems = buildStageProgressItems(stageFlow, stages).map(
     (stage) => ({
       ...stage,
@@ -38,14 +39,18 @@ export const StageProgress: FC<{
     progressItems[0];
 
   const onSelect = (stage: string) => {
-    const nextParams = new URLSearchParams(searchParams?.toString() ?? "");
-    nextParams.set("stage", stage);
-    nextParams.delete("pool_names");
-    nextParams.delete("pool_name");
-    nextParams.delete("match_page");
-    nextParams.delete("teams_page");
-    const query = nextParams.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname);
+    startTransition(() => {
+      const nextParams = new URLSearchParams(searchParams?.toString() ?? "");
+      nextParams.set("stage", stage);
+      nextParams.delete("pool_names");
+      nextParams.delete("pool_name");
+      nextParams.delete("match_page");
+      nextParams.delete("teams_page");
+      const query = nextParams.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, {
+        scroll: false,
+      });
+    });
   };
 
   const formatCount = (count: number | null) =>
