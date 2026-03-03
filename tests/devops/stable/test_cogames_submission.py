@@ -110,7 +110,7 @@ def test_upload_policy_builds_expected_upload_command(monkeypatch: pytest.Monkey
 
     assert len(run_calls) == 1
     cmd = run_calls[0]
-    assert cmd[:4] == ["cogames", "upload", "--skip-validation", "--include-hidden"]
+    assert cmd[:3] == ["cogames", "upload", "--skip-validation"]
     assert "--policy" in cmd
     assert "class=noop" in cmd
     assert "-k" in cmd

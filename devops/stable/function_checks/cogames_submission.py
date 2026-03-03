@@ -114,7 +114,6 @@ def _upload_policy(
     with isolated_venv(packages=["cogames"]) as bin_dir:
         args = [
             "upload",
-            "--include-hidden",
             "--policy",
             policy_spec,
             "--name",
@@ -161,7 +160,6 @@ def _wait_for_submission_status(*, ref_payload: dict[str, str], expected_status:
                     server_url,
                     "--login-server",
                     login_server,
-                    "--include-hidden",
                     "--json",
                 ],
             )
