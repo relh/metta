@@ -22,7 +22,6 @@ members = [
     "metta-common",
     "metta-pr-similarity-mcp",
     "mettagrid",
-    "pufferlib-core",
     "softmax",
 ]
 
@@ -631,7 +630,7 @@ requires-dist = [
     { name = "nbconvert", specifier = ">=7.16.0" },
     { name = "nbstripout", specifier = ">=0.8.0" },
     { name = "packaging", specifier = ">=24.0.0" },
-    { name = "pufferlib-core", editable = "packages/pufferlib-core" },
+    { name = "pufferlib-core" },
     { name = "pydantic", specifier = ">=2.11.5" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pytest-httpserver", specifier = ">=1.1.0" },
@@ -2548,7 +2547,7 @@ requires-dist = [
     { name = "pixie-python", specifier = ">=4.3.0" },
     { name = "plotly", specifier = ">=6.1.1" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2.9" },
-    { name = "pufferlib-core", editable = "packages/pufferlib-core" },
+    { name = "pufferlib-core" },
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pybind11", specifier = ">=2.10.4" },
     { name = "pydantic", specifier = ">=2.12.2" },
@@ -2660,7 +2659,7 @@ dev = [
 requires-dist = [
     { name = "einops", specifier = ">=0.7.0" },
     { name = "mamba-ssm", marker = "extra == 'mamba'" },
-    { name = "pufferlib-core", editable = "packages/pufferlib-core" },
+    { name = "pufferlib-core" },
 ]
 provides-extras = ["mamba"]
 
@@ -2877,7 +2876,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3.3,<3" },
     { name = "pettingzoo", specifier = ">=1.25" },
     { name = "protobuf", specifier = ">=6.31.1" },
-    { name = "pufferlib-core", editable = "packages/pufferlib-core" },
+    { name = "pufferlib-core", specifier = ">=3.0.18" },
     { name = "pydantic", specifier = ">=2.12.2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "requests", specifier = ">=2.32.0" },
@@ -3893,7 +3892,7 @@ wheels = [
 [[package]]
 name = "pufferlib-core"
 version = "3.0.18"
-source = { editable = "packages/pufferlib-core" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "gymnasium" },
     { name = "numpy" },
@@ -3905,18 +3904,10 @@ dependencies = [
     { name = "setuptools" },
     { name = "torch" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "gymnasium" },
-    { name = "numpy" },
-    { name = "nvidia-ml-py" },
-    { name = "psutil" },
-    { name = "pyro-ppl" },
-    { name = "rich" },
-    { name = "rich-argparse" },
-    { name = "setuptools" },
-    { name = "torch" },
+sdist = { url = "https://files.pythonhosted.org/packages/d9/60/f78f8325da8f514839007fed60474ac3f633d2137b2f3dc99593ef78fa11/pufferlib_core-3.0.18.tar.gz", hash = "sha256:44c9fe78a99fd1960f06f4cb959080c9084d50b9115393ce7cd50b23a082a180", size = 67606, upload-time = "2026-03-02T23:59:19.274Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/85/11/5b80b3101a48397d825a5b1e37328caf7c49b5218dbe542ca39f5e29b048/pufferlib_core-3.0.18-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:f04639ecebf51fe76e63270ce122e2a3d2e1de2e4b3872d60e33b291839c33f1", size = 90287, upload-time = "2026-03-02T23:59:16.487Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/ab/72894f33b86396989dffc9380be3b493d97dfb44fb4592d0cbb02764a331/pufferlib_core-3.0.18-cp312-cp312-manylinux_2_34_x86_64.whl", hash = "sha256:be880cd0b9037d175112e3ab02938ac75766b100fa2121c4a1837f10496b0647", size = 2262973, upload-time = "2026-03-02T23:59:17.978Z" },
 ]
 
 [[package]]

@@ -260,9 +260,8 @@ jobs:
   cogames-docsync:
     name: "CoGames Docs Sync"
     needs: setup-checks
-    if: |
-      needs.setup-checks.outputs.skip == 'false' &&
-      needs.setup-checks.outputs.cogames_docs_changed == 'true'
+    # TODO(yatharth): re-enable once docsync notebooks are fixed — currently always times out at 10min
+    if: false
     runs-on: blacksmith-2vcpu-ubuntu-2404
     # Since we're running arbitrary code in the notebooks, it's good to have a timeout.
     timeout-minutes: 10

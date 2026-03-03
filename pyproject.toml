@@ -157,7 +157,8 @@ members = [
   "packages/cortex",
   "packages/gitta",
   "packages/mettagrid",
-  "packages/pufferlib-core",
+  # Intentionally excluded: packages/pufferlib-core defaults to PyPI wheels.
+  # Local override: uv pip install --editable packages/pufferlib-core --no-deps
   "softmax",
   "mcp_servers/pr_similarity",
   "chatprop",
@@ -172,7 +173,6 @@ gitta = { workspace = true }
 metta-agent = { workspace = true }
 metta-app-backend = { workspace = true }
 metta-common = { workspace = true }
-pufferlib-core = { workspace = true }
 softmax = { workspace = true }
 metta-pr-similarity-mcp = { workspace = true }
 metta-chatprop = { workspace = true }

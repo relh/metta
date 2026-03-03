@@ -139,6 +139,7 @@ runs:
       env:
         UV_NO_SYNC: "1"
         UV_HTTP_TIMEOUT: "120"
+        UV_TORCH_BACKEND: "cpu"
       run: |
         # Export environment variables
         echo "VIRTUAL_ENV=$(pwd)/.venv" >> $GITHUB_ENV
