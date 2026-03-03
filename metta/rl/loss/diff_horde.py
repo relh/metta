@@ -33,6 +33,8 @@ class DiffHordeLossConfig(LossConfig):
     lambda_: float | list[float] = 0.95
     reduce_cumulants: Literal["mean", "sum"] = "mean"
     normalize_cumulants: bool = True
+    cumulant_centering: Literal["none", "ema"] = "none"
+    cumulant_center_alpha: float = Field(default=1e-3, gt=0, le=1.0)
     cumulant_rms_alpha: float = Field(default=1e-3, gt=0, le=1.0)
     cumulant_rms_epsilon: float = Field(default=1e-6, gt=0)
     cumulant_rms_min_scale: float = Field(default=1e-3, gt=0)
@@ -74,6 +76,7 @@ class DiffHordeLoss(Loss):
         "_aux_module_params",
         "_gamma_vector_cache",
         "_lambda_vector_cache",
+        "cumulant_mean_F",
         "cumulant_rms_sq_F",
         "cumulant_rms_updates",
     )
@@ -91,13 +94,14 @@ class DiffHordeLoss(Loss):
         policy_env_info = getattr(env, "policy_env_info", None)
         self.cumulant_extractor = DiffHordeCumulantExtractor(cfg.cumulants, policy_env_info)
         self.phi_bar_agentF = torch.empty((0, self._num_cumulants), dtype=torch.float32, device=self.device)
+        self.cumulant_mean_F = torch.zeros((self._num_cumulants,), dtype=torch.float32, device=self.device)
         self.cumulant_rms_sq_F = torch.ones((self._num_cumulants,), dtype=torch.float32, device=self.device)
         self.cumulant_rms_updates = torch.zeros((), dtype=torch.int64, device=self.device)
         self._aux_module_params: tuple[Tensor, ...] | None = None
         self._gamma_vector_cache: dict[tuple[torch.device, torch.dtype], Tensor] = {}
         self._lambda_vector_cache: dict[tuple[torch.device, torch.dtype], Tensor] = {}
         self.register_state_attr("phi_bar_agentF")
-        self.register_state_attr("cumulant_rms_sq_F", "cumulant_rms_updates")
+        self.register_state_attr("cumulant_mean_F", "cumulant_rms_sq_F", "cumulant_rms_updates")
 
     @property
     def _num_cumulants(self) -> int:
@@ -169,9 +173,18 @@ class DiffHordeLoss(Loss):
     def _update_and_normalize_cumulants(self, phi_bF: Tensor) -> Tensor:
         phi_f32 = phi_bF.to(device=self.device, dtype=torch.float32)
         with torch.no_grad():
+            centered_phi_bF = phi_f32
+            if self.cfg.cumulant_centering == "ema":
+                batch_mean_F = phi_f32.mean(dim=0)
+                if int(self.cumulant_rms_updates.item()) == 0:
+                    self.cumulant_mean_F.copy_(batch_mean_F)
+                else:
+                    self.cumulant_mean_F.lerp_(batch_mean_F, float(self.cfg.cumulant_center_alpha))
+                centered_phi_bF = phi_f32 - self.cumulant_mean_F.unsqueeze(0)
+
             # Keep RMS stats rank-local: rollout postprocess runs per trajectory slice and
             # slices can be empty on some ranks, so cross-rank collectives can deadlock.
-            batch_sq_mean_F = phi_f32.pow(2).mean(dim=0)
+            batch_sq_mean_F = centered_phi_bF.pow(2).mean(dim=0)
             if int(self.cumulant_rms_updates.item()) == 0:
                 self.cumulant_rms_sq_F.copy_(batch_sq_mean_F)
             else:
@@ -182,7 +195,7 @@ class DiffHordeLoss(Loss):
                 float(self.cfg.cumulant_rms_min_scale)
             )
 
-        normalized = phi_f32 / scale_F.unsqueeze(0)
+        normalized = centered_phi_bF / scale_F.unsqueeze(0)
         if self.cfg.cumulant_rms_clip is not None:
             clip = float(self.cfg.cumulant_rms_clip)
             normalized = normalized.clamp(min=-clip, max=clip)

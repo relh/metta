@@ -11,6 +11,7 @@ from torchrl.data import Composite, UnboundedDiscrete
 
 from metta.agent.components.actor import ActorHeadConfig
 from metta.agent.policies.cnn_shared_critic import CnnSharedCriticConfig
+from metta.agent.policies.vit_future_attr_pred import ViTFutureAttrPredConfig
 from metta.agent.policy import Policy
 from metta.rl.loss.action_supervised import ActionSupervisedConfig
 from metta.rl.loss.cmpo import CMPOConfig
@@ -624,16 +625,51 @@ def test_action_supervised_treats_transport_encoded_teacher_labels_as_invalid() 
 
 
 def test_cnn_shared_critic_auto_wires_vibe_head_in_split_action_env() -> None:
-    env_info = PolicyEnvInterface(
+    env_info = _split_action_env_info(vibe_action_names=["change_vibe_default", "change_vibe_junction"])
+    cfg = CnnSharedCriticConfig()
+    cfg.make_policy(env_info)
+
+    assert cfg.action_probs_config.vibe_in_key == "vibe_logits"
+    vibe_components = [
+        component
+        for component in cfg.components
+        if isinstance(component, ActorHeadConfig) and component.action_space == "vibe"
+    ]
+    assert len(vibe_components) == 1
+    assert any(
+        isinstance(component, ActorHeadConfig)
+        and component.action_space == "vibe"
+        and component.out_key == "vibe_logits"
+        for component in cfg.components
+    )
+
+
+def _split_action_env_info(vibe_action_names: list[str]) -> PolicyEnvInterface:
+    return PolicyEnvInterface(
         obs_features=[ObservationFeatureSpec(id=0, name="agent:group", normalization=10.0)],
         tags=["agent"],
         action_names=["noop", "move_north", "move_south"],
-        vibe_action_names=["change_vibe_default", "change_vibe_junction"],
+        vibe_action_names=vibe_action_names,
         num_agents=1,
         observation_shape=(200, 3),
         egocentric_shape=(11, 11),
     )
+
+
+def test_cnn_shared_critic_without_vibes_omits_vibe_head() -> None:
+    env_info = _split_action_env_info(vibe_action_names=[])
     cfg = CnnSharedCriticConfig()
+    cfg.make_policy(env_info)
+
+    assert cfg.action_probs_config.vibe_in_key is None
+    assert not any(
+        isinstance(component, ActorHeadConfig) and component.action_space == "vibe" for component in cfg.components
+    )
+
+
+def test_vit_future_attr_pred_auto_wires_vibe_head_in_split_action_env() -> None:
+    env_info = _split_action_env_info(vibe_action_names=["change_vibe_default", "change_vibe_junction"])
+    cfg = ViTFutureAttrPredConfig()
     cfg.make_policy(env_info)
 
     assert cfg.action_probs_config.vibe_in_key == "vibe_logits"
@@ -645,17 +681,9 @@ def test_cnn_shared_critic_auto_wires_vibe_head_in_split_action_env() -> None:
     )
 
 
-def test_cnn_shared_critic_without_vibes_omits_vibe_head() -> None:
-    env_info = PolicyEnvInterface(
-        obs_features=[ObservationFeatureSpec(id=0, name="agent:group", normalization=10.0)],
-        tags=["agent"],
-        action_names=["noop", "move_north", "move_south"],
-        vibe_action_names=[],
-        num_agents=1,
-        observation_shape=(200, 3),
-        egocentric_shape=(11, 11),
-    )
-    cfg = CnnSharedCriticConfig()
+def test_vit_future_attr_pred_without_vibes_omits_vibe_head() -> None:
+    env_info = _split_action_env_info(vibe_action_names=[])
+    cfg = ViTFutureAttrPredConfig()
     cfg.make_policy(env_info)
 
     assert cfg.action_probs_config.vibe_in_key is None

@@ -252,7 +252,55 @@ with configurable EMA/clip knobs:
 - `trainer.losses.diff_horde.cumulant_rms_min_scale`
 - `trainer.losses.diff_horde.cumulant_rms_clip`
 
+### Successor-features stability notes
+
+For CogsGuard SF sweeps, a common failure mode is mixing cumulants with very different magnitudes while using
+`gamma=1.0`, which can make discounted sums and differentials blow up.
+
+Recommended starting point:
+
+- sweep `trainer.losses.diff_horde.gamma` below `1.0` (long horizon, bounded accumulation),
+- keep cumulant normalization enabled, and tune RMS/clipping knobs for heavy-tailed stats,
+- sweep SF loss balance as needed (`vf_coef`, `aux_coef`, `beta`) instead of relying on a single fixed mix,
+- compare against stronger engineered baselines when needed (running-mean/scale + clipping).
+
+When evaluating SF changes, prefer teacher-first A/B checks: start from a teacher recipe known to work, add SF targets,
+then measure better/worse deltas on the same setup.
+
+Also note that CogsGuard `horde_variants` are not exhaustive; extend with explicit `diff_horde_cumulants`
+(`info_scalar`, `env_obs_feature`, `td_key`) for additional shaped-reward or world-model-style targets.
+
+### Suggested sweep protocol
+
+- Keep the teacher setup, seeds, and reward variant fixed while changing SF knobs.
+- Run a strict A/B: no `diff_horde` baseline vs `diff_horde` enabled.
+- Sweep `diff_horde_gamma` first, then centering/normalization (`diff_horde_cumulant_centering`,
+  `trainer.losses.diff_horde.cumulant_rms_*`) before broadening target sets.
+- Sweep target packs through both `horde_variants` and explicit `diff_horde_cumulants`.
+- For objective reward mine shaping experiments, prefer `variants=["milestones_2"]` (or `milestones_2:<factor>`), then
+  test whether SF improves the same shaped-reward progress metrics.
+- Role-focused follow-up: repeat best SF settings on miner/aligner-focused runs to confirm gains are not only global.
+
 ### Examples (CLI overrides)
+
+```bash
+# objective reward mine shaping + SF, with bounded gamma and EMA centering
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  variants='["milestones_2"]' \
+  'horde_variants=["economy_agent","vitals"]' \
+  diff_horde_gamma=0.995 \
+  diff_horde_cumulant_centering=ema
+```
+
+```bash
+# same as above, with explicit objective compounding factor
+./devops/run.sh recipes.experiment.cogsguard.train \
+  run=your_run_name \
+  variants='["milestones_2:25"]' \
+  'horde_variants=["economy_agent","vitals"]' \
+  diff_horde_gamma=0.995
+```
 
 ```bash
 # kind=info_scalar

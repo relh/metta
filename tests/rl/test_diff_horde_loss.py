@@ -213,6 +213,52 @@ def test_diff_horde_rollout_can_disable_cumulant_normalization() -> None:
     assert int(loss.cumulant_rms_updates.item()) == 0
 
 
+def test_diff_horde_rollout_can_center_cumulants_with_ema() -> None:
+    policy = _ToyPolicy()
+    registry = _PolicyRegistry(policy)
+    env = SimpleNamespace(single_action_space=gym_spaces.Discrete(4))
+    cfg = DiffHordeLossConfig(
+        cumulants=[{"kind": "td_key", "name": "core3", "key": "core", "slice": "0:3"}],
+        beta=0.0,
+        psi_all_actions_key=None,
+        h_all_actions_key=None,
+        cumulant_centering="ema",
+        cumulant_center_alpha=1.0,
+        cumulant_rms_alpha=1.0,
+        cumulant_rms_clip=None,
+    )
+    loss = cfg.create(registry, SimpleNamespace(), env, torch.device("cpu"), "diff_horde")
+    context = _make_context(registry)
+
+    core = torch.tensor([[1000.0, 1002.0, 998.0], [1000.0, 998.0, 1002.0]], dtype=torch.float32)
+    rollout_td = TensorDict(
+        {
+            "learner0": TensorDict(
+                {
+                    "agent_slot_ids": torch.tensor([[0], [1]], dtype=torch.long),
+                    "actions": torch.tensor([0, 1], dtype=torch.int32),
+                    "core": core,
+                },
+                batch_size=[2],
+            )
+        },
+        batch_size=[2],
+    )
+    loss.rollout_postprocess(rollout_td, context)
+    learner_td = rollout_td["learner0"]
+
+    expected = torch.tensor([[0.0, 1.0, -1.0], [0.0, -1.0, 1.0]], dtype=torch.float32)
+    torch.testing.assert_close(learner_td["cumulants"], expected, atol=1e-4, rtol=1e-4)
+    torch.testing.assert_close(learner_td["cumulants_phi_bar"], learner_td["cumulants"])
+    torch.testing.assert_close(
+        loss.cumulant_mean_F,
+        torch.tensor([1000.0, 1000.0, 1000.0], dtype=torch.float32),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+    assert int(loss.cumulant_rms_updates.item()) == 1
+
+
 def test_ppo_critic_rollout_resyncs_baseline_from_context_state() -> None:
     policy = _ToyPolicy()
     registry = _PolicyRegistry(policy)

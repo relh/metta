@@ -505,6 +505,10 @@ def train(
     teacher: Optional[TeacherConfig] = None,
     diff_horde_cumulants: DiffHordeCumulantsConfig | dict[str, object] | list[dict[str, object]] | None = None,
     horde_variants: str | Sequence[str] | None = None,
+    diff_horde_gamma: float | Sequence[float] | None = None,
+    diff_horde_lambda: float | Sequence[float] | None = None,
+    diff_horde_normalize_cumulants: bool | None = None,
+    diff_horde_cumulant_centering: Literal["none", "ema"] | None = None,
     variants: str | Sequence[str] | None = None,
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
@@ -663,7 +667,22 @@ def train(
     _sync_slice_advantage(trainer_cfg=trainer_cfg, slice_configs=tt.trajectory_isolation.slices)
 
     if resolved_diff_horde_cumulants is not None:
-        trainer_cfg.losses.add_loss("diff_horde", DiffHordeLossConfig(cumulants=resolved_diff_horde_cumulants))
+        diff_horde_loss_cfg = DiffHordeLossConfig(cumulants=resolved_diff_horde_cumulants)
+        diff_horde_updates: dict[str, object] = {}
+        if diff_horde_gamma is not None:
+            diff_horde_updates["gamma"] = diff_horde_gamma
+        if diff_horde_lambda is not None:
+            diff_horde_updates["lambda_"] = diff_horde_lambda
+        if diff_horde_normalize_cumulants is not None:
+            diff_horde_updates["normalize_cumulants"] = diff_horde_normalize_cumulants
+        if diff_horde_cumulant_centering is not None:
+            diff_horde_updates["cumulant_centering"] = diff_horde_cumulant_centering
+        if diff_horde_updates:
+            payload = diff_horde_loss_cfg.model_dump(mode="python")
+            payload.update(diff_horde_updates)
+            diff_horde_loss_cfg = DiffHordeLossConfig.model_validate(payload)
+
+        trainer_cfg.losses.add_loss("diff_horde", diff_horde_loss_cfg)
         if teacher and teacher.enabled and teacher.mode.endswith(".sliced"):
             target_slice_names = {"ppo", "teacher_led", "student_led"}
         else:

@@ -144,3 +144,19 @@ def test_cogsguard_horde_variants_merge_with_explicit_cumulants() -> None:
     assert "core2" in specs_by_name
     assert specs_by_name["cogs_junction_now"].key == "env_team/cogs/aligned.junction.held"
     assert cumulants.num_cumulants == 4
+
+
+def test_cogsguard_diff_horde_loss_override_knobs() -> None:
+    tool = cogsguard.train(
+        horde_variants=["junctions"],
+        diff_horde_gamma=0.995,
+        diff_horde_lambda=0.9,
+        diff_horde_normalize_cumulants=True,
+        diff_horde_cumulant_centering="ema",
+    )
+
+    diff_horde_cfg = tool.trainer.losses["diff_horde"]
+    assert diff_horde_cfg.gamma == 0.995
+    assert diff_horde_cfg.lambda_ == 0.9
+    assert diff_horde_cfg.normalize_cumulants is True
+    assert diff_horde_cfg.cumulant_centering == "ema"
