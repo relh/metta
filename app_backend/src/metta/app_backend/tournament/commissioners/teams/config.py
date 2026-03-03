@@ -92,6 +92,7 @@ TeamTournamentStage = Annotated[
 class TeamTournamentConfig(BaseModel):
     game: GameEnvGenerator = Field(default_factory=GameEnvGenerator, description="Game environment configuration")
     stages: list[TeamTournamentStage] = Field(description="Ordered tournament stages")
+    fixed_map_seed: int | None = Field(default=None, description="When set, all matches use this map seed")
     max_failed_attempts: int = Field(
         default=MAX_FAILED_ATTEMPTS,
         ge=1,

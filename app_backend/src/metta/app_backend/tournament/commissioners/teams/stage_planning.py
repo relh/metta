@@ -133,6 +133,7 @@ class TeamStagePlanningMixin:
             stage=stage,
             game=self.config.game,
             max_failed_attempts=self.config.max_failed_attempts,
+            fixed_map_seed=self.config.fixed_map_seed,
         )
 
     def get_referees(self, season_version: int) -> dict[str, RefereeBase]:  # type: ignore[unused-arg]
@@ -147,6 +148,7 @@ class TeamStagePlanningMixin:
                         teams=[],
                         game=self.config.game,
                         max_failed_attempts=self.config.max_failed_attempts,
+                        fixed_map_seed=self.config.fixed_map_seed,
                     )
                 case ScoreStage() as stage:
                     refs[binding.output_pool] = ScoreStageReferee(

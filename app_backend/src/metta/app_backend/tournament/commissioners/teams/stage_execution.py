@@ -481,6 +481,7 @@ class TeamStageExecutionMixin:
             teams=[],
             game=self.config.game,
             max_failed_attempts=self.config.max_failed_attempts,
+            fixed_map_seed=self.config.fixed_map_seed,
         )
         await self._ensure_pools_exist(season, {binding.input_pool: baseline_referee})
 
