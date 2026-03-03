@@ -11,12 +11,16 @@ module "observatory_irsa" {
   oidc_providers = {
     main = {
       provider_arn               = module.eks.oidc_provider_arn
-      namespace_service_accounts = ["observatory:observatory-backend"]
+      namespace_service_accounts = [
+        "observatory:observatory-backend",
+        "observatory:dashboard-backend",
+      ]
     }
   }
 
   role_policy_arns = {
-    policy = aws_iam_policy.observatory_s3.arn
+    policy  = aws_iam_policy.observatory_s3.arn
+    bedrock = aws_iam_policy.observatory_bedrock.arn
   }
 }
 
@@ -46,6 +50,24 @@ resource "aws_iam_policy" "observatory_s3" {
         Resource = "arn:aws:iam::583928386201:role/PrimaryAccountEKSAccess"
       }
     ]
+  })
+}
+
+resource "aws_iam_policy" "observatory_bedrock" {
+  name = "observatory-bedrock-access"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+      ]
+      Resource = [
+        "arn:aws:bedrock:*:*:inference-profile/*",
+        "arn:aws:bedrock:*:*:foundation-model/*",
+      ]
+    }]
   })
 }
 
