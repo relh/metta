@@ -224,6 +224,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5d/77/073e8ac488f335aec7001952825275582fb8f433737e90f24eeef9d878f6/anthropic-0.71.0-py3-none-any.whl", hash = "sha256:85c5015fcdbdc728390f11b17642a65a4365d03b12b799b18b6cc57e71fdb327", size = 355035, upload-time = "2025-10-16T15:54:38.238Z" },
 ]
 
+[package.optional-dependencies]
+bedrock = [
+    { name = "boto3" },
+    { name = "botocore" },
+]
+
 [[package]]
 name = "antlr4-python3-runtime"
 version = "4.9.3"
@@ -1209,7 +1215,7 @@ name = "gitta"
 version = "0.2.0"
 source = { editable = "packages/gitta" }
 dependencies = [
-    { name = "anthropic" },
+    { name = "anthropic", extra = ["bedrock"] },
     { name = "boto3" },
     { name = "git-filter-repo" },
     { name = "httpx" },
@@ -1226,7 +1232,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anthropic", specifier = ">=0.18.0" },
+    { name = "anthropic", extras = ["bedrock"], specifier = ">=0.49.0" },
     { name = "boto3", specifier = ">=1.26.0" },
     { name = "git-filter-repo", specifier = ">=2.38.0" },
     { name = "httpx", specifier = ">=0.24.0" },
@@ -2675,6 +2681,7 @@ source = { editable = "app_backend" }
 dependencies = [
     { name = "aioboto3" },
     { name = "alembic" },
+    { name = "anthropic", extra = ["bedrock"] },
     { name = "boto3" },
     { name = "cachetools" },
     { name = "ddtrace" },
@@ -2711,6 +2718,7 @@ dev = [
 requires-dist = [
     { name = "aioboto3", specifier = ">=13.2.0" },
     { name = "alembic", specifier = ">=1.17.0" },
+    { name = "anthropic", extras = ["bedrock"], specifier = ">=0.49.0" },
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "cachetools", specifier = ">=5.3.0" },
     { name = "ddtrace", specifier = ">=2.6.0" },

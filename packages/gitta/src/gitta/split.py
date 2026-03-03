@@ -11,7 +11,7 @@ import tempfile
 from dataclasses import dataclass
 from typing import Any, cast
 
-from anthropic import Anthropic
+from anthropic import Anthropic, AnthropicBedrock
 from anthropic.types import TextBlock
 
 from .core import GitError, run_git, run_git_cmd
@@ -38,7 +38,8 @@ class SplitDecision:
     group2_title: str
 
 
-DEFAULT_MODEL = "claude-sonnet-4-5"
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5"
+DEFAULT_BEDROCK_MODEL = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
 DEFAULT_COMMIT_TIMEOUT = 300.0
 
 
@@ -54,9 +55,13 @@ class PRSplitter:
         commit_timeout: float | None = None,
     ):
         self.anthropic_api_key = anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
-        self._anthropic: Anthropic | None = None
+        self._anthropic: Anthropic | AnthropicBedrock | None = None
         self.github_token = github_token or os.environ.get("GITHUB_TOKEN")
-        self.model = model or os.environ.get("GITTA_SPLIT_MODEL") or DEFAULT_MODEL
+        self.model = (
+            model
+            or os.environ.get("GITTA_SPLIT_MODEL")
+            or (DEFAULT_ANTHROPIC_MODEL if self.anthropic_api_key else DEFAULT_BEDROCK_MODEL)
+        )
 
         if skip_hooks is None:
             skip_hooks_env = os.environ.get("GITTA_SKIP_HOOKS", "").lower()
@@ -79,15 +84,12 @@ class PRSplitter:
         self.base_branch: str | None = None
         self.current_branch: str | None = None
 
-    def _get_anthropic_client(self) -> Anthropic:
+    def _get_anthropic_client(self) -> Anthropic | AnthropicBedrock:
+        # Re-check env on every call so a rotated key is picked up mid-run.
         api_key = self.anthropic_api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError("Anthropic API key not provided and ANTHROPIC_API_KEY environment variable not set")
-
         if self._anthropic is None or api_key != self.anthropic_api_key:
             self.anthropic_api_key = api_key
-            self._anthropic = Anthropic(api_key=api_key)
-
+            self._anthropic = Anthropic(api_key=api_key) if api_key else AnthropicBedrock()
         return self._anthropic
 
     def get_base_branch(self) -> str:
@@ -550,12 +552,13 @@ Examples:
   python -m gitta.split --github-token YOUR_TOKEN
 
   # Override the Anthropic model
-  python -m gitta.split --model {DEFAULT_MODEL}
+  python -m gitta.split --model {DEFAULT_ANTHROPIC_MODEL}
 
 Environment variables:
   ANTHROPIC_API_KEY - Anthropic API key for AI analysis
   GITHUB_TOKEN      - GitHub token for creating PRs (optional)
-  GITTA_SPLIT_MODEL - Anthropic model name (optional, defaults to {DEFAULT_MODEL})
+  GITTA_SPLIT_MODEL - Claude model name (optional, defaults to {DEFAULT_ANTHROPIC_MODEL} with API key,
+                      or {DEFAULT_BEDROCK_MODEL} without API key)
   GITTA_SKIP_HOOKS  - Set to "1" to skip git hooks when committing split branches
   GITTA_COMMIT_TIMEOUT - Commit timeout in seconds (defaults to {DEFAULT_COMMIT_TIMEOUT})
         """,
@@ -575,7 +578,11 @@ Environment variables:
 
     parser.add_argument(
         "--model",
-        help=f"Anthropic model to use (defaults to GITTA_SPLIT_MODEL env var or {DEFAULT_MODEL})",
+        help=(
+            "Claude model to use (defaults to GITTA_SPLIT_MODEL env var, "
+            f"or {DEFAULT_ANTHROPIC_MODEL} with API key, "
+            f"or {DEFAULT_BEDROCK_MODEL} without API key)"
+        ),
         default=os.environ.get("GITTA_SPLIT_MODEL"),
     )
     parser.add_argument(
@@ -602,11 +609,9 @@ Environment variables:
 
     args = parser.parse_args()
 
-    # Validate API key
+    # API key is optional — Bedrock credentials are used when no key is provided
     if not args.anthropic_key:
-        print("❌ Error: Anthropic API key not provided!")
-        print("   Set ANTHROPIC_API_KEY environment variable or use --anthropic-key")
-        sys.exit(1)
+        print("No Anthropic API key provided -- will use AWS Bedrock credentials")
 
     if not args.github_token:
         print("⚠️  Warning: GitHub token not provided, will skip PR creation")

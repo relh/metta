@@ -368,10 +368,15 @@ def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:
     assert body["rows"][0]["role"] == "miner"
 
 
-def test_dashboard_analysis_requires_env_or_request_api_key(monkeypatch: Any) -> None:
+def test_dashboard_analysis_uses_bedrock_without_request_key(monkeypatch: Any) -> None:
+    """Without X-Anthropic-Api-Key header, the endpoint proceeds to Bedrock (no 500)."""
+
+    async def fake_require_policy_version(_policy_version_id: str) -> tuple[Any, Any]:
+        raise HTTPException(status_code=418, detail="bedrock-path-reached")
+
     monkeypatch.setattr(
-        "dashboard.backend.dashboard_backend.state_page.router.settings.ANTHROPIC_API_KEY",
-        None,
+        "dashboard.backend.dashboard_backend.state_page.router._require_policy_version",
+        fake_require_policy_version,
     )
 
     app = FastAPI()
@@ -379,16 +384,11 @@ def test_dashboard_analysis_requires_env_or_request_api_key(monkeypatch: Any) ->
     client = TestClient(app, base_url="http://localhost")
 
     response = client.post(f"/dashboard/v1/policies/versions/{uuid4()}/analysis")
-    assert response.status_code == 500
-    assert "Provide X-Anthropic-Api-Key" in response.json()["detail"]
+    assert response.status_code == 418
+    assert response.json()["detail"] == "bedrock-path-reached"
 
 
 def test_dashboard_analysis_accepts_request_scoped_api_key(monkeypatch: Any) -> None:
-    monkeypatch.setattr(
-        "dashboard.backend.dashboard_backend.state_page.router.settings.ANTHROPIC_API_KEY",
-        None,
-    )
-
     async def fake_require_policy_version(_policy_version_id: str) -> tuple[Any, Any]:
         raise HTTPException(status_code=418, detail="request-key-path-reached")
 

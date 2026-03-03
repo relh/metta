@@ -16,10 +16,9 @@ from metta.app_backend.anthropic import (
     AnthropicHTTPError,
     AnthropicResponseFormatError,
     AnthropicTimeoutError,
-    request_anthropic_message,
+    request_bedrock_message,
 )
 from metta.app_backend.auth import SoftmaxUser
-from metta.app_backend.config import settings
 from metta.app_backend.database import db_session
 from metta.app_backend.route_logger import timed_route
 
@@ -200,10 +199,6 @@ def create_sql_router() -> APIRouter:
     @timed_route("generate_ai_query")
     async def generate_ai_query(request: AIQueryRequest, user: SoftmaxUser) -> AIQueryResponse:
         """Generate a SQL query from natural language description using Claude."""
-        # Get API key from environment variable
-        if not settings.ANTHROPIC_API_KEY:
-            raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY environment variable not set")
-
         # Fetch all table schemas in parallel
         tables = await list_tables(user)
         schemas = await asyncio.gather(*[get_table_schema(table.table_name, user) for table in tables])
@@ -233,10 +228,9 @@ def create_sql_router() -> APIRouter:
         )
 
         try:
-            generated_query = await request_anthropic_message(
-                api_key=settings.ANTHROPIC_API_KEY,
+            generated_query = await request_bedrock_message(
                 prompt=prompt,
-                model="claude-opus-4-20250514",
+                model="us.anthropic.claude-opus-4-20250514-v1:0",
                 max_tokens=1000,
                 timeout=30.0,
             )

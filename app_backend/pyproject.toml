@@ -24,6 +24,7 @@ dependencies = [
   "pydantic-settings>=2.10.1",
   "pytest-asyncio>=1.0.0",
   "python-multipart>=0.0.20",
+  "anthropic[bedrock]>=0.49.0",
   "httpx>=0.28.1",
   "wandb>=0.22.3",
   "metta-common",

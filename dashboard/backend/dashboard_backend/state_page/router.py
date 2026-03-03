@@ -20,10 +20,10 @@ from dashboard.backend.dashboard_backend.anthropic import (
     AnthropicResponseFormatError,
     AnthropicTimeoutError,
     request_anthropic_message,
+    request_bedrock_message,
 )
 from dashboard.backend.dashboard_backend.auth import SoftmaxUser
 from dashboard.backend.dashboard_backend.cogames_diagnose.router import list_run_summaries
-from dashboard.backend.dashboard_backend.config import settings
 from dashboard.backend.dashboard_backend.database import db_session
 from dashboard.backend.dashboard_backend.state_page import diagnostics as claude_dashboard
 from dashboard.backend.dashboard_backend.state_page.capability_audit import build_capability_code_audit
@@ -682,15 +682,6 @@ def create_dashboard_router() -> APIRouter:
     ) -> DashboardAnalysisResponse:
         """Run Claude AI analysis on computed dashboard data."""
         request_api_key = request.headers.get("X-Anthropic-Api-Key", "").strip()
-        anthropic_api_key = request_api_key or settings.ANTHROPIC_API_KEY
-        if not anthropic_api_key:
-            raise HTTPException(
-                status_code=500,
-                detail=(
-                    "Analysis unavailable: no Anthropic API key configured. "
-                    "Provide X-Anthropic-Api-Key, or run backend with ANTHROPIC_API_KEY exported."
-                ),
-            )
 
         now = time.time()
         user_key = user.email or str(user.id)
@@ -773,13 +764,23 @@ def create_dashboard_router() -> APIRouter:
         prompt = claude_dashboard.build_analysis_prompt(summary)
 
         try:
-            analysis_text = await request_anthropic_message(
-                api_key=anthropic_api_key,
-                prompt=prompt,
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=2500,
-                timeout=60.0,
-            )
+            if request_api_key:
+                analysis_text = await request_anthropic_message(
+                    api_key=request_api_key,
+                    prompt=prompt,
+                    model="claude-sonnet-4-5-20250929",
+                    max_tokens=2500,
+                    timeout=60.0,
+                )
+            else:
+                # Bedrock uses team AWS credits. This is safe while the endpoint is
+                # SoftmaxUser-gated; add an API key requirement if opened to ExternalUser.
+                analysis_text = await request_bedrock_message(
+                    prompt=prompt,
+                    model="global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                    max_tokens=2500,
+                    timeout=60.0,
+                )
         except AnthropicTimeoutError as e:
             raise HTTPException(status_code=504, detail="Claude API timed out (60s limit)") from e
         except AnthropicHTTPError as e:

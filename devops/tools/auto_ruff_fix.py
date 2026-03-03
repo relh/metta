@@ -14,7 +14,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -29,6 +28,9 @@ except ImportError:
 
 import anthropic
 
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+DEFAULT_BEDROCK_MODEL = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+
 
 @dataclass
 class RuffError:
@@ -41,16 +43,20 @@ class RuffError:
 
 
 class AutoRuffFix:
-    def __init__(self, claude_api_key: str, model: str = "claude-sonnet-4-6", context_lines: int = 5):
+    def __init__(self, claude_api_key: str | None = None, model: str | None = None, context_lines: int = 5):
         """Initialize the AutoRuffFix tool.
 
         Args:
-            claude_api_key: Anthropic API key for Claude
+            claude_api_key: Anthropic API key for Claude (optional — uses AWS Bedrock when not provided)
             model: Claude model to use for generating fixes
             context_lines: Number of lines to include before and after the error line (default: 5)
         """
-        self.client = anthropic.Anthropic(api_key=claude_api_key)
-        self.model = model
+        if claude_api_key:
+            self.client = anthropic.Anthropic(api_key=claude_api_key)
+            self.model = model or DEFAULT_ANTHROPIC_MODEL
+        else:
+            self.client = anthropic.AnthropicBedrock()
+            self.model = model or DEFAULT_BEDROCK_MODEL
         self.verbose = False
         self.context_lines = context_lines
 
@@ -506,8 +512,12 @@ def main():
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
     parser.add_argument(
         "--model",
-        default="claude-sonnet-4-6",
-        help="Claude model to use (default: claude-sonnet-4-6)",
+        default=None,
+        help=(
+            "Claude model to use. Defaults to "
+            f"{DEFAULT_ANTHROPIC_MODEL} with --api-key/ANTHROPIC_API_KEY, "
+            f"or {DEFAULT_BEDROCK_MODEL} when using Bedrock."
+        ),
     )
     parser.add_argument("--api-key", help="Anthropic API key (can also use ANTHROPIC_API_KEY env var)")
     parser.add_argument(
@@ -519,11 +529,8 @@ def main():
 
     args = parser.parse_args()
 
-    # Get API key from command line argument or environment variable
+    # API key is optional — Bedrock credentials are used when no key is provided
     api_key = args.api_key or os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable not set and --api-key not provided")
-        sys.exit(1)
 
     auto_fix = AutoRuffFix(claude_api_key=api_key, model=args.model, context_lines=args.context_lines)
     auto_fix.set_verbose(args.verbose)

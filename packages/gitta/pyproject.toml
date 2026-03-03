@@ -7,7 +7,12 @@ name = "gitta"
 version = "0.2.0"
 description = "Git utilities library with PR splitting and AWS Secrets Manager support"
 requires-python = ">=3.9"
-dependencies = ["httpx>=0.24.0", "anthropic>=0.18.0", "git-filter-repo>=2.38.0", "boto3>=1.26.0"]
+dependencies = [
+  "httpx>=0.24.0",
+  "anthropic[bedrock]>=0.49.0",
+  "git-filter-repo>=2.38.0",
+  "boto3>=1.26.0",
+]
 
 [dependency-groups]
 dev = [
