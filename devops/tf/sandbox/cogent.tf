@@ -92,9 +92,14 @@ resource "aws_iam_role_policy_attachment" "cogent_ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+data "aws_vpc" "default" {
+  default = true
+}
+
 resource "aws_security_group" "cogent" {
   name        = "cogent-sg"
   description = "Cogent agent instance - egress only, SSM access (no inbound)"
+  vpc_id      = data.aws_vpc.default.id
 
   egress {
     from_port   = 0
