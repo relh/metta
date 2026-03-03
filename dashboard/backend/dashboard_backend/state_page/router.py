@@ -120,28 +120,34 @@ def _season_display_name(season: Season) -> str:
     return season.name if season.canonical else f"{season.name}:v{season.version}"
 
 
-async def _default_winner_policy_version_id(session: Any) -> tuple[str | None, str | None]:
-    freeplay_seasons = await _latest_freeplay_seasons(session)
-    for season in freeplay_seasons:
-        season_name = _season_display_name(season)
-        if season.name not in SEASONS:
-            continue
-        commissioner = await build_commissioner(season.name, season_id=season.id)
-        leaderboard = await commissioner.get_leaderboard()
-        if leaderboard:
-            return str(leaderboard[0][0]), season_name
-
-    season = await _latest_default_season(session)
-    if season is None:
-        return None, None
-    season_name = _season_display_name(season)
+async def _season_leaderboard_winner_policy_version_id(season: Season) -> str | None:
     if season.name not in SEASONS:
-        return None, season_name
+        return None
     commissioner = await build_commissioner(season.name, season_id=season.id)
     leaderboard = await commissioner.get_leaderboard()
     if not leaderboard:
-        return None, season_name
-    return str(leaderboard[0][0]), season_name
+        return None
+    return str(leaderboard[0][0])
+
+
+async def _default_winner_policy_version_id(session: Any) -> tuple[str | None, str | None]:
+    default_season = await _latest_default_season(session)
+    if default_season is not None:
+        winner_policy_id = await _season_leaderboard_winner_policy_version_id(default_season)
+        if winner_policy_id is not None:
+            return winner_policy_id, _season_display_name(default_season)
+
+    freeplay_seasons = await _latest_freeplay_seasons(session)
+    for season in freeplay_seasons:
+        if default_season is not None and season.id == default_season.id:
+            continue
+        winner_policy_id = await _season_leaderboard_winner_policy_version_id(season)
+        if winner_policy_id is not None:
+            return winner_policy_id, _season_display_name(season)
+
+    if default_season is None:
+        return None, None
+    return None, _season_display_name(default_season)
 
 
 async def _require_policy_version(policy_version_id: str) -> tuple[UUID, Any]:

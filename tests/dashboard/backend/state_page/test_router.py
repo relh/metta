@@ -92,21 +92,21 @@ def test_default_dashboard_data_returns_404_when_default_policy_missing(monkeypa
     assert response.json()["detail"] == "No default policy version available"
 
 
-def test_default_winner_policy_version_prefers_freeplay_leader(monkeypatch: Any) -> None:
-    freeplay_season_id = uuid4()
-    freeplay_policy_id = uuid4()
-    freeplay_season = SimpleNamespace(
-        id=freeplay_season_id,
+def test_default_winner_policy_version_prefers_default_season_leader(monkeypatch: Any) -> None:
+    default_season_id = uuid4()
+    default_policy_id = uuid4()
+    default_season = SimpleNamespace(
+        id=default_season_id,
         name="beta-cvc",
         canonical=True,
-        version=7,
+        version=4,
     )
     calls: list[tuple[str, Any]] = []
 
     class _FakeCommissioner:
         async def get_leaderboard(self, pool_name: str | None = None) -> list[tuple[Any, float, int]]:
             calls.append(("get_leaderboard", pool_name))
-            return [(freeplay_policy_id, 1.23, 9)]
+            return [(default_policy_id, 1.23, 9)]
 
     async def fake_build_commissioner(season_name: str, *, season_id: Any) -> _FakeCommissioner:
         calls.append(("build_commissioner", (season_name, season_id)))
@@ -117,32 +117,32 @@ def test_default_winner_policy_version_prefers_freeplay_leader(monkeypatch: Any)
         fake_build_commissioner,
     )
 
-    session = _FakeSession([_ExecuteResult(scalar_values=[freeplay_season])])
+    session = _FakeSession([_ExecuteResult(scalar=default_season)])
     winner_policy_id, winner_season_name = asyncio.run(_default_winner_policy_version_id(session))
 
-    assert winner_policy_id == str(freeplay_policy_id)
+    assert winner_policy_id == str(default_policy_id)
     assert winner_season_name == "beta-cvc"
     assert calls == [
-        ("build_commissioner", ("beta-cvc", freeplay_season_id)),
+        ("build_commissioner", ("beta-cvc", default_season_id)),
         ("get_leaderboard", None),
     ]
 
 
-def test_default_winner_policy_version_falls_back_when_freeplay_has_no_leader(monkeypatch: Any) -> None:
-    freeplay_season_id = uuid4()
+def test_default_winner_policy_version_falls_back_when_default_has_no_leader(monkeypatch: Any) -> None:
+    default_season_id = uuid4()
     fallback_season_id = uuid4()
     fallback_policy_id = uuid4()
-    freeplay_season = SimpleNamespace(
-        id=freeplay_season_id,
+    default_season = SimpleNamespace(
+        id=default_season_id,
         name="beta-cvc",
         canonical=True,
-        version=7,
+        version=4,
     )
     fallback_season = SimpleNamespace(
         id=fallback_season_id,
         name="beta-teams-small",
         canonical=True,
-        version=2,
+        version=6,
     )
     calls: list[tuple[str, Any]] = []
 
@@ -168,8 +168,8 @@ def test_default_winner_policy_version_falls_back_when_freeplay_has_no_leader(mo
 
     session = _FakeSession(
         [
-            _ExecuteResult(scalar_values=[freeplay_season]),
-            _ExecuteResult(scalar=fallback_season),
+            _ExecuteResult(scalar=default_season),
+            _ExecuteResult(scalar_values=[fallback_season, default_season]),
         ]
     )
     winner_policy_id, winner_season_name = asyncio.run(_default_winner_policy_version_id(session))
@@ -177,7 +177,7 @@ def test_default_winner_policy_version_falls_back_when_freeplay_has_no_leader(mo
     assert winner_policy_id == str(fallback_policy_id)
     assert winner_season_name == "beta-teams-small"
     assert calls == [
-        ("build_commissioner", ("beta-cvc", freeplay_season_id)),
+        ("build_commissioner", ("beta-cvc", default_season_id)),
         ("get_leaderboard", None),
         ("build_commissioner", ("beta-teams-small", fallback_season_id)),
         ("get_leaderboard", None),
