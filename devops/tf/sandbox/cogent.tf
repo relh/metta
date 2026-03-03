@@ -1,6 +1,40 @@
 # Cogent agent instance — IAM, instance profile, security group.
 # The EC2 instance itself is launched manually (see devops/cogent/README.md).
 
+# These resources were created manually before being codified in Terraform.
+# Import blocks adopt them into TF state on first apply, then become no-ops.
+# After successful import, these blocks can be removed in a follow-up.
+
+import {
+  to = aws_iam_role.cogent
+  id = "cogent-role"
+}
+
+import {
+  to = aws_iam_instance_profile.cogent
+  id = "cogent-profile"
+}
+
+import {
+  to = aws_iam_role_policy.cogent_secrets
+  id = "cogent-role:cogent-secrets"
+}
+
+import {
+  to = aws_iam_role_policy.cogent_bedrock
+  id = "cogent-role:bedrock-claude-code"
+}
+
+import {
+  to = aws_iam_role_policy_attachment.cogent_ssm
+  id = "cogent-role/arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+import {
+  to = aws_security_group.cogent
+  id = "sg-04dcd1e41a6fc023b"
+}
+
 resource "aws_iam_role" "cogent" {
   name = "cogent-role"
   assume_role_policy = jsonencode({
