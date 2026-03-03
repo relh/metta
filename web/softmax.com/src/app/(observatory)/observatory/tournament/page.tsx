@@ -4,10 +4,7 @@ import { redirect } from "next/navigation";
 import { ServerDebugDrain } from "@observatory/lib/debug/ServerDebugDrain";
 import { getRepo } from "@observatory/lib/repo/server";
 import { seasonRoute } from "@observatory/lib/routes";
-import {
-  seasonTabModeForName,
-  TOURNAMENT_DEFAULT_SEASON_NAME,
-} from "@observatory/lib/tournament/tabMode";
+import { seasonTabModeForTournamentType } from "@observatory/lib/tournament/tabMode";
 
 export default async function TournamentPage({
   searchParams,
@@ -27,21 +24,16 @@ export default async function TournamentPage({
   const requestedMode =
     params.mode === "tournament" ? "tournament" : "freeplay";
   const modeSeasons = seasons.filter(
-    (season) => seasonTabModeForName(season.name) === requestedMode,
+    (season) =>
+      seasonTabModeForTournamentType(season.tournament_type) === requestedMode,
   );
   const preferredSeasons = modeSeasons.length > 0 ? modeSeasons : seasons;
   const defaultSeason =
-    (requestedMode === "tournament"
-      ? preferredSeasons.find(
-          (season) => season.name === TOURNAMENT_DEFAULT_SEASON_NAME,
-        )
-      : null) ??
-    preferredSeasons.find((season) => season.is_default) ??
-    preferredSeasons[0];
+    preferredSeasons.find((season) => season.is_default) ?? preferredSeasons[0];
   const effectiveMode =
     modeSeasons.length > 0
       ? requestedMode
-      : seasonTabModeForName(defaultSeason.name);
+      : seasonTabModeForTournamentType(defaultSeason.tournament_type);
   redirect(seasonRoute(defaultSeason.name, { mode: effectiveMode }));
 }
 

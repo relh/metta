@@ -1,10 +1,5 @@
 export type SeasonTabMode = "freeplay" | "tournament";
-
-export const TOURNAMENT_DEFAULT_SEASON_NAME = "beta-teams-small";
-const TOURNAMENT_TAB_SEASON_NAMES = new Set([
-  "beta-teams-small",
-  "beta-teams-large",
-]);
+export type SeasonTournamentType = "freeplay" | "team";
 
 export const seasonNameFromRef = (seasonRef: string): string => {
   const withV = seasonRef.lastIndexOf(":v");
@@ -21,7 +16,6 @@ export const seasonNameFromRef = (seasonRef: string): string => {
   return seasonRef;
 };
 
-export const seasonTabModeForName = (seasonName: string): SeasonTabMode =>
-  TOURNAMENT_TAB_SEASON_NAMES.has(seasonNameFromRef(seasonName))
-    ? "tournament"
-    : "freeplay";
+export const seasonTabModeForTournamentType = (
+  tournamentType: SeasonTournamentType,
+): SeasonTabMode => (tournamentType === "team" ? "tournament" : "freeplay");

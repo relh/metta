@@ -14,7 +14,7 @@ import type { SeasonSummary, SeasonVersionInfo } from "@observatory/lib/api";
 import { seasonRoute } from "@observatory/lib/routes";
 import {
   type SeasonTabMode,
-  seasonTabModeForName,
+  seasonTabModeForTournamentType,
 } from "@observatory/lib/tournament/tabMode";
 import { parseDatetime } from "@observatory/utils/datetime";
 
@@ -132,7 +132,8 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
   const freeplaySeasons = useMemo(
     () =>
       seasons.filter(
-        (season) => seasonTabModeForName(season.name) === "freeplay",
+        (season) =>
+          seasonTabModeForTournamentType(season.tournament_type) === "freeplay",
       ),
     [seasons],
   );
@@ -140,7 +141,9 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
   const tournamentSeasons = useMemo(
     () =>
       seasons.filter(
-        (season) => seasonTabModeForName(season.name) === "tournament",
+        (season) =>
+          seasonTabModeForTournamentType(season.tournament_type) ===
+          "tournament",
       ),
     [seasons],
   );
@@ -151,7 +154,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
       return modeParam;
     }
     if (selectedSeason) {
-      return seasonTabModeForName(selectedSeason.name);
+      return seasonTabModeForTournamentType(selectedSeason.tournament_type);
     }
     if (freeplaySeasons.length > 0) {
       return "freeplay";
@@ -454,7 +457,7 @@ export const SeasonSelect: FC<{ seasons: SeasonSummary[] }> = ({
       setVersionsRefreshNonce((current) => current + 1);
       router.push(
         seasonRoute(newSeason.name, {
-          mode: seasonTabModeForName(newSeason.name),
+          mode: seasonTabModeForTournamentType(newSeason.tournament_type),
         }),
       );
       router.refresh();

@@ -20,7 +20,6 @@ import {
   seasonPlayersRoute,
 } from "@observatory/lib/routes";
 import { getSeasonStageContext } from "@observatory/lib/tournament/api";
-import { seasonTabModeForName } from "@observatory/lib/tournament/tabMode";
 
 import { StageLeaderboard } from "./StageLeaderboard";
 import { StartTournamentButton } from "./StartTournamentButton";
@@ -94,7 +93,7 @@ export default async function SeasonPage({
       redirect(
         seasonPlayersRoute(seasonName, {
           stage: parsed.stage ?? undefined,
-          mode: seasonTabModeForName(seasonName),
+          mode: "tournament",
         }),
       );
     }

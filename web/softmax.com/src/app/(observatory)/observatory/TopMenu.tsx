@@ -2,7 +2,7 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { FC, PropsWithChildren, use } from "react";
+import { FC, PropsWithChildren, use, useEffect, useState } from "react";
 
 import { AutoRefreshBadge } from "@observatory/components/AutoRefreshBadge";
 import {
@@ -22,7 +22,7 @@ import {
 } from "@observatory/lib/routes";
 import {
   seasonNameFromRef,
-  seasonTabModeForName,
+  seasonTabModeForTournamentType,
   type SeasonTabMode,
 } from "@observatory/lib/tournament/tabMode";
 
@@ -55,22 +55,71 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
 }) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { apiBaseUrl, isSoftmaxTeamMember } = use(AppContext);
+  const { apiBaseUrl, isSoftmaxTeamMember, repo } = use(AppContext);
 
   const isPoliciesActive =
     pathname === "/" || pathname.startsWith("/observatory/policies");
   const isTournamentRoute = pathname.startsWith("/observatory/tournament");
   const modeParam = searchParams.get("mode");
-  let effectiveMode: SeasonTabMode = "freeplay";
-  if (modeParam === "freeplay" || modeParam === "tournament") {
-    effectiveMode = modeParam;
-  } else if (pathname.startsWith("/observatory/tournament/")) {
-    const seasonSegment = pathname.split("/")[3];
-    if (seasonSegment) {
-      const decoded = decodeURIComponent(seasonSegment);
-      effectiveMode = seasonTabModeForName(seasonNameFromRef(decoded));
+  const [inferredMode, setInferredMode] = useState<SeasonTabMode | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (modeParam === "freeplay" || modeParam === "tournament") {
+      setInferredMode(modeParam);
+      return () => {
+        cancelled = true;
+      };
     }
-  }
+
+    if (!pathname.startsWith("/observatory/tournament/")) {
+      setInferredMode(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const seasonSegment = pathname.split("/")[3];
+    if (!seasonSegment) {
+      setInferredMode(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    let decoded = seasonSegment;
+    try {
+      decoded = decodeURIComponent(seasonSegment);
+    } catch {
+      decoded = seasonSegment;
+    }
+    const seasonName = seasonNameFromRef(decoded);
+
+    repo
+      .getSeason(seasonName)
+      .then((season) => {
+        if (!cancelled) {
+          setInferredMode(
+            seasonTabModeForTournamentType(season.tournament_type),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setInferredMode("freeplay");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [modeParam, pathname, repo]);
+
+  const effectiveMode: SeasonTabMode =
+    modeParam === "freeplay" || modeParam === "tournament"
+      ? modeParam
+      : (inferredMode ?? "freeplay");
   const isFreeplayActive = isTournamentRoute && effectiveMode === "freeplay";
   const isTournamentActive =
     isTournamentRoute && effectiveMode === "tournament";
