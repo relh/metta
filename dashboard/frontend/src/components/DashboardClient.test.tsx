@@ -464,7 +464,7 @@ describe('DashboardClient', () => {
 
     expect(screen.getByText(/^Data Quality$/)).toBeTruthy()
     expect(screen.getByText(/^Action Success$/)).toBeTruthy()
-    expect(screen.getByText(/^Avg Reward$/)).toBeTruthy()
+    expect(screen.getAllByText(/^Avg Reward$/).length).toBeGreaterThan(0)
     expect(screen.getByText(/^Junction Control$/)).toBeTruthy()
     expect(screen.getByText(/^Noop Rate$/)).toBeTruthy()
     expect(screen.getByText('yellow: between 0.50 and 2.00')).toBeTruthy()
@@ -601,6 +601,107 @@ describe('DashboardClient', () => {
     expect(screen.getByText('0 issues · instrumentation missing')).toBeTruthy()
   })
 
+  it('shows parse + teammate summary on overview and keeps coordination focused on slices', async () => {
+    const response: DashboardResponse = {
+      policy: { id: 'policy-overview-coordination-layout', name: 'glanky', version: 11, rank: 2, score: 2.4, matches: 40 },
+      episodes: [
+        {
+          episode_id: 'episode-overview-coordination-layout-1',
+          status: 'completed',
+          reward: 12.4,
+          opponent_name: 'unknown',
+          team_composition: 'miner,aligner,scout,scrambler',
+          diagnostic_tags: [],
+          steps: 220,
+          replay_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
+        },
+      ],
+      season: 'beta-cvc',
+      generated_at: '2026-03-03T10:00:00Z',
+      derived: {
+        kpis: {
+          avg_reward: 11.85,
+          action_success_rate: 0.89,
+          junction_control_rate: 0.71,
+          noop_rate: 0.02,
+        },
+        failures: {},
+        opponent_metrics: {
+          unknown: {
+            count: 5,
+            avg_reward: 53.531,
+            strategy_profile: { aggressive: 0, defensive: 50, resource_hoarder: 0, junction_hunter: 0, mobile_scout: 50 },
+          },
+          nim_random: {
+            count: 4,
+            avg_reward: 1.0,
+            strategy_profile: { aggressive: 0, defensive: 0, resource_hoarder: 0, junction_hunter: 0, mobile_scout: 0 },
+          },
+        },
+        matchup: {
+          reason: 'Teammate pairings improved overall (global reward delta +4.80).',
+          current_avg_reward: 11.85,
+          baseline_avg_reward: 7.054,
+          global_reward_delta: 4.796,
+          evidence_sufficient: true,
+          opponent_spread: 52.501,
+          best_opponent: 'unknown',
+          worst_opponent: 'buggy',
+          composition_spread: 8.819,
+          best_composition: '?v?',
+          worst_composition: '4v4',
+          opponent_slices: [{ key: 'unknown', avg_reward: 53.531, count: 5, delta_vs_baseline: 4.8, delta_vs_policy: 41.681 }],
+          composition_slices: [{ key: '4v4', avg_reward: 2.0, count: 6, delta_vs_baseline: -1.0, delta_vs_policy: -9.85 }],
+        },
+      },
+      selection: {
+        sampled_episode_count: 1,
+      },
+    }
+
+    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
+      pool_id: 'pool-overview-coordination-layout',
+      pool_name: 'default',
+      roles: {},
+      rows: [
+        { role: 'aligner', percentile: 65.4, details: {}, updated_at: '2026-03-03T10:00:00Z' },
+        { role: 'miner', percentile: 44.4, details: {}, updated_at: '2026-03-03T10:00:00Z' },
+        { role: 'scrambler', percentile: 66.1, details: {}, updated_at: '2026-03-03T10:00:00Z' },
+        { role: 'scout', percentile: 49.2, details: {}, updated_at: '2026-03-03T10:00:00Z' },
+      ],
+    })
+    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+
+    window.history.replaceState({}, '', '/?policyVersionId=policy-overview-coordination-layout')
+    render(<DashboardClient />)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    })
+
+    expect(screen.getAllByText('Aligner').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Miner').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Scrambler').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Scout').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('P65.4').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('P44.4').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('P66.1').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('P49.2').length).toBeGreaterThan(0)
+    expect(screen.getByText('Best Teammate Pairing')).toBeTruthy()
+    expect(screen.getByText('Lowest-Reward Teammate Pairing')).toBeTruthy()
+    expect(screen.getByText('Teammate Pairing Diagnosis')).toBeTruthy()
+    expect(screen.getByText('Teammate Breakdown')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Coordination' }))
+
+    expect(screen.queryByText('Best Teammate Pairing')).toBeNull()
+    expect(screen.queryByText('Teammate Pairing Diagnosis')).toBeNull()
+    expect(screen.queryByText('Teammate Breakdown')).toBeNull()
+    expect(screen.getByText('Teammate Pairing Slices (Current Relative to Baseline)')).toBeTruthy()
+    expect(screen.getByText('Composition Slices')).toBeTruthy()
+  })
+
   it('does not refetch parse percentiles when switching non-coordination tabs', async () => {
     const response: DashboardResponse = {
       policy: { id: 'policy-123', name: 'glanky', version: 2, rank: 1, score: 1.5, matches: 12 },
@@ -636,6 +737,7 @@ describe('DashboardClient', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnose' }))
     fireEvent.click(screen.getByRole('button', { name: 'Capabilities' }))
     fireEvent.click(screen.getByRole('button', { name: 'Overview' }))
 

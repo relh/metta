@@ -36,13 +36,13 @@ import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab = 'overview' | 'performance' | 'coordination' | 'capabilities'
+type DashboardTab = 'overview' | 'performance' | 'coordination' | 'diagnose' | 'capabilities'
 
 type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
 type SortDir = 'asc' | 'desc'
 
-const DASHBOARD_TABS: DashboardTab[] = ['overview', 'coordination', 'capabilities', 'performance']
+const DASHBOARD_TABS: DashboardTab[] = ['overview', 'coordination', 'diagnose', 'capabilities', 'performance']
 
 const OPPONENT_COLORS = [
   '#3b82f6',
@@ -60,6 +60,13 @@ const OPPONENT_COLORS = [
 const METTASCOPE_REPLAY_URL_PREFIX = 'https://metta-ai.github.io/metta/mettascope/mettascope.html?replay='
 const OVERVIEW_TREND_CHART_WIDTH = 560
 const OVERVIEW_TREND_CHART_HEIGHT = 200
+const OVERVIEW_PARSE_ROLES = ['aligner', 'miner', 'scrambler', 'scout'] as const
+const OVERVIEW_PARSE_ROLE_LABELS: Record<string, string> = {
+  aligner: 'Aligner',
+  miner: 'Miner',
+  scrambler: 'Scrambler',
+  scout: 'Scout',
+}
 
 const DASHBOARD_FEEDBACK_ISSUE_URL = 'https://github.com/Metta-AI/metta/issues/new'
 const DEFAULT_DASHBOARD_CACHE_KEY = '__default__'
@@ -588,6 +595,19 @@ function severityStyle(severity: 'good' | 'warn' | 'bad'): CSSProperties {
     borderColor: 'var(--kpi-warn-border)',
     background: 'var(--kpi-warn-bg)',
   }
+}
+
+function parsePercentilePillStyle(percentile: number | null): CSSProperties {
+  if (percentile === null) return severityStyle('warn')
+  if (percentile >= 90) return severityStyle('good')
+  if (percentile >= 70) {
+    return {
+      borderColor: 'var(--signal-info-border)',
+      background: 'var(--signal-info-bg)',
+    }
+  }
+  if (percentile >= 40) return severityStyle('warn')
+  return severityStyle('bad')
 }
 
 function formatTrendValue(value: number | null | undefined, metricKey: string): string {
@@ -1177,6 +1197,8 @@ export function DashboardClient() {
   const matchupGlobalDelta = toFiniteNumber(matchup?.global_reward_delta)
   const matchupOpponentSpread = toFiniteNumber(matchup?.opponent_spread)
   const matchupCompositionSpread = toFiniteNumber(matchup?.composition_spread)
+  const matchupOpponentSlices = useMemo(() => asMatchupSlices(matchup?.opponent_slices), [matchup])
+  const matchupCompositionSlices = useMemo(() => asMatchupSlices(matchup?.composition_slices), [matchup])
   const matchupCurrentAvgRewardSeverity = kpiSeverity(matchupCurrentAvgReward, 30, 10)
   const matchupBaselineAvgRewardSeverity = kpiSeverity(matchupBaselineAvgReward, 30, 10)
   const matchupGlobalDeltaSeverity = kpiSeverity(matchupGlobalDelta, 5, 0)
@@ -1713,7 +1735,7 @@ export function DashboardClient() {
   useEffect(() => {
     const loadedPolicyVersionId = data?.policy?.id
     if (!loadedPolicyVersionId) return
-    const shouldShowRoleLoadState = activeTab === 'coordination'
+    const shouldShowRoleLoadState = activeTab === 'overview'
     if (!shouldShowRoleLoadState) return
     const policyVersionKey = String(loadedPolicyVersionId)
     const cacheKey = rolePercentilesCacheKey(policyVersionKey, data?.generated_at) ?? policyVersionKey
@@ -2032,7 +2054,29 @@ export function DashboardClient() {
   const trainingFocus = deriveTrainingFocus(kpis)
   const completedWithReplayCount = completedEpisodes.filter((episode) => Boolean(episode.replay_url)).length
   const replayCoverage = completedEpisodes.length > 0 ? completedWithReplayCount / completedEpisodes.length : null
-  const roleParseCount = rolePercentiles?.rows?.length ?? 0
+  const overviewRoleParsePills = useMemo(() => {
+    const rows = rolePercentiles?.rows ?? []
+    const rolePercentilesByRole = new Map<string, number>()
+    const roleRowsByRole = new Map<string, (typeof rows)[number]>()
+    for (const row of rows) {
+      const role = String(row.role ?? '').trim().toLowerCase()
+      const percentile = toFiniteNumber(row.percentile)
+      if (!OVERVIEW_PARSE_ROLES.includes(role as (typeof OVERVIEW_PARSE_ROLES)[number])) continue
+      if (percentile !== null) rolePercentilesByRole.set(role, percentile)
+      roleRowsByRole.set(role, row)
+    }
+
+    return OVERVIEW_PARSE_ROLES.map((role) => ({
+      role,
+      label: OVERVIEW_PARSE_ROLE_LABELS[role],
+      percentile: rolePercentilesByRole.get(role) ?? null,
+      metricKeys: (rolePercentiles?.roles?.[role] ?? []).map((definition) => definition.key).filter((key) => key.length > 0),
+      sampleCount:
+        Object.values(roleRowsByRole.get(role)?.details?.metrics ?? {})
+          .map((metric) => toFiniteNumber(metric?.samples))
+          .find((count) => count !== null) ?? null,
+    }))
+  }, [rolePercentiles])
   const selectedDiagnoseRun = selectedDiagnoseRunId
     ? (diagnoseRuns.find((run) => run.run_id === selectedDiagnoseRunId) ?? null)
     : null
@@ -2186,6 +2230,13 @@ export function DashboardClient() {
             </button>
             <button
               type="button"
+              onClick={() => activateTab('diagnose')}
+              className={activeTab === 'diagnose' ? 'active-tab' : ''}
+            >
+              Diagnose
+            </button>
+            <button
+              type="button"
               onClick={() => activateTab('capabilities')}
               className={activeTab === 'capabilities' ? 'active-tab' : ''}
             >
@@ -2200,72 +2251,209 @@ export function DashboardClient() {
             </button>
           </section>
 
-          {activeTab === 'overview' && (
+          {(activeTab === 'overview' || activeTab === 'performance') && (
             <>
-              <section
-                className="grid"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
-              >
-                <KPIStatCard
-                  label="Avg Reward"
-                  value={formatNumber(avgReward, 2)}
-                  detail={avgRewardBandDetail}
-                  detailSecondary={avgRewardPercentileDetail}
-                  severity={avgRewardSeverity}
-                />
-                <KPIStatCard
-                  label="Action Success"
-                  value={formatPercent(actionSuccess, 0)}
-                  detail={actionSuccessBandDetail}
-                  severity={actionSuccessSeverity}
-                />
-                <KPIStatCard
-                  label="Junction Control"
-                  value={formatPercent(junctionControl, 0)}
-                  detail={junctionControlBandDetail}
-                  severity={junctionControlSeverity}
-                />
-                <KPIStatCard
-                  label="Noop Rate"
-                  value={formatPercent(noopRate, 1)}
-                  detail={noopRateBandDetail}
-                  severity={noopRateSeverity}
-                />
-                <KPIStatCard
-                  label="Data Quality"
-                  value={dataQualityLabel}
-                  detail={dataQualityDetail}
-                  detailSecondary={dataQualityDetailSecondary}
-                  severity={dataQualitySeverity}
-                />
-                {showExtendedOverviewKpis && (
+              {activeTab === 'overview' && (
+                <section
+                  className="grid"
+                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
+                >
                   <KPIStatCard
-                    label="Resource Retention"
-                    value={formatPercent(resourceRetention, 0)}
-                    detail={resourceRetentionBandDetail}
-                    severity={resourceRetentionSeverity}
+                    label="Avg Reward"
+                    value={formatNumber(avgReward, 2)}
+                    detail={avgRewardBandDetail}
+                    detailSecondary={avgRewardPercentileDetail}
+                    severity={avgRewardSeverity}
                   />
-                )}
-                {showExtendedOverviewKpis && (
                   <KPIStatCard
-                    label="Freeze Vulnerability"
-                    value={formatPercent(freezeVulnerability, 1)}
-                    detail={freezeVulnerabilityBandDetail}
-                    severity={freezeVulnerabilitySeverity}
+                    label="Action Success"
+                    value={formatPercent(actionSuccess, 0)}
+                    detail={actionSuccessBandDetail}
+                    severity={actionSuccessSeverity}
                   />
-                )}
-                {showExtendedOverviewKpis && (
                   <KPIStatCard
-                    label="Reward Consistency"
-                    value={formatPercent(rewardConsistency, 0)}
-                    detail={rewardConsistencyBandDetail}
-                    severity={rewardConsistencySeverity}
+                    label="Junction Control"
+                    value={formatPercent(junctionControl, 0)}
+                    detail={junctionControlBandDetail}
+                    severity={junctionControlSeverity}
                   />
-                )}
-              </section>
+                  <KPIStatCard
+                    label="Noop Rate"
+                    value={formatPercent(noopRate, 1)}
+                    detail={noopRateBandDetail}
+                    severity={noopRateSeverity}
+                  />
+                  <KPIStatCard
+                    label="Data Quality"
+                    value={dataQualityLabel}
+                    detail={dataQualityDetail}
+                    detailSecondary={dataQualityDetailSecondary}
+                    severity={dataQualitySeverity}
+                  />
+                  {showExtendedOverviewKpis && (
+                    <KPIStatCard
+                      label="Resource Retention"
+                      value={formatPercent(resourceRetention, 0)}
+                      detail={resourceRetentionBandDetail}
+                      severity={resourceRetentionSeverity}
+                    />
+                  )}
+                  {showExtendedOverviewKpis && (
+                    <KPIStatCard
+                      label="Freeze Vulnerability"
+                      value={formatPercent(freezeVulnerability, 1)}
+                      detail={freezeVulnerabilityBandDetail}
+                      severity={freezeVulnerabilitySeverity}
+                    />
+                  )}
+                  {showExtendedOverviewKpis && (
+                    <KPIStatCard
+                      label="Reward Consistency"
+                      value={formatPercent(rewardConsistency, 0)}
+                      detail={rewardConsistencyBandDetail}
+                      severity={rewardConsistencySeverity}
+                    />
+                  )}
+                </section>
+              )}
+
+              {activeTab === 'overview' && (
+                <section className="grid two" style={{ gap: 10 }}>
+                  {overviewRoleParsePills.map((pill) => (
+                    <article
+                      key={pill.role}
+                      className="card"
+                      style={{ padding: 12, borderWidth: 2, minWidth: 0, ...parsePercentilePillStyle(pill.percentile) }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          letterSpacing: 0.3,
+                          textTransform: 'uppercase',
+                          color: 'var(--kpi-label-ink)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={pill.label}
+                      >
+                        {pill.label}
+                      </p>
+                      <p
+                        style={{
+                          margin: '6px 0 0',
+                          fontSize: 24,
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={pill.percentile === null ? '-' : `P${pill.percentile.toFixed(1)}`}
+                      >
+                        {pill.percentile === null ? '-' : `P${pill.percentile.toFixed(1)}`}
+                      </p>
+                      <div className="role-progress" style={{ marginTop: 6 }}>
+                        <div
+                          className="role-progress-bar"
+                          style={{ width: `${Math.max(0, Math.min(pill.percentile ?? 0, 100))}%` }}
+                        />
+                      </div>
+                      <p
+                        style={{
+                          margin: '4px 0 0',
+                          fontSize: 12,
+                          color: 'var(--kpi-detail-ink)',
+                          whiteSpace: 'normal',
+                          overflowWrap: 'anywhere',
+                          lineHeight: 1.3,
+                        }}
+                        title={
+                          pill.metricKeys.length > 0
+                            ? `mix metrics: ${pill.metricKeys.join(', ')}`
+                            : 'mix metrics unavailable'
+                        }
+                      >
+                        {pill.metricKeys.length > 0
+                          ? `mix: ${pill.metricKeys.slice(0, 3).join(', ')}${pill.metricKeys.length > 3 ? ` +${pill.metricKeys.length - 3}` : ''}`
+                          : 'mix unavailable'}
+                        {pill.sampleCount !== null ? ` · n≈${pill.sampleCount.toFixed(0)}` : ''}
+                      </p>
+                      {pill.percentile === null && (
+                        <p
+                          style={{
+                            margin: '2px 0 0',
+                            fontSize: 12,
+                            color: 'var(--kpi-detail-ink)',
+                            whiteSpace: 'normal',
+                            overflowWrap: 'anywhere',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {roleLoading ? 'loading' : roleError ? 'unavailable' : 'no data'}
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                </section>
+              )}
+
+              {activeTab === 'performance' && (
+                <section
+                  className="grid"
+                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
+                >
+                  <KPIStatCard
+                    label="Failed Episodes"
+                    value={String(toFiniteNumber(failures.failed_episodes) ?? 0)}
+                    detail={formatPercent(toFiniteNumber(failures.failed_rate), 1)}
+                    severity={kpiSeverity(toFiniteNumber(failures.failed_rate), 0.03, 0.1, false)}
+                  />
+                  <KPIStatCard
+                    label="Replay Coverage"
+                    value={formatPercent(replayCoverage, 0)}
+                    detail={`${completedWithReplayCount}/${completedEpisodes.length} completed`}
+                    severity={kpiSeverity(replayCoverage, 0.7, 0.4)}
+                  />
+                  <KPIStatCard
+                    label="Timeout Failures"
+                    value={String(toFiniteNumber(failures.timeout_failures) ?? 0)}
+                    severity={(toFiniteNumber(failures.timeout_failures) ?? 0) > 0 ? 'bad' : 'good'}
+                  />
+                  <KPIStatCard
+                    label="OOM Failures"
+                    value={String(toFiniteNumber(failures.oom_failures) ?? 0)}
+                    severity={(toFiniteNumber(failures.oom_failures) ?? 0) > 0 ? 'bad' : 'good'}
+                  />
+                  <KPIStatCard
+                    label="Crash/Other"
+                    value={String(
+                      (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0)
+                    )}
+                    detail={`${String(toFiniteNumber(failures.crash_failures) ?? 0)} crash + ${String(toFiniteNumber(failures.other_failures) ?? 0)} other`}
+                    severity={
+                      (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0) > 0
+                        ? 'bad'
+                        : 'good'
+                    }
+                  />
+                  <KPIStatCard
+                    label="Freeze-Heavy"
+                    value={String(toFiniteNumber(failures.freeze_heavy_completed) ?? 0)}
+                    severity={(toFiniteNumber(failures.freeze_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
+                  />
+                  <KPIStatCard
+                    label="Noop-Heavy"
+                    value={String(toFiniteNumber(failures.noop_heavy_completed) ?? 0)}
+                    severity={(toFiniteNumber(failures.noop_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
+                  />
+                </section>
+              )}
 
               <section className="grid" style={{ gap: 10 }}>
-                <article className="card grid" style={{ gap: 10, minWidth: 0 }}>
+                {activeTab === 'overview' && (
+                  <>
+                    <article className="card grid" style={{ gap: 10, minWidth: 0 }}>
                   <div className="dashboard-title-line" style={{ marginBottom: 2 }}>
                     <h2 style={{ margin: 0 }}>Replay Spotlight</h2>
                     <span className="dashboard-title-subline">Embedded replay view for fastest debugging.</span>
@@ -2378,8 +2566,163 @@ export function DashboardClient() {
                       </p>
                     </>
                   )}
-                </article>
+                    </article>
 
+                    <section className="grid two coordination-pairing-layout" style={{ alignItems: 'start' }}>
+                      <div className="grid" style={{ gap: 10, minWidth: 0 }}>
+                        <section
+                          className="grid"
+                          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}
+                        >
+                          <article className="card">
+                            <h2 style={{ marginTop: 0 }}>Best Teammate Pairing</h2>
+                            {bestWorstOpponents?.best ? (
+                              <p style={{ marginBottom: 0 }}>
+                                <strong>{bestWorstOpponents.best.opponent}</strong> (avg reward{' '}
+                                {formatNumber(bestWorstOpponents.best.avgReward, 3)})
+                              </p>
+                            ) : (
+                              <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
+                            )}
+                          </article>
+                          <article className="card">
+                            <h2 style={{ marginTop: 0 }}>Lowest-Reward Teammate Pairing</h2>
+                            {bestWorstOpponents?.worst ? (
+                              <p style={{ marginBottom: 0 }}>
+                                <strong>{bestWorstOpponents.worst.opponent}</strong> (avg reward{' '}
+                                {formatNumber(bestWorstOpponents.worst.avgReward, 3)})
+                              </p>
+                            ) : (
+                              <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
+                            )}
+                          </article>
+                        </section>
+
+                        {matchup && (
+                          <section className="card" style={{ display: 'grid', gap: 10 }}>
+                            <h2 style={{ margin: 0 }}>Teammate Pairing Diagnosis</h2>
+                            <p style={{ margin: 0 }}>{String(matchup.reason ?? '-')}</p>
+                            <div className="coordination-diagnosis-pills" style={{ display: 'grid', gap: 8 }}>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCurrentAvgRewardSeverity) }}
+                              >
+                                Current avg reward: <code>{formatNumber(matchupCurrentAvgReward, 3)}</code>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupBaselineAvgRewardSeverity) }}
+                              >
+                                Baseline avg reward: <code>{formatNumber(matchupBaselineAvgReward, 3)}</code>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupGlobalDeltaSeverity) }}
+                              >
+                                Global delta: <code>{formatSigned(matchupGlobalDelta, 3)}</code>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupEvidenceSeverity) }}
+                              >
+                                Evidence: <strong>{matchup.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
+                              >
+                                Teammate spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
+                              >
+                                Best/Worst teammate:{' '}
+                                <code>
+                                  {String(matchup.best_opponent ?? '-')} / {String(matchup.worst_opponent ?? '-')}
+                                </code>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
+                              >
+                                Composition spread: <code>{formatNumber(matchupCompositionSpread, 3)}</code>
+                              </div>
+                              <div
+                                className="card"
+                                style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
+                              >
+                                Best/Worst composition:{' '}
+                                <code>
+                                  {String(matchup.best_composition ?? '-')} / {String(matchup.worst_composition ?? '-')}
+                                </code>
+                              </div>
+                            </div>
+                          </section>
+                        )}
+
+                        <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />
+                      </div>
+
+                      <section className="card">
+                        <h2 style={{ marginTop: 0 }}>Teammate Breakdown</h2>
+                        {opponentRows.length === 0 ? (
+                          <p style={{ marginBottom: 0 }}>No teammate metrics available.</p>
+                        ) : (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Teammate</th>
+                                  <th>Games</th>
+                                  <th>Avg Reward</th>
+                                  <th>Win Rate</th>
+                                  <th>Agg</th>
+                                  <th>Def</th>
+                                  <th>Res</th>
+                                  <th>Jnc</th>
+                                  <th>Mob</th>
+                                  <th>Top Profile</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {opponentRows.map((row) => (
+                                  <tr key={row.opponent}>
+                                    <td>
+                                      <span
+                                        style={{
+                                          display: 'inline-block',
+                                          width: 8,
+                                          height: 8,
+                                          borderRadius: '50%',
+                                          background: colorMap[row.opponent] ?? '#94a3b8',
+                                          marginRight: 6,
+                                        }}
+                                      />
+                                      {row.opponent}
+                                    </td>
+                                    <td>{row.count}</td>
+                                    <td>{formatNumber(row.avgReward, 2)}</td>
+                                    <td>{formatPercent(row.winRate, 0)}</td>
+                                    <td>{formatNumber(toFiniteNumber(row.strategyProfile?.aggressive), 0)}</td>
+                                    <td>{formatNumber(toFiniteNumber(row.strategyProfile?.defensive), 0)}</td>
+                                    <td>{formatNumber(toFiniteNumber(row.strategyProfile?.resource_hoarder), 0)}</td>
+                                    <td>{formatNumber(toFiniteNumber(row.strategyProfile?.junction_hunter), 0)}</td>
+                                    <td>{formatNumber(toFiniteNumber(row.strategyProfile?.mobile_scout), 0)}</td>
+                                    <td>{row.bestProfile ?? '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </section>
+                    </section>
+                  </>
+                )}
+
+                {activeTab === 'performance' && (
+                  <>
                 <div
                   className="grid two overview-insights-layout"
                   style={{ gap: 10, minWidth: 0, overflowX: 'hidden' }}
@@ -2523,7 +2866,6 @@ export function DashboardClient() {
                     )}
                   </article>
                 </div>
-              </section>
 
               <section className="grid two overview-dense-grid" style={{ alignItems: 'start' }}>
                 {(unsupported || instrumentation) && (
@@ -2998,11 +3340,14 @@ export function DashboardClient() {
                     Open dashboard feedback issue
                   </a>
                 </section>
+                  </section>
+                </>
+              )}
               </section>
             </>
           )}
 
-          {activeTab === 'overview' && (
+          {activeTab === 'diagnose' && (
             <section className="grid" style={{ alignItems: 'start' }}>
               <section className="card">
                 <div className="dashboard-title-line" style={{ marginBottom: 10 }}>
@@ -3100,56 +3445,6 @@ export function DashboardClient() {
 
           {activeTab === 'performance' && (
             <>
-              <section
-                className="grid"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
-              >
-                <KPIStatCard
-                  label="Failed Episodes"
-                  value={String(toFiniteNumber(failures.failed_episodes) ?? 0)}
-                  detail={formatPercent(toFiniteNumber(failures.failed_rate), 1)}
-                  severity={kpiSeverity(toFiniteNumber(failures.failed_rate), 0.03, 0.1, false)}
-                />
-                <KPIStatCard
-                  label="Replay Coverage"
-                  value={formatPercent(replayCoverage, 0)}
-                  detail={`${completedWithReplayCount}/${completedEpisodes.length} completed`}
-                  severity={kpiSeverity(replayCoverage, 0.7, 0.4)}
-                />
-                <KPIStatCard
-                  label="Timeout Failures"
-                  value={String(toFiniteNumber(failures.timeout_failures) ?? 0)}
-                  severity={(toFiniteNumber(failures.timeout_failures) ?? 0) > 0 ? 'bad' : 'good'}
-                />
-                <KPIStatCard
-                  label="OOM Failures"
-                  value={String(toFiniteNumber(failures.oom_failures) ?? 0)}
-                  severity={(toFiniteNumber(failures.oom_failures) ?? 0) > 0 ? 'bad' : 'good'}
-                />
-                <KPIStatCard
-                  label="Crash/Other"
-                  value={String(
-                    (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0)
-                  )}
-                  detail={`${String(toFiniteNumber(failures.crash_failures) ?? 0)} crash + ${String(toFiniteNumber(failures.other_failures) ?? 0)} other`}
-                  severity={
-                    (toFiniteNumber(failures.crash_failures) ?? 0) + (toFiniteNumber(failures.other_failures) ?? 0) > 0
-                      ? 'bad'
-                      : 'good'
-                  }
-                />
-                <KPIStatCard
-                  label="Freeze-Heavy"
-                  value={String(toFiniteNumber(failures.freeze_heavy_completed) ?? 0)}
-                  severity={(toFiniteNumber(failures.freeze_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
-                />
-                <KPIStatCard
-                  label="Noop-Heavy"
-                  value={String(toFiniteNumber(failures.noop_heavy_completed) ?? 0)}
-                  severity={(toFiniteNumber(failures.noop_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
-                />
-              </section>
-
               <section className="card grid" style={{ gap: 10 }}>
                 <h2 style={{ marginTop: 0, marginBottom: 2 }}>Filters & Export</h2>
                 <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
@@ -3537,124 +3832,22 @@ export function DashboardClient() {
                   severity={kpiSeverity(matchupCompositionSpread, 12, 24, false)}
                 />
                 <KPIStatCard
-                  label="Best Teammate"
-                  value={String(bestWorstOpponents?.best?.opponent ?? '-')}
-                  detail={formatNumber(bestWorstOpponents?.best?.avgReward ?? null, 2)}
-                  severity={bestWorstOpponents?.best ? 'good' : 'warn'}
-                />
-                <KPIStatCard
-                  label="Worst Teammate"
-                  value={String(bestWorstOpponents?.worst?.opponent ?? '-')}
-                  detail={formatNumber(bestWorstOpponents?.worst?.avgReward ?? null, 2)}
-                  severity={bestWorstOpponents?.worst ? 'warn' : 'bad'}
-                />
-                <KPIStatCard
-                  label="Role Parse Rows"
-                  value={String(roleParseCount)}
-                  detail={String(rolePercentiles?.pool_name ?? '-')}
-                  severity={roleParseCount > 0 ? 'good' : roleLoading ? 'warn' : 'bad'}
-                />
-                <KPIStatCard
                   label="Matchup Evidence"
                   value={matchup?.evidence_sufficient ? 'sufficient' : 'limited'}
                   severity={matchup?.evidence_sufficient ? 'good' : 'warn'}
                 />
               </section>
 
-              <section className="grid two coordination-pairing-layout" style={{ alignItems: 'start' }}>
-                <div className="grid" style={{ gap: 10, minWidth: 0 }}>
-                  <section
-                    className="grid"
-                    style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}
-                  >
-                    <article className="card">
-                      <h2 style={{ marginTop: 0 }}>Best Teammate Pairing</h2>
-                      {bestWorstOpponents?.best ? (
-                        <p style={{ marginBottom: 0 }}>
-                          <strong>{bestWorstOpponents.best.opponent}</strong> (avg reward{' '}
-                          {formatNumber(bestWorstOpponents.best.avgReward, 3)})
-                        </p>
-                      ) : (
-                        <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
-                      )}
-                    </article>
-                    <article className="card">
-                      <h2 style={{ marginTop: 0 }}>Lowest-Reward Teammate Pairing</h2>
-                      {bestWorstOpponents?.worst ? (
-                        <p style={{ marginBottom: 0 }}>
-                          <strong>{bestWorstOpponents.worst.opponent}</strong> (avg reward{' '}
-                          {formatNumber(bestWorstOpponents.worst.avgReward, 3)})
-                        </p>
-                      ) : (
-                        <p style={{ marginBottom: 0 }}>No teammate pairing reward data yet.</p>
-                      )}
-                    </article>
-                  </section>
-
-                  {matchup && (
-                    <section className="card" style={{ display: 'grid', gap: 10 }}>
-                      <h2 style={{ margin: 0 }}>Teammate Pairing Diagnosis</h2>
-                      <p style={{ margin: 0 }}>{String(matchup.reason ?? '-')}</p>
-                      <div className="coordination-diagnosis-pills" style={{ display: 'grid', gap: 8 }}>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCurrentAvgRewardSeverity) }}
-                        >
-                          Current avg reward: <code>{formatNumber(matchupCurrentAvgReward, 3)}</code>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupBaselineAvgRewardSeverity) }}
-                        >
-                          Baseline avg reward: <code>{formatNumber(matchupBaselineAvgReward, 3)}</code>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupGlobalDeltaSeverity) }}
-                        >
-                          Global delta: <code>{formatSigned(matchupGlobalDelta, 3)}</code>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupEvidenceSeverity) }}
-                        >
-                          Evidence: <strong>{matchup.evidence_sufficient ? 'sufficient' : 'limited'}</strong>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
-                        >
-                          Teammate spread: <code>{formatNumber(matchupOpponentSpread, 3)}</code>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupOpponentSpreadSeverity) }}
-                        >
-                          Best/Worst teammate:{' '}
-                          <code>
-                            {String(matchup.best_opponent ?? '-')} / {String(matchup.worst_opponent ?? '-')}
-                          </code>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
-                        >
-                          Composition spread: <code>{formatNumber(matchupCompositionSpread, 3)}</code>
-                        </div>
-                        <div
-                          className="card"
-                          style={{ padding: 10, borderWidth: 2, ...severityStyle(matchupCompositionSpreadSeverity) }}
-                        >
-                          Best/Worst composition:{' '}
-                          <code>
-                            {String(matchup.best_composition ?? '-')} / {String(matchup.worst_composition ?? '-')}
-                          </code>
-                        </div>
-                      </div>
-                    </section>
-                  )}
-
-                  {matchup && asMatchupSlices(matchup.opponent_slices).length > 0 && (
+              {(matchupOpponentSlices.length > 0 || matchupCompositionSlices.length > 0) && (
+                <section
+                  className="grid"
+                  style={{
+                    gap: 10,
+                    alignItems: 'start',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
+                  }}
+                >
+                  {matchupOpponentSlices.length > 0 && (
                     <section className="card">
                       <h2 style={{ marginTop: 0 }}>Teammate Pairing Slices (Current Relative to Baseline)</h2>
                       <div style={{ overflowX: 'auto' }}>
@@ -3668,12 +3861,11 @@ export function DashboardClient() {
                             </tr>
                           </thead>
                           <tbody>
-                            {asMatchupSlices(matchup.opponent_slices).map((slice) => (
+                            {matchupOpponentSlices.map((slice) => (
                               <tr key={String(slice.key ?? 'slice')}>
                                 <td>{String(slice.key ?? '-')}</td>
                                 <td>
-                                  {formatNumber(toFiniteNumber(slice.avg_reward), 2)} (
-                                  {toFiniteNumber(slice.count) ?? 0})
+                                  {formatNumber(toFiniteNumber(slice.avg_reward), 2)} ({toFiniteNumber(slice.count) ?? 0})
                                 </td>
                                 <td>{formatSigned(toFiniteNumber(slice.delta_vs_baseline), 2)}</td>
                                 <td>{formatSigned(toFiniteNumber(slice.delta_vs_policy), 2)}</td>
@@ -3685,7 +3877,7 @@ export function DashboardClient() {
                     </section>
                   )}
 
-                  {matchup && asMatchupSlices(matchup.composition_slices).length > 0 && (
+                  {matchupCompositionSlices.length > 0 && (
                     <section className="card">
                       <h2 style={{ marginTop: 0 }}>Composition Slices</h2>
                       <div style={{ overflowX: 'auto' }}>
@@ -3699,14 +3891,13 @@ export function DashboardClient() {
                             </tr>
                           </thead>
                           <tbody>
-                            {asMatchupSlices(matchup.composition_slices).map((slice) => (
+                            {matchupCompositionSlices.map((slice) => (
                               <tr key={String(slice.key ?? 'comp')}>
                                 <td>
                                   <code>{String(slice.key ?? '-')}</code>
                                 </td>
                                 <td>
-                                  {formatNumber(toFiniteNumber(slice.avg_reward), 2)} (
-                                  {toFiniteNumber(slice.count) ?? 0})
+                                  {formatNumber(toFiniteNumber(slice.avg_reward), 2)} ({toFiniteNumber(slice.count) ?? 0})
                                 </td>
                                 <td>{formatSigned(toFiniteNumber(slice.delta_vs_baseline), 2)}</td>
                                 <td>{formatSigned(toFiniteNumber(slice.delta_vs_policy), 2)}</td>
@@ -3717,70 +3908,17 @@ export function DashboardClient() {
                       </div>
                     </section>
                   )}
-                </div>
-                <div className="grid" style={{ gap: 10, minWidth: 0 }}>
-                  <section className="card">
-                    <h2 style={{ marginTop: 0 }}>Teammate Breakdown</h2>
-                    {opponentRows.length === 0 ? (
-                      <p style={{ marginBottom: 0 }}>No teammate metrics available.</p>
-                    ) : (
-                      <div style={{ overflowX: 'auto' }}>
-                        <table>
-                          <thead>
-                            <tr>
-                              <th>Teammate</th>
-                              <th>Games</th>
-                              <th>Avg Reward</th>
-                              <th>Win Rate</th>
-                              <th>Agg</th>
-                              <th>Def</th>
-                              <th>Res</th>
-                              <th>Jnc</th>
-                              <th>Mob</th>
-                              <th>Top Profile</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {opponentRows.map((row) => (
-                              <tr key={row.opponent}>
-                                <td>
-                                  <span
-                                    style={{
-                                      display: 'inline-block',
-                                      width: 8,
-                                      height: 8,
-                                      borderRadius: '50%',
-                                      background: colorMap[row.opponent] ?? '#94a3b8',
-                                      marginRight: 6,
-                                    }}
-                                  />
-                                  {row.opponent}
-                                </td>
-                                <td>{row.count}</td>
-                                <td>{formatNumber(row.avgReward, 2)}</td>
-                                <td>{formatPercent(row.winRate, 0)}</td>
-                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.aggressive), 0)}</td>
-                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.defensive), 0)}</td>
-                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.resource_hoarder), 0)}</td>
-                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.junction_hunter), 0)}</td>
-                                <td>{formatNumber(toFiniteNumber(row.strategyProfile?.mobile_scout), 0)}</td>
-                                <td>{row.bestProfile ?? '-'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </section>
-                  <section className="card">
-                    <h2 style={{ marginTop: 0 }}>Role Parses</h2>
-                    <RolePercentilesPanel roleData={rolePercentiles} loading={roleLoading} error={roleError} />
-                  </section>
-                </div>
-              </section>
+                </section>
+              )}
+
+              {!matchup && (
+                <section className="card">
+                  <p style={{ margin: 0 }}>No teammate matchup slices available.</p>
+                </section>
+              )}
             </section>
           )}
-          {activeTab === 'capabilities' && (
+          {activeTab === 'diagnose' && (
             <section className="grid" style={{ gap: 10 }}>
               <section
                 className="grid"
@@ -3814,16 +3952,6 @@ export function DashboardClient() {
                   severity={
                     diagnoseProbeTotal > 0 ? kpiSeverity(diagnoseProbePassed / diagnoseProbeTotal, 0.75, 0.45) : 'warn'
                   }
-                />
-                <KPIStatCard
-                  label="Capability Coverage"
-                  value={formatPercent(capabilityCoverage, 0)}
-                  detail={
-                    capabilityStatusTotal > 0
-                      ? `${capabilityStatusYes} yes · ${capabilityStatusPartial} partial / ${capabilityStatusTotal}`
-                      : 'no audit rows'
-                  }
-                  severity={kpiSeverity(capabilityCoverage, 0.6, 0.35)}
                 />
                 <KPIStatCard
                   label="Dominant Issue"
@@ -3943,9 +4071,29 @@ export function DashboardClient() {
                     )}
                   </section>
                 </section>
-
-                <SkillTreePanel data={data} diagnoseNote={diagnoseNote} diagnoseManifest={diagnoseManifest} />
               </section>
+            </section>
+          )}
+
+          {activeTab === 'capabilities' && (
+            <section className="grid" style={{ gap: 10 }}>
+              <section
+                className="grid"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: 10 }}
+              >
+                <KPIStatCard
+                  label="Capability Coverage"
+                  value={formatPercent(capabilityCoverage, 0)}
+                  detail={
+                    capabilityStatusTotal > 0
+                      ? `${capabilityStatusYes} yes · ${capabilityStatusPartial} partial / ${capabilityStatusTotal}`
+                      : 'no audit rows'
+                  }
+                  severity={kpiSeverity(capabilityCoverage, 0.6, 0.35)}
+                />
+              </section>
+
+              <SkillTreePanel data={data} diagnoseNote={diagnoseNote} diagnoseManifest={diagnoseManifest} />
             </section>
           )}
         </>
