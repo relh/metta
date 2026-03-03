@@ -11,7 +11,7 @@ from psycopg import errors as pg_errors
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from metta.app_backend.anthropic import (
+from metta.app_backend.anthropic_client import (
     AnthropicConnectionError,
     AnthropicHTTPError,
     AnthropicResponseFormatError,
