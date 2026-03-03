@@ -25,10 +25,26 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ .Release.Name }}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: {{ .Release.Name }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: {{ .Release.Name }}
+              topologyKey: kubernetes.io/hostname
       containers:
         - name: server
           image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "tag is required" .Values.image.tag }}"
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["uv", "run", "--no-sync", "python", "-m", "dashboard.backend.dashboard_backend.main"]
           workingDir: /workspace/metta
           envFrom:
@@ -46,8 +62,10 @@ spec:
           resources:
             requests:
               memory: "1Gi"
+              ephemeral-storage: "256Mi"
             limits:
               memory: "4Gi"
+              ephemeral-storage: "2Gi"
           ports:
             - containerPort: 8010
           startupProbe:
