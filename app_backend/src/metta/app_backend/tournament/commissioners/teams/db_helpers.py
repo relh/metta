@@ -25,6 +25,7 @@ from metta.app_backend.tournament.referees.teams.team_stage import (
     TeamConfig,
     build_pending_team_match_schedule,
 )
+from metta.app_backend.tournament.settings import MAX_OUTSTANDING_MATCHES_PER_SEASON
 from metta.app_backend.tournament.teams.scoring import compute_team_average_scores
 
 logger = logging.getLogger(__name__)
@@ -239,7 +240,7 @@ class TeamDbHelpersMixin:
         team_counts = await self._get_team_match_counts(pool.id, {team.team_id for team in teams})
         zero_counts = MatchCountEntry.zero()
         outstanding = await self._count_outstanding_matches()
-        slots = max(0, self.config.max_outstanding_matches - outstanding)
+        slots = max(0, MAX_OUTSTANDING_MATCHES_PER_SEASON - outstanding)
         if slots <= 0:
             return 0
 

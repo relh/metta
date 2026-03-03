@@ -46,7 +46,7 @@ from metta.app_backend.tournament.referees.base import (
     RefereeBase,
 )
 from metta.app_backend.tournament.settings import (
-    MAX_OUTSTANDING_MATCHES,
+    MAX_OUTSTANDING_MATCHES_PER_SEASON,
     POLL_INTERVAL_FAST_SECONDS,
     POLL_INTERVAL_SECONDS,
     settings,
@@ -206,7 +206,7 @@ class CommissionerBase(ABC):
         logger.info(f"[{self.season_name}] match statuses synced, changed={status_changed} (rss={_rss_mb()})")
 
         outstanding = await self._count_outstanding_matches()
-        slots_available = max(0, MAX_OUTSTANDING_MATCHES - outstanding)
+        slots_available = max(0, MAX_OUTSTANDING_MATCHES_PER_SEASON - outstanding)
         logger.info(f"[{self.season_name}] outstanding={outstanding} slots={slots_available} (rss={_rss_mb()})")
 
         total_scheduled = 0

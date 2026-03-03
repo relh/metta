@@ -16,6 +16,8 @@ from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.eval_task import EvalTask, FinishedTaskStatus, TaskAttempt, TaskStatus
 from metta.app_backend.user_data import Ownable
 
+AVAILABLE_TASK_BACKPRESSURE_LIMIT: int = 2000
+
 
 class EvalTaskRow(Ownable):
     model_config = {"from_attributes": True}
@@ -139,7 +141,7 @@ async def create_eval_task(
 
 
 @with_db
-async def get_available_tasks(limit: int = 200) -> list[EvalTaskRow]:
+async def get_available_tasks(limit: int = AVAILABLE_TASK_BACKPRESSURE_LIMIT) -> list[EvalTaskRow]:
     session = get_db()
     stmt = (
         _eval_task_row_stmt()

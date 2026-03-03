@@ -146,7 +146,7 @@ def create_eval_task_router() -> APIRouter:
     @timed_http_handler
     async def get_available_tasks(
         user: SoftmaxUser,
-        limit: int = Query(default=200, ge=1, le=1000),
+        limit: int = Query(default=eval_task_queries.AVAILABLE_TASK_BACKPRESSURE_LIMIT, ge=1, le=5000),
     ) -> TasksResponse:
         tasks = await eval_task_queries.get_available_tasks(limit=limit)
         await fill_user_data(tasks, current_user=user)

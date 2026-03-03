@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlmodel import col, func, select
 
+import metta.app_backend.tournament.settings as tournament_settings
 from metta.app_backend.database import db_session, get_db
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import (
@@ -422,7 +423,6 @@ async def test_team_eval_schedules_duplicate_team_compositions_per_team(stats_re
             TeamEvalStage(matches_per_team=2, cull_fraction=0.0),
             ScoreStage(top_k=1),
         ],
-        max_outstanding_matches=1000,
     )
 
     season_id: UUID
@@ -688,7 +688,6 @@ async def test_policy_stage_reopens_until_downstream_minimum_is_met(stats_repo: 
             TeamEvalStage(matches_per_team=1, cull_fraction=0.0),
             ScoreStage(top_k=1),
         ],
-        max_outstanding_matches=1000,
     )
 
     async with db_session() as session:
@@ -1263,8 +1262,9 @@ async def test_get_progress_errors_when_season_team_config_missing(stats_repo: s
 
 
 @pytest.mark.asyncio
-async def test_full_tournament_dry_run(stats_repo: str) -> None:  # noqa: ARG001
+async def test_full_tournament_dry_run(stats_repo: str, monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: ARG001
     random.seed(42)
+    monkeypatch.setattr(tournament_settings, "MAX_OUTSTANDING_MATCHES_PER_SEASON", 10000)
 
     policy_skills: dict[UUID, float] = {}
 
@@ -1283,7 +1283,6 @@ async def test_full_tournament_dry_run(stats_repo: str) -> None:  # noqa: ARG001
             TeamEvalStage(matches_per_team=2, cull_fraction=0.0),
             ScoreStage(top_k=3),
         ],
-        max_outstanding_matches=10000,
     )
 
     skills = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1]

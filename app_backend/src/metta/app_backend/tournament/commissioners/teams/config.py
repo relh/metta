@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field, model_validator
 
 from metta.app_backend.tournament.referees.envs import GameEnvGenerator
 from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
-from metta.app_backend.tournament.settings import MAX_OUTSTANDING_MATCHES
 
 
 class ThresholdElim(BaseModel):
@@ -93,9 +92,6 @@ TeamTournamentStage = Annotated[
 class TeamTournamentConfig(BaseModel):
     game: GameEnvGenerator = Field(default_factory=GameEnvGenerator, description="Game environment configuration")
     stages: list[TeamTournamentStage] = Field(description="Ordered tournament stages")
-    max_outstanding_matches: int = Field(
-        default=MAX_OUTSTANDING_MATCHES, description="Max concurrent matches across all stages"
-    )
     max_failed_attempts: int = Field(
         default=MAX_FAILED_ATTEMPTS,
         ge=1,

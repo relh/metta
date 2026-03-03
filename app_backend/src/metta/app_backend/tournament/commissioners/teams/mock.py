@@ -52,7 +52,6 @@ class MockTeamsCommissioner(MockMatchExecutionMixin, TeamCommissionerBase):
             TeamEvalStage(display_name="Playoffs: eight-player", matches_per_team=2, cull_fraction=0.0),
             ScoreStage(display_name="Final scoring", top_k=4),
         ],
-        max_outstanding_matches=6,
     )
 
     def _policy_referee(self, stage: PolicyEvalStage) -> PolicyStageReferee:

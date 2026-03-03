@@ -1,5 +1,5 @@
 from metta.app_backend.clients.base_client import BaseAppBackendClient
-from metta.app_backend.queries.eval_task_queries import EvalTaskRow
+from metta.app_backend.queries.eval_task_queries import AVAILABLE_TASK_BACKPRESSURE_LIMIT, EvalTaskRow
 from metta.app_backend.routes.eval_task_routes import (
     GitHashesRequest,
     GitHashesResponse,
@@ -18,7 +18,7 @@ class EvalTaskClient(BaseAppBackendClient):
     def create_task(self, request: TaskCreateRequest) -> EvalTaskRow:
         return self._make_request(EvalTaskRow, "POST", "/tasks", json=request.model_dump(mode="json"))
 
-    def get_available_tasks(self, limit: int = 200) -> TasksResponse:
+    def get_available_tasks(self, limit: int = AVAILABLE_TASK_BACKPRESSURE_LIMIT) -> TasksResponse:
         return self._make_request(TasksResponse, "GET", "/tasks/available", params={"limit": limit})
 
     def claim_tasks(self, request: TaskClaimRequest) -> TaskClaimResponse:

@@ -23,6 +23,7 @@ from metta.app_backend.tournament.commissioners.teams.sampling import sample_tea
 from metta.app_backend.tournament.commissioners.teams.stage_planning import StageBinding
 from metta.app_backend.tournament.referees.base import MatchCountEntry, RefereeBase
 from metta.app_backend.tournament.referees.teams.team_stage import TeamStageReferee
+from metta.app_backend.tournament.settings import MAX_OUTSTANDING_MATCHES_PER_SEASON
 from metta.app_backend.tournament.teams.scoring import compute_policy_placement_scores, rank_teams_by_score
 
 logger = logging.getLogger(__name__)
@@ -109,7 +110,7 @@ class TeamStageExecutionMixin:
         match_counts = await self._get_match_counts(pool.id, active_ids)
 
         outstanding = await self._count_outstanding_matches()
-        slots = max(0, self.config.max_outstanding_matches - outstanding)
+        slots = max(0, MAX_OUTSTANDING_MATCHES_PER_SEASON - outstanding)
         if slots <= 0:
             return 0
 

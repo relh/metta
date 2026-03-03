@@ -1,7 +1,7 @@
 pools:
   - name: jobs-warm
     workload: jobs
-    replicas: 10
+    replicas: 50
     expireAfter: 2h
     requirements:
       - key: karpenter.sh/capacity-type
@@ -12,7 +12,7 @@ pools:
 
       - key: node.kubernetes.io/instance-type
         operator: In
-        values: ["r6a.2xlarge"]
+        values: ["r5a.2xlarge", "r5.2xlarge", "r6a.2xlarge", "r6i.2xlarge", "r7a.2xlarge", "r7i.2xlarge"]
 
   - name: jobs
     workload: jobs
