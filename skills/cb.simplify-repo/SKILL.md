@@ -10,10 +10,10 @@ args: <subfolder_count=50> [focus_paths...]
 
 ## Overview
 
-Run a broad cleanup sweep and keep only high-confidence, behavior-preserving simplifications.
+Run a broad cleanup sweep and keep only high-impact simplifications.
 
-**Announce at start:** "I’m running cb.simplify-repo: I’ll scan `<subfolder_count>` subfolders, keep only clear macro
-wins, and ship one focused PR."
+**Announce at start:** "I’m running cb.simplify-repo: I’ll scan `<subfolder_count>` subfolders, keep only macro wins,
+and ship one focused PR."
 
 ## Step 1: Prepare Branch And Scope
 
@@ -35,40 +35,45 @@ fi
 rg --files -g '*.py' "${TARGETS[@]}" | xargs -n1 dirname | sort -u | shuf -n "$COUNT" > /tmp/simplify_dirs.txt
 ```
 
-## Step 2: Scan For Macro Candidates
+## Step 2: Scan For Substantial Candidates
 
-Prioritize patterns with clear readability/indirection wins:
+Prioritize patterns that delete real complexity:
 
 ```bash
 DIRS="$(tr '\n' ' ' </tmp/simplify_dirs.txt)"
 ruff check --select SIM $DIRS
-rg -n -U -g '*.py' "if .*:\n\s+if |\.keys\(\)|return\s+\w+\s*$" $DIRS
+rg -n -U -g '*.py' "if .*:\n\s+if |elif .*:\n\s+return|def [A-Za-z_]\w*\([^)]*\):\n\s+return [A-Za-z_][A-Za-z0-9_]*\(" $DIRS
+rg -n -g '*.py' "^def [A-Za-z_]\w*\(|^class [A-Za-z_]\w*\(" $DIRS
 rg -n -g '*.py' \
   "except Exception|except:\s*$|\bis None\b|dict\.get\(|getattr\([^,]+,[^,]+,[^)]+\)|shim|compat|backward|legacy|alias|fallback" \
   $DIRS
-rg -n -U -g '*.py' "def [A-Za-z_]\w*\([^)]*\):\n\s+return [A-Za-z_][A-Za-z0-9_]*\(" $DIRS
 if command -v vulture >/dev/null 2>&1; then
   vulture $DIRS --min-confidence 95 --exclude "*test*.py,*migrations*"
 fi
 ```
 
-Keep only behavior-equivalent candidates. For fallback/`None`/`except` matches, keep a candidate only when callsites and
-types prove an internal invariant (not external input). For `vulture` matches, keep only very-high-confidence dead code:
-`>=95`, zero in-repo references (`rg -n "\bSymbolName\b"`), and not part of a public export surface.
+Before edits, manually read core entrypoints and adjacent modules to map real call flow.
 
-## Step 3: Apply Minimal Safe Simplifications
+Keep only behavior-equivalent candidates. Use repo-wide `rg` to verify callsites before deleting wrappers/classes.
+
+## Step 3: Apply Only Macro Wins
 
 Rules:
 
-- Collapse duplicated branches and nested `if` chains when semantics are unchanged.
-- Replace key-view indirection (`for k in d.keys()`, `x in d.keys()`) with direct iteration/membership.
-- Replace defensive internal fallbacks (`dict.get`, `getattr(..., default)`, `x or default`) only when required fields
-  are guaranteed by invariants.
+- Keep changes only when they remove duplication, dead code, compat/shims, or indirection.
+- Inline one-use helpers (including cross-file) when callsites stay readable, then delete the helper.
+- Canonicalize duplicative classes: keep one canonical type, migrate all callsites, delete the disguise class.
+- Monorepo invariant: all callsites are in-repo. If none exists in-repo, it does not exist.
+- Collapse duplicated branches and nested conditionals when semantics are unchanged.
+- Replace defensive internal fallbacks (`dict.get`, `getattr(..., default)`, `x or default`) only when invariants prove
+  required fields are always present.
 - Remove broad `except` blocks or dead `None` branches only when you can prove they are unreachable.
-- Remove dead code from `vulture` results only when confidence is `>=95` and callsite search confirms no live usage.
-- Delete compat aliases/shim wrappers only after updating all in-repo callsites.
-- Remove dead helper layers only when all callsites stay equivalent.
-- Avoid broad stylistic churn; skip borderline refactors.
+- Remove `vulture` dead code only when confidence is `>=95` and callsite search shows no live usage.
+- Reject low-signal churn:
+  - `.keys()` rewrites (`x in d.keys()`, `for k in d.keys()`) as standalone edits
+  - trivial style-only rewrites that do not reduce indirection
+  - behavior-risky container rewrites on non-dict mappings (e.g., `TensorDict`)
+- If >10% of changed Python lines are low-signal churn, revert those hunks and rescan.
 
 ## Step 4: Validate Touched Code
 
@@ -84,8 +89,6 @@ fi
 metta pytest <targeted-test-paths>
 ```
 
-If environment-limited failures occur, note them in the PR.
-
 ## Step 5: Ship One PR
 
 ```bash
@@ -95,15 +98,6 @@ git commit -m "refactor: macro simplify repo without behavior changes" \
 git push -u origin HEAD
 ```
 
-Draft summary from diff, then create PR:
-
 ```bash
-# Use skill: pr.summary
 gh pr create --base main --head "$(git branch --show-current)" --title "<TITLE>" --body "<BODY>"
 ```
-
-## Integration
-
-**Uses:** `cb.cleanup-refactor`, `cb.simplify-diff`, `pr.summary`  
-**Pairs with:** `pr.check-ci`, `pr.fix-ci`  
-**Alternative:** `cb.cleanup-pr-sweep` when the user wants many small PRs instead of one.
