@@ -479,13 +479,21 @@ def event_processor():
 
 @app.command(
     name="generate-api-types",
-    help="Generate API types",
+    help="Generate TypeScript and Python API types from the OpenAPI spec",
 )
 @handle_errors
 def generate_api_types():
+    # TypeScript types (softmax.com frontend)
     roots = [repo_root / "web/softmax.com"]
     for root in roots:
         subprocess.run(["pnpm", "run", "generate-api-types"], cwd=root, check=True)
+
+    # Python models (cogames CLI)
+    info("Generating cogames Python models...")
+    subprocess.run(
+        ["uv", "run", "python", str(repo_root / "packages" / "cogames" / "scripts" / "generate_models.py")],
+        check=True,
+    )
 
 
 app.command(name="run-episode")(handle_errors(run_episode_cmd))

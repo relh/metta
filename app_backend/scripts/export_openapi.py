@@ -6,7 +6,10 @@ Usage:
     uv run app_backend/scripts/export_openapi.py --output /tmp/fresh
 
 Called by Observatory's `npm run generate-api-types` to produce the JSON
-that openapi-typescript consumes. The JSON files are gitignored.
+that openapi-typescript consumes.
+
+To also regenerate Python models for cogames, run:
+    metta dev generate-api-types
 """
 
 import json

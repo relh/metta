@@ -104,6 +104,7 @@ testing = [
   "pyright==1.1.408",
   "freezegun>=1.5.5",
   "grpcio-tools>=1.71.0",
+  "datamodel-code-generator==0.28.3",
 ]
 lint = ["cpplint>=2.0.2", "import-linter>=2.1", "mypy>=1.18.2", "ruff>=0.11.13"]
 interactive = [
