@@ -144,20 +144,18 @@ def _assert_json_serializable(requests: list[MatchRequest]) -> None:
 # -- make_assignments --
 
 
-def test_make_assignments_solo():
-    assert make_assignments(8, 1) == [0] * 8
-
-
-def test_make_assignments_pairs():
-    assert make_assignments(8, 2) == [0, 0, 0, 0, 1, 1, 1, 1]
-
-
-def test_make_assignments_quads():
-    assert make_assignments(8, 4) == [0, 0, 1, 1, 2, 2, 3, 3]
-
-
-def test_make_assignments_full():
-    assert make_assignments(8, 8) == [0, 1, 2, 3, 4, 5, 6, 7]
+@pytest.mark.parametrize(
+    ("policies_per_team", "expected"),
+    [
+        (1, [0] * 8),
+        (2, [0, 0, 0, 0, 1, 1, 1, 1]),
+        (4, [0, 0, 1, 1, 2, 2, 3, 3]),
+        (8, [0, 1, 2, 3, 4, 5, 6, 7]),
+    ],
+    ids=["solo", "pairs", "quads", "full"],
+)
+def test_make_assignments_variants(policies_per_team, expected):
+    assert make_assignments(8, policies_per_team) == expected
 
 
 # -- CogsGuardGame --
@@ -182,31 +180,26 @@ def test_game_registry_rejects_unknown_env():
 # -- PolicyStageReferee: combo generation --
 
 
-def test_generate_combos_team_size_1():
+@pytest.mark.parametrize(
+    ("policies_per_team", "expected_combo_count", "expected_assignments"),
+    [
+        (1, 16, [0] * 8),
+        (2, 120, [0, 0, 0, 0, 1, 1, 1, 1]),
+        (4, 1820, [0, 0, 1, 1, 2, 2, 3, 3]),
+    ],
+    ids=["team-size-1", "team-size-2", "team-size-4"],
+)
+def test_generate_combos_team_size(
+    policies_per_team: int,
+    expected_combo_count: int,
+    expected_assignments: list[int],
+):
     player_ids = [uuid4() for _ in range(16)]
-    combos = _generate_combos(player_ids, policies_per_team=1)
-    assert len(combos) == 16
+    combos = _generate_combos(player_ids, policies_per_team=policies_per_team)
+    assert len(combos) == expected_combo_count
     for pp_ids, assignments in combos:
-        assert len(pp_ids) == 1
-        assert assignments == [0] * 8
-
-
-def test_generate_combos_team_size_2():
-    player_ids = [uuid4() for _ in range(16)]
-    combos = _generate_combos(player_ids, policies_per_team=2)
-    assert len(combos) == 120  # C(16,2)
-    for pp_ids, assignments in combos:
-        assert len(pp_ids) == 2
-        assert assignments == [0, 0, 0, 0, 1, 1, 1, 1]
-
-
-def test_generate_combos_team_size_4():
-    player_ids = [uuid4() for _ in range(16)]
-    combos = _generate_combos(player_ids, policies_per_team=4)
-    assert len(combos) == 1820  # C(16,4)
-    for pp_ids, assignments in combos:
-        assert len(pp_ids) == 4
-        assert assignments == [0, 0, 1, 1, 2, 2, 3, 3]
+        assert len(pp_ids) == policies_per_team
+        assert assignments == expected_assignments
 
 
 def test_generate_combos_assignments_structure():
@@ -220,20 +213,20 @@ def test_generate_combos_assignments_structure():
             assert set(assignments) == set(range(policies_per_team))
 
 
-def test_eval_referee_schedules_combos_for_team_size():
+@pytest.mark.parametrize(
+    ("policies_per_team", "expected_requests"),
+    [
+        (1, 4 * 2),  # C(4,1) * 2
+        (2, 6 * 2),  # C(4,2) * 2
+        (4, 1 * 2),  # C(4,4) * 2
+    ],
+    ids=["team-size-1", "team-size-2", "team-size-4"],
+)
+def test_eval_referee_schedules_combos_for_team_size(policies_per_team: int, expected_requests: int):
     players = [_make_player() for _ in range(4)]
-
-    referee_1 = _make_policy_referee(policies_per_team=1, matches_per_combo=2)
-    requests_1 = referee_1.get_matches_to_schedule(players, {})
-    assert len(requests_1) == 4 * 2  # C(4,1) * 2
-
-    referee_2 = _make_policy_referee(policies_per_team=2, matches_per_combo=2)
-    requests_2 = referee_2.get_matches_to_schedule(players, {})
-    assert len(requests_2) == 6 * 2  # C(4,2) * 2
-
-    referee_4 = _make_policy_referee(policies_per_team=4, matches_per_combo=2)
-    requests_4 = referee_4.get_matches_to_schedule(players, {})
-    assert len(requests_4) == 1 * 2  # C(4,4) * 2
+    referee = _make_policy_referee(policies_per_team=policies_per_team, matches_per_combo=2)
+    requests = referee.get_matches_to_schedule(players, {})
+    assert len(requests) == expected_requests
 
 
 def test_eval_referee_skips_completed():

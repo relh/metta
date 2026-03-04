@@ -14,14 +14,15 @@ def with_extra_imports_root(monkeypatch):
     monkeypatch.syspath_prepend(extra_imports_root)
 
 
-def test_load_symbol_with_builtin() -> None:
-    result = load_symbol("builtins.str")
-    assert result is str
-
-
-def test_load_symbol_with_stdlib_function() -> None:
-    result = load_symbol("importlib.import_module")
-    assert result is importlib.import_module
+@pytest.mark.parametrize(
+    ("symbol_name", "expected"),
+    [
+        ("builtins.str", str),
+        ("importlib.import_module", importlib.import_module),
+    ],
+)
+def test_load_symbol_with_builtin_or_stdlib(symbol_name: str, expected: object) -> None:
+    assert load_symbol(symbol_name) is expected
 
 
 def test_load_symbol_invalid_format_raises_value_error() -> None:
@@ -36,28 +37,23 @@ def test_load_symbol_missing_module_raises_module_not_found_error() -> None:
 
 
 def test_load_self() -> None:
-    result = load_symbol("mettagrid.util.module.load_symbol")
-    assert callable(result)
+    assert callable(load_symbol("mettagrid.util.module.load_symbol"))
 
 
-def test_load_config() -> None:
-    result = load_symbol("mettagrid.base_config.Config")
+@pytest.mark.parametrize(
+    ("symbol_name", "expected_name"),
+    [
+        ("mettagrid.base_config.Config", "Config"),
+        ("foo.bar.baz.Foo.Bar.Baz", "Baz"),
+        ("notebook_fixture.NotebookPolicyClass", "NotebookPolicyClass"),
+        ("notebook_fixture.NotebookPolicyClass.Config", "Config"),
+    ],
+)
+def test_load_symbol_type_by_name(
+    symbol_name: str,
+    expected_name: str,
+    with_extra_imports_root,
+) -> None:
+    result = load_symbol(symbol_name)
     assert isinstance(result, type)
-    assert result.__name__ == "Config"
-
-
-def test_load_nested_symbol(with_extra_imports_root) -> None:
-    result = load_symbol("foo.bar.baz.Foo.Bar.Baz")
-    assert result is not None and result.__name__ == "Baz"
-
-
-def test_load_symbol_from_notebook(with_extra_imports_root) -> None:
-    result = load_symbol("notebook_fixture.NotebookPolicyClass")
-    assert isinstance(result, type)
-    assert result.__name__ == "NotebookPolicyClass"
-
-
-def test_load_nested_symbol_from_notebook(with_extra_imports_root) -> None:
-    result = load_symbol("notebook_fixture.NotebookPolicyClass.Config")
-    assert isinstance(result, type)
-    assert result.__name__ == "Config"
+    assert result.__name__ == expected_name

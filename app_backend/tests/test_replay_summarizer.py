@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import zlib
 
+import pytest
+
 from metta.app_backend.replay.summarizer import (
     ReplaySummary,
     _classify_distribution,
@@ -145,54 +147,48 @@ def test_walk_sparse_action_mixed():
 # === _classify_distribution ===
 
 
-def test_classify_distribution_none():
-    assert _classify_distribution([0.0, 0.0, 0.0, 0.0]) == "none"
-
-
-def test_classify_distribution_early_heavy():
-    assert _classify_distribution([0.5, 0.3, 0.1, 0.0]) == "early_heavy"
-
-
-def test_classify_distribution_late_heavy():
-    assert _classify_distribution([0.0, 0.1, 0.3, 0.5]) == "late_heavy"
-
-
-def test_classify_distribution_distributed():
-    assert _classify_distribution([0.25, 0.25, 0.25, 0.25]) == "distributed"
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([0.0, 0.0, 0.0, 0.0], "none"),
+        ([0.5, 0.3, 0.1, 0.0], "early_heavy"),
+        ([0.0, 0.1, 0.3, 0.5], "late_heavy"),
+        ([0.25, 0.25, 0.25, 0.25], "distributed"),
+    ],
+)
+def test_classify_distribution(values, expected):
+    assert _classify_distribution(values) == expected
 
 
 # === _classify_reward_shape ===
 
 
-def test_classify_reward_shape_flat():
-    assert _classify_reward_shape([0.0, 0.0, 0.0, 0.0]) == "flat"
-
-
-def test_classify_reward_shape_frontloaded():
-    assert _classify_reward_shape([5.0, 3.0, 1.0, 0.0]) == "frontloaded"
-
-
-def test_classify_reward_shape_backloaded():
-    assert _classify_reward_shape([0.0, 1.0, 3.0, 5.0]) == "backloaded"
-
-
-def test_classify_reward_shape_linear():
-    assert _classify_reward_shape([2.5, 2.5, 2.5, 2.5]) == "linear"
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([0.0, 0.0, 0.0, 0.0], "flat"),
+        ([5.0, 3.0, 1.0, 0.0], "frontloaded"),
+        ([0.0, 1.0, 3.0, 5.0], "backloaded"),
+        ([2.5, 2.5, 2.5, 2.5], "linear"),
+    ],
+)
+def test_classify_reward_shape(values, expected):
+    assert _classify_reward_shape(values) == expected
 
 
 # === _classify_noop_pattern ===
 
 
-def test_classify_noop_pattern_none():
-    assert _classify_noop_pattern([0.0, 0.0, 0.0, 0.0]) == "none"
-
-
-def test_classify_noop_pattern_clustered():
-    assert _classify_noop_pattern([0.8, 0.1, 0.0, 0.0]) == "clustered"
-
-
-def test_classify_noop_pattern_distributed():
-    assert _classify_noop_pattern([0.15, 0.15, 0.15, 0.15]) == "distributed"
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ([0.0, 0.0, 0.0, 0.0], "none"),
+        ([0.8, 0.1, 0.0, 0.0], "clustered"),
+        ([0.15, 0.15, 0.15, 0.15], "distributed"),
+    ],
+)
+def test_classify_noop_pattern(values, expected):
+    assert _classify_noop_pattern(values) == expected
 
 
 # === summarize_replay ===

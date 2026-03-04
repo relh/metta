@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from devops.runners.executors.local import LocalExecutor
 from devops.runners.job import Job, JobStatus
 from devops.runners.reporters.datadog import _job_to_effective_status_service_check, _job_to_metrics
@@ -44,22 +46,26 @@ def test_job_to_metrics_emits_last_completion_timestamp() -> None:
     assert completion.tags["check_group"] == "internal_training_heavy"
 
 
-def test_job_to_metrics_marks_failed_when_acceptance_fails() -> None:
-    job = _make_job(status=JobStatus.SUCCEEDED, acceptance_passed=False)
+@pytest.mark.parametrize(
+    ("status", "acceptance_passed", "expected_value", "expected_terminal_status"),
+    [
+        (JobStatus.SUCCEEDED, False, -1.0, "failed"),
+        (JobStatus.SKIPPED, None, 0.0, "skipped"),
+    ],
+    ids=["acceptance-failed", "skipped"],
+)
+def test_job_to_metrics_terminal_status_mapping(
+    status: JobStatus,
+    acceptance_passed: bool | None,
+    expected_value: float,
+    expected_terminal_status: str,
+) -> None:
+    job = _make_job(status=status, acceptance_passed=acceptance_passed)
     samples = _job_to_metrics(job)
 
     terminal = _first_metric(samples, STABLE_CHECK_RAW_STATUS_METRIC)
-    assert terminal.value == -1.0
-    assert terminal.tags["terminal_status"] == "failed"
-
-
-def test_job_to_metrics_marks_skipped_terminal_status() -> None:
-    job = _make_job(status=JobStatus.SKIPPED)
-    samples = _job_to_metrics(job)
-
-    terminal = _first_metric(samples, STABLE_CHECK_RAW_STATUS_METRIC)
-    assert terminal.value == 0.0
-    assert terminal.tags["terminal_status"] == "skipped"
+    assert terminal.value == expected_value
+    assert terminal.tags["terminal_status"] == expected_terminal_status
 
 
 def test_job_to_metrics_supports_function_check_command() -> None:
@@ -89,51 +95,51 @@ def test_job_to_metrics_emits_summary_metrics() -> None:
     assert summary_ts.tags["job"] == "prod_arena_basic_easy_shaped_train_100m"
 
 
-def test_job_to_metrics_marks_quarantined_as_yellow_summary() -> None:
-    job = _make_job(status=JobStatus.FAILED)
-    job.metadata["lifecycle"] = "quarantined"
+@pytest.mark.parametrize(
+    ("status", "acceptance_passed", "lifecycle", "expected_value"),
+    [
+        (JobStatus.SUCCEEDED, True, "active", 1.0),
+        (JobStatus.FAILED, None, "quarantined", 0.0),
+        (JobStatus.FAILED, None, "active", -1.0),
+    ],
+    ids=["active-success", "quarantined-failure", "active-failure"],
+)
+def test_job_to_metrics_effective_summary_mapping(
+    status: JobStatus,
+    acceptance_passed: bool | None,
+    lifecycle: str,
+    expected_value: float,
+) -> None:
+    job = _make_job(status=status, acceptance_passed=acceptance_passed)
+    job.metadata["lifecycle"] = lifecycle
     samples = _job_to_metrics(job)
 
     summary = _first_metric(samples, STABLE_CHECK_EFFECTIVE_STATUS_METRIC)
-    assert summary.value == 0.0
-    assert summary.tags["lifecycle"] == "quarantined"
+    assert summary.value == expected_value
+    assert summary.tags["lifecycle"] == lifecycle
 
 
-def test_job_to_metrics_marks_active_failure_as_red_summary() -> None:
-    job = _make_job(status=JobStatus.FAILED)
-    samples = _job_to_metrics(job)
-
-    summary = _first_metric(samples, STABLE_CHECK_EFFECTIVE_STATUS_METRIC)
-    assert summary.value == -1.0
-    assert summary.tags["lifecycle"] == "active"
-
-
-def test_job_to_effective_status_service_check_marks_failed_as_critical() -> None:
-    job = _make_job(status=JobStatus.FAILED)
+@pytest.mark.parametrize(
+    ("status", "acceptance_passed", "lifecycle", "expected_status"),
+    [
+        (JobStatus.FAILED, None, "active", 2),
+        (JobStatus.SUCCEEDED, True, "active", 0),
+        (JobStatus.SKIPPED, None, "active", 2),
+        (JobStatus.FAILED, None, "quarantined", 0),
+    ],
+    ids=["failed-critical", "succeeded-ok", "skipped-critical", "quarantined-ok"],
+)
+def test_job_to_effective_status_service_check_mapping(
+    status: JobStatus,
+    acceptance_passed: bool | None,
+    lifecycle: str,
+    expected_status: int,
+) -> None:
+    job = _make_job(status=status, acceptance_passed=acceptance_passed)
+    job.metadata["lifecycle"] = lifecycle
     check = _job_to_effective_status_service_check(job)
+
     assert check is not None
     assert check.check == STABLE_CHECK_EFFECTIVE_STATUS_SERVICE_CHECK
-    assert check.status == 2
+    assert check.status == expected_status
     assert check.tags["job"] == "prod_arena_basic_easy_shaped_train_100m"
-
-
-def test_job_to_effective_status_service_check_marks_succeeded_as_ok() -> None:
-    job = _make_job(status=JobStatus.SUCCEEDED, acceptance_passed=True)
-    check = _job_to_effective_status_service_check(job)
-    assert check is not None
-    assert check.status == 0
-
-
-def test_job_to_effective_status_service_check_marks_skipped_as_critical() -> None:
-    job = _make_job(status=JobStatus.SKIPPED)
-    check = _job_to_effective_status_service_check(job)
-    assert check is not None
-    assert check.status == 2
-
-
-def test_job_to_effective_status_service_check_marks_quarantined_failure_as_ok() -> None:
-    job = _make_job(status=JobStatus.FAILED)
-    job.metadata["lifecycle"] = "quarantined"
-    check = _job_to_effective_status_service_check(job)
-    assert check is not None
-    assert check.status == 0
