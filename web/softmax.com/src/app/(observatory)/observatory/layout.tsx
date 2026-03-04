@@ -25,7 +25,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
   const userId = session?.user?.id;
   if (!userId) {
     return (
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body className="overflow-y-scroll">
           <ThemeProvider>
             <div className="bg-background mx-auto flex min-h-screen flex-col items-center justify-center">
@@ -49,7 +49,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
 
   if (!dbUser?.profileCompleted || dbUser.tosVersion !== CURRENT_TOS_VERSION) {
     return (
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body className="overflow-y-scroll">
           <ThemeProvider>
             <div className="bg-background mx-auto flex min-h-screen flex-col items-center justify-center">
