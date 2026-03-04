@@ -601,8 +601,7 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
                 powers[power - 1] = feature.id
               inventoryPowerIds[resource] = powers
               continue
-        else:
-          inventoryBaseIds[suffix] = feature.id
+        inventoryBaseIds[suffix] = feature.id
       elif feature.name.startsWith("team:"):
         if result.inventoryTokenBase == 0:
           result.inventoryTokenBase = int(feature.normalization)
@@ -618,8 +617,7 @@ proc parseConfig*(environmentConfig: string): Config {.raises: [].} =
                 powers[power - 1] = feature.id
               inventoryPowerIds[baseName] = powers
               continue
-        else:
-          inventoryBaseIds[feature.name] = feature.id
+        inventoryBaseIds[feature.name] = feature.id
       case feature.name:
       of "agent:group":
         result.features.group = feature.id

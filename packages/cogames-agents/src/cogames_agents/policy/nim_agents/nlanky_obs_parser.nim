@@ -8,10 +8,15 @@ const
   SpawnRow = 100
   SpawnCol = 100
 
-proc pow256(power: int): int =
+proc powBase(base: int, power: int): int =
   result = 1
   for _ in 0 ..< power:
-    result *= 256
+    result *= base
+
+proc parseDigitString(value: string): int =
+  result = 0
+  for ch in value:
+    result = result * 10 + (ord(ch) - ord('0'))
 
 type
   ObsParser* = ref object
@@ -139,16 +144,17 @@ proc parse*(
         # Best-effort per-cell inventory reconstruction (extractor inventories).
         let fname = parser.featureNameById.getOrDefault(fv.featureId, "")
         if fname.startsWith("inv:"):
-          var suffix = fname[4 .. ^1]
-          if ":p" in suffix:
-            let parts = suffix.rsplit(":p", 1)
-            let baseName = parts[0]
-            var power = 0
-            for ch in parts[1]:
-              if ch < '0' or ch > '9':
-                break
-              power = power * 10 + (ord(ch) - ord('0'))
-            invByName[baseName] = invByName.getOrDefault(baseName, 0) + fv.value * pow256(power)
+          let suffix = fname[4 .. ^1]
+          let powerIndex = suffix.rfind(":p")
+          let inventoryBase = if cfg.inventoryTokenBase > 1: cfg.inventoryTokenBase else: 256
+          if powerIndex != -1:
+            let baseName = suffix[0 ..< powerIndex]
+            let powerStr = suffix[powerIndex + 2 .. ^1]
+            if baseName.len > 0 and powerStr.len > 0 and powerStr.allCharsInSet({'0' .. '9'}):
+              let power = parseDigitString(powerStr)
+              invByName[baseName] = invByName.getOrDefault(baseName, 0) + fv.value * powBase(inventoryBase, power)
+            else:
+              invByName[suffix] = invByName.getOrDefault(suffix, 0) + fv.value
           else:
             invByName[suffix] = invByName.getOrDefault(suffix, 0) + fv.value
 

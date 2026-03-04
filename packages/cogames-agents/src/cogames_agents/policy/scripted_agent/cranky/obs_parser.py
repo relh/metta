@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from cogames_agents.policy.scripted_agent.utils import add_inventory_token, split_power_suffix
+
 from .context import StateSnapshot
 from .entity_map import Entity
 
@@ -59,6 +61,7 @@ class ObsParser:
 
         for tok in obs.tokens:
             feature_name = tok.feature.name
+            token_value_base = max(int(tok.feature.normalization), 1)
 
             # Global tokens include local position and team hub inventory
             if tok.is_global:
@@ -75,27 +78,13 @@ class ObsParser:
                     lp_row_offset = -tok.value
                     has_position = True
                 elif feature_name.startswith("inv:"):
-                    resource_name = feature_name[4:]
-                    if ":p" in resource_name:
-                        base_name, power_str = resource_name.rsplit(":p", 1)
-                        power = int(power_str)
-                        current = inv.get(base_name, 0)
-                        inv[base_name] = current + tok.value * (256**power)
-                    else:
-                        current = inv.get(resource_name, 0)
-                        inv[resource_name] = current + tok.value
+                    add_inventory_token(inv, feature_name, tok.value, token_value_base=token_value_base)
                 elif feature_name.startswith("team:"):
                     resource_name = feature_name[5:]
-                    key = f"team:{resource_name}"
-                    if ":p" in resource_name:
-                        base_name, power_str = resource_name.rsplit(":p", 1)
-                        power = int(power_str)
-                        key = f"team:{base_name}"
-                        current = inv.get(key, 0)
-                        inv[key] = current + tok.value * (256**power)
-                    else:
-                        current = inv.get(key, 0)
-                        inv[key] = current + tok.value
+                    base_name, power = split_power_suffix(resource_name)
+                    key = f"team:{base_name}"
+                    current = inv.get(key, 0)
+                    inv[key] = current + tok.value * (token_value_base**power)
                 continue
 
             # Center cell tokens for inventory/vibe and local position
@@ -114,16 +103,7 @@ class ObsParser:
                     lp_row_offset = -tok.value
                     has_position = True
                 elif feature_name.startswith("inv:"):
-                    resource_name = feature_name[4:]
-                    # Handle multi-token encoding
-                    if ":p" in resource_name:
-                        base_name, power_str = resource_name.rsplit(":p", 1)
-                        power = int(power_str)
-                        current = inv.get(base_name, 0)
-                        inv[base_name] = current + tok.value * (256**power)
-                    else:
-                        current = inv.get(resource_name, 0)
-                        inv[resource_name] = current + tok.value
+                    add_inventory_token(inv, feature_name, tok.value, token_value_base=token_value_base)
                 elif feature_name == "vibe":
                     vibe_id = tok.value
 
@@ -185,15 +165,8 @@ class ObsParser:
                 position_features[world_pos]["props"][feature_name] = tok.value
             elif feature_name.startswith("inv:"):
                 inv_dict = position_features[world_pos].setdefault("inventory", {})
-                suffix = feature_name[4:]
-                if ":p" in suffix:
-                    base_name, power_str = suffix.rsplit(":p", 1)
-                    power = int(power_str)
-                    current = inv_dict.get(base_name, 0)
-                    inv_dict[base_name] = current + tok.value * (256**power)
-                else:
-                    current = inv_dict.get(suffix, 0)
-                    inv_dict[suffix] = current + tok.value
+                token_value_base = max(int(tok.feature.normalization), 1)
+                add_inventory_token(inv_dict, feature_name, tok.value, token_value_base=token_value_base)
 
         # Convert to entities
         for world_pos, features in position_features.items():

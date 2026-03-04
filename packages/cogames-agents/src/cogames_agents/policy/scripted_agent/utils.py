@@ -31,6 +31,14 @@ def is_station(obj_name: str, station: str) -> bool:
     return station in obj_name
 
 
+def split_power_suffix(name: str) -> tuple[str, int]:
+    """Split a token suffix into (base_name, power)."""
+    base_name, sep, power_str = name.rpartition(":p")
+    if sep and base_name and power_str.isdigit():
+        return base_name, int(power_str)
+    return name, 0
+
+
 def add_inventory_token(
     inventory: dict[str, int],
     feature_name: str,
@@ -40,12 +48,7 @@ def add_inventory_token(
 ) -> None:
     """Add inventory token value, reconstructing multi-token amounts."""
     suffix = feature_name[4:]
-    if ":p" in suffix:
-        resource_name, power_str = suffix.rsplit(":p", 1)
-        power = int(power_str)
-    else:
-        resource_name = suffix
-        power = 0
+    resource_name, power = split_power_suffix(suffix)
     inventory[resource_name] = inventory.get(resource_name, 0) + value * (token_value_base**power)
 
 
