@@ -254,15 +254,41 @@ def _get_pod_error_from_event(event_data: dict, batch_v1: client.BatchV1Api, job
     return status.get("message") or "Pod failed"
 
 
-def _extract_python_traceback(lines: list[str]) -> str | None:
-    """Extract the final exception from a Python traceback.
+def _extract_context(
+    lines: list[str],
+    start_idx: int,
+    end_idx: int,
+    *,
+    drop_blank: bool = True,
+) -> str | None:
+    context_lines = lines[start_idx:end_idx]
+    if drop_blank:
+        context_lines = [line for line in context_lines if line.strip()]
+    if not context_lines:
+        return None
+    result = "\n".join(context_lines)
+    if len(result) <= 500:
+        return result
+    return result[:500] + "..."
 
-    Looks for:
-    - "Traceback (most recent call last):"
-    - Exception line (e.g., "ValueError: invalid value")
-    - Extracts exception with 2-3 lines of context
-    """
-    # Scan backwards for traceback marker
+
+def _scan_backwards_for_markers(
+    lines: list[str],
+    markers: tuple[str, ...],
+    *,
+    max_scan_lines: int = 100,
+) -> int:
+    stop_idx = max(0, len(lines) - max_scan_lines)
+    normalized_markers = tuple(marker.lower() for marker in markers)
+    for i in range(len(lines) - 1, stop_idx, -1):
+        line = lines[i].lower()
+        if any(marker in line for marker in normalized_markers):
+            return i
+    return -1
+
+
+def _extract_python_traceback(lines: list[str]) -> str | None:
+    """Extract final exception context from a Python traceback block."""
     traceback_start = -1
     for i in range(len(lines) - 1, -1, -1):
         if "Traceback (most recent call last):" in lines[i]:
@@ -272,7 +298,6 @@ def _extract_python_traceback(lines: list[str]) -> str | None:
     if traceback_start == -1:
         return None
 
-    # Look for the final exception (last line that matches exception pattern)
     exception_keywords = [
         "Error:",
         "Exception:",
@@ -291,7 +316,6 @@ def _extract_python_traceback(lines: list[str]) -> str | None:
         "TimeoutError",
         "ConnectionError",
     ]
-
     exception_line = -1
     for i in range(len(lines) - 1, traceback_start, -1):
         line = lines[i].strip()
@@ -309,7 +333,6 @@ def _extract_python_traceback(lines: list[str]) -> str | None:
     end_idx = min(exception_line + 3, len(lines))
     context_lines = [line for line in lines[start_idx:end_idx] if line.strip()]
 
-    # Limit total length to ~500 chars
     result = "\n".join(context_lines)
     if len(result) > 500:
         result = result[:500] + "..."
@@ -318,15 +341,8 @@ def _extract_python_traceback(lines: list[str]) -> str | None:
 
 
 def _extract_policy_server_error(lines: list[str]) -> str | None:
-    """Extract policy server-specific errors.
-
-    Looks for:
-    - "Policy server failed during episode execution"
-    - "Policy server returned {status_code}"
-    - "Policy server request failed"
-    - RuntimeError from manager.py with log tails
-    """
-    policy_error_markers = [
+    """Extract policy-server-related error context from recent log lines."""
+    policy_error_markers = (
         "Policy server failed",
         "Policy server returned",
         "Policy server request failed",
@@ -335,64 +351,34 @@ def _extract_policy_server_error(lines: list[str]) -> str | None:
         "failed to connect",
         "connection refused",
         "grpc",
-    ]
+    )
+    marker_idx = _scan_backwards_for_markers(lines, policy_error_markers)
+    if marker_idx == -1:
+        return None
 
-    # Scan backwards for policy-related errors (case-insensitive to match varied log output)
-    for i in range(len(lines) - 1, max(0, len(lines) - 100), -1):
-        line = lines[i]
-        line_lower = line.lower()
-        if any(marker.lower() in line_lower for marker in policy_error_markers):
-            # Extract this line and next 3-5 lines of context
-            start_idx = max(0, i - 2)
-            end_idx = min(i + 5, len(lines))
-            context_lines = [ln for ln in lines[start_idx:end_idx] if ln.strip()]
-
-            result = "\n".join(context_lines)
-            if len(result) > 500:
-                result = result[:500] + "..."
-            return result
-
-    return None
+    start_idx = max(0, marker_idx - 2)
+    end_idx = min(marker_idx + 5, len(lines))
+    return _extract_context(lines, start_idx, end_idx)
 
 
 def _extract_generic_error(lines: list[str]) -> str | None:
-    """Extract any error-like message from logs.
-
-    Fallback strategy that looks for:
-    - Lines containing ERROR, CRITICAL, FAILED
-    - Lines with "error:", "failed:", "exception:"
-    """
-    error_patterns = [
-        "ERROR",
-        "CRITICAL",
-        "FAILED",
-        "FATAL",
-        "error:",
-        "Error:",
-        "failed:",
-        "Failed:",
+    """Extract generic error-like context from recent log lines."""
+    error_patterns = (
+        "error",
+        "critical",
+        "failed",
+        "fatal",
         "exception:",
-        "Exception:",
         "abort",
         "crash",
-    ]
+    )
+    marker_idx = _scan_backwards_for_markers(lines, error_patterns)
+    if marker_idx == -1:
+        return None
 
-    # Scan backwards for any error-like content (case-insensitive)
-    for i in range(len(lines) - 1, max(0, len(lines) - 100), -1):
-        line = lines[i]
-        line_lower = line.lower()
-        if any(pattern.lower() in line_lower for pattern in error_patterns):
-            # Extract with minimal context
-            start_idx = max(0, i - 1)
-            end_idx = min(i + 3, len(lines))
-            context_lines = [ln for ln in lines[start_idx:end_idx] if ln.strip()]
-
-            result = "\n".join(context_lines)
-            if len(result) > 500:
-                result = result[:500] + "..."
-            return result
-
-    return None
+    start_idx = max(0, marker_idx - 1)
+    end_idx = min(marker_idx + 3, len(lines))
+    return _extract_context(lines, start_idx, end_idx)
 
 
 def _extract_error_from_logs(job_id: UUID, max_lines: int = 200) -> str | None:
