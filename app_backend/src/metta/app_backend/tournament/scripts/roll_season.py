@@ -44,7 +44,7 @@ async def roll_season_version(
         raise ValueError(f"No canonical season found for '{season_name}'")
 
     overrides = overrides or {}
-    compat_version = overrides["compat_version"] if "compat_version" in overrides else old_season.compat_version
+    compat_version = overrides.get("compat_version", old_season.compat_version)
     effective_team_config = (
         deepcopy(team_tournament_config)
         if team_tournament_config is not None

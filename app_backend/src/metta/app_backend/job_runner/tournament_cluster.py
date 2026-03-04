@@ -89,12 +89,11 @@ def _get_cluster_info(assumed_creds: dict[str, str]) -> tuple[str, str]:
     eks = boto3.client("eks", region_name=cfg.EVAL_CLUSTER_REGION, **assumed_creds)
     cluster = eks.describe_cluster(name=cfg.EVAL_CLUSTER_NAME)["cluster"]
 
-    ca_file = tempfile.NamedTemporaryFile(delete=False, suffix=".crt")
-    ca_file.write(base64.b64decode(cluster["certificateAuthority"]["data"]))
-    ca_file.close()
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".crt") as ca_file:
+        ca_file.write(base64.b64decode(cluster["certificateAuthority"]["data"]))
+        ca_path: str = ca_file.name
 
     endpoint: str = cluster["endpoint"]
-    ca_path: str = ca_file.name
     _cluster_endpoint = endpoint
     _ca_path = ca_path
 

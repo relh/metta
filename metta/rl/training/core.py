@@ -626,7 +626,7 @@ class CoreTrainingLoop:
             # Ship actions to the environment
             with context.stopwatch("_rollout.send"):
                 td_actions3: Tensor = td["actions"]
-                td_vibe_actions3: Optional[Tensor] = td["vibe_actions"] if "vibe_actions" in td else None
+                td_vibe_actions3: Optional[Tensor] = td.get("vibe_actions", None)
                 if td_vibe_actions3 is not None:
                     num_vibe_actions = len(env.policy_env_info.vibe_action_names)
                     if num_vibe_actions <= 0:
