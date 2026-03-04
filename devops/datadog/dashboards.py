@@ -333,7 +333,7 @@ def stable_runner_health_dashboard() -> dict:
                                 "data_source": "metrics",
                                 "name": "running",
                                 "query": (
-                                    "sum:job.running_count{service:observatory-backend,env:production,job_type:episode}"
+                                    "avg:job.running_count{service:observatory-backend,env:production,job_type:episode}"
                                 ),
                             }
                         ],

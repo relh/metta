@@ -68,7 +68,7 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert STABLE_CHECK_ACCEPTANCE_CRITERION_TARGET_METRIC in query_text
     assert STABLE_CHECK_ACCEPTANCE_CRITERION_STATUS_METRIC in query_text
     assert "service:observatory-backend,env:production,job_type:episode" in query_text
-    assert "sum:job.running_count" in query_text
+    assert "avg:job.running_count" in query_text
     assert "p50:job.stage_duration" in query_text
     assert "p90:job.stage_duration" in query_text
     assert "to_status:completed" in query_text
