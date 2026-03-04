@@ -70,6 +70,20 @@ async def _list_available_episode_runner_compat_versions() -> list[str]:
     return await list_available_episode_runner_compat_versions()
 
 
+async def _validate_requested_compat_version(raw_compat_version: str) -> str:
+    compat_version = raw_compat_version.strip()
+    if not compat_version:
+        raise HTTPException(status_code=400, detail="compat_version is required")
+
+    available_compat_versions = await _list_available_episode_runner_compat_versions()
+    if compat_version not in available_compat_versions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"compat_version {compat_version} is not available in {get_episode_runner_registry()}",
+        )
+    return compat_version
+
+
 def _agent_idx_from_filename(filename: str) -> int | None:
     """Extract agent index from a policy log filename like 'policy_agent_3.txt'."""
     m = re.match(r"policy_agent_(\d+)\.txt", filename)
@@ -711,15 +725,7 @@ def create_tournament_router() -> APIRouter:
         name, season = await _resolve_canonical_season_by_id_or_404(session, season_id)
         commissioner_cls = tournament_registry.SEASONS[name]
 
-        compat_version = request.compat_version.strip()
-        if not compat_version:
-            raise HTTPException(status_code=400, detail="compat_version is required")
-        available_compat_versions = await _list_available_episode_runner_compat_versions()
-        if compat_version not in available_compat_versions:
-            raise HTTPException(
-                status_code=400,
-                detail=(f"compat_version {compat_version} is not available in {get_episode_runner_registry()}"),
-            )
+        compat_version = await _validate_requested_compat_version(request.compat_version)
 
         initial_season_fields = commissioner_cls.get_initial_season_fields()
         new_season = await roll_season_version(
@@ -745,15 +751,7 @@ def create_tournament_router() -> APIRouter:
     ) -> SeasonSummary:
         name, season = await _resolve_canonical_season_by_id_or_404(session, season_id)
 
-        compat_version = request.compat_version.strip()
-        if not compat_version:
-            raise HTTPException(status_code=400, detail="compat_version is required")
-        available_compat_versions = await _list_available_episode_runner_compat_versions()
-        if compat_version not in available_compat_versions:
-            raise HTTPException(
-                status_code=400,
-                detail=(f"compat_version {compat_version} is not available in {get_episode_runner_registry()}"),
-            )
+        compat_version = await _validate_requested_compat_version(request.compat_version)
 
         season.compat_version = compat_version
         await session.commit()
