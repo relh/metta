@@ -49,10 +49,10 @@ from mettagrid.runner.types import PureSingleEpisodeResult, RunnerError, Runtime
 logger = logging.getLogger(__name__)
 
 POLL_INTERVAL_SECONDS = 5
-BATCH_SIZE = 100
+BATCH_SIZE = 500
 RECONCILE_INTERVAL_SECONDS = 60
 RECONCILE_GRACE_PERIOD_SECONDS = 86400  # 1 day — last-resort safety net for truly stuck jobs
-WORKER_THREADS = 4
+WORKER_THREADS = 16
 
 _db_engine = None
 
