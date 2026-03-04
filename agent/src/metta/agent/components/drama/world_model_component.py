@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Optional
 
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
 from torchrl.data import Composite
 
+from metta.agent.components.mamba.wrapper import MambaConfig as _DramaMambaConfig
+from metta.agent.components.mamba.wrapper import MambaWrapperModel
 from metta.agent.components.utils import zero_long
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 from .config import DramaWorldModelConfig
-from .mamba_wrapper import MambaConfig as _DramaMambaConfig
-from .mamba_wrapper import MambaWrapperModel
 
 
 class DramaWorldModelComponent(nn.Module):
@@ -24,7 +24,6 @@ class DramaWorldModelComponent(nn.Module):
         self.in_key = config.in_key
         self.out_key = config.out_key
         self.action_key = config.action_key
-        self.pool: Literal["cls", "mean", "none"] = "mean"
 
         action_dim = max(1, config.action_dim)
         if env is not None:

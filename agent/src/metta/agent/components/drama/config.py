@@ -1,28 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from metta.agent.components.component_config import ComponentConfig
-
-
-@dataclass
-class DramaMambaConfig:
-    d_model: int = 96
-    d_intermediate: int = 192
-    n_layer: int = 1
-    stoch_dim: int = 48
-    action_dim: int = 1
-    ssm_cfg: Dict[str, Any] = field(default_factory=dict)
-    attn_layer_idx: list[int] = field(default_factory=list)
-    attn_cfg: Dict[str, Any] = field(default_factory=dict)
-    pff_cfg: Dict[str, Any] = field(default_factory=dict)
-    dropout_p: float = 0.0
-    rms_norm: bool = True
-    residual_in_fp32: bool = True
-    fused_add_norm: bool = True
 
 
 class DramaWorldModelConfig(ComponentConfig):
@@ -40,14 +22,31 @@ class DramaWorldModelConfig(ComponentConfig):
     n_layer: int = 1
     dropout_p: float = 0.0
 
-    use_reward_token: bool = True
-    use_reset_token: bool = True
-    pool: str = "mean"
+    ssm_cfg: Dict[str, Any] = Field(default_factory=dict)
+    attn_layer_idx: list[int] = Field(default_factory=list)
+    attn_cfg: Dict[str, Any] = Field(default_factory=dict)
+    pff_cfg: Dict[str, Any] = Field(default_factory=dict)
 
-    ssm_cfg: Optional[Dict[str, Any]] = None
-    attn_layer_idx: Optional[list[int]] = None
-    attn_cfg: Optional[Dict[str, Any]] = None
-    pff_cfg: Optional[Dict[str, Any]] = None
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_payload(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+        normalized.pop("pool", None)
+        normalized.pop("use_reward_token", None)
+        normalized.pop("use_reset_token", None)
+
+        if normalized.get("ssm_cfg") is None:
+            normalized["ssm_cfg"] = {}
+        if normalized.get("attn_layer_idx") is None:
+            normalized["attn_layer_idx"] = []
+        if normalized.get("attn_cfg") is None:
+            normalized["attn_cfg"] = {}
+        if normalized.get("pff_cfg") is None:
+            normalized["pff_cfg"] = {}
+        return normalized
 
     def make_component(self, env: Optional[Any] = None):  # type: ignore[override]
         from .world_model_component import DramaWorldModelComponent  # noqa: PLC0415
@@ -60,15 +59,3 @@ class DramaWorldModelConfig(ComponentConfig):
                 resolved = self.model_copy(update={"action_dim": max(1, int(action_dim))})
 
         return DramaWorldModelComponent(config=resolved, env=env)
-
-    @model_validator(mode="after")
-    def _fill_defaults(self) -> "DramaWorldModelConfig":
-        if self.ssm_cfg is None:
-            self.ssm_cfg = {}
-        if self.attn_layer_idx is None:
-            self.attn_layer_idx = []
-        if self.attn_cfg is None:
-            self.attn_cfg = {}
-        if self.pff_cfg is None:
-            self.pff_cfg = {}
-        return self

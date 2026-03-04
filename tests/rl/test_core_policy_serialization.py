@@ -8,7 +8,9 @@ from cortex.rl.feature_extractors import (
 )
 from cortex.stacks import build_cortex_auto_config
 
+from metta.agent.components.drama.config import DramaWorldModelConfig
 from metta.agent.policies.default import DefaultPolicyConfig
+from metta.agent.policies.drama_policy import DramaPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 
 
@@ -78,3 +80,36 @@ def test_core_policy_architecture_to_spec_round_trip_with_explicit_cortex_stack_
     reconstructed = PolicyArchitecture.from_spec(cfg.to_spec())
     assert isinstance(reconstructed, DefaultPolicyConfig)
     assert reconstructed.model_dump(mode="json") == cfg.model_dump(mode="json")
+
+
+def test_core_policy_architecture_to_spec_round_trip_with_drama_policy() -> None:
+    cfg = DramaPolicyConfig()
+
+    reconstructed = PolicyArchitecture.from_spec(cfg.to_spec())
+    assert isinstance(reconstructed, DramaPolicyConfig)
+    assert reconstructed.model_dump(mode="json") == cfg.model_dump(mode="json")
+
+
+def test_drama_world_model_config_has_no_dead_field_shims() -> None:
+    assert "pool" not in DramaWorldModelConfig.model_fields
+    assert "use_reward_token" not in DramaWorldModelConfig.model_fields
+    assert "use_reset_token" not in DramaWorldModelConfig.model_fields
+
+
+def test_drama_world_model_config_accepts_legacy_payload_and_normalizes_none() -> None:
+    cfg = DramaWorldModelConfig.model_validate(
+        {
+            "pool": "mean",
+            "use_reward_token": False,
+            "use_reset_token": False,
+            "ssm_cfg": None,
+            "attn_layer_idx": None,
+            "attn_cfg": None,
+            "pff_cfg": None,
+        }
+    )
+
+    assert cfg.ssm_cfg == {}
+    assert cfg.attn_layer_idx == []
+    assert cfg.attn_cfg == {}
+    assert cfg.pff_cfg == {}
