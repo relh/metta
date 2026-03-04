@@ -2,16 +2,15 @@
 
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from metta.app_backend.job_runner.event_processor import (
     EventCtx,
-    _fetch_job_if_actionable,
     _handle_pod_deleted,
     _handle_pod_running,
     _process_event,
 )
-from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
+from metta.app_backend.models.job_request import JobStatus
 from metta.app_backend.models.k8s_events import K8sEvent
 
 _JOB_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
@@ -173,50 +172,6 @@ class TestProcessEventDispatch:
 
 
 # ---------------------------------------------------------------------------
-# _fetch_job_if_actionable
-# ---------------------------------------------------------------------------
-
-
-class TestFetchJobIfActionable:
-    def _make_job_request(self, status: JobStatus) -> JobRequest:
-        return JobRequest(
-            id=uuid4(),
-            job={"type": "single_episode", "policy_uris": ["s3://b/p"], "assignments": [0], "env": {"name": "t"}},
-            status=status,
-            job_type=JobType.episode,
-            user_id="u",
-        )
-
-    def test_terminal_completed_returns_none(self):
-        stats = MagicMock()
-        stats.get_job.return_value = self._make_job_request(JobStatus.completed)
-        ctx = EventCtx.parse(_make_event(phase="Succeeded"))
-        assert ctx is not None
-
-        result = _fetch_job_if_actionable(stats, ctx)
-        assert result is None
-
-    def test_terminal_failed_returns_none(self):
-        stats = MagicMock()
-        stats.get_job.return_value = self._make_job_request(JobStatus.failed)
-        ctx = EventCtx.parse(_make_event(phase="Failed"))
-        assert ctx is not None
-
-        result = _fetch_job_if_actionable(stats, ctx)
-        assert result is None
-
-    def test_non_terminal_returns_job_request(self):
-        stats = MagicMock()
-        job_req = self._make_job_request(JobStatus.running)
-        stats.get_job.return_value = job_req
-        ctx = EventCtx.parse(_make_event(phase="Running"))
-        assert ctx is not None
-
-        result = _fetch_job_if_actionable(stats, ctx)
-        assert result is job_req
-
-
-# ---------------------------------------------------------------------------
 # _handle_pod_running
 # ---------------------------------------------------------------------------
 
@@ -228,9 +183,12 @@ class TestHandlePodRunning:
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        with patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update:
-            _handle_pod_running(stats, core_v1, batch_v1, ctx, ev)
-            mock_update.assert_called_once_with(stats, ctx.job_id, JobStatus.running, worker=ctx.pod_name)
+        _handle_pod_running(stats, core_v1, batch_v1, ctx, ev)
+        stats.update_job.assert_called_once()
+        update = stats.update_job.call_args[0][1]
+        assert update.status == JobStatus.running
+        assert update.worker == ctx.pod_name
+        assert update.running_at is not None
 
     def test_running_skips_when_not_running(self):
         stats, core_v1, batch_v1 = _stub_clients()
@@ -238,9 +196,8 @@ class TestHandlePodRunning:
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        with patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update:
-            _handle_pod_running(stats, core_v1, batch_v1, ctx, ev)
-            mock_update.assert_not_called()
+        _handle_pod_running(stats, core_v1, batch_v1, ctx, ev)
+        stats.update_job.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -255,10 +212,13 @@ class TestHandlePodDeleted:
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        with patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update:
-            _handle_pod_deleted(stats, core_v1, batch_v1, ctx, ev)
-            mock_update.assert_called_once()
-            assert mock_update.call_args[0][2] == JobStatus.failed
+        _handle_pod_deleted(stats, core_v1, batch_v1, ctx, ev)
+        stats.update_job.assert_called_once()
+        update = stats.update_job.call_args[0][1]
+        assert update.status == JobStatus.failed
+        assert update.error == "Pod deleted unexpectedly"
+        assert update.error_type == "pod_deleted"
+        assert update.completed_at is not None
 
     def test_deleted_skips_terminal_phase(self):
         stats, core_v1, batch_v1 = _stub_clients()
@@ -266,6 +226,5 @@ class TestHandlePodDeleted:
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        with patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update:
-            _handle_pod_deleted(stats, core_v1, batch_v1, ctx, ev)
-            mock_update.assert_not_called()
+        _handle_pod_deleted(stats, core_v1, batch_v1, ctx, ev)
+        stats.update_job.assert_not_called()

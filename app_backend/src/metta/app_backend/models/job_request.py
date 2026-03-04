@@ -53,6 +53,8 @@ class JobRequestUpdate(SQLModel):
     error_type: str | None = Field(
         default=None, description="Classified error type: timeout, oom, policy_error, unknown"
     )
+    running_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
@@ -80,8 +82,6 @@ class JobRequest(_JobRequestBase, JobRequestUpdate, table=True):
         default_factory=lambda: datetime.now(UTC), sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")}
     )
     dispatched_at: datetime | None = None
-    running_at: datetime | None = None
-    completed_at: datetime | None = None
 
     policy_versions: list["JobPolicyVersion"] = Relationship(back_populates="job")
     episode_jobs: list["EpisodeJob"] = Relationship(back_populates="job")

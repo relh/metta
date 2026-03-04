@@ -541,6 +541,14 @@ def create_job_router() -> APIRouter:
             await fill_user_data([response], current_user=user)
             return response
 
+    _STATUS_ORDER: dict[JobStatus, int] = {
+        JobStatus.pending: 0,
+        JobStatus.dispatched: 1,
+        JobStatus.running: 2,
+        JobStatus.completed: 3,
+        JobStatus.failed: 3,
+    }
+
     @router.post("/{job_id}")
     @timed_http_handler
     async def update_job(job_id: UUID, request: JobRequestUpdate, _user: SoftmaxUser) -> JobRequest:
@@ -550,38 +558,36 @@ def create_job_router() -> APIRouter:
             if not job:
                 raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-            transition_time: Optional[datetime] = None
-            previous_status: Optional[JobStatus] = None
+            previous_status = job.status
+            status_changed = False
+
             if request.status is not None:
-                transition_time = datetime.now(UTC)
-                previous_status = job.status
+                if _STATUS_ORDER[request.status] <= _STATUS_ORDER[job.status]:
+                    return job
                 allowed = VALID_TRANSITIONS.get(job.status, set())
                 if request.status not in allowed:
                     raise HTTPException(
                         status_code=409,
                         detail=f"Cannot transition from {job.status} to {request.status}",
                     )
-
                 job.status = request.status
+                status_changed = True
 
-                if request.status == JobStatus.running:
-                    job.running_at = transition_time
-                    if request.worker:
-                        job.worker = request.worker
-                if request.status in (JobStatus.completed, JobStatus.failed):
-                    job.completed_at = transition_time
-
+            if request.running_at is not None:
+                job.running_at = request.running_at
+            if request.completed_at is not None:
+                job.completed_at = request.completed_at
+            if request.worker is not None:
+                job.worker = request.worker
             if request.error is not None:
                 job.error = request.error
-
             if request.error_type is not None:
                 job.error_type = request.error_type
-
             if request.result is not None:
                 job.result = request.result
 
-            # Record metrics BEFORE commit to ensure they're captured even if subsequent operations fail
-            if request.status is not None and previous_status is not None and transition_time is not None:
+            if status_changed:
+                transition_time = request.completed_at or request.running_at or datetime.now(UTC)
                 metrics = get_job_metrics()
                 result_data = job.result or {}
                 raw_cost = result_data.get("cost_usd")
@@ -600,8 +606,7 @@ def create_job_router() -> APIRouter:
             await session.commit()
             await session.refresh(job)
 
-            # Update running counts after commit (gauge based on current DB state)
-            if request.status is not None:
+            if status_changed:
                 metrics = get_job_metrics()
                 await metrics.update_running_counts(session, {job.job_type})
             return job

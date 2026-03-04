@@ -37,7 +37,7 @@ from metta.app_backend.job_runner.episode_recording import EpisodeJobSummary, re
 from metta.app_backend.job_runner.job_artifacts import JobArtifact
 from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to_public, get_s3_client
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
-from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus
+from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
 from metta.app_backend.models.k8s_events import K8sEvent
 from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -142,6 +142,27 @@ class EventCtx:
             job_name=job_name,
             container_running=container_running,
         )
+
+
+def _parse_container_timestamps(event_data: dict) -> tuple[datetime | None, datetime | None]:
+    """Extract container startedAt and finishedAt from stored event data."""
+    container_statuses = event_data.get("object", {}).get("status", {}).get("containerStatuses", [])
+    if not container_statuses:
+        return None, None
+    state = container_statuses[0].get("state", {})
+    terminated = state.get("terminated", {})
+    if terminated:
+        started = terminated.get("startedAt")
+        finished = terminated.get("finishedAt")
+        return (
+            datetime.fromisoformat(started) if started else None,
+            datetime.fromisoformat(finished) if finished else None,
+        )
+    running = state.get("running", {})
+    if running:
+        started = running.get("startedAt")
+        return datetime.fromisoformat(started) if started else None, None
+    return None, None
 
 
 def _read_results_from_s3(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
@@ -554,39 +575,6 @@ def _build_result_metadata(
     return result_data
 
 
-def _update_job_status(
-    stats_client: StatsClient,
-    job_id: UUID,
-    status: JobStatus,
-    error: str | None = None,
-    error_type: str | None = None,
-    worker: str | None = None,
-    result: dict[str, Any] | None = None,
-):
-    try:
-        current = stats_client.get_job(job_id)
-        if current.status == status:
-            return
-        if current.status in (JobStatus.completed, JobStatus.failed):
-            if error and not current.error:
-                stats_client.update_job(job_id, JobRequestUpdate(error=error, error_type=error_type))
-            return
-        stats_client.update_job(
-            job_id, JobRequestUpdate(status=status, error=error, error_type=error_type, worker=worker, result=result)
-        )
-    except Exception as e:
-        logger.error(f"Failed to update job {job_id} status to {status}: {e}")
-
-
-def _fetch_job_if_actionable(stats_client: StatsClient, ctx: EventCtx) -> JobRequest | None:
-    """Fetch job from stats server. Returns None if already terminal (no work needed)."""
-    job_request = stats_client.get_job(ctx.job_id)
-    if job_request.status in (JobStatus.completed, JobStatus.failed):
-        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
-        return None
-    return job_request
-
-
 @trace("tournament.event_processor.handle_succeeded")
 def _handle_pod_succeeded(
     stats_client: StatsClient,
@@ -595,21 +583,28 @@ def _handle_pod_succeeded(
     ctx: EventCtx,
     event_data: dict,
 ):
-    job_request = _fetch_job_if_actionable(stats_client, ctx)
-    if job_request is None:
+    job_request = stats_client.get_job(ctx.job_id)
+    if job_request.status in (JobStatus.completed, JobStatus.failed):
+        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
         return
 
+    started_at, finished_at = _parse_container_timestamps(event_data)
+    now = datetime.now(UTC)
     cfg = get_dispatch_config()
+
     results, read_error = _read_results_with_retry(ctx.job_id, cfg.EVAL_S3_BUCKET, JobArtifact.RESULTS.key(ctx.job_id))
     if not results:
         detail = f" (last error: {read_error})" if read_error else ""
         error_type = "result_missing" if not read_error or "NoSuchKey" in read_error else "result_error"
-        _update_job_status(
-            stats_client,
+        stats_client.update_job(
             ctx.job_id,
-            JobStatus.failed,
-            error=f"Pod exited with code 0 but results not found in S3{detail}",
-            error_type=error_type,
+            JobRequestUpdate(
+                status=JobStatus.failed,
+                running_at=started_at,
+                completed_at=finished_at or now,
+                error=f"Pod exited with code 0 but results not found in S3{detail}",
+                error_type=error_type,
+            ),
         )
         logger.warning(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), no results in S3{detail}")
         capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
@@ -623,19 +618,23 @@ def _handle_pod_succeeded(
             core_v1,
             ctx.job_id,
             dispatched_at=job_request.dispatched_at,
-            running_at=job_request.running_at,
+            running_at=started_at or job_request.running_at,
         )
-
         job = EpisodeJobSummary.model_validate(job_request.job)
         replay_uri = copy_replay_to_public(ctx.job_id)
         record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)
-        _update_job_status(stats_client, ctx.job_id, JobStatus.completed)
-        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     except Exception as e:
         logger.error(f"Failed to record episode for job {ctx.job_id}: {e}", exc_info=True)
-        _update_job_status(stats_client, ctx.job_id, JobStatus.completed)
-        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), episode recording failed")
 
+    stats_client.update_job(
+        ctx.job_id,
+        JobRequestUpdate(
+            status=JobStatus.completed,
+            running_at=started_at,
+            completed_at=finished_at or now,
+        ),
+    )
+    logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
     if ctx.job_name:
         _delete_k8s_job(batch_v1, ctx.job_name)
@@ -649,10 +648,12 @@ def _handle_pod_failed(
     ctx: EventCtx,
     event_data: dict,
 ):
-    job_request = _fetch_job_if_actionable(stats_client, ctx)
-    if job_request is None:
+    job_request = stats_client.get_job(ctx.job_id)
+    if job_request.status in (JobStatus.completed, JobStatus.failed):
+        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
         return
 
+    started_at, finished_at = _parse_container_timestamps(event_data)
     capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
 
     runner_error = _read_runner_error(ctx.job_id)
@@ -672,17 +673,19 @@ def _handle_pod_failed(
         core_v1,
         ctx.job_id,
         dispatched_at=job_request.dispatched_at,
-        running_at=job_request.running_at,
+        running_at=started_at or job_request.running_at,
     )
-    _update_job_status(
-        stats_client,
+    stats_client.update_job(
         ctx.job_id,
-        JobStatus.failed,
-        error=error,
-        error_type=error_type,
-        result=fail_result or None,
+        JobRequestUpdate(
+            status=JobStatus.failed,
+            running_at=started_at,
+            completed_at=finished_at or datetime.now(UTC),
+            error=error,
+            error_type=error_type,
+            result=fail_result or None,
+        ),
     )
-
     logger.info(f"Job {ctx.job_id} failed (pod {ctx.pod_name}, error_source={error_source}): {error}")
 
     if ctx.job_name:
@@ -696,9 +699,18 @@ def _handle_pod_running(
     ctx: EventCtx,
     event_data: dict,
 ):
-    if ctx.container_running:
-        _update_job_status(stats_client, ctx.job_id, JobStatus.running, worker=ctx.pod_name)
-        logger.debug(f"Job {ctx.job_id} running (pod {ctx.pod_name})")
+    if not ctx.container_running:
+        return
+    started_at, _ = _parse_container_timestamps(event_data)
+    stats_client.update_job(
+        ctx.job_id,
+        JobRequestUpdate(
+            status=JobStatus.running,
+            running_at=started_at or datetime.now(UTC),
+            worker=ctx.pod_name,
+        ),
+    )
+    logger.debug(f"Job {ctx.job_id} running (pod {ctx.pod_name})")
 
 
 def _handle_pod_deleted(
@@ -708,11 +720,18 @@ def _handle_pod_deleted(
     ctx: EventCtx,
     event_data: dict,
 ):
-    if ctx.phase not in ("Succeeded", "Failed"):
-        _update_job_status(
-            stats_client, ctx.job_id, JobStatus.failed, error="Pod deleted unexpectedly", error_type="pod_deleted"
-        )
-        logger.warning(f"Job {ctx.job_id} failed: pod {ctx.pod_name} deleted unexpectedly (phase={ctx.phase})")
+    if ctx.phase in ("Succeeded", "Failed"):
+        return
+    stats_client.update_job(
+        ctx.job_id,
+        JobRequestUpdate(
+            status=JobStatus.failed,
+            completed_at=datetime.now(UTC),
+            error="Pod deleted unexpectedly",
+            error_type="pod_deleted",
+        ),
+    )
+    logger.warning(f"Job {ctx.job_id} failed: pod {ctx.pod_name} deleted unexpectedly (phase={ctx.phase})")
 
 
 _PHASE_HANDLERS: dict[str, Callable[..., None]] = {
@@ -856,7 +875,7 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
         if job.id not in active_job_ids:
             if job.completed_at or job.result:
                 logger.info(f"Reconciliation: job {job.id} has results but status={job.status}, marking completed")
-                _update_job_status(stats_client, job.id, JobStatus.completed)
+                stats_client.update_job(job.id, JobRequestUpdate(status=JobStatus.completed, completed_at=now))
                 completed_count += 1
             else:
                 ref_time = job.dispatched_at or job.created_at
@@ -869,12 +888,14 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
                         skipped_count += 1
                         continue
                 logger.warning(f"Reconciliation: job {job.id} marked {job.status} but no pod found, marking failed")
-                _update_job_status(
-                    stats_client,
+                stats_client.update_job(
                     job.id,
-                    JobStatus.failed,
-                    error="Pod not found (reconciliation)",
-                    error_type="pod_not_found",
+                    JobRequestUpdate(
+                        status=JobStatus.failed,
+                        completed_at=now,
+                        error="Pod not found (reconciliation)",
+                        error_type="pod_not_found",
+                    ),
                 )
                 stale_count += 1
 
