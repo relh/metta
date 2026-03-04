@@ -11,6 +11,17 @@ from metta.trainingboard.ingest.asana import (
 )
 
 
+def _read_ndjson(path) -> list[dict]:
+    records: list[dict] = []
+    with path.open(encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            records.append(json.loads(line))
+    return records
+
+
 def test_parse_project_and_section_from_url() -> None:
     project_gid, section_gid = parse_project_and_section_from_url(
         "https://app.asana.com/1/1209016784099267/project/1209041170403490/list/1209017020013677"
@@ -90,7 +101,7 @@ def test_sync_project_research_writes_raw_and_normalized_cache(tmp_path, monkeyp
     monkeypatch.setattr(asana_ingest, "fetch_task_stories", fake_fetch_task_stories)
 
     raw_cache_path = tmp_path / "cache" / "asana_research_raw_cache_project-123_all.json"
-    output_path = tmp_path / "cache" / "asana_research_cache.json"
+    output_path = tmp_path / "cache" / "asana_research_cache.ndjson"
 
     records, summary = sync_project_research(
         project_gid="project-123",
@@ -112,7 +123,7 @@ def test_sync_project_research_writes_raw_and_normalized_cache(tmp_path, monkeyp
     assert summary.recommendation_count >= 1
 
     raw_cache_payload = json.loads(raw_cache_path.read_text(encoding="utf-8"))
-    normalized_payload = json.loads(output_path.read_text(encoding="utf-8"))
+    normalized_payload = _read_ndjson(output_path)
 
     assert raw_cache_payload["source_key"] == "project-123:all"
     assert "tasks" in raw_cache_payload
@@ -152,7 +163,7 @@ def test_sync_project_research_reuses_story_cache_when_task_unchanged(tmp_path, 
     monkeypatch.setattr(asana_ingest, "fetch_task_stories", fake_fetch_task_stories)
 
     raw_cache_path = tmp_path / "cache" / "asana_research_raw_cache_project-123_all.json"
-    output_path = tmp_path / "cache" / "asana_research_cache.json"
+    output_path = tmp_path / "cache" / "asana_research_cache.ndjson"
 
     _, first_summary = sync_project_research(
         project_gid="project-123",
@@ -208,7 +219,7 @@ def test_sync_project_research_uses_section_fetch_and_merges_output(tmp_path, mo
     monkeypatch.setattr(asana_ingest, "fetch_section_tasks", fake_fetch_section_tasks)
     monkeypatch.setattr(asana_ingest, "fetch_task_stories", fake_fetch_task_stories)
 
-    output_path = tmp_path / "cache" / "asana_research_cache.json"
+    output_path = tmp_path / "cache" / "asana_research_cache.ndjson"
 
     _, summary_a = sync_project_research(
         project_gid="project-a",
@@ -231,7 +242,7 @@ def test_sync_project_research_uses_section_fetch_and_merges_output(tmp_path, mo
     assert not summary_b.used_project_fallback
     assert summary_b.output_records_total == 2
 
-    payload = json.loads(output_path.read_text(encoding="utf-8"))
+    payload = _read_ndjson(output_path)
     assert {record["gid"] for record in payload} == {"task-a", "task-b"}
 
 

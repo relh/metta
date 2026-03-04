@@ -1,5 +1,4 @@
 const AUTO_REFRESH_MS = 45_000;
-const HOT_RELOAD_MS = 2_000;
 let isRefreshing = false;
 
 function escapeHtml(value) {
@@ -88,25 +87,30 @@ function axisPanelHtml(panel) {
   `;
 }
 
-function betItemHtml(panel) {
-  if (Number(panel.evidence_count) <= 0) {
-    return "";
-  }
-  const topWin = panel.best_wins[0];
-  if (!topWin) {
-    return "";
-  }
+function betItemHtml(task) {
+  const axisNames = {
+    experience_parallelism: "Experience Parallelism",
+    experience_quality: "Experience Quality",
+    loss_parallelism: "Loss Parallelism",
+    loss_signal_quality: "Loss Signal Quality",
+    parameter_parallelism: "Parameter Parallelism",
+    hyperparameter_quality: "Hyperparameter Quality",
+  };
+  const primaryAxis = (task.top_axes || [])[0] || "";
+  const axisLabel = axisNames[primaryAxis] || primaryAxis || "Unmapped";
+  const taskUrl = escapeHtml(task.permalink_url || "#");
+  const taskTitle = escapeHtml(task.title || task.gid || "Untitled task");
   return `
     <li>
-      <div class="bet-axis">${escapeHtml(panel.title)}</div>
-      <div class="bet-title">${escapeHtml(topWin.name)}</div>
-      <div class="bet-meta">expected ×${formatNumber(topWin.expected_multiplier)} | axis ×${formatNumber(panel.projected_multiplier)} | score ${formatNumber(panel.opportunity_score, 3)}</div>
+      <div class="bet-axis">${escapeHtml(axisLabel)}</div>
+      <div class="bet-title"><a href="${taskUrl}" target="_blank" rel="noopener noreferrer">${taskTitle}</a></div>
+      <div class="bet-meta">priority ${formatNumber(task.priority_score, 3)} | impact ${formatNumber(task.impact_score, 3)} | feasibility ${formatNumber(task.feasibility_score, 3)}</div>
     </li>
   `;
 }
 
-function bucketHtml(label, toneClass, panels) {
-  const items = panels.map(betItemHtml).filter(Boolean).join("");
+function bucketHtml(label, toneClass, tasks) {
+  const items = tasks.map(betItemHtml).filter(Boolean).join("");
   const content = items || '<li><div class="bet-meta">No bets available.</div></li>';
   return `
     <article class="bet-column ${toneClass}">
@@ -116,8 +120,8 @@ function bucketHtml(label, toneClass, panels) {
   `;
 }
 
-async function fetchDashboard() {
-  const response = await fetch("/api/v1/dashboard");
+async function fetchBoardData() {
+  const response = await fetch("/api/v1/board");
   if (!response.ok) {
     const message = await response.text();
     throw new Error(`request failed: ${response.status} ${message.slice(0, 200)}`);
@@ -125,7 +129,7 @@ async function fetchDashboard() {
   return response.json();
 }
 
-function renderDashboard(snapshot) {
+function renderDashboard(snapshot, taskRanking) {
   const combinedNode = document.getElementById("combinedMultiplier");
   const generatedNode = document.getElementById("generatedAt");
   const panelRoot = document.getElementById("axisPanels");
@@ -138,13 +142,14 @@ function renderDashboard(snapshot) {
   generatedNode.textContent = `generated: ${formatDate(snapshot.generated_at)}`;
 
   panelRoot.innerHTML = snapshot.ranked_axes.map(axisPanelHtml).join("");
-  const nowPanels = snapshot.ranked_axes.slice(0, 2);
-  const nextPanels = snapshot.ranked_axes.slice(2, 4);
-  const laterPanels = snapshot.ranked_axes.slice(4, 6);
+  const rankedTasks = taskRanking?.ranked_tasks || [];
+  const nowTasks = rankedTasks.slice(0, 3);
+  const nextTasks = rankedTasks.slice(3, 6);
+  const laterTasks = rankedTasks.slice(6, 9);
   topBetsRoot.innerHTML = [
-    bucketHtml("Now", "now", nowPanels),
-    bucketHtml("Next", "next", nextPanels),
-    bucketHtml("Later", "later", laterPanels),
+    bucketHtml("Now", "now", nowTasks),
+    bucketHtml("Next", "next", nextTasks),
+    bucketHtml("Later", "later", laterTasks),
   ].join("");
 }
 
@@ -155,10 +160,13 @@ async function refreshDashboard(trigger = "manual") {
   isRefreshing = true;
   setStatus(trigger === "auto" ? "Auto-refreshing board..." : "Refreshing board...");
   try {
-    const snapshot = await fetchDashboard();
-    renderDashboard(snapshot);
+    const board = await fetchBoardData();
+    const snapshot = board.dashboard || {};
+    const taskRanking = board.task_ranking || {};
+    renderDashboard(snapshot, taskRanking);
+    const betCount = (taskRanking?.ranked_tasks || []).length;
     setStatus(
-      `Updated ${formatDate(snapshot.generated_at)} | ${snapshot.ranked_axes.length} axes | auto-refresh ${Math.floor(AUTO_REFRESH_MS / 1000)}s`,
+      `Updated ${formatDate(snapshot.generated_at)} | ${snapshot.ranked_axes.length} axes | ${betCount} ranked tasks | auto-refresh ${Math.floor(AUTO_REFRESH_MS / 1000)}s`,
     );
   } catch (error) {
     setStatus(`Failed to load dashboard: ${error.message}`, true);
@@ -168,12 +176,6 @@ async function refreshDashboard(trigger = "manual") {
 }
 
 function init() {
-  const query = new URLSearchParams(window.location.search);
-  if (query.get("hot") === "1") {
-    window.setInterval(() => {
-      window.location.reload();
-    }, HOT_RELOAD_MS);
-  }
   void refreshDashboard("initial");
   window.setInterval(() => {
     void refreshDashboard("auto");

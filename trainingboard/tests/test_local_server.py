@@ -1,9 +1,17 @@
+import os
 from pathlib import Path
 
+import metta.trainingboard.local.backend.server as server_module
 from metta.trainingboard.local.backend.server import (
     _resolve_frontend_target,
+    build_board_payload_for_state_dir,
     build_dashboard_for_state_dir,
+    build_task_ranking_for_state_dir,
+    cache_path_for_state_dir,
+    dashboard_cache_path_for_state_dir,
+    default_repo_cache_path,
     parse_args,
+    task_ranking_llm_cache_path_for_state_dir,
 )
 
 
@@ -26,3 +34,63 @@ def test_build_dashboard_for_state_dir_works_without_cache(tmp_path: Path) -> No
     payload = build_dashboard_for_state_dir(tmp_path)
     assert "ranked_axes" in payload
     assert len(payload["ranked_axes"]) == 6
+
+
+def test_build_task_ranking_for_state_dir_works_without_llm_cache(tmp_path: Path) -> None:
+    payload = build_task_ranking_for_state_dir(tmp_path, limit=7)
+    assert "ranked_tasks" in payload
+    assert len(payload["ranked_tasks"]) <= 7
+
+
+def test_build_board_payload_for_state_dir_contains_dashboard_and_ranking(tmp_path: Path) -> None:
+    payload = build_board_payload_for_state_dir(tmp_path)
+    assert "dashboard" in payload
+    assert "task_ranking" in payload
+    assert len(payload["dashboard"]["ranked_axes"]) == 6
+    assert "ranked_tasks" in payload["task_ranking"]
+
+
+def test_dashboard_cache_path_prefers_newer_cache_between_repo_and_state(monkeypatch, tmp_path: Path) -> None:
+    repo_cache_path = tmp_path / "repo_cache.ndjson"
+    repo_cache_path.write_text("[]\n", encoding="utf-8")
+
+    state_cache_path = cache_path_for_state_dir(tmp_path)
+    state_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    state_cache_path.write_text("[]\n", encoding="utf-8")
+    monkeypatch.setattr(server_module, "default_repo_cache_path", lambda _: repo_cache_path)
+
+    os.utime(state_cache_path, (1, 1))
+    os.utime(repo_cache_path, (2, 2))
+    assert dashboard_cache_path_for_state_dir(tmp_path) == repo_cache_path
+
+    os.utime(state_cache_path, (3, 3))
+    assert dashboard_cache_path_for_state_dir(tmp_path) == state_cache_path
+
+
+def test_dashboard_cache_path_falls_back_to_repo_cache_when_state_missing(monkeypatch, tmp_path: Path) -> None:
+    repo_cache_path = tmp_path / "repo_cache.ndjson"
+    monkeypatch.setattr(server_module, "default_repo_cache_path", lambda _: repo_cache_path)
+    assert dashboard_cache_path_for_state_dir(tmp_path) == repo_cache_path
+
+
+def test_default_repo_cache_path_falls_back_to_state_cache_when_repo_missing(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(server_module, "_discover_repo_cache_dir", lambda: None)
+    assert default_repo_cache_path(tmp_path) == cache_path_for_state_dir(tmp_path)
+
+
+def test_task_ranking_llm_cache_prefers_newer_between_repo_and_state(monkeypatch, tmp_path: Path) -> None:
+    repo_cache_path = tmp_path / "repo_llm_cache.ndjson"
+    repo_cache_path.write_text("", encoding="utf-8")
+
+    state_cache_path = cache_path_for_state_dir(tmp_path).parent / "task_llm_scores.ndjson"
+    state_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    state_cache_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(server_module, "default_repo_llm_cache_path", lambda _: repo_cache_path)
+    monkeypatch.setattr(server_module, "llm_cache_path_for_state_dir", lambda _: state_cache_path)
+
+    os.utime(state_cache_path, (1, 1))
+    os.utime(repo_cache_path, (2, 2))
+    assert task_ranking_llm_cache_path_for_state_dir(tmp_path) == repo_cache_path
+
+    os.utime(state_cache_path, (3, 3))
+    assert task_ranking_llm_cache_path_for_state_dir(tmp_path) == state_cache_path

@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from metta.trainingboard.keyword_match import count_keyword_hits
 from metta.trainingboard.models import ResearchPaperRecord
+from metta.trainingboard.normalized_cache import load_normalized_records, write_normalized_records
 from metta.trainingboard.scoring import AXIS_SPECS
 
 ASANA_TASK_FIELDS = (
@@ -319,10 +320,7 @@ def _write_json_file(path: Path, payload: dict | list[dict]) -> None:
 
 
 def _load_existing_records(path: Path) -> list[ResearchPaperRecord]:
-    if not path.is_file():
-        return []
-    raw_records = json.loads(path.read_text(encoding="utf-8"))
-    return [ResearchPaperRecord.model_validate(raw_record) for raw_record in raw_records]
+    return load_normalized_records(path)
 
 
 def _record_sort_key(record: ResearchPaperRecord) -> tuple[str, str]:
@@ -416,7 +414,7 @@ def sync_project_research(
     records = _merge_records(_load_existing_records(output_path), source_records) if merge_output else source_records
 
     _write_json_file(raw_cache_path, raw_cache.model_dump())
-    _write_json_file(output_path, [record.model_dump() for record in records])
+    write_normalized_records(output_path, records)
 
     summary = ResearchSyncSummary(
         source_key=key,

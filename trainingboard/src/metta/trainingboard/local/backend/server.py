@@ -11,22 +11,123 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
-from metta.trainingboard.scoring import build_dashboard_snapshot_from_cache
+from metta.trainingboard.llm_scoring import default_llm_cache_path, load_llm_score_cache
+from metta.trainingboard.models import LLMTaskScores
+from metta.trainingboard.scoring import (
+    build_dashboard_snapshot,
+    build_task_leaderboards,
+    build_task_ranking_snapshot,
+    load_cached_papers,
+)
 
 FRONTEND_ROOT = Path(__file__).resolve().parents[1] / "frontend"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8877
 DEFAULT_STATE_DIR = Path("~/.trainingboard").expanduser()
-DEFAULT_CACHE_RELATIVE_PATH = Path("cache/asana_research_cache.json")
+DEFAULT_CACHE_RELATIVE_PATH = Path("cache/asana_research_cache.ndjson")
+DEFAULT_REPO_CACHE_FILE_NAME = "asana_research_cache.ndjson"
+DEFAULT_REPO_LLM_CACHE_FILE_NAME = "task_llm_scores.ndjson"
+REPO_CACHE_DIRECTORY = Path("trainingboard/data")
 
 
 def cache_path_for_state_dir(state_dir: Path) -> Path:
     return state_dir.expanduser() / DEFAULT_CACHE_RELATIVE_PATH
 
 
+def llm_cache_path_for_state_dir(state_dir: Path) -> Path:
+    return default_llm_cache_path(state_dir)
+
+
+def _discover_repo_cache_dir() -> Optional[Path]:
+    module_path = Path(__file__).resolve()
+    for parent in module_path.parents:
+        candidate = parent / REPO_CACHE_DIRECTORY
+        if candidate.is_dir():
+            return candidate
+
+    cwd = Path.cwd().resolve()
+    for parent in (cwd, *cwd.parents):
+        candidate = parent / REPO_CACHE_DIRECTORY
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
+def default_repo_cache_path(state_dir: Optional[Path] = None) -> Path:
+    repo_cache_dir = _discover_repo_cache_dir()
+    if repo_cache_dir is not None:
+        return repo_cache_dir / DEFAULT_REPO_CACHE_FILE_NAME
+    if state_dir is None:
+        state_dir = DEFAULT_STATE_DIR
+    return cache_path_for_state_dir(state_dir)
+
+
+def default_repo_llm_cache_path(state_dir: Optional[Path] = None) -> Path:
+    repo_cache_dir = _discover_repo_cache_dir()
+    if repo_cache_dir is not None:
+        return repo_cache_dir / DEFAULT_REPO_LLM_CACHE_FILE_NAME
+    if state_dir is None:
+        state_dir = DEFAULT_STATE_DIR
+    return llm_cache_path_for_state_dir(state_dir)
+
+
+def _prefer_newer_cache(state_path: Path, repo_path: Path) -> Path:
+    if repo_path.is_file() and state_path.is_file():
+        if repo_path.stat().st_mtime >= state_path.stat().st_mtime:
+            return repo_path
+        return state_path
+    if repo_path.is_file():
+        return repo_path
+    if state_path.is_file():
+        return state_path
+    return repo_path
+
+
+def dashboard_cache_path_for_state_dir(state_dir: Path) -> Path:
+    state_cache_path = cache_path_for_state_dir(state_dir)
+    repo_cache_path = default_repo_cache_path(state_dir)
+    return _prefer_newer_cache(state_cache_path, repo_cache_path)
+
+
+def task_ranking_llm_cache_path_for_state_dir(state_dir: Path) -> Path:
+    state_llm_cache_path = llm_cache_path_for_state_dir(state_dir)
+    repo_llm_cache_path = default_repo_llm_cache_path(state_dir)
+    return _prefer_newer_cache(state_llm_cache_path, repo_llm_cache_path)
+
+
 def build_dashboard_for_state_dir(state_dir: Path) -> dict:
-    snapshot = build_dashboard_snapshot_from_cache(cache_path_for_state_dir(state_dir))
+    papers = load_cached_papers(dashboard_cache_path_for_state_dir(state_dir))
+    snapshot = build_dashboard_snapshot(papers)
     return snapshot.model_dump()
+
+
+def build_task_ranking_for_state_dir(state_dir: Path, limit: int = 60, leaderboard_top_n: int = 10) -> dict:
+    papers = load_cached_papers(dashboard_cache_path_for_state_dir(state_dir))
+    llm_cache_path = task_ranking_llm_cache_path_for_state_dir(state_dir)
+    llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None
+    if llm_cache_path.is_file():
+        llm_scores_by_gid = {
+            gid: cache_entry.scores for gid, cache_entry in load_llm_score_cache(llm_cache_path).items()
+        }
+    full_snapshot = build_task_ranking_snapshot(papers, limit=None, llm_scores_by_gid=llm_scores_by_gid)
+    leaderboards = build_task_leaderboards(full_snapshot.ranked_tasks, top_n=leaderboard_top_n)
+    payload = full_snapshot.model_dump()
+    payload["ranked_tasks"] = payload["ranked_tasks"][: max(0, limit)]
+    payload["leaderboards"] = {
+        "top_overall": [task.model_dump() for task in leaderboards["top_overall"]],
+        "top_by_axis": {
+            axis_id: [task.model_dump() for task in tasks] for axis_id, tasks in leaderboards["top_by_axis"].items()
+        },
+    }
+    payload["llm_cache_path"] = str(llm_cache_path)
+    return payload
+
+
+def build_board_payload_for_state_dir(state_dir: Path) -> dict:
+    return {
+        "dashboard": build_dashboard_for_state_dir(state_dir),
+        "task_ranking": build_task_ranking_for_state_dir(state_dir),
+    }
 
 
 def _resolve_frontend_target(base: Path, file_name: str) -> Optional[Path]:
@@ -41,6 +142,24 @@ def _resolve_frontend_target(base: Path, file_name: str) -> Optional[Path]:
     return target
 
 
+def _query_int(
+    query_params: dict[str, list[str]],
+    *,
+    key: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if key not in query_params or not query_params[key]:
+        return default
+    raw = query_params[key][0]
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
+
 class TrainingBoardHTTPServer(ThreadingHTTPServer):
     state_dir: Path
 
@@ -50,12 +169,26 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
+        query_params = urllib.parse.parse_qs(parsed.query)
         if parsed.path == "/":
             self._serve_file(FRONTEND_ROOT / "templates" / "index.html", "text/html; charset=utf-8")
             return
 
         if parsed.path == "/api/v1/dashboard":
             self._write_json(200, build_dashboard_for_state_dir(self.server.state_dir))
+            return
+
+        if parsed.path == "/api/v1/task-ranking":
+            limit = _query_int(query_params, key="limit", default=60, minimum=0, maximum=1000)
+            top_n = _query_int(query_params, key="top_n", default=10, minimum=0, maximum=100)
+            self._write_json(
+                200,
+                build_task_ranking_for_state_dir(self.server.state_dir, limit=limit, leaderboard_top_n=top_n),
+            )
+            return
+
+        if parsed.path == "/api/v1/board":
+            self._write_json(200, build_board_payload_for_state_dir(self.server.state_dir))
             return
 
         if parsed.path.startswith("/static/"):
@@ -73,7 +206,7 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/v1/recompute":
-            self._write_json(200, build_dashboard_for_state_dir(self.server.state_dir))
+            self._write_json(200, build_board_payload_for_state_dir(self.server.state_dir))
             return
         self._write_json(404, {"error": "not found"})
 
@@ -117,7 +250,7 @@ def run_server(args: argparse.Namespace) -> None:
 
     print(f"trainingboard server listening on http://{host}:{port}")
     print(f"state dir: {state_dir}")
-    print(f"cache: {cache_path_for_state_dir(state_dir)}")
+    print(f"cache: {dashboard_cache_path_for_state_dir(state_dir)}")
     httpd.serve_forever()
 
 
