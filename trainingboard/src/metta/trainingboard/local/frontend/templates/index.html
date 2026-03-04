@@ -6,15 +6,17 @@
     <title>trainingboard flywheel dashboard</title>
     <style>
       :root {
-        --bg: #060d14;
-        --bg-panel: rgba(13, 23, 35, 0.86);
-        --bg-soft: rgba(9, 17, 27, 0.72);
-        --line: #2b3f57;
-        --line-soft: #1a2a3a;
-        --text: #eaf3fd;
-        --muted: #97acc2;
-        --focus: #5bd0a2;
-        --focus-2: #3ea4ff;
+        --bg: #040a13;
+        --bg-panel: rgba(11, 21, 34, 0.93);
+        --bg-soft: rgba(7, 14, 23, 0.88);
+        --line: #31537a;
+        --line-soft: #20374f;
+        --text: #eef6ff;
+        --muted: #a8bfd7;
+        --focus: #6af0bd;
+        --focus-2: #6ec4ff;
+        --focus-3: #ffc46a;
+        --danger: #ff9aac;
       }
       * {
         box-sizing: border-box;
@@ -25,173 +27,266 @@
         min-height: 100%;
         color: var(--text);
         background:
-          radial-gradient(1100px 760px at 0% -20%, #13314a 0%, transparent 65%),
-          radial-gradient(880px 640px at 100% 0%, #284066 0%, transparent 58%),
-          linear-gradient(180deg, #0a1520, var(--bg));
+          radial-gradient(1300px 840px at 0% -25%, #154367 0%, transparent 68%),
+          radial-gradient(960px 720px at 100% -5%, #365982 0%, transparent 61%),
+          linear-gradient(180deg, #071220, var(--bg));
         font-family: "Sora", "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
       }
       main {
-        width: min(1400px, 95vw);
-        margin: 20px auto 30px;
+        width: min(1880px, 97vw);
+        margin: 14px auto 22px;
       }
       .hero {
         border: 1px solid var(--line);
-        border-radius: 16px;
+        border-radius: 18px;
         background: var(--bg-panel);
-        padding: 14px;
+        padding: 10px 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
       .hero h1 {
         margin: 0;
-        font-size: 30px;
+        font-size: clamp(22px, 1.7vw, 32px);
+        line-height: 1;
         letter-spacing: 0.01em;
+        white-space: nowrap;
       }
-      .hero p {
-        margin: 8px 0 0;
-        color: var(--muted);
-        font-size: 14px;
-        max-width: 920px;
-      }
-      .hero-meta {
-        margin-top: 10px;
+      .hero-line {
         display: flex;
         align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
+        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        white-space: nowrap;
+        scrollbar-width: thin;
+      }
+      .hero-desc {
+        color: var(--muted);
+        font-size: clamp(12px, 0.9vw, 15px);
+        padding-right: 4px;
       }
       .pill {
-        border: 1px solid var(--line-soft);
+        border: 1px solid var(--line);
         border-radius: 999px;
-        background: var(--bg-soft);
-        padding: 6px 10px;
-        font-size: 12px;
+        background: linear-gradient(180deg, rgba(20, 36, 54, 0.95), rgba(13, 27, 43, 0.95));
+        padding: 5px 8px;
+        font-size: clamp(11px, 0.85vw, 14px);
       }
-      button {
-        border: 1px solid #2f5070;
-        color: var(--text);
-        border-radius: 10px;
-        background: linear-gradient(90deg, #2b4f6e, #2f6a80);
-        padding: 7px 12px;
-        font: inherit;
-        cursor: pointer;
+      .pill strong {
+        color: var(--focus);
       }
-      .status {
-        margin-top: 10px;
+      .pill-accent {
+        border-color: #4f7aa8;
+        color: #d6ebff;
+      }
+      .status-inline {
         color: var(--muted);
-        font-size: 13px;
+        font-size: clamp(11px, 0.82vw, 14px);
+        padding-left: 4px;
       }
-      .status.error {
-        color: #ff9cb0;
+      .status-inline.error {
+        color: var(--danger);
+      }
+      .top-bets {
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--bg-panel);
+        padding: 14px;
+      }
+      .top-bets h2 {
+        margin: 0;
+        font-size: clamp(22px, 1.8vw, 34px);
+        letter-spacing: 0.01em;
+      }
+      .bet-grid {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(240px, 1fr));
+      }
+      .bet-column {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(14, 28, 45, 0.95), rgba(8, 18, 29, 0.95));
+        padding: 10px;
+      }
+      .bet-column.now {
+        border-color: #3a9f77;
+      }
+      .bet-column.next {
+        border-color: #3d78b4;
+      }
+      .bet-column.later {
+        border-color: #8f6d42;
+      }
+      .bet-column h3 {
+        margin: 0 0 8px;
+        font-size: clamp(16px, 1.2vw, 22px);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .bet-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+      .bet-list li {
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: rgba(7, 14, 23, 0.95);
+        padding: 8px;
+      }
+      .bet-axis {
+        color: var(--focus-2);
+        font-size: clamp(12px, 0.9vw, 16px);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .bet-title {
+        margin-top: 4px;
+        font-weight: 700;
+        font-size: clamp(14px, 1.04vw, 18px);
+      }
+      .bet-meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: clamp(12px, 0.9vw, 15px);
       }
       .grid {
-        margin-top: 14px;
+        margin-top: 12px;
         display: grid;
-        grid-template-columns: repeat(3, minmax(260px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(3, minmax(320px, 1fr));
+        gap: 10px;
       }
       .panel {
         border: 1px solid var(--line);
-        border-radius: 14px;
+        border-radius: 16px;
         background: var(--bg-panel);
-        padding: 12px;
-        min-height: 220px;
+        padding: 11px;
+        min-height: 228px;
       }
       .panel h2 {
         margin: 0;
-        font-size: 16px;
+        font-size: clamp(17px, 1.22vw, 24px);
+        line-height: 1;
       }
-      .panel .subtitle {
-        margin: 6px 0 10px;
+      .panel-title-line {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .panel-tagline {
         color: var(--muted);
-        font-size: 12px;
-        min-height: 32px;
+        font-size: clamp(11px, 0.82vw, 14px);
+        letter-spacing: 0.01em;
       }
       .metric-row {
         display: flex;
-        gap: 6px;
+        gap: 5px;
         flex-wrap: wrap;
       }
       .metric {
         border: 1px solid var(--line-soft);
-        border-radius: 9px;
+        border-radius: 10px;
         background: var(--bg-soft);
-        padding: 6px 8px;
-        font-size: 12px;
+        padding: 5px 8px;
+        font-size: clamp(11px, 0.85vw, 14px);
       }
       .metric strong {
         color: var(--focus);
       }
+      .evidence-inline {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: clamp(11px, 0.82vw, 14px);
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+      }
+      .evidence-label {
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .evidence-chip {
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        background: rgba(8, 16, 25, 0.86);
+        padding: 3px 7px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .wins {
-        margin: 10px 0 0;
+        margin: 8px 0 0;
         padding: 0;
         list-style: none;
         display: grid;
-        gap: 6px;
-      }
-      .evidence {
-        margin: 10px 0 0;
-        padding-left: 18px;
-        color: var(--muted);
-        font-size: 12px;
-        display: grid;
-        gap: 4px;
+        gap: 5px;
       }
       .evidence-empty {
-        margin-top: 10px;
+        margin-top: 8px;
         color: var(--muted);
-        font-size: 12px;
+        font-size: clamp(11px, 0.82vw, 14px);
       }
       .wins li {
         border: 1px solid var(--line-soft);
-        border-radius: 8px;
-        background: rgba(8, 16, 25, 0.74);
-        padding: 7px;
-        font-size: 12px;
+        border-radius: 10px;
+        background: rgba(7, 14, 23, 0.9);
+        padding: 6px 7px;
+        font-size: clamp(11px, 0.85vw, 14px);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px;
+        line-height: 1.25;
       }
       .wins .label {
-        display: block;
-        font-weight: 600;
+        font-weight: 700;
+      }
+      .wins .mult {
+        color: var(--focus);
+        font-weight: 700;
       }
       .wins .meta {
-        margin-top: 3px;
         color: var(--muted);
+        flex: 1 1 240px;
       }
-      .ranking {
-        margin-top: 12px;
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        background: var(--bg-panel);
-        padding: 12px;
-      }
-      .ranking h2 {
-        margin: 0;
-        font-size: 18px;
-      }
-      .ranking-list {
-        margin: 10px 0 0;
-        padding: 0;
-        list-style: none;
-        display: grid;
-        gap: 8px;
-      }
-      .ranking-list li {
-        border: 1px solid var(--line-soft);
-        border-radius: 10px;
-        background: var(--bg-soft);
-        padding: 8px 10px;
-        display: flex;
-        justify-content: space-between;
-        gap: 8px;
-        font-size: 13px;
-      }
-      .ranking-list .score {
-        color: var(--focus-2);
-      }
-      @media (max-width: 1040px) {
+      @media (max-width: 1380px) {
+        .hero {
+          flex-wrap: wrap;
+          align-items: flex-start;
+        }
+        .hero-line {
+          white-space: normal;
+          overflow-x: visible;
+          flex-wrap: wrap;
+        }
+        .bet-grid {
+          grid-template-columns: repeat(2, minmax(240px, 1fr));
+        }
         .grid {
-          grid-template-columns: repeat(2, minmax(220px, 1fr));
+          grid-template-columns: repeat(2, minmax(260px, 1fr));
         }
       }
-      @media (max-width: 720px) {
+      @media (max-width: 880px) {
+        .bet-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 760px) {
+        main {
+          width: min(98vw, 98vw);
+        }
         .grid {
           grid-template-columns: 1fr;
         }
@@ -202,24 +297,23 @@
     <main>
       <section class="hero">
         <h1>Training Flywheel Board</h1>
-        <p>
-          Six-axis opportunity map for wall-clock training speed. Multipliers combine current priors with evidence from
-          ingested Asana research tasks/papers.
-        </p>
-        <div class="hero-meta">
-          <span class="pill" id="combinedMultiplier">combined: x0.00</span>
+        <div class="hero-line">
+          <span class="hero-desc">
+            Six-axis map for faster training loops, ranked by priors and ingested Asana evidence.
+          </span>
+          <span class="pill" id="combinedMultiplier">combined <strong>x0.00</strong></span>
           <span class="pill" id="generatedAt">generated: -</span>
-          <button id="refreshButton" type="button">Refresh scores</button>
+          <span class="pill pill-accent">board mode: auto-refresh every 45s</span>
+          <span class="status-inline" id="status">Loading dashboard...</span>
         </div>
-        <div class="status" id="status">Loading dashboard...</div>
+      </section>
+
+      <section class="top-bets">
+        <h2>Top Bets: Now / Next / Later</h2>
+        <div class="bet-grid" id="topBetsBuckets"></div>
       </section>
 
       <section class="grid" id="axisPanels"></section>
-
-      <section class="ranking">
-        <h2>Ranked Priority</h2>
-        <ul class="ranking-list" id="rankingList"></ul>
-      </section>
     </main>
     <script type="module" src="/static/app.js"></script>
   </body>

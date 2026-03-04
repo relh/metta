@@ -742,6 +742,28 @@ def cmd_gridworks(ctx: typer.Context):
 
 
 @app.command(
+    name="trainingboard",
+    help="Start the trainingboard dashboard (or pass through trainingboard CLI args)",
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
+)
+def cmd_trainingboard(ctx: typer.Context):
+    repo_root = get_repo_root()
+    trainingboard_args = list(ctx.args)
+    if not trainingboard_args or trainingboard_args[0].startswith("-"):
+        trainingboard_args = ["serve", *trainingboard_args]
+
+    cmd = [
+        "uv",
+        "run",
+        "--project",
+        str(repo_root / "trainingboard"),
+        "trainingboard",
+        *trainingboard_args,
+    ]
+    subprocess.run(cmd, cwd=repo_root, check=False)
+
+
+@app.command(
     name="run-monitor",
     help="Monitor training runs.",
     context_settings={"allow_extra_args": True, "ignore_unknown_options": True},

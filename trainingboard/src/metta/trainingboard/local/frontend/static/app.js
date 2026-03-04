@@ -1,3 +1,7 @@
+const AUTO_REFRESH_MS = 45_000;
+const HOT_RELOAD_MS = 2_000;
+let isRefreshing = false;
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -31,47 +35,84 @@ function formatDate(value) {
   return parsed.toLocaleString();
 }
 
+function formatNumber(value, digits = 2) {
+  return Number(value).toFixed(digits);
+}
+
+function compactPrinciple(principle) {
+  const parenthetical = /\(([^)]+)\)\s*$/.exec(principle || "");
+  if (parenthetical) {
+    return parenthetical[1];
+  }
+  return String(principle || "");
+}
+
 function axisPanelHtml(panel) {
+  const hasEvidence = Number(panel.evidence_count) > 0;
   const wins = panel.best_wins
     .map((win) => {
       return `
         <li>
-          <span class="label">${escapeHtml(win.name)} <strong>×${Number(win.expected_multiplier).toFixed(2)}</strong></span>
-          <div class="meta">${escapeHtml(win.summary)}</div>
+          <span class="label">${escapeHtml(win.name)}</span>
+          <span class="mult">×${formatNumber(win.expected_multiplier)}</span>
+          <span class="meta">${escapeHtml(win.summary)}</span>
         </li>
       `;
     })
     .join("");
   const evidenceItems = (panel.evidence_titles || [])
     .slice(0, 3)
-    .map((title) => `<li>${escapeHtml(title)}</li>`)
+    .map((title) => `<span class="evidence-chip">${escapeHtml(title)}</span>`)
     .join("");
-  const evidenceHtml = evidenceItems
-    ? `<ul class="evidence">${evidenceItems}</ul>`
-    : '<div class="evidence-empty">No linked Asana research evidence yet.</div>';
+  const evidenceHtml = hasEvidence && evidenceItems
+    ? `<div class="evidence-inline"><span class="evidence-label">Evidence</span>${evidenceItems}</div>`
+    : "";
+  const winsHtml = hasEvidence ? `<ul class="wins">${wins}</ul>` : "";
 
   return `
     <article class="panel">
-      <h2>${panel.index}. ${escapeHtml(panel.title)}</h2>
-      <div class="subtitle">${escapeHtml(panel.principle)}</div>
+      <div class="panel-title-line">
+        <h2>${panel.index}. ${escapeHtml(panel.title)}</h2>
+        <span class="panel-tagline">${escapeHtml(compactPrinciple(panel.principle))}</span>
+      </div>
       <div class="metric-row">
-        <span class="metric">Projected <strong>×${Number(panel.projected_multiplier).toFixed(2)}</strong></span>
-        <span class="metric">Prior ×${Number(panel.prior_multiplier).toFixed(2)}</span>
-        <span class="metric">Confidence ${(Number(panel.confidence) * 100).toFixed(0)}%</span>
-        <span class="metric">Evidence ${Number(panel.evidence_count)}</span>
+        <span class="metric">Proj <strong>×${formatNumber(panel.projected_multiplier)}</strong></span>
+        <span class="metric">Prior ×${formatNumber(panel.prior_multiplier)}</span>
+        <span class="metric">Conf ${(Number(panel.confidence) * 100).toFixed(0)}%</span>
+        <span class="metric">Ev ${Number(panel.evidence_count)}</span>
+        <span class="metric">Score ${formatNumber(panel.opportunity_score, 3)}</span>
       </div>
       ${evidenceHtml}
-      <ul class="wins">${wins}</ul>
+      ${winsHtml}
     </article>
   `;
 }
 
-function rankingHtml(panel, position) {
+function betItemHtml(panel) {
+  if (Number(panel.evidence_count) <= 0) {
+    return "";
+  }
+  const topWin = panel.best_wins[0];
+  if (!topWin) {
+    return "";
+  }
   return `
     <li>
-      <span>${position}. ${escapeHtml(panel.title)}</span>
-      <span class="score">score ${Number(panel.opportunity_score).toFixed(3)} | ×${Number(panel.projected_multiplier).toFixed(2)}</span>
+      <div class="bet-axis">${escapeHtml(panel.title)}</div>
+      <div class="bet-title">${escapeHtml(topWin.name)}</div>
+      <div class="bet-meta">expected ×${formatNumber(topWin.expected_multiplier)} | axis ×${formatNumber(panel.projected_multiplier)} | score ${formatNumber(panel.opportunity_score, 3)}</div>
     </li>
+  `;
+}
+
+function bucketHtml(label, toneClass, panels) {
+  const items = panels.map(betItemHtml).filter(Boolean).join("");
+  const content = items || '<li><div class="bet-meta">No bets available.</div></li>';
+  return `
+    <article class="bet-column ${toneClass}">
+      <h3>${escapeHtml(label)}</h3>
+      <ul class="bet-list">${content}</ul>
+    </article>
   `;
 }
 
@@ -88,35 +129,55 @@ function renderDashboard(snapshot) {
   const combinedNode = document.getElementById("combinedMultiplier");
   const generatedNode = document.getElementById("generatedAt");
   const panelRoot = document.getElementById("axisPanels");
-  const rankingRoot = document.getElementById("rankingList");
-  if (!combinedNode || !generatedNode || !panelRoot || !rankingRoot) {
+  const topBetsRoot = document.getElementById("topBetsBuckets");
+  if (!combinedNode || !generatedNode || !panelRoot || !topBetsRoot) {
     return;
   }
 
-  combinedNode.textContent = `combined: ×${Number(snapshot.combined_multiplier).toFixed(2)}`;
+  combinedNode.innerHTML = `combined <strong>x${formatNumber(snapshot.combined_multiplier)}</strong>`;
   generatedNode.textContent = `generated: ${formatDate(snapshot.generated_at)}`;
 
   panelRoot.innerHTML = snapshot.ranked_axes.map(axisPanelHtml).join("");
-  rankingRoot.innerHTML = snapshot.ranked_axes.map((panel, index) => rankingHtml(panel, index + 1)).join("");
+  const nowPanels = snapshot.ranked_axes.slice(0, 2);
+  const nextPanels = snapshot.ranked_axes.slice(2, 4);
+  const laterPanels = snapshot.ranked_axes.slice(4, 6);
+  topBetsRoot.innerHTML = [
+    bucketHtml("Now", "now", nowPanels),
+    bucketHtml("Next", "next", nextPanels),
+    bucketHtml("Later", "later", laterPanels),
+  ].join("");
 }
 
-async function refreshDashboard() {
-  setStatus("Refreshing dashboard...");
+async function refreshDashboard(trigger = "manual") {
+  if (isRefreshing) {
+    return;
+  }
+  isRefreshing = true;
+  setStatus(trigger === "auto" ? "Auto-refreshing board..." : "Refreshing board...");
   try {
     const snapshot = await fetchDashboard();
     renderDashboard(snapshot);
-    setStatus(`Loaded ${snapshot.ranked_axes.length} flywheel axes.`);
+    setStatus(
+      `Updated ${formatDate(snapshot.generated_at)} | ${snapshot.ranked_axes.length} axes | auto-refresh ${Math.floor(AUTO_REFRESH_MS / 1000)}s`,
+    );
   } catch (error) {
     setStatus(`Failed to load dashboard: ${error.message}`, true);
+  } finally {
+    isRefreshing = false;
   }
 }
 
 function init() {
-  const refreshButton = document.getElementById("refreshButton");
-  if (refreshButton) {
-    refreshButton.addEventListener("click", refreshDashboard);
+  const query = new URLSearchParams(window.location.search);
+  if (query.get("hot") === "1") {
+    window.setInterval(() => {
+      window.location.reload();
+    }, HOT_RELOAD_MS);
   }
-  refreshDashboard();
+  void refreshDashboard("initial");
+  window.setInterval(() => {
+    void refreshDashboard("auto");
+  }, AUTO_REFRESH_MS);
 }
 
 init();
