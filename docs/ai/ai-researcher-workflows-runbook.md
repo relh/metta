@@ -86,31 +86,66 @@ Notes:
 - use `--researcher-profile neophyte` for stricter happy-path/gate behavior
 - gates are enforced by default; use `--no-enforce-gates` to avoid non-zero exit on gate failure
 
-### Startup via Cogent Runner (Neophyte Competitor Bot)
+### Startup via Cogent Branch Jobs (Neophyte Competitor Bot)
 
-From the cogent EC2 instance:
-
-```bash
-./agent-runner.py --branch main --neophyte-competitor-bot \
-  --policy metta://policy/role_py \
-  --policy-name my-neophyte-policy \
-  --season beta-cvc
-```
-
-This runs `run_ai_researcher_startup.py` with `--researcher-profile neophyte`.
-
-### Startup via Cogent Runner (Experienced Competitor Bot)
-
-From the cogent EC2 instance:
+The old `--neophyte-competitor-bot` runner flag is retired. Use branch-submitted jobs (`.agent/jobs/*.md`) on a
+`cogent/*` branch:
 
 ```bash
-./agent-runner.py --branch main --experienced-competitor-bot \
-  --policy metta://policy/role_py \
-  --policy-name my-experienced-policy \
-  --season beta-cvc
+BRANCH="cogent/ai-researcher-neophyte-$(date +%Y%m%d-%H%M%S)"
+git checkout -b "$BRANCH"
+mkdir -p .agent/jobs
+
+cat > .agent/jobs/ai-researcher-neophyte.md <<'EOF'
+---
+schedule: once
+agent: codex
+timeout: 180
+---
+Run the canonical neophyte researcher workflow end-to-end using
+`packages/cogames-rl-researcher/prompts/run-neophyte-workflow.md`.
+EOF
+
+git add -f .agent/jobs/ai-researcher-neophyte.md
+git commit -m "[cogent] launch neophyte researcher workflow"
+git push -u origin HEAD
 ```
 
-This runs `run_ai_researcher_startup.py` with `--researcher-profile experienced`.
+### Startup via Cogent Branch Jobs (Experienced Competitor Bot)
+
+The old `--experienced-competitor-bot` runner flag is retired. Use branch-submitted jobs (`.agent/jobs/*.md`) on a
+`cogent/*` branch:
+
+```bash
+BRANCH="cogent/ai-researcher-experienced-$(date +%Y%m%d-%H%M%S)"
+git checkout -b "$BRANCH"
+mkdir -p .agent/jobs
+
+cat > .agent/jobs/ai-researcher-experienced.md <<'EOF'
+---
+schedule: once
+agent: codex
+timeout: 240
+---
+Run the canonical experienced researcher workflow end-to-end using
+`packages/cogames-rl-researcher/prompts/run-experienced-workflow.md`.
+EOF
+
+git add -f .agent/jobs/ai-researcher-experienced.md
+git commit -m "[cogent] launch experienced researcher workflow"
+git push -u origin HEAD
+```
+
+Monitor completion from git history:
+
+```bash
+git fetch origin <cogent-branch> --quiet
+git log --oneline -n 5 origin/<cogent-branch>
+git ls-tree --name-only -r origin/<cogent-branch> -- .agent/jobs/
+```
+
+Success signal: the one-shot job file is removed and a cleanup commit appears:
+`[cogent] cleanup: completed one-shot job <filename>`.
 
 ## Resume Workflow (Continue Existing Run)
 
