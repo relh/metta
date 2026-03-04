@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "metta-trainingboard"
+version = "0.1.0"
+description = "Six-axis flywheel dashboard for training improvement prioritization"
+requires-python = ">=3.11"
+dependencies = ["asana>=5.2.2", "click>=8.1.0", "pydantic>=2.12.2"]
+
+[project.scripts]
+trainingboard = "metta.trainingboard.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true
+include = ["metta.trainingboard", "metta.trainingboard.*"]
+
+[tool.setuptools.package-data]
+"metta.trainingboard" = [
+  "py.typed",
+  "local/py.typed",
+  "local/frontend/templates/*",
+  "local/frontend/static/*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = ["pytest>=8.3.3"]

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>trainingboard flywheel dashboard</title>
+    <style>
+      :root {
+        --bg: #060d14;
+        --bg-panel: rgba(13, 23, 35, 0.86);
+        --bg-soft: rgba(9, 17, 27, 0.72);
+        --line: #2b3f57;
+        --line-soft: #1a2a3a;
+        --text: #eaf3fd;
+        --muted: #97acc2;
+        --focus: #5bd0a2;
+        --focus-2: #3ea4ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        color: var(--text);
+        background:
+          radial-gradient(1100px 760px at 0% -20%, #13314a 0%, transparent 65%),
+          radial-gradient(880px 640px at 100% 0%, #284066 0%, transparent 58%),
+          linear-gradient(180deg, #0a1520, var(--bg));
+        font-family: "Sora", "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(1400px, 95vw);
+        margin: 20px auto 30px;
+      }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--bg-panel);
+        padding: 14px;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: 30px;
+        letter-spacing: 0.01em;
+      }
+      .hero p {
+        margin: 8px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        max-width: 920px;
+      }
+      .hero-meta {
+        margin-top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .pill {
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        background: var(--bg-soft);
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+      button {
+        border: 1px solid #2f5070;
+        color: var(--text);
+        border-radius: 10px;
+        background: linear-gradient(90deg, #2b4f6e, #2f6a80);
+        padding: 7px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .status.error {
+        color: #ff9cb0;
+      }
+      .grid {
+        margin-top: 14px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(260px, 1fr));
+        gap: 12px;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--bg-panel);
+        padding: 12px;
+        min-height: 220px;
+      }
+      .panel h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .panel .subtitle {
+        margin: 6px 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+        min-height: 32px;
+      }
+      .metric-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .metric {
+        border: 1px solid var(--line-soft);
+        border-radius: 9px;
+        background: var(--bg-soft);
+        padding: 6px 8px;
+        font-size: 12px;
+      }
+      .metric strong {
+        color: var(--focus);
+      }
+      .wins {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 6px;
+      }
+      .evidence {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 12px;
+        display: grid;
+        gap: 4px;
+      }
+      .evidence-empty {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .wins li {
+        border: 1px solid var(--line-soft);
+        border-radius: 8px;
+        background: rgba(8, 16, 25, 0.74);
+        padding: 7px;
+        font-size: 12px;
+      }
+      .wins .label {
+        display: block;
+        font-weight: 600;
+      }
+      .wins .meta {
+        margin-top: 3px;
+        color: var(--muted);
+      }
+      .ranking {
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: var(--bg-panel);
+        padding: 12px;
+      }
+      .ranking h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .ranking-list {
+        margin: 10px 0 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+      .ranking-list li {
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: var(--bg-soft);
+        padding: 8px 10px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        font-size: 13px;
+      }
+      .ranking-list .score {
+        color: var(--focus-2);
+      }
+      @media (max-width: 1040px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(220px, 1fr));
+        }
+      }
+      @media (max-width: 720px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <h1>Training Flywheel Board</h1>
+        <p>
+          Six-axis opportunity map for wall-clock training speed. Multipliers combine current priors with evidence from
+          ingested Asana research tasks/papers.
+        </p>
+        <div class="hero-meta">
+          <span class="pill" id="combinedMultiplier">combined: x0.00</span>
+          <span class="pill" id="generatedAt">generated: -</span>
+          <button id="refreshButton" type="button">Refresh scores</button>
+        </div>
+        <div class="status" id="status">Loading dashboard...</div>
+      </section>
+
+      <section class="grid" id="axisPanels"></section>
+
+      <section class="ranking">
+        <h2>Ranked Priority</h2>
+        <ul class="ranking-list" id="rankingList"></ul>
+      </section>
+    </main>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
