@@ -67,7 +67,7 @@ def main() -> int:
     )
 
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--preset", choices=list(PRESET_CONFIGS.keys()), help="Use a preset config")
+    source.add_argument("--preset", choices=list(PRESET_CONFIGS), help="Use a preset config")
     source.add_argument("--recipe", help="Recipe module path (e.g. recipes.experiment.cogsguard)")
     source.add_argument("--report", help="Generate phase summary from results directory and exit")
 

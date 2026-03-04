@@ -108,9 +108,7 @@ def _vibe_actions_enabled(*, training_env_cfg: TrainingEnvironmentConfig) -> boo
     if _overrides_disable_change_vibe(getattr(task_gen, "overrides", None)):
         return False
     child_gen = getattr(task_gen, "child_generator_config", None)
-    if _overrides_disable_change_vibe(getattr(child_gen, "overrides", None)):
-        return False
-    return True
+    return not _overrides_disable_change_vibe(getattr(child_gen, "overrides", None))
 
 
 def _wire_vibe_actor_loss(*, trainer_cfg: TrainerConfig, slice_configs: Sequence[object]) -> None:
@@ -360,10 +358,7 @@ def _make_fixed_map_envs(
 
 
 def _resolve_max_steps_buckets(max_steps: int, max_steps_buckets: Sequence[int] | None) -> list[int]:
-    if max_steps_buckets is None:
-        buckets = [max_steps]
-    else:
-        buckets = list(max_steps_buckets)
+    buckets = [max_steps] if max_steps_buckets is None else list(max_steps_buckets)
     buckets = sorted(set(int(steps) for steps in buckets if 0 < steps <= max_steps))
     if max_steps not in buckets:
         buckets.append(max_steps)
@@ -411,10 +406,7 @@ def make_curriculum(
         algorithm_config = DiscreteRandomConfig()
 
     if env is not None:
-        if _supports_seed_bucket(env):
-            task_generators = [cc.bucketed(env)]
-        else:
-            task_generators = [cc.single_task(env)]
+        task_generators = [cc.bucketed(env)] if _supports_seed_bucket(env) else [cc.single_task(env)]
     else:
         resolved_variants, resolved_rewards = split_variants(variants)
         resolved_event_profiles = resolve_event_profiles(event_profiles)
@@ -477,10 +469,7 @@ def make_curriculum(
         if isinstance(child, cc.SingleTaskGenerator.Config) and _supports_seed_bucket(child.env):
             task_gen.add_bucket("game.map_builder.seed", [seed_span])
 
-    if len(task_generators) == 1:
-        tasks = task_generators[0]
-    else:
-        tasks = cc.merge(task_generators)
+    tasks = task_generators[0] if len(task_generators) == 1 else cc.merge(task_generators)
 
     return tasks.to_curriculum(algorithm_config=algorithm_config)
 

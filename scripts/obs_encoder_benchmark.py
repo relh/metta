@@ -103,14 +103,8 @@ def benchmark_variant(
 
     mean_ms = statistics.mean(times)
     median_ms = statistics.median(times)
-    if len(times) >= 11:
-        p90 = statistics.quantiles(times, n=10)[8]
-    else:
-        p90 = max(times)
-    if len(times) >= 101:
-        p99 = statistics.quantiles(times, n=100)[98]
-    else:
-        p99 = max(times)
+    p90 = statistics.quantiles(times, n=10)[8] if len(times) >= 11 else max(times)
+    p99 = statistics.quantiles(times, n=100)[98] if len(times) >= 101 else max(times)
     print(f"{label:26s} mean={mean_ms:7.3f} ms  median={median_ms:7.3f}  p90={p90:7.3f}  p99={p99:7.3f}")
     return {"mean_ms": mean_ms, "median_ms": median_ms, "p90_ms": p90, "p99_ms": p99}
 

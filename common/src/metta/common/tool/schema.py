@@ -188,10 +188,13 @@ def extract_schema(
         has_default = False
 
         # Check for PydanticUndefined
-        if field.default is not None and field.default is not ...:
-            if str(type(field.default).__name__) != "PydanticUndefinedType":
-                default_val = field.default
-                has_default = True
+        if (
+            field.default is not None
+            and field.default is not ...
+            and str(type(field.default).__name__) != "PydanticUndefinedType"
+        ):
+            default_val = field.default
+            has_default = True
 
         if not has_default and field.default_factory is not None:
             try:

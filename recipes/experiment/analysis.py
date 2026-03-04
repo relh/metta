@@ -38,12 +38,10 @@ class SummarySpec(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "SummarySpec":
-        if self.type == "auc":
-            if self.percent is not None and not (0 < float(self.percent) <= 1):
-                raise ValueError("summary.percent must be in (0,1] when used for AUC")
-        if self.type == "eval_last_n":
-            if self.n <= 0:
-                raise ValueError("summary.n must be > 0 for eval_last_n")
+        if self.type == "auc" and self.percent is not None and not (0 < float(self.percent) <= 1):
+            raise ValueError("summary.percent must be in (0,1] when used for AUC")
+        if self.type == "eval_last_n" and self.n <= 0:
+            raise ValueError("summary.n must be > 0 for eval_last_n")
         return self
 
 
@@ -673,17 +671,16 @@ class CompareTool(Tool):
             # Print assumption stats if present
             assumptions = ttest.get("assumptions") if isinstance(ttest, dict) else None
             if isinstance(assumptions, dict):
-                for k in sorted(assumptions.keys()):
+                for k in sorted(assumptions):
                     print(f"    {k}: {assumptions[k]}")
             # Print t-test results only when present
             tvals = ttest.get("ttest") if isinstance(ttest, dict) else None
-            if isinstance(tvals, dict):
-                if "t_stat" in tvals and "p_value" in tvals:
-                    print(f"    t_stat: {tvals['t_stat']}")
-                    print(f"    p_value: {tvals['p_value']}")
+            if isinstance(tvals, dict) and "t_stat" in tvals and "p_value" in tvals:
+                print(f"    t_stat: {tvals['t_stat']}")
+                print(f"    p_value: {tvals['p_value']}")
         if power is not None:
             print("  power:")
-            for k in sorted(power.keys()):
+            for k in sorted(power):
                 print(f"    {k}: {power[k]}")
         print("")
 
@@ -715,10 +712,7 @@ class CompareTool(Tool):
         alpha = self.bootstrap.alpha
         side = self.bootstrap.side
         dist = NormalDist()
-        if side == "two-sided":
-            z_alpha = dist.inv_cdf(1 - alpha / 2)
-        else:
-            z_alpha = dist.inv_cdf(1 - alpha)
+        z_alpha = dist.inv_cdf(1 - alpha / 2) if side == "two-sided" else dist.inv_cdf(1 - alpha)
         z_beta = dist.inv_cdf(self.power.beta)
         # Required N under normal approx: (z_alpha + z_beta)^2 * sigma^2 / d^2
         # We approximate sigma by `scale` argument (caller chooses)

@@ -42,10 +42,7 @@ _torch_initialized = False
 
 def _run_in_game_version(version: str) -> int:
     argv = strip_game_version_args(sys.argv[1:])
-    if shutil.which("uv"):
-        cmd = ["uv", "run", "./tools/run.py"]
-    else:
-        cmd = [sys.executable, "./tools/run.py"]
+    cmd = ["uv", "run", "./tools/run.py"] if shutil.which("uv") else [sys.executable, "./tools/run.py"]
     return run_in_game_version(version, argv, cmd)
 
 
@@ -215,7 +212,7 @@ def get_tool_fields(tool_class: type[Tool]) -> set[str]:
         if base is Tool:
             break
         if issubclass(base, BaseModel) and hasattr(base, "model_fields"):
-            fields.update(base.model_fields.keys())
+            fields.update(base.model_fields)
     return fields
 
 
@@ -225,7 +222,7 @@ def get_function_params(tool_maker: Any) -> set[str]:
         # Important: do NOT read Tool.__init__ for params (it's usually **data).
         return set()
     else:
-        return set(inspect.signature(tool_maker).parameters.keys())
+        return set(inspect.signature(tool_maker).parameters)
 
 
 def classify_remaining_args(remaining_args: dict[str, Any], tool_fields: set[str]) -> tuple[dict[str, Any], list[str]]:
@@ -269,6 +266,7 @@ def list_tool_arguments(tool_maker: Any, console: Console) -> None:
             if top_level not in grouped:
                 grouped[top_level] = []
             grouped[top_level].append((path, type_str, default, required))
+        last_top_level = next(reversed(grouped), None)
 
         for top_level, fields in grouped.items():
             for path, type_str, default, required in fields:
@@ -297,7 +295,7 @@ def list_tool_arguments(tool_maker: Any, console: Console) -> None:
 
                 console.print()
 
-            if top_level != list(grouped.keys())[-1]:
+            if top_level != last_top_level:
                 console.print()
 
     else:
@@ -599,7 +597,7 @@ constructor/function vs configuration overrides based on introspection.
             if known_args.verbose and nested_cli:
                 cls_name = tool_maker.__name__
                 output_info(f"\n{cyan(f'Creating {cls_name} from nested CLI payload:')}")
-                for k in sorted(nested_cli.keys()):
+                for k in sorted(nested_cli):
                     output_info(f"  {k} = {nested_cli[k]}")
             tool_cfg = tool_maker.model_validate(nested_cli)
             remaining_args = {}  # all dotted/top-level consumed by model validation

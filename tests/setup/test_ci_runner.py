@@ -50,4 +50,4 @@ def test_ci_unknown_option_treated_as_stage() -> None:
 def test_stage_map_contains_expected_stages() -> None:
     """Verify the stage map has all expected stages."""
     expected = {"lint", "python-tests", "cpp-tests", "cpp-benchmarks", "nim-tests", "recipe-tests"}
-    assert expected.issubset(set(STAGE_MAP.keys()))
+    assert expected.issubset(STAGE_MAP)

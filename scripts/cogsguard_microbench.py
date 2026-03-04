@@ -198,11 +198,7 @@ def main() -> int:
     tool.stats_reporter.report_to_wandb = False
     tool.stats_reporter.interval = 1
 
-    out_path: Path
-    if args.out:
-        out_path = Path(args.out)
-    else:
-        out_path = Path(tool.system.data_dir) / run / "microbench.json"
+    out_path = Path(args.out) if args.out else Path(tool.system.data_dir) / run / "microbench.json"
 
     if args.torch_profiler:
         # TorchProfiler defaults to profiling epoch 300; override for short microbench runs.

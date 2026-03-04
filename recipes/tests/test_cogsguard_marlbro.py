@@ -31,7 +31,7 @@ def test_marlbro_route_slot_ids_support_shared_policy() -> None:
         ),
     )
 
-    assert set(tool.policy_assets.keys()) == {"shared_policy"}
+    assert set(tool.policy_assets) == {"shared_policy"}
     slices = {slice_cfg.name: slice_cfg for slice_cfg in tool.trajectory_isolation.slices}
     assert slices["miner_slice"].route_slot_ids == (0, 1, 2, 3)
     assert slices["aligner_slice"].route_slot_ids == (4, 5, 6, 7)
@@ -72,7 +72,7 @@ def test_marlbro_routed_adapter_param_enables_default_architecture() -> None:
 
 def test_marlbro_train_uses_shared_policy_with_routed_adapter() -> None:
     tool = marlbro.train(routed_adapter={"enabled": True})
-    assert set(tool.policy_assets.keys()) == {"shared_policy"}
+    assert set(tool.policy_assets) == {"shared_policy"}
     shared_architecture = tool.policy_assets["shared_policy"].architecture
     assert isinstance(shared_architecture, CnnSharedCriticConfig)
     assert shared_architecture.cortex_routed_adapter is not None
@@ -87,7 +87,7 @@ def test_marlbro_train_uses_shared_policy_with_routed_adapter() -> None:
 
 def test_marlbro_train_keeps_separate_policies_without_routed_adapter() -> None:
     tool = marlbro.train()
-    assert set(tool.policy_assets.keys()) == {"miner_policy", "aligner_policy"}
+    assert set(tool.policy_assets) == {"miner_policy", "aligner_policy"}
     assert tool.scheduler is None
     assert tool.training_env.supervisor_policy_uri is None
     slices = {slice_cfg.name: slice_cfg for slice_cfg in tool.trajectory_isolation.slices}
@@ -183,7 +183,7 @@ def test_marlbro_routed_adapter_with_scripted_teacher_wires_both_slices() -> Non
             "mode": "scripted.supervisor.mixed",
         },
     )
-    assert set(tool.policy_assets.keys()) == {"shared_policy"}
+    assert set(tool.policy_assets) == {"shared_policy"}
     assert tool.training_env.supervisor_policy_uri == "metta://policy/nlanky"
     assert tool.scheduler is not None
     assert tool.trainer.losses.has_loss("miner_slice_supervisor")

@@ -43,10 +43,7 @@ def train(
     agent: str | None = None,
 ) -> tools.TrainTool:
     if policy_architecture is None:
-        if agent is not None:
-            policy_architecture = _policy_from_name(agent)
-        else:
-            policy_architecture = AGaLiTeConfig()
+        policy_architecture = _policy_from_name(agent) if agent is not None else AGaLiTeConfig()
 
     tool = base_train(
         curriculum=curriculum,

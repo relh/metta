@@ -325,9 +325,7 @@ class SweepTool(Tool):
             def _extract_categorical_params(params: dict) -> dict:
                 out: dict = {}
                 for k, v in params.items():
-                    if isinstance(v, CategoricalParameterConfig):
-                        out[k] = v
-                    elif isinstance(v, list):
+                    if isinstance(v, CategoricalParameterConfig | list):
                         out[k] = v
                     # Ignore numeric ParameterConfig for grid search
                 return out

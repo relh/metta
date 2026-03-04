@@ -64,20 +64,24 @@ class PlayTool(Tool):
             if "system.seed" not in tool._explicit_seed_overrides:
                 tool.system.seed = int(tool.seed)
             map_builder = tool.sim.env.game.map_builder
-            if isinstance(map_builder, HasSeed):
-                if "sim.env.game.map_builder.seed" not in tool._explicit_seed_overrides:
-                    map_builder.seed = int(tool.seed)
+            if (
+                isinstance(map_builder, HasSeed)
+                and "sim.env.game.map_builder.seed" not in tool._explicit_seed_overrides
+            ):
+                map_builder.seed = int(tool.seed)
 
         if key == "system.seed":
             if "seed" not in tool._explicit_seed_overrides and tool.seed is None:
                 tool.seed = int(tool.system.seed)
             map_builder = tool.sim.env.game.map_builder
-            if isinstance(map_builder, HasSeed):
-                if "sim.env.game.map_builder.seed" not in tool._explicit_seed_overrides:
-                    seed = tool.seed
-                    if seed is None:
-                        raise RuntimeError("PlayTool.seed should be set when syncing map_builder seed")
-                    map_builder.seed = int(seed)
+            if (
+                isinstance(map_builder, HasSeed)
+                and "sim.env.game.map_builder.seed" not in tool._explicit_seed_overrides
+            ):
+                seed = tool.seed
+                if seed is None:
+                    raise RuntimeError("PlayTool.seed should be set when syncing map_builder seed")
+                map_builder.seed = int(seed)
 
         return tool
 

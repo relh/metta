@@ -106,10 +106,7 @@ class TrainTool(Tool):
 
     def output_references(self, job_name: str) -> dict:
         storage = auto_policy_storage_decision(job_name)
-        if storage.remote_prefix:
-            policy_uri = storage.remote_prefix
-        else:
-            policy_uri = f"file://{self.system.data_dir / job_name / 'checkpoints'}"
+        policy_uri = storage.remote_prefix or f"file://{self.system.data_dir / job_name / 'checkpoints'}"
         return {"policy_uri": policy_uri}
 
     def apply_defaults_and_mutations(self, args: dict[str, str]) -> None:
@@ -145,10 +142,13 @@ class TrainTool(Tool):
         if self.group:
             self.wandb.group = self.group
 
-        if platform.system() == "Darwin" and str(self.system.device).startswith("mps"):
-            if self.training_env.vectorization == "serial":
-                logger.warning("MPS requested on macOS; switching to multiprocessing vectorization.")
-                self.training_env.vectorization = "multiprocessing"
+        if (
+            platform.system() == "Darwin"
+            and str(self.system.device).startswith("mps")
+            and self.training_env.vectorization == "serial"
+        ):
+            logger.warning("MPS requested on macOS; switching to multiprocessing vectorization.")
+            self.training_env.vectorization = "multiprocessing"
 
         if platform.system() == "Darwin" and not self.disable_macbook_optimize:
             self._minimize_config_for_debugging()  # this overrides many config settings for local testings
@@ -159,16 +159,15 @@ class TrainTool(Tool):
 
         # Ensure we checkpoint whenever we evaluate by making checkpointer.epoch_interval
         # a divisor of evaluator.epoch_interval
-        if self.evaluator.epoch_interval != 0:
-            if self.evaluator.epoch_interval % self.checkpointer.epoch_interval != 0:
-                logger.warning(
-                    "evaluator.epoch_interval (%d) is not a multiple of checkpointer.epoch_interval (%d). "
-                    "Adjusting checkpointer.epoch_interval to %d to ensure checkpoints occur during evaluations.",
-                    self.evaluator.epoch_interval,
-                    self.checkpointer.epoch_interval,
-                    self.evaluator.epoch_interval,
-                )
-                self.checkpointer.epoch_interval = self.evaluator.epoch_interval
+        if self.evaluator.epoch_interval != 0 and self.evaluator.epoch_interval % self.checkpointer.epoch_interval != 0:
+            logger.warning(
+                "evaluator.epoch_interval (%d) is not a multiple of checkpointer.epoch_interval (%d). "
+                "Adjusting checkpointer.epoch_interval to %d to ensure checkpoints occur during evaluations.",
+                self.evaluator.epoch_interval,
+                self.checkpointer.epoch_interval,
+                self.evaluator.epoch_interval,
+            )
+            self.checkpointer.epoch_interval = self.evaluator.epoch_interval
 
         if self.evaluator.evaluate_local:
             # suppress NCCL watchdog timeouts while ranks wait for master to complete evals
