@@ -137,6 +137,12 @@ def get_tournament_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
     return _core_api, _batch_api
 
 
+def new_tournament_clients() -> tuple[client.CoreV1Api, client.BatchV1Api]:
+    config = _ensure_config()
+    api = ApiClient(config)
+    return client.CoreV1Api(api), client.BatchV1Api(api)
+
+
 def get_tournament_client() -> client.BatchV1Api:
     _, batch = get_tournament_clients()
     return batch

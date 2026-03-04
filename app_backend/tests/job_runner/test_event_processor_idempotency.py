@@ -5,6 +5,7 @@ verifying that deduplication logic works correctly.
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -45,6 +46,17 @@ def mock_k8s_clients():
     batch_v1.read_namespaced_job.return_value = mock_job
 
     return core_v1, batch_v1
+
+
+@pytest.fixture
+def executor():
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        yield pool
+
+
+@pytest.fixture
+def mock_cfg_dispatch():
+    return MagicMock()
 
 
 @pytest.fixture
@@ -134,20 +146,20 @@ def create_pod_event(job_id: str, pod_name: str, phase: str, event_type: str = "
     }
 
 
-def test_event_processor_idempotency(event_processor_db, mock_k8s_clients, mock_stats_client):
+def test_event_processor_idempotency(
+    event_processor_db, mock_k8s_clients, mock_stats_client, executor, mock_cfg_dispatch
+):
     """Test that processing the same events multiple times produces identical state."""
     engine = create_engine(event_processor_db)
     job_id = uuid4()
     pod_name = f"test-pod-{job_id.hex[:8]}"
 
-    # Create sequence of events: Added -> Running -> Succeeded
     events_data = [
         create_pod_event(str(job_id), pod_name, "Pending", "ADDED"),
         create_pod_event(str(job_id), pod_name, "Running", "MODIFIED"),
         create_pod_event(str(job_id), pod_name, "Succeeded", "MODIFIED"),
     ]
 
-    # Insert events into database
     with Session(engine) as session:
         for event_data in events_data:
             event = K8sEvent(
@@ -160,12 +172,10 @@ def test_event_processor_idempotency(event_processor_db, mock_k8s_clients, mock_
 
     core_v1, batch_v1 = mock_k8s_clients
 
-    # Mock S3 operations
     with patch("metta.app_backend.job_runner.event_processor.get_s3_client") as mock_s3:
         mock_s3_client = MagicMock()
         mock_s3.return_value = mock_s3_client
 
-        # Mock complete results in S3 with all required fields
         results_data = {
             "winner": 0,
             "episode_length": 100,
@@ -180,22 +190,23 @@ def test_event_processor_idempotency(event_processor_db, mock_k8s_clients, mock_
         mock_response = MagicMock()
         mock_response["Body"].read.return_value = json.dumps(results_data).encode("utf-8")
         mock_s3_client.get_object.return_value = mock_response
-
-        # Mock runtime info (not found is ok)
         mock_s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "head_object")
 
-        with patch("metta.app_backend.job_runner.event_processor.record_job_episode") as mock_record:
-            # Process events first time
-            _process_batch(mock_stats_client, core_v1, batch_v1)
+        with (
+            patch("metta.app_backend.job_runner.event_processor.record_job_episode") as mock_record,
+            patch(
+                "metta.app_backend.job_runner.event_processor._get_thread_clients",
+                return_value=(mock_stats_client, core_v1, batch_v1),
+            ),
+        ):
+            _process_batch(executor, mock_cfg_dispatch)
 
-            # Capture state after first processing
             first_state = {
                 "status": mock_stats_client._job_state[job_id].status,
                 "error": mock_stats_client._job_state[job_id].error,
                 "episode_recorded": mock_record.call_count,
             }
 
-            # Mark events as unprocessed again (simulate replay)
             with Session(engine) as session:
                 stmt = select(K8sEvent)
                 events = list(session.exec(stmt).all())
@@ -204,45 +215,36 @@ def test_event_processor_idempotency(event_processor_db, mock_k8s_clients, mock_
                     session.add(event)
                 session.commit()
 
-            # Reset record counter
             initial_episode_count = mock_record.call_count
+            _process_batch(executor, mock_cfg_dispatch)
 
-            # Process events second time (should be idempotent)
-            _process_batch(mock_stats_client, core_v1, batch_v1)
-
-            # Capture state after second processing
             second_state = {
                 "status": mock_stats_client._job_state[job_id].status,
                 "error": mock_stats_client._job_state[job_id].error,
                 "episode_recorded": mock_record.call_count - initial_episode_count,
             }
 
-    # Verify status and error are identical on replay
     assert first_state["status"] == second_state["status"]
     assert first_state["error"] == second_state["error"]
-
-    # Verify job ended up in correct final state
     assert first_state["status"] == JobStatus.completed
     assert first_state["error"] is None
-
-    # Verify episode was recorded exactly once (deduplication working)
-    # On second pass, the job is already completed, so episode recording should be skipped
     assert first_state["episode_recorded"] == 1, "Episode should be recorded on first pass"
     assert second_state["episode_recorded"] == 0, "Episode should not be recorded twice"
 
 
-def test_event_processor_handles_duplicate_success_events(event_processor_db, mock_k8s_clients, mock_stats_client):
+def test_event_processor_handles_duplicate_success_events(
+    event_processor_db, mock_k8s_clients, mock_stats_client, executor, mock_cfg_dispatch
+):
     """Test that multiple Succeeded events don't cause duplicate episode recording."""
     engine = create_engine(event_processor_db)
     job_id = uuid4()
     pod_name = f"test-pod-{job_id.hex[:8]}"
 
-    # Create multiple Succeeded events (e.g., from pod restarts or watch reconnects)
     events_data = [
         create_pod_event(str(job_id), pod_name, "Running", "MODIFIED"),
         create_pod_event(str(job_id), pod_name, "Succeeded", "MODIFIED"),
-        create_pod_event(str(job_id), pod_name, "Succeeded", "MODIFIED"),  # Duplicate
-        create_pod_event(str(job_id), pod_name, "Succeeded", "MODIFIED"),  # Duplicate
+        create_pod_event(str(job_id), pod_name, "Succeeded", "MODIFIED"),
+        create_pod_event(str(job_id), pod_name, "Succeeded", "MODIFIED"),
     ]
 
     with Session(engine) as session:
@@ -261,7 +263,6 @@ def test_event_processor_handles_duplicate_success_events(event_processor_db, mo
         mock_s3_client = MagicMock()
         mock_s3.return_value = mock_s3_client
 
-        # Mock complete results in S3 with all required fields
         results_data = {
             "winner": 0,
             "episode_length": 100,
@@ -278,8 +279,13 @@ def test_event_processor_handles_duplicate_success_events(event_processor_db, mo
         mock_s3_client.get_object.return_value = mock_response
         mock_s3_client.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "head_object")
 
-        with patch("metta.app_backend.job_runner.event_processor.record_job_episode"):
-            # Track how many times update_job is called
+        with (
+            patch("metta.app_backend.job_runner.event_processor.record_job_episode"),
+            patch(
+                "metta.app_backend.job_runner.event_processor._get_thread_clients",
+                return_value=(mock_stats_client, core_v1, batch_v1),
+            ),
+        ):
             update_count = 0
             original_update = mock_stats_client.update_job
 
@@ -290,21 +296,17 @@ def test_event_processor_handles_duplicate_success_events(event_processor_db, mo
 
             mock_stats_client.update_job = counting_update
 
-            # Process all events
-            _process_batch(mock_stats_client, core_v1, batch_v1)
+            _process_batch(executor, mock_cfg_dispatch)
 
-            # Verify job is completed
             assert mock_stats_client._job_state[job_id].status == JobStatus.completed
-
-            # Count updates to 'completed' status (deduplication should prevent multiple completions)
-            # We expect: Running -> Completed (first Succeeded event processes, others skip)
-            # The update_count includes both Running and Completed updates
             assert update_count <= 3, (
                 f"Expected at most 3 status updates (Running + Completed + maybe one more), got {update_count}"
             )
 
 
-def test_event_processor_handles_failed_events_idempotently(event_processor_db, mock_k8s_clients, mock_stats_client):
+def test_event_processor_handles_failed_events_idempotently(
+    event_processor_db, mock_k8s_clients, mock_stats_client, executor, mock_cfg_dispatch
+):
     """Test that failed pod events are processed idempotently."""
     engine = create_engine(event_processor_db)
     job_id = uuid4()
@@ -327,15 +329,18 @@ def test_event_processor_handles_failed_events_idempotently(event_processor_db, 
 
     core_v1, batch_v1 = mock_k8s_clients
 
-    # Mock _read_runner_error since it makes an S3 call (runner error file not available in test)
-    with patch("metta.app_backend.job_runner.event_processor._read_runner_error", return_value=None):
-        # First processing
-        _process_batch(mock_stats_client, core_v1, batch_v1)
+    with (
+        patch("metta.app_backend.job_runner.event_processor._read_runner_error", return_value=None),
+        patch(
+            "metta.app_backend.job_runner.event_processor._get_thread_clients",
+            return_value=(mock_stats_client, core_v1, batch_v1),
+        ),
+    ):
+        _process_batch(executor, mock_cfg_dispatch)
 
         first_status = mock_stats_client._job_state[job_id].status
         first_error = mock_stats_client._job_state[job_id].error
 
-        # Mark as unprocessed and reprocess
         with Session(engine) as session:
             stmt = select(K8sEvent)
             events = list(session.exec(stmt).all())
@@ -344,11 +349,10 @@ def test_event_processor_handles_failed_events_idempotently(event_processor_db, 
                 session.add(event)
             session.commit()
 
-        _process_batch(mock_stats_client, core_v1, batch_v1)
+        _process_batch(executor, mock_cfg_dispatch)
 
         second_status = mock_stats_client._job_state[job_id].status
         second_error = mock_stats_client._job_state[job_id].error
 
-    # Verify idempotency
     assert first_status == second_status == JobStatus.failed
     assert first_error == second_error

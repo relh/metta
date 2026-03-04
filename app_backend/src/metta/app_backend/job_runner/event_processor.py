@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Callable, cast
@@ -36,8 +38,8 @@ from metta.app_backend.job_runner.config import (
 from metta.app_backend.job_runner.episode_recording import EpisodeJobSummary, record_job_episode
 from metta.app_backend.job_runner.job_artifacts import JobArtifact
 from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to_public, get_s3_client
-from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients
-from metta.app_backend.models.job_request import JobRequestUpdate, JobStatus
+from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients, new_tournament_clients
+from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus
 from metta.app_backend.models.k8s_events import K8sEvent
 from metta.app_backend.otel.job_metrics import compute_job_cost
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -50,6 +52,7 @@ POLL_INTERVAL_SECONDS = 5
 BATCH_SIZE = 100
 RECONCILE_INTERVAL_SECONDS = 60
 RECONCILE_GRACE_PERIOD_SECONDS = 86400  # 1 day — last-resort safety net for truly stuck jobs
+WORKER_THREADS = 4
 
 _db_engine = None
 
@@ -66,6 +69,25 @@ def _get_db_engine():
             uri = uri.replace("postgresql://", "postgresql+psycopg://", 1)
         _db_engine = create_engine(uri, pool_pre_ping=True)
     return _db_engine
+
+
+_thread_local = threading.local()
+
+
+def _get_thread_clients(cfg_dispatch) -> tuple[StatsClient, client.CoreV1Api, client.BatchV1Api]:
+    if not hasattr(_thread_local, "stats_client"):
+        _thread_local.stats_client = StatsClient(
+            backend_url=cfg_dispatch.STATS_SERVER_URI, machine_token=cfg_dispatch.MACHINE_TOKEN
+        )
+        _thread_local.stats_client._validate_authenticated()
+        if cfg_dispatch.LOCAL_DEV:
+            if not cfg_dispatch.LOCAL_DEV_K8S_CONTEXT:
+                raise ValueError("LOCAL_DEV=true requires LOCAL_DEV_K8S_CONTEXT to be set")
+            load_kube_config(context=cfg_dispatch.LOCAL_DEV_K8S_CONTEXT)
+            _thread_local.core_v1, _thread_local.batch_v1 = client.CoreV1Api(), client.BatchV1Api()
+        else:
+            _thread_local.core_v1, _thread_local.batch_v1 = new_tournament_clients()
+    return _thread_local.stats_client, _thread_local.core_v1, _thread_local.batch_v1
 
 
 def _get_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api] | None:
@@ -89,11 +111,17 @@ def _fetch_unprocessed_events(session: Session, limit: int = BATCH_SIZE) -> list
     return list(session.exec(stmt).all())
 
 
-def _mark_processed(session: Session, event: K8sEvent) -> None:
-    """Mark an event as processed."""
-    event.processed_at = datetime.now(UTC)
-    session.add(event)
-    session.commit()
+def _mark_processed_batch(engine, event_ids: list[int]) -> None:
+    if not event_ids:
+        return
+    now = datetime.now(UTC)
+    with Session(engine) as session:
+        for eid in event_ids:
+            event = session.get(K8sEvent, eid)
+            if event:
+                event.processed_at = now
+                session.add(event)
+        session.commit()
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,27 +170,6 @@ class EventCtx:
             job_name=job_name,
             container_running=container_running,
         )
-
-
-def _parse_container_timestamps(event_data: dict) -> tuple[datetime | None, datetime | None]:
-    """Extract container startedAt and finishedAt from stored event data."""
-    container_statuses = event_data.get("object", {}).get("status", {}).get("containerStatuses", [])
-    if not container_statuses:
-        return None, None
-    state = container_statuses[0].get("state", {})
-    terminated = state.get("terminated", {})
-    if terminated:
-        started = terminated.get("startedAt")
-        finished = terminated.get("finishedAt")
-        return (
-            datetime.fromisoformat(started) if started else None,
-            datetime.fromisoformat(finished) if finished else None,
-        )
-    running = state.get("running", {})
-    if running:
-        started = running.get("startedAt")
-        return datetime.fromisoformat(started) if started else None, None
-    return None, None
 
 
 def _read_results_from_s3(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
@@ -575,6 +582,37 @@ def _build_result_metadata(
     return result_data
 
 
+def _update_job_status(
+    stats_client: StatsClient,
+    job_id: UUID,
+    status: JobStatus,
+    error: str | None = None,
+    error_type: str | None = None,
+    worker: str | None = None,
+    result: dict[str, Any] | None = None,
+    current: JobRequest | None = None,
+):
+    if current is None:
+        current = stats_client.get_job(job_id)
+    if current.status == status:
+        return
+    if current.status in (JobStatus.completed, JobStatus.failed):
+        if error and not current.error:
+            stats_client.update_job(job_id, JobRequestUpdate(error=error, error_type=error_type))
+        return
+    stats_client.update_job(
+        job_id, JobRequestUpdate(status=status, error=error, error_type=error_type, worker=worker, result=result)
+    )
+
+
+def _fetch_job_if_actionable(stats_client: StatsClient, ctx: EventCtx) -> JobRequest | None:
+    job_request = stats_client.get_job(ctx.job_id)
+    if job_request.status in (JobStatus.completed, JobStatus.failed):
+        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
+        return None
+    return job_request
+
+
 @trace("tournament.event_processor.handle_succeeded")
 def _handle_pod_succeeded(
     stats_client: StatsClient,
@@ -583,28 +621,22 @@ def _handle_pod_succeeded(
     ctx: EventCtx,
     event_data: dict,
 ):
-    job_request = stats_client.get_job(ctx.job_id)
-    if job_request.status in (JobStatus.completed, JobStatus.failed):
-        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
+    job_request = _fetch_job_if_actionable(stats_client, ctx)
+    if job_request is None:
         return
 
-    started_at, finished_at = _parse_container_timestamps(event_data)
-    now = datetime.now(UTC)
     cfg = get_dispatch_config()
-
     results, read_error = _read_results_with_retry(ctx.job_id, cfg.EVAL_S3_BUCKET, JobArtifact.RESULTS.key(ctx.job_id))
     if not results:
         detail = f" (last error: {read_error})" if read_error else ""
         error_type = "result_missing" if not read_error or "NoSuchKey" in read_error else "result_error"
-        stats_client.update_job(
+        _update_job_status(
+            stats_client,
             ctx.job_id,
-            JobRequestUpdate(
-                status=JobStatus.failed,
-                running_at=started_at,
-                completed_at=finished_at or now,
-                error=f"Pod exited with code 0 but results not found in S3{detail}",
-                error_type=error_type,
-            ),
+            JobStatus.failed,
+            error=f"Pod exited with code 0 but results not found in S3{detail}",
+            error_type=error_type,
+            current=job_request,
         )
         logger.warning(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), no results in S3{detail}")
         capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
@@ -618,23 +650,18 @@ def _handle_pod_succeeded(
             core_v1,
             ctx.job_id,
             dispatched_at=job_request.dispatched_at,
-            running_at=started_at or job_request.running_at,
+            running_at=job_request.running_at,
         )
         job = EpisodeJobSummary.model_validate(job_request.job)
         replay_uri = copy_replay_to_public(ctx.job_id)
         record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)
+        _update_job_status(stats_client, ctx.job_id, JobStatus.completed, current=job_request)
+        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     except Exception as e:
         logger.error(f"Failed to record episode for job {ctx.job_id}: {e}", exc_info=True)
+        _update_job_status(stats_client, ctx.job_id, JobStatus.completed, current=job_request)
+        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), episode recording failed")
 
-    stats_client.update_job(
-        ctx.job_id,
-        JobRequestUpdate(
-            status=JobStatus.completed,
-            running_at=started_at,
-            completed_at=finished_at or now,
-        ),
-    )
-    logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
     if ctx.job_name:
         _delete_k8s_job(batch_v1, ctx.job_name)
@@ -648,12 +675,10 @@ def _handle_pod_failed(
     ctx: EventCtx,
     event_data: dict,
 ):
-    job_request = stats_client.get_job(ctx.job_id)
-    if job_request.status in (JobStatus.completed, JobStatus.failed):
-        logger.info(f"Job {ctx.job_id} already {job_request.status.value}, skipping (pod {ctx.pod_name})")
+    job_request = _fetch_job_if_actionable(stats_client, ctx)
+    if job_request is None:
         return
 
-    started_at, finished_at = _parse_container_timestamps(event_data)
     capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
 
     runner_error = _read_runner_error(ctx.job_id)
@@ -673,18 +698,16 @@ def _handle_pod_failed(
         core_v1,
         ctx.job_id,
         dispatched_at=job_request.dispatched_at,
-        running_at=started_at or job_request.running_at,
+        running_at=job_request.running_at,
     )
-    stats_client.update_job(
+    _update_job_status(
+        stats_client,
         ctx.job_id,
-        JobRequestUpdate(
-            status=JobStatus.failed,
-            running_at=started_at,
-            completed_at=finished_at or datetime.now(UTC),
-            error=error,
-            error_type=error_type,
-            result=fail_result or None,
-        ),
+        JobStatus.failed,
+        error=error,
+        error_type=error_type,
+        result=fail_result or None,
+        current=job_request,
     )
     logger.info(f"Job {ctx.job_id} failed (pod {ctx.pod_name}, error_source={error_source}): {error}")
 
@@ -699,18 +722,9 @@ def _handle_pod_running(
     ctx: EventCtx,
     event_data: dict,
 ):
-    if not ctx.container_running:
-        return
-    started_at, _ = _parse_container_timestamps(event_data)
-    stats_client.update_job(
-        ctx.job_id,
-        JobRequestUpdate(
-            status=JobStatus.running,
-            running_at=started_at or datetime.now(UTC),
-            worker=ctx.pod_name,
-        ),
-    )
-    logger.debug(f"Job {ctx.job_id} running (pod {ctx.pod_name})")
+    if ctx.container_running:
+        _update_job_status(stats_client, ctx.job_id, JobStatus.running, worker=ctx.pod_name)
+        logger.debug(f"Job {ctx.job_id} running (pod {ctx.pod_name})")
 
 
 def _handle_pod_deleted(
@@ -720,18 +734,11 @@ def _handle_pod_deleted(
     ctx: EventCtx,
     event_data: dict,
 ):
-    if ctx.phase in ("Succeeded", "Failed"):
-        return
-    stats_client.update_job(
-        ctx.job_id,
-        JobRequestUpdate(
-            status=JobStatus.failed,
-            completed_at=datetime.now(UTC),
-            error="Pod deleted unexpectedly",
-            error_type="pod_deleted",
-        ),
-    )
-    logger.warning(f"Job {ctx.job_id} failed: pod {ctx.pod_name} deleted unexpectedly (phase={ctx.phase})")
+    if ctx.phase not in ("Succeeded", "Failed"):
+        _update_job_status(
+            stats_client, ctx.job_id, JobStatus.failed, error="Pod deleted unexpectedly", error_type="pod_deleted"
+        )
+        logger.warning(f"Job {ctx.job_id} failed: pod {ctx.pod_name} deleted unexpectedly (phase={ctx.phase})")
 
 
 _PHASE_HANDLERS: dict[str, Callable[..., None]] = {
@@ -776,56 +783,67 @@ def _process_event(
         _handle_pod_deleted(stats_client, core_v1, batch_v1, ctx, event.event)
 
 
-def _deduplicate_events(events: list[K8sEvent]) -> tuple[list[K8sEvent], list[K8sEvent]]:
-    """Keep only the most terminal event per job_id. Returns (to_process, to_skip)."""
-    best_per_job: dict[UUID, tuple[K8sEvent, int]] = {}
-    unparseable: list[K8sEvent] = []
+def _process_event_threaded(cfg_dispatch, event: K8sEvent) -> None:
+    stats_client, core_v1, batch_v1 = _get_thread_clients(cfg_dispatch)
+    _process_event(stats_client, core_v1, batch_v1, event)
 
+
+def _group_by_job(events: list[K8sEvent]) -> tuple[dict[UUID, list[K8sEvent]], list[K8sEvent]]:
+    groups: dict[UUID, list[K8sEvent]] = {}
+    unparseable: list[K8sEvent] = []
     for event in events:
         ctx = EventCtx.parse(event.event)
         if ctx is None:
             unparseable.append(event)
             continue
+        groups.setdefault(ctx.job_id, []).append(event)
+    return groups, unparseable
+
+
+def _pick_winner(events: list[K8sEvent]) -> K8sEvent:
+    best = events[0]
+    ctx = EventCtx.parse(best.event)
+    assert ctx is not None
+    best_priority = _event_priority(ctx)
+    for event in events[1:]:
+        ctx = EventCtx.parse(event.event)
+        assert ctx is not None
         priority = _event_priority(ctx)
-        existing = best_per_job.get(ctx.job_id)
-        if existing is None or priority > existing[1]:
-            best_per_job[ctx.job_id] = (event, priority)
-
-    winners = {id(ep[0]) for ep in best_per_job.values()}
-    to_process = unparseable + [ep for ep in events if id(ep) in winners]
-    to_skip = [ep for ep in events if id(ep) not in winners and ep not in unparseable]
-    return to_process, to_skip
+        if priority > best_priority:
+            best = event
+            best_priority = priority
+    return best
 
 
-def _process_batch(
-    stats_client: StatsClient,
-    core_v1: client.CoreV1Api,
-    batch_v1: client.BatchV1Api,
-) -> int:
-    """Process a batch of events. Returns the number of events processed."""
+def _process_batch(executor: ThreadPoolExecutor, cfg_dispatch) -> int:
     engine = _get_db_engine()
     with Session(engine, expire_on_commit=False) as session:
         events = _fetch_unprocessed_events(session)
         if not events:
             return 0
 
-        to_process, to_skip = _deduplicate_events(events)
+    groups, unparseable = _group_by_job(events)
 
-        if to_skip:
-            logger.info(f"Dedup: {len(to_skip)} redundant events skipped, {len(to_process)} to process")
-            for event in to_skip:
-                _mark_processed(session, event)
+    all_event_ids: list[int] = [e.id for e in unparseable if e.id]
+    futures: dict[Future, tuple[K8sEvent, list[K8sEvent]]] = {}
+    for _job_id, group in groups.items():
+        winner = _pick_winner(group)
+        losers = [e for e in group if e is not winner]
+        all_event_ids.extend(e.id for e in losers if e.id)
+        futures[executor.submit(_process_event_threaded, cfg_dispatch, winner)] = (winner, group)
 
-        processed_count = len(to_skip)
-        for event in to_process:
-            try:
-                _process_event(stats_client, core_v1, batch_v1, event)
-                _mark_processed(session, event)
-                processed_count += 1
-            except Exception:
-                logger.error(f"Failed to process event {event.id}", exc_info=True)
+    processed_ids: list[int] = []
+    for future in as_completed(futures):
+        winner, group = futures[future]
+        exc = future.exception()
+        if exc is None:
+            if winner.id:
+                processed_ids.append(winner.id)
+        else:
+            logger.error(f"Failed to process event {winner.id}: {exc}", exc_info=exc)
 
-        return processed_count
+    _mark_processed_batch(engine, all_event_ids + processed_ids)
+    return len(all_event_ids) + len(processed_ids)
 
 
 def _get_job_info(pod: client.V1Pod) -> tuple[UUID, str] | None:
@@ -875,7 +893,7 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
         if job.id not in active_job_ids:
             if job.completed_at or job.result:
                 logger.info(f"Reconciliation: job {job.id} has results but status={job.status}, marking completed")
-                stats_client.update_job(job.id, JobRequestUpdate(status=JobStatus.completed, completed_at=now))
+                _update_job_status(stats_client, job.id, JobStatus.completed)
                 completed_count += 1
             else:
                 ref_time = job.dispatched_at or job.created_at
@@ -888,14 +906,12 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
                         skipped_count += 1
                         continue
                 logger.warning(f"Reconciliation: job {job.id} marked {job.status} but no pod found, marking failed")
-                stats_client.update_job(
+                _update_job_status(
+                    stats_client,
                     job.id,
-                    JobRequestUpdate(
-                        status=JobStatus.failed,
-                        completed_at=now,
-                        error="Pod not found (reconciliation)",
-                        error_type="pod_not_found",
-                    ),
+                    JobStatus.failed,
+                    error="Pod not found (reconciliation)",
+                    error_type="pod_not_found",
                 )
                 stale_count += 1
 
@@ -914,6 +930,7 @@ def run_event_processor():
     logger.info(f"Event processor started: stats_server_uri={cfg.STATS_SERVER_URI}")
 
     last_reconcile = time.monotonic()
+    executor = ThreadPoolExecutor(max_workers=WORKER_THREADS)
 
     try:
         while True:
@@ -924,16 +941,14 @@ def run_event_processor():
                     logger.warning("Eval cluster clients unavailable, retrying in 30s")
                     time.sleep(30)
                     continue
-                core_v1, batch_v1 = clients
+                core_v1, _ = clients
 
-                # Process stored events
-                processed = _process_batch(stats_client, core_v1, batch_v1)
+                processed = _process_batch(executor, cfg)
                 if processed > 0:
                     logger.info(f"Processed {processed} events")
                 else:
                     time.sleep(POLL_INTERVAL_SECONDS)
 
-                # Only reconcile when event queue is drained
                 if processed == 0:
                     now = time.monotonic()
                     if now - last_reconcile >= RECONCILE_INTERVAL_SECONDS:
@@ -944,6 +959,7 @@ def run_event_processor():
                 logger.error(f"Event processor error: {e}", exc_info=True)
                 time.sleep(POLL_INTERVAL_SECONDS)
     finally:
+        executor.shutdown(wait=False)
         stats_client.close()
 
 
