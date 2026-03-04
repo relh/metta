@@ -232,7 +232,7 @@ class Loss:
         """Restore registered attributes from a state dictionary."""
 
         missing_keys: list[str] = [name for name in self._state_attrs if name not in state_dict]
-        unexpected_keys: list[str] = [name for name in state_dict.keys() if name not in self._state_attrs]
+        unexpected_keys: list[str] = [name for name in state_dict if name not in self._state_attrs]
 
         for name in self._state_attrs - set(missing_keys):
             self._restore_state_value(name, state_dict[name])

@@ -77,7 +77,7 @@ class Kickstarter(Loss):
         if forced:
             teacher_actions = teacher_td["actions"]
             student_td["actions"] = teacher_actions.to(dtype=student_td["actions"].dtype)
-            if "act_log_prob" in student_td.keys() and "act_log_prob" in teacher_td.keys():
+            if "act_log_prob" in student_td and "act_log_prob" in teacher_td:
                 student_td["act_log_prob"] = teacher_td["act_log_prob"].to(dtype=student_td["act_log_prob"].dtype)
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:

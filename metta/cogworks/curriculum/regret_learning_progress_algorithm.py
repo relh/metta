@@ -161,7 +161,7 @@ class RegretLearningProgressAlgorithm(RegretAlgorithmBase):
         }
 
         regret_changes: list[float] = []
-        for task_id in self._regret_outcomes.keys():
+        for task_id in self._regret_outcomes:
             ema = self._ema_tracker.get(task_id)
             if ema is None:
                 continue

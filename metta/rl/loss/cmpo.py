@@ -149,7 +149,7 @@ class TransitionBuffer:
     def sample(self, batch_size: int, device: torch.device) -> TensorDict:
         actual = min(batch_size, len(self._buffer))
         batch = random.sample(self._buffer, actual)
-        stacked = {k: torch.stack([item[k] for item in batch], dim=0).to(device=device) for k in batch[0].keys()}
+        stacked = {k: torch.stack([item[k] for item in batch], dim=0).to(device=device) for k in batch[0]}
         return TensorDict(stacked, batch_size=(actual,))
 
 
@@ -354,10 +354,7 @@ class CMPO(Loss):
         return prior_td["full_log_probs"].reshape(B, TT, -1).detach()
 
     def _compute_q_values(self, obs: Tensor, valid_action_mask: Tensor, *, gamma: float) -> Tensor:
-        if self.prior_model is not None:
-            value_model = self.prior_model
-        else:
-            value_model = self.policy
+        value_model = self.prior_model if self.prior_model is not None else self.policy
 
         B, TT = obs.shape[:2]
         obs_flat = obs.reshape(B * TT, *obs.shape[2:])

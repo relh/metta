@@ -462,10 +462,7 @@ class Protein:
 
         # For 'naive' normalization path (info/weighting)
         # Use subset statistics if subset was used
-        if subset_size < n_obs:
-            y_for_norm = y[subset_indices]
-        else:
-            y_for_norm = y
+        y_for_norm = y[subset_indices] if subset_size < n_obs else y
         min_y, max_y = np.min(y_for_norm), np.max(y_for_norm)
         mu_raw = mu * y_std + y_mean
         gp_y_norm = (mu_raw - min_y) / (np.abs(max_y - min_y) + 1e-12)
@@ -474,10 +471,7 @@ class Protein:
         c = np.array([e["cost"] for e in self.success_observations])
 
         # Use same subset for cost GP as score GP (if subset was used)
-        if subset_size < n_obs:
-            c_subset = c[subset_indices]
-        else:
-            c_subset = c
+        c_subset = c[subset_indices] if subset_size < n_obs else c
 
         if np.max(c_subset) - np.min(c_subset) < 1e-12:
             gp_log_c_norm = np.full(len(suggestions), 0.5)
@@ -510,10 +504,7 @@ class Protein:
             # EI in standardized units
             direction = self.hyperparameters.optimize_direction
             # Use subset for best_obs if subset was used
-            if subset_size < n_obs:
-                y_for_best = y[subset_indices]
-            else:
-                y_for_best = y
+            y_for_best = y[subset_indices] if subset_size < n_obs else y
             best_obs = np.max(y_for_best) if direction == 1 else np.min(y_for_best)
             best_std = (best_obs - y_mean) / y_std
             impr = (mu - best_std) if direction == 1 else (best_std - mu)
@@ -550,9 +541,8 @@ class Protein:
                 info["cost_threshold_relaxed"] = True
 
             # Add randomized parameter values to info if randomization was used
-            if self.randomize_acquisition:
-                if self.acquisition_fn == "ucb" and "beta" in locals():
-                    info["ucb_beta_used"] = beta
+            if self.randomize_acquisition and self.acquisition_fn == "ucb" and "beta" in locals():
+                info["ucb_beta_used"] = beta
             best = suggestions_t[best_idx].numpy()
             return self.hyperparameters.to_dict(best, fill), info
         else:
@@ -572,9 +562,8 @@ class Protein:
                 )
                 if cost_threshold_relaxed:
                     info["cost_threshold_relaxed"] = True
-                if self.randomize_acquisition:
-                    if self.acquisition_fn == "ucb" and "beta" in locals():
-                        info["ucb_beta_used"] = beta
+                if self.randomize_acquisition and self.acquisition_fn == "ucb" and "beta" in locals():
+                    info["ucb_beta_used"] = beta
 
                 suggestion = suggestions_t[idx].numpy()
                 results.append((self.hyperparameters.to_dict(suggestion, fill), info))

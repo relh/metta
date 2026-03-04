@@ -94,7 +94,7 @@ class FutureAttributePredictionLoss(Loss):
         minibatch = shared_loss_data["sampled_mb"]
         env_obs = minibatch["env_obs"]
 
-        if "future_attr_pred" not in policy_td.keys():
+        if "future_attr_pred" not in policy_td:
             return self._zero(), shared_loss_data, False
 
         num_attrs = len(self.cfg.attribute_ids)

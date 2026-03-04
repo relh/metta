@@ -58,9 +58,9 @@ class FutureLatentEMALoss(Loss):
             return self._zero(), shared_loss_data, False
         policy_td = cast(TensorDict, policy_td_raw)
 
-        if "future_latent_pred" not in policy_td.keys():
+        if "future_latent_pred" not in policy_td:
             return self._zero(), shared_loss_data, False
-        if "core" not in policy_td.keys():
+        if "core" not in policy_td:
             return self._zero(), shared_loss_data, False
 
         future_pred: Tensor = policy_td["future_latent_pred"].to(dtype=torch.float32)

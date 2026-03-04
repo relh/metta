@@ -208,10 +208,10 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
             total = float(sum(clipped.values()))
             if total <= 0.0:
                 # Fall back to uniform weights; Curriculum will normalize.
-                scores = {tid: 1.0 for tid in clipped.keys()}
+                scores = {tid: 1.0 for tid in clipped}
             else:
                 uniform = 1.0 / n
-                scores = {tid: (1.0 - r) * (clipped[tid] / total) + r * uniform for tid in clipped.keys()}
+                scores = {tid: (1.0 - r) * (clipped[tid] / total) + r * uniform for tid in clipped}
 
         if self.hypers.use_dual_pool:
             scores = self._apply_dual_pool_reweighting(scores)
@@ -340,9 +340,7 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
             return self._score_cache[task_id]
 
         task_stats = self.task_tracker.get_task_stats(task_id)
-        if not task_stats or task_stats["completion_count"] < 2:
-            score = self.hypers.exploration_bonus
-        elif task_id not in self._task_emas:
+        if (not task_stats or task_stats["completion_count"] < 2) or task_id not in self._task_emas:
             score = self.hypers.exploration_bonus
         else:
             ema_score, ema_squared, num_samples = self._task_emas[task_id]
@@ -581,7 +579,7 @@ class LearningProgressAlgorithm(CurriculumAlgorithm):
         if not self._outcomes:
             return np.array([])
 
-        task_ids = sorted(self._outcomes.keys())
+        task_ids = sorted(self._outcomes)
         if not task_ids:
             return np.array([])
 

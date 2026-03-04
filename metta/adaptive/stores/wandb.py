@@ -200,13 +200,8 @@ class WandbStore:
         if run.state == self.STATUS_RUNNING:
             has_started_training = True
         elif run.state in [self.STATUS_FINISHED, self.STATUS_CRASHED, self.STATUS_FAILED]:
-            if runtime > 0:
-                # Actually ran training
-                has_started_training = True
-                # Completion will be determined by comparing current_steps to total_timesteps below
-            else:
-                # Just initialized, never actually ran - stays PENDING
-                has_started_training = False
+            # Completion will be determined by comparing current_steps to total_timesteps below.
+            has_started_training = runtime > 0
 
         # Check evaluation status (regardless of run state)
         # This needs to be outside the elif block because eval can cause run to go back to RUNNING

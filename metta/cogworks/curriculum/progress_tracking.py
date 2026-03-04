@@ -65,18 +65,12 @@ def sigmoid_normalized_distribution(raw_scores: np.ndarray) -> np.ndarray:
     sub = raw_scores[positive_mask]
     if sub.size > 2:
         std = np.std(sub)
-        if std > 0:
-            sub = (sub - np.mean(sub)) / std
-        else:
-            sub = sub - np.mean(sub)
+        sub = (sub - np.mean(sub)) / std if std > 0 else sub - np.mean(sub)
 
     sub = 1 / (1 + np.exp(-np.clip(sub, -500, 500)))
 
     total = float(np.sum(sub))
-    if total > 0:
-        sub = sub / total
-    else:
-        sub = np.ones_like(sub) / len(sub)
+    sub = sub / total if total > 0 else np.ones_like(sub) / len(sub)
 
     out = np.zeros_like(raw_scores, dtype=float)
     out[positive_mask] = sub

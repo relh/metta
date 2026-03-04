@@ -173,10 +173,7 @@ def make_rich_monitor_table(runs: list[RunInfo], score_metric: str = "reward") -
         if run.summary and score_metric in run.summary:
             score_value = run.summary[score_metric]
             if score_value is not None:
-                if isinstance(score_value, (int, float)):
-                    score_str = f"{score_value:.3f}"
-                else:
-                    score_str = str(score_value)
+                score_str = f"{score_value:.3f}" if isinstance(score_value, (int, float)) else str(score_value)
             else:
                 score_str = "N/A"
         else:
@@ -255,10 +252,7 @@ def create_run_banner(
     if name_filter:
         filter_parts.append(f"name~{name_filter}")
 
-    if filter_parts:
-        filter_desc = " | ".join(filter_parts)
-    else:
-        filter_desc = "all runs"
+    filter_desc = " | ".join(filter_parts) if filter_parts else "all runs"
 
     # First line with fetch/display info
     line1 = Text(

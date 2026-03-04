@@ -878,11 +878,12 @@ class CoreTrainingLoop:
 
                         torch.nn.utils.clip_grad_norm_(policy.parameters(), actual_max_grad_norm)
                         policy_optimizer.step()
-                        if cuda_sync_after_optimizer_step and self.device.type == "cuda":
-                            if distributed_world_size == 1:
-                                torch.cuda.synchronize()
-                            elif (mb_idx + 1) % distributed_sync_period == 0:
-                                torch.cuda.synchronize()
+                        if (
+                            cuda_sync_after_optimizer_step
+                            and self.device.type == "cuda"
+                            and (distributed_world_size == 1 or (mb_idx + 1) % distributed_sync_period == 0)
+                        ):
+                            torch.cuda.synchronize()
 
                 # Notify losses of minibatch end
                 if stop_update_epoch:

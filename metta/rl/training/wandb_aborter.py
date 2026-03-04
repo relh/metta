@@ -39,16 +39,15 @@ class WandbAborter(TrainerComponent):
 
         target_timesteps: int | None = None
 
-        if distributed_helper.is_master() and self._wandb_run:
-            if abort_requested(self._wandb_run):
-                target_timesteps = int(context.agent_step)
-                context.config.total_timesteps = target_timesteps
-                logger.info("Abort tag detected. Stopping training at agent_step=%s", target_timesteps)
+        if distributed_helper.is_master() and self._wandb_run and abort_requested(self._wandb_run):
+            target_timesteps = int(context.agent_step)
+            context.config.total_timesteps = target_timesteps
+            logger.info("Abort tag detected. Stopping training at agent_step=%s", target_timesteps)
 
-                try:
-                    self._wandb_run.config.update({"trainer.total_timesteps": target_timesteps}, allow_val_change=True)
-                except Exception as exc:  # noqa: BLE001 - we only log the failure
-                    logger.warning("Failed to update wandb config with abort timesteps: %s", exc, exc_info=True)
+            try:
+                self._wandb_run.config.update({"trainer.total_timesteps": target_timesteps}, allow_val_change=True)
+            except Exception as exc:  # noqa: BLE001 - we only log the failure
+                logger.warning("Failed to update wandb config with abort timesteps: %s", exc, exc_info=True)
 
         if distributed_helper.is_distributed:
             target_timesteps = distributed_helper.broadcast_from_master(target_timesteps)

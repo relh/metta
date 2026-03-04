@@ -16,7 +16,7 @@ def _infer_tensordict_device(td: TensorDict) -> torch.device:
         return device
 
     # Infer device from the first tensor in the TensorDict.
-    for key in td:
+    for key in td.keys():
         val = td[key]
         if isinstance(val, Tensor):
             return val.device
@@ -53,8 +53,8 @@ def ensure_sequence_metadata(
 ) -> None:
     """Attach required sequence metadata to ``td`` if missing."""
 
-    needs_batch = "batch" not in td.keys()
-    needs_bptt = "bptt" not in td.keys()
+    needs_batch = "batch" not in td
+    needs_bptt = "bptt" not in td
     if not (needs_batch or needs_bptt):
         return
 
@@ -123,7 +123,7 @@ def forward_policy_for_training(
     policy_td, B, TT = prepare_policy_forward_td(minibatch, policy_spec, clone=False)
 
     flat_actions = minibatch["actions"].reshape(B * TT, -1)
-    if "vibe_actions" in minibatch.keys():
+    if "vibe_actions" in minibatch:
         flat_vibe_actions = minibatch["vibe_actions"].reshape(B * TT, -1)
         flat_actions = torch.cat((flat_actions, flat_vibe_actions), dim=1)
 

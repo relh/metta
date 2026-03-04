@@ -95,9 +95,12 @@ class ScheduleRule(Config):
         if self.start_agent_step is not None and self.end_agent_step is not None:
             if not (self.start_agent_step <= agent_step < self.end_agent_step):
                 return
-        elif self.start_epoch is not None and self.end_epoch is not None:
-            if not (self.start_epoch <= epoch < self.end_epoch):
-                return
+        elif (
+            self.start_epoch is not None
+            and self.end_epoch is not None
+            and not (self.start_epoch <= epoch < self.end_epoch)
+        ):
+            return
 
         fn = ANNEALERS[self.style]
         value = fn(self._progress(epoch=epoch, agent_step=agent_step), float(self.start_value), float(self.end_value))
@@ -320,7 +323,7 @@ class LossScheduler(TrainerComponent):
         #    must be present based on which losses are active for rollout.
         #    Check if any loss has train phase disabled (gated to False)
         train_disabled = False
-        for loss_name in self.context.losses.keys():
+        for loss_name in self.context.losses:
             entry = gates.get(loss_name)
             if entry and entry.get("train") is False:
                 train_disabled = True
@@ -354,7 +357,7 @@ class LossScheduler(TrainerComponent):
 
         # Include spec keys from losses that are active for rollout this epoch.
         gates = self.context.loss_run_gates
-        for loss_name in context.losses.keys():
+        for loss_name in context.losses:
             entry = gates.get(loss_name)
             if entry and entry.get("rollout") is False:
                 continue

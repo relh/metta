@@ -138,7 +138,7 @@ class PPOCritic(Loss):
             raise RuntimeError("PPOCritic requires a trajectory slice to select advantage config.")
         advantage_cfg = context.current_slice_cfg.advantage
         if self.cfg.critic_update == "gtd_lambda":
-            if "values" not in minibatch.keys():
+            if "values" not in minibatch:
                 raise RuntimeError("delta_lambda advantages require minibatch['values']")
 
             policy_td = shared_loss_data["policy_td"]
@@ -157,7 +157,7 @@ class PPOCritic(Loss):
             )
             return
 
-        values_for_adv = minibatch["values"] if "values" in minibatch.keys() else None
+        values_for_adv = minibatch["values"] if "values" in minibatch else None
         if values_for_adv is not None:
             if values_for_adv.dim() > 2:
                 values_for_adv = values_for_adv.mean(dim=-1)
@@ -200,7 +200,7 @@ class PPOCritic(Loss):
         old_values: Tensor = minibatch["values"]
         if self.cfg.critic_update == "gtd_lambda":
             policy_td: TensorDict = shared_loss_data["policy_td"]
-            if "h_values" not in policy_td.keys():
+            if "h_values" not in policy_td:
                 raise RuntimeError("Policy must output 'h_values' for critic_update='gtd_lambda'")
 
             new_values: Tensor = policy_td["values"]
@@ -222,7 +222,7 @@ class PPOCritic(Loss):
             rho_bt = rho_bt.reshape(old_values.shape).detach()
 
             rho_clip = float(self.cfg.rho_clip)
-            if "teacher_mask" in minibatch.keys():
+            if "teacher_mask" in minibatch:
                 teacher_mask = minibatch["teacher_mask"][:, 0].to(dtype=torch.bool)
                 if bool(teacher_mask.any()):
                     rho_trim = rho_bt[teacher_mask][:, :-1]

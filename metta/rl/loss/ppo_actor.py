@@ -71,15 +71,14 @@ class PPOActor(Loss):
             }
         )
         for key in self.cfg.extra_action_keys:
-            if key in spec.keys():
+            if key in spec:
                 continue
             spec[key] = UnboundedDiscrete(shape=torch.Size([]), dtype=torch.int32)
         return spec
 
     def policy_output_keys(self, policy_td: Optional[TensorDict] = None) -> set[str]:
-        if policy_td is not None:
-            if self.cfg.log_prob_key not in policy_td.keys() or self.cfg.entropy_key not in policy_td.keys():
-                return set()
+        if policy_td is not None and (self.cfg.log_prob_key not in policy_td or self.cfg.entropy_key not in policy_td):
+            return set()
         return {self.cfg.log_prob_key, self.cfg.entropy_key}
 
     def _ppo_policy_loss(
@@ -125,15 +124,15 @@ class PPOActor(Loss):
             return self._zero(), shared_loss_data, False
 
         policy_td: TensorDict = shared_loss_data["policy_td"]
-        if self.cfg.log_prob_key not in minibatch.keys():
+        if self.cfg.log_prob_key not in minibatch:
             raise RuntimeError(
                 f"PPOActor[{self.cfg.actor_name}] expected minibatch['{self.cfg.log_prob_key}'], but it was missing."
             )
-        if self.cfg.log_prob_key not in policy_td.keys():
+        if self.cfg.log_prob_key not in policy_td:
             raise RuntimeError(
                 f"PPOActor[{self.cfg.actor_name}] expected policy_td['{self.cfg.log_prob_key}'], but it was missing."
             )
-        if self.cfg.entropy_key not in policy_td.keys():
+        if self.cfg.entropy_key not in policy_td:
             raise RuntimeError(
                 f"PPOActor[{self.cfg.actor_name}] expected policy_td['{self.cfg.entropy_key}'], but it was missing."
             )

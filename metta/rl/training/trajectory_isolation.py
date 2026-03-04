@@ -42,7 +42,7 @@ def _pad_slice_td_like(slice_td: TensorDict, rollout_td: TensorDict | None) -> T
     for key in slice_td.keys():
         slice_value = slice_td.get(key)
         rollout_value = None
-        if rollout_td is not None and key in rollout_td.keys():
+        if rollout_td is not None and key in rollout_td:
             rollout_value = rollout_td.get(key)
 
         if isinstance(slice_value, TensorDict):
@@ -245,7 +245,7 @@ class TrajectoryIsolationConfig(Config):
             losses: typically `TrainerConfig.losses` (LossesConfig)
         """
 
-        available_policies = set(policy_assets.keys())
+        available_policies = set(policy_assets)
         available_losses = _available_loss_keys(losses)
 
         missing: list[str] = []
@@ -725,7 +725,7 @@ class TrajectoryIsolator(TrainerComponent):
                         # Non-tensor keys should not be written back (and are usually not present).
                         continue
 
-                    if key in rollout_td.keys():
+                    if key in rollout_td:
                         rollout_value = rollout_td.get(key)
                         if not isinstance(rollout_value, torch.Tensor):
                             # Unexpected type mismatch; use the safe path.

@@ -70,10 +70,9 @@ class ProteinConfig(Config):
         for key, value in self.parameters.items():
             if isinstance(value, ParameterConfig):
                 config[key] = value.model_dump()
-            elif isinstance(value, CategoricalParameterConfig):
+            elif isinstance(value, CategoricalParameterConfig) or (
+                isinstance(value, dict) and "min" in value and "max" in value
+            ):
                 config[key] = value
-            elif isinstance(value, dict):
-                if "min" in value and "max" in value:
-                    config[key] = value
 
         return config

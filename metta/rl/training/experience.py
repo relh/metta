@@ -317,7 +317,7 @@ class Experience:
 
     def reset_importance_sampling_ratios(self) -> None:
         """Reset the importance sampling ratio to 1.0."""
-        if "ratio" in self.buffer.keys():
+        if "ratio" in self.buffer:
             self.buffer["ratio"].fill_(1.0)
 
     def stats(self) -> Dict[str, float]:
@@ -328,11 +328,11 @@ class Experience:
             "truncateds": self.buffer["truncateds"].mean().item(),
         }
         # Only include values if they exist (not all losses use value networks)
-        if "values" in self.buffer.keys():
+        if "values" in self.buffer:
             stats["values"] = self.buffer["values"].mean().item()
-        if "ratio" in self.buffer.keys():
+        if "ratio" in self.buffer:
             stats["ratio"] = self.buffer["ratio"].mean().item()
-        if "act_log_prob" in self.buffer.keys():
+        if "act_log_prob" in self.buffer:
             stats["act_log_prob"] = self.buffer["act_log_prob"].mean().item()
 
         # Add episode length stats for active episodes
@@ -343,7 +343,7 @@ class Experience:
             stats["t_in_row"] = 0.0
 
         # Add action statistics based on action space type
-        if "actions" in self.buffer.keys():
+        if "actions" in self.buffer:
             actions = self.buffer["actions"]
             if actions.dtype in [torch.int32, torch.int64]:
                 # For discrete actions, we can add distribution info

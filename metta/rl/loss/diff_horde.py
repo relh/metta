@@ -331,13 +331,13 @@ class DiffHordeLoss(Loss):
         b: int,
         t: int,
     ) -> Tensor:
-        if all_actions_key and all_actions_key in policy_td.keys():
+        if all_actions_key and all_actions_key in policy_td:
             values = self._gather_action_conditional(
                 values=policy_td[all_actions_key],
                 actions=minibatch[self.cfg.actions_key],
             )
             return self._as_btF(tensor=values, b=b, t=t, f=self._num_cumulants, key=all_actions_key)
-        if direct_key in policy_td.keys():
+        if direct_key in policy_td:
             return self._as_btF(tensor=policy_td[direct_key], b=b, t=t, f=self._num_cumulants, key=direct_key)
         raise RuntimeError(f"DiffHordeLoss missing policy output key '{direct_key}'")
 
@@ -348,9 +348,9 @@ class DiffHordeLoss(Loss):
         policy_td: TensorDict,
         device: torch.device,
     ) -> Tensor:
-        if self.cfg.target_log_prob_key not in policy_td.keys():
+        if self.cfg.target_log_prob_key not in policy_td:
             raise RuntimeError("DiffHordeLoss off-policy correction requires policy_td['act_log_prob']")
-        if self.cfg.behavior_log_prob_key not in minibatch.keys():
+        if self.cfg.behavior_log_prob_key not in minibatch:
             raise RuntimeError("DiffHordeLoss off-policy correction requires minibatch['act_log_prob']")
 
         actions_shape = minibatch[self.cfg.actions_key].shape
@@ -386,7 +386,7 @@ class DiffHordeLoss(Loss):
             if len(value) != size:
                 raise ValueError(f"Expected parameter list of length {size}, got {len(value)}")
             cache_key = (device, dtype)
-            cached = cache.get(cache_key, None)
+            cached = cache.get(cache_key)
             if cached is None:
                 cached = torch.tensor(value, device=device, dtype=dtype)
                 cache[cache_key] = cached
