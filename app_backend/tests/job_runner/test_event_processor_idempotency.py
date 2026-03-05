@@ -15,7 +15,7 @@ from botocore.exceptions import ClientError
 from kubernetes import client
 from sqlmodel import Session, create_engine, select
 
-from metta.app_backend.job_runner.event_processor import _process_batch
+from metta.app_backend.job_runner.event_processor import _process_batch, _ThreadClients
 from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.models.k8s_events import K8sEvent
 
@@ -196,7 +196,7 @@ def test_event_processor_idempotency(
             patch("metta.app_backend.job_runner.event_processor.record_job_episode") as mock_record,
             patch(
                 "metta.app_backend.job_runner.event_processor._get_thread_clients",
-                return_value=(mock_stats_client, core_v1, batch_v1),
+                return_value=_ThreadClients(stats=mock_stats_client, core_v1=core_v1, batch_v1=batch_v1),
             ),
         ):
             _process_batch(executor, mock_cfg_dispatch)
@@ -283,7 +283,7 @@ def test_event_processor_handles_duplicate_success_events(
             patch("metta.app_backend.job_runner.event_processor.record_job_episode"),
             patch(
                 "metta.app_backend.job_runner.event_processor._get_thread_clients",
-                return_value=(mock_stats_client, core_v1, batch_v1),
+                return_value=_ThreadClients(stats=mock_stats_client, core_v1=core_v1, batch_v1=batch_v1),
             ),
         ):
             update_count = 0
@@ -333,7 +333,7 @@ def test_event_processor_handles_failed_events_idempotently(
         patch("metta.app_backend.job_runner.event_processor._read_runner_error", return_value=None),
         patch(
             "metta.app_backend.job_runner.event_processor._get_thread_clients",
-            return_value=(mock_stats_client, core_v1, batch_v1),
+            return_value=_ThreadClients(stats=mock_stats_client, core_v1=core_v1, batch_v1=batch_v1),
         ),
     ):
         _process_batch(executor, mock_cfg_dispatch)
