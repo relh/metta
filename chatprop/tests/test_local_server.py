@@ -11,12 +11,15 @@ from metta.chatprop.local.backend.server import (
     _extract_session_cwd,
     _flowchart_options_from_payload,
     _normalize_closed_pr_record,
+    _normalize_uploaded_snapshot_payload,
     _parse_archived_session_id,
     _parse_output_path,
+    _read_uploaded_snapshot_records,
     _repo_from_cwd,
     _repo_root_for_explicit_skills,
     _resolve_frontend_target,
     _select_pr_record,
+    _store_uploaded_snapshot,
     parse_args,
 )
 from metta.chatprop.scanner import TranscriptFile
@@ -259,6 +262,87 @@ def test_parse_output_path_handles_blank_and_expands() -> None:
     assert parsed.is_absolute()
 
 
+def test_normalize_uploaded_snapshot_payload_accepts_flowchart_shape() -> None:
+    normalized = _normalize_uploaded_snapshot_payload(
+        {
+            "name": "laptop-snapshot",
+            "snapshot": {
+                "session_count": 4,
+                "branch_count": 3,
+                "workflow_graph": {
+                    "graph_scope": "uploaded_snapshot",
+                    "revision_prevention_scope": "uploaded_snapshot",
+                    "nodes": [
+                        {"id": "implicit_fn:fix", "label": "fix(x)", "kind": "implicit", "count": 2},
+                        {"id": "explicit:pr.fix-ci", "label": "pr.fix-ci", "kind": "explicit", "count": 1},
+                    ],
+                    "edges": [
+                        {
+                            "source": "implicit_fn:fix",
+                            "target": "explicit:pr.fix-ci",
+                            "phase": "explicit_ref",
+                            "count": 1,
+                        }
+                    ],
+                },
+            },
+        }
+    )
+    assert normalized is not None
+    assert normalized["name"] == "laptop-snapshot"
+    assert normalized["source_key"] == "laptop-snapshot"
+    assert normalized["session_count"] == 4
+    assert normalized["branch_count"] == 3
+    assert normalized["workflow_graph"]["node_count"] == 2
+    assert normalized["workflow_graph"]["edge_count"] == 1
+
+
+def test_normalize_uploaded_snapshot_payload_rejects_missing_graph() -> None:
+    assert _normalize_uploaded_snapshot_payload({"snapshot": {"session_count": 1}}) is None
+
+
+def test_store_uploaded_snapshot_replaces_existing_source_key(tmp_path: Path) -> None:
+    config = _make_config(tmp_path)
+    first = _store_uploaded_snapshot(
+        config,
+        {
+            "source_key": "machine-a",
+            "name": "Machine A",
+            "snapshot": {
+                "session_count": 3,
+                "branch_count": 2,
+                "workflow_graph": {
+                    "nodes": [{"id": "implicit_fn:fix", "label": "fix(x)", "kind": "implicit", "count": 2}],
+                    "edges": [],
+                },
+            },
+        },
+    )
+    second = _store_uploaded_snapshot(
+        config,
+        {
+            "source_key": "machine-a",
+            "name": "Machine A",
+            "snapshot": {
+                "session_count": 9,
+                "branch_count": 4,
+                "workflow_graph": {
+                    "nodes": [{"id": "implicit_fn:fix", "label": "fix(x)", "kind": "implicit", "count": 5}],
+                    "edges": [],
+                },
+            },
+        },
+    )
+
+    records = _read_uploaded_snapshot_records(config)
+    assert len(records) == 1
+    assert first["snapshot_id"] == second["snapshot_id"]
+    assert second["session_count"] == 9
+    assert second["branch_count"] == 4
+    assert records[0]["source_key"] == "machine-a"
+    assert records[0]["workflow_graph"]["nodes"][0]["count"] == 5
+
+
 def test_build_catalog_keeps_single_indexed_branch_feature_chunk(tmp_path: Path, monkeypatch) -> None:
     config = _make_config(tmp_path)
     transcript_path = tmp_path / "session.jsonl"
@@ -342,3 +426,58 @@ def test_build_catalog_loads_explicit_skills_from_repo_root_not_cwd(tmp_path: Pa
     assert loaded_roots == [_repo_root_for_explicit_skills()]
     assert loaded_roots[0] != fake_cwd
     assert (loaded_roots[0] / "skills").is_dir()
+
+
+def test_build_catalog_merges_uploaded_snapshots_when_local_archive_is_empty(tmp_path: Path, monkeypatch) -> None:
+    config = _make_config(tmp_path)
+
+    monkeypatch.setattr(server_module, "_read_archive_index", lambda _config: {})
+    monkeypatch.setattr(server_module, "_read_archive_metadata_windows", lambda _config: {})
+    monkeypatch.setattr(server_module, "scan_archived", lambda _config: [])
+    monkeypatch.setattr(server_module, "_load_branch_cache", lambda _config: {})
+    monkeypatch.setattr(server_module, "_load_merged_pr_index", lambda _config: {"by_branch": {}, "by_repo_branch": {}})
+    monkeypatch.setattr(server_module, "_write_branch_cache", lambda _config, _cache: None)
+    monkeypatch.setattr(server_module, "load_explicit_skills", lambda _repo_root: ["pr.fix-ci", "pr.summary"])
+    monkeypatch.setattr(
+        server_module,
+        "_read_uploaded_snapshot_records",
+        lambda _config: [
+            {
+                "snapshot_id": "up-1",
+                "uploaded_at": "2026-03-05T16:00:00+00:00",
+                "name": "remote-sample",
+                "session_count": 12,
+                "branch_count": 5,
+                "workflow_graph": {
+                    "graph_scope": "uploaded_snapshot",
+                    "revision_prevention_scope": "uploaded_snapshot",
+                    "node_count": 2,
+                    "edge_count": 1,
+                    "nodes": [
+                        {"id": "implicit_fn:fix", "label": "fix(x)", "kind": "implicit", "count": 7},
+                        {"id": "explicit:pr.fix-ci", "label": "pr.fix-ci", "kind": "explicit", "count": 3},
+                    ],
+                    "edges": [
+                        {
+                            "source": "implicit_fn:fix",
+                            "target": "explicit:pr.fix-ci",
+                            "phase": "explicit_ref",
+                            "count": 3,
+                        }
+                    ],
+                    "revision_prevention": [],
+                },
+            }
+        ],
+    )
+
+    payload = _build_catalog(config, refresh=False)
+
+    assert payload["session_count"] == 12
+    assert payload["branch_count"] == 5
+    assert payload["uploaded_snapshot_count"] == 1
+    assert payload["uploaded_session_count"] == 12
+    assert payload["uploaded_branch_count"] == 5
+    assert payload["workflow_graph"]["graph_scope"] == "all_feature_chunks_plus_uploaded_snapshots"
+    assert payload["skill_dendrogram"]["skill_count"] == 2
+    assert payload["uploaded_snapshots"][0]["node_count"] == 2

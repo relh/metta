@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,11 +13,22 @@ import click
 
 from metta.chatprop.analyze import build_analysis_context, run_analysis
 from metta.chatprop.config import ChatpropConfig, default_config_path, load_config
+from metta.chatprop.local.backend.server import build_catalog_snapshot
 from metta.chatprop.local.backend.server import run_server as run_local_server
 from metta.chatprop.local.daemon import get_status, run_daemon_forever, run_daemon_once, upload_session
 from metta.chatprop.local.flowchart import build_flowchart_artifacts, write_flowchart_outputs
 from metta.chatprop.local.launchd import install_launchd_plist
 from metta.chatprop.scanner import TranscriptFile, find_transcripts_for_branches, read_transcript
+
+
+def _snapshot_source_key(config: ChatpropConfig) -> str:
+    source_seed = (
+        f"{config.state_dir.expanduser().resolve()}|"
+        f"{config.claude_code.path.expanduser().resolve()}|"
+        f"{config.codex.path.expanduser().resolve()}"
+    )
+    digest = hashlib.sha256(source_seed.encode("utf-8")).hexdigest()[:20]
+    return f"local:{digest}"
 
 
 def _render_local_config_toml(
@@ -349,6 +363,34 @@ def flowchart(
     click.echo(f"  mermaid: {mermaid_path.resolve()}")
     if json_path is not None:
         click.echo(f"  json: {json_path.resolve()}")
+
+
+@main.command(name="snapshot")
+@click.option("--config", "config_path", default=str(default_config_path()))
+@click.option("--refresh", is_flag=True, help="Refresh branch outcome lookup before snapshot export.")
+@click.option("--output", "output_path", default="chatprop_snapshot.json", help="Path to JSON snapshot output.")
+def snapshot(config_path: str, refresh: bool, output_path: str) -> None:
+    """Export a compact workflow snapshot for remote chatprop uploads."""
+    config = load_config(Path(config_path).expanduser())
+    catalog = build_catalog_snapshot(config=config, refresh=refresh)
+    workflow_graph = catalog.get("workflow_graph")
+    if not isinstance(workflow_graph, dict):
+        click.echo("catalog missing workflow_graph", err=True)
+        sys.exit(1)
+
+    payload = {
+        "schema": "chatprop_snapshot_v1",
+        "generated_at": datetime.now(UTC).isoformat(),
+        "catalog_generated_at": catalog.get("generated_at"),
+        "source_key": _snapshot_source_key(config),
+        "session_count": int(catalog.get("session_count", 0)),
+        "branch_count": int(catalog.get("branch_count", 0)),
+        "workflow_graph": workflow_graph,
+    }
+    path = Path(output_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    click.echo(f"snapshot exported: {path.resolve()}")
 
 
 if __name__ == "__main__":

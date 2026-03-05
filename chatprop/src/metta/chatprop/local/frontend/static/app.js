@@ -117,6 +117,28 @@ function setFlowchartStatus(text, isError = false) {
   }
 }
 
+function setUploadStatus(text, isError = false) {
+  const node = document.getElementById("uploadStatus");
+  if (!node) return;
+  node.textContent = text;
+  if (isError) {
+    node.classList.add("error");
+  } else {
+    node.classList.remove("error");
+  }
+}
+
+function setDendrogramStatus(text, isError = false) {
+  const node = document.getElementById("dendrogramStatus");
+  if (!node) return;
+  node.textContent = text;
+  if (isError) {
+    node.classList.add("error");
+  } else {
+    node.classList.remove("error");
+  }
+}
+
 function parseBoundedInt(rawValue, fallback, minValue, maxValue) {
   const value = Number.parseInt(String(rawValue ?? ""), 10);
   if (!Number.isFinite(value)) return fallback;
@@ -200,23 +222,32 @@ async function ensureMermaidClient() {
   return mermaidClientPromise;
 }
 
-async function renderFlowchartCanvas(mermaidText) {
-  const canvas = document.getElementById("flowchartCanvas");
+async function renderMermaidCanvas({ canvasId, mermaidText, emptyMessage, renderPrefix }) {
+  const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   if (!mermaidText) {
-    canvas.innerHTML = '<div class="hint-line">No flowchart data yet.</div>';
+    canvas.innerHTML = `<div class="hint-line">${escapeHtml(emptyMessage)}</div>`;
     return;
   }
 
   try {
     const mermaid = await ensureMermaidClient();
-    const renderId = `chatprop_flowchart_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const renderId = `${renderPrefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     const rendered = await mermaid.render(renderId, mermaidText);
     canvas.innerHTML = rendered.svg;
   } catch (error) {
     canvas.innerHTML = `<pre>${escapeHtml(mermaidText)}</pre>`;
     throw error;
   }
+}
+
+async function renderFlowchartCanvas(mermaidText) {
+  await renderMermaidCanvas({
+    canvasId: "flowchartCanvas",
+    mermaidText,
+    emptyMessage: "No flowchart data yet.",
+    renderPrefix: "chatprop_flowchart",
+  });
 }
 
 function applyFlowchartPayload(payload) {
@@ -604,6 +635,89 @@ function renderWorkflowGraphPanel() {
   }
 }
 
+function renderUploadTable() {
+  const summaryNode = document.getElementById("uploadSummary");
+  const body = document.getElementById("uploadSnapshotsBody");
+  if (!summaryNode || !body) return;
+
+  const uploads = Array.isArray(state.catalog?.uploaded_snapshots) ? state.catalog.uploaded_snapshots.slice() : [];
+  summaryNode.textContent = `${uploads.length.toLocaleString()} snapshots`;
+
+  if (uploads.length === 0) {
+    body.innerHTML = '<tr><td colspan="6">No uploaded snapshots yet.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = uploads
+    .map((upload) => {
+      const name = upload.name || "uploaded snapshot";
+      const uploadedAt = upload.uploaded_at || "-";
+      const sessionCount = Number(upload.session_count || 0).toLocaleString();
+      const branchCount = Number(upload.branch_count || 0).toLocaleString();
+      const nodeCount = Number(upload.node_count || 0).toLocaleString();
+      const edgeCount = Number(upload.edge_count || 0).toLocaleString();
+      return `
+        <tr>
+          <td><span class="truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span></td>
+          <td><span title="${escapeHtml(formatDate(uploadedAt))}">${escapeHtml(formatDateCompact(uploadedAt))}</span></td>
+          <td>${escapeHtml(sessionCount)}</td>
+          <td>${escapeHtml(branchCount)}</td>
+          <td>${escapeHtml(nodeCount)}</td>
+          <td>${escapeHtml(edgeCount)}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function renderDendrogramSummary(payload) {
+  const summaryNode = document.getElementById("dendrogramSummary");
+  if (!summaryNode) return;
+  const skillCount = Number(payload?.skill_count || 0).toLocaleString();
+  const nodeCount = Number(payload?.node_count || 0).toLocaleString();
+  const edgeCount = Number(payload?.edge_count || 0).toLocaleString();
+  summaryNode.textContent = `skills=${skillCount} nodes=${nodeCount} edges=${edgeCount}`;
+}
+
+function renderDendrogramSource(mermaidText) {
+  const node = document.getElementById("dendrogramSource");
+  if (!node) return;
+  node.textContent = mermaidText || "";
+}
+
+async function renderDendrogramFromCatalog() {
+  const payload = state.catalog?.skill_dendrogram;
+  if (!payload || typeof payload !== "object") {
+    renderDendrogramSummary(null);
+    renderDendrogramSource("");
+    setDendrogramStatus("Dendrogram unavailable: no explicit skill graph.");
+    await renderMermaidCanvas({
+      canvasId: "dendrogramCanvas",
+      mermaidText: "",
+      emptyMessage: "No dendrogram data yet.",
+      renderPrefix: "chatprop_dendrogram",
+    });
+    return;
+  }
+
+  const mermaidText = typeof payload.mermaid === "string" ? payload.mermaid : "";
+  renderDendrogramSummary(payload);
+  renderDendrogramSource(mermaidText);
+  try {
+    await renderMermaidCanvas({
+      canvasId: "dendrogramCanvas",
+      mermaidText,
+      emptyMessage: "No dendrogram data yet.",
+      renderPrefix: "chatprop_dendrogram",
+    });
+    setDendrogramStatus(
+      `Dendrogram ready: ${Number(payload.skill_count || 0).toLocaleString()} skills in ${Number(payload.node_count || 0).toLocaleString()} nodes.`,
+    );
+  } catch (error) {
+    setDendrogramStatus(`Dendrogram rendered as Mermaid text fallback: ${error.message}`, true);
+  }
+}
+
 function renderCatalogCards() {
   const catalog = state.catalog || {};
   const branches = catalog.branches || [];
@@ -613,11 +727,27 @@ function renderCatalogCards() {
 
   const sessionsNode = document.getElementById("sessionsCount");
   const branchesNode = document.getElementById("branchesCount");
+  const uploadsNode = document.getElementById("uploadedSnapshotCount");
   const mergedNode = document.getElementById("mergedCount");
   const generatedNode = document.getElementById("generatedAt");
 
-  if (sessionsNode) sessionsNode.textContent = Number(catalog.session_count || 0).toLocaleString();
-  if (branchesNode) branchesNode.textContent = Number(catalog.branch_count || 0).toLocaleString();
+  const totalSessions = Number(catalog.session_count || 0);
+  const totalBranches = Number(catalog.branch_count || 0);
+  const localSessions = Number(catalog.local_session_count || totalSessions);
+  const localBranches = Number(catalog.local_branch_count || totalBranches);
+  const uploadedSessions = Number(catalog.uploaded_session_count || 0);
+  const uploadedBranches = Number(catalog.uploaded_branch_count || 0);
+  const uploadCount = Number(catalog.uploaded_snapshot_count || 0);
+
+  if (sessionsNode) {
+    sessionsNode.textContent = totalSessions.toLocaleString();
+    sessionsNode.title = uploadedSessions > 0 ? `${localSessions.toLocaleString()} local + ${uploadedSessions.toLocaleString()} uploaded` : "";
+  }
+  if (branchesNode) {
+    branchesNode.textContent = totalBranches.toLocaleString();
+    branchesNode.title = uploadedBranches > 0 ? `${localBranches.toLocaleString()} local + ${uploadedBranches.toLocaleString()} uploaded` : "";
+  }
+  if (uploadsNode) uploadsNode.textContent = uploadCount.toLocaleString();
   if (mergedNode) {
     if (pendingCount > 0 && resolvedCount === 0) {
       mergedNode.textContent = "—";
@@ -635,6 +765,7 @@ function renderCatalog() {
   renderBranchTable();
   renderSessionTable();
   renderWorkflowGraphPanel();
+  renderUploadTable();
 }
 
 function sleepMs(ms) {
@@ -684,11 +815,14 @@ async function loadCatalog({ refresh }) {
     state.catalog = payload;
     renderCatalog();
     await renderFlowchartFromCatalog();
+    await renderDendrogramFromCatalog();
     const pendingCount = (payload.branches || []).filter((row) => row.pr_state === "pending_lookup").length;
     const lookupNote =
       pendingCount > 0 ? ` (${pendingCount.toLocaleString()} PR states pending lookup)` : "";
+    const uploadedCount = Number(payload.uploaded_snapshot_count || 0);
+    const uploadNote = uploadedCount > 0 ? ` (${uploadedCount.toLocaleString()} uploaded snapshots)` : "";
     setCatalogStatus(
-      `Catalog ready: ${Number(payload.session_count || 0).toLocaleString()} sessions, ${Number(payload.branch_count || 0).toLocaleString()} branches${lookupNote}.`,
+      `Catalog ready: ${Number(payload.session_count || 0).toLocaleString()} sessions, ${Number(payload.branch_count || 0).toLocaleString()} branches${lookupNote}${uploadNote}.`,
     );
     renderProgressBar(100, "Catalog ready · 100.0%");
     window.setTimeout(() => {
@@ -697,6 +831,40 @@ async function loadCatalog({ refresh }) {
   } catch (error) {
     setCatalogStatus(`Catalog load failed: ${error.message}`, true);
     renderProgressBar(100, `Load failed: ${error.message}`);
+  }
+}
+
+async function uploadSnapshotFromFile() {
+  const fileInput = document.getElementById("uploadSnapshotFile");
+  const nameInput = document.getElementById("uploadSnapshotName");
+  if (!(fileInput instanceof HTMLInputElement) || !(nameInput instanceof HTMLInputElement)) {
+    return;
+  }
+  const file = fileInput.files?.[0];
+  if (!file) {
+    setUploadStatus("Select a JSON snapshot file first.", true);
+    return;
+  }
+
+  setUploadStatus(`Uploading ${file.name}...`);
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Snapshot file must contain a JSON object.");
+    }
+
+    const optionalName = nameInput.value.trim();
+    const payload = optionalName.length > 0 ? { name: optionalName, snapshot: parsed } : { snapshot: parsed };
+    const response = await fetchJsonWithPayload("/api/uploads", payload);
+    const uploaded = response?.uploaded || {};
+    const uploadedName = uploaded.name || optionalName || file.name;
+    setUploadStatus(`Uploaded ${uploadedName}. Refreshing catalog...`);
+    fileInput.value = "";
+    await loadCatalog({ refresh: false });
+    setUploadStatus(`Uploaded ${uploadedName}.`);
+  } catch (error) {
+    setUploadStatus(`Upload failed: ${error.message}`, true);
   }
 }
 
@@ -743,6 +911,35 @@ function bindCatalogControls() {
       void runAnalysisAction("find");
     }
   });
+}
+
+function bindUploadControls() {
+  const uploadBtn = document.getElementById("uploadSnapshotBtn");
+  const fileInput = document.getElementById("uploadSnapshotFile");
+  const nameInput = document.getElementById("uploadSnapshotName");
+
+  if (uploadBtn) {
+    uploadBtn.addEventListener("click", () => {
+      void uploadSnapshotFromFile();
+    });
+  }
+  if (fileInput) {
+    fileInput.addEventListener("change", () => {
+      const element = fileInput;
+      if (!(element instanceof HTMLInputElement)) return;
+      if (element.files?.length) {
+        setUploadStatus(`Ready to upload ${element.files[0].name}.`);
+      }
+    });
+  }
+  if (nameInput) {
+    nameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void uploadSnapshotFromFile();
+      }
+    });
+  }
 }
 
 function bindFlowchartControls() {
@@ -799,6 +996,7 @@ function bindAnalysisControls() {
 
 async function initialize() {
   bindCatalogControls();
+  bindUploadControls();
   bindFlowchartControls();
   bindAnalysisControls();
   await loadCatalog({ refresh: false });

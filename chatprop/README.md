@@ -80,6 +80,14 @@ uv run chatprop flowchart \
   --max-edges 350
 ```
 
+### 4b) Export compact upload snapshot (for remote chatprop)
+
+```bash
+uv run chatprop snapshot --output ./chatprop_snapshot.json
+```
+
+Upload this JSON from the web UI "Snapshot Uploads" panel when running chatprop as a remote service.
+
 ### 5) Analyze/propose branch learnings
 
 ```bash
@@ -96,6 +104,7 @@ Run `uv run chatprop --help` for full command docs.
 - `status`: show archive/index counters
 - `serve`: run local UI/API server
 - `flowchart`: export weighted workflow graph
+- `snapshot`: export compact workflow snapshot for remote upload
 - `find BRANCH...`: list transcripts matching branch/PR strings
 - `upload SESSION_ID`: force-archive a single session by id
 - `analyze BRANCH...`: build branch context and run `claude --print` analysis (`--dry-run` prints prompt context only)

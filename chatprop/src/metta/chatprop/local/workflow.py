@@ -35,20 +35,41 @@ _DONE_CUES = [
     re.compile(r"\b(done|completed?|finished)\b", re.IGNORECASE),
     re.compile(r"\ball set\b", re.IGNORECASE),
     re.compile(r"\bready (?:for review|to merge|for merge)\b", re.IGNORECASE),
-    re.compile(r"\b(pr|pull request) (?:is )?(?:up|open|ready|created|submitted)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(pr|pull request) (?:is )?(?:up|open|ready|created|submitted)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\b(pushed|submitted|committed)\b", re.IGNORECASE),
     re.compile(r"\bimplemented\b", re.IGNORECASE),
 ]
 
 _IMPLICIT_VERB_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("fix", re.compile(r"\b(fix|debug|triage|repair|resolve|address)\b", re.IGNORECASE)),
-    ("cleanup", re.compile(r"\b(clean ?up|simplify|refactor|remove|prune)\b", re.IGNORECASE)),
-    ("implement", re.compile(r"\b(add|implement|create|build|introduce)\b", re.IGNORECASE)),
-    ("analyze", re.compile(r"\b(analy[sz]e|investigate|review|audit|inspect)\b", re.IGNORECASE)),
+    (
+        "fix",
+        re.compile(r"\b(fix|debug|triage|repair|resolve|address)\b", re.IGNORECASE),
+    ),
+    (
+        "cleanup",
+        re.compile(r"\b(clean ?up|simplify|refactor|remove|prune)\b", re.IGNORECASE),
+    ),
+    (
+        "implement",
+        re.compile(r"\b(add|implement|create|build|introduce)\b", re.IGNORECASE),
+    ),
+    (
+        "analyze",
+        re.compile(r"\b(analy[sz]e|investigate|review|audit|inspect)\b", re.IGNORECASE),
+    ),
     ("test", re.compile(r"\b(test|verify|check|lint|pytest|ci)\b", re.IGNORECASE)),
     ("sync", re.compile(r"\b(sync|merge|rebase|restack|cherry-pick)\b", re.IGNORECASE)),
-    ("submit", re.compile(r"\b(submit|push|commit|open pr|create pr)\b", re.IGNORECASE)),
-    ("document", re.compile(r"\b(explain|summari[sz]e|document|write up|docs?)\b", re.IGNORECASE)),
+    (
+        "submit",
+        re.compile(r"\b(submit|push|commit|open pr|create pr)\b", re.IGNORECASE),
+    ),
+    (
+        "document",
+        re.compile(r"\b(explain|summari[sz]e|document|write up|docs?)\b", re.IGNORECASE),
+    ),
 ]
 
 _ARG_STOP_WORDS = {
@@ -155,7 +176,13 @@ def _extract_event_from_payload(obj: dict[str, Any], order: int) -> list[_Event]
         text = _collapse_text(_extract_text_parts(obj.get("message", obj)))
         if text:
             events.append(
-                _Event(order=order, timestamp=timestamp, timestamp_raw=timestamp_text, role="assistant", text=text)
+                _Event(
+                    order=order,
+                    timestamp=timestamp,
+                    timestamp_raw=timestamp_text,
+                    role="assistant",
+                    text=text,
+                )
             )
         return events
     if msg_type == "event_msg":
@@ -167,13 +194,25 @@ def _extract_event_from_payload(obj: dict[str, Any], order: int) -> list[_Event]
             text = _collapse_text(_extract_text_parts(payload.get("message")))
             if text:
                 events.append(
-                    _Event(order=order, timestamp=timestamp, timestamp_raw=timestamp_text, role="user", text=text)
+                    _Event(
+                        order=order,
+                        timestamp=timestamp,
+                        timestamp_raw=timestamp_text,
+                        role="user",
+                        text=text,
+                    )
                 )
         elif event_kind == "agent_message":
             text = _collapse_text(_extract_text_parts(payload.get("message")))
             if text:
                 events.append(
-                    _Event(order=order, timestamp=timestamp, timestamp_raw=timestamp_text, role="assistant", text=text)
+                    _Event(
+                        order=order,
+                        timestamp=timestamp,
+                        timestamp_raw=timestamp_text,
+                        role="assistant",
+                        text=text,
+                    )
                 )
         return events
     if msg_type == "response_item":
@@ -270,7 +309,9 @@ def extract_transcript_events(path: Path) -> list[_Event]:
     return events
 
 
-def build_feature_chunks_from_segments(segments: list[BranchSegment]) -> list[dict[str, Any]]:
+def build_feature_chunks_from_segments(
+    segments: list[BranchSegment],
+) -> list[dict[str, Any]]:
     if not segments:
         return []
 
@@ -366,7 +407,12 @@ def _clean_argument_phrase(raw: str, *, fallback: str) -> str:
     if not compact:
         return fallback
 
-    compact = re.sub(r"^(?:please|can you|could you|would you|help me)\s+", "", compact, flags=re.IGNORECASE)
+    compact = re.sub(
+        r"^(?:please|can you|could you|would you|help me)\s+",
+        "",
+        compact,
+        flags=re.IGNORECASE,
+    )
     compact = re.split(r"\b(?:and|then|also|but)\b", compact, maxsplit=1, flags=re.IGNORECASE)[0]
     tokens = [token for token in compact.split(" ") if token]
     while tokens and tokens[0].lower() in _ARG_STOP_WORDS:
@@ -599,7 +645,7 @@ def analyze_session_feature_chunks(
                 "user_message_count": len(revision_user_events),
                 "skills": revision_skills,
                 "implicit_invocations": revision_invocations,
-                "first_revision_user_at": first_revision_event.timestamp_raw if first_revision_event else None,
+                "first_revision_user_at": (first_revision_event.timestamp_raw if first_revision_event else None),
             },
             "has_revision": bool(revision_events),
             "explicit_skill_refs": sorted(explicit_refs),
@@ -639,7 +685,14 @@ class SkillGraphAccumulator:
             self._nodes[skill_id] = node
         return node
 
-    def _record_node_use(self, skill_id: str, *, label: str, example: str | None, argument: str | None = None) -> None:
+    def _record_node_use(
+        self,
+        skill_id: str,
+        *,
+        label: str,
+        example: str | None,
+        argument: str | None = None,
+    ) -> None:
         if skill_id.startswith("implicit_"):
             node = self._ensure_implicit_node(skill_id, label)
             self._total_implicit_uses += 1
@@ -861,3 +914,310 @@ class SkillGraphAccumulator:
             "edges": edges,
             "revision_prevention": revision_prevention,
         }
+
+
+def _parse_nonnegative_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return max(0, value)
+    if isinstance(value, str):
+        text = value.strip().removeprefix("+")
+        if text.isdigit():
+            return int(text)
+    return 0
+
+
+def _merge_sample_strings(target: list[str], incoming: Any, *, limit: int) -> None:
+    if not isinstance(incoming, list):
+        return
+    for value in incoming:
+        if not isinstance(value, str):
+            continue
+        cleaned = value.strip()
+        if not cleaned or cleaned in target:
+            continue
+        target.append(cleaned)
+        if len(target) >= limit:
+            break
+
+
+def _wilson_bounds(*, support: int, total: int) -> tuple[float, float]:
+    if total <= 0:
+        return 0.0, 0.0
+    proportion = support / total
+    z = 1.96
+    denominator = 1.0 + (z * z) / total
+    center = (proportion + (z * z) / (2 * total)) / denominator
+    margin = z * ((proportion * (1.0 - proportion) / total) + (z * z) / (4 * total * total)) ** 0.5 / denominator
+    low = max(0.0, round(center - margin, 3))
+    high = min(1.0, round(center + margin, 3))
+    return low, high
+
+
+def merge_workflow_graphs(
+    workflow_graphs: list[dict[str, Any]],
+    *,
+    graph_scope: str,
+    revision_prevention_scope: str,
+) -> dict[str, Any]:
+    nodes_by_id: dict[str, dict[str, Any]] = {}
+    edges: dict[tuple[str, str, str], int] = defaultdict(int)
+    revision_pairs: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for graph in workflow_graphs:
+        nodes_raw = graph.get("nodes")
+        if isinstance(nodes_raw, list):
+            for node_raw in nodes_raw:
+                if not isinstance(node_raw, dict):
+                    continue
+                node_id = node_raw.get("id")
+                if not isinstance(node_id, str) or not node_id:
+                    continue
+                merged = nodes_by_id.setdefault(
+                    node_id,
+                    {
+                        "id": node_id,
+                        "label": node_id.split(":", 1)[-1],
+                        "kind": "explicit",
+                        "count": 0,
+                        "examples": [],
+                    },
+                )
+                label = node_raw.get("label")
+                if isinstance(label, str) and label.strip():
+                    merged["label"] = label.strip()
+                kind = node_raw.get("kind")
+                if kind in {"explicit", "implicit"}:
+                    merged["kind"] = kind
+                merged["count"] = int(merged["count"]) + _parse_nonnegative_int(node_raw.get("count"))
+                _merge_sample_strings(
+                    merged["examples"],
+                    node_raw.get("examples"),
+                    limit=_MAX_NODE_EXAMPLES,
+                )
+                samples = merged.setdefault("argument_samples", [])
+                if isinstance(samples, list):
+                    _merge_sample_strings(
+                        samples,
+                        node_raw.get("argument_samples"),
+                        limit=_MAX_ARGUMENT_SAMPLES,
+                    )
+
+        edges_raw = graph.get("edges")
+        if isinstance(edges_raw, list):
+            for edge_raw in edges_raw:
+                if not isinstance(edge_raw, dict):
+                    continue
+                source = edge_raw.get("source")
+                target = edge_raw.get("target")
+                if not isinstance(source, str) or not source:
+                    continue
+                if not isinstance(target, str) or not target:
+                    continue
+                phase_raw = edge_raw.get("phase")
+                phase = phase_raw if isinstance(phase_raw, str) and phase_raw else "flow"
+                count = _parse_nonnegative_int(edge_raw.get("count"))
+                if count <= 0:
+                    continue
+                edges[(source, target, phase)] += count
+
+        pairs_raw = graph.get("revision_prevention")
+        if isinstance(pairs_raw, list):
+            for pair_raw in pairs_raw:
+                if not isinstance(pair_raw, dict):
+                    continue
+                planning_skill = pair_raw.get("planning_skill")
+                revision_skill = pair_raw.get("revision_skill")
+                if not isinstance(planning_skill, str) or not planning_skill:
+                    continue
+                if not isinstance(revision_skill, str) or not revision_skill:
+                    continue
+                pair_key = (planning_skill, revision_skill)
+                merged_pair = revision_pairs.setdefault(
+                    pair_key,
+                    {
+                        "planning_skill": planning_skill,
+                        "revision_skill": revision_skill,
+                        "count": 0,
+                        "example_branches": [],
+                        "example_repos": [],
+                    },
+                )
+                merged_pair["count"] = int(merged_pair["count"]) + _parse_nonnegative_int(pair_raw.get("count"))
+                _merge_sample_strings(
+                    merged_pair["example_branches"],
+                    pair_raw.get("example_branches"),
+                    limit=_MAX_PAIR_EXAMPLES,
+                )
+                _merge_sample_strings(
+                    merged_pair["example_repos"],
+                    pair_raw.get("example_repos"),
+                    limit=_MAX_PAIR_EXAMPLES,
+                )
+
+    merged_nodes = sorted(
+        nodes_by_id.values(),
+        key=lambda item: (-int(item.get("count", 0)), str(item.get("id", ""))),
+    )
+    implicit_total = sum(int(node.get("count", 0)) for node in merged_nodes if node.get("kind") == "implicit")
+    if implicit_total > 0:
+        for node in merged_nodes:
+            if node.get("kind") != "implicit":
+                node.pop("confidence_low", None)
+                node.pop("confidence_high", None)
+                continue
+            support = int(node.get("count", 0))
+            low, high = _wilson_bounds(support=support, total=implicit_total)
+            node["confidence_low"] = low
+            node["confidence_high"] = high
+
+    merged_edges = [
+        {
+            "source": source,
+            "target": target,
+            "phase": phase,
+            "count": count,
+        }
+        for (source, target, phase), count in sorted(
+            edges.items(),
+            key=lambda item: (-item[1], item[0][2], item[0][0], item[0][1]),
+        )
+    ]
+    merged_pairs = sorted(
+        revision_pairs.values(),
+        key=lambda item: (
+            -int(item.get("count", 0)),
+            str(item.get("planning_skill", "")),
+        ),
+    )
+    for pair in merged_pairs:
+        pair["suggested_adjustment"] = (
+            f"Insert {pair['revision_skill']} checks before declaring {pair['planning_skill']} complete."
+        )
+
+    return {
+        "graph_scope": graph_scope,
+        "revision_prevention_scope": revision_prevention_scope,
+        "node_count": len(merged_nodes),
+        "edge_count": len(merged_edges),
+        "nodes": merged_nodes,
+        "edges": merged_edges,
+        "revision_prevention": merged_pairs,
+    }
+
+
+def _escape_mermaid(value: str) -> str:
+    return value.replace('"', "'")
+
+
+def build_skill_dendrogram(
+    explicit_skills: list[str],
+    *,
+    usage_counts: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    skills = sorted({skill.strip() for skill in explicit_skills if isinstance(skill, str) and skill.strip()})
+    usage_lookup = usage_counts or {}
+
+    node_meta: dict[str, dict[str, Any]] = {
+        "": {
+            "id": "",
+            "label": "skills",
+            "depth": 0,
+            "is_skill": False,
+            "has_children": False,
+            "count": 0,
+        }
+    }
+    edges: set[tuple[str, str]] = set()
+
+    for skill in skills:
+        parts = [part for part in skill.split(".") if part]
+        if not parts:
+            continue
+        parent = ""
+        prefix_parts: list[str] = []
+        for depth, part in enumerate(parts, start=1):
+            prefix_parts.append(part)
+            prefix = ".".join(prefix_parts)
+            node = node_meta.setdefault(
+                prefix,
+                {
+                    "id": prefix,
+                    "label": part,
+                    "depth": depth,
+                    "is_skill": False,
+                    "has_children": False,
+                    "count": 0,
+                },
+            )
+            node["depth"] = min(int(node["depth"]), depth)
+            node_meta[parent]["has_children"] = True
+            edges.add((parent, prefix))
+            parent = prefix
+        node_meta[parent]["is_skill"] = True
+        node_meta[parent]["label"] = skill
+        node_meta[parent]["count"] = _parse_nonnegative_int(usage_lookup.get(skill))
+
+    ordered_ids = sorted(
+        node_meta.keys(),
+        key=lambda node_id: (int(node_meta[node_id]["depth"]), node_id),
+    )
+    node_alias = {node_id: f"d{index}" for index, node_id in enumerate(ordered_ids)}
+
+    nodes_out: list[dict[str, Any]] = []
+    lines = ["graph TD"]
+    lines.append("classDef root fill:#1f2937,stroke:#93c5fd,color:#e5e7eb;")
+    lines.append("classDef group fill:#0f172a,stroke:#64748b,color:#cbd5e1;")
+    lines.append("classDef skill fill:#111827,stroke:#34d399,color:#d1fae5;")
+    lines.append("classDef group_skill fill:#1f2937,stroke:#f59e0b,color:#fef3c7;")
+
+    for node_id in ordered_ids:
+        info = node_meta[node_id]
+        alias = node_alias[node_id]
+        if node_id == "":
+            kind = "root"
+            output_id = "root"
+        else:
+            is_skill = info["is_skill"] is True
+            has_children = info["has_children"] is True
+            if is_skill and has_children:
+                kind = "group_skill"
+            elif is_skill:
+                kind = "skill"
+            else:
+                kind = "group"
+            output_id = str(info["id"])
+
+        label = str(info["label"])
+        count = int(info["count"])
+        if kind in {"skill", "group_skill"} and count > 0:
+            label = f"{label}<br/>count={count}"
+        lines.append(f'{alias}["{_escape_mermaid(label)}"]')
+        lines.append(f"class {alias} {kind};")
+
+        output_node: dict[str, Any] = {
+            "id": output_id,
+            "label": str(info["label"]),
+            "kind": kind,
+            "depth": int(info["depth"]),
+        }
+        if kind in {"skill", "group_skill"}:
+            output_node["count"] = count
+        nodes_out.append(output_node)
+
+    edges_out: list[dict[str, str]] = []
+    for source, target in sorted(edges, key=lambda item: (int(node_meta[item[0]]["depth"]), item[0], item[1])):
+        source_id = "root" if source == "" else source
+        target_id = target
+        edges_out.append({"source": source_id, "target": target_id})
+        lines.append(f"{node_alias[source]} --> {node_alias[target]}")
+
+    return {
+        "skill_count": len(skills),
+        "node_count": len(nodes_out),
+        "edge_count": len(edges_out),
+        "nodes": nodes_out,
+        "edges": edges_out,
+        "mermaid": "\n".join(lines) + "\n",
+    }

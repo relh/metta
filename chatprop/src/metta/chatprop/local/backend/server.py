@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import json
 import mimetypes
 import re
@@ -20,7 +21,10 @@ from typing import Any
 
 from metta.chatprop.analyze import build_analysis_context, run_analysis
 from metta.chatprop.config import ChatpropConfig, load_config
-from metta.chatprop.local.flowchart_core import render_mermaid_flowchart, write_flowchart_outputs
+from metta.chatprop.local.flowchart_core import (
+    render_mermaid_flowchart,
+    write_flowchart_outputs,
+)
 from metta.chatprop.local.indexer import (
     BranchSegment,
     extract_branch_segments_from_transcript,
@@ -31,7 +35,9 @@ from metta.chatprop.local.workflow import (
     SkillGraphAccumulator,
     analyze_session_feature_chunks,
     build_feature_chunks_from_segments,
+    build_skill_dendrogram,
     load_explicit_skills,
+    merge_workflow_graphs,
 )
 from metta.chatprop.scanner import find_transcripts_for_branches, scan_archived
 
@@ -47,6 +53,8 @@ DEFAULT_FLOWCHART_MAX_NODES = 120
 DEFAULT_FLOWCHART_MAX_EDGES = 350
 DEFAULT_FLOWCHART_EXPORT_RELATIVE_MERMAID = Path("exports/chatprop_flowchart.mmd")
 DEFAULT_FLOWCHART_EXPORT_RELATIVE_JSON = Path("exports/chatprop_flowchart.json")
+UPLOADED_SNAPSHOT_STORE_RELATIVE = Path("cache/uploaded_snapshots.json")
+UPLOADED_SNAPSHOT_MAX_BYTES = 5 * 1024 * 1024
 PR_NUMBER_IN_SUBJECT = re.compile(r"\(#(\d+)\)")
 _GH_PR_SEARCH_QUERY = """
 query($search: String!, $first: Int!, $after: String) {
@@ -77,6 +85,7 @@ query($search: String!, $first: Int!, $after: String) {
 
 _catalog_jobs_lock = threading.Lock()
 _catalog_jobs: dict[str, dict[str, Any]] = {}
+_uploaded_snapshots_lock = threading.Lock()
 
 
 def _repo_root_for_explicit_skills() -> Path:
@@ -201,7 +210,7 @@ def _flowchart_payload_with_catalog(
     return _flowchart_payload(
         workflow_graph,
         options=options,
-        catalog_generated_at=catalog.get("generated_at") if catalog is not None else None,
+        catalog_generated_at=(catalog.get("generated_at") if catalog is not None else None),
         session_count=catalog.get("session_count") if catalog is not None else None,
         branch_count=catalog.get("branch_count") if catalog is not None else None,
     )
@@ -237,6 +246,221 @@ def _read_json_dict(path: Path) -> dict[str, Any]:
     if isinstance(parsed, dict):
         return parsed
     return {}
+
+
+def _uploaded_snapshot_store_path(config: ChatpropConfig) -> Path:
+    return config.state_dir.expanduser() / UPLOADED_SNAPSHOT_STORE_RELATIVE
+
+
+def _read_uploaded_snapshot_records(config: ChatpropConfig) -> list[dict[str, Any]]:
+    payload = _read_json_dict(_uploaded_snapshot_store_path(config))
+    snapshots = payload.get("snapshots")
+    if not isinstance(snapshots, list):
+        return []
+    records: list[dict[str, Any]] = []
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict):
+            continue
+        graph = snapshot.get("workflow_graph")
+        if not isinstance(graph, dict):
+            continue
+        records.append(snapshot)
+    return records
+
+
+def _write_uploaded_snapshot_records(config: ChatpropConfig, snapshots: list[dict[str, Any]]) -> None:
+    path = _uploaded_snapshot_store_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "updated_at": _iso_utc(datetime.now(tz=UTC)),
+        "snapshots": snapshots,
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _workflow_graph_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any] | None:
+    graph = snapshot.get("workflow_graph")
+    if isinstance(graph, dict):
+        return graph
+    nodes = snapshot.get("nodes")
+    edges = snapshot.get("edges")
+    if isinstance(nodes, list) or isinstance(edges, list):
+        return snapshot
+    return None
+
+
+def _snapshot_fingerprint(
+    *,
+    workflow_graph: dict[str, Any],
+    session_count: int,
+    branch_count: int,
+) -> str:
+    payload = {
+        "workflow_graph": workflow_graph,
+        "session_count": session_count,
+        "branch_count": branch_count,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _snapshot_label(payload: dict[str, Any], snapshot: dict[str, Any]) -> str:
+    raw_name = payload.get("name")
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        raw_name = snapshot.get("name")
+    if isinstance(raw_name, str) and raw_name.strip():
+        return raw_name.strip()
+    generated_at = snapshot.get("generated_at")
+    if isinstance(generated_at, str) and generated_at.strip():
+        return f"snapshot {generated_at.strip()}"
+    return "uploaded snapshot"
+
+
+def _snapshot_source_key(payload: dict[str, Any], snapshot: dict[str, Any]) -> str | None:
+    candidates = [
+        payload.get("source_key"),
+        snapshot.get("source_key"),
+        payload.get("source"),
+        snapshot.get("source"),
+        payload.get("name"),
+        snapshot.get("name"),
+    ]
+    for raw in candidates:
+        if not isinstance(raw, str):
+            continue
+        normalized = raw.strip().lower()
+        if normalized:
+            return normalized
+    return None
+
+
+def _normalize_uploaded_snapshot_payload(
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    raw_snapshot = payload.get("snapshot")
+    snapshot = raw_snapshot if isinstance(raw_snapshot, dict) else payload
+    if not isinstance(snapshot, dict):
+        return None
+    workflow_graph_raw = _workflow_graph_from_snapshot(snapshot)
+    if workflow_graph_raw is None:
+        return None
+
+    graph_scope_raw = workflow_graph_raw.get("graph_scope")
+    revision_scope_raw = workflow_graph_raw.get("revision_prevention_scope")
+    graph_scope = graph_scope_raw if isinstance(graph_scope_raw, str) and graph_scope_raw else "uploaded_snapshot"
+    revision_scope = (
+        revision_scope_raw if isinstance(revision_scope_raw, str) and revision_scope_raw else "uploaded_snapshot"
+    )
+    workflow_graph = merge_workflow_graphs(
+        [workflow_graph_raw],
+        graph_scope=graph_scope,
+        revision_prevention_scope=revision_scope,
+    )
+
+    session_count = _parse_bounded_int(snapshot.get("session_count"), minimum=0, maximum=1_000_000_000)
+    if session_count is None:
+        session_count = 0
+    branch_count = _parse_bounded_int(snapshot.get("branch_count"), minimum=0, maximum=1_000_000_000)
+    if branch_count is None:
+        branch_count = 0
+
+    return {
+        "name": _snapshot_label(payload, snapshot),
+        "source_key": _snapshot_source_key(payload, snapshot),
+        "session_count": session_count,
+        "branch_count": branch_count,
+        "workflow_graph": workflow_graph,
+        "fingerprint": _snapshot_fingerprint(
+            workflow_graph=workflow_graph,
+            session_count=session_count,
+            branch_count=branch_count,
+        ),
+    }
+
+
+def _uploaded_snapshot_summary(record: dict[str, Any]) -> dict[str, Any]:
+    workflow_graph = record.get("workflow_graph")
+    node_count = 0
+    edge_count = 0
+    if isinstance(workflow_graph, dict):
+        node_count = _parse_bounded_int(workflow_graph.get("node_count"), minimum=0, maximum=1_000_000_000) or 0
+        edge_count = _parse_bounded_int(workflow_graph.get("edge_count"), minimum=0, maximum=1_000_000_000) or 0
+    return {
+        "snapshot_id": record.get("snapshot_id"),
+        "uploaded_at": record.get("uploaded_at"),
+        "name": record.get("name"),
+        "session_count": _parse_bounded_int(record.get("session_count"), minimum=0, maximum=1_000_000_000) or 0,
+        "branch_count": _parse_bounded_int(record.get("branch_count"), minimum=0, maximum=1_000_000_000) or 0,
+        "node_count": node_count,
+        "edge_count": edge_count,
+    }
+
+
+def _store_uploaded_snapshot(config: ChatpropConfig, payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_uploaded_snapshot_payload(payload)
+    if normalized is None:
+        raise ValueError("Snapshot must include workflow_graph (or nodes/edges).")
+
+    with _uploaded_snapshots_lock:
+        records = _read_uploaded_snapshot_records(config)
+        now = _iso_utc(datetime.now(tz=UTC))
+        source_key = normalized.get("source_key")
+        target = None
+        if isinstance(source_key, str):
+            target = next(
+                (
+                    record
+                    for record in records
+                    if isinstance(record.get("source_key"), str) and record.get("source_key") == source_key
+                ),
+                None,
+            )
+            if target is None:
+                normalized_name = normalized.get("name")
+                if isinstance(normalized_name, str):
+                    normalized_name = normalized_name.strip().lower()
+                    if normalized_name:
+                        target = next(
+                            (
+                                record
+                                for record in records
+                                if not isinstance(record.get("source_key"), str)
+                                and isinstance(record.get("name"), str)
+                                and record.get("name", "").strip().lower() == normalized_name
+                            ),
+                            None,
+                        )
+        if target is None:
+            target = next(
+                (
+                    record
+                    for record in records
+                    if isinstance(record.get("fingerprint"), str)
+                    and record.get("fingerprint") == normalized["fingerprint"]
+                ),
+                None,
+            )
+        if target is None:
+            target = {
+                "snapshot_id": str(uuid.uuid4()),
+                "uploaded_at": now,
+                **normalized,
+            }
+            records.append(target)
+        else:
+            target["uploaded_at"] = now
+            target["name"] = normalized["name"]
+            target["source_key"] = normalized["source_key"]
+            target["session_count"] = normalized["session_count"]
+            target["branch_count"] = normalized["branch_count"]
+            target["workflow_graph"] = normalized["workflow_graph"]
+
+        records.sort(
+            key=lambda record: str(record.get("uploaded_at", "")),
+            reverse=True,
+        )
+        _write_uploaded_snapshot_records(config, records[:500])
+        return _uploaded_snapshot_summary(target)
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
@@ -364,7 +588,9 @@ def _parse_archived_session_id(path: Path) -> str:
     return stem
 
 
-def _read_archive_metadata_windows(config: ChatpropConfig) -> dict[str, tuple[str, str]]:
+def _read_archive_metadata_windows(
+    config: ChatpropConfig,
+) -> dict[str, tuple[str, str]]:
     metadata_root = config.state_dir.expanduser() / "archive" / "metadata"
     if not metadata_root.is_dir():
         return {}
@@ -484,7 +710,9 @@ def _merged_pr_cache_path(config: ChatpropConfig) -> Path:
     return config.state_dir.expanduser() / "cache" / "merged_prs.json"
 
 
-def _load_merged_pr_cache(config: ChatpropConfig) -> tuple[str | None, list[dict[str, Any]], str | None]:
+def _load_merged_pr_cache(
+    config: ChatpropConfig,
+) -> tuple[str | None, list[dict[str, Any]], str | None]:
     payload = _read_json_dict(_merged_pr_cache_path(config))
     updated_at_raw = payload.get("updated_at")
     updated_at = updated_at_raw if isinstance(updated_at_raw, str) and updated_at_raw.strip() else None
@@ -553,10 +781,10 @@ def _normalize_merged_pr_record(record: dict[str, Any]) -> dict[str, Any] | None
         "title": record.get("title") if isinstance(record.get("title"), str) else None,
         "url": record.get("url") if isinstance(record.get("url"), str) else None,
         "mergedAt": merged_at,
-        "closedAt": record.get("closedAt") if isinstance(record.get("closedAt"), str) else None,
+        "closedAt": (record.get("closedAt") if isinstance(record.get("closedAt"), str) else None),
         "headRefName": head_ref_name.strip(),
-        "baseRefName": record.get("baseRefName") if isinstance(record.get("baseRefName"), str) else None,
-        "updatedAt": record.get("updatedAt") if isinstance(record.get("updatedAt"), str) else None,
+        "baseRefName": (record.get("baseRefName") if isinstance(record.get("baseRefName"), str) else None),
+        "updatedAt": (record.get("updatedAt") if isinstance(record.get("updatedAt"), str) else None),
         "repositoryNameWithOwner": repository_name_with_owner,
         "repositoryName": repository_name,
     }
@@ -591,8 +819,8 @@ def _normalize_closed_pr_record(record: dict[str, Any]) -> dict[str, Any] | None
         "mergedAt": closed_at,
         "closedAt": closed_at,
         "headRefName": head_ref_name.strip(),
-        "baseRefName": record.get("baseRefName") if isinstance(record.get("baseRefName"), str) else None,
-        "updatedAt": record.get("updatedAt") if isinstance(record.get("updatedAt"), str) else None,
+        "baseRefName": (record.get("baseRefName") if isinstance(record.get("baseRefName"), str) else None),
+        "updatedAt": (record.get("updatedAt") if isinstance(record.get("updatedAt"), str) else None),
         "repositoryNameWithOwner": repository_name_with_owner,
         "repositoryName": repository_name,
         "landedVia": "closed_pr_number_on_main",
@@ -677,7 +905,10 @@ def _search_closed_unmerged_prs_via_github_api(
 def _landed_pr_numbers_on_main(base_ref: str = "origin/main") -> set[int]:
     if not _git_ref_exists(base_ref):
         return set()
-    rc, output = _run_capture(["git", "log", base_ref, "--format=%s", "--max-count=20000"], timeout_seconds=8.0)
+    rc, output = _run_capture(
+        ["git", "log", base_ref, "--format=%s", "--max-count=20000"],
+        timeout_seconds=8.0,
+    )
     if rc != 0 or not output:
         return set()
     numbers: set[int] = set()
@@ -745,7 +976,9 @@ def _repo_names_from_record(record: dict[str, Any]) -> set[str]:
     return names
 
 
-def _merged_pr_index(records: list[dict[str, Any]]) -> dict[str, dict[str, dict[str, Any]]]:
+def _merged_pr_index(
+    records: list[dict[str, Any]],
+) -> dict[str, dict[str, dict[str, Any]]]:
     by_branch: dict[str, dict[str, Any]] = {}
     by_repo_branch: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -832,14 +1065,16 @@ def _refresh_merged_pr_cache(
 
     merged_records = list(merged_by_number.values())
     merged_records.sort(
-        key=lambda record: record.get("mergedAt") if isinstance(record.get("mergedAt"), str) else "",
+        key=lambda record: (record.get("mergedAt") if isinstance(record.get("mergedAt"), str) else ""),
         reverse=True,
     )
     _write_merged_pr_cache(config, merged_prs=merged_records, author=author)
     return _merged_pr_index(merged_records)
 
 
-def _load_merged_pr_index(config: ChatpropConfig) -> dict[str, dict[str, dict[str, Any]]]:
+def _load_merged_pr_index(
+    config: ChatpropConfig,
+) -> dict[str, dict[str, dict[str, Any]]]:
     _, records, scope = _load_merged_pr_cache(config)
     if scope != MERGED_PR_CACHE_SCOPE:
         return {"by_branch": {}, "by_repo_branch": {}}
@@ -1409,7 +1644,7 @@ def _build_catalog(
                     segments.append(
                         BranchSegment(
                             branch=branch,
-                            started_at=started_at if isinstance(started_at, str) else None,
+                            started_at=(started_at if isinstance(started_at, str) else None),
                             ended_at=ended_at if isinstance(ended_at, str) else None,
                         )
                     )
@@ -1445,7 +1680,7 @@ def _build_catalog(
                     revision_feature_count += 1
                 skill_graph.add_feature_chunk(
                     session_id=str(session.get("session_id", "")),
-                    repo=session.get("repo") if isinstance(session.get("repo"), str) else None,
+                    repo=(session.get("repo") if isinstance(session.get("repo"), str) else None),
                     chunk=chunk,
                     include_revision_prevention=is_merged_branch,
                 )
@@ -1487,11 +1722,60 @@ def _build_catalog(
         reverse=True,
     )
 
-    workflow_graph = {
+    local_workflow_graph = {
         **skill_graph.to_dict(),
         "graph_scope": "all_feature_chunks",
         "revision_prevention_scope": "merged_feature_chunks_only",
     }
+    uploaded_records = _read_uploaded_snapshot_records(config)
+    uploaded_workflow_graphs: list[dict[str, Any]] = []
+    uploaded_summaries: list[dict[str, Any]] = []
+    uploaded_session_count = 0
+    uploaded_branch_count = 0
+    for record in uploaded_records:
+        workflow_graph = record.get("workflow_graph")
+        if isinstance(workflow_graph, dict):
+            uploaded_workflow_graphs.append(workflow_graph)
+        summary = _uploaded_snapshot_summary(record)
+        uploaded_summaries.append(summary)
+        uploaded_session_count += int(summary["session_count"])
+        uploaded_branch_count += int(summary["branch_count"])
+
+    workflow_graph = merge_workflow_graphs(
+        [local_workflow_graph, *uploaded_workflow_graphs],
+        graph_scope=(
+            "all_feature_chunks_plus_uploaded_snapshots" if uploaded_workflow_graphs else "all_feature_chunks"
+        ),
+        revision_prevention_scope=(
+            "merged_feature_chunks_only_plus_uploaded_snapshots"
+            if uploaded_workflow_graphs
+            else "merged_feature_chunks_only"
+        ),
+    )
+    explicit_usage_counts: dict[str, int] = {}
+    nodes_raw = workflow_graph.get("nodes")
+    if isinstance(nodes_raw, list):
+        for node in nodes_raw:
+            if not isinstance(node, dict):
+                continue
+            node_id = node.get("id")
+            if not isinstance(node_id, str) or not node_id.startswith("explicit:"):
+                continue
+            explicit_usage_counts[node_id.split(":", 1)[-1]] = (
+                _parse_bounded_int(
+                    node.get("count"),
+                    minimum=0,
+                    maximum=1_000_000_000,
+                )
+                or 0
+            )
+    skill_dendrogram = build_skill_dendrogram(
+        explicit_skills,
+        usage_counts=explicit_usage_counts,
+    )
+    total_session_count = len(sessions) + uploaded_session_count
+    total_branch_count = len(branches_sorted) + uploaded_branch_count
+
     flowchart_options = {
         "min_node_count": DEFAULT_FLOWCHART_MIN_NODE_COUNT,
         "min_edge_count": DEFAULT_FLOWCHART_MIN_EDGE_COUNT,
@@ -1501,17 +1785,24 @@ def _build_catalog(
     flowchart_payload = _flowchart_payload(
         workflow_graph,
         options=flowchart_options,
-        session_count=len(sessions),
-        branch_count=len(branches_sorted),
+        session_count=total_session_count,
+        branch_count=total_branch_count,
     )
 
     return {
         "generated_at": _iso_utc(datetime.now(tz=UTC)),
-        "session_count": len(sessions),
-        "branch_count": len(branches_sorted),
+        "session_count": total_session_count,
+        "branch_count": total_branch_count,
+        "local_session_count": len(sessions),
+        "local_branch_count": len(branches_sorted),
+        "uploaded_snapshot_count": len(uploaded_summaries),
+        "uploaded_session_count": uploaded_session_count,
+        "uploaded_branch_count": uploaded_branch_count,
+        "uploaded_snapshots": uploaded_summaries,
         "sessions": sessions,
         "branches": branches_sorted,
         "workflow_graph": workflow_graph,
+        "skill_dendrogram": skill_dendrogram,
         "workflow_flowchart": flowchart_payload,
     }
 
@@ -1534,57 +1825,82 @@ class ServerConfig:
 
 class ChatPropHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        if self.path in {"", "/"}:
+        path = self._request_path()
+        if path in {"", "/"}:
             self._serve_file("index.html", is_static=False)
             return
 
-        if self.path.startswith("/static/"):
-            file_name = self.path[len("/static/") :]
+        if path.startswith("/static/"):
+            file_name = path[len("/static/") :]
             self._serve_file(file_name, is_static=True)
             return
 
-        if self.path == "/api/health":
+        if path == "/api/health":
             self._serve_json({"ok": True})
             return
 
-        if self.path.startswith("/api/catalog/jobs/"):
+        if path == "/api/uploads":
+            self._serve_uploads()
+            return
+
+        if path.startswith("/api/catalog/jobs/"):
             self._serve_catalog_job_status()
             return
 
-        if self.path.startswith("/api/catalog"):
+        if path.startswith("/api/catalog"):
             self._serve_catalog()
             return
 
         self.send_error(404, "Not found")
 
     def do_POST(self) -> None:
-        if self.path == "/api/catalog/jobs":
+        path = self._request_path()
+        if path == "/api/catalog/jobs":
             self._serve_catalog_job_create()
             return
-        if self.path == "/api/analysis/find":
+        if path == "/api/analysis/find":
             self._serve_analysis_find()
             return
-        if self.path == "/api/analysis/context":
+        if path == "/api/analysis/context":
             self._serve_analysis_context()
             return
-        if self.path == "/api/analysis/run":
+        if path == "/api/analysis/run":
             self._serve_analysis_run()
             return
-        if self.path == "/api/flowchart/render":
+        if path == "/api/flowchart/render":
             self._serve_flowchart_render()
             return
-        if self.path == "/api/flowchart/save":
+        if path == "/api/flowchart/save":
             self._serve_flowchart_save()
+            return
+        if path == "/api/uploads":
+            self._serve_upload_create()
             return
 
         self.send_error(404, "Not found")
 
+    def _request_path(self) -> str:
+        return urllib.parse.urlparse(self.path).path
+
     def _query_params(self) -> dict[str, list[str]]:
         return urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
 
-    def _read_json_body(self) -> dict[str, Any] | None:
-        length = int(self.headers.get("Content-Length", "0"))
+    def _read_json_body(self, *, max_bytes: int | None = None) -> dict[str, Any] | None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            self.send_error(400, "Invalid Content-Length")
+            return None
+        if length < 0:
+            self.send_error(400, "Invalid Content-Length")
+            return None
+        if max_bytes is not None and length > max_bytes:
+            self.send_error(413, "Request body too large")
+            return None
         raw = self.rfile.read(length) if length > 0 else b""
+        if max_bytes is not None and len(raw) > max_bytes:
+            self.send_error(413, "Request body too large")
+            return None
         try:
             payload = json.loads(raw.decode("utf-8")) if raw else {}
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -1594,6 +1910,25 @@ class ChatPropHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Request body must be a JSON object")
             return None
         return payload
+
+    def _serve_uploads(self) -> None:
+        config = load_config()
+        records = _read_uploaded_snapshot_records(config)
+        summaries = [_uploaded_snapshot_summary(record) for record in records]
+        self._serve_json({"count": len(summaries), "uploads": summaries})
+
+    def _serve_upload_create(self) -> None:
+        payload = self._read_json_body(max_bytes=UPLOADED_SNAPSHOT_MAX_BYTES)
+        if payload is None:
+            return
+        config = load_config()
+        try:
+            summary = _store_uploaded_snapshot(config, payload)
+        except ValueError as exc:
+            self.send_error(400, str(exc))
+            return
+        records = _read_uploaded_snapshot_records(config)
+        self._serve_json({"uploaded": summary, "count": len(records)})
 
     def _read_analysis_branches(self) -> list[str] | None:
         if self.command != "POST":
