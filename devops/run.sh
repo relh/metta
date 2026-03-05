@@ -29,8 +29,17 @@ if [[ -n "${METTA_DD_LOG_FILE:-}" ]]; then
   uv run metta install datadog-agent --non-interactive --profile=softmax-docker || true
 fi
 
+# The PyPI pufferlib-core wheel is CPU-only; rebuild from source with CUDA.
+# This must happen after all uv run/sync calls since they restore the PyPI wheel.
+# --no-build-isolation: let the build see the venv's torch.
+# PUFFERLIB_BUILD_CUDA=1: compile .cu files even if torch can't see the GPU at build time.
+if command -v nvcc > /dev/null 2>&1; then
+  echo "Python dependencies installed"
+  PUFFERLIB_BUILD_CUDA=1 uv pip install --no-build-isolation --editable packages/pufferlib-core --no-deps
+fi
+
 set +e
-uv run torchrun \
+uv run --no-sync torchrun \
   --nnodes=$NUM_NODES \
   --nproc-per-node=$NUM_GPUS \
   --master-addr=$MASTER_ADDR \

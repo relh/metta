@@ -69,4 +69,7 @@ RUN echo 'cd /workspace/metta' >> /root/.bashrc && \
 RUN --mount=type=cache,id=metta-uv-cache,target=/root/.cache/uv \
   uv sync --locked
 
+RUN --mount=type=cache,id=metta-uv-cache,target=/root/.cache/uv \
+  PUFFERLIB_BUILD_CUDA=1 uv pip install --no-build-isolation --editable packages/pufferlib-core --no-deps
+
 ENTRYPOINT ["/bin/bash", "-c"]

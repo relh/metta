@@ -160,5 +160,12 @@ echo "[SETUP] Checked out: $(git rev-parse HEAD)"
 echo "[SETUP] Installing system dependencies..."
 bash ./install.sh --profile softmax-docker --non-interactive
 
+# Ensure nvcc is available for CUDA builds in the run phase (devops/run.sh).
+# The AMI has CUDA at /usr/local/cuda but nvcc may not be on PATH.
+if [ -d /usr/local/cuda/bin ] && ! command -v nvcc > /dev/null 2>&1; then
+  echo 'export PATH="/usr/local/cuda/bin:$PATH"' >> ~/.bashrc
+  export PATH="/usr/local/cuda/bin:$PATH"
+fi
+
 # Note that different sets of skypilot environment variables are available in "run" vs "setup"
 # see https://docs.skypilot.co/en/latest/running-jobs/environment-variables.html
