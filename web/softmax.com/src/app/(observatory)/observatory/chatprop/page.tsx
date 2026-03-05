@@ -22,7 +22,7 @@ export default function ChatpropPage() {
 
   return (
     <SoftmaxGuard>
-      <div className="h-[calc(100vh-57px)]">
+      <div className="h-[calc(100vh-114px)]">
         <iframe
           title="Chatprop"
           src={config.chatpropUrl}

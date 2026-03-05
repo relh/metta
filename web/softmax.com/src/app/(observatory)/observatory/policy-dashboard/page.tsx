@@ -32,7 +32,7 @@ export default async function PolicyDashboardPage(props: {
 
   return (
     <SoftmaxGuard>
-      <div className="h-[calc(100vh-57px)]">
+      <div className="h-[calc(100vh-114px)]">
         <PolicyDashboardEmbed src={dashboardUrl} />
       </div>
     </SoftmaxGuard>

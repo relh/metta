@@ -2,7 +2,14 @@
 import clsx from "clsx";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { FC, PropsWithChildren, use, useEffect, useState } from "react";
+import {
+  CSSProperties,
+  FC,
+  PropsWithChildren,
+  use,
+  useEffect,
+  useState,
+} from "react";
 
 import { AutoRefreshBadge } from "@observatory/components/AutoRefreshBadge";
 import {
@@ -32,19 +39,35 @@ import {
 import { AppContext } from "./AppContext";
 import { UserDropdown } from "./UserDropdown";
 
-const MenuLink: FC<PropsWithChildren<{ href: string; isActive: boolean }>> = ({
+const MenuLink: FC<
+  PropsWithChildren<{
+    href: string;
+    isActive: boolean;
+    className?: string;
+    activeClassName?: string;
+    inactiveClassName?: string;
+    style?: CSSProperties;
+  }>
+> = ({
   href,
   children,
   isActive = false,
+  className,
+  activeClassName,
+  inactiveClassName,
+  style,
 }) => {
   return (
     <Link
       href={href}
+      style={style}
       className={clsx(
         "hover:bg-surface-alt border-b-2 px-5 py-4 no-underline transition-all duration-200",
         isActive
-          ? "border-blue-500 text-blue-500"
-          : "text-foreground-muted hover:text-foreground border-transparent",
+          ? (activeClassName ?? "border-blue-500 text-blue-500")
+          : (inactiveClassName ??
+              "text-foreground-muted hover:text-foreground border-transparent"),
+        className,
       )}
     >
       {children}
@@ -62,7 +85,6 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
 
   const isPoliciesActive =
     pathname === "/" || pathname.startsWith("/observatory/policies");
-  const isBardoActive = pathname.startsWith("/observatory/bardo");
   const isTournamentRoute = pathname.startsWith("/observatory/tournament");
   const modeParam = searchParams.get("mode");
   const [inferredMode, setInferredMode] = useState<SeasonTabMode | null>(null);
@@ -129,23 +151,12 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
     isTournamentRoute && effectiveMode === "tournament";
 
   return (
-    <nav className="border-border-strong bg-surface flex items-center justify-between border-b px-5">
-      <div className="mx-auto flex max-w-7xl items-center">
+    <nav className="border-border-strong bg-surface flex items-start justify-between border-b px-5">
+      <div className="mx-auto flex max-w-7xl flex-col">
         <div className="flex">
-          <MenuLink href={bardoRoute()} isActive={isBardoActive}>
-            Bardo
-          </MenuLink>
           <MenuLink href={policiesRoute()} isActive={isPoliciesActive}>
             Policies
           </MenuLink>
-          {isSoftmaxTeamMember && (
-            <MenuLink
-              href={policyDashboardRoute()}
-              isActive={pathname.startsWith("/observatory/policy-dashboard")}
-            >
-              Policy Dashboard
-            </MenuLink>
-          )}
           <MenuLink
             href={tournamentRoute({ mode: "freeplay" })}
             isActive={isFreeplayActive}
@@ -179,18 +190,6 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
                 Remote Jobs
               </MenuLink>
               <MenuLink
-                href={trainBoardRoute()}
-                isActive={pathname.startsWith("/observatory/train-board")}
-              >
-                Train Board
-              </MenuLink>
-              <MenuLink
-                href={chatpropRoute()}
-                isActive={pathname.startsWith("/observatory/chatprop")}
-              >
-                Chatprop
-              </MenuLink>
-              <MenuLink
                 href={smartPlugsRoute()}
                 isActive={pathname.startsWith("/observatory/infra/smart-plugs")}
               >
@@ -199,8 +198,57 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
             </>
           )}
         </div>
+        {isSoftmaxTeamMember && (
+          <div className="border-border-strong flex border-t">
+            <MenuLink
+              href={bardoRoute()}
+              isActive={pathname.startsWith("/observatory/bardo")}
+              className="tracking-wide italic"
+              activeClassName="border-violet-500 text-violet-500"
+              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
+            >
+              Bardo
+            </MenuLink>
+            <MenuLink
+              href={policyDashboardRoute()}
+              isActive={pathname.startsWith("/observatory/policy-dashboard")}
+              className="tracking-wide italic"
+              activeClassName="border-violet-500 text-violet-500"
+              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
+            >
+              Policy Dashboard
+            </MenuLink>
+            <MenuLink
+              href={trainBoardRoute()}
+              isActive={pathname.startsWith("/observatory/train-board")}
+              className="tracking-wide italic"
+              activeClassName="border-violet-500 text-violet-500"
+              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
+            >
+              Train Board
+            </MenuLink>
+            <MenuLink
+              href={chatpropRoute()}
+              isActive={pathname.startsWith("/observatory/chatprop")}
+              className="tracking-wide italic"
+              activeClassName="border-violet-500 text-violet-500"
+              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
+            >
+              Chatprop
+            </MenuLink>
+          </div>
+        )}
       </div>
-      <div className="flex items-center gap-3">
+      <div
+        className={clsx(
+          "flex items-center gap-3",
+          isSoftmaxTeamMember && "pt-3",
+        )}
+      >
         <AutoRefreshBadge />
         <Dropdown
           render={({ close }) => (

@@ -105,7 +105,7 @@ print_row() {
   printf '%-22s | %-5s | %s\n' "$check" "$result" "$detail"
 }
 
-echo "Policy Dashboard Live API Smoke"
+echo "Vibeservatory Dashboard Live API Smoke"
 echo "base_url=$API_BASE_URL"
 echo "policy_version_id=$POLICY_VERSION_ID"
 if [[ -n "$ANALYSIS_API_KEY" ]]; then

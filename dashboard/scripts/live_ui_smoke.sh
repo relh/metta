@@ -3,8 +3,8 @@ set -euo pipefail
 
 POLICY_VERSION_ID="${1:-7e16ac5f-7fe6-4970-940c-acc2d6c29013}"
 DASHBOARD_URL="${DASHBOARD_URL:-https://policy-dashboard.vibeservatory.softmax-research.net}"
-STORAGE_STATE_PATH="${DASHBOARD_STORAGE_STATE:-$HOME/.cache/pdashboard/storage-state.json}"
-ARTIFACT_DIR="${DASHBOARD_SMOKE_ARTIFACT_DIR:-/tmp/pdashboard-ui-smoke-$(date +%Y%m%d-%H%M%S)}"
+STORAGE_STATE_PATH="${DASHBOARD_STORAGE_STATE:-$HOME/.cache/vibeservatory-dashboard/storage-state.json}"
+ARTIFACT_DIR="${DASHBOARD_SMOKE_ARTIFACT_DIR:-/tmp/vibeservatory-dashboard-ui-smoke-$(date +%Y%m%d-%H%M%S)}"
 
 if [[ ! -f "$STORAGE_STATE_PATH" ]]; then
   echo "ERROR: missing storage state at $STORAGE_STATE_PATH" >&2
@@ -15,7 +15,7 @@ fi
 
 mkdir -p "$ARTIFACT_DIR"
 
-echo "Policy Dashboard Live UI Smoke"
+echo "Vibeservatory Dashboard Live UI Smoke"
 echo "dashboard_url=$DASHBOARD_URL"
 echo "policy_version_id=$POLICY_VERSION_ID"
 echo "storage_state=$STORAGE_STATE_PATH"

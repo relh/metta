@@ -9,7 +9,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 Usage:
   dashboard/scripts/dev_local.sh
 
-Runs dashboard against production read-only DB via k8s tunnel.
+Runs Vibeservatory dashboard against production read-only DB via k8s tunnel.
 EOF
   exit 0
 fi
@@ -32,7 +32,7 @@ export DASHBOARD_HOST="${DASHBOARD_HOST:-127.0.0.1}"
 export DASHBOARD_PORT="${DASHBOARD_PORT:-8010}"
 export NEXT_PUBLIC_DASHBOARD_API_BASE_URL="${NEXT_PUBLIC_DASHBOARD_API_BASE_URL:-http://127.0.0.1:8010}"
 
-echo "[dashboard] Using live read-only DB mode via observatory k8s tunnel..."
+echo "[vibeservatory] Using live read-only DB mode via observatory k8s tunnel..."
 RO_URI="${RO_URI:-$(aws secretsmanager get-secret-value --secret-id observatory/readonly-db-uri --query SecretString --output text)}"
 RO_HOST="$(
   python - "$RO_URI" << 'PY'
@@ -57,7 +57,7 @@ if ! kubectl -n observatory get pod ro-db-proxy > /dev/null 2>&1; then
 else
   EXISTING_PROXY_SPEC="$(kubectl -n observatory get pod ro-db-proxy -o jsonpath='{.spec.containers[0].command} {.spec.containers[0].args}' 2> /dev/null || true)"
   if [[ "$EXISTING_PROXY_SPEC" != *"TCP:${RO_HOST}:5432"* ]]; then
-    echo "[dashboard] Recreating ro-db-proxy for target host ${RO_HOST}..."
+    echo "[vibeservatory] Recreating ro-db-proxy for target host ${RO_HOST}..."
     kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true > /dev/null 2>&1 || true
     create_ro_proxy_pod
   else
@@ -119,10 +119,10 @@ print(urlunparse(u._replace(netloc=f"{userinfo}127.0.0.1:15432")))
 PY
 )"
 
-echo "[dashboard] Backend:  http://${DASHBOARD_HOST}:${DASHBOARD_PORT}"
-echo "[dashboard] Frontend: http://127.0.0.1:5174"
-echo "[dashboard] API base: ${NEXT_PUBLIC_DASHBOARD_API_BASE_URL}"
-echo "[dashboard] DB mode: live-ro"
+echo "[vibeservatory] Backend:  http://${DASHBOARD_HOST}:${DASHBOARD_PORT}"
+echo "[vibeservatory] Frontend: http://127.0.0.1:5174"
+echo "[vibeservatory] API base: ${NEXT_PUBLIC_DASHBOARD_API_BASE_URL}"
+echo "[vibeservatory] DB mode: live-ro"
 
 cleanup() {
   if [[ -n "${FRONTEND_PID:-}" ]]; then

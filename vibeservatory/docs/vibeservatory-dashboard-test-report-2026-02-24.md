@@ -1,4 +1,4 @@
-# Policy Dashboard Feature Test Report (No Anthropic Key)
+# Vibeservatory Dashboard Feature Test Report (No Anthropic Key)
 
 Date: 2026-02-24  
 Branch: `richard-statspage224`  
@@ -6,7 +6,7 @@ PR: https://github.com/Metta-AI/metta/pull/7962
 
 ## Scope
 
-Validate dashboard functionality end-to-end without providing any Anthropic API key.
+Validate Vibeservatory dashboard functionality end-to-end without providing any Anthropic API key.
 
 Included:
 
@@ -79,7 +79,7 @@ dashboard/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 Final run result:
 
 - `failures=0 warnings=0`
-- Artifacts: `/tmp/pdashboard-ui-smoke-20260224-074718`
+- Artifacts: `/tmp/vibeservatory-dashboard-ui-smoke-20260224-074718`
 
 ## Sub-Tab Results
 

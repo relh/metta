@@ -42,7 +42,7 @@ export default async function BardoPage({
 
   return (
     <SoftmaxGuard>
-      <div className="h-[calc(100vh-57px)]">
+      <div className="h-[calc(100vh-114px)]">
         <BardoEmbed src={bardoUrl} />
       </div>
     </SoftmaxGuard>

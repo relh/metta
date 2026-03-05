@@ -1,4 +1,4 @@
-# Policy Dashboard Branch + Doc Audit (2026-02-24)
+# Vibeservatory Dashboard Branch + Doc Audit (2026-02-24)
 
 Branch: `richard-statspage224`  
 Base: `origin/main`  
@@ -8,11 +8,11 @@ PR: https://github.com/Metta-AI/metta/pull/7962
 
 Merge-base diff vs `origin/main`:
 
-- `dashboard/docs/policy-dashboard-how-to-run.md`
-- `dashboard/docs/policy-dashboard-test-report-2026-02-24.md`
+- `vibeservatory/docs/vibeservatory-dashboard-how-to-run.md`
+- `vibeservatory/docs/vibeservatory-dashboard-test-report-2026-02-24.md`
 - `dashboard/scripts/live_ui_smoke.sh`
 - `dashboard/scripts/capture_observatory_storage_state.sh`
-- `dashboard/README.md`
+- `vibeservatory/README.md`
 
 Scope assessment:
 
@@ -30,7 +30,7 @@ Checked docs for command accuracy and consistency with code:
   - `skills/cg.policy-dashboard/generate.py --help`
   - `uv run cogames diagnose --help`
 - Test report matches executed commands and observed outcomes.
-- `dashboard/README.md` now explicitly documents standalone dashboard smoke default and embed override.
+- `vibeservatory/README.md` now explicitly documents standalone dashboard smoke default and embed override.
 
 ## 3) Cool/Cleanup Refactor Applied
 
@@ -46,7 +46,7 @@ Refactor performed:
   - default `DASHBOARD_URL` changed to `https://policy-dashboard.softmax-research.net`
 - `dashboard/scripts/capture_observatory_storage_state.sh`
   - default capture URL changed to `https://policy-dashboard.softmax-research.net`
-- `dashboard/README.md`
+- `vibeservatory/README.md`
   - updated notes to reflect standalone default and embed override behavior
 
 Why safe:

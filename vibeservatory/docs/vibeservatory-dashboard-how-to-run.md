@@ -1,6 +1,6 @@
-# Policy Dashboard: How To Run
+# Vibeservatory Dashboard: How To Run
 
-This doc captures the current ways to run the policy dashboard and related diagnose tooling in `metta`.
+This doc captures the current ways to run the Vibeservatory dashboard and related diagnose tooling in `metta`.
 
 ## 1) Full State Page (Standalone Dashboard)
 
