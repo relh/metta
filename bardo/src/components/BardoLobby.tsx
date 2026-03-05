@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation'
 
 import type { BardoPolicy, BardoWorldState } from '../lib/types'
 
+const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
+const BARDO_AUTH_TOKEN_SESSION_STORAGE_KEY = 'bardo-auth-token'
 const WORLD_POLL_MS = 15_000
 const WORLD_STEP_MS = 60
 
@@ -125,6 +127,56 @@ function asPercent(value: number): string {
   return `${(clamp01(value) * 100).toFixed(3)}%`
 }
 
+function trimToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
+}
+
+function readBardoAuthTokenFromUrlFragment(): string | null {
+  if (typeof window === 'undefined') return null
+  const currentUrl = new URL(window.location.href)
+  const rawFragment = currentUrl.hash.startsWith('#') ? currentUrl.hash.slice(1) : currentUrl.hash
+  if (!rawFragment) return null
+
+  let decodedFragment = rawFragment
+  try {
+    decodedFragment = decodeURIComponent(rawFragment)
+  } catch {
+    return null
+  }
+
+  const token = trimToNull(decodedFragment)
+  if (!token) return null
+
+  window.sessionStorage.setItem(BARDO_AUTH_TOKEN_SESSION_STORAGE_KEY, token)
+  window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}`)
+  return token
+}
+
+function readBardoAuthTokenFromCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  const parts = document.cookie.split('; ')
+  for (const part of parts) {
+    if (!part.startsWith(`${AUTH_COOKIE_NAME}=`)) continue
+    return trimToNull(part.slice(AUTH_COOKIE_NAME.length + 1))
+  }
+  return null
+}
+
+export function resolveBardoAuthToken(): string | null {
+  if (typeof window === 'undefined') return null
+  const hashToken = readBardoAuthTokenFromUrlFragment()
+  if (hashToken) return hashToken
+
+  const sessionToken = trimToNull(window.sessionStorage.getItem(BARDO_AUTH_TOKEN_SESSION_STORAGE_KEY))
+  if (sessionToken) return sessionToken
+
+  const cookieToken = readBardoAuthTokenFromCookie()
+  if (cookieToken) return cookieToken
+
+  return null
+}
+
 function ensureActorState(store: Map<string, ActorState>, policyId: string): ActorState {
   const existing = store.get(policyId)
   if (existing) return existing
@@ -170,7 +222,9 @@ export function BardoLobby() {
     if (nameFilter) query.set('q', nameFilter)
     const endpoint = query.size > 0 ? `/api/world-state?${query.toString()}` : '/api/world-state'
 
-    const response = await fetch(endpoint, { cache: 'no-store' })
+    const authToken = resolveBardoAuthToken()
+    const headers = authToken ? { 'X-Auth-Token': authToken } : undefined
+    const response = await fetch(endpoint, { cache: 'no-store', headers })
 
     if (!response.ok) {
       const payload = (await response.json().catch(() => ({ error: '' }))) as { error?: string }
