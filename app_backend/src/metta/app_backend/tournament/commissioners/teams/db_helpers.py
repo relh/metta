@@ -219,6 +219,10 @@ class TeamDbHelpersMixin:
             sorted_slots = sorted(team.policy_versions, key=lambda tpv: tpv.position)
             pv_ids = [tpv.policy_version_id for tpv in sorted_slots]
             unique_pvs = list(dict.fromkeys(pv_ids))
+
+            if any(pv not in pp_by_pv for pv in unique_pvs):
+                continue
+
             pv_to_idx = {pv: i for i, pv in enumerate(unique_pvs)}
 
             assignments = [pv_to_idx[pv] for pv in pv_ids]
