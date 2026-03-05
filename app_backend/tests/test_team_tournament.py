@@ -768,6 +768,61 @@ async def test_policy_stage_reopens_until_downstream_minimum_is_met(stats_repo: 
 
 
 @pytest.mark.asyncio
+async def test_compute_policy_scores_excludes_retired_pool_players(stats_repo: str) -> None:  # noqa: ARG001
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {}
+
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-score-retired-{uuid4().hex[:8]}"
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=commissioner.initial_config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+
+        pool = Pool(season_id=season.id, name="stage-3")
+        session.add(pool)
+        await session.flush()
+
+        policy_active = Policy(name=f"policy-active-{uuid4().hex[:8]}", user_id="test")
+        policy_retired = Policy(name=f"policy-retired-{uuid4().hex[:8]}", user_id="test")
+        session.add(policy_active)
+        session.add(policy_retired)
+        await session.flush()
+
+        pv_active = PolicyVersion(policy_id=policy_active.id, version=1)
+        pv_retired = PolicyVersion(policy_id=policy_retired.id, version=1)
+        session.add(pv_active)
+        session.add(pv_retired)
+        await session.flush()
+
+        pp_active = PoolPlayer(pool_id=pool.id, policy_version_id=pv_active.id)
+        pp_retired = PoolPlayer(pool_id=pool.id, policy_version_id=pv_retired.id, retired=True)
+        session.add(pp_active)
+        session.add(pp_retired)
+        await session.flush()
+
+        active_match = Match(pool_id=pool.id, assignments=[0] * 8, status=MatchStatus.completed)
+        retired_match = Match(pool_id=pool.id, assignments=[0] * 8, status=MatchStatus.completed)
+        session.add(active_match)
+        session.add(retired_match)
+        await session.flush()
+
+        session.add(MatchPlayer(match_id=active_match.id, pool_player_id=pp_active.id, policy_index=0, score=1.0))
+        session.add(MatchPlayer(match_id=retired_match.id, pool_player_id=pp_retired.id, policy_index=0, score=99.0))
+        await session.commit()
+
+        scores = await commissioner._compute_policy_scores(pool.id)
+
+        assert scores == {pv_active.id: 1.0}
+
+
+@pytest.mark.asyncio
 async def test_advance_policy_stage_excludes_failed_out_policies(stats_repo: str) -> None:  # noqa: ARG001
     def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
         return {}

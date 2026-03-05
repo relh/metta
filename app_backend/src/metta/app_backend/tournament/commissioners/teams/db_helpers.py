@@ -60,6 +60,7 @@ class TeamDbHelpersMixin:
                 .join(MatchPlayer, MatchPlayer.pool_player_id == PoolPlayer.id)
                 .join(Match, Match.id == MatchPlayer.match_id)
                 .where(PoolPlayer.pool_id == pool_id)
+                .where(col(PoolPlayer.retired).is_(False))
                 .where(Match.status == MatchStatus.completed)
                 .where(col(MatchPlayer.score).is_not(None))
                 .group_by(PoolPlayer.policy_version_id)
