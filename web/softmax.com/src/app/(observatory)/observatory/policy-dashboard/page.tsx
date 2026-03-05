@@ -1,4 +1,5 @@
 import { config } from "@observatory/config";
+import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 import {
   buildEmbeddedPolicyDashboardUrl,
   parsePolicyDashboardTab,
@@ -30,8 +31,10 @@ export default async function PolicyDashboardPage(props: {
   );
 
   return (
-    <div className="h-[calc(100vh-57px)]">
-      <PolicyDashboardEmbed src={dashboardUrl} />
-    </div>
+    <SoftmaxGuard>
+      <div className="h-[calc(100vh-57px)]">
+        <PolicyDashboardEmbed src={dashboardUrl} />
+      </div>
+    </SoftmaxGuard>
   );
 }

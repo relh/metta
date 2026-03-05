@@ -12,10 +12,12 @@ import {
 } from "@observatory/components/Dropdown";
 import { ThemeToggle } from "@observatory/components/ThemeToggle";
 import {
+  chatpropRoute,
   episodeJobsRoute,
   evalTasksRoute,
   policiesRoute,
   policyDashboardRoute,
+  trainBoardRoute,
   smartPlugsRoute,
   sqlQueryRoute,
   tournamentRoute,
@@ -166,16 +168,28 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
                 SQL Query
               </MenuLink>
               <MenuLink
+                href={evalTasksRoute()}
+                isActive={pathname.startsWith("/observatory/eval-tasks")}
+              >
+                Remote Jobs
+              </MenuLink>
+              <MenuLink
+                href={trainBoardRoute()}
+                isActive={pathname.startsWith("/observatory/train-board")}
+              >
+                Train Board
+              </MenuLink>
+              <MenuLink
+                href={chatpropRoute()}
+                isActive={pathname.startsWith("/observatory/chatprop")}
+              >
+                Chatprop
+              </MenuLink>
+              <MenuLink
                 href={smartPlugsRoute()}
                 isActive={pathname.startsWith("/observatory/infra/smart-plugs")}
               >
                 Smart Plugs
-              </MenuLink>
-              <MenuLink
-                href={evalTasksRoute()}
-                isActive={pathname.startsWith("/observatory/eval-task")}
-              >
-                Remote Jobs
               </MenuLink>
             </>
           )}

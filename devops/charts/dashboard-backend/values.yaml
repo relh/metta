@@ -1,6 +1,6 @@
-host: api.policy-dashboard.softmax-research.net
+host: api.policy-dashboard.vibeservatory.softmax-research.net
 
-frontendHost: policy-dashboard.softmax-research.net
+frontendHost: policy-dashboard.vibeservatory.softmax-research.net
 
 image:
   registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com

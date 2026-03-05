@@ -1,4 +1,4 @@
-name: "Build Dashboard Frontend Docker Image"
+name: "Build Vibeservatory Frontend Docker Image"
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
     paths:
       - "dashboard/frontend/**"
       - "devops/charts/dashboard/**"
-      - ".github/workflows/build-dashboard-image.yml"
+      - ".github/workflows/build-vibeservatory-image.yml"
   workflow_dispatch: {}
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       dockerfile: dashboard/frontend/Dockerfile
       tag_suffix: -dashboard
       docker_build_args: |
-        NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.policy-dashboard.softmax-research.net
+        NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.policy-dashboard.vibeservatory.softmax-research.net
       namespace: observatory
       release: dashboard
       chart: ./devops/charts/dashboard

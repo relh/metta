@@ -128,6 +128,18 @@ export function evalTasksRoute() {
   return "/observatory/eval-tasks";
 }
 
+export function trainBoardRoute() {
+  return "/observatory/train-board";
+}
+
+export function chatpropRoute() {
+  return "/observatory/chatprop";
+}
+
+export function bardoRoute() {
+  return "/observatory/bardo";
+}
+
 export function sqlQueryRoute() {
   return "/observatory/sql-query";
 }

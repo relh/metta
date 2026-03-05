@@ -2,7 +2,20 @@ interface Config {
   apiBaseUrl: string;
   authToken?: string;
   policyDashboardUrl: string;
+  trainBoardUrl: string | null;
+  chatpropUrl: string | null;
+  bardoUrl: string | null;
   siteUrl?: string;
+}
+
+function resolveFragileServiceUrl(
+  configuredUrl: string | undefined,
+  localDevDefault?: string,
+): string | null {
+  const trimmed = configuredUrl?.trim();
+  if (trimmed) return trimmed;
+  if (process.env.NODE_ENV === "production") return null;
+  return localDevDefault ?? null;
 }
 
 export const config: Config = {
@@ -11,6 +24,15 @@ export const config: Config = {
   authToken: process.env.DEV_AUTH_TOKEN, // set in dev mode for convenience based on ~/.metta/config.yaml token
   policyDashboardUrl:
     process.env.OBSERVATORY_POLICY_DASHBOARD_URL || "http://127.0.0.1:5174",
+  trainBoardUrl: resolveFragileServiceUrl(
+    process.env.OBSERVATORY_TRAIN_BOARD_URL,
+    "http://127.0.0.1:8877",
+  ),
+  chatpropUrl: resolveFragileServiceUrl(
+    process.env.OBSERVATORY_CHATPROP_URL,
+    "http://127.0.0.1:8765",
+  ),
+  bardoUrl: resolveFragileServiceUrl(process.env.OBSERVATORY_BARDO_URL),
   siteUrl: process.env.SITE_URL,
 };
 

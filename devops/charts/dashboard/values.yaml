@@ -1,6 +1,6 @@
-host: policy-dashboard.softmax-research.net
+host: policy-dashboard.vibeservatory.softmax-research.net
 
-apiUrl: https://api.policy-dashboard.softmax-research.net
+apiUrl: https://api.policy-dashboard.vibeservatory.softmax-research.net
 observatoryAuthCookieName: observatory_auth_token
 
 image:

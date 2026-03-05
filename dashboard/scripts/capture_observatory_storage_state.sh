@@ -2,7 +2,7 @@
 set -euo pipefail
 
 STORAGE_STATE_PATH="${DASHBOARD_STORAGE_STATE:-$HOME/.cache/pdashboard/storage-state.json}"
-DASHBOARD_URL="${DASHBOARD_URL:-https://observatory.softmax-research.net/policy-dashboard}"
+DASHBOARD_URL="${DASHBOARD_URL:-https://policy-dashboard.vibeservatory.softmax-research.net}"
 
 mkdir -p "$(dirname "$STORAGE_STATE_PATH")"
 
