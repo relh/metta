@@ -34,7 +34,7 @@ def default_llm_cache_path(state_dir: Path) -> Path:
 
 
 def resolve_openai_api_key(explicit_key: str = "", token_env: str = "OPENAI_API_KEY") -> str:
-    return explicit_key or (os.environ[token_env] if token_env in os.environ else "")
+    return explicit_key or os.environ.get(token_env, "")
 
 
 def load_llm_score_cache(cache_path: Path) -> dict[str, LLMTaskScoreCacheEntry]:

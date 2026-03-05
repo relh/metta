@@ -4,6 +4,7 @@ import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from itertools import repeat
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -147,17 +148,17 @@ def fetch_project_tasks(project_gid: str, token: str, include_completed: bool = 
     return [RawAsanaTask.model_validate(raw_task) for raw_task in raw_tasks]
 
 
-def _task_matches_section(task: RawAsanaTask, section_gid: str) -> bool:
-    return any(
-        membership.section is not None and membership.section.gid == section_gid for membership in task.memberships
-    )
-
-
 def fetch_section_tasks(
     project_gid: str, section_gid: str, token: str, include_completed: bool = True
 ) -> list[RawAsanaTask]:
     project_tasks = fetch_project_tasks(project_gid=project_gid, token=token, include_completed=include_completed)
-    return [task for task in project_tasks if _task_matches_section(task, section_gid)]
+    return [
+        task
+        for task in project_tasks
+        if any(
+            membership.section is not None and membership.section.gid == section_gid for membership in task.memberships
+        )
+    ]
 
 
 def fetch_task_stories(task_gid: str, token: str) -> list[RawAsanaStory]:
@@ -252,18 +253,17 @@ def infer_axis_scores(text: str, recommendations: list[str], paper_links: list[s
 
 
 def _story_analysis_texts(stories: list[RawAsanaStory]) -> list[str]:
-    comment_texts: list[str] = []
-    for story in stories:
-        story_text = story.text or ""
-        if not story_text.strip():
-            continue
-        story_type = (story.type or "").lower()
-        story_subtype = (story.resource_subtype or "").lower()
-        if "comment" in story_type or "comment" in story_subtype:
-            comment_texts.append(story_text)
-            continue
-        comment_texts.append(story_text)
-    return comment_texts
+    return [text for story in stories if (text := story.text) and text.strip()]
+
+
+def _empty_raw_cache(key: str, project_gid: str, section_gid: Optional[str]) -> AsanaProjectRawCache:
+    return AsanaProjectRawCache(
+        source_key=key,
+        project_gid=project_gid,
+        section_gid=section_gid,
+        synced_at="",
+        tasks={},
+    )
 
 
 def _record_from_cache_entry(entry: AsanaTaskCacheEntry) -> ResearchPaperRecord:
@@ -293,34 +293,13 @@ def _record_from_cache_entry(entry: AsanaTaskCacheEntry) -> ResearchPaperRecord:
 def _load_raw_cache(project_gid: str, section_gid: Optional[str], raw_cache_path: Path) -> AsanaProjectRawCache:
     key = source_key(project_gid, section_gid)
     if not raw_cache_path.is_file():
-        return AsanaProjectRawCache(
-            source_key=key,
-            project_gid=project_gid,
-            section_gid=section_gid,
-            synced_at="",
-            tasks={},
-        )
+        return _empty_raw_cache(key=key, project_gid=project_gid, section_gid=section_gid)
 
     raw_payload = json.loads(raw_cache_path.read_text(encoding="utf-8"))
     cache = AsanaProjectRawCache.model_validate(raw_payload)
     if cache.source_key != key:
-        return AsanaProjectRawCache(
-            source_key=key,
-            project_gid=project_gid,
-            section_gid=section_gid,
-            synced_at="",
-            tasks={},
-        )
+        return _empty_raw_cache(key=key, project_gid=project_gid, section_gid=section_gid)
     return cache
-
-
-def _write_json_file(path: Path, payload: dict | list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-
-def _load_existing_records(path: Path) -> list[ResearchPaperRecord]:
-    return load_normalized_records(path)
 
 
 def _record_sort_key(record: ResearchPaperRecord) -> tuple[str, str]:
@@ -345,7 +324,7 @@ def _fetch_story_batch(task_gids: list[str], token: str, story_worker_count: int
         return {}
 
     with ThreadPoolExecutor(max_workers=story_worker_count) as executor:
-        story_lists = list(executor.map(lambda task_gid: fetch_task_stories(task_gid=task_gid, token=token), task_gids))
+        story_lists = list(executor.map(fetch_task_stories, task_gids, repeat(token)))
     return dict(zip(task_gids, story_lists, strict=True))
 
 
@@ -411,9 +390,10 @@ def sync_project_research(
 
     source_records = [_record_from_cache_entry(entry) for entry in refreshed_entries.values()]
     source_records = sorted(source_records, key=_record_sort_key, reverse=True)
-    records = _merge_records(_load_existing_records(output_path), source_records) if merge_output else source_records
+    records = _merge_records(load_normalized_records(output_path), source_records) if merge_output else source_records
 
-    _write_json_file(raw_cache_path, raw_cache.model_dump())
+    raw_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_cache_path.write_text(json.dumps(raw_cache.model_dump(), indent=2) + "\n", encoding="utf-8")
     write_normalized_records(output_path, records)
 
     summary = ResearchSyncSummary(

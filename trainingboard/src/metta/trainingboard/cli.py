@@ -78,7 +78,7 @@ def ingest_asana(
     state_dir: str,
 ) -> None:
     """Ingest an Asana project into local research cache."""
-    access_token = token or (os.environ[token_env] if token_env in os.environ else "")
+    access_token = token or os.environ.get(token_env, "")
     if not access_token:
         raise click.ClickException(f"Missing Asana token. Set --token or ${token_env}.")
 
