@@ -3,7 +3,8 @@ name: cm.web
 description: Browser automation inside cmux using the cmux browser CLI
 ---
 
-Use the `cmux browser` CLI for browser automation. DO NOT use `mcp__claude-in-chrome__*` tools — they won't work inside cmux.
+Use the `cmux browser` CLI for browser automation. DO NOT use `mcp__claude-in-chrome__*` tools — they won't work inside
+cmux.
 
 ## Setup: Find or create a browser
 
@@ -27,34 +28,40 @@ Look for a surface showing a page title (not a terminal). If you find one, use i
 cmux browser open <url>
 ```
 
-This creates a new browser surface and returns its ref (e.g. `surface:6 pane=pane:5`). Use the surface ref for all subsequent commands.
+This creates a new browser surface and returns its ref (e.g. `surface:6 pane=pane:5`). Use the surface ref for all
+subsequent commands.
 
-**Surfaces can disappear** — if a command returns `not_found: Surface not found`, re-run `cmux list-panes` to discover what's available and create a new browser if needed.
+**Surfaces can disappear** — if a command returns `not_found: Surface not found`, re-run `cmux list-panes` to discover
+what's available and create a new browser if needed.
 
 ## Commands
 
 All commands use `cmux browser --surface <surface> <command>`.
 
 ### Navigation
+
 - `navigate <url>` — go to a URL
 - `back` / `forward` / `reload` — history navigation
 - `get-url` — get current URL
 - `get title` — get page title
 
 ### Reading the page
+
 - `snapshot --interactive` — DOM snapshot with interactive element refs (best for finding what to click/fill)
 - `snapshot --compact` — compact DOM snapshot (truncates on content-heavy pages)
 - `get html [selector]` — get HTML content
 - `get value <selector>` — get input value
 - `get count <selector>` — count matching elements
 
-**Note**: `get text` requires a selector — it does not work without one. To get all visible text from a page, use `eval` instead:
+**Note**: `get text` requires a selector — it does not work without one. To get all visible text from a page, use `eval`
+instead:
 
 ```bash
 cmux browser --surface <surface> eval "document.body.innerText.substring(0, 5000)"
 ```
 
 ### Interacting
+
 - `click <selector>` — click an element (CSS selector)
 - `dblclick <selector>` — double-click
 - `hover <selector>` — hover over element
@@ -66,25 +73,30 @@ cmux browser --surface <surface> eval "document.body.innerText.substring(0, 5000
 - `scroll --dy -300` — scroll down (negative = down, positive = up)
 
 ### Waiting
+
 - `wait --selector <css>` — wait for element to appear
 - `wait --text <text>` — wait for text to appear
 - `wait --url-contains <text>` — wait for URL change
 - `wait --load-state complete` — wait for page load
 
 ### JavaScript
+
 - `eval <script>` — evaluate JS and return result
 
 ### Tabs
+
 - `tab list` — list browser tabs
 - `tab new [url]` — open new tab
 - `tab switch <index>` — switch to tab
 - `tab close [index]` — close tab
 
 ### Console & errors
+
 - `console list` — read console messages
 - `errors list` — read page errors
 
 ### Other
+
 - `find role <role>` / `find text <text>` / `find label <text>` — find elements by accessibility properties
 - `highlight <selector>` — visually highlight an element
 - `cookies get [name]` / `cookies set <name> <value>` / `cookies clear` — manage cookies
@@ -92,7 +104,8 @@ cmux browser --surface <surface> eval "document.body.innerText.substring(0, 5000
 
 ## Data extraction with eval
 
-`snapshot` truncates on content-heavy pages. For extracting structured data (search results, listings, tables), use `eval` with JavaScript:
+`snapshot` truncates on content-heavy pages. For extracting structured data (search results, listings, tables), use
+`eval` with JavaScript:
 
 ```bash
 # Get all visible text from a specific section
@@ -111,7 +124,8 @@ out.join('\\n');
 
 ### Lazy-loaded content
 
-Many sites load results incrementally as you scroll. If you're only seeing a few results, scroll the container to trigger loading:
+Many sites load results incrementally as you scroll. If you're only seeing a few results, scroll the container to
+trigger loading:
 
 ```bash
 cmux browser --surface <surface> eval "
@@ -124,7 +138,8 @@ Then re-extract. You may need to scroll multiple times for very long lists.
 
 ## Workflow
 
-1. **Find or create browser**: `cmux list-panes` → `cmux list-pane-surfaces --pane <pane>` → use existing surface, or `cmux browser open <url>` to create one
+1. **Find or create browser**: `cmux list-panes` → `cmux list-pane-surfaces --pane <pane>` → use existing surface, or
+   `cmux browser open <url>` to create one
 2. **Check current state**: `get-url` and `get title`
 3. **Navigate if needed**: `navigate <url>`
 4. **Read the page**: `snapshot --interactive` for interaction, `eval` for data extraction
@@ -137,4 +152,5 @@ Then re-extract. You may need to scroll multiple times for very long lists.
 - Use `snapshot --interactive` to see clickable elements with their selectors
 - Use `wait` before interacting with dynamically-loaded content
 - The `--selector` flag on `snapshot` lets you focus on a specific part of the page
-- **Geolocation is unreliable** — "near me" queries may resolve to the wrong location. Use explicit addresses when location matters.
+- **Geolocation is unreliable** — "near me" queries may resolve to the wrong location. Use explicit addresses when
+  location matters.

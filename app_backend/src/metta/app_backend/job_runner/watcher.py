@@ -2,6 +2,11 @@
 K8s Pod Watcher - stores pod events to database.
 
 This watcher only stores events; processing is done by the event_processor.
+
+Uses resourceVersion tracking to resume watches without missing events:
+- On stream timeout, resumes from last seen resourceVersion (no re-list)
+- On 410 Gone (resourceVersion expired), does a full re-list to re-sync
+- BOOKMARK events update the tracked resourceVersion without generating stored events
 """
 
 import logging
@@ -12,6 +17,7 @@ from kubernetes import (
     client,
     watch,  # type: ignore[attr-defined]
 )
+from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
 
 from metta.app_backend.health_server import start_health_server, update_heartbeat
@@ -27,7 +33,7 @@ from metta.common.util.log_config import init_logging, suppress_noisy_logs
 
 logger = logging.getLogger(__name__)
 
-WATCH_TIMEOUT_SECONDS = 30
+WATCH_TIMEOUT_SECONDS = 90
 
 
 def _get_k8s_client() -> client.CoreV1Api | None:
@@ -55,6 +61,12 @@ K8sPodWatchEventType = Literal["ADDED", "MODIFIED", "DELETED", "BOOKMARK", "ERRO
 class K8sPodWatchEvent(TypedDict):
     type: K8sPodWatchEventType
     object: client.V1Pod
+
+
+def _pod_resource_version(pod: client.V1Pod) -> str | None:
+    if pod.metadata and pod.metadata.resource_version:
+        return pod.metadata.resource_version
+    return None
 
 
 def _maybe_store_event(
@@ -86,26 +98,43 @@ def _maybe_store_event(
         logger.error("Failed to persist k8s watch event", exc_info=True)
 
 
-def _watch_pods_with_client(core_v1: client.CoreV1Api, cluster_name: str):
-    """Watch pods and store events to the database."""
+def _list_and_sync(
+    core_v1: client.CoreV1Api,
+    cluster_name: str,
+    node_label_cache: dict[str, dict[str, str]],
+) -> str | None:
+    """Full list of pods, store as ADDED events, return resourceVersion."""
     cfg = get_dispatch_config()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
 
     pod_list = core_v1.list_namespaced_pod(namespace=cfg.JOB_NAMESPACE, label_selector=label_selector)
     if not pod_list.metadata or not pod_list.metadata.resource_version:
-        logger.error(f"Invalid pod list on cluster={cluster_name}: {pod_list}")
-        return
+        logger.error(f"Invalid pod list on cluster={cluster_name}")
+        return None
 
-    node_label_cache: dict[str, dict[str, str]] = {}
-
-    # Store initial state of all pods
     for pod in pod_list.items:
         _maybe_store_event(cluster_name, "ADDED", pod, node_label_cache, core_v1)
 
-    resource_version = pod_list.metadata.resource_version
-    logger.info(f"Starting pod watch on cluster={cluster_name} from resourceVersion={resource_version}")
-    update_heartbeat()
+    rv = pod_list.metadata.resource_version
+    logger.info(f"Full re-list on cluster={cluster_name}: {len(pod_list.items)} pods, resourceVersion={rv}")
+    return rv
 
+
+def _watch_stream(
+    core_v1: client.CoreV1Api,
+    cluster_name: str,
+    resource_version: str,
+    node_label_cache: dict[str, dict[str, str]],
+) -> str:
+    """Run a single watch stream, return the last seen resourceVersion.
+
+    Raises ApiException with status 410 if the resourceVersion is too old.
+    """
+    cfg = get_dispatch_config()
+    label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
+    last_rv = resource_version
+
+    update_heartbeat()
     w = watch.Watch()
     event: K8sPodWatchEvent
     for event in w.stream(  # type: ignore[assignment]
@@ -113,17 +142,36 @@ def _watch_pods_with_client(core_v1: client.CoreV1Api, cluster_name: str):
         namespace=cfg.JOB_NAMESPACE,
         label_selector=label_selector,
         resource_version=resource_version,
+        allow_watch_bookmarks=True,
         timeout_seconds=WATCH_TIMEOUT_SECONDS,
     ):
         update_heartbeat()
         event_type, pod = event["type"], event["object"]
+
+        rv = _pod_resource_version(pod)
+        if rv:
+            last_rv = rv
+
+        if event_type == "ERROR":
+            raw = event.get("raw_object", {})  # type: ignore[union-attr]
+            code = raw.get("code", 0) if isinstance(raw, dict) else 0
+            if code == 410:
+                raise ApiException(status=410, reason="Gone")
+            logger.warning(f"Watch ERROR event on cluster={cluster_name}: {raw}")
+            continue
+
         if event_type in ("ADDED", "MODIFIED", "DELETED"):
             _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
 
+    return last_rv
+
 
 def _watch_loop(cluster_name: str):
-    """Main watch loop - watches pods and stores events."""
+    """Main watch loop with resourceVersion tracking across reconnects."""
     logger.info(f"Watch loop starting for cluster={cluster_name}")
+    resource_version: str | None = None
+    node_label_cache: dict[str, dict[str, str]] = {}
+
     while True:
         try:
             core_v1 = _get_k8s_client()
@@ -131,9 +179,26 @@ def _watch_loop(cluster_name: str):
                 logger.warning("Eval cluster client unavailable, retrying in 30s")
                 time.sleep(30)
                 continue
-            _watch_pods_with_client(core_v1, cluster_name)
+
+            if resource_version is None:
+                resource_version = _list_and_sync(core_v1, cluster_name, node_label_cache)
+                if resource_version is None:
+                    time.sleep(5)
+                    continue
+
+            resource_version = _watch_stream(core_v1, cluster_name, resource_version, node_label_cache)
+
+        except ApiException as e:
+            if e.status == 410:
+                logger.info(f"resourceVersion expired on cluster={cluster_name}, doing full re-list")
+                resource_version = None
+            else:
+                logger.error(f"Watch API error on cluster={cluster_name}: {e}", exc_info=True)
+                resource_version = None
+                time.sleep(1)
         except Exception as e:
             logger.error(f"Watch error on cluster={cluster_name}, restarting: {e}", exc_info=True)
+            resource_version = None
             time.sleep(1)
 
 
