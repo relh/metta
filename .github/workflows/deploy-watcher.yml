@@ -1,10 +1,17 @@
 name: "Deploy Watcher"
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app_backend/src/metta/app_backend/job_runner/watcher.py"
+      - "devops/charts/orchestrator/templates/watcher-deployment.yaml"
+      - ".github/workflows/deploy-watcher.yml"
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Image tag to deploy for the watcher. Leave empty to use the current orchestrator image tag."
+        description: "Image tag to deploy. Leave empty to use sha-<HEAD>."
         required: false
 
 env:
@@ -12,14 +19,14 @@ env:
   CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
 
 jobs:
-  deploy:
-    name: "Deploy Watcher"
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+  build-and-deploy:
+    name: "Build and Deploy Watcher"
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write
       contents: read
     outputs:
-      image_tag: ${{ inputs.image_tag }}
+      image_tag: ${{ steps.resolve-tag.outputs.tag }}
     steps:
       - id: ci-token
         uses: actions/create-github-app-token@v1
@@ -29,6 +36,22 @@ jobs:
       - uses: actions/checkout@v6
         with:
           token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Resolve image tag
+        id: resolve-tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=sha-$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Docker image
+        uses: ./.github/actions/docker-build
+        with:
+          image_name: metta-app-backend
+          dockerfile: ./devops/docker/Dockerfile.backend
+          aws_role: ${{ vars.AWS_ROLE }}
 
       - name: Configure EKS
         uses: ./.github/actions/eks-configure
@@ -48,7 +71,7 @@ jobs:
             orchestrator \
             ./devops/charts/orchestrator \
             --reuse-values \
-            --set watcher.imageTag=${{ inputs.image_tag }}
+            --set watcher.imageTag=${{ steps.resolve-tag.outputs.tag }}
       - name: Collect deploy failure diagnostics
         if: failure()
         uses: ./.github/actions/deploy-failure-diagnostics
@@ -58,7 +81,7 @@ jobs:
 
   notify-discord:
     name: Notify Discord
-    needs: [deploy]
+    needs: [build-and-deploy]
     if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
@@ -72,6 +95,6 @@ jobs:
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           package-name: watcher
-          version: ${{ needs.deploy.outputs.image_tag }}
-          success-message: "watcher deployed with image tag: `${{ needs.deploy.outputs.image_tag }}`"
+          version: ${{ needs.build-and-deploy.outputs.image_tag }}
+          success-message: "watcher deployed with image tag: `${{ needs.build-and-deploy.outputs.image_tag }}`"
           needs-context: ${{ toJSON(needs) }}
