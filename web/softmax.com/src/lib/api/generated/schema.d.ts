@@ -802,6 +802,13 @@ export interface components {
        */
       score_stddev?: number | null;
       /**
+       * Score Percentiles
+       * @description Weighted percentiles of per-match policy scores, keyed by percentile (e.g. 30, 60, 90).
+       */
+      score_percentiles?: {
+        [key: string]: number;
+      };
+      /**
        * Matches
        * @description Number of matches played
        */

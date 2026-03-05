@@ -5,7 +5,7 @@ from typing import NamedTuple
 from uuid import UUID
 
 from metta_alo.scoring import Scorer, WeightedScorer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlmodel import col, select
 
 # pyright: reportArgumentType=false
@@ -59,11 +59,12 @@ class ScoredMatchData(BaseModel):
     episode_tags: EpisodeTags | None = None
 
 
-class LeaderboardStatsRow(NamedTuple):
+class LeaderboardStatsRow(BaseModel):
     policy_version_id: UUID
     score: float
     match_count: int
     score_stddev: float | None = None
+    score_percentiles: dict[int, float] = Field(default_factory=dict)
 
 
 def compute_weighted_score_stddev(
@@ -99,6 +100,59 @@ def compute_weighted_score_stddev(
         stddev_by_policy[policy_version_id] = math.sqrt(max(variance, 0.0))
 
     return stddev_by_policy
+
+
+def _weighted_percentile(
+    values_with_weights: list[tuple[float, float]],
+    percentile: float,
+) -> float | None:
+    if not values_with_weights:
+        return None
+
+    sorted_values = sorted(values_with_weights, key=lambda item: item[0])
+    total_weight = sum(max(weight, 0.0) for _, weight in sorted_values)
+    if total_weight <= 0:
+        return None
+
+    clamped = min(max(percentile, 0.0), 100.0)
+    threshold = (clamped / 100.0) * total_weight
+    cumulative = 0.0
+    for value, weight in sorted_values:
+        cumulative += max(weight, 0.0)
+        if cumulative >= threshold:
+            return value
+    return sorted_values[-1][0]
+
+
+def compute_weighted_score_percentiles(
+    policy_scores: dict[UUID, float],
+    scored_matches: list[ScoredMatchData],
+    *,
+    percentiles: tuple[float, ...] = (30.0, 60.0, 90.0),
+) -> dict[UUID, dict[int, float | None]]:
+    weighted_scores: dict[UUID, list[tuple[float, float]]] = defaultdict(list)
+
+    for match in scored_matches:
+        total_agents = sum(match.policy_agent_counts.values())
+        if total_agents <= 0:
+            continue
+
+        for policy_version_id, score in match.policy_scores.items():
+            if policy_version_id not in policy_scores:
+                continue
+            agent_count = match.policy_agent_counts.get(policy_version_id, 0)
+            if agent_count <= 0:
+                continue
+            weight = agent_count / total_agents
+            weighted_scores[policy_version_id].append((score, weight))
+
+    percentiles_by_policy: dict[UUID, dict[int, float | None]] = {}
+    for policy_version_id in policy_scores:
+        values = weighted_scores.get(policy_version_id, [])
+        percentiles_by_policy[policy_version_id] = {
+            int(percentile): _weighted_percentile(values, percentile) for percentile in percentiles
+        }
+    return percentiles_by_policy
 
 
 class RefereeBase(ABC):
@@ -216,12 +270,16 @@ class RefereeBase(ABC):
 
         scores = self.scorer.compute_scores(list(all_policy_ids), scored_matches)
         score_stddevs = compute_weighted_score_stddev(scores, scored_matches)
+        score_percentiles = compute_weighted_score_percentiles(scores, scored_matches)
         results = [
             LeaderboardStatsRow(
                 policy_version_id=policy_version_id,
                 score=score,
                 match_count=match_counts.get(policy_version_id, 0),
                 score_stddev=score_stddevs.get(policy_version_id),
+                score_percentiles={
+                    k: v for k, v in score_percentiles.get(policy_version_id, {}).items() if v is not None
+                },
             )
             for policy_version_id, score in scores.items()
         ]

@@ -25,10 +25,32 @@ import { SubmitForm } from "./SubmitForm";
 
 const parseSearchParams = createLoader({ stage: parseAsString });
 
+type PlayersPageProps = {
+  params: Promise<{ seasonName: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
 type PolicyStageStats = {
   mean: number;
   stddev: number | null;
+  percentiles: Record<number, number>;
 };
+
+function calculatePercentile(
+  values: number[],
+  percentile: number,
+): number | null {
+  if (values.length === 0) return null;
+  if (values.length === 1) return values[0];
+  const sorted = [...values].sort((left, right) => left - right);
+  const index =
+    (Math.max(0, Math.min(100, percentile)) / 100) * (sorted.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) return sorted[lower];
+  const weight = index - lower;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+}
 
 function calculateSampleStddev(values: number[], mean: number): number | null {
   if (values.length === 0) {
@@ -48,7 +70,7 @@ function calculateSampleStddev(values: number[], mean: number): number | null {
 export default async function PlayersPage({
   params,
   searchParams,
-}: PageProps<"/observatory/tournament/[seasonName]/players">) {
+}: PlayersPageProps) {
   const { seasonName } = await params;
   const parsed = await parseSearchParams(searchParams);
   const repo = await getRepo();
@@ -150,9 +172,17 @@ export default async function PlayersPage({
                   const mean =
                     scores.reduce((sum, score) => sum + score, 0) /
                     scores.length;
+                  const sortedScores = [...scores].sort(
+                    (left, right) => left - right,
+                  );
                   statsByPolicy.set(policyId, {
                     mean,
                     stddev: calculateSampleStddev(scores, mean),
+                    percentiles: Object.fromEntries(
+                      [30, 60, 90]
+                        .map((p) => [p, calculatePercentile(sortedScores, p)])
+                        .filter(([, v]) => v !== null),
+                    ),
                   });
                 }
                 return [poolName, statsByPolicy] as const;
@@ -171,6 +201,7 @@ export default async function PlayersPage({
                     {
                       mean: entry.score,
                       stddev: entry.score_stddev ?? null,
+                      percentiles: entry.score_percentiles ?? {},
                     },
                   ]),
                 ),
@@ -230,6 +261,7 @@ export default async function PlayersPage({
                     hasPool: false,
                     mean: null,
                     stddev: null,
+                    percentiles: null,
                     completed: 0,
                     failed: 0,
                     pending: 0,
@@ -246,6 +278,7 @@ export default async function PlayersPage({
                   hasPool: true,
                   mean: stageStats?.mean ?? null,
                   stddev: stageStats?.stddev ?? null,
+                  percentiles: stageStats?.percentiles ?? null,
                   completed: pool.completed,
                   failed: pool.failed,
                   pending: pool.pending,

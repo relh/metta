@@ -103,6 +103,10 @@ class LeaderboardEntry(BaseModel):
         default=None,
         description="Standard deviation of per-match policy scores under the leaderboard weighting.",
     )
+    score_percentiles: dict[int, float] = Field(
+        default_factory=dict,
+        description="Weighted percentiles of per-match policy scores, keyed by percentile (e.g. 30, 60, 90).",
+    )
     matches: int = Field(description="Number of matches played")
 
 
@@ -484,6 +488,7 @@ async def _build_policy_leaderboard(
             ),
             score=entry.score,
             score_stddev=entry.score_stddev,
+            score_percentiles=entry.score_percentiles,
             matches=entry.match_count,
         )
         for i, entry in enumerate(leaderboard)

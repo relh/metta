@@ -10,6 +10,7 @@ from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus,
 from metta.app_backend.tournament.referees.base import (
     LeaderboardStatsRow,
     ScoredMatchData,
+    compute_weighted_score_percentiles,
     compute_weighted_score_stddev,
 )
 from metta.app_backend.tournament.referees.leaderboard_rows import group_match_rows
@@ -91,6 +92,7 @@ class MockLeaderboardMixin:
 
         scores = self.scorer.compute_scores(list(all_policy_ids), scored_matches)
         score_stddevs = compute_weighted_score_stddev(scores, scored_matches)
+        score_percentiles = compute_weighted_score_percentiles(scores, scored_matches)
         return sorted(
             (
                 LeaderboardStatsRow(
@@ -98,6 +100,7 @@ class MockLeaderboardMixin:
                     score=score,
                     match_count=match_counts.get(pv_id, 0),
                     score_stddev=score_stddevs.get(pv_id),
+                    score_percentiles={k: v for k, v in score_percentiles.get(pv_id, {}).items() if v is not None},
                 )
                 for pv_id, score in scores.items()
             ),

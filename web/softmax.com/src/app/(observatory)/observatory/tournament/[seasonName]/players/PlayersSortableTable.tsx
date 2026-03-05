@@ -35,6 +35,7 @@ export type PlayersTableStageCell = {
   hasPool: boolean;
   mean: number | null;
   stddev: number | null;
+  percentiles: Record<number, number> | null;
   completed: number;
   failed: number;
   pending: number;
@@ -302,9 +303,17 @@ export function PlayersSortableTable({
                         {stage.mean !== null ? stage.mean.toPrecision(4) : "-"}
                       </span>
                       <span className="text-foreground-muted font-mono text-[0.7rem]">
-                        +/-{" "}
-                        {stage.stddev !== null
-                          ? stage.stddev.toPrecision(4)
+                        p30{" "}
+                        {stage.percentiles?.[30] !== undefined
+                          ? stage.percentiles[30].toPrecision(3)
+                          : "n/a"}{" "}
+                        | p60{" "}
+                        {stage.percentiles?.[60] !== undefined
+                          ? stage.percentiles[60].toPrecision(3)
+                          : "n/a"}{" "}
+                        | p90{" "}
+                        {stage.percentiles?.[90] !== undefined
+                          ? stage.percentiles[90].toPrecision(3)
                           : "n/a"}
                       </span>
                       <Link
