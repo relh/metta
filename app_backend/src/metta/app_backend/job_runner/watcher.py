@@ -9,11 +9,9 @@ Uses resourceVersion tracking to resume watches without missing events:
 - BOOKMARK events update the tracked resourceVersion without generating stored events
 """
 
-import json
 import logging
 import time
-from types import SimpleNamespace
-from typing import Literal, TypedDict, cast
+from typing import Any, Literal, cast
 
 from kubernetes import (
     client,
@@ -38,6 +36,14 @@ logger = logging.getLogger(__name__)
 
 WATCH_TIMEOUT_SECONDS = 90
 
+K8sPodWatchEventType = Literal["ADDED", "MODIFIED", "DELETED", "BOOKMARK", "ERROR"]
+
+_api_client = ApiClient()
+
+
+def _pod_to_dict(pod: client.V1Pod) -> dict[str, Any]:
+    return cast(dict[str, Any], _api_client.sanitize_for_serialization(pod))
+
 
 def _get_k8s_client() -> client.CoreV1Api | None:
     cfg = get_dispatch_config()
@@ -53,50 +59,31 @@ def _get_k8s_client() -> client.CoreV1Api | None:
     return core_v1
 
 
-# ADDED: Pod created (usually starts in Pending phase)
-# MODIFIED: Pod state changed (phase transitions, container status updates)
-# DELETED: Pod removed from cluster
-# BOOKMARK: Internal watch checkpoint (no actual change, just resourceVersion update)
-# ERROR: Watch stream error
-K8sPodWatchEventType = Literal["ADDED", "MODIFIED", "DELETED", "BOOKMARK", "ERROR"]
-
-
-class K8sPodWatchEvent(TypedDict):
-    type: K8sPodWatchEventType
-    object: client.V1Pod
-
-
-def _pod_resource_version(pod: client.V1Pod) -> str | None:
-    if pod.metadata and pod.metadata.resource_version:
-        return pod.metadata.resource_version
-    return None
+def _get_cached_node_labels(
+    node_name: str,
+    node_label_cache: dict[str, dict[str, str]],
+    core_v1: client.CoreV1Api,
+) -> dict[str, str]:
+    if node_name not in node_label_cache:
+        try:
+            node = cast(client.V1Node, core_v1.read_node(node_name))
+            node_label_cache[node_name] = (node.metadata.labels or {}) if node.metadata else {}
+        except Exception:
+            node_label_cache[node_name] = {}
+    return node_label_cache[node_name]
 
 
 def _maybe_store_event(
     cluster: str,
     event_type: str,
-    pod: client.V1Pod,
+    pod: dict[str, Any],
     node_label_cache: dict[str, dict[str, str]],
-    core_v1: client.CoreV1Api | None = None,
+    core_v1: client.CoreV1Api,
 ) -> None:
-    """Store a pod event, including node labels for terminal pods.
-
-    Node labels are fetched once per unique node and cached for the lifetime of
-    the watch session. The fetch happens on the first sighting of a node (usually
-    while the pod is Running), so by the time a terminal event arrives the labels
-    are already in cache and no extra REST call is needed.
-    """
     try:
-        node_name = pod.spec.node_name if pod.spec else None
-        if core_v1 and node_name and node_name not in node_label_cache:
-            try:
-                node = cast(client.V1Node, core_v1.read_node(node_name))
-                node_label_cache[node_name] = (node.metadata.labels or {}) if node.metadata else {}
-            except Exception:
-                node_label_cache[node_name] = {}  # cache miss to prevent retries
-        node_labels = node_label_cache.get(node_name) if node_name else None
-        phase = pod.status.phase if pod.status else None
-        store_k8s_event(cluster, event_type, pod, node_labels=node_labels if phase in ("Succeeded", "Failed") else None)
+        node_name = (pod.get("spec") or {}).get("nodeName")
+        node_labels = _get_cached_node_labels(node_name, node_label_cache, core_v1) if node_name else None
+        store_k8s_event(cluster, event_type, pod, node_labels=node_labels)
     except Exception:
         logger.error("Failed to persist k8s watch event", exc_info=True)
 
@@ -106,7 +93,6 @@ def _list_and_sync(
     cluster_name: str,
     node_label_cache: dict[str, dict[str, str]],
 ) -> str | None:
-    """Full list of pods, store as ADDED events, return resourceVersion."""
     cfg = get_dispatch_config()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
 
@@ -116,7 +102,7 @@ def _list_and_sync(
         return None
 
     for pod in pod_list.items:
-        _maybe_store_event(cluster_name, "ADDED", pod, node_label_cache, core_v1)
+        _maybe_store_event(cluster_name, "ADDED", _pod_to_dict(pod), node_label_cache, core_v1)
 
     rv = pod_list.metadata.resource_version
     logger.info(f"Full re-list on cluster={cluster_name}: {len(pod_list.items)} pods, resourceVersion={rv}")
@@ -129,18 +115,13 @@ def _watch_stream(
     resource_version: str,
     node_label_cache: dict[str, dict[str, str]],
 ) -> str:
-    """Run a single watch stream, return the last seen resourceVersion.
-
-    Raises ApiException with status 410 if the resourceVersion is too old.
-    """
     cfg = get_dispatch_config()
     label_selector = f"{LABEL_APP}={LABEL_APP_VALUE}"
     last_rv = resource_version
 
     update_heartbeat()
     w = watch.Watch()
-    event: K8sPodWatchEvent
-    for event in w.stream(  # type: ignore[assignment]
+    for raw_event in w.stream(
         core_v1.list_namespaced_pod,
         namespace=cfg.JOB_NAMESPACE,
         label_selector=label_selector,
@@ -149,36 +130,28 @@ def _watch_stream(
         timeout_seconds=WATCH_TIMEOUT_SECONDS,
     ):
         update_heartbeat()
-        event_type, pod = event["type"], event["object"]
+        event = cast(dict[str, Any], raw_event)
+        event_type: str = event["type"]
+        pod: dict[str, Any] = event["raw_object"]
 
         if event_type == "ERROR":
-            raw = event.get("raw_object", {})  # type: ignore[union-attr]
-            code = raw.get("code", 0) if isinstance(raw, dict) else 0
+            code = pod.get("code", 0)
             if code == 410:
                 raise ApiException(status=410, reason="Gone")
-            logger.warning(f"Watch ERROR event on cluster={cluster_name}: {raw}")
+            logger.warning(f"Watch ERROR event on cluster={cluster_name}: {pod}")
             continue
 
-        if isinstance(pod, dict):
-            rv = pod.get("metadata", {}).get("resourceVersion")
-        else:
-            rv = _pod_resource_version(pod)
+        rv = pod.get("metadata", {}).get("resourceVersion")
         if rv:
             last_rv = rv
 
-        if event_type not in ("ADDED", "MODIFIED", "DELETED"):
-            continue
-
-        if isinstance(pod, dict):
-            pod = cast(client.V1Pod, ApiClient().deserialize(SimpleNamespace(data=json.dumps(pod)), "V1Pod"))
-
-        _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
+        if event_type in ("ADDED", "MODIFIED", "DELETED"):
+            _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
 
     return last_rv
 
 
 def _watch_loop(cluster_name: str):
-    """Main watch loop with resourceVersion tracking across reconnects."""
     logger.info(f"Watch loop starting for cluster={cluster_name}")
     resource_version: str | None = None
     node_label_cache: dict[str, dict[str, str]] = {}
@@ -214,7 +187,6 @@ def _watch_loop(cluster_name: str):
 
 
 def run_watcher():
-    """Run the watcher service."""
     cfg = get_dispatch_config()
     start_health_server()
     logger.info(f"Watcher started: namespace={cfg.JOB_NAMESPACE}")

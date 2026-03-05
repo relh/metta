@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
-from kubernetes import client
-from kubernetes.client.api_client import ApiClient
 from sqlmodel import Session, create_engine
 
 from metta.app_backend.config import settings
@@ -35,14 +34,17 @@ def _get_engine():
 
 
 def store_k8s_event(
-    cluster: str, event_type: str, pod: client.V1Pod, node_labels: dict[str, str] | None = None
+    cluster: str, event_type: str, pod: dict[str, Any], node_labels: dict[str, str] | None = None
 ) -> None:
     engine = _get_engine()
     if engine is None:
         return
-    raw = ApiClient().sanitize_for_serialization(pod)
-    event_time = pod.metadata.creation_timestamp if pod.metadata else None
-    event_dict: dict = {"type": event_type, "object": raw}
+    creation_ts: str | None = (pod.get("metadata") or {}).get("creationTimestamp")
+    if creation_ts:
+        event_time = datetime.fromisoformat(creation_ts.replace("Z", "+00:00"))
+    else:
+        event_time = None
+    event_dict: dict = {"type": event_type, "object": pod}
     if node_labels:
         event_dict["node_labels"] = node_labels
     event = K8sEvent(
