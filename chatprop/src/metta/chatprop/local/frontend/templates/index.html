@@ -4,19 +4,149 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>chatprop local landscape</title>
+    <script>
+      (() => {
+        const root = document.documentElement;
+        const params = new URLSearchParams(window.location.search);
+        const theme = params.get("theme");
+        if (theme === "dark" || theme === "light") {
+          root.setAttribute("data-theme", theme);
+          return;
+        }
+        if (theme === "system") {
+          root.removeAttribute("data-theme");
+        }
+      })();
+    </script>
     <style>
       :root {
-        --bg0: #08111a;
-        --bg1: #0f1d2d;
-        --panel: rgba(7, 15, 24, 0.88);
-        --panel-soft: rgba(8, 19, 30, 0.7);
-        --line: #294159;
-        --line-soft: #1d3044;
-        --text: #e3eef8;
-        --muted: #8fa5bc;
-        --accent: #31c48d;
-        --warn: #f59e0b;
-        --error: #ef4444;
+        color-scheme: light;
+        font-family: Arial, sans-serif;
+        --bg: #f9fafb;
+        --surface: #ffffff;
+        --surface-alt: #f3f4f6;
+        --fg: #111827;
+        --fg-muted: #6b7280;
+        --fg-subtle: #374151;
+        --border: #e5e7eb;
+        --border-strong: #d1d5db;
+        --border-subtle: #f3f4f6;
+        --panel: var(--surface);
+        --panel-soft: #f8fafc;
+        --table-head-bg: var(--surface-alt);
+        --table-head-fg: var(--fg-subtle);
+        --table-row-border: var(--border-subtle);
+        --tag-border: #d8e2ef;
+        --tag-bg: #eef3fa;
+        --tag-ink: #4c6789;
+        --primary-btn-bg: #eff6ff;
+        --primary-btn-bg-hover: #dbeafe;
+        --primary-btn-border: #93c5fd;
+        --primary-btn-ink: #1d4ed8;
+        --ghost-btn-bg: var(--surface);
+        --ghost-btn-bg-hover: var(--surface-alt);
+        --ghost-btn-ink: var(--fg-subtle);
+        --progress-track: #eef2f7;
+        --progress-track-border: #d8e0eb;
+        --progress-fill-start: #34d399;
+        --progress-fill-end: #10b981;
+        --badge-merged-bg: #dcfce7;
+        --badge-merged-ink: #166534;
+        --badge-open-bg: #dbeafe;
+        --badge-open-ink: #1d4ed8;
+        --badge-closed-bg: #fef3c7;
+        --badge-closed-ink: #92400e;
+        --badge-none-bg: #e5e7eb;
+        --badge-none-ink: #4b5563;
+        --status-error: #b4232f;
+        --link: #2563eb;
+        --code-bg: #f8fafc;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #030712;
+        --surface: #111827;
+        --surface-alt: #1f2937;
+        --fg: #f3f4f6;
+        --fg-muted: #9ca3af;
+        --fg-subtle: #d1d5db;
+        --border: #374151;
+        --border-strong: #4b5563;
+        --border-subtle: #1f2937;
+        --panel: var(--surface);
+        --panel-soft: #0f172a;
+        --table-head-bg: #0f172a;
+        --table-head-fg: #cbd5e1;
+        --table-row-border: var(--border-subtle);
+        --tag-border: #334155;
+        --tag-bg: #1e293b;
+        --tag-ink: #bfdbfe;
+        --primary-btn-bg: #0f1f3e;
+        --primary-btn-bg-hover: #152b52;
+        --primary-btn-border: #2f4f88;
+        --primary-btn-ink: #bfdbfe;
+        --ghost-btn-bg: var(--surface);
+        --ghost-btn-bg-hover: var(--surface-alt);
+        --ghost-btn-ink: var(--fg-subtle);
+        --progress-track: #102743;
+        --progress-track-border: #1e4f84;
+        --progress-fill-start: #34d399;
+        --progress-fill-end: #10b981;
+        --badge-merged-bg: #0f2f22;
+        --badge-merged-ink: #bbf7d0;
+        --badge-open-bg: #102743;
+        --badge-open-ink: #bfdbfe;
+        --badge-closed-bg: #3a2a10;
+        --badge-closed-ink: #facc15;
+        --badge-none-bg: #1f2937;
+        --badge-none-ink: #94a3b8;
+        --status-error: #fecdd3;
+        --link: #93c5fd;
+        --code-bg: #0f172a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          color-scheme: dark;
+          --bg: #030712;
+          --surface: #111827;
+          --surface-alt: #1f2937;
+          --fg: #f3f4f6;
+          --fg-muted: #9ca3af;
+          --fg-subtle: #d1d5db;
+          --border: #374151;
+          --border-strong: #4b5563;
+          --border-subtle: #1f2937;
+          --panel: var(--surface);
+          --panel-soft: #0f172a;
+          --table-head-bg: #0f172a;
+          --table-head-fg: #cbd5e1;
+          --table-row-border: var(--border-subtle);
+          --tag-border: #334155;
+          --tag-bg: #1e293b;
+          --tag-ink: #bfdbfe;
+          --primary-btn-bg: #0f1f3e;
+          --primary-btn-bg-hover: #152b52;
+          --primary-btn-border: #2f4f88;
+          --primary-btn-ink: #bfdbfe;
+          --ghost-btn-bg: var(--surface);
+          --ghost-btn-bg-hover: var(--surface-alt);
+          --ghost-btn-ink: var(--fg-subtle);
+          --progress-track: #102743;
+          --progress-track-border: #1e4f84;
+          --progress-fill-start: #34d399;
+          --progress-fill-end: #10b981;
+          --badge-merged-bg: #0f2f22;
+          --badge-merged-ink: #bbf7d0;
+          --badge-open-bg: #102743;
+          --badge-open-ink: #bfdbfe;
+          --badge-closed-bg: #3a2a10;
+          --badge-closed-ink: #facc15;
+          --badge-none-bg: #1f2937;
+          --badge-none-ink: #94a3b8;
+          --status-error: #fecdd3;
+          --link: #93c5fd;
+          --code-bg: #0f172a;
+        }
       }
       * {
         box-sizing: border-box;
@@ -25,12 +155,8 @@
       body {
         margin: 0;
         min-height: 100%;
-        background:
-          radial-gradient(1200px 800px at 10% -10%, #133252, transparent 60%),
-          radial-gradient(1000px 700px at 100% 0%, #1e3a5f, transparent 60%),
-          linear-gradient(180deg, var(--bg1), var(--bg0));
-        color: var(--text);
-        font-family: "Space Grotesk", "IBM Plex Sans", "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
       }
       main {
         width: min(1600px, 96vw);
@@ -41,10 +167,9 @@
         flex-direction: column;
         gap: 10px;
         padding: 14px;
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 16px;
         background: var(--panel);
-        backdrop-filter: blur(6px);
       }
       .hero-main {
         display: block;
@@ -61,7 +186,7 @@
       }
       .subtitle {
         margin: 6px 0 0;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 13px;
       }
       .controls {
@@ -79,7 +204,7 @@
         overflow-x: auto;
       }
       .card {
-        border: 1px solid var(--line-soft);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
         padding: 5px 10px;
         background: var(--panel-soft);
@@ -91,7 +216,7 @@
       }
       .card-label {
         margin: 0;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 11px;
       }
       .card-value {
@@ -105,11 +230,11 @@
       }
       .status {
         margin-top: 8px;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 13px;
       }
       .status.error {
-        color: #fda4af;
+        color: var(--status-error);
       }
       .progress-wrap {
         margin-top: 8px;
@@ -121,39 +246,54 @@
         width: 100%;
         height: 9px;
         border-radius: 999px;
-        background: #102235;
-        border: 1px solid #1f3950;
+        background: var(--progress-track);
+        border: 1px solid var(--progress-track-border);
         overflow: hidden;
       }
       .progress-bar {
         height: 100%;
         width: 0%;
-        background: linear-gradient(90deg, #1ea97a, #34d399);
+        background: linear-gradient(90deg, var(--progress-fill-start), var(--progress-fill-end));
         transition: width 0.25s ease-out;
       }
       .progress-text {
         margin-top: 4px;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 12px;
       }
       button,
       input {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border-strong);
         border-radius: 10px;
-        background: rgba(7, 16, 26, 0.9);
-        color: var(--text);
+        background: var(--surface);
+        color: var(--fg);
         padding: 7px 9px;
         font: inherit;
       }
+      input::placeholder {
+        color: var(--fg-muted);
+      }
       button {
         cursor: pointer;
+        transition:
+          background-color 120ms ease,
+          border-color 120ms ease,
+          color 120ms ease;
       }
       button.primary {
-        background: linear-gradient(90deg, #1d6d52, #1f7556);
-        border-color: #2a8966;
+        background: var(--primary-btn-bg);
+        border-color: var(--primary-btn-border);
+        color: var(--primary-btn-ink);
+      }
+      button.primary:hover {
+        background: var(--primary-btn-bg-hover);
       }
       button.ghost {
-        background: rgba(10, 24, 37, 0.75);
+        background: var(--ghost-btn-bg);
+        color: var(--ghost-btn-ink);
+      }
+      button.ghost:hover {
+        background: var(--ghost-btn-bg-hover);
       }
       .split {
         margin-top: 12px;
@@ -162,7 +302,7 @@
         gap: 12px;
       }
       .panel {
-        border: 1px solid var(--line);
+        border: 1px solid var(--border);
         border-radius: 14px;
         background: var(--panel);
         padding: 12px;
@@ -180,7 +320,7 @@
         margin-bottom: 10px;
       }
       .table-wrap {
-        border: 1px solid var(--line-soft);
+        border: 1px solid var(--border-subtle);
         border-radius: 10px;
         overflow: auto;
         max-height: 420px;
@@ -251,7 +391,7 @@
       }
       th,
       td {
-        border-bottom: 1px solid #1a2a3b;
+        border-bottom: 1px solid var(--table-row-border);
         padding: 6px;
         text-align: left;
         vertical-align: top;
@@ -268,12 +408,12 @@
         position: sticky;
         top: 0;
         z-index: 1;
-        background: #0b1725;
-        color: #b7d0e8;
+        background: var(--table-head-bg);
+        color: var(--table-head-fg);
         font-weight: 600;
       }
       .mono {
-        font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
       .branch-tags {
         display: flex;
@@ -282,11 +422,13 @@
       }
       .branch-sequence {
         margin-top: 4px;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 11px;
       }
       .tag {
-        border: 1px solid #2d485f;
+        border: 1px solid var(--tag-border);
+        background: var(--tag-bg);
+        color: var(--tag-ink);
         border-radius: 999px;
         padding: 2px 6px;
         font-size: 11px;
@@ -294,7 +436,7 @@
       }
       .metrics-line {
         margin-top: 4px;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 11px;
       }
       .badge {
@@ -305,20 +447,20 @@
         font-weight: 700;
       }
       .badge-merged {
-        background: rgba(49, 196, 141, 0.18);
-        color: #86efac;
+        background: var(--badge-merged-bg);
+        color: var(--badge-merged-ink);
       }
       .badge-open {
-        background: rgba(14, 165, 233, 0.2);
-        color: #7dd3fc;
+        background: var(--badge-open-bg);
+        color: var(--badge-open-ink);
       }
       .badge-closed {
-        background: rgba(245, 158, 11, 0.18);
-        color: #fcd34d;
+        background: var(--badge-closed-bg);
+        color: var(--badge-closed-ink);
       }
       .badge-none {
-        background: rgba(148, 163, 184, 0.2);
-        color: #cbd5e1;
+        background: var(--badge-none-bg);
+        color: var(--badge-none-ink);
       }
       .action-row {
         display: flex;
@@ -332,9 +474,9 @@
       }
       pre {
         margin: 0;
-        border: 1px solid var(--line-soft);
+        border: 1px solid var(--border-subtle);
         border-radius: 10px;
-        background: #07121e;
+        background: var(--code-bg);
         min-height: 220px;
         max-height: 440px;
         overflow: auto;
@@ -344,7 +486,7 @@
         font-size: 12px;
       }
       a {
-        color: #8bd6ff;
+        color: var(--link);
         text-decoration: none;
       }
       a:hover {
@@ -358,7 +500,7 @@
       }
       .hint-line {
         margin-top: 4px;
-        color: var(--muted);
+        color: var(--fg-muted);
         font-size: 11px;
       }
       .flowchart-controls {
@@ -377,9 +519,9 @@
         margin-bottom: 8px;
       }
       .flowchart-canvas {
-        border: 1px solid var(--line-soft);
+        border: 1px solid var(--border-subtle);
         border-radius: 10px;
-        background: #07121e;
+        background: var(--code-bg);
         min-height: 220px;
         max-height: 620px;
         overflow: auto;
@@ -401,6 +543,9 @@
           margin-left: 0;
         }
         .split {
+          grid-template-columns: 1fr;
+        }
+        .insights-grid {
           grid-template-columns: 1fr;
         }
         .flowchart-paths {
@@ -501,7 +646,7 @@
         <article class="panel">
           <div class="panel-head">
             <h2>Skill Graph</h2>
-            <div id="workflowSummary" class="mono" style="font-size: 12px; color: var(--muted)">nodes=0 edges=0</div>
+            <div id="workflowSummary" class="mono" style="font-size: 12px; color: var(--fg-muted)">nodes=0 edges=0</div>
           </div>
           <div class="table-wrap" style="max-height: 260px">
             <table>
@@ -533,7 +678,7 @@
         <article class="panel">
           <div class="panel-head">
             <h2>Revision Prevention</h2>
-            <div class="mono" style="font-size: 12px; color: var(--muted)">from merged feature chunks</div>
+            <div class="mono" style="font-size: 12px; color: var(--fg-muted)">from merged feature chunks</div>
           </div>
           <div class="table-wrap" style="max-height: 500px">
             <table>
@@ -554,7 +699,7 @@
       <section class="panel" style="margin-top: 12px">
         <div class="panel-head">
           <h2>Weighted Flowchart</h2>
-          <div id="flowchartSummary" class="mono" style="font-size: 12px; color: var(--muted)">nodes=0 edges=0</div>
+          <div id="flowchartSummary" class="mono" style="font-size: 12px; color: var(--fg-muted)">nodes=0 edges=0</div>
         </div>
         <div class="flowchart-controls">
           <label class="mono">min node <input id="flowchartMinNodeCount" type="number" min="1" value="1" /></label>
@@ -571,7 +716,7 @@
         <div class="status" id="flowchartStatus">Flowchart will render after catalog load.</div>
         <div id="flowchartCanvas" class="flowchart-canvas"></div>
         <details style="margin-top: 8px">
-          <summary class="mono" style="cursor: pointer; color: var(--muted)">Mermaid source</summary>
+          <summary class="mono" style="cursor: pointer; color: var(--fg-muted)">Mermaid source</summary>
           <pre id="flowchartSource" class="flowchart-source"></pre>
         </details>
       </section>
