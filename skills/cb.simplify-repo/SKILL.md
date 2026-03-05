@@ -10,10 +10,16 @@ args: <subfolder_count=50> [focus_paths...]
 
 ## Overview
 
-Run a broad cleanup sweep and keep only high-impact simplifications.
+Run cleanup with the #1 goal of net LOC reduction without behavior changes.
+
+Top-level requirement:
+
+- Ship a net-negative LOC diff. If not, keep scanning.
+- Prefer deletions/inlining over lateral rewrites.
+- Reject LOC increases unless they unlock larger deletions.
 
 **Announce at start:** "I’m running cb.simplify-repo: I’ll scan `<subfolder_count>` subfolders, keep only macro wins,
-and ship one focused PR."
+and ship one net-negative LOC PR."
 
 ## Step 1: Prepare Branch And Scope
 
@@ -37,8 +43,6 @@ rg --files -g '*.py' "${TARGETS[@]}" | xargs -n1 dirname | sort -u | shuf -n "$C
 
 ## Step 2: Scan For Substantial Candidates
 
-Prioritize patterns that delete real complexity:
-
 ```bash
 DIRS="$(tr '\n' ' ' </tmp/simplify_dirs.txt)"
 ruff check --select SIM $DIRS
@@ -52,28 +56,24 @@ if command -v vulture >/dev/null 2>&1; then
 fi
 ```
 
-Before edits, manually read core entrypoints and adjacent modules to map real call flow.
-
-Keep only behavior-equivalent candidates. Use repo-wide `rg` to verify callsites before deleting wrappers/classes.
-
 ## Step 3: Apply Only Macro Wins
 
 Rules:
 
-- Keep changes only when they remove duplication, dead code, compat/shims, or indirection.
+- Keep changes only when they remove duplication/dead code/compat/indirection and reduce net LOC.
 - Inline one-use helpers (including cross-file) when callsites stay readable, then delete the helper.
 - Canonicalize duplicative classes: keep one canonical type, migrate all callsites, delete the disguise class.
-- Monorepo invariant: all callsites are in-repo. If none exists in-repo, it does not exist.
+- Monorepo invariant: all callsites are in-repo.
 - Collapse duplicated branches and nested conditionals when semantics are unchanged.
 - Replace defensive internal fallbacks (`dict.get`, `getattr(..., default)`, `x or default`) only when invariants prove
   required fields are always present.
 - Remove broad `except` blocks or dead `None` branches only when you can prove they are unreachable.
-- Remove `vulture` dead code only when confidence is `>=95` and callsite search shows no live usage.
+- Remove `vulture` dead code only with confidence `>=95` and no live callsites.
 - Reject low-signal churn:
   - `.keys()` rewrites (`x in d.keys()`, `for k in d.keys()`) as standalone edits
   - trivial style-only rewrites that do not reduce indirection
   - behavior-risky container rewrites on non-dict mappings (e.g., `TensorDict`)
-- If >10% of changed Python lines are low-signal churn, revert those hunks and rescan.
+- If >10% of changed lines are low-signal churn, revert those hunks and rescan.
 
 ## Step 4: Validate Touched Code
 
@@ -85,9 +85,12 @@ if [ -n "$CHANGED_PY" ]; then
 else
   echo "No Python files changed"
 fi
+git diff --shortstat
 # run nearest tests for touched modules
 metta pytest <targeted-test-paths>
 ```
+
+If `git diff --shortstat` is not net-negative LOC, revert low-value hunks and rescan.
 
 ## Step 5: Ship One PR
 
