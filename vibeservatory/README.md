@@ -35,6 +35,7 @@ Environment:
 - `DASHBOARD_AUTH_SECRET` (optional)
 - `DASHBOARD_LOGIN_SERVICE_URL` (default `https://softmax.com`)
 - `DASHBOARD_DEV_AUTH_BYPASS` (default `true`; bypass applies only for localhost requests)
+- `DASHBOARD_PANTHEON_ROOT` (optional; defaults to `outputs/pantheon` when repo root is discoverable)
 - `ANTHROPIC_API_KEY` (optional, for analysis endpoint)
 
 ## Standalone Frontend
@@ -48,6 +49,7 @@ What it does:
   - `Performance`: per-episode filters/export, replay links, health KPIs, failure/crash summaries, and tag inventory
   - `Coordination`: teammate-pairing diagnosis, teammate/composition slice tables, and role-percentile parses
   - `Capabilities`: unified capability tree plus diagnose run selector, stage gates, probes, symptoms, and prescriptions
+  - `Pantheon`: hall-of-fame/lame/same motif stories from replay-derived behavior snippets (v0 includes seeded examples)
 
 Run:
 

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchDashboardData, fetchDashboardDefaultData } from './api'
+import { fetchDashboardData, fetchDashboardDefaultData, fetchPantheonStories } from './api'
 import type { DashboardResponse } from './api'
 
 const DASHBOARD_RESPONSE: DashboardResponse = {
@@ -124,5 +124,22 @@ describe('dashboard api', () => {
 
     expect(readAuthHeader(fetchMock)).toBe('fresh-hash-token')
     expect(window.sessionStorage.getItem('policy-dashboard-auth-token')).toBe('fresh-hash-token')
+  })
+
+  it('fetches pantheon stories from the pantheon service route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          generated_at: '2026-03-05T00:00:00Z',
+          stories: [],
+        })
+      )
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await fetchPantheonStories()
+
+    expect(response.stories).toEqual([])
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/pantheon/stories')
   })
 })

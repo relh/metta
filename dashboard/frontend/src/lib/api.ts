@@ -713,6 +713,27 @@ export type DiagnoseUploadResponse = {
   manifest: DiagnoseManifest | null
 }
 
+export type PantheonStory = {
+  story_id: string
+  hall: 'fame' | 'same' | 'lame'
+  title: string
+  motif: string
+  summary: string
+  policy: string
+  run_id?: string | null
+  episode_id?: string | null
+  replay_url?: string | null
+  source?: string
+  tags?: string[]
+  created_at: string
+}
+
+export type PantheonStoriesResponse = {
+  generated_at: string
+  source_root?: string | null
+  stories: PantheonStory[]
+}
+
 type DashboardRequestMethod = 'GET' | 'POST'
 type DashboardRequestBody = string | FormData | undefined
 
@@ -871,6 +892,10 @@ export async function uploadDiagnoseBundle(bundle: File): Promise<DiagnoseUpload
   const formData = new FormData()
   formData.append('bundle', bundle)
   return await dashboardRequest<DiagnoseUploadResponse>('/dashboard/v1/cogames-diagnose/runs/upload', 'POST', formData)
+}
+
+export async function fetchPantheonStories(): Promise<PantheonStoriesResponse> {
+  return await dashboardRequest<PantheonStoriesResponse>('/dashboard/v1/pantheon/stories')
 }
 
 export function diagnoseArtifactUrl(runId: string, artifact: string): string {

@@ -3,6 +3,7 @@ interface Config {
   authToken?: string;
   policyDashboardUrl: string | null;
   diagnoseUrl: string | null;
+  pantheonUrl: string | null;
   trainBoardUrl: string | null;
   chatpropUrl: string | null;
   bardoUrl: string | null;
@@ -30,6 +31,10 @@ export const config: Config = {
   diagnoseUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_DIAGNOSE_URL,
     "http://127.0.0.1:5174/diagnose",
+  ),
+  pantheonUrl: resolveFragileServiceUrl(
+    process.env.OBSERVATORY_PANTHEON_URL,
+    "http://127.0.0.1:5174/policy-dashboard",
   ),
   trainBoardUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_TRAIN_BOARD_URL,

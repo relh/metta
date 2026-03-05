@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     DASHBOARD_PORT: int = 8010
     DASHBOARD_CORS_ORIGINS: str = "*"
     DASHBOARD_COGAMES_DIAGNOSE_ROOT: str | None = None
+    DASHBOARD_PANTHEON_ROOT: str | None = None
 
     DASHBOARD_AUTH_SECRET: str | None = None
     DASHBOARD_LOGIN_SERVICE_URL: str = "https://softmax.com"

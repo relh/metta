@@ -14,6 +14,7 @@ vi.mock('../lib/api', () => ({
   fetchDiagnoseRuns: vi.fn(),
   fetchDiagnoseManifest: vi.fn(),
   fetchDiagnoseDoctorNote: vi.fn(),
+  fetchPantheonStories: vi.fn(),
 }))
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } {
@@ -603,7 +604,14 @@ describe('DashboardClient', () => {
 
   it('shows parse + teammate summary on overview and keeps coordination focused on slices', async () => {
     const response: DashboardResponse = {
-      policy: { id: 'policy-overview-coordination-layout', name: 'glanky', version: 11, rank: 2, score: 2.4, matches: 40 },
+      policy: {
+        id: 'policy-overview-coordination-layout',
+        name: 'glanky',
+        version: 11,
+        rank: 2,
+        score: 2.4,
+        matches: 40,
+      },
       episodes: [
         {
           episode_id: 'episode-overview-coordination-layout-1',
@@ -630,7 +638,13 @@ describe('DashboardClient', () => {
           unknown: {
             count: 5,
             avg_reward: 53.531,
-            strategy_profile: { aggressive: 0, defensive: 50, resource_hoarder: 0, junction_hunter: 0, mobile_scout: 50 },
+            strategy_profile: {
+              aggressive: 0,
+              defensive: 50,
+              resource_hoarder: 0,
+              junction_hunter: 0,
+              mobile_scout: 50,
+            },
           },
           nim_random: {
             count: 4,
@@ -650,8 +664,12 @@ describe('DashboardClient', () => {
           composition_spread: 8.819,
           best_composition: '?v?',
           worst_composition: '4v4',
-          opponent_slices: [{ key: 'unknown', avg_reward: 53.531, count: 5, delta_vs_baseline: 4.8, delta_vs_policy: 41.681 }],
-          composition_slices: [{ key: '4v4', avg_reward: 2.0, count: 6, delta_vs_baseline: -1.0, delta_vs_policy: -9.85 }],
+          opponent_slices: [
+            { key: 'unknown', avg_reward: 53.531, count: 5, delta_vs_baseline: 4.8, delta_vs_policy: 41.681 },
+          ],
+          composition_slices: [
+            { key: '4v4', avg_reward: 2.0, count: 6, delta_vs_baseline: -1.0, delta_vs_policy: -9.85 },
+          ],
         },
       },
       selection: {
@@ -702,6 +720,63 @@ describe('DashboardClient', () => {
     expect(screen.getByText('Composition Slices')).toBeTruthy()
   })
 
+  it('loads pantheon motifs when Pantheon tab is selected', async () => {
+    const response: DashboardResponse = {
+      policy: { id: 'policy-pantheon', name: 'glanky', version: 12, rank: 1, score: 3.1, matches: 18 },
+      episodes: [],
+      season: 'beta-cvc',
+      generated_at: '2026-03-05T00:10:00Z',
+      derived: {
+        kpis: {},
+        failures: {},
+        opponent_metrics: {},
+      },
+      selection: {
+        sampled_episode_count: 0,
+      },
+    }
+
+    vi.mocked(api.fetchDashboardData).mockResolvedValueOnce(response)
+    vi.mocked(api.fetchDashboardRolePercentiles).mockResolvedValueOnce({
+      pool_id: 'pool-1',
+      pool_name: 'default',
+      roles: {},
+      rows: [],
+    })
+    vi.mocked(api.fetchDiagnoseRuns).mockResolvedValue({ runs: [] })
+    vi.mocked(api.fetchPantheonStories).mockResolvedValue({
+      generated_at: '2026-03-05T00:10:30Z',
+      stories: [
+        {
+          story_id: 'motif-1',
+          hall: 'fame',
+          title: 'Frozen Junction Hold',
+          motif: 'Disciplined hold motif',
+          summary: 'Held junction through final ticks.',
+          policy: 'glanky:v12',
+          created_at: '2026-03-05T00:10:10Z',
+          source: 'seeded',
+          tags: ['junction-control'],
+        },
+      ],
+    })
+
+    window.history.replaceState({}, '', '/?policyVersionId=policy-pantheon')
+    render(<DashboardClient />)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pantheon' }))
+
+    await waitFor(() => {
+      expect(api.fetchPantheonStories).toHaveBeenCalledTimes(1)
+    })
+    expect(screen.getByText('Frozen Junction Hold')).toBeTruthy()
+    expect(screen.getByText('Hall of Fame')).toBeTruthy()
+  })
+
   it('does not refetch parse percentiles when switching non-coordination tabs', async () => {
     const response: DashboardResponse = {
       policy: { id: 'policy-123', name: 'glanky', version: 2, rank: 1, score: 1.5, matches: 12 },
@@ -736,8 +811,7 @@ describe('DashboardClient', () => {
       expect(api.fetchDashboardRolePercentiles).toHaveBeenCalledTimes(1)
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Performance' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Diagnose' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Episodes' }))
     fireEvent.click(screen.getByRole('button', { name: 'Capabilities' }))
     fireEvent.click(screen.getByRole('button', { name: 'Overview' }))
 

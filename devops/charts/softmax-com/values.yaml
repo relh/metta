@@ -17,6 +17,7 @@ observatory_api_url: http://observatory-backend.observatory.svc.cluster.local:80
 
 policy_dashboard_url: https://vibeservatory.softmax-research.net/policy-dashboard
 diagnose_url: https://vibeservatory.softmax-research.net/diagnose
+pantheon_url: https://vibeservatory.softmax-research.net/policy-dashboard
 train_board_url: https://vibeservatory.softmax-research.net/train-board
 chatprop_url: https://vibeservatory.softmax-research.net/chatprop
 bardo_url: https://vibeservatory.softmax-research.net/bardo

@@ -1,6 +1,7 @@
 'use client'
 
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 
 import {
   DASHBOARD_API_BASE_URL,
@@ -25,6 +26,7 @@ import {
   type DiagnoseDoctorNote,
   type DiagnoseManifest,
   type DiagnoseRunSummary,
+  type PantheonStory,
   fetchDiagnoseDoctorNote,
   fetchDiagnoseManifest,
   fetchDiagnoseRuns,
@@ -32,18 +34,19 @@ import {
   fetchDashboardData,
   fetchDashboardDefaultData,
   fetchDashboardRolePercentiles,
+  fetchPantheonStories,
 } from '../lib/api'
 import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab = 'overview' | 'performance' | 'coordination' | 'capabilities'
+type DashboardTab = 'overview' | 'performance' | 'coordination' | 'capabilities' | 'pantheon'
 
 type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
 type SortDir = 'asc' | 'desc'
 
-const DASHBOARD_TABS: DashboardTab[] = ['overview', 'capabilities', 'coordination', 'performance']
+const DASHBOARD_TABS: DashboardTab[] = ['overview', 'capabilities', 'coordination', 'performance', 'pantheon']
 
 const OPPONENT_COLORS = [
   '#3b82f6',
@@ -73,6 +76,12 @@ const OVERVIEW_PARSE_PRIORITY_METRICS: Record<(typeof OVERVIEW_PARSE_ROLES)[numb
   miner: ['germanium.deposited', 'silicon.deposited', 'carbon.deposited', 'oxygen.deposited'],
   scrambler: ['junction.scrambled'],
   scout: ['cell.visited'],
+}
+const PANTHEON_HALLS = ['fame', 'same', 'lame'] as const
+const PANTHEON_HALL_LABELS: Record<(typeof PANTHEON_HALLS)[number], string> = {
+  fame: 'Hall of Fame',
+  same: 'Hall of Same',
+  lame: 'Hall of Lame',
 }
 
 const DASHBOARD_FEEDBACK_ISSUE_URL = 'https://github.com/Metta-AI/metta/issues/new'
@@ -1067,6 +1076,8 @@ export function DashboardClient() {
   const replaySpotlightContainerRef = useRef<HTMLDivElement | null>(null)
   const diagnoseRunsCacheRef = useRef<DiagnoseRunSummary[] | null>(null)
   const diagnoseRunsRequestRef = useRef<Promise<DiagnoseRunSummary[]> | null>(null)
+  const pantheonStoriesCacheRef = useRef<PantheonStory[] | null>(null)
+  const pantheonStoriesRequestRef = useRef<Promise<PantheonStory[]> | null>(null)
 
   const [selectedTrendMetric, setSelectedTrendMetric] = useState('score')
   const [showAnalysis, setShowAnalysis] = useState(true)
@@ -1074,6 +1085,9 @@ export function DashboardClient() {
   const [selectedDiagnoseRunId, setSelectedDiagnoseRunId] = useState<string | null>(null)
   const [diagnoseManifest, setDiagnoseManifest] = useState<DiagnoseManifest | null>(null)
   const [diagnoseNote, setDiagnoseNote] = useState<DiagnoseDoctorNote | null>(null)
+  const [pantheonStories, setPantheonStories] = useState<PantheonStory[]>([])
+  const [pantheonLoading, setPantheonLoading] = useState(false)
+  const [pantheonError, setPantheonError] = useState<string | null>(null)
 
   const activateTab = useCallback((tab: DashboardTab) => {
     setActiveTab(tab)
@@ -1185,6 +1199,25 @@ export function DashboardClient() {
         diagnoseRunsRequestRef.current = null
       })
     diagnoseRunsRequestRef.current = request
+    return request
+  }, [])
+
+  const prefetchPantheonStories = useCallback((): Promise<PantheonStory[]> => {
+    if (pantheonStoriesCacheRef.current) {
+      return Promise.resolve(pantheonStoriesCacheRef.current)
+    }
+    if (pantheonStoriesRequestRef.current) {
+      return pantheonStoriesRequestRef.current
+    }
+    const request = fetchPantheonStories()
+      .then((response) => {
+        pantheonStoriesCacheRef.current = [...response.stories]
+        return pantheonStoriesCacheRef.current
+      })
+      .finally(() => {
+        pantheonStoriesRequestRef.current = null
+      })
+    pantheonStoriesRequestRef.current = request
     return request
   }, [])
 
@@ -1876,6 +1909,33 @@ export function DashboardClient() {
   }, [diagnoseRuns, selectedDiagnoseRunId])
 
   useEffect(() => {
+    if (activeTab !== 'pantheon') return
+
+    let cancelled = false
+    setPantheonLoading(true)
+    setPantheonError(null)
+
+    void prefetchPantheonStories()
+      .then((stories) => {
+        if (cancelled) return
+        setPantheonStories(stories)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setPantheonStories([])
+        setPantheonError(err instanceof Error ? err.message : String(err))
+      })
+      .finally(() => {
+        if (cancelled) return
+        setPantheonLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, prefetchPantheonStories])
+
+  useEffect(() => {
     if (typeof window === 'undefined') return
     const params = new URLSearchParams(window.location.search)
     const initialPolicyVersionId = params.get('policyVersionId')?.trim()
@@ -2142,6 +2202,29 @@ export function DashboardClient() {
   const capabilitySupportTrained = capabilityAuditSummary.supportTrained
   const capabilitySupportBacked = capabilityAuditSummary.supportBacked
   const capabilityWithEvidenceCount = capabilityAuditSummary.withEvidence
+  const pantheonStoriesByHall = useMemo(
+    () =>
+      PANTHEON_HALLS.reduce(
+        (groups, hall) => {
+          groups[hall] = pantheonStories.filter((story) => story.hall === hall)
+          return groups
+        },
+        {
+          fame: [] as PantheonStory[],
+          same: [] as PantheonStory[],
+          lame: [] as PantheonStory[],
+        }
+      ),
+    [pantheonStories]
+  )
+  const pantheonPolicyCount = useMemo(() => {
+    const policies = new Set(pantheonStories.map((story) => story.policy).filter((value) => value.trim().length > 0))
+    return policies.size
+  }, [pantheonStories])
+  const pantheonReplayLinkedCount = useMemo(
+    () => pantheonStories.filter((story) => Boolean(story.replay_url)).length,
+    [pantheonStories]
+  )
   const autoTrainingCommand = useMemo(() => {
     const policyName = String(data?.policy?.name ?? 'policy')
       .toLowerCase()
@@ -2273,6 +2356,13 @@ export function DashboardClient() {
               className={activeTab === 'performance' ? 'active-tab' : ''}
             >
               Episodes
+            </button>
+            <button
+              type="button"
+              onClick={() => activateTab('pantheon')}
+              className={activeTab === 'pantheon' ? 'tab-pantheon active-tab' : 'tab-pantheon'}
+            >
+              Pantheon
             </button>
           </section>
 
@@ -3988,6 +4078,123 @@ export function DashboardClient() {
               <SkillTreePanel data={data} diagnoseNote={diagnoseNote} diagnoseManifest={diagnoseManifest} />
             </section>
           )}
+          {activeTab === 'pantheon' && (
+            <section className="grid" style={{ gap: 10 }}>
+              <section className="grid kpi-grid" style={{ gap: 10 }}>
+                <KPIStatCard
+                  label="Motif Stories"
+                  value={String(pantheonStories.length)}
+                  detail="Curated Hall of Fame/Lame/Same snippets"
+                  severity={pantheonStories.length >= 6 ? 'good' : pantheonStories.length > 0 ? 'warn' : 'bad'}
+                />
+                <KPIStatCard
+                  label="Policies Covered"
+                  value={String(pantheonPolicyCount)}
+                  detail="Distinct policies represented in this dataset"
+                  severity={pantheonPolicyCount >= 3 ? 'good' : pantheonPolicyCount > 0 ? 'warn' : 'bad'}
+                />
+                <KPIStatCard
+                  label="Replay-linked"
+                  value={String(pantheonReplayLinkedCount)}
+                  detail={`${pantheonStories.length} total stories`}
+                  severity={
+                    pantheonStories.length > 0 && pantheonReplayLinkedCount === pantheonStories.length
+                      ? 'good'
+                      : pantheonReplayLinkedCount > 0
+                        ? 'warn'
+                        : 'bad'
+                  }
+                />
+                <KPIStatCard
+                  label="Supervised Seed"
+                  value="v0"
+                  detail="Bootstrapped motifs while replay-mining pipeline lands"
+                  severity="warn"
+                />
+              </section>
+
+              <section className="card grid" style={{ gap: 8 }}>
+                <h2 style={{ margin: 0 }}>Pantheon</h2>
+                <p style={{ margin: 0 }}>
+                  Replay motif stories grouped as fame/lame/same. This is the supervised seed set for future behavior
+                  learning.
+                </p>
+              </section>
+
+              {pantheonLoading ? (
+                <section className="card">
+                  <p style={{ margin: 0 }}>Loading Pantheon motifs...</p>
+                </section>
+              ) : pantheonError ? (
+                <section className="card">
+                  <p style={{ margin: 0, color: '#b42318' }}>
+                    <strong>Error:</strong> {pantheonError}
+                  </p>
+                </section>
+              ) : pantheonStories.length === 0 ? (
+                <section className="card">
+                  <p style={{ margin: 0 }}>No Pantheon stories found yet.</p>
+                </section>
+              ) : (
+                <section className="pantheon-hall-grid">
+                  {PANTHEON_HALLS.map((hall) => (
+                    <article key={hall} className={`card pantheon-hall-card pantheon-hall-${hall}`}>
+                      <div className="pantheon-hall-head">
+                        <h3 style={{ margin: 0 }}>{PANTHEON_HALL_LABELS[hall]}</h3>
+                        <span>{pantheonStoriesByHall[hall].length}</span>
+                      </div>
+                      <div className="grid" style={{ gap: 8 }}>
+                        {pantheonStoriesByHall[hall].map((story) => (
+                          <article key={story.story_id} className="pantheon-story-card">
+                            <div className="pantheon-story-head">
+                              <strong>{story.title}</strong>
+                              <span>{story.source ?? 'unknown'}</span>
+                            </div>
+                            <p style={{ margin: 0 }}>{story.motif}</p>
+                            <p style={{ margin: 0, color: '#5b7294', fontSize: 13 }}>{story.summary}</p>
+                            <p className="pantheon-story-meta">
+                              policy <code>{story.policy}</code>
+                              {story.run_id ? (
+                                <>
+                                  {' '}
+                                  · run <code>{story.run_id}</code>
+                                </>
+                              ) : null}
+                              {story.episode_id ? (
+                                <>
+                                  {' '}
+                                  · episode <code>{story.episode_id}</code>
+                                </>
+                              ) : null}
+                            </p>
+                            {Array.isArray(story.tags) && story.tags.length > 0 ? (
+                              <p className="pantheon-story-tags">
+                                tags: <code>{story.tags.join(', ')}</code>
+                              </p>
+                            ) : null}
+                            {story.replay_url ? (
+                              <a href={story.replay_url} target="_blank" rel="noreferrer">
+                                Open replay
+                              </a>
+                            ) : null}
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              )}
+            </section>
+          )}
+
+          <section className="vibeservatory-service-row" aria-label="Vibeservatory services">
+            <Link className="vibeservatory-service-link" href="/diagnose">
+              Diagnose Service
+            </Link>
+            <Link className="vibeservatory-service-link vibeservatory-service-link-pantheon" href="/?tab=pantheon">
+              Pantheon Service
+            </Link>
+          </section>
         </>
       )}
     </main>

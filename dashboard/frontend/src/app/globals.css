@@ -519,6 +519,123 @@ code {
   border-bottom-color: var(--brand);
 }
 
+.tab-row button.tab-pantheon {
+  color: #6d28d9;
+  font-weight: 700;
+}
+
+.tab-row button.tab-pantheon:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.tab-row button.tab-pantheon.active-tab {
+  color: #6d28d9;
+  border-bottom-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.14);
+}
+
+.vibeservatory-service-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.vibeservatory-service-link {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  color: #365073;
+  background: #f8fafc;
+}
+
+.vibeservatory-service-link:hover {
+  border-color: #a8bdd4;
+  background: #eef4ff;
+}
+
+.vibeservatory-service-link-pantheon {
+  border-color: #d5c7ff;
+  color: #6d28d9;
+  background: #f5f3ff;
+}
+
+.vibeservatory-service-link-pantheon:hover {
+  border-color: #8b5cf6;
+  background: #ede9fe;
+}
+
+.pantheon-hall-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.pantheon-hall-card {
+  display: grid;
+  gap: 10px;
+}
+
+.pantheon-hall-fame {
+  border-color: #9dc9ff;
+  background: #eff6ff;
+}
+
+.pantheon-hall-same {
+  border-color: #cfb9ff;
+  background: #f5f0ff;
+}
+
+.pantheon-hall-lame {
+  border-color: #ffc4c4;
+  background: #fff1f2;
+}
+
+.pantheon-hall-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.pantheon-hall-head span {
+  font-size: 12px;
+  color: #536c90;
+}
+
+.pantheon-story-card {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #d8e2ef;
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+
+.pantheon-story-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.pantheon-story-head span {
+  font-size: 12px;
+  color: #5f7392;
+}
+
+.pantheon-story-meta,
+.pantheon-story-tags {
+  margin: 0;
+  font-size: 12px;
+  color: #5f7392;
+}
+
 .dashboard-shell {
   padding-top: 10px;
 }

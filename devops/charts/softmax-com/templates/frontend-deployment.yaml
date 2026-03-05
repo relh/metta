@@ -23,6 +23,8 @@ spec:
               value: "{{ .Values.policy_dashboard_url }}"
             - name: OBSERVATORY_DIAGNOSE_URL
               value: "{{ .Values.diagnose_url }}"
+            - name: OBSERVATORY_PANTHEON_URL
+              value: "{{ .Values.pantheon_url }}"
             - name: OBSERVATORY_TRAIN_BOARD_URL
               value: "{{ .Values.train_board_url }}"
             - name: OBSERVATORY_CHATPROP_URL

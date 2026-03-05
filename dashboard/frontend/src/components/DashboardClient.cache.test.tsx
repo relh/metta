@@ -17,6 +17,7 @@ type DashboardClientApiMocks = {
   fetchDiagnoseRuns: ReturnType<typeof vi.fn>
   fetchDiagnoseManifest: ReturnType<typeof vi.fn>
   fetchDiagnoseDoctorNote: ReturnType<typeof vi.fn>
+  fetchPantheonStories: ReturnType<typeof vi.fn>
 }
 
 async function loadDashboardClientWithMocks(): Promise<{
@@ -33,6 +34,7 @@ async function loadDashboardClientWithMocks(): Promise<{
     fetchDiagnoseRuns: vi.fn(),
     fetchDiagnoseManifest: vi.fn(),
     fetchDiagnoseDoctorNote: vi.fn(),
+    fetchPantheonStories: vi.fn(),
   }
 
   vi.doMock('../lib/api', () => ({

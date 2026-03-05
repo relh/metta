@@ -38,6 +38,10 @@ export function diagnoseRoute(runId?: string | null) {
   return `/observatory/diagnose/${encodeURIComponent(trimmed)}`;
 }
 
+export function pantheonRoute() {
+  return "/observatory/pantheon";
+}
+
 export function tournamentRoute(params?: { mode?: SeasonTabMode }) {
   const searchParams = new URLSearchParams();
   if (params?.mode) {

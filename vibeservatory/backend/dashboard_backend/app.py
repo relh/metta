@@ -10,6 +10,7 @@ from vibeservatory.backend.dashboard_backend.chatprop.router import create_chatp
 from vibeservatory.backend.dashboard_backend.cogames_diagnose.router import create_cogames_diagnose_router
 from vibeservatory.backend.dashboard_backend.config import settings
 from vibeservatory.backend.dashboard_backend.database import configure_dashboard_db
+from vibeservatory.backend.dashboard_backend.pantheon.router import create_pantheon_router
 from vibeservatory.backend.dashboard_backend.state_page.router import create_dashboard_router
 from vibeservatory.backend.dashboard_backend.trainboard.router import create_trainboard_router
 
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(create_chatprop_router())
     app.include_router(create_trainboard_router())
     app.include_router(create_cogames_diagnose_router())
+    app.include_router(create_pantheon_router())
     app.include_router(create_role_stats_router())
 
     @app.get("/healthz", include_in_schema=False)

@@ -94,6 +94,7 @@ run_tab overview 'h2:has-text("Outcome Summary")'
 run_tab performance 'h2:has-text("Filters & Export")'
 run_tab coordination 'h2:has-text("Teammate Breakdown")'
 run_tab capabilities 'h2:has-text("Diagnose")'
+run_tab pantheon 'h2:has-text("Pantheon")'
 
 echo
 echo "summary: failures=$failures warnings=$warnings artifacts=$ARTIFACT_DIR"

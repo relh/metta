@@ -24,6 +24,7 @@ import {
   diagnoseRoute,
   episodeJobsRoute,
   evalTasksRoute,
+  pantheonRoute,
   policiesRoute,
   policyDashboardRoute,
   trainBoardRoute,
@@ -236,6 +237,18 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
               }}
             >
               Diagnose
+            </MenuLink>
+            <MenuLink
+              href={pantheonRoute()}
+              isActive={pathname.startsWith("/observatory/pantheon")}
+              className="tracking-wide italic"
+              activeClassName="border-violet-500 text-violet-500"
+              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+              style={{
+                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+              }}
+            >
+              Pantheon
             </MenuLink>
             <MenuLink
               href={trainBoardRoute()}
