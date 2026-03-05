@@ -13,17 +13,27 @@ const FORWARDED_HEADER_MAPPINGS = [
   ['x-user-is-softmax-team-member', 'X-User-Is-Softmax-Team-Member'],
 ] as const
 
-function bardoWorldStateUrl(): string {
-  return (process.env.BARDO_WORLD_STATE_URL || 'http://127.0.0.1:8010/bardo/v1/world-state').replace(/\/$/, '')
+function trimToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed ? trimmed : null
 }
 
 function authCookieName(): string {
   return process.env.OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
 }
 
-function trimToNull(value: string | null | undefined): string | null {
-  const trimmed = value?.trim()
-  return trimmed ? trimmed : null
+function bardoWorldStateUrl(): string {
+  const explicit = process.env.BARDO_WORLD_STATE_URL?.trim()
+  if (explicit) {
+    return explicit.replace(/\/$/, '')
+  }
+
+  const apiBase = process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.trim()
+  if (apiBase) {
+    return `${apiBase.replace(/\/$/, '')}/bardo/v1/world-state`
+  }
+
+  return 'http://127.0.0.1:8010/bardo/v1/world-state'
 }
 
 type ProxyAuthRequest = {

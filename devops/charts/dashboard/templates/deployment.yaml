@@ -33,6 +33,8 @@ spec:
           env:
           - name: NEXT_PUBLIC_DASHBOARD_API_BASE_URL
             value: "{{ .Values.apiUrl }}"
+          - name: BARDO_WORLD_STATE_URL
+            value: "{{ .Values.bardoWorldStateUrl }}"
           - name: NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME
             value: "{{ .Values.observatoryAuthCookieName }}"
           ports:

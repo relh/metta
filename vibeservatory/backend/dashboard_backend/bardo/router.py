@@ -164,9 +164,9 @@ async def load_bardo_world_state(*, name_filter: str | None, include_active_jobs
 
 
 def create_bardo_router() -> APIRouter:
-    router = APIRouter(prefix="/dashboard/v1/bardo", tags=["dashboard"])
+    router = APIRouter(tags=["dashboard"])
 
-    @router.get("/world-state")
+    @router.get("/bardo/v1/world-state")
     @timed_http_handler
     async def get_world_state(
         user: User | None = Depends(get_user),

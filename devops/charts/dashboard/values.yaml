@@ -5,6 +5,7 @@ extraHosts:
   - bardo.vibeservatory.softmax-research.net
 
 apiUrl: https://api.policy-dashboard.vibeservatory.softmax-research.net
+bardoWorldStateUrl: https://api.policy-dashboard.vibeservatory.softmax-research.net/bardo/v1/world-state
 observatoryAuthCookieName: observatory_auth_token
 
 image:

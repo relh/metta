@@ -63,7 +63,7 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
     app.dependency_overrides[get_user] = fake_get_user
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/bardo/world-state?q=alpha")
+    response = client.get("/bardo/v1/world-state?q=alpha")
     assert response.status_code == 200
 
     payload = response.json()
@@ -131,7 +131,7 @@ def test_bardo_world_state_hides_active_jobs_for_non_softmax(
     app.dependency_overrides[get_user] = fake_get_user
     client = TestClient(app, base_url="http://localhost")
 
-    response = client.get("/dashboard/v1/bardo/world-state")
+    response = client.get("/bardo/v1/world-state")
     assert response.status_code == 200
 
     payload = response.json()

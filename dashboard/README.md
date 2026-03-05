@@ -186,9 +186,14 @@ kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true
 - Frontend workflow: `.github/workflows/build-vibeservatory-image.yml`
   - Deploys Helm chart: `devops/charts/dashboard/`
   - Host: `https://policy-dashboard.vibeservatory.softmax-research.net`
+  - Also serves host-routed pages for:
+    - `https://bardo.vibeservatory.softmax-research.net` (Bardo UI)
+    - `https://train-board.vibeservatory.softmax-research.net` (baked train-board snapshot)
+    - `https://chatprop.vibeservatory.softmax-research.net` (baked chatprop snapshot)
 - Backend workflow: `.github/workflows/deploy-dashboard-backend.yml`
   - Deploys Helm chart: `devops/charts/dashboard-backend/`
   - Host: `https://api.policy-dashboard.vibeservatory.softmax-research.net`
+  - Bardo world-state endpoint: `GET /bardo/v1/world-state`
 
 Backend requires `STATS_DB_READ_ONLY_URI`, provisioned as the `dashboard-backend-env` k8s secret from Terraform. The
 source URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (temporarily managed outside
