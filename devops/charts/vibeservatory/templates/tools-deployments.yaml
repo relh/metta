@@ -34,7 +34,6 @@ spec:
         - run
         - --project
         - /workspace/metta/chatprop
-        - --no-sync
         - chatprop
         - serve
         - --host
@@ -109,7 +108,6 @@ spec:
         - run
         - --project
         - /workspace/metta/trainboard
-        - --no-sync
         - trainingboard
         - serve
         - --host
