@@ -95,23 +95,31 @@ def _get_db_engine():
     return _db_engine
 
 
+@dataclass(frozen=True)
+class _ThreadClients:
+    stats: StatsClient
+    core_v1: client.CoreV1Api
+    batch_v1: client.BatchV1Api
+
+
 _thread_local = threading.local()
 
 
-def _get_thread_clients(cfg_dispatch) -> tuple[StatsClient, client.CoreV1Api, client.BatchV1Api]:
-    if not hasattr(_thread_local, "stats_client"):
-        _thread_local.stats_client = StatsClient(
-            backend_url=cfg_dispatch.STATS_SERVER_URI, machine_token=cfg_dispatch.MACHINE_TOKEN
-        )
-        _thread_local.stats_client._validate_authenticated()
+def _get_thread_clients(cfg_dispatch) -> _ThreadClients:
+    clients: _ThreadClients | None = getattr(_thread_local, "clients", None)
+    if clients is None:
+        stats = StatsClient(backend_url=cfg_dispatch.STATS_SERVER_URI, machine_token=cfg_dispatch.MACHINE_TOKEN)
+        stats._validate_authenticated()
         if cfg_dispatch.LOCAL_DEV:
             if not cfg_dispatch.LOCAL_DEV_K8S_CONTEXT:
                 raise ValueError("LOCAL_DEV=true requires LOCAL_DEV_K8S_CONTEXT to be set")
             load_kube_config(context=cfg_dispatch.LOCAL_DEV_K8S_CONTEXT)
-            _thread_local.core_v1, _thread_local.batch_v1 = client.CoreV1Api(), client.BatchV1Api()
+            core_v1, batch_v1 = client.CoreV1Api(), client.BatchV1Api()
         else:
-            _thread_local.core_v1, _thread_local.batch_v1 = new_tournament_clients()
-    return _thread_local.stats_client, _thread_local.core_v1, _thread_local.batch_v1
+            core_v1, batch_v1 = new_tournament_clients()
+        clients = _ThreadClients(stats=stats, core_v1=core_v1, batch_v1=batch_v1)
+        _thread_local.clients = clients
+    return clients
 
 
 def _get_k8s_clients() -> tuple[client.CoreV1Api, client.BatchV1Api] | None:
@@ -796,8 +804,8 @@ def _process_event(
 
 
 def _process_event_threaded(cfg_dispatch, event: K8sEvent) -> None:
-    stats_client, core_v1, batch_v1 = _get_thread_clients(cfg_dispatch)
-    _process_event(stats_client, core_v1, batch_v1, event)
+    tc = _get_thread_clients(cfg_dispatch)
+    _process_event(tc.stats, tc.core_v1, tc.batch_v1, event)
 
 
 def _group_by_job(events: list[K8sEvent]) -> tuple[dict[UUID, list[K8sEvent]], list[K8sEvent]]:

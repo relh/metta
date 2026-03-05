@@ -148,10 +148,6 @@ def _watch_stream(
         update_heartbeat()
         event_type, pod = event["type"], event["object"]
 
-        rv = _pod_resource_version(pod)
-        if rv:
-            last_rv = rv
-
         if event_type == "ERROR":
             raw = event.get("raw_object", {})  # type: ignore[union-attr]
             code = raw.get("code", 0) if isinstance(raw, dict) else 0
@@ -159,6 +155,10 @@ def _watch_stream(
                 raise ApiException(status=410, reason="Gone")
             logger.warning(f"Watch ERROR event on cluster={cluster_name}: {raw}")
             continue
+
+        rv = _pod_resource_version(pod)
+        if rv:
+            last_rv = rv
 
         if event_type in ("ADDED", "MODIFIED", "DELETED"):
             _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
