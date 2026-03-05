@@ -69,6 +69,15 @@ def fetch_repos():
         )
         if result.returncode != 0:
             print(f"ERROR fetching {repo.name}: {result.stderr.strip()}", file=sys.stderr)
+            continue
+        result = subprocess.run(
+            ["git", "reset", "--hard", "origin/main"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"ERROR resetting {repo.name}: {result.stderr.strip()}", file=sys.stderr)
 
 
 def deploy_files():

@@ -49,6 +49,25 @@ def log(msg: str):
     print(f"[poller] {datetime.now(timezone.utc).strftime('%H:%M:%S')} {msg}", flush=True)
 
 
+FAILURE_CONTEXT_LINES = 20
+
+
+def _log_failure_context(label: str, result: subprocess.CompletedProcess):
+    """Log exit code and a bounded tail of stderr/stdout for failed jobs."""
+    log(f"{label}: exit_code={result.returncode}")
+    for stream_name, text in [("stderr", result.stderr), ("stdout", result.stdout)]:
+        if not text or not text.strip():
+            continue
+        lines = text.strip().splitlines()
+        tail = lines[-FAILURE_CONTEXT_LINES:]
+        if len(lines) > FAILURE_CONTEXT_LINES:
+            log(f"{label}: {stream_name} (last {FAILURE_CONTEXT_LINES} of {len(lines)} lines):")
+        else:
+            log(f"{label}: {stream_name}:")
+        for line in tail:
+            log(f"{label}:   {line}")
+
+
 # ---------------------------------------------------------------------------
 # State persistence
 # ---------------------------------------------------------------------------
@@ -157,7 +176,7 @@ def run_agent_job(
     result = subprocess.run(cmd, capture_output=True, text=True)
     record_job_outcome(state, label, result.returncode, time.monotonic() - t0, now)
     if result.returncode != 0:
-        log(f"{label}: exit_code={result.returncode}")
+        _log_failure_context(label, result)
         return False
     log(f"{label}: done")
     return True
@@ -185,7 +204,7 @@ def run_inline_prompt(
     result = subprocess.run(cmd, capture_output=True, text=True)
     record_job_outcome(state, label, result.returncode, time.monotonic() - t0, now)
     if result.returncode != 0:
-        log(f"{label}: exit_code={result.returncode}")
+        _log_failure_context(label, result)
         return False
     log(f"{label}: done")
     return True
@@ -552,6 +571,55 @@ def rotate_old_logs():
             log(f"log-rotate: deleted {entry.name}")
 
 
+STALE_BRANCH_DAYS = 7
+
+
+def prune_stale_branches():
+    """Delete origin/cogent/* branches with no job files and no recent commits."""
+    result = subprocess.run(
+        ["git", "branch", "-r", "--list", "origin/cogent/*"],
+        cwd=METTA_DIR,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return
+    cutoff_epoch = int(time.time()) - STALE_BRANCH_DAYS * 86400
+    for line in result.stdout.strip().splitlines():
+        ref = line.strip()
+        if not ref:
+            continue
+        branch = ref.removeprefix("origin/")
+        jobs = subprocess.run(
+            ["git", "ls-tree", "--name-only", ref, "--", JOBS_DIR + "/"],
+            cwd=METTA_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if jobs.returncode == 0 and jobs.stdout.strip():
+            continue
+        commit_time = subprocess.run(
+            ["git", "log", "-1", "--format=%ct", ref],
+            cwd=METTA_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if commit_time.returncode != 0:
+            continue
+        if int(commit_time.stdout.strip()) > cutoff_epoch:
+            continue
+        delete = subprocess.run(
+            ["git", "push", "origin", "--delete", branch],
+            cwd=METTA_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if delete.returncode == 0:
+            log(f"branch-prune: deleted stale branch {branch}")
+        else:
+            log(f"branch-prune: failed to delete {branch}: {delete.stderr.strip()}")
+
+
 # ---------------------------------------------------------------------------
 # Asana task scanning
 # ---------------------------------------------------------------------------
@@ -774,6 +842,7 @@ def tick():
     if last_prune is None or (now - last_prune).total_seconds() >= PRUNE_INTERVAL_S:
         prune_stale_state(state, now)
         rotate_old_logs()
+        prune_stale_branches()
         state["last_prune"] = now.isoformat()
 
     # --- 1. Checked-in jobs from cron_schedule.py ---
