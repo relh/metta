@@ -1,7 +1,20 @@
+import { Metadata } from "next";
+
 import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
+import { buildEmbeddedBardoUrl } from "@observatory/lib/bardo";
 
-export default function BardoPage() {
+import { BardoEmbed } from "./BardoEmbed";
+
+type BardoSearchParams = {
+  q?: string | string[];
+};
+
+export default async function BardoPage({
+  searchParams,
+}: {
+  searchParams: Promise<BardoSearchParams>;
+}) {
   if (!config.bardoUrl) {
     return (
       <SoftmaxGuard>
@@ -20,16 +33,22 @@ export default function BardoPage() {
     );
   }
 
+  const params = await searchParams;
+  const nameFilter = params.q;
+  const bardoUrl = buildEmbeddedBardoUrl(config.bardoUrl, {
+    nameFilter:
+      typeof nameFilter === "string" && nameFilter.trim() ? nameFilter : null,
+  });
+
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-57px)]">
-        <iframe
-          title="Bardo"
-          src={config.bardoUrl}
-          className="bg-background h-full w-full border-0"
-          referrerPolicy="no-referrer"
-        />
+        <BardoEmbed src={bardoUrl} />
       </div>
     </SoftmaxGuard>
   );
 }
+
+export const metadata: Metadata = {
+  title: "Bardo | Observatory",
+};

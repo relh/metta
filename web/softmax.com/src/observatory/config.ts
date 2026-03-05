@@ -32,7 +32,10 @@ export const config: Config = {
     process.env.OBSERVATORY_CHATPROP_URL,
     "http://127.0.0.1:8765",
   ),
-  bardoUrl: resolveFragileServiceUrl(process.env.OBSERVATORY_BARDO_URL),
+  bardoUrl: resolveFragileServiceUrl(
+    process.env.OBSERVATORY_BARDO_URL,
+    "http://127.0.0.1:5175",
+  ),
   siteUrl: process.env.SITE_URL,
 };
 

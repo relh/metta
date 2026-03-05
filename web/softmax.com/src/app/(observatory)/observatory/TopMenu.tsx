@@ -12,6 +12,7 @@ import {
 } from "@observatory/components/Dropdown";
 import { ThemeToggle } from "@observatory/components/ThemeToggle";
 import {
+  bardoRoute,
   chatpropRoute,
   episodeJobsRoute,
   evalTasksRoute,
@@ -61,6 +62,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
 
   const isPoliciesActive =
     pathname === "/" || pathname.startsWith("/observatory/policies");
+  const isBardoActive = pathname.startsWith("/observatory/bardo");
   const isTournamentRoute = pathname.startsWith("/observatory/tournament");
   const modeParam = searchParams.get("mode");
   const [inferredMode, setInferredMode] = useState<SeasonTabMode | null>(null);
@@ -130,6 +132,9 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
     <nav className="border-border-strong bg-surface flex items-center justify-between border-b px-5">
       <div className="mx-auto flex max-w-7xl items-center">
         <div className="flex">
+          <MenuLink href={bardoRoute()} isActive={isBardoActive}>
+            Bardo
+          </MenuLink>
           <MenuLink href={policiesRoute()} isActive={isPoliciesActive}>
             Policies
           </MenuLink>
