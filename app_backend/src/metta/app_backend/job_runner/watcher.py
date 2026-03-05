@@ -19,7 +19,7 @@ from kubernetes import (
     client,
     watch,  # type: ignore[attr-defined]
 )
-from kubernetes.client import ApiClient
+from kubernetes.client import ApiClient  # type: ignore[attr-defined]
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
 
