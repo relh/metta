@@ -222,8 +222,7 @@ class PufferDefaultPolicy(Policy):
 
     def initialize_to_environment(self, policy_env_info: PolicyEnvInterface, device: torch.device):
         self.to(device)
-        if hasattr(self.obs_shim, "initialize_to_environment"):
-            self.obs_shim.initialize_to_environment(policy_env_info, device)
+        self.obs_shim.initialize_to_environment(policy_env_info, device)
         self.action_probs.initialize_to_environment(policy_env_info, device)
 
     def reset_memory(self):

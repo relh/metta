@@ -9,7 +9,6 @@ from torchrl.data import Composite
 
 from metta.agent.components.mamba.wrapper import MambaConfig as _DramaMambaConfig
 from metta.agent.components.mamba.wrapper import MambaWrapperModel
-from metta.agent.components.utils import zero_long
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 from .config import DramaWorldModelConfig
@@ -62,7 +61,7 @@ class DramaWorldModelComponent(nn.Module):
         device = samples.device if samples.device is not None else torch.device("cpu")
 
         if actions is None:
-            actions = zero_long((batch_size, seq_len), device=device)
+            actions = torch.zeros(batch_size, seq_len, dtype=torch.long, device=device)
         else:
             actions = actions.to(device=samples.device)
             # Collapse one-hot or singleton action dimensions to scalars.
@@ -77,7 +76,7 @@ class DramaWorldModelComponent(nn.Module):
             if actions.size(1) == 1:
                 actions = actions.expand(-1, seq_len)
             elif actions.size(1) < seq_len:
-                pad = zero_long((batch_size, seq_len - actions.size(1)), device=device)
+                pad = torch.zeros(batch_size, seq_len - actions.size(1), dtype=torch.long, device=device)
                 actions = torch.cat([actions, pad], dim=1)
             elif actions.size(1) > seq_len:
                 actions = actions[:, :seq_len]

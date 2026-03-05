@@ -46,7 +46,6 @@ class ObsAttrCoordEmbed(nn.Module):
 
         self._attr_embeds = nn.Embedding(self._max_embeds, self._attr_embed_dim, padding_idx=255)
         nn.init.trunc_normal_(self._attr_embeds.weight, std=0.02)
-        return None
 
     def forward(self, td: TensorDict) -> TensorDict:
         observations = td[self.config.in_key]
@@ -114,7 +113,6 @@ class ObsAttrEmbedFourier(nn.Module):
         nn.init.trunc_normal_(self._attr_embeds.weight, std=0.02)
 
         self.register_buffer("frequencies", 2.0 ** torch.arange(self._num_freqs))
-        return None
 
     def forward(self, td: TensorDict) -> TensorDict:
         observations = td[self.config.in_key]
@@ -194,8 +192,6 @@ class ObsAttrCoordValueEmbed(nn.Module):
 
         self._val_embeds = nn.Embedding(self._max_embeds, self._attr_embed_dim)
         nn.init.trunc_normal_(self._val_embeds.weight, std=0.02)
-
-        return None
 
     def forward(self, td: TensorDict) -> TensorDict:
         # [B, M, 3] the 3 vector is: coord (unit8), attr_idx, attr_val

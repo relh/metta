@@ -166,8 +166,6 @@ class ObsLatentAttn(nn.Module):
         else:
             self.output_proj = nn.Linear(self._query_token_dim, self._out_dim)
 
-        return None
-
     def forward(self, td: TensorDict) -> TensorDict:
         x_features = td[self.config.in_key]
         key_mask = None
@@ -429,8 +427,6 @@ class ObsSelfAttn(nn.Module):
             self._final_proj = nn.Linear(self._feat_dim, self._out_dim)
         else:
             self._final_proj = nn.Identity()
-
-        return None
 
     def forward(self, td: TensorDict) -> TensorDict:
         x_features = td[self.config.in_key]

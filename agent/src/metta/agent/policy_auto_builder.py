@@ -1,7 +1,6 @@
 import logging
 from collections import OrderedDict
 from contextlib import ExitStack
-from functools import partial
 from typing import Any, Optional
 
 import torch
@@ -20,9 +19,6 @@ logger = logging.getLogger("metta_agent")
 def log_on_master_with_level(log_level: int, *args, **argv) -> None:
     if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
         logger.log(log_level, *args, **argv)
-
-
-log_on_master = partial(log_on_master_with_level, logging.INFO)
 
 
 class PolicyAutoBuilder(Policy):
@@ -52,9 +48,9 @@ class PolicyAutoBuilder(Policy):
         td = self._sequential_network(td)
         self.action_probs(td, action)
         # Only flatten values if they exist (GRPO policies don't have critic networks)
-        if "values" in td.keys():
+        if "values" in td:
             td["values"] = td["values"].flatten()
-        if "h_values" in td.keys():
+        if "h_values" in td:
             td["h_values"] = td["h_values"].flatten()
         return td
 
@@ -67,13 +63,13 @@ class PolicyAutoBuilder(Policy):
         if torch.cuda.is_available():
             self._configure_sdp()
         logs = []
-        for _, value in self.components.items():
+        for value in self.components.values():
             if hasattr(value, "initialize_to_environment"):
                 logs.append(value.initialize_to_environment(policy_env_info, device))
-        if hasattr(self, "action_probs"):
-            if hasattr(self.action_probs, "initialize_to_environment"):
-                if callable(self.action_probs.initialize_to_environment):
-                    self.action_probs.initialize_to_environment(policy_env_info, device)
+        if hasattr(self.action_probs, "initialize_to_environment"):
+            initialize_to_environment = self.action_probs.initialize_to_environment
+            if callable(initialize_to_environment):
+                initialize_to_environment(policy_env_info, device)
 
         for log in logs:
             if log is not None:
@@ -136,25 +132,12 @@ class PolicyAutoBuilder(Policy):
         self._sdpa_context = ExitStack()
 
     def reset_memory(self):
-        for _, value in self.components.items():
+        for value in self.components.values():
             if hasattr(value, "reset_memory"):
                 value.reset_memory()
 
     @property
     def total_params(self):
-        if hasattr(self, "_total_params"):
-            return self._total_params
-
-        params = list(self.parameters())
-        skipped_lazy_params = sum(isinstance(param, UninitializedParameter) for param in params)
-        self._total_params = sum(param.numel() for param in params if not isinstance(param, UninitializedParameter))
-
-        if skipped_lazy_params:
-            log_on_master(
-                "Skipped %d uninitialized parameters when logging model size.",
-                skipped_lazy_params,
-            )
-
         return self._total_params
 
     def get_agent_experience_spec(self) -> Composite:

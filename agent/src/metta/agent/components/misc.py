@@ -77,10 +77,9 @@ class MLP(nn.Module):
         self.network = TensorDictSequential(*layers)
 
     def _get_nonlinearity(self, name: str) -> nn.Module:
-        if hasattr(nn, name):
-            cls = getattr(nn, name)
-            if isinstance(cls, type) and issubclass(cls, nn.Module):
-                return cls()
+        cls = getattr(nn, name, None)
+        if isinstance(cls, type) and issubclass(cls, nn.Module):
+            return cls()
         raise ValueError(f"Unsupported or unknown nonlinearity in torch.nn: {name}")
 
     def forward(self, td: TensorDict) -> TensorDict:

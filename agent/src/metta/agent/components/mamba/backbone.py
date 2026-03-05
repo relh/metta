@@ -10,7 +10,6 @@ from einops import rearrange
 from tensordict import TensorDict
 from torchrl.data import Composite
 
-from metta.agent.components.utils import zero_long
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 
 from .config import MambaBackboneConfig
@@ -232,7 +231,7 @@ class MambaBackboneComponent(nn.Module):
         return tokens, reset_flags
 
     def _dummy_actions(self, batch: int, seq_len: int, device: torch.device) -> torch.Tensor:
-        return zero_long((batch, seq_len), device=device)
+        return torch.zeros(batch, seq_len, dtype=torch.long, device=device)
 
     def _pool(self, hidden: torch.Tensor) -> torch.Tensor:
         if self.pool == "cls":

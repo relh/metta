@@ -105,14 +105,9 @@ class PolicyArchitecture(Config):
 
         payload: dict[str, Any] = dict(kwargs)
 
-        default_components: list[Any] = []
-        default_action_probs: Any = None
-        try:
-            default_instance = config_class()
-            default_components = list(getattr(default_instance, "components", []) or [])
-            default_action_probs = getattr(default_instance, "action_probs_config", None)
-        except Exception:
-            pass
+        default_instance = config_class()
+        default_components = list(getattr(default_instance, "components", []) or [])
+        default_action_probs = getattr(default_instance, "action_probs_config", None)
 
         if "components" in payload:
             payload["components"] = [
@@ -180,14 +175,10 @@ class Policy(MultiAgentPolicy, nn.Module):
 
     def load_policy_data(self, policy_data_path: str) -> None:
         """Load network weights from file using PyTorch state dict."""
-        import torch  # noqa: PLC0415
-
         self.load_state_dict(torch.load(policy_data_path, map_location=self.device))
 
     def save_policy_data(self, policy_data_path: str) -> None:
         """Save network weights to file using torch.save."""
-        import torch  # noqa: PLC0415
-
         torch.save(self.state_dict(), policy_data_path)
 
     def agent_policy(self, agent_id: int) -> AgentPolicy:
@@ -279,9 +270,7 @@ class CheckpointPolicy(Policy):
         return self._policy.get_agent_experience_spec()
 
     def initialize_to_environment(self, policy_env_info: PolicyEnvInterface, device: torch.device) -> None:
-        initialize = getattr(self._policy, "initialize_to_environment", None)
-        if callable(initialize):
-            initialize(policy_env_info, device)
+        self._policy.initialize_to_environment(policy_env_info, device)
 
     @property
     def device(self) -> torch.device:
@@ -296,9 +285,7 @@ class CheckpointPolicy(Policy):
     def load_policy_data(self, policy_data_path: str) -> None:
         state_dict = load_safetensors_file(str(Path(policy_data_path).expanduser()))
         self._policy.load_state_dict(dict(state_dict))
-        initialize = getattr(self._policy, "initialize_to_environment", None)
-        if callable(initialize):
-            initialize(self._policy_env_info, self._device)
+        self._policy.initialize_to_environment(self._policy_env_info, self._device)
 
     def state_dict(self, *args, **kwargs):
         return self._policy.state_dict(*args, **kwargs)

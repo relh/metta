@@ -245,7 +245,6 @@ class ObsAttrValNorm(nn.Module):
             feature_list = list(policy_env_info.obs_features)
             self._feature_normalizations = {feat.id: feat.normalization for feat in feature_list}
         self._update_norm_factors(device)
-        return None
 
     def _update_norm_factors(self, device: Optional[torch.device] = None):
         # Create a tensor for feature normalizations
@@ -260,7 +259,6 @@ class ObsAttrValNorm(nn.Module):
             else:
                 raise ValueError("feature normalization index exceeds embedding size")
         self.register_buffer("_norm_factors", norm_tensor)
-        return None
 
     def forward(self, td: TensorDict) -> TensorDict:
         observations = td[self.in_key]
