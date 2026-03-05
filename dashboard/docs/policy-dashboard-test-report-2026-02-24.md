@@ -28,8 +28,8 @@ Policy version used in smoke tests:
 ### Backend tests
 
 ```bash
-uv run pytest tests/dashboard/backend/state_page/test_router.py tests/dashboard/backend/state_page/test_diagnostics.py tests/dashboard/backend/cogames_diagnose/test_router.py -q
-uv run pytest tests/dashboard/backend/state_page/test_kpi_math.py tests/dashboard/backend/test_role_percentile_queries.py tests/dashboard/backend/test_auth.py -q
+uv run pytest tests/vibeservatory/backend/state_page/test_router.py tests/vibeservatory/backend/state_page/test_diagnostics.py tests/vibeservatory/backend/cogames_diagnose/test_router.py -q
+uv run pytest tests/vibeservatory/backend/state_page/test_kpi_math.py tests/vibeservatory/backend/test_role_percentile_queries.py tests/vibeservatory/backend/test_auth.py -q
 ```
 
 Result:

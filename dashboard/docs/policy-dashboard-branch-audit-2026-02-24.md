@@ -25,7 +25,7 @@ Scope assessment:
 Checked docs for command accuracy and consistency with code:
 
 - Runbook commands align with:
-  - `dashboard/backend/dashboard_backend/main.py`
+  - `vibeservatory/backend/dashboard_backend/main.py`
   - `dashboard/frontend/package.json`
   - `skills/cg.policy-dashboard/generate.py --help`
   - `uv run cogames diagnose --help`

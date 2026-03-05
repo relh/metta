@@ -1,10 +1,10 @@
-name: Auto-approve trainingboard
+name: Auto-approve trainboard
 
 on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "trainingboard/**"
+      - "trainboard/**"
 
 jobs:
   auto-approve:
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check if PR only touches trainingboard
+      - name: Check if PR only touches trainboard
         id: check
         run: |
           mapfile -t FILES < <(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path')
@@ -26,7 +26,7 @@ jobs:
           fi
           ALL_MATCH=true
           for f in "${FILES[@]}"; do
-            if [[ ! "$f" =~ ^trainingboard/ ]]; then
+            if [[ ! "$f" =~ ^trainboard/ ]]; then
               ALL_MATCH=false
               break
             fi

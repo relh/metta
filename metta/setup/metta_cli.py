@@ -756,7 +756,7 @@ def cmd_trainingboard(ctx: typer.Context):
         "uv",
         "run",
         "--project",
-        str(repo_root / "trainingboard"),
+        str(repo_root / "trainboard"),
         "trainingboard",
         *trainingboard_args,
     ]

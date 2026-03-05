@@ -11,7 +11,7 @@ bundle, and reports valid completion.
 
 ```bash
 uv run pytest packages/cogames/tests/test_diagnose_stage1.py -q
-uv run pytest tests/dashboard/backend/cogames_diagnose/test_router.py -q
+uv run pytest tests/vibeservatory/backend/cogames_diagnose/test_router.py -q
 ```
 
 ### Live smoke run (compact)
@@ -72,7 +72,7 @@ uv run cogames diagnose class=random \
 ### Tests
 
 - `packages/cogames/tests/test_diagnose_stage1.py`: `24 passed`
-- `tests/dashboard/backend/cogames_diagnose/test_router.py`: `4 passed`
+- `tests/vibeservatory/backend/cogames_diagnose/test_router.py`: `4 passed`
 
 ### Live smoke diagnose run
 

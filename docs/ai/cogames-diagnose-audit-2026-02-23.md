@@ -5,7 +5,7 @@
 Audit of current implementation against the Thread Vision spec for Cogames Diagnose, across:
 
 - Diagnose engine: `packages/cogames/src/cogames/diagnose.py`
-- Dashboard backend diagnose API: `dashboard/backend/dashboard_backend/cogames_diagnose/router.py`
+- Dashboard backend diagnose API: `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
 - Dashboard frontend diagnose views:
   - `dashboard/frontend/src/components/CogamesDiagnosePanel.tsx`
   - `dashboard/frontend/src/app/diagnose/page.tsx`
@@ -187,7 +187,7 @@ Impact:
 - Diagnose pipeline, gating, social review, artifacts:
   - `packages/cogames/src/cogames/diagnose.py`
 - Dashboard diagnose backend routes:
-  - `dashboard/backend/dashboard_backend/cogames_diagnose/router.py`
+  - `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
 - Dashboard diagnose views/API types:
   - `dashboard/frontend/src/components/CogamesDiagnosePanel.tsx`
   - `dashboard/frontend/src/app/diagnose/[runId]/page.tsx`
@@ -196,7 +196,7 @@ Impact:
 ## Tests executed during audit
 
 - `uv run pytest packages/cogames/tests/test_diagnose_stage1.py -q` -> `14 passed`
-- `uv run pytest tests/dashboard/backend/cogames_diagnose/test_router.py -q` -> `2 passed`
+- `uv run pytest tests/vibeservatory/backend/cogames_diagnose/test_router.py -q` -> `2 passed`
 
 ## Immediate remediation plan
 

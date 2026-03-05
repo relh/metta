@@ -9,7 +9,7 @@ Start backend:
 ```bash
 export STATS_DB_READ_ONLY_URI='postgresql://postgres:password@127.0.0.1:5432/metta'
 export DASHBOARD_DEV_AUTH_BYPASS=true
-uv run python -m dashboard.backend.dashboard_backend.main
+uv run python -m vibeservatory.backend.dashboard_backend.main
 ```
 
 Start frontend:

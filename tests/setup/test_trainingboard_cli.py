@@ -34,7 +34,7 @@ def test_trainingboard_command_defaults_to_serve(monkeypatch: pytest.MonkeyPatch
         "uv",
         "run",
         "--project",
-        str(tmp_path / "trainingboard"),
+        str(tmp_path / "trainboard"),
         "trainingboard",
         "serve",
     ]
@@ -61,7 +61,7 @@ def test_trainingboard_command_passes_through_args(monkeypatch: pytest.MonkeyPat
         "uv",
         "run",
         "--project",
-        str(tmp_path / "trainingboard"),
+        str(tmp_path / "trainboard"),
         "trainingboard",
         "ingest-asana",
         "--project-gid",

@@ -11,7 +11,7 @@ This folder intentionally contains both dashboard backend and frontend code in o
 
 ### What it does
 
-- Serves dashboard endpoints from `dashboard/backend/dashboard_backend/state_page/router.py`
+- Serves dashboard endpoints from `vibeservatory/backend/dashboard_backend/state_page/router.py`
 - Also mounts role-stats endpoints from `metta.app_backend.routes.role_stats_routes`
 - Exposes internal docs at `http://127.0.0.1:8010/internal/docs`
 - Hides public docs (`/docs` is disabled)
@@ -21,7 +21,7 @@ This folder intentionally contains both dashboard backend and frontend code in o
 ### Run
 
 ```bash
-uv run python -m dashboard.backend.dashboard_backend.main
+uv run python -m vibeservatory.backend.dashboard_backend.main
 ```
 
 ### Environment
@@ -109,7 +109,7 @@ export STATS_DB_READ_ONLY_URI='postgresql://postgres:password@127.0.0.1:5432/met
 export DASHBOARD_DEV_AUTH_BYPASS=true
 export DASHBOARD_HOST=127.0.0.1
 export DASHBOARD_PORT=8010
-uv run python -m dashboard.backend.dashboard_backend.main
+uv run python -m vibeservatory.backend.dashboard_backend.main
 ```
 
 4. In another terminal, start dashboard frontend:
@@ -170,7 +170,7 @@ print(urlunparse(u._replace(netloc=f"{u.username}:{u.password}@127.0.0.1:15432")
 PY
 )"
 export DASHBOARD_DEV_AUTH_BYPASS=true
-uv run python -m dashboard.backend.dashboard_backend.main
+uv run python -m vibeservatory.backend.dashboard_backend.main
 ```
 
 5. Start frontend the same as Mode A.

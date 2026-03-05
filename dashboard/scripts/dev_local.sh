@@ -141,7 +141,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-uv run python -m dashboard.backend.dashboard_backend.main &
+uv run python -m vibeservatory.backend.dashboard_backend.main &
 BACKEND_PID=$!
 
 pnpm --dir dashboard/frontend dev &
