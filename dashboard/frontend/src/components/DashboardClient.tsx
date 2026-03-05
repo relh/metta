@@ -32,13 +32,12 @@ import {
   fetchDashboardData,
   fetchDashboardDefaultData,
   fetchDashboardRolePercentiles,
-  uploadDiagnoseBundle,
 } from '../lib/api'
 import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
 import { SkillTreePanel } from './SkillTreePanel'
 
-type DashboardTab = 'overview' | 'performance' | 'coordination' | 'diagnose' | 'capabilities'
+type DashboardTab = 'overview' | 'performance' | 'coordination' | 'capabilities'
 
 type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
@@ -1072,16 +1071,9 @@ export function DashboardClient() {
   const [selectedTrendMetric, setSelectedTrendMetric] = useState('score')
   const [showAnalysis, setShowAnalysis] = useState(true)
   const [diagnoseRuns, setDiagnoseRuns] = useState<DiagnoseRunSummary[]>([])
-  const [diagnoseLoading, setDiagnoseLoading] = useState(false)
-  const [diagnoseError, setDiagnoseError] = useState<string | null>(null)
   const [selectedDiagnoseRunId, setSelectedDiagnoseRunId] = useState<string | null>(null)
   const [diagnoseManifest, setDiagnoseManifest] = useState<DiagnoseManifest | null>(null)
   const [diagnoseNote, setDiagnoseNote] = useState<DiagnoseDoctorNote | null>(null)
-  const [diagnoseNoteLoading, setDiagnoseNoteLoading] = useState(false)
-  const [diagnoseNoteError, setDiagnoseNoteError] = useState<string | null>(null)
-  const [diagnoseUploadLoading, setDiagnoseUploadLoading] = useState(false)
-  const [diagnoseUploadError, setDiagnoseUploadError] = useState<string | null>(null)
-  const [diagnoseUploadSuccess, setDiagnoseUploadSuccess] = useState<string | null>(null)
 
   const activateTab = useCallback((tab: DashboardTab) => {
     setActiveTab(tab)
@@ -1194,27 +1186,6 @@ export function DashboardClient() {
       })
     diagnoseRunsRequestRef.current = request
     return request
-  }, [])
-
-  const uploadDiagnoseRunBundle = useCallback(async (bundle: File) => {
-    setDiagnoseUploadLoading(true)
-    setDiagnoseUploadError(null)
-    setDiagnoseUploadSuccess(null)
-
-    try {
-      const uploaded = await uploadDiagnoseBundle(bundle)
-      const refreshedRuns = sortDiagnoseRuns((await fetchDiagnoseRuns()).runs)
-      diagnoseRunsCacheRef.current = refreshedRuns
-      diagnoseRunsRequestRef.current = null
-      setDiagnoseRuns(refreshedRuns)
-      setDiagnoseError(null)
-      setSelectedDiagnoseRunId(uploaded.run_id)
-      setDiagnoseUploadSuccess(`Imported ${uploaded.run_id} from ${bundle.name}.`)
-    } catch (err) {
-      setDiagnoseUploadError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setDiagnoseUploadLoading(false)
-    }
   }, [])
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
@@ -1822,8 +1793,6 @@ export function DashboardClient() {
       setSelectedDiagnoseRunId(null)
       setDiagnoseManifest(null)
       setDiagnoseNote(null)
-      setDiagnoseError(null)
-      setDiagnoseNoteError(null)
       return
     }
 
@@ -1832,8 +1801,6 @@ export function DashboardClient() {
       const sortedRuns = sortDiagnoseRuns(embeddedDiagnoseRuns)
       diagnoseRunsCacheRef.current = sortedRuns
       setDiagnoseRuns(sortedRuns)
-      setDiagnoseError(null)
-      setDiagnoseLoading(false)
       setSelectedDiagnoseRunId((current) => {
         if (current && sortedRuns.some((run) => run.run_id === current)) return current
         const preferred =
@@ -1846,8 +1813,6 @@ export function DashboardClient() {
     }
 
     let cancelled = false
-    setDiagnoseLoading(true)
-    setDiagnoseError(null)
 
     void prefetchDiagnoseRuns()
       .then((runs) => {
@@ -1864,17 +1829,12 @@ export function DashboardClient() {
           return preferred?.run_id ?? null
         })
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (cancelled) return
         setDiagnoseRuns([])
         setSelectedDiagnoseRunId(null)
         setDiagnoseManifest(null)
         setDiagnoseNote(null)
-        setDiagnoseError(err instanceof Error ? err.message : String(err))
-      })
-      .finally(() => {
-        if (cancelled) return
-        setDiagnoseLoading(false)
       })
 
     return () => {
@@ -1886,39 +1846,29 @@ export function DashboardClient() {
     if (!selectedDiagnoseRunId) {
       setDiagnoseManifest(null)
       setDiagnoseNote(null)
-      setDiagnoseNoteError(null)
       return
     }
 
     let cancelled = false
-    setDiagnoseNoteLoading(true)
-    setDiagnoseNoteError(null)
     setDiagnoseManifest(diagnoseRuns.find((run) => run.run_id === selectedDiagnoseRunId)?.manifest ?? null)
 
     void Promise.allSettled([
       fetchDiagnoseDoctorNote(selectedDiagnoseRunId),
       fetchDiagnoseManifest(selectedDiagnoseRunId),
-    ])
-      .then((results) => {
-        if (cancelled) return
-        const [noteResult, manifestResult] = results
+    ]).then((results) => {
+      if (cancelled) return
+      const [noteResult, manifestResult] = results
 
-        if (noteResult.status === 'fulfilled') {
-          setDiagnoseNote(noteResult.value)
-        } else {
-          setDiagnoseNote(null)
-          const message = noteResult.reason instanceof Error ? noteResult.reason.message : String(noteResult.reason)
-          setDiagnoseNoteError(message)
-        }
+      if (noteResult.status === 'fulfilled') {
+        setDiagnoseNote(noteResult.value)
+      } else {
+        setDiagnoseNote(null)
+      }
 
-        if (manifestResult.status === 'fulfilled') {
-          setDiagnoseManifest(manifestResult.value)
-        }
-      })
-      .finally(() => {
-        if (cancelled) return
-        setDiagnoseNoteLoading(false)
-      })
+      if (manifestResult.status === 'fulfilled') {
+        setDiagnoseManifest(manifestResult.value)
+      }
+    })
 
     return () => {
       cancelled = true
@@ -2134,41 +2084,6 @@ export function DashboardClient() {
           .find((count) => count !== null) ?? null,
     }))
   }, [rolePercentiles])
-  const selectedDiagnoseRun = selectedDiagnoseRunId
-    ? (diagnoseRuns.find((run) => run.run_id === selectedDiagnoseRunId) ?? null)
-    : null
-  const selectedDiagnoseStage =
-    diagnoseNote?.stage_status ??
-    diagnoseManifest?.stage_status ??
-    selectedDiagnoseRun?.manifest?.stage_status ??
-    selectedDiagnoseRun?.manifest?.run_status ??
-    null
-  const selectedDiagnoseDominantIssue = diagnoseNote?.dominant_issue ?? null
-  const diagnoseProbeTotal = diagnoseNote?.stage1_probe_evaluations?.length ?? 0
-  const diagnoseProbePassed = (diagnoseNote?.stage1_probe_evaluations ?? []).filter((probe) => probe.passed).length
-  const diagnoseCoreAxisChecks = ['stability', 'efficiency', 'control'].map((axis) => {
-    const score = (diagnoseNote?.axes ?? []).find((entry) => entry.axis === axis)
-    return Boolean(score?.confirmed)
-  })
-  const diagnoseCoreReady = diagnoseCoreAxisChecks.every((check) => check)
-  const selectedDiagnoseSymptom = [...(diagnoseNote?.symptoms ?? [])].sort(
-    (left, right) => right.severity - left.severity
-  )[0]
-  const selectedDiagnosePrescription = selectedDiagnoseSymptom
-    ? ((diagnoseNote?.prescriptions ?? []).find((entry) => entry.symptom_id === selectedDiagnoseSymptom.symptom_id) ??
-      null)
-    : ((diagnoseNote?.prescriptions ?? [])[0] ?? null)
-  const selectedDiagnoseSocialConfirmed =
-    diagnoseNote && typeof diagnoseNote.social_review === 'object' && diagnoseNote.social_review !== null
-      ? Boolean(diagnoseNote.social_review.confirmed)
-      : null
-  const diagnoseUploadCommand = useMemo(() => {
-    const policyId = String(data?.policy?.id ?? '').trim()
-    if (!policyId) {
-      return 'uv run cogames diagnose class=random --mission-set cogsguard_evals --bundle-zip ./diagnose-results.zip'
-    }
-    return `uv run cogames diagnose "metta://policy/${policyId}" --mission-set cogsguard_evals --bundle-zip ./diagnose-results.zip`
-  }, [data?.policy?.id])
   const capabilityAuditSummary = useMemo(() => {
     const statuses = Object.values(data?.derived?.capability_code_audit?.capabilities ?? {})
     let yes = 0
@@ -2251,7 +2166,7 @@ export function DashboardClient() {
             <h1 className="dashboard-title-line">
               <span>Policy Dashboard</span>
               <span className="dashboard-title-subline">
-                Episodes, diagnose, and skill-tree evaluation in one view.
+                Episodes, diagnostics, and skill-tree evaluation in one view.
               </span>
             </h1>
           </div>
@@ -2361,7 +2276,7 @@ export function DashboardClient() {
             </button>
           </section>
 
-          {(activeTab === 'overview' || activeTab === 'performance' || activeTab === 'diagnose') && (
+          {(activeTab === 'overview' || activeTab === 'performance') && (
             <>
               {activeTab === 'overview' && (
                 <section className="grid kpi-grid" style={{ gap: 10 }}>
@@ -2423,6 +2338,128 @@ export function DashboardClient() {
                   )}
                 </section>
               )}
+
+              {activeTab === 'overview' &&
+                (unsupported ||
+                  instrumentation ||
+                  actionSummary ||
+                  orchestration ||
+                  trend ||
+                  confidence ||
+                  patterns) && (
+                  <section className="grid kpi-grid" style={{ gap: 10 }}>
+                    {unsupported && (
+                      <article
+                        className="card"
+                        style={{
+                          padding: 10,
+                          borderWidth: 2,
+                          minWidth: 0,
+                          ...severityStyle(unsupportedIssueCount > 0 ? 'warn' : 'good'),
+                        }}
+                      >
+                        Unsupported-state warnings: <code>{unsupportedIssueCount}</code>
+                      </article>
+                    )}
+                    {instrumentation && (
+                      <article
+                        className="card"
+                        style={{
+                          padding: 10,
+                          borderWidth: 2,
+                          minWidth: 0,
+                          ...severityStyle(instrumentation.compliant ? 'good' : 'warn'),
+                        }}
+                      >
+                        Instrumentation: <strong>{instrumentation.compliant ? 'compliant' : 'incomplete'}</strong> ·
+                        score <code>{formatPercent(toFiniteNumber(instrumentation.score), 0)}</code>
+                      </article>
+                    )}
+                    {actionSummary && (
+                      <article
+                        className="card"
+                        style={{
+                          padding: 10,
+                          borderWidth: 2,
+                          minWidth: 0,
+                          ...severityStyle(
+                            String(actionSummary.rollout_recommendation ?? '').toLowerCase() === 'hold'
+                              ? 'warn'
+                              : 'good'
+                          ),
+                        }}
+                      >
+                        Rollout gate: <code>{String(actionSummary.rollout_recommendation ?? '-')}</code> ·{' '}
+                        <span style={{ overflowWrap: 'anywhere' }}>{String(actionSummary.headline ?? '-')}</span>
+                      </article>
+                    )}
+                    {orchestration && (
+                      <article
+                        className="card"
+                        style={{ padding: 10, borderWidth: 2, minWidth: 0, ...severityStyle('warn') }}
+                      >
+                        Experiment mode: <code>{String(orchestration.mode ?? '-')}</code> ·{' '}
+                        <span style={{ overflowWrap: 'anywhere' }}>{String(orchestration.headline ?? '-')}</span>
+                      </article>
+                    )}
+                    {trend && (
+                      <article
+                        className="card"
+                        style={{
+                          padding: 10,
+                          borderWidth: 2,
+                          minWidth: 0,
+                          ...severityStyle(
+                            String(trend.direction ?? '')
+                              .toLowerCase()
+                              .includes('improv') || String(trend.direction ?? '').toLowerCase() === 'up'
+                              ? 'good'
+                              : String(trend.direction ?? '')
+                                    .toLowerCase()
+                                    .includes('regress') || String(trend.direction ?? '').toLowerCase() === 'down'
+                                ? 'bad'
+                                : 'warn'
+                          ),
+                        }}
+                      >
+                        Trend: <code>{String(trend.direction ?? 'insufficient')}</code> · evidence{' '}
+                        <strong>{trend.evidence_sufficient ? 'sufficient' : 'limited'}</strong> · covered{' '}
+                        <code>
+                          {trendCoveredVersionCount}/{trendPoints.length}
+                        </code>
+                      </article>
+                    )}
+                    {confidence && (
+                      <article
+                        className="card"
+                        style={{
+                          padding: 10,
+                          borderWidth: 2,
+                          minWidth: 0,
+                          ...severityStyle(confidence.evidence_sufficient ? 'good' : 'warn'),
+                        }}
+                      >
+                        Confidence: <strong>{confidence.evidence_sufficient ? 'sufficient' : 'limited'}</strong> ·
+                        intervals <code>{(confidence.intervals ?? []).length}</code>
+                      </article>
+                    )}
+                    {patterns && (
+                      <article
+                        className="card"
+                        style={{
+                          padding: 10,
+                          borderWidth: 2,
+                          minWidth: 0,
+                          ...severityStyle(patterns.evidence_sufficient ? 'good' : 'warn'),
+                        }}
+                      >
+                        Pattern extraction:{' '}
+                        <span style={{ overflowWrap: 'anywhere' }}>{String(patterns.headline ?? '-')}</span> · signals{' '}
+                        <code>{(patterns.signals ?? []).length}</code>
+                      </article>
+                    )}
+                  </section>
+                )}
 
               {activeTab === 'overview' && (
                 <section className="grid parse-pill-grid" style={{ gap: 10 }}>
@@ -2552,6 +2589,21 @@ export function DashboardClient() {
                     value={String(toFiniteNumber(failures.noop_heavy_completed) ?? 0)}
                     severity={(toFiniteNumber(failures.noop_heavy_completed) ?? 0) > 0 ? 'warn' : 'good'}
                   />
+                </section>
+              )}
+
+              {activeTab === 'performance' && (
+                <section className="card">
+                  <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
+                  {diagnostics.length === 0 ? (
+                    <p style={{ marginBottom: 0 }}>No diagnostics emitted.</p>
+                  ) : (
+                    <ul style={{ marginBottom: 0, display: 'grid', gap: 6 }}>
+                      {diagnostics.map((entry) => (
+                        <li key={entry}>{entry}</li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
               )}
 
@@ -2971,327 +3023,107 @@ export function DashboardClient() {
                           mode="metrics"
                           suppressStateMessage
                         />
-                      </div>
-                    </section>
-                  </>
-                )}
 
-                {activeTab === 'diagnose' && (
-                  <>
-                    {(unsupported ||
-                      instrumentation ||
-                      actionSummary ||
-                      orchestration ||
-                      trend ||
-                      confidence ||
-                      patterns) && (
-                      <section className="grid kpi-grid" style={{ gap: 10 }}>
-                        {unsupported && (
-                          <article
-                            className="card"
-                            style={{
-                              padding: 10,
-                              borderWidth: 2,
-                              minWidth: 0,
-                              ...severityStyle(unsupportedIssueCount > 0 ? 'warn' : 'good'),
-                            }}
-                          >
-                            Unsupported-state warnings: <code>{unsupportedIssueCount}</code>
-                          </article>
-                        )}
-                        {instrumentation && (
-                          <article
-                            className="card"
-                            style={{
-                              padding: 10,
-                              borderWidth: 2,
-                              minWidth: 0,
-                              ...severityStyle(instrumentation.compliant ? 'good' : 'warn'),
-                            }}
-                          >
-                            Instrumentation: <strong>{instrumentation.compliant ? 'compliant' : 'incomplete'}</strong> ·
-                            score <code>{formatPercent(toFiniteNumber(instrumentation.score), 0)}</code>
-                          </article>
-                        )}
-                        {actionSummary && (
-                          <article
-                            className="card"
-                            style={{
-                              padding: 10,
-                              borderWidth: 2,
-                              minWidth: 0,
-                              ...severityStyle(
-                                String(actionSummary.rollout_recommendation ?? '').toLowerCase() === 'hold'
-                                  ? 'warn'
-                                  : 'good'
-                              ),
-                            }}
-                          >
-                            Rollout gate: <code>{String(actionSummary.rollout_recommendation ?? '-')}</code> ·{' '}
-                            <span style={{ overflowWrap: 'anywhere' }}>{String(actionSummary.headline ?? '-')}</span>
-                          </article>
-                        )}
-                        {orchestration && (
-                          <article
-                            className="card"
-                            style={{ padding: 10, borderWidth: 2, minWidth: 0, ...severityStyle('warn') }}
-                          >
-                            Experiment mode: <code>{String(orchestration.mode ?? '-')}</code> ·{' '}
-                            <span style={{ overflowWrap: 'anywhere' }}>{String(orchestration.headline ?? '-')}</span>
-                          </article>
-                        )}
-                        {trend && (
-                          <article
-                            className="card"
-                            style={{
-                              padding: 10,
-                              borderWidth: 2,
-                              minWidth: 0,
-                              ...severityStyle(
-                                String(trend.direction ?? '')
-                                  .toLowerCase()
-                                  .includes('improv') || String(trend.direction ?? '').toLowerCase() === 'up'
-                                  ? 'good'
-                                  : String(trend.direction ?? '')
-                                        .toLowerCase()
-                                        .includes('regress') || String(trend.direction ?? '').toLowerCase() === 'down'
-                                    ? 'bad'
-                                    : 'warn'
-                              ),
-                            }}
-                          >
-                            Trend: <code>{String(trend.direction ?? 'insufficient')}</code> · evidence{' '}
-                            <strong>{trend.evidence_sufficient ? 'sufficient' : 'limited'}</strong> · covered{' '}
-                            <code>
-                              {trendCoveredVersionCount}/{trendPoints.length}
-                            </code>
-                          </article>
-                        )}
-                        {confidence && (
-                          <article
-                            className="card"
-                            style={{
-                              padding: 10,
-                              borderWidth: 2,
-                              minWidth: 0,
-                              ...severityStyle(confidence.evidence_sufficient ? 'good' : 'warn'),
-                            }}
-                          >
-                            Confidence: <strong>{confidence.evidence_sufficient ? 'sufficient' : 'limited'}</strong> ·
-                            intervals <code>{(confidence.intervals ?? []).length}</code>
-                          </article>
-                        )}
-                        {patterns && (
-                          <article
-                            className="card"
-                            style={{
-                              padding: 10,
-                              borderWidth: 2,
-                              minWidth: 0,
-                              ...severityStyle(patterns.evidence_sufficient ? 'good' : 'warn'),
-                            }}
-                          >
-                            Pattern extraction:{' '}
-                            <span style={{ overflowWrap: 'anywhere' }}>{String(patterns.headline ?? '-')}</span> {' · '}
-                            signals <code>{(patterns.signals ?? []).length}</code>
-                          </article>
-                        )}
-                      </section>
-                    )}
-                    <section className="grid kpi-grid" style={{ gap: 10 }}>
-                      <KPIStatCard
-                        label="Diagnose Runs"
-                        value={String(diagnoseRuns.length)}
-                        severity={diagnoseRuns.length > 0 ? 'good' : diagnoseLoading ? 'warn' : 'bad'}
-                      />
-                      <KPIStatCard
-                        label="Selected Run"
-                        value={selectedDiagnoseRunId ? `${selectedDiagnoseRunId.slice(0, 12)}...` : '-'}
-                        severity={selectedDiagnoseRunId ? 'good' : 'warn'}
-                      />
-                      <KPIStatCard
-                        label="Diagnose Stage"
-                        value={String(selectedDiagnoseStage ?? '-')}
-                        severity={
-                          selectedDiagnoseStage?.includes('complete') || selectedDiagnoseStage?.includes('ready')
-                            ? 'good'
-                            : selectedDiagnoseStage
-                              ? 'warn'
-                              : 'bad'
-                        }
-                      />
-                      <KPIStatCard
-                        label="Probe Pass Rate"
-                        value={
-                          diagnoseProbeTotal > 0 ? formatPercent(diagnoseProbePassed / diagnoseProbeTotal, 0) : '-'
-                        }
-                        detail={diagnoseProbeTotal > 0 ? `${diagnoseProbePassed}/${diagnoseProbeTotal}` : 'no probes'}
-                        severity={
-                          diagnoseProbeTotal > 0
-                            ? kpiSeverity(diagnoseProbePassed / diagnoseProbeTotal, 0.75, 0.45)
-                            : 'warn'
-                        }
-                      />
-                      <KPIStatCard
-                        label="Dominant Issue"
-                        value={String(selectedDiagnoseDominantIssue ?? '-')}
-                        severity={selectedDiagnoseDominantIssue ? 'warn' : 'good'}
-                      />
-                      <KPIStatCard
-                        label="Manifest Valid"
-                        value={
-                          diagnoseManifest ? (diagnoseManifest.diagnose_validity?.valid ? 'valid' : 'invalid') : '-'
-                        }
-                        severity={
-                          diagnoseManifest ? (diagnoseManifest.diagnose_validity?.valid ? 'good' : 'bad') : 'warn'
-                        }
-                      />
-                    </section>
-                    <section className="grid two overview-dense-grid" style={{ alignItems: 'start', gap: 10 }}>
-                      <section className="card">
-                        <h2 style={{ marginTop: 0 }}>Diagnostics ({diagnostics.length})</h2>
-                        {diagnostics.length === 0 ? (
-                          <p style={{ marginBottom: 0 }}>No diagnostics emitted.</p>
-                        ) : (
-                          <ul style={{ marginBottom: 0, display: 'grid', gap: 6 }}>
-                            {diagnostics.map((entry) => (
-                              <li key={entry}>{entry}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
-                      <section className="card" style={{ display: 'grid', gap: 8 }}>
-                        <h2 style={{ marginTop: 0 }}>Feedback</h2>
-                        <p style={{ marginTop: 0, marginBottom: 8, color: '#546b8a' }}>
-                          Report dashboard bugs/features with policy, tab, metric, filter, and selected-episode context
-                          prefilled.
-                        </p>
-                        <a href={feedbackUrl} target="_blank" rel="noreferrer">
-                          Open dashboard feedback issue
-                        </a>
-                      </section>
+                        <section className="card">
+                          <div className="dashboard-title-line" style={{ marginBottom: 10 }}>
+                            <h2 style={{ margin: 0 }}>Analysis</h2>
+                            <span className="dashboard-title-subline">
+                              Run AI analysis to generate a natural-language summary.
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+                            <label style={{ display: 'grid', gap: 6, maxWidth: 560 }}>
+                              Anthropic API key (optional, bring your own)
+                              <input
+                                type="password"
+                                autoComplete="off"
+                                placeholder="sk-ant-..."
+                                value={analysisApiKey}
+                                onChange={(event) => setAnalysisApiKey(event.target.value)}
+                              />
+                            </label>
+                            <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                              Key is sent only with this analysis request as <code>X-Anthropic-Api-Key</code>; it is not
+                              persisted.
+                            </p>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={onRunAnalysis}
+                                disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
+                              >
+                                {analysis ? 'Re-run AI analysis' : 'Run AI analysis'}
+                              </button>
+                            </div>
+                          </div>
+                          {analysisError && (
+                            <div
+                              className="card"
+                              style={{ padding: 12, borderColor: '#fecdca', background: '#fff7f6' }}
+                            >
+                              <p style={{ marginTop: 0, marginBottom: 6, color: '#b42318' }}>
+                                <strong>Analysis unavailable:</strong> {analysisError}
+                              </p>
+                              {isAnalysisKeyMissingError(analysisError) && (
+                                <p style={{ margin: 0, fontSize: 13, color: '#6b2c2c' }}>
+                                  No shared key is configured for this backend. Bring your own key above, or run your
+                                  own backend with <code>ANTHROPIC_API_KEY</code> exported.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {!analysis && !analysisLoading && (
+                            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+                              <p style={{ margin: 0, color: '#546b8a' }}>
+                                No analysis generated yet for this session. Run the action above when ready.
+                              </p>
+                            </div>
+                          )}
+                          {analysisLoading && (
+                            <AnalysisLoadingQuips
+                              policyName={String(data?.policy?.name ?? 'policy')}
+                              opponentStats={data?.derived?.opponent_metrics ?? {}}
+                            />
+                          )}
+                          {analysis && (
+                            <div style={{ display: 'grid', gap: 10 }}>
+                              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
+                                  {showAnalysis ? 'Hide analysis' : 'Show analysis'}
+                                </button>
+                              </div>
+                              <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
+                                Data sources: {analysis.data_sources.join(', ') || '-'}
+                              </p>
+                              {showAnalysis &&
+                                (data ? (
+                                  <AnalysisRichText
+                                    text={analysis.analysis}
+                                    episodes={episodes}
+                                    opponentStats={data.derived.opponent_metrics}
+                                  />
+                                ) : (
+                                  <div
+                                    style={{
+                                      border: '1px solid var(--panel-soft-border)',
+                                      borderRadius: 10,
+                                      padding: 12,
+                                      background: 'var(--panel-soft-bg-1)',
+                                      whiteSpace: 'pre-wrap',
+                                    }}
+                                  >
+                                    {analysis.analysis}
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </section>
+                      </div>
                     </section>
                   </>
                 )}
               </section>
             </>
-          )}
-
-          {activeTab === 'diagnose' && (
-            <section className="grid panel-grid" style={{ gap: 10 }}>
-              <section className="card">
-                <div className="dashboard-title-line" style={{ marginBottom: 10 }}>
-                  <h2 style={{ margin: 0 }}>Analysis</h2>
-                  <span className="dashboard-title-subline">
-                    Run AI analysis to generate a natural-language summary.
-                  </span>
-                </div>
-                <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
-                  <label style={{ display: 'grid', gap: 6, maxWidth: 560 }}>
-                    Anthropic API key (optional, bring your own)
-                    <input
-                      type="password"
-                      autoComplete="off"
-                      placeholder="sk-ant-..."
-                      value={analysisApiKey}
-                      onChange={(event) => setAnalysisApiKey(event.target.value)}
-                    />
-                  </label>
-                  <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                    Key is sent only with this analysis request as <code>X-Anthropic-Api-Key</code>; it is not
-                    persisted.
-                  </p>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={onRunAnalysis}
-                      disabled={analysisLoading || loading || !policyVersionId.trim() || !data}
-                    >
-                      {analysis ? 'Re-run AI analysis' : 'Run AI analysis'}
-                    </button>
-                  </div>
-                </div>
-                {analysisError && (
-                  <div className="card" style={{ padding: 12, borderColor: '#fecdca', background: '#fff7f6' }}>
-                    <p style={{ marginTop: 0, marginBottom: 6, color: '#b42318' }}>
-                      <strong>Analysis unavailable:</strong> {analysisError}
-                    </p>
-                    {isAnalysisKeyMissingError(analysisError) && (
-                      <p style={{ margin: 0, fontSize: 13, color: '#6b2c2c' }}>
-                        No shared key is configured for this backend. Bring your own key above, or run your own backend
-                        with <code>ANTHROPIC_API_KEY</code> exported.
-                      </p>
-                    )}
-                  </div>
-                )}
-                {!analysis && !analysisLoading && (
-                  <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
-                    <p style={{ margin: 0, color: '#546b8a' }}>
-                      No analysis generated yet for this session. Run the action above when ready.
-                    </p>
-                  </div>
-                )}
-                {analysisLoading && (
-                  <AnalysisLoadingQuips
-                    policyName={String(data?.policy?.name ?? 'policy')}
-                    opponentStats={data?.derived?.opponent_metrics ?? {}}
-                  />
-                )}
-                {analysis && (
-                  <div style={{ display: 'grid', gap: 10 }}>
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <button type="button" onClick={() => setShowAnalysis((value) => !value)}>
-                        {showAnalysis ? 'Hide analysis' : 'Show analysis'}
-                      </button>
-                    </div>
-                    <p style={{ margin: 0, fontSize: 12, color: '#4b617f' }}>
-                      Data sources: {analysis.data_sources.join(', ') || '-'}
-                    </p>
-                    {showAnalysis &&
-                      (data ? (
-                        <AnalysisRichText
-                          text={analysis.analysis}
-                          episodes={episodes}
-                          opponentStats={data.derived.opponent_metrics}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            border: '1px solid var(--panel-soft-border)',
-                            borderRadius: 10,
-                            padding: 12,
-                            background: 'var(--panel-soft-bg-1)',
-                            whiteSpace: 'pre-wrap',
-                          }}
-                        >
-                          {analysis.analysis}
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </section>
-              <section className="card" style={{ display: 'grid', gap: 10, minWidth: 0 }}>
-                <div
-                  className="dashboard-title-line"
-                  style={{ marginBottom: 2, whiteSpace: 'normal', flexWrap: 'wrap' }}
-                >
-                  <h2 style={{ margin: 0 }}>CoGames Diagnose</h2>
-                  <span className="dashboard-title-subline" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-                    Separate diagnose launcher. This button will be wired to the full flow next.
-                  </span>
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <button
-                    type="button"
-                    disabled
-                    title="CoGames diagnose integration coming soon"
-                    style={{ width: '100%', minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}
-                  >
-                    Run CoGames Diagnose (Coming Soon)
-                  </button>
-                </div>
-              </section>
-            </section>
           )}
 
           {activeTab === 'performance' && (
@@ -4094,146 +3926,6 @@ export function DashboardClient() {
               </section>
             </section>
           )}
-          {activeTab === 'diagnose' && (
-            <section className="grid" style={{ gap: 10 }}>
-              <section className="grid" style={{ gap: 10 }}>
-                <section className="grid panel-grid" style={{ gap: 10 }}>
-                  <section className="card grid" style={{ gap: 8 }}>
-                    <h2 style={{ margin: 0 }}>Import Diagnose Bundle</h2>
-                    <p style={{ margin: 0, color: '#546b8a', fontSize: 13 }}>
-                      Run diagnose locally with a bundle export, then upload it here to render the doctor report.
-                    </p>
-                    <code>{diagnoseUploadCommand}</code>
-                    <label style={{ display: 'grid', gap: 6 }}>
-                      Diagnose bundle (.zip)
-                      <input
-                        type="file"
-                        accept=".zip,application/zip"
-                        disabled={diagnoseUploadLoading}
-                        onChange={(event) => {
-                          const bundle = event.currentTarget.files?.[0]
-                          event.currentTarget.value = ''
-                          if (!bundle) return
-                          void uploadDiagnoseRunBundle(bundle)
-                        }}
-                      />
-                    </label>
-                    {diagnoseUploadLoading ? <p style={{ margin: 0 }}>Uploading diagnose bundle...</p> : null}
-                    {diagnoseUploadError ? (
-                      <p style={{ margin: 0, color: '#b42318' }}>
-                        <strong>Error:</strong> {diagnoseUploadError}
-                      </p>
-                    ) : null}
-                    {diagnoseUploadSuccess ? (
-                      <p style={{ margin: 0, color: '#176537' }}>{diagnoseUploadSuccess}</p>
-                    ) : null}
-                  </section>
-
-                  <section className="card grid" style={{ gap: 10 }}>
-                    <h2 style={{ margin: 0 }}>Diagnose Control</h2>
-                    {diagnoseLoading ? (
-                      <p style={{ margin: 0 }}>Loading diagnose runs...</p>
-                    ) : diagnoseError ? (
-                      <p style={{ margin: 0, color: '#b42318' }}>
-                        <strong>Error:</strong> {diagnoseError}
-                      </p>
-                    ) : diagnoseRuns.length === 0 ? (
-                      <p style={{ margin: 0 }}>No diagnose runs found for this environment.</p>
-                    ) : (
-                      <>
-                        <label style={{ display: 'grid', gap: 6 }}>
-                          Diagnose run
-                          <select
-                            value={selectedDiagnoseRunId ?? ''}
-                            onChange={(event) => setSelectedDiagnoseRunId(event.target.value)}
-                          >
-                            {diagnoseRuns.map((run) => (
-                              <option key={run.run_id} value={run.run_id}>
-                                {run.run_id}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-                          <span>
-                            policy:{' '}
-                            <strong>{diagnoseManifest?.policy ?? selectedDiagnoseRun?.manifest?.policy ?? '-'}</strong>
-                          </span>
-                          <span>
-                            stage: <strong>{selectedDiagnoseStage ?? '-'}</strong>
-                          </span>
-                          <span>
-                            created:{' '}
-                            <strong>
-                              {formatDateTime(
-                                diagnoseManifest?.created_at ?? selectedDiagnoseRun?.manifest?.created_at
-                              )}
-                            </strong>
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    {selectedDiagnoseRunId && (
-                      <a
-                        href={`/diagnose/${encodeURIComponent(selectedDiagnoseRunId)}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open full diagnose report
-                      </a>
-                    )}
-                  </section>
-
-                  <section className="card grid" style={{ gap: 8 }}>
-                    <h2 style={{ margin: 0 }}>Diagnose Snapshot</h2>
-                    {diagnoseNoteLoading ? (
-                      <p style={{ margin: 0 }}>Loading doctor note...</p>
-                    ) : diagnoseNoteError ? (
-                      <p style={{ margin: 0, color: '#b42318' }}>
-                        <strong>Error:</strong> {diagnoseNoteError}
-                      </p>
-                    ) : !diagnoseNote ? (
-                      <p style={{ margin: 0 }}>Select a diagnose run to load findings.</p>
-                    ) : (
-                      <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
-                        <span>
-                          dominant issue: <strong>{selectedDiagnoseDominantIssue ?? '-'}</strong>
-                        </span>
-                        <span>
-                          core stage-1 gate: <strong>{diagnoseCoreReady ? 'ready' : 'blocked'}</strong>
-                        </span>
-                        <span>
-                          top symptom:{' '}
-                          <strong>
-                            {selectedDiagnoseSymptom
-                              ? `${selectedDiagnoseSymptom.symptom_id} (${selectedDiagnoseSymptom.axis})`
-                              : '-'}
-                          </strong>
-                        </span>
-                        <span>
-                          primary prescription: <strong>{selectedDiagnosePrescription?.owner ?? '-'}</strong>
-                        </span>
-                        <span>
-                          social confirmed:{' '}
-                          <strong>
-                            {selectedDiagnoseSocialConfirmed === null
-                              ? 'n/a'
-                              : selectedDiagnoseSocialConfirmed
-                                ? 'true'
-                                : 'false'}
-                          </strong>
-                        </span>
-                        <span>
-                          note: <strong>{diagnoseNote.notes?.[0] ?? '-'}</strong>
-                        </span>
-                      </div>
-                    )}
-                  </section>
-                </section>
-              </section>
-            </section>
-          )}
-
           {activeTab === 'capabilities' && (
             <section className="grid" style={{ gap: 10 }}>
               <section className="grid kpi-grid" style={{ gap: 10 }}>
