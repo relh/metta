@@ -14,3 +14,9 @@ description:
 - Fetch origin and merge or rebase from origin/main.
 - Resolve conflicts, preserving branch intent and upstream structure.
 - Summarize what changed and note that pushing is left to the user.
+
+## Common Request Language
+
+- "sync/rebase/merge this branch with main"
+- "resolve merge conflicts while keeping branch intent"
+- "fix stale merge/open state before continuing work"

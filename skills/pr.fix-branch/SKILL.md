@@ -15,6 +15,11 @@ failures. **Always works in a git worktree** for isolation (unless user explicit
 
 **Announce at start:** "I'm using the fix-branch skill to sync and fix this branch."
 
+## Common Request Language
+
+- "fix this PR branch end-to-end"
+- "apply one more round of PR fixes/comments/CI cleanups"
+
 ## Sub-Agent Architecture
 
 Steps 3-5 are dispatched as **sub-agents** using the Task tool to reduce context churn. Each sub-agent runs

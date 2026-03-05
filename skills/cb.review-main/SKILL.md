@@ -14,3 +14,9 @@ description:
 - List changed files and review `git diff $base` (limit to focus paths if provided).
 - Report prioritized findings (bugs, regressions, risks, unintended changes) with file/line refs.
 - Call out simplification or cleanup opportunities and note missing tests.
+
+## Common Request Language
+
+- "analyze the whole branch / full context"
+- "review all changes against main and call out risks"
+- "audit recent merge quality and discrepancies"
