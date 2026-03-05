@@ -24,6 +24,7 @@ class StableFunctionCheckConfig:
 
     func: Callable[[StableCheckContext], object]
     timeout_s: int
+    description: str = ""
 
     check_group: StableCheckGroup = StableCheckGroup.LIVE_TESTS_LIGHT
     lifecycle: StableCheckLifecycle = DEFAULT_LIFECYCLE
@@ -62,7 +63,7 @@ def stable_function_check(
     remote_gpus: int | None = None,
     remote_nodes: int | None = None,
 ) -> Callable[[Callable[[StableCheckContext], object]], Callable[[StableCheckContext], object]]:
-    """Register a function-backed stable check."""
+    """Register a function-backed stable check. This function's doc comment will be reported in summaries."""
 
     def decorator(func: Callable[[StableCheckContext], object]) -> Callable[[StableCheckContext], object]:
         # Validate function signature.
@@ -90,6 +91,7 @@ def stable_function_check(
             StableFunctionCheckConfig(
                 func=func,
                 timeout_s=timeout_s,
+                description=inspect.getdoc(func) or "",
                 check_group=check_group,
                 datadog_metric_category=datadog_metric_category,
                 lifecycle=lifecycle,
@@ -175,6 +177,7 @@ def _stable_function_check_config_to_job(
 
     return Job(
         name=job_name,
+        description=config.description,
         cmd=cmd,
         executor=executor,
         timeout_s=config.timeout_s,

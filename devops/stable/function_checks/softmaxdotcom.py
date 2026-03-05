@@ -26,6 +26,7 @@ def _get(url: str, *, timeout_s: float = 15.0, user_agent: str = "metta-stable-h
     check_group=StableCheckGroup.LIVE_TESTS_LIGHT,
 )
 def healthcheck(_ctx: StableCheckContext) -> None:
+    """Verify softmax.com/alignmentleague, the /api/health endpoint, and the tournament seasons API are all healthy."""
     page_status, page_body = _get(ALIGNMENTLEAGUE_URL)
     assert page_status == 200, f"{ALIGNMENTLEAGUE_URL} returned {page_status}, expected 200"
     assert "<title>Softmax - Alignment League Benchmark</title>" in page_body, (

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import pkgutil
 import sys
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ class StableToolCheckConfig:
 
     func: Callable[..., Tool]
     timeout_s: int
+    description: str = ""
 
     check_group: StableCheckGroup = StableCheckGroup.LIVE_TESTS_LIGHT
     lifecycle: StableCheckLifecycle = DEFAULT_LIFECYCLE
@@ -75,6 +77,7 @@ def stable_tool_check(
             StableToolCheckConfig(
                 func=func,
                 timeout_s=timeout_s,
+                description=inspect.getdoc(func) or "",
                 check_group=check_group,
                 datadog_metric_category=datadog_metric_category,
                 lifecycle=lifecycle,
@@ -175,6 +178,7 @@ def stable_tool_check_configs_to_jobs(configs: list[StableToolCheckConfig], pref
         jobs.append(
             Job(
                 name=job_name,
+                description=config.description,
                 cmd=cmd,
                 executor=executor,
                 timeout_s=config.timeout_s,

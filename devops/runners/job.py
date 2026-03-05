@@ -42,6 +42,7 @@ class Job(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     name: str
+    description: str = ""
     cmd: list[str]
     executor: JobExecutor
     timeout_s: int = 3600

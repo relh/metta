@@ -215,6 +215,7 @@ def _wait_for_submission_status(*, ref_payload: dict[str, str], expected_status:
     check_group=StableCheckGroup.LIVE_TESTS_LIGHT,
 )
 def install_cogames(_ctx: StableCheckContext) -> None:
+    """Install the cogames package in an isolated venv and verify it runs."""
     run_commands_in_isolated_venv(
         packages=["cogames"],
         commands=[["cogames", "version"]],
@@ -228,6 +229,7 @@ def install_cogames(_ctx: StableCheckContext) -> None:
     output_references={"good_submission_ref_path": GOOD_SUBMISSION_REF_PATH_TEMPLATE},
 )
 def upload_canary_good_policy(ctx: StableCheckContext) -> None:
+    """Upload a known-good (random) canary policy to the tournament for submission testing."""
     _ensure_cogames_auth_token()
     policy_name = _submission_policy_name("good")
     _upload_policy(
@@ -248,6 +250,7 @@ def upload_canary_good_policy(ctx: StableCheckContext) -> None:
     output_references={"bad_submission_ref_path": BAD_SUBMISSION_REF_PATH_TEMPLATE},
 )
 def upload_canary_bad_policy(ctx: StableCheckContext) -> None:
+    """Upload a known-bad (noop + invalid params) canary policy to verify that invalid submissions are rejected."""
     _ensure_cogames_auth_token()
     policy_name = _submission_policy_name("bad")
     _upload_policy(
@@ -269,6 +272,7 @@ def upload_canary_bad_policy(ctx: StableCheckContext) -> None:
     input_references={"submission_ref_path": "bad_submission_ref_path"},
 )
 def check_canary_bad_policy_submission_results(ctx: StableCheckContext) -> None:
+    """Confirm that the bad canary policy submission reaches a failed state in the tournament."""
     _ensure_cogames_auth_token()
     submission_ref_path = Path(ctx.inputs["submission_ref_path"])
     ref_payload = json.loads(submission_ref_path.read_text())
@@ -282,6 +286,7 @@ def check_canary_bad_policy_submission_results(ctx: StableCheckContext) -> None:
     input_references={"submission_ref_path": "good_submission_ref_path"},
 )
 def check_canary_good_policy_submission_results(ctx: StableCheckContext) -> None:
+    """Confirm that the good canary policy submission completes matches in the tournament."""
     _ensure_cogames_auth_token()
     submission_ref_path = Path(ctx.inputs["submission_ref_path"])
     ref_payload = json.loads(submission_ref_path.read_text())
