@@ -1,6 +1,6 @@
-host: api.policy-dashboard.vibeservatory.softmax-research.net
+host: api.vibeservatory.softmax-research.net
 
-frontendHost: policy-dashboard.vibeservatory.softmax-research.net
+frontendHost: vibeservatory.softmax-research.net
 
 image:
   registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
@@ -29,29 +29,7 @@ datadog:
   env: production # no previews for now
 
 chatprop:
-  enabled: true
-  host: chatprop.vibeservatory.softmax-research.net
-  port: 8765
-  replicaCount: 1
-  homeDir: /tmp/chatprop
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
+  path: /chatprop
 
 trainboard:
-  enabled: true
-  host: train-board.vibeservatory.softmax-research.net
-  port: 8877
-  replicaCount: 1
-  stateDir: /tmp/trainingboard
-  resources:
-    requests:
-      cpu: 250m
-      memory: 512Mi
-    limits:
-      cpu: 1000m
-      memory: 2Gi
+  path: /train-board

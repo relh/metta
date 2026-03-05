@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 import metta.chatprop.local.backend.server as server_module
 from metta.chatprop.config import ChatpropConfig, DaemonConfig, SourceConfig
 from metta.chatprop.local.backend.server import (
@@ -68,6 +70,16 @@ def test_parse_args_defaults() -> None:
     args = parse_args([])
     assert args.host == "127.0.0.1"
     assert args.port == 8765
+
+
+def test_parse_args_normalizes_base_path() -> None:
+    args = parse_args(["--base-path", "/chatprop/"])
+    assert args.base_path == "/chatprop"
+
+
+def test_parse_args_rejects_relative_base_path() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--base-path", "chatprop"])
 
 
 def test_parse_archived_session_id_strips_mtime_suffix() -> None:

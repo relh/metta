@@ -48,6 +48,26 @@ _pipeline_cache_key: Optional[tuple[str, str, int]] = None
 _pipeline_cache_expires_at: float = 0.0
 
 
+def _normalize_base_path(raw: str) -> str:
+    value = raw.strip()
+    if not value or value == "/":
+        return ""
+    if not value.startswith("/"):
+        msg = "base path must start with '/'"
+        raise ValueError(msg)
+    return value.rstrip("/")
+
+
+def _strip_base_path(path: str, base_path: str) -> Optional[str]:
+    if not base_path:
+        return path
+    if path == base_path:
+        return "/"
+    if path.startswith(f"{base_path}/"):
+        return path[len(base_path) :]
+    return None
+
+
 def cache_path_for_state_dir(state_dir: Path) -> Path:
     return state_dir.expanduser() / DEFAULT_CACHE_RELATIVE_PATH
 
@@ -264,6 +284,7 @@ def _query_int(
 
 class TrainingBoardHTTPServer(ThreadingHTTPServer):
     state_dir: Path
+    base_path: str
 
 
 class TrainingBoardHandler(BaseHTTPRequestHandler):
@@ -271,16 +292,20 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
+        request_path = _strip_base_path(parsed.path, self.server.base_path)
+        if request_path is None:
+            self._write_json(404, {"error": "not found"})
+            return
         query_params = urllib.parse.parse_qs(parsed.query)
-        if parsed.path == "/":
+        if request_path == "/":
             self._serve_file(FRONTEND_ROOT / "templates" / "index.html", "text/html; charset=utf-8")
             return
 
-        if parsed.path == "/api/v1/dashboard":
+        if request_path == "/api/v1/dashboard":
             self._write_json(200, build_dashboard_for_state_dir(self.server.state_dir))
             return
 
-        if parsed.path == "/api/v1/task-ranking":
+        if request_path == "/api/v1/task-ranking":
             limit = _query_int(query_params, key="limit", default=60, minimum=0, maximum=1000)
             top_n = _query_int(query_params, key="top_n", default=10, minimum=0, maximum=100)
             self._write_json(
@@ -289,20 +314,20 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if parsed.path == "/api/v1/board":
+        if request_path == "/api/v1/board":
             self._write_json(200, build_board_payload_for_state_dir(self.server.state_dir))
             return
 
-        if parsed.path == "/api/v1/pipeline":
+        if request_path == "/api/v1/pipeline":
             self._write_json(200, build_pipeline_snapshot_for_state_dir(self.server.state_dir))
             return
 
-        if parsed.path == "/api/v1/research-funnel":
+        if request_path == "/api/v1/research-funnel":
             self._write_json(200, build_research_funnel_for_state_dir(self.server.state_dir))
             return
 
-        if parsed.path.startswith("/static/"):
-            file_name = parsed.path.removeprefix("/static/")
+        if request_path.startswith("/static/"):
+            file_name = request_path.removeprefix("/static/")
             target = _resolve_frontend_target(FRONTEND_ROOT / "static", file_name)
             if target is None or not target.is_file():
                 self._write_json(404, {"error": "static asset not found"})
@@ -315,13 +340,16 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path == "/api/v1/recompute":
+        request_path = _strip_base_path(parsed.path, self.server.base_path)
+        if request_path == "/api/v1/recompute":
             self._write_json(200, build_board_payload_for_state_dir(self.server.state_dir))
             return
         self._write_json(404, {"error": "not found"})
 
     def _serve_file(self, path: Path, content_type: str) -> None:
         payload = path.read_bytes()
+        if path == FRONTEND_ROOT / "templates" / "index.html":
+            payload = payload.decode("utf-8").replace("__TRAINBOARD_BASE_PATH__", self.server.base_path).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Cache-Control", "no-store")
@@ -347,18 +375,26 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR))
-    return parser.parse_args(argv)
+    parser.add_argument("--base-path", default="")
+    args = parser.parse_args(argv)
+    try:
+        args.base_path = _normalize_base_path(args.base_path)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
 def run_server(args: argparse.Namespace) -> None:
     host = args.host
     port = args.port
     state_dir = Path(args.state_dir).expanduser()
+    base_path = _normalize_base_path(args.base_path)
 
     httpd = TrainingBoardHTTPServer((host, port), TrainingBoardHandler)
     httpd.state_dir = state_dir
+    httpd.base_path = base_path
 
-    print(f"trainingboard server listening on http://{host}:{port}")
+    print(f"trainingboard server listening on http://{host}:{port}{base_path or ''}")
     print(f"state dir: {state_dir}")
     print(f"cache: {dashboard_cache_path_for_state_dir(state_dir)}")
     httpd.serve_forever()

@@ -2,6 +2,7 @@ interface Config {
   apiBaseUrl: string;
   authToken?: string;
   policyDashboardUrl: string | null;
+  diagnoseUrl: string | null;
   trainBoardUrl: string | null;
   chatpropUrl: string | null;
   bardoUrl: string | null;
@@ -26,6 +27,10 @@ export const config: Config = {
     process.env.OBSERVATORY_POLICY_DASHBOARD_URL,
     "http://127.0.0.1:5174",
   ),
+  diagnoseUrl: resolveFragileServiceUrl(
+    process.env.OBSERVATORY_DIAGNOSE_URL,
+    "http://127.0.0.1:5174/diagnose",
+  ),
   trainBoardUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_TRAIN_BOARD_URL,
     "http://127.0.0.1:8877",
@@ -36,7 +41,7 @@ export const config: Config = {
   ),
   bardoUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_BARDO_URL,
-    "http://127.0.0.1:5175",
+    "http://127.0.0.1:5174/bardo",
   ),
   siteUrl: process.env.SITE_URL,
 };

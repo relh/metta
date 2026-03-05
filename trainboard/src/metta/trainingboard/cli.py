@@ -41,9 +41,10 @@ def main() -> None:
 @click.option("--host", default=DEFAULT_HOST)
 @click.option("--port", type=int, default=DEFAULT_PORT)
 @click.option("--state-dir", default=str(DEFAULT_STATE_DIR))
-def serve(host: str, port: int, state_dir: str) -> None:
+@click.option("--base-path", default="", help="Serve the UI/API under this URL path prefix.")
+def serve(host: str, port: int, state_dir: str, base_path: str) -> None:
     """Run local six-panel dashboard server."""
-    run_server(SimpleNamespace(host=host, port=port, state_dir=state_dir))
+    run_server(SimpleNamespace(host=host, port=port, state_dir=state_dir, base_path=base_path))
 
 
 @main.command(name="ingest-asana")

@@ -1821,40 +1821,54 @@ def build_catalog_snapshot(
 class ServerConfig:
     host: str
     port: int
+    base_path: str
+
+
+class ChatPropHTTPServer(ThreadingHTTPServer):
+    base_path: str
 
 
 class ChatPropHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        path = self._request_path()
-        if path in {"", "/"}:
+        parsed = self._parse_request_path()
+        if parsed is None:
+            self.send_error(404, "Not found")
+            return
+
+        if parsed.path in {"", "/"}:
             self._serve_file("index.html", is_static=False)
             return
 
-        if path.startswith("/static/"):
-            file_name = path[len("/static/") :]
+        if parsed.path.startswith("/static/"):
+            file_name = parsed.path[len("/static/") :]
             self._serve_file(file_name, is_static=True)
             return
 
-        if path == "/api/health":
+        if parsed.path == "/api/health":
             self._serve_json({"ok": True})
             return
 
-        if path == "/api/uploads":
+        if parsed.path == "/api/uploads":
             self._serve_uploads()
             return
 
-        if path.startswith("/api/catalog/jobs/"):
-            self._serve_catalog_job_status()
+        if parsed.path.startswith("/api/catalog/jobs/"):
+            self._serve_catalog_job_status(parsed.path)
             return
 
-        if path.startswith("/api/catalog"):
-            self._serve_catalog()
+        if parsed.path.startswith("/api/catalog"):
+            self._serve_catalog(parsed.query)
             return
 
         self.send_error(404, "Not found")
 
     def do_POST(self) -> None:
-        path = self._request_path()
+        parsed = self._parse_request_path()
+        if parsed is None:
+            self.send_error(404, "Not found")
+            return
+
+        path = parsed.path
         if path == "/api/catalog/jobs":
             self._serve_catalog_job_create()
             return
@@ -1879,11 +1893,18 @@ class ChatPropHandler(BaseHTTPRequestHandler):
 
         self.send_error(404, "Not found")
 
-    def _request_path(self) -> str:
-        return urllib.parse.urlparse(self.path).path
-
-    def _query_params(self) -> dict[str, list[str]]:
-        return urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+    def _parse_request_path(self) -> urllib.parse.ParseResult | None:
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path or "/"
+        base_path = self.server.base_path if isinstance(self.server, ChatPropHTTPServer) else ""
+        if base_path:
+            if path == base_path:
+                path = "/"
+            elif path.startswith(f"{base_path}/"):
+                path = path[len(base_path) :]
+            else:
+                return None
+        return parsed._replace(path=path)
 
     def _read_json_body(self, *, max_bytes: int | None = None) -> dict[str, Any] | None:
         try:
@@ -2091,8 +2112,8 @@ class ChatPropHandler(BaseHTTPRequestHandler):
             }
         )
 
-    def _serve_catalog(self) -> None:
-        params = self._query_params()
+    def _serve_catalog(self, query: str) -> None:
+        params = urllib.parse.parse_qs(query)
         refresh = params.get("refresh", ["0"])[0] in {"1", "true", "yes"}
 
         config = load_config()
@@ -2107,8 +2128,7 @@ class ChatPropHandler(BaseHTTPRequestHandler):
         job = _create_catalog_job(bool(refresh))
         self._serve_json(job)
 
-    def _serve_catalog_job_status(self) -> None:
-        path = urllib.parse.urlparse(self.path).path
+    def _serve_catalog_job_status(self, path: str) -> None:
         prefix = "/api/catalog/jobs/"
         if not path.startswith(prefix):
             self.send_error(404, "Not found")
@@ -2143,6 +2163,9 @@ class ChatPropHandler(BaseHTTPRequestHandler):
 
         mime_type, _ = mimetypes.guess_type(str(target))
         body = target.read_bytes()
+        if not is_static and file_name == "index.html":
+            base_path = self.server.base_path if isinstance(self.server, ChatPropHTTPServer) else ""
+            body = body.decode("utf-8").replace("__CHATPROP_BASE_PATH__", base_path).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", mime_type or "text/plain")
         self.send_header("Content-Length", str(len(body)))
@@ -2154,18 +2177,35 @@ class ChatPropHandler(BaseHTTPRequestHandler):
 
 
 def run_server(args: argparse.Namespace) -> None:
-    config = ServerConfig(host=args.host, port=args.port)
-    server = ThreadingHTTPServer((config.host, config.port), ChatPropHandler)
-    print(f"chatprop: serving on http://{config.host}:{config.port}", flush=True)
+    config = ServerConfig(host=args.host, port=args.port, base_path=_normalize_base_path(args.base_path))
+    server = ChatPropHTTPServer((config.host, config.port), ChatPropHandler)
+    server.base_path = config.base_path
+    endpoint = f"http://{config.host}:{config.port}{config.base_path or ''}"
+    print(f"chatprop: serving on {endpoint}", flush=True)
     with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
+
+
+def _normalize_base_path(raw: str) -> str:
+    value = raw.strip()
+    if not value or value == "/":
+        return ""
+    if not value.startswith("/"):
+        raise ValueError("base path must start with '/'")
+    return value.rstrip("/")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run chatprop webserver")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    return parser.parse_args(argv)
+    parser.add_argument("--base-path", default="")
+    args = parser.parse_args(argv)
+    try:
+        args.base_path = _normalize_base_path(args.base_path)
+    except ValueError as exc:
+        parser.error(str(exc))
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

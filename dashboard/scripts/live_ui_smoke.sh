@@ -2,7 +2,7 @@
 set -euo pipefail
 
 POLICY_VERSION_ID="${1:-7e16ac5f-7fe6-4970-940c-acc2d6c29013}"
-DASHBOARD_URL="${DASHBOARD_URL:-https://policy-dashboard.vibeservatory.softmax-research.net}"
+DASHBOARD_URL="${DASHBOARD_URL:-https://vibeservatory.softmax-research.net/policy-dashboard}"
 STORAGE_STATE_PATH="${DASHBOARD_STORAGE_STATE:-$HOME/.cache/vibeservatory-dashboard/storage-state.json}"
 ARTIFACT_DIR="${DASHBOARD_SMOKE_ARTIFACT_DIR:-/tmp/vibeservatory-dashboard-ui-smoke-$(date +%Y%m%d-%H%M%S)}"
 

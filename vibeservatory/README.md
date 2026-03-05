@@ -173,10 +173,10 @@ kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true
 
 - Frontend workflow: `.github/workflows/build-vibeservatory-image.yml`
   - Deploys Helm chart: `devops/charts/dashboard/`
-  - Host: `https://policy-dashboard.vibeservatory.softmax-research.net`
+  - Host: `https://vibeservatory.softmax-research.net` (Policy Dashboard at `/policy-dashboard`)
 - Backend workflow: `.github/workflows/deploy-vibeservatory.yml`
   - Deploys Helm chart: `devops/charts/vibeservatory/`
-  - Host: `https://api.policy-dashboard.vibeservatory.softmax-research.net`
+  - Host: `https://api.vibeservatory.softmax-research.net`
 
 Backend requires `STATS_DB_READ_ONLY_URI`, provisioned as the `vibeservatory-env` k8s secret from Terraform. The source
 URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (temporarily managed outside Terraform per
@@ -213,5 +213,5 @@ dashboard/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 
 Notes:
 
-- `live_ui_smoke.sh` defaults to `https://policy-dashboard.vibeservatory.softmax-research.net` (standalone dashboard).
+- `live_ui_smoke.sh` defaults to `https://vibeservatory.softmax-research.net/policy-dashboard` (standalone dashboard).
 - Override `DASHBOARD_URL` if you explicitly want to smoke the Observatory embed route.

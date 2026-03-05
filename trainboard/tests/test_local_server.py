@@ -1,5 +1,8 @@
 import os
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 import metta.trainingboard.local.backend.server as server_module
 from metta.trainingboard.local.backend.server import (
@@ -21,6 +24,16 @@ def test_parse_args_defaults() -> None:
     args = parse_args([])
     assert args.host == "127.0.0.1"
     assert args.port == 8877
+
+
+def test_parse_args_normalizes_base_path() -> None:
+    args = parse_args(["--base-path", "/train-board/"])
+    assert args.base_path == "/train-board"
+
+
+def test_parse_args_rejects_relative_base_path() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--base-path", "train-board"])
 
 
 def test_resolve_frontend_target_blocks_traversal(tmp_path: Path) -> None:
@@ -108,6 +121,37 @@ def test_build_board_payload_for_state_dir_contains_dashboard_and_ranking(tmp_pa
     assert len(payload["dashboard"]["ranked_axes"]) == 6
     assert "scoring_source" in payload["dashboard"]
     assert "ranked_tasks" in payload["task_ranking"]
+
+
+def test_pipeline_and_funnel_routes_respect_base_path(monkeypatch, tmp_path: Path) -> None:
+    pipeline_payload = {"available": True, "experiments": {"running_now": 2}}
+    funnel_payload = {"tasks_total": 4, "stages": {"paper_selected": 3}}
+    monkeypatch.setattr(server_module, "build_pipeline_snapshot_for_state_dir", lambda _state_dir: pipeline_payload)
+    monkeypatch.setattr(server_module, "build_research_funnel_for_state_dir", lambda _state_dir: funnel_payload)
+
+    class _StubHandler:
+        def __init__(self, path: str) -> None:
+            self.path = path
+            self.server = SimpleNamespace(state_dir=tmp_path, base_path="/train-board")
+            self.responses: list[tuple[int, dict]] = []
+
+        def _write_json(self, status_code: int, payload: dict) -> None:
+            self.responses.append((status_code, payload))
+
+        def _serve_file(self, _path: Path, _content_type: str) -> None:
+            raise AssertionError("unexpected file serving in API route test")
+
+    pipeline_handler = _StubHandler("/train-board/api/v1/pipeline")
+    server_module.TrainingBoardHandler.do_GET(pipeline_handler)
+    assert pipeline_handler.responses == [(200, pipeline_payload)]
+
+    funnel_handler = _StubHandler("/train-board/api/v1/research-funnel")
+    server_module.TrainingBoardHandler.do_GET(funnel_handler)
+    assert funnel_handler.responses == [(200, funnel_payload)]
+
+    off_prefix_handler = _StubHandler("/api/v1/pipeline")
+    server_module.TrainingBoardHandler.do_GET(off_prefix_handler)
+    assert off_prefix_handler.responses == [(404, {"error": "not found"})]
 
 
 def test_pipeline_snapshot_returns_unavailable_when_wandb_fetch_fails(monkeypatch, tmp_path: Path) -> None:

@@ -15,10 +15,11 @@ frontend:
 
 observatory_api_url: http://observatory-backend.observatory.svc.cluster.local:8000
 
-policy_dashboard_url: https://policy-dashboard.vibeservatory.softmax-research.net
-train_board_url: https://train-board.vibeservatory.softmax-research.net
-chatprop_url: https://chatprop.vibeservatory.softmax-research.net
-bardo_url: https://bardo.vibeservatory.softmax-research.net
+policy_dashboard_url: https://vibeservatory.softmax-research.net/policy-dashboard
+diagnose_url: https://vibeservatory.softmax-research.net/diagnose
+train_board_url: https://vibeservatory.softmax-research.net/train-board
+chatprop_url: https://vibeservatory.softmax-research.net/chatprop
+bardo_url: https://vibeservatory.softmax-research.net/bardo
 
 db_migrate: true
 cronjobs: true

@@ -20,9 +20,18 @@ import { config } from "@observatory/config";
 import { RequestDebugPanel } from "@observatory/lib/debug/RequestDebugPanel";
 import { ServerDebugDrain } from "@observatory/lib/debug/ServerDebugDrain";
 
+async function getSessionUserId(): Promise<string | null> {
+  try {
+    const session = await auth();
+    return session?.user?.id ?? null;
+  } catch (error) {
+    console.error("Failed to load Observatory session", error);
+    return null;
+  }
+}
+
 export default async function RootLayout({ children }: PropsWithChildren) {
-  const session = await auth();
-  const userId = session?.user?.id;
+  const userId = await getSessionUserId();
   if (!userId) {
     return (
       <html lang="en" suppressHydrationWarning>

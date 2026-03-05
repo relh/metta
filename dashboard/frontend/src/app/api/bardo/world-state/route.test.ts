@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bardoProxyHeaders } from './route'
+import { bardoProxyHeaders } from './proxy-headers'
 
 const ORIGINAL_AUTH_COOKIE_NAME = process.env.OBSERVATORY_AUTH_COOKIE_NAME
 const ORIGINAL_NEXT_PUBLIC_AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME

@@ -38,17 +38,3 @@ export function parsePolicyDashboardTab(
 ): PolicyDashboardTab | undefined {
   return normalizeDashboardTab(value);
 }
-
-export function buildEmbeddedPolicyDashboardDiagnoseUrl(
-  baseUrl: string,
-  runId?: string | null,
-): string {
-  const url = new URL(baseUrl);
-  const basePath = url.pathname.replace(/\/$/, "");
-  const diagnosePath = runId?.trim()
-    ? `${basePath}/diagnose/${encodeURIComponent(runId.trim())}`
-    : `${basePath}/diagnose`;
-  url.pathname = diagnosePath;
-  url.search = "";
-  return url.toString();
-}

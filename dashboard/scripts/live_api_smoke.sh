@@ -2,7 +2,7 @@
 set -euo pipefail
 
 POLICY_VERSION_ID="${1:-7e16ac5f-7fe6-4970-940c-acc2d6c29013}"
-API_BASE_URL="${DASHBOARD_API_BASE_URL:-https://api.policy-dashboard.vibeservatory.softmax-research.net}"
+API_BASE_URL="${DASHBOARD_API_BASE_URL:-https://api.vibeservatory.softmax-research.net}"
 ANALYSIS_API_KEY="${DASHBOARD_ANTHROPIC_API_KEY:-}"
 AUTH_TOKEN="${DASHBOARD_AUTH_TOKEN:-${OBSERVATORY_AUTH_TOKEN:-}}"
 

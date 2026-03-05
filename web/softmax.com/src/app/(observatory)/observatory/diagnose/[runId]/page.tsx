@@ -2,7 +2,7 @@ import { Metadata } from "next";
 
 import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
-import { buildEmbeddedPolicyDashboardDiagnoseUrl } from "@observatory/lib/policy-dashboard";
+import { buildEmbeddedDiagnoseUrl } from "@observatory/lib/diagnose";
 
 import { PolicyDashboardEmbed } from "../../policy-dashboard/PolicyDashboardEmbed";
 
@@ -15,7 +15,7 @@ export default async function DiagnoseRunPage({
 }: {
   params: Promise<DiagnoseRunParams>;
 }) {
-  if (!config.policyDashboardUrl) {
+  if (!config.diagnoseUrl) {
     return (
       <SoftmaxGuard>
         <div className="mx-auto max-w-3xl p-6">
@@ -24,8 +24,8 @@ export default async function DiagnoseRunPage({
               Diagnose is not configured
             </h1>
             <p className="text-foreground-muted mt-2">
-              Set <code>OBSERVATORY_POLICY_DASHBOARD_URL</code> to the hosted
-              Policy Dashboard URL for this environment.
+              Set <code>OBSERVATORY_DIAGNOSE_URL</code> to the hosted Diagnose
+              URL for this environment.
             </p>
           </div>
         </div>
@@ -34,10 +34,7 @@ export default async function DiagnoseRunPage({
   }
 
   const { runId } = await params;
-  const diagnoseUrl = buildEmbeddedPolicyDashboardDiagnoseUrl(
-    config.policyDashboardUrl,
-    runId,
-  );
+  const diagnoseUrl = buildEmbeddedDiagnoseUrl(config.diagnoseUrl, runId);
 
   return (
     <SoftmaxGuard>

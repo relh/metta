@@ -223,9 +223,10 @@ Current CLAUDE.md:
 @main.command()
 @click.option("--host", default="127.0.0.1")
 @click.option("--port", type=int, default=8765)
-def serve(host: str, port: int) -> None:
+@click.option("--base-path", default="", help="Serve the UI/API under this URL path prefix.")
+def serve(host: str, port: int, base_path: str) -> None:
     """Start local chatprop GUI wrapper server."""
-    run_local_server(SimpleNamespace(host=host, port=port))
+    run_local_server(SimpleNamespace(host=host, port=port, base_path=base_path))
 
 
 @main.command(name="init")

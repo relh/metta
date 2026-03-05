@@ -1,29 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { bardoProxyHeaders } from './proxy-headers'
+
 const NO_STORE_HEADERS = {
   'Cache-Control': 'no-store, max-age=0',
-}
-
-const FORWARDED_HEADER_MAPPINGS = [
-  ['x-auth-token', 'X-Auth-Token'],
-  ['authorization', 'Authorization'],
-  ['x-auth-secret', 'X-Auth-Secret'],
-  ['x-user-id', 'X-User-Id'],
-  ['x-user-email', 'X-User-Email'],
-  ['x-user-is-softmax-team-member', 'X-User-Is-Softmax-Team-Member'],
-] as const
-
-function trimToNull(value: string | null | undefined): string | null {
-  const trimmed = value?.trim()
-  return trimmed ? trimmed : null
-}
-
-function authCookieName(): string {
-  return (
-    process.env.OBSERVATORY_AUTH_COOKIE_NAME?.trim() ||
-    process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() ||
-    'observatory_auth_token'
-  )
 }
 
 function bardoWorldStateUrl(): string {
@@ -38,32 +18,6 @@ function bardoWorldStateUrl(): string {
   }
 
   return 'http://127.0.0.1:8010/bardo/v1/world-state'
-}
-
-type ProxyAuthRequest = {
-  headers: Headers
-  cookies: {
-    get(name: string): { value: string } | undefined
-  }
-}
-
-export function bardoProxyHeaders(request: ProxyAuthRequest): Record<string, string> {
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  }
-
-  for (const [incoming, outgoing] of FORWARDED_HEADER_MAPPINGS) {
-    const value = trimToNull(request.headers.get(incoming))
-    if (!value) continue
-    headers[outgoing] = value
-  }
-
-  if (!headers['X-Auth-Token']) {
-    const cookieToken = trimToNull(request.cookies.get(authCookieName())?.value)
-    if (cookieToken) headers['X-Auth-Token'] = cookieToken
-  }
-
-  return headers
 }
 
 export async function GET(request: NextRequest) {

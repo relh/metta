@@ -12,6 +12,14 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
+const DEFAULT_OBSERVATORY_API_URL =
+  "https://api.observatory.softmax-research.net";
+
+function getObservatoryApiBaseUrl(): string {
+  const configured = process.env.OBSERVATORY_API_URL?.trim();
+  return configured || DEFAULT_OBSERVATORY_API_URL;
+}
+
 async function proxy(req: NextRequest, method: string, path: string) {
   const headers: Record<string, string> = {
     ...(await getApiHeadersFromSession()),
@@ -22,20 +30,40 @@ async function proxy(req: NextRequest, method: string, path: string) {
     }
   }
 
-  const url = new URL(`${process.env.OBSERVATORY_API_URL}/${path}`);
+  let url: URL;
+  try {
+    const base = getObservatoryApiBaseUrl().replace(/\/+$/, "");
+    const normalizedPath = path.replace(/^\/+/, "");
+    url = new URL(`${base}/${normalizedPath}`);
+  } catch (error) {
+    console.error("Invalid Observatory API URL configuration", error);
+    return Response.json(
+      { error: "Observatory API is not configured correctly." },
+      { status: 500 },
+    );
+  }
   req.nextUrl.searchParams.forEach((value, key) => {
     url.searchParams.append(key, value);
   });
 
   const body = method === "POST" ? await req.text() : undefined;
 
-  const response = await fetch(url, {
-    method,
-    redirect: "follow",
-    headers,
-    body,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      redirect: "follow",
+      headers,
+      body,
+      cache: "no-store",
+    });
+  } catch (error) {
+    console.error("Failed to proxy Observatory API request", error);
+    return Response.json(
+      { error: "Failed to reach Observatory API upstream." },
+      { status: 502 },
+    );
+  }
 
   return new Response(response.body, {
     status: response.status,
