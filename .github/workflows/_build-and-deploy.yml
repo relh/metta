@@ -1,4 +1,7 @@
-# Reusable workflow to build and deploy a Docker image to EKS using Helm
+# Reusable workflow to build and deploy a Docker image to EKS using Helm.
+#
+# Build and deploy run as separate jobs so that a failed deploy can be retried
+# without rebuilding the image.
 name: Build Image and Deploy with Helm
 
 concurrency:
@@ -11,7 +14,7 @@ on:
     outputs:
       image_tag:
         description: "The image tag that was built and deployed"
-        value: ${{ jobs.build-and-deploy.outputs.image_tag }}
+        value: ${{ jobs.build.outputs.image_tag }}
     inputs:
       code_paths:
         description: "Comma-separated list of code paths to check for changes. Dockerfile and chart paths are automatically added."
@@ -105,22 +108,50 @@ jobs:
             paths:
               ${{ inputs.code_paths }}
 
-  build-and-deploy:
-    name: "Build and Deploy"
+  build:
+    name: "Build"
     needs: checks
     if: |
-      needs.checks.outputs.run == 'true' ||
-      (github.event_name == 'pull_request' && github.event.action == 'closed')
+      needs.checks.outputs.run == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.preview_helm_values != ''))
     runs-on: ${{ inputs.runs_on }}
-    # Build can take ~10-15m; leave enough headroom for helm --atomic --timeout 15m.
-    # If the job times out first, Helm can be interrupted and left in pending-*.
-    timeout-minutes: 45
+    timeout-minutes: 20
     outputs:
       image_tag: ${{ steps.build-image.outputs.tag }}
 
-    env:
-      BUILD_PREVIEW: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.preview_helm_values != '' }}
-      DELETE_PREVIEW: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
+    steps:
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Build Docker image
+        id: build-image
+        uses: ./.github/actions/docker-build
+        with:
+          image_name: ${{ inputs.image_name }}
+          dockerfile: ${{ inputs.dockerfile }}
+          suffix: ${{ inputs.tag_suffix }}
+          aws_role: ${{ vars.AWS_ROLE }}
+          build_args: ${{ inputs.docker_build_args }}
+
+  deploy:
+    name: "Deploy"
+    needs: [checks, build]
+    if: |
+      always() &&
+      (
+        (github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.build.outputs.image_tag != '') ||
+        (github.event_name == 'pull_request' && github.event.action != 'closed' && needs.build.outputs.image_tag != '' && inputs.preview_helm_values != '') ||
+        (github.event_name == 'pull_request' && github.event.action == 'closed')
+      )
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 20
 
     steps:
       - id: ci-token
@@ -133,12 +164,10 @@ jobs:
           token: ${{ steps.ci-token.outputs.token }}
 
       - name: Configure EKS
-        if: github.ref == 'refs/heads/main' || env.BUILD_PREVIEW == 'true' || env.DELETE_PREVIEW == 'true'
         uses: ./.github/actions/eks-configure
         with:
           aws_role: ${{ vars.AWS_ROLE }}
 
-      # useful for home deployment
       - name: Pre-deploy command
         if: inputs.pre_deploy_command != ''
         run: ${{ inputs.pre_deploy_command }}
@@ -150,17 +179,6 @@ jobs:
           namespace: ${{ inputs.namespace }}
           release: ${{ inputs.release }}
 
-      - name: Build Docker image
-        id: build-image
-        uses: ./.github/actions/docker-build
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || env.BUILD_PREVIEW == 'true'
-        with:
-          image_name: ${{ inputs.image_name }}
-          dockerfile: ${{ inputs.dockerfile }}
-          suffix: ${{ inputs.tag_suffix }}
-          aws_role: ${{ vars.AWS_ROLE }}
-          build_args: ${{ inputs.docker_build_args }}
-
       - name: Deploy to production
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         run: |
@@ -169,41 +187,41 @@ jobs:
             -n ${{ inputs.namespace }} \
             ${{ inputs.release }} \
             ${{ inputs.chart }} \
-            --set image.tag=${{ steps.build-image.outputs.tag }} \
+            --set image.tag=${{ needs.build.outputs.image_tag }} \
             ${{ inputs.production_helm_values }}
 
       - name: Deploy PR preview
-        if: env.BUILD_PREVIEW == 'true'
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.preview_helm_values != ''
         run: |
           helm upgrade -i \
             --atomic --timeout 10m \
             -n ${{ inputs.namespace }} \
             ${{ inputs.release }}-pr-${{ github.event.pull_request.number }} \
             ${{ inputs.chart }} \
-            --set image.tag=${{ steps.build-image.outputs.tag }} \
+            --set image.tag=${{ needs.build.outputs.image_tag }} \
             --labels pr-preview=true,pr-number=${{ github.event.pull_request.number }} \
             ${{ inputs.preview_helm_values }}
 
       - name: Determine release name for diagnostics
         id: diag-release
-        if: failure() && (github.ref == 'refs/heads/main' || env.BUILD_PREVIEW == 'true')
+        if: failure()
         shell: bash
         run: |
-          if [[ "$BUILD_PREVIEW" == "true" ]]; then
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.action }}" != "closed" ]]; then
             echo "name=${{ inputs.release }}-pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
           else
             echo "name=${{ inputs.release }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Collect deploy failure diagnostics
-        if: failure() && (github.ref == 'refs/heads/main' || env.BUILD_PREVIEW == 'true')
+        if: failure()
         uses: ./.github/actions/deploy-failure-diagnostics
         with:
           namespace: ${{ inputs.namespace }}
           release: ${{ steps.diag-release.outputs.name }}
 
       - name: Comment PR with preview URL
-        if: env.BUILD_PREVIEW == 'true' && inputs.preview_host != ''
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && inputs.preview_host != ''
         uses: actions/github-script@v7
         with:
           script: |
@@ -242,5 +260,5 @@ jobs:
             }
 
       - name: Delete PR preview
-        if: env.DELETE_PREVIEW == 'true'
+        if: github.event_name == 'pull_request' && github.event.action == 'closed'
         run: helm delete --ignore-not-found -n ${{ inputs.namespace }} ${{ inputs.release }}-pr-${{ github.event.pull_request.number }}
