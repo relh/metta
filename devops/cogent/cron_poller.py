@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -117,14 +118,16 @@ def mark_ran(job_name: str, frequency: str, now: datetime, state: dict):
 # ---------------------------------------------------------------------------
 
 
-def run_sync():
+def run_sync(state: dict, now: datetime):
     """Run repo-sync.py (token refresh + fetch)."""
     log("sync: refreshing tokens and fetching repos")
+    t0 = time.monotonic()
     result = subprocess.run(
         [sys.executable, str(SYNC_SCRIPT)],
         capture_output=True,
         text=True,
     )
+    record_job_outcome(state, "sync", result.returncode, time.monotonic() - t0, now)
     if result.returncode != 0:
         log(f"sync: FAILED: {result.stderr.strip()}")
 
@@ -137,6 +140,8 @@ def run_agent_job(
     timeout: int = 60,
     agent: str = "codex",
     label: str,
+    state: dict,
+    now: datetime,
 ) -> bool:
     """Invoke agent-runner.py as a subprocess."""
     cmd = [sys.executable, str(RUNNER), "--branch", branch, "--timeout", str(timeout), "--agent", agent]
@@ -148,7 +153,9 @@ def run_agent_job(
         raise ValueError(f"{label}: job must specify skill or prompt")
 
     log(f"{label}: running on branch={branch} agent={agent}")
+    t0 = time.monotonic()
     result = subprocess.run(cmd, capture_output=True, text=True)
+    record_job_outcome(state, label, result.returncode, time.monotonic() - t0, now)
     if result.returncode != 0:
         log(f"{label}: exit_code={result.returncode}")
         return False
@@ -156,7 +163,9 @@ def run_agent_job(
     return True
 
 
-def run_inline_prompt(*, branch: str, content: str, timeout: int = 60, agent: str = "codex", label: str) -> bool:
+def run_inline_prompt(
+    *, branch: str, content: str, timeout: int = 60, agent: str = "codex", label: str, state: dict, now: datetime
+) -> bool:
     """Run an inline prompt by passing text directly to agent-runner via --prompt-text."""
     cmd = [
         sys.executable,
@@ -172,7 +181,9 @@ def run_inline_prompt(*, branch: str, content: str, timeout: int = 60, agent: st
     ]
 
     log(f"{label}: running inline prompt on branch={branch} agent={agent}")
+    t0 = time.monotonic()
     result = subprocess.run(cmd, capture_output=True, text=True)
+    record_job_outcome(state, label, result.returncode, time.monotonic() - t0, now)
     if result.returncode != 0:
         log(f"{label}: exit_code={result.returncode}")
         return False
@@ -443,6 +454,105 @@ def prune_stale_worktrees():
 
 
 # ---------------------------------------------------------------------------
+# State pruning & log rotation (gated to once per hour)
+# ---------------------------------------------------------------------------
+
+PRUNE_INTERVAL_S = 3600
+JOB_HISTORY_MAX = 500
+
+
+def _branch_from_key(key: str) -> str | None:
+    """Extract branch name from a 'branch:<branch>:<file>' key."""
+    if not key.startswith("branch:"):
+        return None
+    parts = key.split(":", 2)
+    return parts[1] if len(parts) >= 3 else None
+
+
+def _remote_ref_exists(branch: str) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", f"origin/{branch}"],
+        cwd=METTA_DIR,
+        capture_output=True,
+    )
+    return result.returncode == 0
+
+
+def prune_stale_state(state: dict, now: datetime):
+    """Remove entries for completed/gone items from poller state."""
+    # asana_tasks: drop terminal entries older than 7 days
+    asana_tasks = state.get("asana_tasks", {})
+    cutoff = now - timedelta(days=7)
+    for gid in list(asana_tasks):
+        entry = asana_tasks[gid]
+        if entry.get("status") not in ("completed", "failed"):
+            continue
+        last_run = entry.get("last_run")
+        if last_run and datetime.fromisoformat(last_run) < cutoff:
+            del asana_tasks[gid]
+            log(f"state-prune: removed stale asana task {gid}")
+
+    # completed_once: drop branch: entries whose remote branch is gone
+    completed_once = state.get("completed_once", [])
+    for name in list(completed_once):
+        branch = _branch_from_key(name)
+        if branch is None:
+            continue
+        if not _remote_ref_exists(branch):
+            completed_once.remove(name)
+            log(f"state-prune: removed stale completed_once {name}")
+
+    # last_run: drop branch: entries whose remote branch is gone
+    last_run_dict = state.get("last_run", {})
+    for key in list(last_run_dict):
+        branch = _branch_from_key(key)
+        if branch is None:
+            continue
+        if not _remote_ref_exists(branch):
+            del last_run_dict[key]
+            log(f"state-prune: removed stale last_run {key}")
+
+    # branch_once_retries: drop entries whose remote branch is gone
+    retries = state.get("branch_once_retries", {})
+    for key in list(retries):
+        branch = _branch_from_key(key)
+        if branch is None:
+            continue
+        if not _remote_ref_exists(branch):
+            del retries[key]
+            log(f"state-prune: removed stale branch_once_retries {key}")
+
+
+def record_job_outcome(state: dict, label: str, exit_code: int, duration_s: float, now: datetime):
+    history = state.setdefault("job_history", [])
+    history.append(
+        {
+            "job": label,
+            "time": now.isoformat(),
+            "exit_code": exit_code,
+            "duration_s": round(duration_s, 1),
+        }
+    )
+    if len(history) > JOB_HISTORY_MAX:
+        del history[: len(history) - JOB_HISTORY_MAX]
+
+
+def rotate_old_logs():
+    """Delete per-run log files older than 14 days."""
+    if not LOG_DIR.exists():
+        return
+    cutoff = time.time() - 14 * 86400
+    for entry in LOG_DIR.iterdir():
+        if entry.name == "poller.log":
+            continue
+        if not entry.name.endswith(".log"):
+            continue
+        if entry.stat().st_mtime < cutoff:
+            entry.unlink()
+            log(f"log-rotate: deleted {entry.name}")
+
+
+# ---------------------------------------------------------------------------
 # Asana task scanning
 # ---------------------------------------------------------------------------
 
@@ -588,7 +698,9 @@ def scan_asana_tasks(state: dict, now: datetime):
                     cmd += ["--skill", ctx.skill]
 
                 log(f"{label}: dispatching on branch={branch}")
+                t0 = time.monotonic()
                 result = subprocess.run(cmd, capture_output=True, text=True)
+                record_job_outcome(state, label, result.returncode, time.monotonic() - t0, now)
 
                 if result.returncode == 0:
                     output = _extract_agent_result(result.stdout)
@@ -650,6 +762,20 @@ def tick():
 
     prune_stale_worktrees()
 
+    # Hourly maintenance: prune stale state + rotate old logs
+    last_prune_str = state.get("last_prune")
+    last_prune = None
+    if last_prune_str:
+        try:
+            last_prune = datetime.fromisoformat(last_prune_str)
+        except (ValueError, TypeError):
+            log(f"state: invalid last_prune value {last_prune_str!r}, resetting")
+            state.pop("last_prune", None)
+    if last_prune is None or (now - last_prune).total_seconds() >= PRUNE_INTERVAL_S:
+        prune_stale_state(state, now)
+        rotate_old_logs()
+        state["last_prune"] = now.isoformat()
+
     # --- 1. Checked-in jobs from cron_schedule.py ---
     try:
         for job in load_schedule_jobs():
@@ -660,7 +786,7 @@ def tick():
                 continue
 
             if job.action.value == "sync":
-                run_sync()
+                run_sync(state, now)
             else:
                 run_agent_job(
                     branch=job.branch,
@@ -669,6 +795,8 @@ def tick():
                     timeout=job.timeout_minutes,
                     agent=job.agent,
                     label=job.name,
+                    state=state,
+                    now=now,
                 )
             mark_ran(job.name, sched.frequency.value, now, state)
     except Exception as e:
@@ -712,6 +840,8 @@ def tick():
                         timeout=timeout,
                         agent=agent,
                         label=job_id,
+                        state=state,
+                        now=now,
                     )
                 elif body:
                     success = run_inline_prompt(
@@ -720,6 +850,8 @@ def tick():
                         timeout=timeout,
                         agent=agent,
                         label=job_id,
+                        state=state,
+                        now=now,
                     )
                 else:
                     log(f"{job_id}: skipped — no skill, prompt, or body")

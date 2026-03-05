@@ -203,6 +203,8 @@ def test_tick_saves_state_when_asana_scan_raises(monkeypatch) -> None:
     state = {"last_run": {}, "completed_once": []}
     monkeypatch.setattr(cron_poller, "load_state", lambda: state)
     monkeypatch.setattr(cron_poller, "prune_stale_worktrees", lambda: None)
+    monkeypatch.setattr(cron_poller, "prune_stale_state", lambda s, now: None)
+    monkeypatch.setattr(cron_poller, "rotate_old_logs", lambda: None)
     monkeypatch.setattr(cron_poller, "load_schedule_jobs", lambda: [])
     monkeypatch.setattr(cron_poller, "list_remote_branches", lambda repo_dir: [])  # noqa: ARG005
     monkeypatch.setattr(cron_poller, "scan_asana_tasks", lambda s, now: (_ for _ in ()).throw(RuntimeError("boom")))
@@ -220,6 +222,8 @@ def test_tick_keeps_failed_one_shot_branch_job(monkeypatch) -> None:
     state = {"last_run": {}, "completed_once": []}
     monkeypatch.setattr(cron_poller, "load_state", lambda: state)
     monkeypatch.setattr(cron_poller, "prune_stale_worktrees", lambda: None)
+    monkeypatch.setattr(cron_poller, "prune_stale_state", lambda s, now: None)
+    monkeypatch.setattr(cron_poller, "rotate_old_logs", lambda: None)
     monkeypatch.setattr(cron_poller, "load_schedule_jobs", lambda: [])
     monkeypatch.setattr(cron_poller, "scan_asana_tasks", lambda s, now: None)  # noqa: ARG005
     monkeypatch.setattr(cron_poller, "list_remote_branches", lambda repo_dir: ["origin/cogent/test"])  # noqa: ARG005
@@ -252,6 +256,8 @@ def test_tick_once_branch_job_failure_adds_delayed_retry(monkeypatch) -> None:
     state = {"last_run": {}, "completed_once": []}
     monkeypatch.setattr(cron_poller, "load_state", lambda: state)
     monkeypatch.setattr(cron_poller, "prune_stale_worktrees", lambda: None)
+    monkeypatch.setattr(cron_poller, "prune_stale_state", lambda s, now: None)
+    monkeypatch.setattr(cron_poller, "rotate_old_logs", lambda: None)
     monkeypatch.setattr(cron_poller, "load_schedule_jobs", lambda: [])
     monkeypatch.setattr(cron_poller, "scan_asana_tasks", lambda s, now: None)  # noqa: ARG005
     monkeypatch.setattr(cron_poller, "list_remote_branches", lambda repo_dir: ["origin/cogent/test"])  # noqa: ARG005
@@ -289,6 +295,8 @@ def test_tick_once_branch_job_retry_gate_and_exhaustion(monkeypatch) -> None:
     }
     monkeypatch.setattr(cron_poller, "load_state", lambda: state)
     monkeypatch.setattr(cron_poller, "prune_stale_worktrees", lambda: None)
+    monkeypatch.setattr(cron_poller, "prune_stale_state", lambda s, now: None)
+    monkeypatch.setattr(cron_poller, "rotate_old_logs", lambda: None)
     monkeypatch.setattr(cron_poller, "load_schedule_jobs", lambda: [])
     monkeypatch.setattr(cron_poller, "scan_asana_tasks", lambda s, now: None)  # noqa: ARG005
     monkeypatch.setattr(cron_poller, "list_remote_branches", lambda repo_dir: ["origin/cogent/test"])  # noqa: ARG005
