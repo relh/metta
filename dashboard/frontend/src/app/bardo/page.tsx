@@ -1,5 +1,11 @@
+import { Suspense } from 'react'
+
 import { BardoLobby } from '../../components/BardoLobby'
 
 export default function BardoPage() {
-  return <BardoLobby />
+  return (
+    <Suspense fallback={null}>
+      <BardoLobby />
+    </Suspense>
+  )
 }
