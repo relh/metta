@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -142,3 +142,79 @@ class TaskRankingSnapshot(BaseModel):
             execution_metrics=execution_metrics,
             ranked_tasks=ranked_tasks,
         )
+
+
+class PipelineFamilyShare(BaseModel):
+    family: str
+    count: int = Field(ge=0)
+    share: float = Field(ge=0.0, le=1.0)
+
+
+class TrainingExperimentMetrics(BaseModel):
+    running_now: int = Field(ge=0)
+    running_recent_7d: int = Field(ge=0)
+    running_stale_gt_14d: int = Field(ge=0)
+    finished_recent_7d: int = Field(ge=0)
+    crashed_recent_7d: int = Field(ge=0)
+    starts_recent_7d_lower_bound: int = Field(ge=0)
+    crash_rate_recent_7d: float = Field(ge=0.0, le=1.0)
+
+
+class SearchCoverageMetrics(BaseModel):
+    unique_families_30d: int = Field(ge=0)
+    top_family_share_30d: float = Field(ge=0.0, le=1.0)
+    family_entropy_30d: float = Field(ge=0.0, le=1.0)
+    dominant_families_30d: list[PipelineFamilyShare]
+
+
+class MeaningfulResultMetrics(BaseModel):
+    metric_keys_considered: list[str]
+    metric_presence_counts: dict[str, int]
+    primary_metric: str = ""
+    primary_metric_coverage_ratio: float = Field(ge=0.0, le=1.0)
+    measurable: bool
+    meaningful_events_7d: int = Field(ge=0)
+    meaningful_events_30d: int = Field(ge=0)
+    weekly_meaningful_rate: float = Field(ge=0.0)
+    threshold_definition: str
+
+
+class TrainingPipelineSnapshot(BaseModel):
+    generated_at: str
+    available: bool
+    source: str
+    notes: list[str] = Field(default_factory=list)
+    experiments: Optional[TrainingExperimentMetrics] = None
+    search_coverage: Optional[SearchCoverageMetrics] = None
+    meaningful_results: Optional[MeaningfulResultMetrics] = None
+
+    @classmethod
+    def unavailable(cls, source: str, note: str) -> "TrainingPipelineSnapshot":
+        return cls(
+            generated_at=datetime.now(tz=UTC).isoformat(),
+            available=False,
+            source=source,
+            notes=[note],
+        )
+
+
+class ResearchFunnelStages(BaseModel):
+    paper_selected: int = Field(ge=0)
+    author_repo_found: int = Field(ge=0)
+    implemented_in_metta: int = Field(ge=0)
+    paper_to_repo_conversion: float = Field(ge=0.0, le=1.0)
+    repo_to_impl_conversion: float = Field(ge=0.0, le=1.0)
+
+
+class ResearchFunnelSnapshot(BaseModel):
+    generated_at: str
+    tasks_total: int = Field(ge=0)
+    llm_scored_tasks: int = Field(ge=0)
+    llm_coverage: float = Field(ge=0.0, le=1.0)
+    status_counts: dict[str, int]
+    paper_signal_tasks: int = Field(ge=0)
+    repo_signal_tasks: int = Field(ge=0)
+    implemented_tasks: int = Field(ge=0)
+    paper_repo_tasks: int = Field(ge=0)
+    paper_repo_implemented_tasks: int = Field(ge=0)
+    stages: ResearchFunnelStages

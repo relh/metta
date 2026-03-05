@@ -17,6 +17,10 @@ def test_template_defaults_to_board_mode_ui() -> None:
     assert 'id="scoringMode"' in template
     assert "auto-refresh every 45s" in template
     assert 'id="refreshButton"' not in template
+    assert 'id="pipelineHealthCards"' in template
+    assert 'id="searchCoverageList"' in template
+    assert 'id="meaningfulResultsSummary"' in template
+    assert 'id="researchFunnelStages"' in template
 
 
 def test_app_enables_auto_refresh_and_buckets() -> None:
@@ -31,6 +35,10 @@ def test_app_enables_auto_refresh_and_buckets() -> None:
     assert 'bucketHtml("Now", "now", nowTasks, impactMetrics, executionMetrics)' in app_js
     assert 'bucketHtml("Next", "next", nextTasks, impactMetrics, executionMetrics)' in app_js
     assert 'bucketHtml("Later", "later", laterTasks, impactMetrics, executionMetrics)' in app_js
+    assert "const pipeline = board.pipeline || {};" in app_js
+    assert "renderPipelineSnapshot(pipeline);" in app_js
+    assert "const funnel = board.research_funnel || {};" in app_js
+    assert "renderResearchFunnel(funnel);" in app_js
 
 
 def test_app_renders_all_twelve_task_metrics_for_top_bets() -> None:

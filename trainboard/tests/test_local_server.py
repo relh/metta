@@ -6,6 +6,7 @@ from metta.trainingboard.local.backend.server import (
     _resolve_frontend_target,
     build_board_payload_for_state_dir,
     build_dashboard_for_state_dir,
+    build_pipeline_snapshot_for_state_dir,
     build_task_ranking_for_state_dir,
     cache_path_for_state_dir,
     dashboard_cache_path_for_state_dir,
@@ -102,9 +103,28 @@ def test_build_board_payload_for_state_dir_contains_dashboard_and_ranking(tmp_pa
     payload = build_board_payload_for_state_dir(tmp_path)
     assert "dashboard" in payload
     assert "task_ranking" in payload
+    assert "pipeline" in payload
+    assert "research_funnel" in payload
     assert len(payload["dashboard"]["ranked_axes"]) == 6
     assert "scoring_source" in payload["dashboard"]
     assert "ranked_tasks" in payload["task_ranking"]
+
+
+def test_pipeline_snapshot_returns_unavailable_when_wandb_fetch_fails(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv(server_module.WANDB_ENABLE_ENV, "1")
+    monkeypatch.setattr(server_module, "_pipeline_cache_payload", None)
+    monkeypatch.setattr(server_module, "_pipeline_cache_key", None)
+    monkeypatch.setattr(server_module, "_pipeline_cache_expires_at", 0.0)
+    monkeypatch.setattr(
+        server_module,
+        "fetch_wandb_state_samples",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("simulated wandb failure")),
+    )
+
+    payload = build_pipeline_snapshot_for_state_dir(tmp_path)
+    assert payload["available"] is False
+    assert "Pipeline metrics unavailable" in payload["notes"][0]
+    assert "simulated wandb failure" in payload["notes"][0]
 
 
 def test_dashboard_cache_path_prefers_newer_cache_between_repo_and_state(monkeypatch, tmp_path: Path) -> None:

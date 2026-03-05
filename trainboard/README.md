@@ -23,6 +23,13 @@ Top Bets is the global top-15 list, split into:
 - `Next` (ranks 6-10)
 - `Later` (ranks 11-15)
 
+Board mode also shows:
+
+- Training pipeline health: running now, 7d starts (lower-bound), 7d crash rate, stale-running count
+- Search-space coverage: family concentration and entropy over recent run-name families
+- Meaningful-result cadence: primary quality metric, coverage, and meaningful event rate
+- Paper-to-repo-to-metta funnel: stage counts + conversion rates
+
 ## Scoring Model (Important)
 
 LLM scores are the canonical source of truth.
@@ -52,6 +59,19 @@ uv run trainingboard serve --host 127.0.0.1 --port 8877
 ```
 
 Open `http://127.0.0.1:8877`.
+
+### Optional live W&B pipeline metrics
+
+Pipeline health is computed from W&B state samples only when enabled:
+
+```bash
+export TRAININGBOARD_ENABLE_WANDB_METRICS=1
+export TRAININGBOARD_WANDB_ENTITY=metta-research   # optional
+export TRAININGBOARD_WANDB_PROJECT=metta           # optional
+export TRAININGBOARD_WANDB_STATE_LIMIT=300         # optional, min 10 max 1000
+```
+
+When disabled, board mode still renders and marks pipeline metrics as unavailable.
 
 ## Typical Workflow
 

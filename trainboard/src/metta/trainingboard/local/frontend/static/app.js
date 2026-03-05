@@ -40,6 +40,14 @@ function formatNumber(value, digits = 2) {
   return Number.isFinite(numeric) ? numeric.toFixed(digits) : "-";
 }
 
+function formatPercent(value, digits = 1) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return "-";
+  }
+  return `${(numeric * 100).toFixed(digits)}%`;
+}
+
 function compactPrinciple(principle) {
   const parenthetical = /\(([^)]+)\)\s*$/.exec(principle || "");
   if (parenthetical) {
@@ -164,6 +172,124 @@ function bucketHtml(label, toneClass, tasks, impactMetrics, executionMetrics) {
   `;
 }
 
+function healthCardHtml(label, value, meta = "") {
+  return `
+    <article class="health-card">
+      <div class="health-label">${escapeHtml(label)}</div>
+      <div class="health-value">${escapeHtml(String(value))}</div>
+      <div class="health-meta">${escapeHtml(meta || "-")}</div>
+    </article>
+  `;
+}
+
+function kvRowHtml(label, value) {
+  return `<li><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></li>`;
+}
+
+function funnelStageHtml(label, value, ratio) {
+  const numericRatio = Number.isFinite(Number(ratio)) ? Math.max(0, Math.min(1, Number(ratio))) : 0;
+  return `
+    <article class="funnel-stage">
+      <div class="funnel-stage-head">
+        <span class="funnel-stage-title">${escapeHtml(label)}</span>
+        <span class="funnel-stage-value">${escapeHtml(String(value))}</span>
+      </div>
+      <div class="funnel-progress"><span style="width: ${(numericRatio * 100).toFixed(1)}%"></span></div>
+    </article>
+  `;
+}
+
+function renderPipelineSnapshot(pipeline) {
+  const cardsRoot = document.getElementById("pipelineHealthCards");
+  const coverageRoot = document.getElementById("searchCoverageList");
+  const meaningfulRoot = document.getElementById("meaningfulResultsSummary");
+  if (!cardsRoot || !coverageRoot || !meaningfulRoot) {
+    return;
+  }
+
+  if (!pipeline.available) {
+    cardsRoot.innerHTML = healthCardHtml("Pipeline Metrics", "Unavailable", (pipeline.notes || [])[0] || "-");
+    coverageRoot.innerHTML = kvRowHtml("Status", "Enable W&B metrics");
+    meaningfulRoot.innerHTML = kvRowHtml("Status", "Not measurable");
+    return;
+  }
+
+  const experiments = pipeline.experiments || {};
+  const searchCoverage = pipeline.search_coverage || {};
+  const meaningful = pipeline.meaningful_results || {};
+
+  cardsRoot.innerHTML = [
+    healthCardHtml("Running Now", Number(experiments.running_now || 0), "active experiments"),
+    healthCardHtml(
+      "7d Starts (LB)",
+      Number(experiments.starts_recent_7d_lower_bound || 0),
+      "running + finished + crashed",
+    ),
+    healthCardHtml(
+      "7d Crash Rate",
+      formatPercent(experiments.crash_rate_recent_7d, 1),
+      `${Number(experiments.crashed_recent_7d || 0)} crashed / ${Number(experiments.finished_recent_7d || 0)} finished`,
+    ),
+    healthCardHtml(
+      "Stale Running",
+      Number(experiments.running_stale_gt_14d || 0),
+      "older than 14 days",
+    ),
+  ].join("");
+
+  const familyRows = (searchCoverage.dominant_families_30d || [])
+    .slice(0, 5)
+    .map((item) => kvRowHtml(item.family, `${item.count} (${formatPercent(item.share, 1)})`));
+  coverageRoot.innerHTML = [
+    kvRowHtml("Unique families", Number(searchCoverage.unique_families_30d || 0)),
+    kvRowHtml("Top-family share", formatPercent(searchCoverage.top_family_share_30d, 1)),
+    kvRowHtml("Coverage entropy", formatNumber(searchCoverage.family_entropy_30d, 2)),
+    ...familyRows,
+  ].join("");
+
+  meaningfulRoot.innerHTML = [
+    kvRowHtml("Measurable", meaningful.measurable ? "Yes" : "No"),
+    kvRowHtml("Primary metric", meaningful.primary_metric || "-"),
+    kvRowHtml("Metric coverage", formatPercent(meaningful.primary_metric_coverage_ratio, 1)),
+    kvRowHtml("Meaningful events (7d)", Number(meaningful.meaningful_events_7d || 0)),
+    kvRowHtml("Meaningful events (30d)", Number(meaningful.meaningful_events_30d || 0)),
+    kvRowHtml("Weekly meaningful rate", formatNumber(meaningful.weekly_meaningful_rate, 2)),
+  ].join("");
+}
+
+function renderResearchFunnel(funnel) {
+  const stagesRoot = document.getElementById("researchFunnelStages");
+  const summaryRoot = document.getElementById("researchFunnelSummary");
+  if (!stagesRoot || !summaryRoot) {
+    return;
+  }
+  const stages = funnel.stages || {};
+  const paperSelected = Number(stages.paper_selected || 0);
+  const repoFound = Number(stages.author_repo_found || 0);
+  const implemented = Number(stages.implemented_in_metta || 0);
+
+  const repoRatio = paperSelected > 0 ? repoFound / paperSelected : 0;
+  const implRatio = paperSelected > 0 ? implemented / paperSelected : 0;
+  stagesRoot.innerHTML = [
+    funnelStageHtml("Paper selected", paperSelected, 1),
+    funnelStageHtml("Author repo found", repoFound, repoRatio),
+    funnelStageHtml("Implemented in metta", implemented, implRatio),
+  ].join("");
+
+  summaryRoot.innerHTML = [
+    kvRowHtml("Tasks total", Number(funnel.tasks_total || 0)),
+    kvRowHtml(
+      "LLM coverage",
+      `${Number(funnel.llm_scored_tasks || 0)}/${Number(funnel.tasks_total || 0)} (${formatPercent(funnel.llm_coverage, 1)})`,
+    ),
+    kvRowHtml("Paper signals", Number(funnel.paper_signal_tasks || 0)),
+    kvRowHtml("Repo signals", Number(funnel.repo_signal_tasks || 0)),
+    kvRowHtml("Implemented tasks", Number(funnel.implemented_tasks || 0)),
+    kvRowHtml("Paper→Repo conv", formatPercent(stages.paper_to_repo_conversion, 1)),
+    kvRowHtml("Repo→Impl conv", formatPercent(stages.repo_to_impl_conversion, 1)),
+  ].join("");
+}
+
 async function fetchBoardData() {
   const response = await fetch("/api/v1/board");
   if (!response.ok) {
@@ -173,7 +299,7 @@ async function fetchBoardData() {
   return response.json();
 }
 
-function renderDashboard(snapshot, taskRanking) {
+function renderDashboard(snapshot, taskRanking, pipeline, funnel) {
   const generatedNode = document.getElementById("generatedAt");
   const scoringNode = document.getElementById("scoringMode");
   const panelRoot = document.getElementById("axisPanels");
@@ -203,6 +329,9 @@ function renderDashboard(snapshot, taskRanking) {
     bucketHtml("Next", "next", nextTasks, impactMetrics, executionMetrics),
     bucketHtml("Later", "later", laterTasks, impactMetrics, executionMetrics),
   ].join("");
+
+  renderPipelineSnapshot(pipeline);
+  renderResearchFunnel(funnel);
 }
 
 async function refreshDashboard(trigger = "manual") {
@@ -215,13 +344,16 @@ async function refreshDashboard(trigger = "manual") {
     const board = await fetchBoardData();
     const snapshot = board.dashboard || {};
     const taskRanking = board.task_ranking || {};
-    renderDashboard(snapshot, taskRanking);
+    const pipeline = board.pipeline || {};
+    const funnel = board.research_funnel || {};
+    renderDashboard(snapshot, taskRanking, pipeline, funnel);
     const betCount = (taskRanking?.ranked_tasks || []).length;
     const axisCount = (snapshot?.ranked_axes || []).length;
     const llmScoredTasks = Number(snapshot?.llm_scored_tasks || 0);
     const tasksTotal = Number(snapshot?.tasks_total || 0);
+    const runningNow = Number(pipeline?.experiments?.running_now || 0);
     setStatus(
-      `Updated ${formatDate(snapshot.generated_at)} | ${axisCount} axes | llm ${llmScoredTasks}/${tasksTotal} | ${betCount} ranked tasks | auto-refresh ${Math.floor(AUTO_REFRESH_MS / 1000)}s`,
+      `Updated ${formatDate(snapshot.generated_at)} | running ${runningNow} | ${axisCount} axes | llm ${llmScoredTasks}/${tasksTotal} | ${betCount} ranked tasks | auto-refresh ${Math.floor(AUTO_REFRESH_MS / 1000)}s`,
     );
   } catch (error) {
     setStatus(`Failed to load dashboard: ${error.message}`, true);

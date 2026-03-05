@@ -309,6 +309,127 @@
         color: var(--muted);
         flex: 1 1 240px;
       }
+      .systems,
+      .funnel {
+        margin-top: 12px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--bg-panel);
+        padding: 14px;
+      }
+      .systems h2,
+      .funnel h2 {
+        margin: 0;
+        font-size: clamp(20px, 1.6vw, 30px);
+      }
+      .system-grid {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+      }
+      .health-card {
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
+        background: rgba(7, 14, 23, 0.92);
+        padding: 9px;
+      }
+      .health-label {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: clamp(10px, 0.75vw, 12px);
+      }
+      .health-value {
+        margin-top: 5px;
+        font-size: clamp(20px, 1.6vw, 30px);
+        font-weight: 700;
+        line-height: 1;
+      }
+      .health-meta {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: clamp(11px, 0.82vw, 14px);
+      }
+      .system-columns {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr 1fr;
+      }
+      .system-panel {
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
+        background: rgba(7, 14, 23, 0.92);
+        padding: 10px;
+      }
+      .system-panel h3 {
+        margin: 0 0 8px;
+        font-size: clamp(14px, 1vw, 18px);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .kv-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 5px;
+      }
+      .kv-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--muted);
+        font-size: clamp(11px, 0.82vw, 14px);
+      }
+      .kv-list strong {
+        color: var(--text);
+      }
+      .funnel-grid {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 2fr 1fr;
+      }
+      .funnel-stages {
+        display: grid;
+        gap: 7px;
+      }
+      .funnel-stage {
+        border: 1px solid var(--line-soft);
+        border-radius: 10px;
+        background: rgba(7, 14, 23, 0.95);
+        padding: 8px;
+      }
+      .funnel-stage-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .funnel-stage-title {
+        font-size: clamp(12px, 0.9vw, 15px);
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .funnel-stage-value {
+        font-size: clamp(16px, 1.2vw, 22px);
+        font-weight: 700;
+      }
+      .funnel-progress {
+        margin-top: 6px;
+        height: 7px;
+        border-radius: 999px;
+        background: rgba(19, 34, 49, 0.95);
+        overflow: hidden;
+      }
+      .funnel-progress > span {
+        display: block;
+        height: 100%;
+        background: linear-gradient(90deg, #5fb9ff, #6af0bd);
+      }
       @media (max-width: 1380px) {
         .hero {
           flex-wrap: wrap;
@@ -328,6 +449,13 @@
         }
         .grid {
           grid-template-columns: repeat(2, minmax(260px, 1fr));
+        }
+        .system-grid {
+          grid-template-columns: repeat(2, minmax(180px, 1fr));
+        }
+        .system-columns,
+        .funnel-grid {
+          grid-template-columns: 1fr;
         }
       }
       @media (max-width: 880px) {
@@ -371,6 +499,32 @@
       <section class="top-bets">
         <h2>Top Bets: Now / Next / Later</h2>
         <div class="bet-grid" id="topBetsBuckets"></div>
+      </section>
+
+      <section class="systems">
+        <h2>Training Pipeline Health</h2>
+        <div class="system-grid" id="pipelineHealthCards"></div>
+        <div class="system-columns">
+          <article class="system-panel">
+            <h3>Search Space Coverage (30d)</h3>
+            <ul class="kv-list" id="searchCoverageList"></ul>
+          </article>
+          <article class="system-panel">
+            <h3>Meaningful Result Cadence</h3>
+            <ul class="kv-list" id="meaningfulResultsSummary"></ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="funnel">
+        <h2>Paper to Repo to Metta Funnel</h2>
+        <div class="funnel-grid">
+          <div class="funnel-stages" id="researchFunnelStages"></div>
+          <article class="system-panel">
+            <h3>Funnel Snapshot</h3>
+            <ul class="kv-list" id="researchFunnelSummary"></ul>
+          </article>
+        </div>
       </section>
 
       <section class="grid" id="axisPanels"></section>

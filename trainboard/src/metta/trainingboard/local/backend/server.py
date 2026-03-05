@@ -5,14 +5,21 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import os
 import sys
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
 from metta.trainingboard.llm_scoring import default_llm_cache_path, load_llm_score_cache
-from metta.trainingboard.models import LLMTaskScores
+from metta.trainingboard.models import LLMTaskScores, TrainingPipelineSnapshot
+from metta.trainingboard.pipeline_metrics import (
+    build_research_funnel_snapshot,
+    build_training_pipeline_snapshot_from_samples,
+    fetch_wandb_state_samples,
+)
 from metta.trainingboard.scoring import (
     build_dashboard_snapshot,
     build_task_leaderboards,
@@ -28,6 +35,17 @@ DEFAULT_CACHE_RELATIVE_PATH = Path("cache/asana_research_cache.ndjson")
 DEFAULT_REPO_CACHE_FILE_NAME = "asana_research_cache.ndjson"
 DEFAULT_REPO_LLM_CACHE_FILE_NAME = "task_llm_scores.ndjson"
 REPO_CACHE_DIRECTORY = Path("trainboard/data")
+WANDB_ENABLE_ENV = "TRAININGBOARD_ENABLE_WANDB_METRICS"
+WANDB_ENTITY_ENV = "TRAININGBOARD_WANDB_ENTITY"
+WANDB_PROJECT_ENV = "TRAININGBOARD_WANDB_PROJECT"
+WANDB_STATE_LIMIT_ENV = "TRAININGBOARD_WANDB_STATE_LIMIT"
+WANDB_DEFAULT_ENTITY = "metta-research"
+WANDB_DEFAULT_PROJECT = "metta"
+PIPELINE_CACHE_TTL_SECONDS = 300
+
+_pipeline_cache_payload: Optional[dict] = None
+_pipeline_cache_key: Optional[tuple[str, str, int]] = None
+_pipeline_cache_expires_at: float = 0.0
 
 
 def cache_path_for_state_dir(state_dir: Path) -> Path:
@@ -147,7 +165,71 @@ def build_board_payload_for_state_dir(state_dir: Path) -> dict:
     return {
         "dashboard": build_dashboard_for_state_dir(state_dir),
         "task_ranking": build_task_ranking_for_state_dir(state_dir),
+        "pipeline": build_pipeline_snapshot_for_state_dir(state_dir),
+        "research_funnel": build_research_funnel_for_state_dir(state_dir),
     }
+
+
+def _enabled_flag(name: str) -> bool:
+    raw_value = os.environ.get(name, "")
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _wandb_per_state_limit() -> int:
+    raw_limit = os.environ.get(WANDB_STATE_LIMIT_ENV, "300").strip()
+    if not raw_limit.isdigit():
+        return 300
+    numeric_limit = int(raw_limit)
+    return max(10, min(1000, numeric_limit))
+
+
+def build_pipeline_snapshot_for_state_dir(_state_dir: Path) -> dict:
+    if not _enabled_flag(WANDB_ENABLE_ENV):
+        return TrainingPipelineSnapshot.unavailable(
+            source="wandb_state_samples",
+            note=f"Set {WANDB_ENABLE_ENV}=1 to enable live pipeline metrics.",
+        ).model_dump()
+
+    entity = os.environ.get(WANDB_ENTITY_ENV, WANDB_DEFAULT_ENTITY)
+    project = os.environ.get(WANDB_PROJECT_ENV, WANDB_DEFAULT_PROJECT)
+    per_state_limit = _wandb_per_state_limit()
+    cache_key = (entity, project, per_state_limit)
+    now_monotonic = time.monotonic()
+
+    global _pipeline_cache_payload, _pipeline_cache_key, _pipeline_cache_expires_at
+    if (
+        _pipeline_cache_payload is not None
+        and _pipeline_cache_key == cache_key
+        and now_monotonic < _pipeline_cache_expires_at
+    ):
+        return _pipeline_cache_payload
+
+    try:
+        samples = fetch_wandb_state_samples(
+            entity=entity,
+            project=project,
+            per_state_limit=per_state_limit,
+        )
+        payload = build_training_pipeline_snapshot_from_samples(samples).model_dump()
+    except Exception as exc:
+        payload = TrainingPipelineSnapshot.unavailable(
+            source="wandb_state_samples",
+            note=f"Pipeline metrics unavailable: {type(exc).__name__}: {exc}",
+        ).model_dump()
+
+    _pipeline_cache_payload = payload
+    _pipeline_cache_key = cache_key
+    _pipeline_cache_expires_at = now_monotonic + PIPELINE_CACHE_TTL_SECONDS
+    return payload
+
+
+def build_research_funnel_for_state_dir(state_dir: Path) -> dict:
+    papers = load_cached_papers(dashboard_cache_path_for_state_dir(state_dir))
+    llm_scores_by_gid, _ = _load_llm_scores_for_state_dir(state_dir)
+    return build_research_funnel_snapshot(
+        papers,
+        llm_scores_by_gid=llm_scores_by_gid or {},
+    ).model_dump()
 
 
 def _resolve_frontend_target(base: Path, file_name: str) -> Optional[Path]:
@@ -209,6 +291,14 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/v1/board":
             self._write_json(200, build_board_payload_for_state_dir(self.server.state_dir))
+            return
+
+        if parsed.path == "/api/v1/pipeline":
+            self._write_json(200, build_pipeline_snapshot_for_state_dir(self.server.state_dir))
+            return
+
+        if parsed.path == "/api/v1/research-funnel":
+            self._write_json(200, build_research_funnel_for_state_dir(self.server.state_dir))
             return
 
         if parsed.path.startswith("/static/"):
