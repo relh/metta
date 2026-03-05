@@ -128,7 +128,7 @@ def compute_weighted_score_percentiles(
     policy_scores: dict[UUID, float],
     scored_matches: list[ScoredMatchData],
     *,
-    percentiles: tuple[float, ...] = (30.0, 60.0, 90.0),
+    percentiles: tuple[float, ...] = tuple(float(p) for p in range(5, 100, 5)),
 ) -> dict[UUID, dict[int, float | None]]:
     weighted_scores: dict[UUID, list[tuple[float, float]]] = defaultdict(list)
 
@@ -149,9 +149,16 @@ def compute_weighted_score_percentiles(
     percentiles_by_policy: dict[UUID, dict[int, float | None]] = {}
     for policy_version_id in policy_scores:
         values = weighted_scores.get(policy_version_id, [])
-        percentiles_by_policy[policy_version_id] = {
-            int(percentile): _weighted_percentile(values, percentile) for percentile in percentiles
-        }
+        n = len(values)
+        if n < len(percentiles):
+            if n > 1:
+                indices = [round(i * (len(percentiles) - 1) / (n - 1)) for i in range(n)]
+            else:
+                indices = [len(percentiles) // 2]
+            capped = tuple(percentiles[i] for i in indices)
+        else:
+            capped = percentiles
+        percentiles_by_policy[policy_version_id] = {int(p): _weighted_percentile(values, p) for p in capped}
     return percentiles_by_policy
 
 

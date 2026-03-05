@@ -19,6 +19,64 @@ import { getPolicyColor } from "./policyColor";
 import { compareMissingLast, type ScoreSortDirection } from "./scoreSort";
 import { useFocusedPolicies } from "./useFocusedPolicies";
 
+function PercentileSparkChart({
+  percentiles,
+  poolMin,
+  poolMax,
+}: {
+  percentiles: Record<number, number>;
+  poolMin: number;
+  poolMax: number;
+}) {
+  const keys = Object.keys(percentiles)
+    .map(Number)
+    .sort((a, b) => a - b);
+  if (keys.length === 0) return null;
+
+  const [hoveredKey, setHoveredKey] = useState<number | null>(null);
+  const range = poolMax - poolMin || 1;
+  const h = 20;
+
+  return (
+    <div className="inline-flex items-end" style={{ height: h, gap: 1 }}>
+      {keys.map((k) => {
+        const barH = Math.max(
+          2,
+          ((percentiles[k] - poolMin) / range) * (h - 2),
+        );
+        return (
+          <div
+            key={k}
+            className="relative cursor-default"
+            onMouseEnter={() => setHoveredKey(k)}
+            onMouseLeave={() => setHoveredKey(null)}
+          >
+            <div
+              className={clsx(
+                "rounded-sm bg-blue-400 transition-opacity",
+                hoveredKey === null
+                  ? "opacity-60"
+                  : hoveredKey === k
+                    ? "opacity-100"
+                    : "opacity-30",
+              )}
+              style={{ height: barH, width: 4 }}
+            />
+            {hoveredKey === k && (
+              <div
+                className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 rounded px-2 py-1 font-mono text-xs whitespace-nowrap text-white shadow-lg"
+                style={{ backgroundColor: "rgba(17, 24, 39, 0.97)" }}
+              >
+                p{k}: {percentiles[k].toPrecision(3)}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type SortDirection = ScoreSortDirection;
 const stageSortPrefix = "stage:";
 
@@ -83,6 +141,24 @@ export function PlayersSortableTable({
   });
   const hasAllPoliciesFocused =
     rows.length > 0 && focusedPolicyIds.length === rows.length;
+
+  const poolPercentileRanges = useMemo(() => {
+    const ranges: Record<string, { min: number; max: number }> = {};
+    for (const col of columns) {
+      const allValues: number[] = [];
+      for (const row of rows) {
+        const p = row.stages[col.key]?.percentiles;
+        if (p) allValues.push(...Object.values(p));
+      }
+      if (allValues.length > 0) {
+        ranges[col.key] = {
+          min: Math.min(...allValues),
+          max: Math.max(...allValues),
+        };
+      }
+    }
+    return ranges;
+  }, [columns, rows]);
 
   const onSort = (sortKey: SortKey) => {
     setSortState((current) => {
@@ -302,20 +378,15 @@ export function PlayersSortableTable({
                       <span className="font-mono text-sm">
                         {stage.mean !== null ? stage.mean.toPrecision(4) : "-"}
                       </span>
-                      <span className="text-foreground-muted font-mono text-[0.7rem]">
-                        p30{" "}
-                        {stage.percentiles?.[30] !== undefined
-                          ? stage.percentiles[30].toPrecision(3)
-                          : "n/a"}{" "}
-                        | p60{" "}
-                        {stage.percentiles?.[60] !== undefined
-                          ? stage.percentiles[60].toPrecision(3)
-                          : "n/a"}{" "}
-                        | p90{" "}
-                        {stage.percentiles?.[90] !== undefined
-                          ? stage.percentiles[90].toPrecision(3)
-                          : "n/a"}
-                      </span>
+                      {stage.percentiles &&
+                        Object.keys(stage.percentiles).length > 0 &&
+                        poolPercentileRanges[column.key] && (
+                          <PercentileSparkChart
+                            percentiles={stage.percentiles}
+                            poolMin={poolPercentileRanges[column.key].min}
+                            poolMax={poolPercentileRanges[column.key].max}
+                          />
+                        )}
                       <Link
                         href={matchesRoute(seasonName, {
                           stage: hasTournamentProgress ? column.key : undefined,

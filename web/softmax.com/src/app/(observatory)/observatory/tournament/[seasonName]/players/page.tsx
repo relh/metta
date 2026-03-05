@@ -175,11 +175,30 @@ export default async function PlayersPage({
                   const sortedScores = [...scores].sort(
                     (left, right) => left - right,
                   );
+                  const allSteps = Array.from(
+                    { length: 19 },
+                    (_, i) => (i + 1) * 5,
+                  );
+                  const n = Math.min(scores.length, allSteps.length);
+                  const steps =
+                    n >= allSteps.length
+                      ? allSteps
+                      : n > 1
+                        ? Array.from(
+                            { length: n },
+                            (_, i) =>
+                              allSteps[
+                                Math.round(
+                                  (i * (allSteps.length - 1)) / (n - 1),
+                                )
+                              ],
+                          )
+                        : [allSteps[Math.floor(allSteps.length / 2)]];
                   statsByPolicy.set(policyId, {
                     mean,
                     stddev: calculateSampleStddev(scores, mean),
                     percentiles: Object.fromEntries(
-                      [30, 60, 90]
+                      steps
                         .map((p) => [p, calculatePercentile(sortedScores, p)])
                         .filter(([, v]) => v !== null),
                     ),
