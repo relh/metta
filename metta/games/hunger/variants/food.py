@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from cogames.core import CoGameMissionVariant
+from mettagrid.config.game_value import stat
+from mettagrid.config.handler_config import Handler, actorHas
 from mettagrid.config.mettagrid_config import (
     MettaGridConfig,
     RenderHudConfig,
     RenderStatusBarConfig,
     ResourceLimitsConfig,
 )
-from mettagrid.config.reward_config import inventoryReward
+from mettagrid.config.mutation.stats_mutation import logActorAgentStat
+from mettagrid.config.reward_config import reward
 
 
 class FoodVariant(CoGameMissionVariant):
@@ -22,14 +25,15 @@ class FoodVariant(CoGameMissionVariant):
         env.game.resource_names = list(env.game.resource_names) + ["food"]
 
         for agent in env.game.agents:
-            inv = agent.inventory
-            inv.limits["food"] = ResourceLimitsConfig(min=100, resources=["food"])
-            inv.initial["food"] = 20
-            agent.rewards["food"] = inventoryReward(
-                "food",
+            agent.inventory.limits["food"] = ResourceLimitsConfig(min=100, resources=["food"])
+            agent.inventory.initial["food"] = 20
+            agent.on_tick["track_food"] = Handler(
+                filters=[actorHas({"food": 1})],
+                mutations=[logActorAgentStat("fed_ticks")],
+            )
+            agent.rewards["food"] = reward(
+                stat("fed_ticks"),
                 weight=1.0 / env.game.max_steps,
-                max=1.0 / env.game.max_steps,
-                per_tick=True,
             )
 
         env.game.render.agent_huds["food"] = RenderHudConfig(resource="food", max=100, rank=0)
