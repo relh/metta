@@ -32,6 +32,7 @@ import {
   fetchDashboardData,
   fetchDashboardDefaultData,
   fetchDashboardRolePercentiles,
+  uploadDiagnoseBundle,
 } from '../lib/api'
 import { AnalysisLoadingQuips, AnalysisRichText } from './AnalysisRichText'
 import { RolePercentilesPanel } from './RolePercentilesPanel'
@@ -1078,6 +1079,9 @@ export function DashboardClient() {
   const [diagnoseNote, setDiagnoseNote] = useState<DiagnoseDoctorNote | null>(null)
   const [diagnoseNoteLoading, setDiagnoseNoteLoading] = useState(false)
   const [diagnoseNoteError, setDiagnoseNoteError] = useState<string | null>(null)
+  const [diagnoseUploadLoading, setDiagnoseUploadLoading] = useState(false)
+  const [diagnoseUploadError, setDiagnoseUploadError] = useState<string | null>(null)
+  const [diagnoseUploadSuccess, setDiagnoseUploadSuccess] = useState<string | null>(null)
 
   const activateTab = useCallback((tab: DashboardTab) => {
     setActiveTab(tab)
@@ -1190,6 +1194,27 @@ export function DashboardClient() {
       })
     diagnoseRunsRequestRef.current = request
     return request
+  }, [])
+
+  const uploadDiagnoseRunBundle = useCallback(async (bundle: File) => {
+    setDiagnoseUploadLoading(true)
+    setDiagnoseUploadError(null)
+    setDiagnoseUploadSuccess(null)
+
+    try {
+      const uploaded = await uploadDiagnoseBundle(bundle)
+      const refreshedRuns = sortDiagnoseRuns((await fetchDiagnoseRuns()).runs)
+      diagnoseRunsCacheRef.current = refreshedRuns
+      diagnoseRunsRequestRef.current = null
+      setDiagnoseRuns(refreshedRuns)
+      setDiagnoseError(null)
+      setSelectedDiagnoseRunId(uploaded.run_id)
+      setDiagnoseUploadSuccess(`Imported ${uploaded.run_id} from ${bundle.name}.`)
+    } catch (err) {
+      setDiagnoseUploadError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDiagnoseUploadLoading(false)
+    }
   }, [])
 
   const episodes = useMemo(() => (Array.isArray(data?.episodes) ? data.episodes : []), [data])
@@ -2137,6 +2162,13 @@ export function DashboardClient() {
     diagnoseNote && typeof diagnoseNote.social_review === 'object' && diagnoseNote.social_review !== null
       ? Boolean(diagnoseNote.social_review.confirmed)
       : null
+  const diagnoseUploadCommand = useMemo(() => {
+    const policyId = String(data?.policy?.id ?? '').trim()
+    if (!policyId) {
+      return 'uv run cogames diagnose class=random --mission-set cogsguard_evals --bundle-zip ./diagnose-results.zip'
+    }
+    return `uv run cogames diagnose "metta://policy/${policyId}" --mission-set cogsguard_evals --bundle-zip ./diagnose-results.zip`
+  }, [data?.policy?.id])
   const capabilityAuditSummary = useMemo(() => {
     const statuses = Object.values(data?.derived?.capability_code_audit?.capabilities ?? {})
     let yes = 0
@@ -4073,6 +4105,37 @@ export function DashboardClient() {
             <section className="grid" style={{ gap: 10 }}>
               <section className="grid" style={{ gap: 10 }}>
                 <section className="grid panel-grid" style={{ gap: 10 }}>
+                  <section className="card grid" style={{ gap: 8 }}>
+                    <h2 style={{ margin: 0 }}>Import Diagnose Bundle</h2>
+                    <p style={{ margin: 0, color: '#546b8a', fontSize: 13 }}>
+                      Run diagnose locally with a bundle export, then upload it here to render the doctor report.
+                    </p>
+                    <code>{diagnoseUploadCommand}</code>
+                    <label style={{ display: 'grid', gap: 6 }}>
+                      Diagnose bundle (.zip)
+                      <input
+                        type="file"
+                        accept=".zip,application/zip"
+                        disabled={diagnoseUploadLoading}
+                        onChange={(event) => {
+                          const bundle = event.currentTarget.files?.[0]
+                          event.currentTarget.value = ''
+                          if (!bundle) return
+                          void uploadDiagnoseRunBundle(bundle)
+                        }}
+                      />
+                    </label>
+                    {diagnoseUploadLoading ? <p style={{ margin: 0 }}>Uploading diagnose bundle...</p> : null}
+                    {diagnoseUploadError ? (
+                      <p style={{ margin: 0, color: '#b42318' }}>
+                        <strong>Error:</strong> {diagnoseUploadError}
+                      </p>
+                    ) : null}
+                    {diagnoseUploadSuccess ? (
+                      <p style={{ margin: 0, color: '#176537' }}>{diagnoseUploadSuccess}</p>
+                    ) : null}
+                  </section>
+
                   <section className="card grid" style={{ gap: 10 }}>
                     <h2 style={{ margin: 0 }}>Diagnose Control</h2>
                     {diagnoseLoading ? (

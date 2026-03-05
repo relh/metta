@@ -1,9 +1,13 @@
 import json
 import re
+import shutil
+import tempfile
+import uuid
+import zipfile
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -88,6 +92,14 @@ def _resolve_diagnose_root() -> Path | None:
     return repo_root / "outputs" / "cogames-diagnose" if (repo_root := _resolve_repo_root()) is not None else None
 
 
+def _required_diagnose_root() -> Path:
+    diagnose_root = _resolve_diagnose_root()
+    if diagnose_root is None:
+        raise HTTPException(status_code=500, detail="Diagnose root is not configured")
+    diagnose_root.mkdir(parents=True, exist_ok=True)
+    return diagnose_root
+
+
 def _list_run_ids(diagnose_root: Path) -> list[str]:
     if not diagnose_root.is_dir():
         return []
@@ -148,6 +160,125 @@ def _required_manifest_artifact_files(manifest: dict[str, Any]) -> set[str]:
     return set(artifact_files)
 
 
+def _assert_safe_bundle_member(value: str) -> PurePosixPath:
+    normalized = value.strip()
+    if not normalized:
+        raise HTTPException(status_code=422, detail=f"Invalid bundle entry: {value}")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or not path.parts:
+        raise HTTPException(status_code=422, detail=f"Invalid bundle entry: {value}")
+    for part in path.parts:
+        if part in {".", ".."}:
+            raise HTTPException(status_code=422, detail=f"Invalid bundle entry: {value}")
+        if not _ARTIFACT_COMPONENT_RE.fullmatch(part):
+            raise HTTPException(status_code=422, detail=f"Invalid bundle entry: {value}")
+    return PurePosixPath(*path.parts)
+
+
+def _read_bundle_json(bundle: zipfile.ZipFile, entry: zipfile.ZipInfo, *, detail: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(bundle.read(entry).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail=detail) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail=detail)
+    return payload
+
+
+def _resolve_bundle_members(bundle: zipfile.ZipFile) -> tuple[str, dict[str, zipfile.ZipInfo], dict[str, Any]]:
+    files_by_path: dict[PurePosixPath, zipfile.ZipInfo] = {}
+    for member in bundle.infolist():
+        if member.is_dir():
+            continue
+        safe_path = _assert_safe_bundle_member(member.filename)
+        files_by_path[safe_path] = member
+    if not files_by_path:
+        raise HTTPException(status_code=422, detail="Bundle contains no files")
+
+    manifest_paths = [path for path in files_by_path if path.name == "manifest.json"]
+    if len(manifest_paths) != 1:
+        raise HTTPException(status_code=422, detail="Bundle must include exactly one manifest.json")
+    bundle_root = manifest_paths[0].parent
+
+    relative_members: dict[str, zipfile.ZipInfo] = {}
+    for path, member in files_by_path.items():
+        if not path.is_relative_to(bundle_root):
+            continue
+        relative = path.relative_to(bundle_root).as_posix()
+        normalized_relative = _assert_safe_artifact_path(relative)
+        relative_members[normalized_relative] = member
+
+    if "doctor_note.json" not in relative_members:
+        raise HTTPException(status_code=422, detail="Bundle missing doctor_note.json")
+    if "manifest.json" not in relative_members:
+        raise HTTPException(status_code=422, detail="Bundle missing manifest.json")
+
+    manifest_payload = _read_bundle_json(bundle, relative_members["manifest.json"], detail="Invalid manifest.json")
+    run_id_raw = manifest_payload.get("run_id")
+    if not isinstance(run_id_raw, str) or not run_id_raw.strip():
+        raise HTTPException(status_code=422, detail="Manifest missing run_id")
+    run_id = run_id_raw.strip()
+    _assert_safe_name(run_id, "run id")
+    return run_id, relative_members, manifest_payload
+
+
+def _replace_run_directory(*, run_dir: Path, staged_run_dir: Path) -> None:
+    backup_dir: Path | None = None
+    try:
+        if run_dir.exists():
+            backup_dir = run_dir.with_name(f".{run_dir.name}.backup-{uuid.uuid4().hex}")
+            run_dir.replace(backup_dir)
+        staged_run_dir.replace(run_dir)
+    except OSError:
+        if backup_dir is not None and backup_dir.exists() and not run_dir.exists():
+            backup_dir.replace(run_dir)
+        raise
+    else:
+        if backup_dir is not None and backup_dir.exists():
+            shutil.rmtree(backup_dir)
+
+
+def _import_bundle(upload: UploadFile) -> DiagnoseRunSummary:
+    upload_name = upload.filename.strip() if upload.filename is not None else ""
+    if upload_name and not upload_name.lower().endswith(".zip"):
+        raise HTTPException(status_code=422, detail="Uploaded file must be a .zip bundle")
+
+    staged_run_dir: Path | None = None
+    try:
+        upload.file.seek(0)
+        with zipfile.ZipFile(upload.file) as bundle:
+            run_id, relative_members, manifest_payload = _resolve_bundle_members(bundle)
+            _required_manifest_artifact_files(manifest_payload)
+
+            diagnose_root = _required_diagnose_root()
+            run_dir = diagnose_root / run_id
+            staged_run_dir = Path(tempfile.mkdtemp(prefix=f".{run_id}.import-", dir=diagnose_root))
+            staged_run_dir_resolved = staged_run_dir.resolve()
+
+            for relative_path, member in relative_members.items():
+                target_path = staged_run_dir / Path(relative_path)
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                if not target_path.resolve().is_relative_to(staged_run_dir_resolved):
+                    raise HTTPException(status_code=422, detail=f"Invalid bundle entry: {relative_path}")
+                with bundle.open(member, "r") as source, target_path.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+
+            _replace_run_directory(run_dir=run_dir, staged_run_dir=staged_run_dir)
+            staged_run_dir = None
+
+    except HTTPException:
+        raise
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=422, detail="Uploaded file is not a valid zip bundle") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to import bundle: {exc}") from exc
+    finally:
+        if staged_run_dir is not None and staged_run_dir.exists():
+            shutil.rmtree(staged_run_dir, ignore_errors=True)
+
+    return DiagnoseRunSummary(run_id=run_id, manifest=manifest_payload)
+
+
 def create_cogames_diagnose_router() -> APIRouter:
     router = APIRouter(prefix="/dashboard/v1/cogames-diagnose", tags=["dashboard"])
 
@@ -194,5 +325,11 @@ def create_cogames_diagnose_router() -> APIRouter:
 
         headers = {"Content-Disposition": f'attachment; filename="{artifact}"'} if artifact.endswith(".zip") else None
         return FileResponse(path=artifact_file, media_type=_content_type_for_artifact(artifact), headers=headers)
+
+    @router.post("/runs/upload")
+    @timed_http_handler
+    async def upload_run_bundle(user: SoftmaxUser, bundle: Annotated[UploadFile, File(...)]) -> DiagnoseRunSummary:
+        del user
+        return _import_bundle(bundle)
 
     return router

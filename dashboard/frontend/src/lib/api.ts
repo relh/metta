@@ -708,7 +708,13 @@ export type DiagnoseRunsResponse = {
   runs: DiagnoseRunSummary[]
 }
 
+export type DiagnoseUploadResponse = {
+  run_id: string
+  manifest: DiagnoseManifest | null
+}
+
 type DashboardRequestMethod = 'GET' | 'POST'
+type DashboardRequestBody = string | FormData | undefined
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -746,14 +752,18 @@ async function parseJsonOrThrow(response: Response): Promise<unknown> {
 async function dashboardRequest<T>(
   path: string,
   method: DashboardRequestMethod = 'GET',
-  body?: string,
+  body?: DashboardRequestBody,
   extraHeaders?: Record<string, string>
 ): Promise<T> {
   const send = async (): Promise<Response> => {
     try {
+      const headers = getDashboardRequestHeaders(extraHeaders)
+      if (typeof FormData !== 'undefined' && body instanceof FormData) {
+        delete headers['Content-Type']
+      }
       return await fetch(`${DASHBOARD_API_BASE_URL}${path}`, {
         method,
-        headers: getDashboardRequestHeaders(extraHeaders),
+        headers,
         body,
         cache: 'no-store',
       })
@@ -855,6 +865,12 @@ export async function fetchDiagnoseDoctorNote(runId: string): Promise<DiagnoseDo
   return await dashboardRequest<DiagnoseDoctorNote>(
     `/dashboard/v1/cogames-diagnose/runs/${encodeURIComponent(runId)}/doctor-note`
   )
+}
+
+export async function uploadDiagnoseBundle(bundle: File): Promise<DiagnoseUploadResponse> {
+  const formData = new FormData()
+  formData.append('bundle', bundle)
+  return await dashboardRequest<DiagnoseUploadResponse>('/dashboard/v1/cogames-diagnose/runs/upload', 'POST', formData)
 }
 
 export function diagnoseArtifactUrl(runId: string, artifact: string): string {
