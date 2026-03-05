@@ -37,7 +37,12 @@ from metta.app_backend.job_runner.config import (
 )
 from metta.app_backend.job_runner.episode_recording import EpisodeJobSummary, record_job_episode
 from metta.app_backend.job_runner.job_artifacts import JobArtifact
-from metta.app_backend.job_runner.shared import capture_pod_logs, copy_replay_to_public, get_s3_client
+from metta.app_backend.job_runner.shared import (
+    capture_pod_logs,
+    copy_replay_to_public,
+    get_s3_client,
+    replay_public_uri,
+)
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients, new_tournament_clients
 from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus
 from metta.app_backend.models.k8s_events import K8sEvent
@@ -53,8 +58,27 @@ BATCH_SIZE = 500
 RECONCILE_INTERVAL_SECONDS = 60
 RECONCILE_GRACE_PERIOD_SECONDS = 86400  # 1 day — last-resort safety net for truly stuck jobs
 WORKER_THREADS = 16
+BACKGROUND_IO_THREADS = 8
 
 _db_engine = None
+_background_executor: ThreadPoolExecutor | None = None
+
+
+def _get_background_executor() -> ThreadPoolExecutor:
+    global _background_executor
+    if _background_executor is None:
+        _background_executor = ThreadPoolExecutor(max_workers=BACKGROUND_IO_THREADS, thread_name_prefix="bg-io")
+    return _background_executor
+
+
+def _fire_and_forget(fn: Callable, *args: Any) -> None:
+    def _wrapped():
+        try:
+            fn(*args)
+        except Exception as e:
+            logger.error(f"Background I/O failed ({fn.__name__}): {e}", exc_info=True)
+
+    _get_background_executor().submit(_wrapped)
 
 
 def _get_db_engine():
@@ -189,7 +213,7 @@ def _read_results_from_s3(job_id: UUID, bucket: str, key: str) -> tuple[PureSing
 
 
 def _read_results_with_retry(job_id: UUID, bucket: str, key: str) -> tuple[PureSingleEpisodeResult | None, str | None]:
-    delays = [1, 2, 4, 8]
+    delays = [0.5, 1, 2]
     last_error: str | None = None
     for i, delay in enumerate(delays):
         results, err = _read_results_from_s3(job_id, bucket, key)
@@ -438,7 +462,7 @@ def _extract_error_from_logs_with_retry(job_id: UUID) -> str | None:
     due to S3 eventual consistency. Retry with exponential backoff similar to
     _read_results_with_retry().
     """
-    delays = [0.5, 1, 2]  # Shorter delays than results (logs uploaded by event_processor)
+    delays = [0.2, 0.5, 1]  # Logs just uploaded by capture_pod_logs in same thread
 
     for i, delay in enumerate(delays):
         error = _extract_error_from_logs(job_id)
@@ -625,7 +649,7 @@ def _handle_pod_succeeded(
             current=job_request,
         )
         logger.warning(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), no results in S3{detail}")
-        capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
+        _fire_and_forget(capture_pod_logs, core_v1, ctx.pod_name, ctx.job_id)
         if ctx.job_name:
             _delete_k8s_job(batch_v1, ctx.job_name)
         return
@@ -639,8 +663,10 @@ def _handle_pod_succeeded(
             running_at=job_request.running_at,
         )
         job = EpisodeJobSummary.model_validate(job_request.job)
-        replay_uri = copy_replay_to_public(ctx.job_id)
-        record_job_episode(ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_uri)
+        _fire_and_forget(copy_replay_to_public, ctx.job_id)
+        record_job_episode(
+            ctx.job_id, job, results, stats_client, result_data=result_data, replay_uri=replay_public_uri(ctx.job_id)
+        )
         _update_job_status(stats_client, ctx.job_id, JobStatus.completed, current=job_request)
         logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     except Exception as e:
@@ -648,7 +674,7 @@ def _handle_pod_succeeded(
         _update_job_status(stats_client, ctx.job_id, JobStatus.completed, current=job_request)
         logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), episode recording failed")
 
-    capture_pod_logs(core_v1, ctx.pod_name, ctx.job_id)
+    _fire_and_forget(capture_pod_logs, core_v1, ctx.pod_name, ctx.job_id)
     if ctx.job_name:
         _delete_k8s_job(batch_v1, ctx.job_name)
 
@@ -946,6 +972,8 @@ def run_event_processor():
                 time.sleep(POLL_INTERVAL_SECONDS)
     finally:
         executor.shutdown(wait=False)
+        if _background_executor is not None:
+            _background_executor.shutdown(wait=False)
         stats_client.close()
 
 

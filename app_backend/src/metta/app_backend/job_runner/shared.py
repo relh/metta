@@ -30,6 +30,10 @@ def get_s3_client() -> BaseClient:
     return _s3_client
 
 
+def replay_public_uri(job_id: UUID) -> str:
+    return f"s3://{SOFTMAX_S3_BUCKET}/replays/{job_id}.json.z"
+
+
 def copy_replay_to_public(job_id: UUID) -> str | None:
     cfg = get_dispatch_config()
     if not cfg.EVAL_S3_BUCKET:
@@ -38,7 +42,7 @@ def copy_replay_to_public(job_id: UUID) -> str | None:
     source_key = JobArtifact.REPLAY.key(job_id)
     s3 = get_s3_client()
 
-    delays = [1, 2, 4, 8]
+    delays = [0.5, 1, 2]
     replay_exists = False
     for i, delay in enumerate(delays):
         try:
