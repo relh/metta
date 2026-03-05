@@ -21,10 +21,8 @@ class _TournamentGame(Protocol):
 
 
 def _tournament_game_registry() -> dict[str, _TournamentGame]:
-    try:
-        from metta.app_backend.tournament.referees.envs import GAME_REGISTRY  # noqa: PLC0415
-    except ModuleNotFoundError:
-        return {}
+    from metta.app_backend.tournament.referees.envs import GAME_REGISTRY  # noqa: PLC0415
+
     return GAME_REGISTRY
 
 

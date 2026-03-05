@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 import logging
-import os
-import platform
-import subprocess
-import sys
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 import metta.tools as tools
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
-from metta.rl.trainer_config import TorchProfilerConfig
+from recipes.experiment.abes._mamba_recipe_utils import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_FORWARD_PASS_MINIBATCH_TARGET_SIZE,
+    DEFAULT_LEARNING_RATE,
+    DEFAULT_MINIBATCH_SIZE,
+    apply_training_overrides,
+    ensure_cuda_extras_installed,
+    supports_mem_eff_path,
+)
 from recipes.prod.arena_basic_easy_shaped import (
     evaluate,
     evaluate_in_sweep,
@@ -27,66 +30,7 @@ from recipes.prod.arena_basic_easy_shaped import (
 
 logger = logging.getLogger(__name__)
 
-if TYPE_CHECKING:  # pragma: no cover
-    pass
-
-DEFAULT_LEARNING_RATE = 8e-4
-DEFAULT_BATCH_SIZE = 131_072
-DEFAULT_MINIBATCH_SIZE = 4_096
-DEFAULT_FORWARD_PASS_MINIBATCH_TARGET_SIZE = 1_024
 DEFAULT_SSM_LAYER = "Mamba2"
-
-
-def _supports_mem_eff_path() -> bool:
-    """Return True if the fused causal-conv1d kernels are available."""
-
-    try:
-        from causal_conv1d import causal_conv1d_fn  # type: ignore[attr-defined]  # noqa: PLC0415
-    except ModuleNotFoundError:
-        return False
-
-    return callable(causal_conv1d_fn)
-
-
-def _apply_overrides(
-    tool: tools.TrainTool,
-    *,
-    learning_rate: float,
-    batch_size: int,
-    minibatch_size: int,
-    forward_pass_minibatch_target_size: int,
-) -> None:
-    trainer = tool.trainer
-    asset = tool.policy_assets["learner0"]  # this recipe assumes a single trainable policy
-    optimizer = asset.optimizer
-    optimizer.learning_rate = learning_rate
-    trainer.batch_size = batch_size
-    trainer.minibatch_size = minibatch_size
-
-    tool.training_env.forward_pass_minibatch_target_size = forward_pass_minibatch_target_size
-    tool.torch_profiler = TorchProfilerConfig(interval_epochs=0)
-
-
-def _ensure_cuda_extras_installed() -> None:
-    if platform.system() != "Linux":
-        return
-
-    script_path = Path(__file__).resolve().parents[4] / "scripts" / "install_cuda_extras.py"
-    if not script_path.exists():
-        logger.warning("Could not locate install_cuda_extras.py; skipping CUDA extras installation.")
-        return
-
-    env = os.environ.copy()
-    try:
-        subprocess.run(
-            [sys.executable, str(script_path), "--quiet"],
-            check=True,
-            env=env,
-        )
-    except subprocess.CalledProcessError as exc:
-        logger.warning("Failed to install CUDA extras automatically: %s", exc)
-    except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning("Unexpected error while installing CUDA extras: %s", exc)
 
 
 def train(
@@ -99,7 +43,7 @@ def train(
     minibatch_size: int = DEFAULT_MINIBATCH_SIZE,
     forward_pass_minibatch_target_size: int = DEFAULT_FORWARD_PASS_MINIBATCH_TARGET_SIZE,
 ) -> tools.TrainTool:
-    _ensure_cuda_extras_installed()
+    ensure_cuda_extras_installed(logger)
 
     try:
         import metta.agent.components.mamba.config as mamba_config  # noqa: PLC0415
@@ -118,7 +62,7 @@ def train(
 
     policy = policy_architecture or MambaSlidingConfig()
 
-    mem_eff_supported = _supports_mem_eff_path()
+    mem_eff_supported = supports_mem_eff_path()
     if not mem_eff_supported:
         logger.warning(
             "[ABES Mamba] Detected missing causal-conv1d CUDA kernels; disabling memory-efficient path."
@@ -137,7 +81,7 @@ def train(
         policy_architecture=policy,
     )
 
-    _apply_overrides(
+    apply_training_overrides(
         tool,
         learning_rate=learning_rate,
         batch_size=batch_size,

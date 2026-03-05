@@ -29,11 +29,10 @@ _POLICY_PRESETS: dict[str, Callable[[], PolicyArchitecture]] = {
 
 
 def _policy_from_name(name: str) -> PolicyArchitecture:
-    try:
-        return _POLICY_PRESETS[name]()
-    except KeyError as exc:  # pragma: no cover - defensive guard
+    if name not in _POLICY_PRESETS:
         available = ", ".join(sorted(_POLICY_PRESETS))
-        raise ValueError(f"Unknown policy '{name}'. Available: {available}") from exc
+        raise ValueError(f"Unknown policy '{name}'. Available: {available}")
+    return _POLICY_PRESETS[name]()
 
 
 def train(

@@ -87,19 +87,9 @@ def get_run(
     run_id: str,
     entity: str = METTA_WANDB_ENTITY,
     project: str = METTA_WANDB_PROJECT,
-) -> Run | None:
-    try:
-        api = wandb.Api(timeout=20)
-    except Exception as e:  # noqa: BLE001
-        print(f"Error connecting to W&B: {str(e)}")
-        print("Make sure you are connected to W&B: `metta status`")
-        return None
-
-    try:
-        return api.run(f"{entity}/{project}/{run_id}")
-    except Exception as e:  # noqa: BLE001
-        print(f"Error getting run {run_id}: {str(e)}")
-        return None
+) -> Run:
+    api = wandb.Api(timeout=20)
+    return api.run(f"{entity}/{project}/{run_id}")
 
 
 def _resolve_step_column(df: pd.DataFrame) -> np.ndarray:
@@ -113,78 +103,68 @@ def _resolve_step_column(df: pd.DataFrame) -> np.ndarray:
 
 def _fetch_series(run_id: str, metric_key: str, fetch: FetchSpec) -> _RunSeries:
     run = get_run(run_id)
-    if run is None:
-        raise ValueError(f"Run not found: {run_id}")
 
     keys = fetch.keys or [metric_key]
 
     if fetch.samples is None:
         # Full scan path with step filtering
-        try:
-            records = list(
-                run.scan_history(keys=keys, min_step=fetch.min_step, max_step=fetch.max_step)  # type: ignore[attr-defined]
-            )
-        except Exception as e:  # noqa: BLE001
-            raise RuntimeError(f"Failed to scan history for run {run_id}: {e}") from e
+        records = list(
+            run.scan_history(keys=keys, min_step=fetch.min_step, max_step=fetch.max_step)  # type: ignore[attr-defined]
+        )
         df = pd.DataFrame(records)
     else:
-        try:
-            # If a sampling budget is provided together with a step window, adaptively
-            # request enough global samples to obtain approximately `samples` points
-            # inside the window, then uniformly downsample the window to the target.
-            if fetch.min_step is not None and fetch.max_step is not None and fetch.samples is not None:
-                desired = max(1, int(fetch.samples))
-                samples_n = max(desired, 2000)
-                max_samples_cap = 10_000
-                max_attempts = 3
+        # If a sampling budget is provided together with a step window, adaptively
+        # request enough global samples to obtain approximately `samples` points
+        # inside the window, then uniformly downsample the window to the target.
+        if fetch.min_step is not None and fetch.max_step is not None and fetch.samples is not None:
+            desired = max(1, int(fetch.samples))
+            samples_n = max(desired, 2000)
+            max_samples_cap = 10_000
+            max_attempts = 3
 
-                df_window: pd.DataFrame | None = None
-                last_window: pd.DataFrame | None = None
+            df_window: pd.DataFrame | None = None
+            last_window: pd.DataFrame | None = None
 
-                for _ in range(max_attempts):
-                    df_all = run.history(samples=samples_n, keys=keys, pandas=True)  # type: ignore[assignment]
-                    if ("_step" not in df_all.columns) and ("step" not in df_all.columns):
-                        raise ValueError(
-                            "Requested step window but no step column ('_step' or 'step') present in fetched history."
-                        )
-                    steps_all = _resolve_step_column(df_all)
-                    lo = float(fetch.min_step)
-                    hi = float(fetch.max_step)
-                    mask = (steps_all >= lo) & (steps_all <= hi)
-                    df_w = df_all.loc[mask]
-                    last_window = df_w
-                    if len(df_w) >= desired or samples_n >= max_samples_cap:
-                        df_window = df_w
-                        break
-                    # Increase request size based on observed fraction in window
-                    window_count = max(1, int(len(df_w)))
-                    samples_n = int(
-                        min(
-                            max_samples_cap,
-                            math.ceil(desired * samples_n / window_count * 1.25),
-                        )
-                    )
-
-                if df_window is None:
-                    df_window = last_window if last_window is not None else df_all
-
-                # Fail fast if the requested window does not meet the desired budget
-                if len(df_window) < desired:
+            for _ in range(max_attempts):
+                df_all = run.history(samples=samples_n, keys=keys, pandas=True)  # type: ignore[assignment]
+                if ("_step" not in df_all.columns) and ("step" not in df_all.columns):
                     raise ValueError(
-                        f"Insufficient points in requested step window (need >= {desired}) in run {run_id}"
+                        "Requested step window but no step column ('_step' or 'step') present in fetched history."
                     )
+                steps_all = _resolve_step_column(df_all)
+                lo = float(fetch.min_step)
+                hi = float(fetch.max_step)
+                mask = (steps_all >= lo) & (steps_all <= hi)
+                df_w = df_all.loc[mask]
+                last_window = df_w
+                if len(df_w) >= desired or samples_n >= max_samples_cap:
+                    df_window = df_w
+                    break
+                # Increase request size based on observed fraction in window
+                window_count = max(1, int(len(df_w)))
+                samples_n = int(
+                    min(
+                        max_samples_cap,
+                        math.ceil(desired * samples_n / window_count * 1.25),
+                    )
+                )
 
-                # Uniformly downsample to the desired budget inside the window
-                if len(df_window) > desired:
-                    idx = np.linspace(0, len(df_window) - 1, num=desired, dtype=int)
-                    df_window = df_window.iloc[idx]
+            if df_window is None:
+                df_window = last_window if last_window is not None else df_all
 
-                df = df_window
-            else:
-                # No window specified; regular global sampling is fine
-                df = run.history(samples=fetch.samples, keys=keys, pandas=True)  # type: ignore[assignment]
-        except Exception as e:  # noqa: BLE001
-            raise RuntimeError(f"Failed to fetch sampled history for run {run_id}: {e}") from e
+            # Fail fast if the requested window does not meet the desired budget
+            if len(df_window) < desired:
+                raise ValueError(f"Insufficient points in requested step window (need >= {desired}) in run {run_id}")
+
+            # Uniformly downsample to the desired budget inside the window
+            if len(df_window) > desired:
+                idx = np.linspace(0, len(df_window) - 1, num=desired, dtype=int)
+                df_window = df_window.iloc[idx]
+
+            df = df_window
+        else:
+            # No window specified; regular global sampling is fine
+            df = run.history(samples=fetch.samples, keys=keys, pandas=True)  # type: ignore[assignment]
 
     if metric_key not in df.columns:
         raise ValueError(f"Metric '{metric_key}' not found in run {run_id}")
@@ -405,64 +385,59 @@ def _ttest_optional(
     paired: bool, control: np.ndarray, candidate: np.ndarray, assumption_alpha: float
 ) -> dict[str, Any]:
     result: dict[str, Any] = {"warnings": [], "assumptions": {}}
-    try:
-        if paired:
-            if len(control) != len(candidate):
-                raise ValueError("paired t-test requires equal-length samples (control vs candidate)")
-            diffs = candidate - control
-            # Assumptions: normality on differences
-            if len(diffs) < 2:
-                result["warnings"].append("Insufficient samples for Shapiro-Wilk (n<2); skipping t-test")
-                return result
-            w_stat, w_p = st.shapiro(diffs)
-            # Compute test statistics but only report if assumptions pass
-            t_stat, p_val = st.ttest_rel(candidate, control, nan_policy="raise")  # type: ignore
-            if float(w_p) < assumption_alpha:
-                result["warnings"].append(f"Shapiro-Wilk normality on diffs failed (p={float(w_p):.6g})")
-            else:
-                result["ttest"] = {"t_stat": float(t_stat), "p_value": float(p_val)}
-            result["assumptions"].update(
-                {
-                    "normality_shapiro_W": float(w_stat),
-                    "normality_p": float(w_p),
-                }
-            )
+    if paired:
+        if len(control) != len(candidate):
+            raise ValueError("paired t-test requires equal-length samples (control vs candidate)")
+        diffs = candidate - control
+        # Assumptions: normality on differences
+        if len(diffs) < 3:
+            result["warnings"].append("Insufficient samples for Shapiro-Wilk (n<3); skipping t-test")
+            return result
+        w_stat, w_p = st.shapiro(diffs)
+        # Compute test statistics but only report if assumptions pass
+        t_stat, p_val = st.ttest_rel(candidate, control, nan_policy="raise")  # type: ignore
+        if float(w_p) < assumption_alpha:
+            result["warnings"].append(f"Shapiro-Wilk normality on diffs failed (p={float(w_p):.6g})")
         else:
-            # Assumptions: approximate normality of each group; report Levene as well
-            if len(control) < 2 or len(candidate) < 2:
-                result["warnings"].append(
-                    "Insufficient samples for Shapiro-Wilk (n<2) in one or both groups; skipping t-test"
-                )
-                return result
-            w_stat_c, w_p_c = st.shapiro(control)
-            w_stat_t, w_p_t = st.shapiro(candidate)
-            lev_stat, lev_p = st.levene(control, candidate, center="mean")
-            # Compute Welch's t-test but only report if normality checks pass
-            t_stat, p_val = st.ttest_ind(candidate, control, equal_var=False, nan_policy="raise")
-            violations: list[str] = []
-            if float(w_p_c) < assumption_alpha:
-                violations.append(f"control normality (p={float(w_p_c):.6g})")
-            if float(w_p_t) < assumption_alpha:
-                violations.append(f"candidate normality (p={float(w_p_t):.6g})")
-            if not violations:
-                result["ttest"] = {"t_stat": float(t_stat), "p_value": float(p_val)}
-            else:
-                result["warnings"].append("Assumption violations: " + "; ".join(violations))
-            result["assumptions"].update(
-                {
-                    "normality_control_W": float(w_stat_c),
-                    "normality_control_p": float(w_p_c),
-                    "normality_candidate_W": float(w_stat_t),
-                    "normality_candidate_p": float(w_p_t),
-                    "levene_stat": float(lev_stat),
-                    "levene_p": float(lev_p),
-                }
+            result["ttest"] = {"t_stat": float(t_stat), "p_value": float(p_val)}
+        result["assumptions"].update(
+            {
+                "normality_shapiro_W": float(w_stat),
+                "normality_p": float(w_p),
+            }
+        )
+    else:
+        # Assumptions: approximate normality of each group; report Levene as well
+        if len(control) < 3 or len(candidate) < 3:
+            result["warnings"].append(
+                "Insufficient samples for Shapiro-Wilk (n<3) in one or both groups; skipping t-test"
             )
-        return result
-    except Exception as e:  # noqa: BLE001
-        # Do not fail the overall analysis; record the failure and continue
-        result["warnings"].append(f"t-test computation failed: {e}")
-        return result
+            return result
+        w_stat_c, w_p_c = st.shapiro(control)
+        w_stat_t, w_p_t = st.shapiro(candidate)
+        lev_stat, lev_p = st.levene(control, candidate, center="mean")
+        # Compute Welch's t-test but only report if normality checks pass
+        t_stat, p_val = st.ttest_ind(candidate, control, equal_var=False, nan_policy="raise")
+        violations: list[str] = []
+        if float(w_p_c) < assumption_alpha:
+            violations.append(f"control normality (p={float(w_p_c):.6g})")
+        if float(w_p_t) < assumption_alpha:
+            violations.append(f"candidate normality (p={float(w_p_t):.6g})")
+        if not violations:
+            result["ttest"] = {"t_stat": float(t_stat), "p_value": float(p_val)}
+        else:
+            result["warnings"].append("Assumption violations: " + "; ".join(violations))
+        result["assumptions"].update(
+            {
+                "normality_control_W": float(w_stat_c),
+                "normality_control_p": float(w_p_c),
+                "normality_candidate_W": float(w_stat_t),
+                "normality_candidate_p": float(w_p_t),
+                "levene_stat": float(lev_stat),
+                "levene_p": float(lev_p),
+            }
+        )
+    return result
 
 
 class CompareTool(Tool):
