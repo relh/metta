@@ -87,14 +87,17 @@ PR_NUMBER=$(gh pr view --json number -q '.number')
 
 ### Step 2: Fetch All Comment Threads
 
-**Get review threads with FULL conversation:**
+Fetch from **three sources** to catch all comments — review threads, regular PR comments (where bots like Graphite
+post), and Greptile.
+
+#### 2a: Review Threads (inline code comments)
 
 ```bash
 gh api graphql -f query='
   query($owner: String!, $repo: String!, $pr: Int!) {
     repository(owner: $owner, name: $repo) {
       pullRequest(number: $pr) {
-        reviewThreads(first: 250) {
+        reviewThreads(first: 100) {
           nodes {
             id
             isResolved
@@ -111,7 +114,7 @@ gh api graphql -f query='
               pageInfo { hasNextPage }
             }
           }
-          pageInfo { hasNextPage }
+          pageInfo { hasNextPage endCursor }
         }
       }
     }
@@ -119,10 +122,37 @@ gh api graphql -f query='
 ' -f owner=$OWNER -f repo=$REPO -F pr=$PR_NUMBER
 ```
 
-**Note:** If `pageInfo.hasNextPage` is `true` for either threads or comments, the PR has more data than fetched. Log a
-warning and consider manual review for such large PRs.
+**Pagination:** If `pageInfo.hasNextPage` is `true`, fetch the next page using `after: "<endCursor>"` on the
+`reviewThreads` connection. Repeat until all pages are fetched.
 
-**Also check Greptile for additional comments:**
+#### 2b: PR Comments (bot comments, top-level discussion)
+
+Bots like Graphite post review suggestions as regular PR comments (not review threads). These often contain suggested
+code changes with line references. Fetch them via the REST API:
+
+```bash
+gh api repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments --paginate \
+  --jq '.[] | {id, path, line, body, user: .user.login, created_at, in_reply_to_id}'
+```
+
+This returns **pull request review comments** — inline comments on the diff that may not appear as review threads (e.g.,
+Graphite bot suggestions, single-comment reviews without a thread).
+
+Also fetch **issue-style comments** (top-level PR discussion, not tied to specific lines):
+
+```bash
+gh api repos/$OWNER/$REPO/issues/$PR_NUMBER/comments --paginate \
+  --jq '.[] | {id, body, user: .user.login, created_at}'
+```
+
+**Deduplication:** Some comments appear in both the GraphQL review threads and REST responses. Deduplicate by matching
+on `path + line + author + body` or by comment ID. Prefer the GraphQL thread representation when duplicates exist (it
+preserves thread structure and resolution status).
+
+**Filtering:** Focus on comments that contain actionable feedback — look for suggested code changes (` ```suggestion `
+blocks), explicit fix requests, or bug reports. Skip pure acknowledgments ("LGTM", "looks good", etc.).
+
+#### 2c: Greptile (if available)
 
 ```
 mcp__plugin_greptile_greptile__list_merge_request_comments
