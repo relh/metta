@@ -178,7 +178,7 @@ export type ProgressResponse = Omit<
   stage_flow: NonNullable<Schemas["TeamTournamentProgress"]["stage_flow"]>;
 };
 export type StageStats = Schemas["StageStats"];
-export type TeamSummary = Schemas["TeamSummary-Output"];
+export type TeamSummary = Schemas["TeamSummary"];
 export type TeamCogSummary = Schemas["TeamCogSummary"];
 
 // ── SQL (not in generated spec — routes have include_in_schema=False) ──

@@ -1519,7 +1519,7 @@ export interface components {
       policy: components["schemas"]["PolicyVersionSummary"];
     };
     /** TeamSummary */
-    "TeamSummary-Output": {
+    TeamSummary: {
       /**
        * Id
        * Format: uuid
@@ -1620,6 +1620,10 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
+      /** Input */
+      input?: unknown;
+      /** Context */
+      ctx?: Record<string, never>;
     };
   };
   responses: never;
@@ -2608,7 +2612,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TeamSummary-Output"][];
+          "application/json": components["schemas"]["TeamSummary"][];
         };
       };
       /** @description Validation Error */
@@ -2674,7 +2678,7 @@ export interface operations {
         content: {
           "application/json":
             | components["schemas"]["LeaderboardEntry"][]
-            | components["schemas"]["TeamSummary-Output"][]
+            | components["schemas"]["TeamSummary"][]
             | components["schemas"]["ScorePoliciesLeaderboardEntry"][];
         };
       };

@@ -1675,6 +1675,10 @@ export interface components {
        * @description Classified error type: timeout, oom, policy_error, unknown
        */
       error_type?: string | null;
+      /** Running At */
+      running_at?: string | null;
+      /** Completed At */
+      completed_at?: string | null;
       job_type: components["schemas"]["JobType"];
       /** Job */
       job: {
@@ -1694,10 +1698,6 @@ export interface components {
       created_at?: string;
       /** Dispatched At */
       dispatched_at?: string | null;
-      /** Running At */
-      running_at?: string | null;
-      /** Completed At */
-      completed_at?: string | null;
     };
     /** JobRequestCreate */
     JobRequestCreate: {
@@ -1778,6 +1778,10 @@ export interface components {
        * @description Classified error type: timeout, oom, policy_error, unknown
        */
       error_type?: string | null;
+      /** Running At */
+      running_at?: string | null;
+      /** Completed At */
+      completed_at?: string | null;
     };
     /**
      * JobStatus
@@ -2880,47 +2884,7 @@ export interface components {
       policy: components["schemas"]["PolicyVersionSummary"];
     };
     /** TeamSummary */
-    "TeamSummary-Input": {
-      /**
-       * Id
-       * Format: uuid
-       * @description Unique team identifier
-       */
-      id: string;
-      /**
-       * Pool Name
-       * @description Name of the pool (stage bucket) where this team record exists
-       */
-      pool_name: string;
-      /**
-       * Eliminated
-       * @description Whether this team was culled in its team-eval round
-       */
-      eliminated: boolean;
-      /**
-       * Score
-       * @description Team score computed for elimination ranking in its current round, if scored
-       */
-      score: number | null;
-      /**
-       * Matches
-       * @description Number of completed match records linked to this team_id
-       * @default 0
-       */
-      matches: number;
-      /**
-       * Cogs
-       * @description Ordered team composition; each cog is one slot containing a policy version
-       */
-      cogs: components["schemas"]["TeamCogSummary"][];
-      /**
-       * Created At
-       * @description ISO 8601 timestamp when this team row was created
-       */
-      created_at: string;
-    };
-    /** TeamSummary */
-    "TeamSummary-Output": {
+    TeamSummary: {
       /**
        * Id
        * Format: uuid
@@ -3029,6 +2993,10 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
+      /** Input */
+      input?: unknown;
+      /** Context */
+      ctx?: Record<string, never>;
     };
     /** WhoAmIResponse */
     WhoAmIResponse: {
@@ -5043,7 +5011,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TeamSummary-Output"][];
+          "application/json": components["schemas"]["TeamSummary"][];
         };
       };
       /** @description Validation Error */
@@ -5109,7 +5077,7 @@ export interface operations {
         content: {
           "application/json":
             | components["schemas"]["LeaderboardEntry"][]
-            | components["schemas"]["TeamSummary-Output"][]
+            | components["schemas"]["TeamSummary"][]
             | components["schemas"]["ScorePoliciesLeaderboardEntry"][];
         };
       };
