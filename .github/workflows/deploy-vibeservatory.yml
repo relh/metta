@@ -1,4 +1,4 @@
-name: "Deploy Dashboard Backend"
+name: "Deploy Vibeservatory"
 
 on:
   push:
@@ -6,14 +6,16 @@ on:
       - main
     paths:
       - "vibeservatory/backend/**"
+      - "chatprop/**"
+      - "trainboard/**"
       - "app_backend/**"
       - "common/**"
       - "packages/mettagrid/**"
       - "packages/cogames/**"
       - "packages/cogames-agents/**"
       - "devops/docker/Dockerfile.backend"
-      - "devops/charts/dashboard-backend/**"
-      - ".github/workflows/deploy-dashboard-backend.yml"
+      - "devops/charts/vibeservatory/**"
+      - ".github/workflows/deploy-vibeservatory.yml"
   workflow_dispatch: {}
 
 jobs:
@@ -27,10 +29,10 @@ jobs:
     with:
       image_name: metta-app-backend
       dockerfile: ./devops/docker/Dockerfile.backend
-      tag_suffix: -dashboard-backend
+      tag_suffix: -vibeservatory
       namespace: observatory
-      release: dashboard-backend
-      chart: ./devops/charts/dashboard-backend
+      release: vibeservatory
+      chart: ./devops/charts/vibeservatory
       production_helm_values: >-
         --install
         --atomic --timeout 10m

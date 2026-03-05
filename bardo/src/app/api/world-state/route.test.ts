@@ -3,11 +3,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { bardoProxyHeaders } from './route'
 
 const ORIGINAL_AUTH_COOKIE_NAME = process.env.OBSERVATORY_AUTH_COOKIE_NAME
+const ORIGINAL_NEXT_PUBLIC_AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME
 
-function fakeRequest(args: {
-  headers?: Record<string, string>
-  cookies?: Record<string, string>
-} = {}) {
+function fakeRequest(
+  args: {
+    headers?: Record<string, string>
+    cookies?: Record<string, string>
+  } = {}
+) {
   const headers = new Headers(args.headers)
   const cookieMap = args.cookies ?? {}
 
@@ -25,9 +28,15 @@ function fakeRequest(args: {
 afterEach(() => {
   if (ORIGINAL_AUTH_COOKIE_NAME === undefined) {
     delete process.env.OBSERVATORY_AUTH_COOKIE_NAME
-    return
+  } else {
+    process.env.OBSERVATORY_AUTH_COOKIE_NAME = ORIGINAL_AUTH_COOKIE_NAME
   }
-  process.env.OBSERVATORY_AUTH_COOKIE_NAME = ORIGINAL_AUTH_COOKIE_NAME
+
+  if (ORIGINAL_NEXT_PUBLIC_AUTH_COOKIE_NAME === undefined) {
+    delete process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME
+  } else {
+    process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME = ORIGINAL_NEXT_PUBLIC_AUTH_COOKIE_NAME
+  }
 })
 
 describe('bardoProxyHeaders', () => {
@@ -81,6 +90,37 @@ describe('bardoProxyHeaders', () => {
     expect(bardoProxyHeaders(request)).toEqual({
       Accept: 'application/json',
       'X-Auth-Token': 'custom-token',
+    })
+  })
+
+  it('falls back to NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME when OBSERVATORY_AUTH_COOKIE_NAME is unset', () => {
+    delete process.env.OBSERVATORY_AUTH_COOKIE_NAME
+    process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME = 'next_public_cookie_name'
+    const request = fakeRequest({
+      cookies: {
+        next_public_cookie_name: 'next-public-token',
+      },
+    })
+
+    expect(bardoProxyHeaders(request)).toEqual({
+      Accept: 'application/json',
+      'X-Auth-Token': 'next-public-token',
+    })
+  })
+
+  it('prefers OBSERVATORY_AUTH_COOKIE_NAME over NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME when both are set', () => {
+    process.env.OBSERVATORY_AUTH_COOKIE_NAME = 'private_cookie_name'
+    process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME = 'public_cookie_name'
+    const request = fakeRequest({
+      cookies: {
+        private_cookie_name: 'private-token',
+        public_cookie_name: 'public-token',
+      },
+    })
+
+    expect(bardoProxyHeaders(request)).toEqual({
+      Accept: 'application/json',
+      'X-Auth-Token': 'private-token',
     })
   })
 })

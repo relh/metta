@@ -5,7 +5,7 @@
 Audit of current implementation against the Thread Vision spec for Cogames Diagnose, across:
 
 - Diagnose engine: `packages/cogames/src/cogames/diagnose.py`
-- Dashboard backend diagnose API: `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
+- Vibeservatory backend diagnose API: `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
 - Dashboard frontend diagnose views:
   - `dashboard/frontend/src/components/CogamesDiagnosePanel.tsx`
   - `dashboard/frontend/src/app/diagnose/page.tsx`
@@ -153,14 +153,14 @@ Impact:
 
 - Stage-2 gate/validity display can report false blocked/invalid state.
 
-3. **Dashboard backend artifact route cannot serve nested artifact paths**
+3. **Vibeservatory backend artifact route cannot serve nested artifact paths**
 
 - Route pattern + artifact regex only allow flat file names.
 - Manifest can contain nested artifacts (for example `replays/...`), but API rejects path separators.
 
 Impact:
 
-- Inability to fetch nested artifacts directly from dashboard backend.
+- Inability to fetch nested artifacts directly from Vibeservatory backend.
 
 4. **Diagnose tab omits key decision context already available in artifacts**
 

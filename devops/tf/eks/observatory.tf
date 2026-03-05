@@ -13,7 +13,7 @@ module "observatory_irsa" {
       provider_arn               = module.eks.oidc_provider_arn
       namespace_service_accounts = [
         "observatory:observatory-backend",
-        "observatory:dashboard-backend",
+        "observatory:vibeservatory",
       ]
     }
   }

@@ -9,4 +9,9 @@ If you don't have the `metta` command, it has not been. It's necessary for the d
 ## Development
 
 To bring up the site locally, run:
-`metta softmax-com up`
+`metta dev softmax-com --backend local`
+
+For first-time setup in a fresh local environment:
+
+- start Postgres: `metta dev postgres up -d`
+- run migrations: `metta dev softmax-com-db-migrate`

@@ -1,0 +1,51 @@
+{{- if .Values.chatprop.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-chatprop
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.cert_manager_issuer | required "cert_manager_issuer is required" }}
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: {{ .Values.chatprop.host | required "chatprop.host is required" | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Release.Name }}-chatprop
+            port:
+              number: {{ .Values.chatprop.port }}
+  tls:
+  - hosts:
+    - {{ .Values.chatprop.host | required "chatprop.host is required" }}
+    secretName: {{ .Release.Name }}-chatprop-tls
+---
+{{- end }}
+{{- if .Values.trainboard.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-trainboard
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.cert_manager_issuer | required "cert_manager_issuer is required" }}
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: {{ .Values.trainboard.host | required "trainboard.host is required" | quote }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ .Release.Name }}-trainboard
+            port:
+              number: {{ .Values.trainboard.port }}
+  tls:
+  - hosts:
+    - {{ .Values.trainboard.host | required "trainboard.host is required" }}
+    secretName: {{ .Release.Name }}-trainboard-tls
+{{- end }}

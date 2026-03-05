@@ -15,6 +15,24 @@ type PolicyDashboardSearchParams = {
 export default async function PolicyDashboardPage(props: {
   searchParams: Promise<PolicyDashboardSearchParams>;
 }) {
+  if (!config.policyDashboardUrl) {
+    return (
+      <SoftmaxGuard>
+        <div className="mx-auto max-w-3xl p-6">
+          <div className="border-border-strong bg-surface rounded border p-4">
+            <h1 className="text-foreground text-lg font-semibold">
+              Policy Dashboard is not configured
+            </h1>
+            <p className="text-foreground-muted mt-2">
+              Set <code>OBSERVATORY_POLICY_DASHBOARD_URL</code> to the hosted
+              Policy Dashboard URL for this environment.
+            </p>
+          </div>
+        </div>
+      </SoftmaxGuard>
+    );
+  }
+
   const searchParams = await props.searchParams;
   const policyVersionId = searchParams.policyVersionId;
   const tab = searchParams.tab;

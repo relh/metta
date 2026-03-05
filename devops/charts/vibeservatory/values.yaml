@@ -12,7 +12,7 @@ serviceAccount:
   annotations:
     eks.amazonaws.com/role-arn: arn:aws:iam::751442549699:role/observatory-backend
 
-secret_name: dashboard-backend-env
+secret_name: vibeservatory-env
 
 cert_manager_issuer: letsencrypt
 
@@ -27,3 +27,31 @@ env:
 datadog:
   enabled: true
   env: production # no previews for now
+
+chatprop:
+  enabled: true
+  host: chatprop.vibeservatory.softmax-research.net
+  port: 8765
+  replicaCount: 1
+  homeDir: /tmp/chatprop
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+trainboard:
+  enabled: true
+  host: train-board.vibeservatory.softmax-research.net
+  port: 8877
+  replicaCount: 1
+  stateDir: /tmp/trainingboard
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

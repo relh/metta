@@ -35,6 +35,8 @@ spec:
             value: "{{ .Values.apiUrl }}"
           - name: BARDO_WORLD_STATE_URL
             value: "{{ .Values.bardoWorldStateUrl }}"
+          - name: OBSERVATORY_AUTH_COOKIE_NAME
+            value: "{{ .Values.observatoryAuthCookieName }}"
           - name: NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME
             value: "{{ .Values.observatoryAuthCookieName }}"
           ports:

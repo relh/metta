@@ -31,6 +31,13 @@ export function policyDashboardRoute(params?: {
     : "/observatory/policy-dashboard";
 }
 
+export function diagnoseRoute(runId?: string | null) {
+  if (!runId) return "/observatory/diagnose";
+  const trimmed = runId.trim();
+  if (!trimmed) return "/observatory/diagnose";
+  return `/observatory/diagnose/${encodeURIComponent(trimmed)}`;
+}
+
 export function tournamentRoute(params?: { mode?: SeasonTabMode }) {
   const searchParams = new URLSearchParams();
   if (params?.mode) {

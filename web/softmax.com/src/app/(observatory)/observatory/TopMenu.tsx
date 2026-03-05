@@ -18,9 +18,11 @@ import {
   DropdownMenuItem,
 } from "@observatory/components/Dropdown";
 import { ThemeToggle } from "@observatory/components/ThemeToggle";
+import { config } from "@observatory/config";
 import {
   bardoRoute,
   chatpropRoute,
+  diagnoseRoute,
   episodeJobsRoute,
   evalTasksRoute,
   policiesRoute,
@@ -149,6 +151,17 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
   const isFreeplayActive = isTournamentRoute && effectiveMode === "freeplay";
   const isTournamentActive =
     isTournamentRoute && effectiveMode === "tournament";
+  const hasPolicyDashboard = Boolean(config.policyDashboardUrl);
+  const hasBardo = Boolean(config.bardoUrl);
+  const hasDiagnose = hasPolicyDashboard;
+  const hasTrainBoard = Boolean(config.trainBoardUrl);
+  const hasChatprop = Boolean(config.chatpropUrl);
+  const showVibeserviceRow =
+    hasBardo ||
+    hasPolicyDashboard ||
+    hasDiagnose ||
+    hasTrainBoard ||
+    hasChatprop;
 
   return (
     <nav className="border-border-strong bg-surface flex items-start justify-between border-b px-5">
@@ -198,48 +211,78 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
             </>
           )}
         </div>
-        {isSoftmaxTeamMember && (
+        {isSoftmaxTeamMember && showVibeserviceRow && (
           <div className="border-border-strong flex border-t">
-            <MenuLink
-              href={bardoRoute()}
-              isActive={pathname.startsWith("/observatory/bardo")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
-            >
-              Bardo
-            </MenuLink>
-            <MenuLink
-              href={policyDashboardRoute()}
-              isActive={pathname.startsWith("/observatory/policy-dashboard")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
-            >
-              Policy Dashboard
-            </MenuLink>
-            <MenuLink
-              href={trainBoardRoute()}
-              isActive={pathname.startsWith("/observatory/train-board")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
-            >
-              Train Board
-            </MenuLink>
-            <MenuLink
-              href={chatpropRoute()}
-              isActive={pathname.startsWith("/observatory/chatprop")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{ fontFamily: "'Comic Sans MS', 'Marker Felt', cursive" }}
-            >
-              Chatprop
-            </MenuLink>
+            {hasBardo && (
+              <MenuLink
+                href={bardoRoute()}
+                isActive={pathname.startsWith("/observatory/bardo")}
+                className="tracking-wide italic"
+                activeClassName="border-violet-500 text-violet-500"
+                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+                style={{
+                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+                }}
+              >
+                Bardo
+              </MenuLink>
+            )}
+            {hasPolicyDashboard && (
+              <MenuLink
+                href={policyDashboardRoute()}
+                isActive={pathname.startsWith("/observatory/policy-dashboard")}
+                className="tracking-wide italic"
+                activeClassName="border-violet-500 text-violet-500"
+                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+                style={{
+                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+                }}
+              >
+                Policy Dashboard
+              </MenuLink>
+            )}
+            {hasDiagnose && (
+              <MenuLink
+                href={diagnoseRoute()}
+                isActive={pathname.startsWith("/observatory/diagnose")}
+                className="tracking-wide italic"
+                activeClassName="border-violet-500 text-violet-500"
+                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+                style={{
+                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+                }}
+              >
+                Diagnose
+              </MenuLink>
+            )}
+            {hasTrainBoard && (
+              <MenuLink
+                href={trainBoardRoute()}
+                isActive={pathname.startsWith("/observatory/train-board")}
+                className="tracking-wide italic"
+                activeClassName="border-violet-500 text-violet-500"
+                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+                style={{
+                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+                }}
+              >
+                Train Board
+              </MenuLink>
+            )}
+            {hasChatprop && (
+              <MenuLink
+                href={chatpropRoute()}
+                isActive={pathname.startsWith("/observatory/chatprop")}
+                className="tracking-wide italic"
+                activeClassName="border-violet-500 text-violet-500"
+                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+                style={{
+                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+                }}
+              >
+                Chatprop
+              </MenuLink>
+            )}
           </div>
         )}
       </div>

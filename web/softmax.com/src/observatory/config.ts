@@ -1,7 +1,7 @@
 interface Config {
   apiBaseUrl: string;
   authToken?: string;
-  policyDashboardUrl: string;
+  policyDashboardUrl: string | null;
   trainBoardUrl: string | null;
   chatpropUrl: string | null;
   bardoUrl: string | null;
@@ -22,8 +22,10 @@ export const config: Config = {
   apiBaseUrl:
     process.env.OBSERVATORY_API_URL || "http://localhost:3002/api/observatory",
   authToken: process.env.DEV_AUTH_TOKEN, // set in dev mode for convenience based on ~/.metta/config.yaml token
-  policyDashboardUrl:
-    process.env.OBSERVATORY_POLICY_DASHBOARD_URL || "http://127.0.0.1:5174",
+  policyDashboardUrl: resolveFragileServiceUrl(
+    process.env.OBSERVATORY_POLICY_DASHBOARD_URL,
+    "http://127.0.0.1:5174",
+  ),
   trainBoardUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_TRAIN_BOARD_URL,
     "http://127.0.0.1:8877",

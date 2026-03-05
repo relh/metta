@@ -63,9 +63,9 @@ resource "kubernetes_secret" "observatory_backend_env" {
   }
 }
 
-resource "kubernetes_secret" "dashboard_backend_env" {
+resource "kubernetes_secret" "vibeservatory_env" {
   metadata {
-    name      = "dashboard-backend-env"
+    name      = "vibeservatory-env"
     namespace = kubernetes_namespace.observatory.metadata[0].name
   }
   data = {

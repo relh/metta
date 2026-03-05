@@ -1,1 +1,1 @@
-"""Dashboard backend package namespace."""
+"""Vibeservatory backend package namespace."""

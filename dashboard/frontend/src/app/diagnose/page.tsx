@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import { fetchDiagnoseRuns, type DiagnoseRunSummary } from '../../lib/api'
+import { DiagnoseUploadPanel } from './DiagnoseUploadPanel'
 
 function runTitle(run: DiagnoseRunSummary): string {
   if (!run.manifest) return 'Diagnose run'
@@ -70,6 +71,8 @@ export default async function DiagnoseIndexPage() {
           </div>
         )}
       </section>
+
+      <DiagnoseUploadPanel />
     </main>
   )
 }

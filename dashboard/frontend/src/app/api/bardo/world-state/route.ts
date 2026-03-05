@@ -19,7 +19,11 @@ function trimToNull(value: string | null | undefined): string | null {
 }
 
 function authCookieName(): string {
-  return process.env.OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
+  return (
+    process.env.OBSERVATORY_AUTH_COOKIE_NAME?.trim() ||
+    process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() ||
+    'observatory_auth_token'
+  )
 }
 
 function bardoWorldStateUrl(): string {

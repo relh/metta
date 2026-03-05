@@ -1,6 +1,6 @@
 # Vibeservatory Dashboard
 
-Canonical docs for the Vibeservatory dashboard backend live here.
+Canonical docs for the Vibeservatory backend live here.
 
 Related code paths:
 
@@ -41,7 +41,7 @@ Environment:
 
 What it does:
 
-- Standalone dashboard UI that fetches from the Vibeservatory dashboard backend directly
+- Standalone dashboard UI that fetches from the Vibeservatory backend directly
 - Loads dashboard data by policy-version UUID
 - Tabs in the UI:
   - `Overview`: policy metadata, KPI snapshot, diagnostics, quality gates, rollout actions, and AI analysis
@@ -74,7 +74,7 @@ dashboard/scripts/dev_local.sh
 
 This starts:
 
-- Vibeservatory dashboard backend at `http://127.0.0.1:8010`
+- Vibeservatory backend at `http://127.0.0.1:8010`
 - Standalone dashboard frontend at `http://127.0.0.1:5174`
 - Frontend API base set to local backend (`NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010`)
 
@@ -174,18 +174,17 @@ kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true
 - Frontend workflow: `.github/workflows/build-vibeservatory-image.yml`
   - Deploys Helm chart: `devops/charts/dashboard/`
   - Host: `https://policy-dashboard.vibeservatory.softmax-research.net`
-- Backend workflow: `.github/workflows/deploy-dashboard-backend.yml`
-  - Deploys Helm chart: `devops/charts/dashboard-backend/`
+- Backend workflow: `.github/workflows/deploy-vibeservatory.yml`
+  - Deploys Helm chart: `devops/charts/vibeservatory/`
   - Host: `https://api.policy-dashboard.vibeservatory.softmax-research.net`
 
-Backend requires `STATS_DB_READ_ONLY_URI`, provisioned as the `dashboard-backend-env` k8s secret from Terraform. The
-source URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (temporarily managed outside
-Terraform per `devops/tf/observatory/readonly_db.tf`), and runtime startup checks enforce non-writer + read-replica
-invariants.
+Backend requires `STATS_DB_READ_ONLY_URI`, provisioned as the `vibeservatory-env` k8s secret from Terraform. The source
+URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (temporarily managed outside Terraform per
+`devops/tf/observatory/readonly_db.tf`), and runtime startup checks enforce non-writer + read-replica invariants.
 
 ## Analysis Key Strategy (BYO)
 
-- The Vibeservatory dashboard backend supports two key sources for AI analysis:
+- The Vibeservatory backend supports two key sources for AI analysis:
   - Request-scoped header: `X-Anthropic-Api-Key` (preferred for BYO usage)
   - Backend env var: `ANTHROPIC_API_KEY` (optional fallback)
 - We do not require a shared deployed key. Users can bring their own key per request from the Overview analysis section.

@@ -10,7 +10,7 @@ Validate Vibeservatory dashboard functionality end-to-end without providing any 
 
 Included:
 
-- Dashboard backend state-page and diagnose backend tests
+- Vibeservatory backend state-page and diagnose backend tests
 - Dashboard frontend unit tests and type-check
 - Live API smoke checks (deployed API)
 - Live UI smoke checks across all dashboard tabs (deployed dashboard frontend)

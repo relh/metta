@@ -4,8 +4,10 @@ A nextjs app that serves MDX-based static content and dynamic content, including
 
 ## Development workflow
 
-1. Run `metta softmax-com up` to start the development server and postgres.
-2. Run `pnpm db:migrate` in this dir to apply the latest migrations.
+1. Start local Postgres: `metta dev postgres up -d`
+2. Apply DB migrations: `metta dev softmax-com-db-migrate`
+3. Start the frontend: `metta dev softmax-com --backend local`
+   (or `--backend prod` to point Observatory API calls at production)
 
 The site should be available at `http://localhost:3002`.
 

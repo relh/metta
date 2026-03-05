@@ -1230,83 +1230,6 @@ code {
   }
 }
 
-.service-snapshot-shell {
-  min-height: 100vh;
-  padding: clamp(1rem, 2.2vw, 2rem);
-  display: grid;
-  gap: 0.9rem;
-  background:
-    radial-gradient(1200px 700px at 0% 0%, rgba(23, 88, 72, 0.18), transparent 65%),
-    radial-gradient(1000px 600px at 100% 100%, rgba(27, 83, 117, 0.18), transparent 62%),
-    var(--bg);
-}
-
-.service-snapshot-card {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(13, 23, 37, 0.82);
-  padding: 0.95rem 1.05rem;
-}
-
-.service-snapshot-kicker {
-  margin: 0;
-  color: var(--brand);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.service-snapshot-title {
-  margin: 0.35rem 0;
-  font-size: clamp(1.2rem, 2.2vw, 1.8rem);
-}
-
-.service-snapshot-subtitle,
-.service-snapshot-meta {
-  margin: 0;
-  color: var(--ink-muted);
-}
-
-.service-snapshot-grid {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.service-snapshot-list {
-  margin: 0.5rem 0 0;
-  padding-left: 1rem;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.service-snapshot-table-wrap {
-  overflow-x: auto;
-}
-
-.service-snapshot-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.service-snapshot-table th,
-.service-snapshot-table td {
-  text-align: left;
-  padding: 0.5rem 0.4rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.service-snapshot-table th {
-  color: var(--ink-muted);
-  font-weight: 600;
-  font-size: 0.82rem;
-}
-
-.service-snapshot-table td a {
-  color: inherit;
-}
-
 .bardo-shell {
   --bardo-bg-top: #fbf4e2;
   --bardo-bg-bottom: #dcecf5;
@@ -1645,10 +1568,6 @@ html[data-theme='dark'] .bardo-footer span {
 }
 
 @media (max-width: 920px) {
-  .service-snapshot-grid {
-    grid-template-columns: 1fr;
-  }
-
   .bardo-card {
     min-height: calc(100vh - 1.6rem);
   }

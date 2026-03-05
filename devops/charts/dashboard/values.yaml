@@ -1,7 +1,5 @@
 host: policy-dashboard.vibeservatory.softmax-research.net
 extraHosts:
-  - train-board.vibeservatory.softmax-research.net
-  - chatprop.vibeservatory.softmax-research.net
   - bardo.vibeservatory.softmax-research.net
 
 apiUrl: https://api.policy-dashboard.vibeservatory.softmax-research.net
