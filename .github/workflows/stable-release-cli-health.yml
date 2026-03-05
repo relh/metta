@@ -1,0 +1,10 @@
+name: "Stable Release CLI Health"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Standin"

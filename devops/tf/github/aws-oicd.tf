@@ -126,6 +126,28 @@ resource "aws_iam_role_policy" "github_datadog_secrets" {
   })
 }
 
+# Allow GitHub workflows to invoke Bedrock models for LLM-driven CLI eval checks.
+resource "aws_iam_role_policy" "github_bedrock_invoke" {
+  name = "github-actions-bedrock-invoke"
+  role = aws_iam_role.github_actions.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+        ]
+        Resource = [
+          "arn:aws:bedrock:*:*:inference-profile/*",
+          "arn:aws:bedrock:*:*:foundation-model/*",
+        ]
+      }
+    ]
+  })
+}
+
 resource "github_actions_variable" "aws_role" {
   repository    = var.github_repo
   variable_name = "AWS_ROLE"
