@@ -160,14 +160,19 @@ def _watch_stream(
             continue
 
         if isinstance(pod, dict):
-            pod = cast(client.V1Pod, ApiClient().deserialize(SimpleNamespace(data=json.dumps(pod)), "V1Pod"))
-
-        rv = _pod_resource_version(pod)
+            rv = pod.get("metadata", {}).get("resourceVersion")
+        else:
+            rv = _pod_resource_version(pod)
         if rv:
             last_rv = rv
 
-        if event_type in ("ADDED", "MODIFIED", "DELETED"):
-            _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
+        if event_type not in ("ADDED", "MODIFIED", "DELETED"):
+            continue
+
+        if isinstance(pod, dict):
+            pod = cast(client.V1Pod, ApiClient().deserialize(SimpleNamespace(data=json.dumps(pod)), "V1Pod"))
+
+        _maybe_store_event(cluster_name, event_type, pod, node_label_cache, core_v1)
 
     return last_rv
 
