@@ -9,14 +9,17 @@ Uses resourceVersion tracking to resume watches without missing events:
 - BOOKMARK events update the tracked resourceVersion without generating stored events
 """
 
+import json
 import logging
 import time
+from types import SimpleNamespace
 from typing import Literal, TypedDict, cast
 
 from kubernetes import (
     client,
     watch,  # type: ignore[attr-defined]
 )
+from kubernetes.client import ApiClient
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
 
@@ -155,6 +158,9 @@ def _watch_stream(
                 raise ApiException(status=410, reason="Gone")
             logger.warning(f"Watch ERROR event on cluster={cluster_name}: {raw}")
             continue
+
+        if isinstance(pod, dict):
+            pod = cast(client.V1Pod, ApiClient().deserialize(SimpleNamespace(data=json.dumps(pod)), "V1Pod"))
 
         rv = _pod_resource_version(pod)
         if rv:
