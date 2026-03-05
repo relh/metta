@@ -14,7 +14,7 @@ from metta.trainingboard.ingest.asana import (
 )
 from metta.trainingboard.llm_scoring import (
     DEFAULT_OPENAI_MODEL,
-    default_llm_cache_path,
+    load_llm_score_cache,
     resolve_openai_api_key,
     score_tasks_with_openai,
 )
@@ -27,6 +27,7 @@ from metta.trainingboard.local.backend.server import (
     dashboard_cache_path_for_state_dir,
     default_repo_cache_path,
     run_server,
+    task_ranking_llm_cache_path_for_state_dir,
 )
 from metta.trainingboard.scoring import build_task_ranking_snapshot, load_cached_papers
 
@@ -170,15 +171,16 @@ def rank_tasks(
     resolved_state_dir = Path(state_dir).expanduser()
     task_cache_path = dashboard_cache_path_for_state_dir(resolved_state_dir)
     papers = load_cached_papers(task_cache_path)
-    llm_scores_by_gid = None
+    llm_cache_path = (
+        Path(llm_cache).expanduser() if llm_cache else task_ranking_llm_cache_path_for_state_dir(resolved_state_dir)
+    )
     llm_summary_payload = None
     if llm:
         resolved_api_key = resolve_openai_api_key(explicit_key=llm_api_key, token_env=llm_api_key_env)
         if not resolved_api_key:
             raise click.ClickException(f"Missing OpenAI API key. Set --llm-api-key or ${llm_api_key_env}.")
-        llm_cache_path = Path(llm_cache).expanduser() if llm_cache else default_llm_cache_path(resolved_state_dir)
         task_limit_for_llm = None if llm_task_limit == 0 else llm_task_limit
-        llm_scores_by_gid, llm_summary = score_tasks_with_openai(
+        _, llm_summary = score_tasks_with_openai(
             papers,
             model=llm_model,
             api_key=resolved_api_key,
@@ -189,7 +191,15 @@ def rank_tasks(
         )
         llm_summary_payload = llm_summary.model_dump()
 
-    payload = build_task_ranking_snapshot(papers, limit=limit, llm_scores_by_gid=llm_scores_by_gid).model_dump()
+    llm_scores_by_gid = {gid: entry.scores for gid, entry in load_llm_score_cache(llm_cache_path).items()}
+    payload = build_task_ranking_snapshot(
+        papers,
+        limit=limit,
+        llm_scores_by_gid=llm_scores_by_gid,
+        require_llm_scores=True,
+    ).model_dump()
+    payload["llm_cache_path"] = str(llm_cache_path)
+    payload["llm_scores_loaded"] = len(llm_scores_by_gid)
     if llm_summary_payload is not None:
         payload["llm_summary"] = llm_summary_payload
     click.echo(json.dumps(payload, indent=2))

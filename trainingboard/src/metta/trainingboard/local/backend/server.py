@@ -95,21 +95,41 @@ def task_ranking_llm_cache_path_for_state_dir(state_dir: Path) -> Path:
     return _prefer_newer_cache(state_llm_cache_path, repo_llm_cache_path)
 
 
+def _load_llm_scores_for_state_dir(state_dir: Path) -> tuple[Optional[dict[str, LLMTaskScores]], Path]:
+    llm_cache_path = task_ranking_llm_cache_path_for_state_dir(state_dir)
+    if not llm_cache_path.is_file():
+        return None, llm_cache_path
+    return (
+        {gid: cache_entry.scores for gid, cache_entry in load_llm_score_cache(llm_cache_path).items()},
+        llm_cache_path,
+    )
+
+
 def build_dashboard_for_state_dir(state_dir: Path) -> dict:
     papers = load_cached_papers(dashboard_cache_path_for_state_dir(state_dir))
-    snapshot = build_dashboard_snapshot(papers)
-    return snapshot.model_dump()
+    llm_scores_by_gid, llm_cache_path = _load_llm_scores_for_state_dir(state_dir)
+    effective_llm_scores = llm_scores_by_gid or {}
+    snapshot = build_dashboard_snapshot(papers, llm_scores_by_gid=effective_llm_scores)
+    llm_scored_tasks = sum(1 for paper in papers if paper.gid in effective_llm_scores)
+    total_tasks = len(papers)
+    payload = snapshot.model_dump()
+    payload["scoring_source"] = "llm_only"
+    payload["llm_scored_tasks"] = llm_scored_tasks
+    payload["tasks_total"] = total_tasks
+    payload["llm_coverage"] = round(llm_scored_tasks / total_tasks, 3) if total_tasks > 0 else 0.0
+    payload["llm_cache_path"] = str(llm_cache_path)
+    return payload
 
 
 def build_task_ranking_for_state_dir(state_dir: Path, limit: int = 60, leaderboard_top_n: int = 10) -> dict:
     papers = load_cached_papers(dashboard_cache_path_for_state_dir(state_dir))
-    llm_cache_path = task_ranking_llm_cache_path_for_state_dir(state_dir)
-    llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None
-    if llm_cache_path.is_file():
-        llm_scores_by_gid = {
-            gid: cache_entry.scores for gid, cache_entry in load_llm_score_cache(llm_cache_path).items()
-        }
-    full_snapshot = build_task_ranking_snapshot(papers, limit=None, llm_scores_by_gid=llm_scores_by_gid)
+    llm_scores_by_gid, llm_cache_path = _load_llm_scores_for_state_dir(state_dir)
+    full_snapshot = build_task_ranking_snapshot(
+        papers,
+        limit=None,
+        llm_scores_by_gid=llm_scores_by_gid or {},
+        require_llm_scores=True,
+    )
     leaderboards = build_task_leaderboards(full_snapshot.ranked_tasks, top_n=leaderboard_top_n)
     payload = full_snapshot.model_dump()
     payload["ranked_tasks"] = payload["ranked_tasks"][: max(0, limit)]

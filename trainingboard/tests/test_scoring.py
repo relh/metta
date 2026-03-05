@@ -52,13 +52,13 @@ def test_experience_parallelism_multiplier_increases_with_relevant_evidence() ->
     boosted_panel = _panel(boosted, "experience_parallelism")
 
     assert boosted_panel.evidence_count == 1
-    assert boosted_panel.projected_multiplier > baseline_panel.projected_multiplier
+    assert boosted_panel.opportunity_score > baseline_panel.opportunity_score
 
 
-def test_ranked_axes_are_sorted_by_opportunity_score_desc() -> None:
+def test_ranked_axes_keep_fixed_axis_order() -> None:
     snapshot = build_dashboard_snapshot([])
-    scores = [panel.opportunity_score for panel in snapshot.ranked_axes]
-    assert scores == sorted(scores, reverse=True)
+    indices = [panel.index for panel in snapshot.ranked_axes]
+    assert indices == [1, 2, 3, 4, 5, 6]
 
 
 def test_short_keyword_matches_token_boundary_only() -> None:
@@ -79,6 +79,60 @@ def test_short_keyword_matches_token_boundary_only() -> None:
 
     loss_signal_panel = _panel(snapshot, "loss_signal_quality")
     assert loss_signal_panel.evidence_count == 0
+
+
+def test_dashboard_snapshot_uses_llm_axis_scores_without_heuristic_fallback() -> None:
+    llm_scores = LLMTaskScores(
+        axis_scores={
+            "experience_parallelism": 0.91,
+            "experience_quality": 0.0,
+            "loss_parallelism": 0.0,
+            "loss_signal_quality": 0.0,
+            "parameter_parallelism": 0.0,
+            "hyperparameter_quality": 0.0,
+        },
+        execution_scores=TaskExecutionScores(
+            simplicity=0.6,
+            time_to_implement=0.6,
+            failure_likelihood=0.3,
+            dependency_load=0.2,
+            measurement_speed=0.6,
+            reversibility=0.6,
+        ),
+        evidence_confidence=0.8,
+        rationale="",
+    )
+    papers = [
+        ResearchPaperRecord(
+            gid="task-llm-only",
+            title="Opaque proposal",
+            notes="",
+            permalink_url="https://example.com/task-llm-only",
+            custom_fields={},
+            paper_links=[],
+            recommendations=[],
+            inferred_axis_scores={},
+        ),
+        ResearchPaperRecord(
+            gid="task-fallback",
+            title="Fallback actor throughput candidate",
+            notes="",
+            permalink_url="https://example.com/task-fallback",
+            custom_fields={},
+            paper_links=[],
+            recommendations=[],
+            inferred_axis_scores={"experience_parallelism": 0.62},
+        ),
+    ]
+    heuristic_snapshot = build_dashboard_snapshot(papers)
+    llm_snapshot = build_dashboard_snapshot(papers, llm_scores_by_gid={"task-llm-only": llm_scores})
+
+    heuristic_panel = _panel(heuristic_snapshot, "experience_parallelism")
+    llm_panel = _panel(llm_snapshot, "experience_parallelism")
+    assert heuristic_panel.evidence_count == 1
+    assert llm_panel.evidence_count == 1
+    assert "Opaque proposal" in llm_panel.evidence_titles
+    assert "Fallback actor throughput candidate" not in llm_panel.evidence_titles
 
 
 def test_task_ranking_contains_twelve_metrics() -> None:
@@ -219,6 +273,58 @@ def test_task_ranking_uses_llm_scores_when_provided() -> None:
     assert ranked_task.axis_scores["experience_parallelism"] == 0.91
     assert ranked_task.execution_scores.simplicity == 0.8
     assert ranked_task.evidence_confidence == 0.87
+
+
+def test_task_ranking_can_require_llm_scores() -> None:
+    llm_scores = LLMTaskScores(
+        axis_scores={
+            "experience_parallelism": 0.91,
+            "experience_quality": 0.12,
+            "loss_parallelism": 0.18,
+            "loss_signal_quality": 0.22,
+            "parameter_parallelism": 0.35,
+            "hyperparameter_quality": 0.14,
+        },
+        execution_scores=TaskExecutionScores(
+            simplicity=0.8,
+            time_to_implement=0.78,
+            failure_likelihood=0.2,
+            dependency_load=0.15,
+            measurement_speed=0.73,
+            reversibility=0.76,
+        ),
+        evidence_confidence=0.87,
+        rationale="",
+    )
+    snapshot = build_task_ranking_snapshot(
+        [
+            ResearchPaperRecord(
+                gid="task-llm",
+                title="LLM scored",
+                notes="",
+                permalink_url="https://example.com/task-llm",
+                custom_fields={},
+                paper_links=[],
+                recommendations=[],
+                inferred_axis_scores={},
+            ),
+            ResearchPaperRecord(
+                gid="task-no-llm",
+                title="No LLM score",
+                notes="",
+                permalink_url="https://example.com/task-no-llm",
+                custom_fields={},
+                paper_links=[],
+                recommendations=[],
+                inferred_axis_scores={"experience_parallelism": 0.9},
+            ),
+        ],
+        llm_scores_by_gid={"task-llm": llm_scores},
+        require_llm_scores=True,
+    )
+    assert snapshot.tasks_scored == 1
+    assert len(snapshot.ranked_tasks) == 1
+    assert snapshot.ranked_tasks[0].gid == "task-llm"
 
 
 def test_task_ranking_dedupes_replicate_titles() -> None:

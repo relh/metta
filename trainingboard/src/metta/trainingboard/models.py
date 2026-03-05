@@ -35,7 +35,6 @@ class AxisSpec(BaseModel):
     index: int = Field(ge=1, le=6)
     title: str
     principle: str
-    prior_multiplier: float = Field(ge=1.0)
     keywords: list[str]
     wins: list[ImprovementCandidate]
 
@@ -64,8 +63,6 @@ class AxisPanel(BaseModel):
     index: int
     title: str
     principle: str
-    prior_multiplier: float
-    projected_multiplier: float
     confidence: float = Field(ge=0.0, le=1.0)
     evidence_count: int = Field(ge=0)
     evidence_titles: list[str]
@@ -75,14 +72,12 @@ class AxisPanel(BaseModel):
 
 class DashboardSnapshot(BaseModel):
     generated_at: str
-    combined_multiplier: float
     ranked_axes: list[AxisPanel]
 
     @classmethod
-    def build(cls, combined_multiplier: float, ranked_axes: list[AxisPanel]) -> "DashboardSnapshot":
+    def build(cls, ranked_axes: list[AxisPanel]) -> "DashboardSnapshot":
         return cls(
             generated_at=datetime.now(tz=UTC).isoformat(),
-            combined_multiplier=combined_multiplier,
             ranked_axes=ranked_axes,
         )
 

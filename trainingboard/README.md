@@ -1,89 +1,119 @@
 # Trainingboard
 
-`trainingboard` is a standalone local package for ranking training-flywheel opportunities across six axes:
+`trainingboard/` is a local package for one job: show and rank training-loop improvement ideas on a wall-screen board.
 
-1. Experience-level parallelism
-2. Experience quality
-3. Loss-level parallelism
-4. Loss signal quality
-5. Parameter-level parallelism
-6. Hyperparameter quality
+It combines:
 
-The package provides three pieces:
+- a local API server (`backend`)
+- a local dashboard (`frontend`)
+- Asana ingestion + normalization (`ingest`)
+- LLM-based task scoring cache (`data/task_llm_scores.ndjson`)
 
-- `backend`: local API server that computes and serves six-axis scores
-- `frontend`: six-panel dashboard UI
-- `ingest`: Asana project ingestion for research-paper/task fodder
+## What The Board Shows
+
+Training opportunities are scored on 12 metrics:
+
+- Impact (6): experience parallelism, experience quality, loss parallelism, loss signal quality, parameter parallelism,
+  hyperparameter quality
+- Execution (6): simplicity, time to implement, failure likelihood, dependency load, measurement speed, reversibility
+
+Top Bets is the global top-15 list, split into:
+
+- `Now` (ranks 1-5)
+- `Next` (ranks 6-10)
+- `Later` (ranks 11-15)
+
+## Scoring Model (Important)
+
+LLM scores are the canonical source of truth.
+
+- Dashboard axis panels use cached LLM scores only.
+- Top Bets ranking uses cached LLM scores only.
+- Tasks without LLM scores are excluded from LLM-only ranking.
+
+If no LLM cache exists yet, board rankings will be empty until you generate scores.
 
 ## Quickstart
+
+From repo root (fastest for daily use):
+
+```bash
+metta trainingboard
+```
+
+This starts the board server on `127.0.0.1:8877`.
+
+Direct package mode:
 
 ```bash
 cd trainingboard
 uv sync
-
-# Sync from a whole Asana project
-ASANA_TOKEN=... uv run trainingboard ingest-asana --project-gid <ASANA_PROJECT_GID> --story-workers 12
-# By default this writes normalized output to: trainingboard/data/asana_research_cache.ndjson
-
-# Sync from a specific Asana list/section URL and merge into output cache
-ASANA_TOKEN=... uv run trainingboard ingest-asana --source-url "https://app.asana.com/1/<workspace>/project/<project_gid>/list/<section_gid>" --story-workers 12
-
-# Start dashboard
 uv run trainingboard serve --host 127.0.0.1 --port 8877
 ```
 
 Open `http://127.0.0.1:8877`.
 
-## Data model
+## Typical Workflow
 
-`trainingboard` computes a projected multiplier per axis from:
+1. Ingest tasks from Asana
 
-- a prior multiplier (seeded from current beliefs)
-- evidence mass from ingested task titles/notes/custom-fields/comments
-- extracted research-paper links (arXiv/OpenReview/etc)
-- extracted recommendation/action snippets from task notes/comments
-- inferred per-axis scores for each record based on six-axis keyword maps
-- best-win candidate interventions per axis
+```bash
+cd trainingboard
+ASANA_TOKEN=... uv run trainingboard ingest-asana --project-gid <ASANA_PROJECT_GID> --story-workers 12
+```
 
-The API response includes per-axis confidence, opportunity score, and suggested wins.
+Or from a specific Asana list:
 
-Task ranking also supports a 12-metric rubric:
+```bash
+ASANA_TOKEN=... uv run trainingboard ingest-asana \
+  --source-url "https://app.asana.com/1/<workspace>/project/<project_gid>/list/<section_gid>" \
+  --story-workers 12
+```
 
-- Impact metrics (6): the six Emmett axes above
-- Execution metrics (6): simplicity, time_to_implement, failure_likelihood, dependency_load, measurement_speed,
-  reversibility
+2. Generate/refresh LLM scores in batches
 
-## CLI
+```bash
+OPENAI_API_KEY=... uv run trainingboard rank-tasks --llm --llm-task-limit 50 --llm-task-offset 0 --limit 50
+OPENAI_API_KEY=... uv run trainingboard rank-tasks --llm --llm-task-limit 50 --llm-task-offset 50 --limit 50
+```
 
-- `trainingboard serve`: run local dashboard server
-- `trainingboard ingest-asana`: incrementally sync Asana task + story data, then write normalized research cache
-  - defaults normalized output to committed repo snapshot: `trainingboard/data/asana_research_cache.ndjson`
-  - use `--no-repo-output` to write to `~/.trainingboard/cache/asana_research_cache.ndjson` instead
-  - supports `--source-url` for list/section URLs
-  - supports `--merge-output` (default) to combine multiple sources into one output cache
-  - if a list/section URL yields zero tasks, ingestion falls back to the full project
-- `trainingboard snapshot`: print computed dashboard JSON from current cache
-- `trainingboard rank-tasks`: print task-level ranking JSON with 12 metrics and aggregate priority scores
-  - default mode uses heuristic/keyword scoring for all tasks
-  - default output de-dupes near-duplicate titles (for example `Ada` vs `Replicate Ada`)
-  - `--llm` enables OpenAI scoring for selected tasks (with cache + heuristic fallback for non-LLM-scored tasks)
-  - requires `OPENAI_API_KEY` (or `--llm-api-key`)
-  - default LLM cache path: `~/.trainingboard/cache/task_llm_scores.ndjson`
-  - common usage:
-    - first batch: `trainingboard rank-tasks --llm --llm-task-limit 50 --llm-task-offset 0 --limit 50`
-    - next batch: `trainingboard rank-tasks --llm --llm-task-limit 50 --llm-task-offset 50 --limit 50`
+3. Launch the board and verify coverage
 
-## Caching
+The header shows `scoring: LLM only (x/y)`.
 
-- Normalized cache (used by dashboard): `~/.trainingboard/cache/asana_research_cache.ndjson`
-- Repo snapshot cache (committable default ingest output): `trainingboard/data/asana_research_cache.ndjson`
-- Raw cache (task+story incremental sync):
-  `~/.trainingboard/cache/asana_research_raw_cache_<project_gid>_<section_or_all>.json`
-- Unchanged tasks (by `modified_at`) reuse cached stories to avoid unnecessary API calls.
+## CLI Commands
 
-When serving, trainingboard prefers `~/.trainingboard/cache/asana_research_cache.ndjson` if present, and otherwise falls
-back to `trainingboard/data/asana_research_cache.ndjson`.
+- `trainingboard serve`
+  - run local board server
+- `trainingboard ingest-asana`
+  - fetch + normalize Asana tasks/stories into NDJSON cache
+- `trainingboard snapshot`
+  - print dashboard JSON payload
+- `trainingboard rank-tasks`
+  - print ranked task JSON (12 metrics + aggregate scores)
 
-## Scripts
+`rank-tasks` behavior:
 
-`trainingboard/scripts/ingest_asana_project.sh` wraps ingestion with basic env handling.
+- always loads cached LLM scores for output ranking
+- defaults to LLM-only ranking (`require_llm_scores=True`)
+- with `--llm`, it refreshes cache entries via OpenAI first, then ranks from cache
+
+## Cache Files
+
+- Normalized state cache: `~/.trainingboard/cache/asana_research_cache.ndjson`
+- Normalized repo cache (committed): `trainingboard/data/asana_research_cache.ndjson`
+- LLM state cache: `~/.trainingboard/cache/task_llm_scores.ndjson`
+- LLM repo cache (committed): `trainingboard/data/task_llm_scores.ndjson`
+- Raw ingest cache: `~/.trainingboard/cache/asana_research_raw_cache_<project_gid>_<section_or_all>.json`
+
+When serving/ranking, trainingboard prefers the newer of repo vs state caches.
+
+## Wall-Screen Notes
+
+- Board mode is default.
+- Auto-refresh is every 45 seconds.
+- Header includes a compact legend for the 12 metric abbreviations.
+
+## Helper Script
+
+`trainingboard/scripts/ingest_asana_project.sh` is a small wrapper around `trainingboard ingest-asana`.

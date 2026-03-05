@@ -52,20 +52,40 @@
         letter-spacing: 0.01em;
         white-space: nowrap;
       }
+      .hero-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
       .hero-line {
         display: flex;
         align-items: center;
         gap: 6px;
-        flex: 1 1 auto;
-        min-width: 0;
         overflow-x: auto;
         white-space: nowrap;
+        scrollbar-width: thin;
+      }
+      .hero-line-2 {
+        overflow-x: visible;
+        white-space: normal;
         scrollbar-width: thin;
       }
       .hero-desc {
         color: var(--muted);
         font-size: clamp(12px, 0.9vw, 15px);
         padding-right: 4px;
+      }
+      .hero-metric-legend {
+        color: var(--muted);
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        background: rgba(8, 16, 25, 0.9);
+        padding: 4px 8px;
+        font-size: clamp(10px, 0.74vw, 12px);
+        letter-spacing: 0.01em;
+        font-family: "JetBrains Mono", "SFMono-Regular", "Consolas", monospace;
       }
       .pill {
         border: 1px solid var(--line);
@@ -166,6 +186,32 @@
         color: var(--muted);
         font-size: clamp(12px, 0.9vw, 15px);
       }
+      .bet-metrics {
+        margin-top: 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .metric-pill {
+        border: 1px solid var(--line-soft);
+        border-radius: 999px;
+        background: rgba(8, 16, 25, 0.95);
+        padding: 2px 6px;
+        display: inline-flex;
+        align-items: baseline;
+        gap: 4px;
+        font-size: clamp(10px, 0.75vw, 12px);
+        line-height: 1.1;
+      }
+      .metric-label {
+        color: var(--focus-2);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .metric-value {
+        color: var(--text);
+        font-variant-numeric: tabular-nums;
+      }
       .grid {
         margin-top: 12px;
         display: grid;
@@ -196,20 +242,13 @@
         font-size: clamp(11px, 0.82vw, 14px);
         letter-spacing: 0.01em;
       }
-      .metric-row {
-        display: flex;
-        gap: 5px;
-        flex-wrap: wrap;
-      }
-      .metric {
+      .panel-ev {
         border: 1px solid var(--line-soft);
-        border-radius: 10px;
+        border-radius: 999px;
         background: var(--bg-soft);
-        padding: 5px 8px;
+        padding: 2px 8px;
         font-size: clamp(11px, 0.85vw, 14px);
-      }
-      .metric strong {
-        color: var(--focus);
+        line-height: 1.1;
       }
       .evidence-inline {
         margin-top: 8px;
@@ -280,6 +319,10 @@
           overflow-x: visible;
           flex-wrap: wrap;
         }
+        .hero-line-2 {
+          white-space: normal;
+          overflow-x: visible;
+        }
         .bet-grid {
           grid-template-columns: repeat(2, minmax(240px, 1fr));
         }
@@ -306,14 +349,22 @@
     <main>
       <section class="hero">
         <h1>Training Flywheel Board</h1>
-        <div class="hero-line">
-          <span class="hero-desc">
-            Six-axis map for faster training loops, ranked by priors and ingested Asana evidence.
-          </span>
-          <span class="pill" id="combinedMultiplier">combined <strong>x0.00</strong></span>
-          <span class="pill" id="generatedAt">generated: -</span>
-          <span class="pill pill-accent">board mode: auto-refresh every 45s</span>
-          <span class="status-inline" id="status">Loading dashboard...</span>
+        <div class="hero-stack">
+          <div class="hero-line">
+            <span class="hero-desc">
+              Six-axis map for faster training loops using canonical LLM task scoring.
+            </span>
+            <span class="pill" id="generatedAt">generated: -</span>
+            <span class="pill" id="scoringMode">scoring: LLM only (0/0)</span>
+            <span class="pill pill-accent">board mode: auto-refresh every 45s</span>
+            <span class="status-inline" id="status">Loading dashboard...</span>
+          </div>
+          <div class="hero-line-2">
+            <span class="hero-metric-legend">
+              score = 1 exp-par + 2 exp-qual + 3 loss-par + 4 loss-sig + 5 param-par + 6 hyper + S simp + T time +
+              F risk + D deps + M meas + R revert
+            </span>
+          </div>
         </div>
       </section>
 

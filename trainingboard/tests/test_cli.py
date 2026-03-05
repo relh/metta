@@ -110,16 +110,32 @@ def test_rank_tasks_uses_cache_and_prints_json(monkeypatch, tmp_path: Path) -> N
         captured["cache_path"] = cache_path
         return []
 
+    def fake_task_ranking_llm_cache_path_for_state_dir(state_dir: Path) -> Path:
+        captured["llm_state_dir"] = state_dir
+        return tmp_path / "llm-cache.ndjson"
+
+    def fake_load_llm_score_cache(cache_path: Path) -> dict[str, object]:
+        captured["llm_cache_path"] = cache_path
+        return {"task-1": SimpleNamespace(scores="llm-score")}
+
     def fake_build_task_ranking_snapshot(
-        papers: list[ResearchPaperRecord], limit: int, llm_scores_by_gid: object
+        papers: list[ResearchPaperRecord],
+        limit: int,
+        llm_scores_by_gid: object,
+        require_llm_scores: bool,
     ) -> FakeTaskRankingSnapshot:
         captured["papers"] = papers
         captured["limit"] = limit
         captured["llm_scores_by_gid"] = llm_scores_by_gid
+        captured["require_llm_scores"] = require_llm_scores
         return FakeTaskRankingSnapshot()
 
     monkeypatch.setattr(cli_module, "dashboard_cache_path_for_state_dir", fake_dashboard_cache_path_for_state_dir)
+    monkeypatch.setattr(
+        cli_module, "task_ranking_llm_cache_path_for_state_dir", fake_task_ranking_llm_cache_path_for_state_dir
+    )
     monkeypatch.setattr(cli_module, "load_cached_papers", fake_load_cached_papers)
+    monkeypatch.setattr(cli_module, "load_llm_score_cache", fake_load_llm_score_cache)
     monkeypatch.setattr(cli_module, "build_task_ranking_snapshot", fake_build_task_ranking_snapshot)
 
     runner = CliRunner()
@@ -130,7 +146,9 @@ def test_rank_tasks_uses_cache_and_prints_json(monkeypatch, tmp_path: Path) -> N
     assert captured["cache_path"] == tmp_path / "cache.ndjson"
     assert captured["papers"] == []
     assert captured["limit"] == 7
-    assert captured["llm_scores_by_gid"] is None
+    assert captured["llm_cache_path"] == tmp_path / "llm-cache.ndjson"
+    assert captured["llm_scores_by_gid"] == {"task-1": "llm-score"}
+    assert captured["require_llm_scores"] is True
     assert '"tasks_scored": 3' in result.output
 
 
@@ -198,9 +216,13 @@ def test_rank_tasks_llm_mode_uses_llm_scores(monkeypatch, tmp_path: Path) -> Non
         captured["token_env"] = token_env
         return "key-123"
 
-    def fake_default_llm_cache_path(state_dir: Path) -> Path:
+    def fake_task_ranking_llm_cache_path_for_state_dir(state_dir: Path) -> Path:
         captured["llm_state_dir"] = state_dir
         return tmp_path / "llm-cache.ndjson"
+
+    def fake_load_llm_score_cache(cache_path: Path) -> dict[str, object]:
+        captured["loaded_cache_path"] = cache_path
+        return {"task-1": SimpleNamespace(scores="cached-llm-score")}
 
     def fake_score_tasks_with_openai(
         papers: list[ResearchPaperRecord],
@@ -225,16 +247,21 @@ def test_rank_tasks_llm_mode_uses_llm_scores(monkeypatch, tmp_path: Path) -> Non
         papers: list[ResearchPaperRecord],
         limit: int,
         llm_scores_by_gid: dict[str, object] | None,
+        require_llm_scores: bool,
     ) -> FakeTaskRankingSnapshot:
         captured["build_papers"] = papers
         captured["build_limit"] = limit
         captured["build_llm_scores"] = llm_scores_by_gid
+        captured["build_require_llm_scores"] = require_llm_scores
         return FakeTaskRankingSnapshot()
 
     monkeypatch.setattr(cli_module, "dashboard_cache_path_for_state_dir", fake_dashboard_cache_path_for_state_dir)
     monkeypatch.setattr(cli_module, "load_cached_papers", fake_load_cached_papers)
     monkeypatch.setattr(cli_module, "resolve_openai_api_key", fake_resolve_openai_api_key)
-    monkeypatch.setattr(cli_module, "default_llm_cache_path", fake_default_llm_cache_path)
+    monkeypatch.setattr(
+        cli_module, "task_ranking_llm_cache_path_for_state_dir", fake_task_ranking_llm_cache_path_for_state_dir
+    )
+    monkeypatch.setattr(cli_module, "load_llm_score_cache", fake_load_llm_score_cache)
     monkeypatch.setattr(cli_module, "score_tasks_with_openai", fake_score_tasks_with_openai)
     monkeypatch.setattr(cli_module, "build_task_ranking_snapshot", fake_build_task_ranking_snapshot)
 
@@ -263,8 +290,10 @@ def test_rank_tasks_llm_mode_uses_llm_scores(monkeypatch, tmp_path: Path) -> Non
     assert captured["llm_model"] == "gpt-4.1-mini"
     assert captured["llm_api_key"] == "key-123"
     assert captured["llm_cache_path"] == tmp_path / "llm-cache.ndjson"
+    assert captured["loaded_cache_path"] == tmp_path / "llm-cache.ndjson"
     assert captured["llm_task_limit"] == 1
     assert captured["llm_task_offset"] == 5
     assert captured["llm_force_refresh"] is True
-    assert captured["build_llm_scores"] is not None
+    assert captured["build_llm_scores"] == {"task-1": "cached-llm-score"}
+    assert captured["build_require_llm_scores"] is True
     assert '"llm_summary"' in result.output

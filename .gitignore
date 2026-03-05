@@ -184,5 +184,8 @@ docs/plans/
 # Can be created by sandboxed agents
 .pnpm-store/
 
+# trainingboard keeps using root uv.lock; avoid nested lockfile churn
+trainingboard/uv.lock
+
 # Gas Town (added by gt)
 .claude/commands/

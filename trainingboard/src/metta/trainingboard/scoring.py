@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from math import prod
 from pathlib import Path
 from typing import Optional
 
@@ -27,7 +26,6 @@ AXIS_SPECS: list[AxisSpec] = [
         index=1,
         title="Experience-Level Parallelism",
         principle="More experience-level parallelism (more GPUs)",
-        prior_multiplier=1.42,
         keywords=["rollout", "actor", "gpu", "parallel", "throughput", "experience generation", "simulation"],
         wins=[
             ImprovementCandidate(
@@ -52,7 +50,6 @@ AXIS_SPECS: list[AxisSpec] = [
         index=2,
         title="Experience Quality",
         principle="Better quality experience generation (better curriculum models)",
-        prior_multiplier=1.37,
         keywords=["curriculum", "exploration", "difficulty", "teacher", "sampling", "trajectory", "map selection"],
         wins=[
             ImprovementCandidate(
@@ -77,7 +74,6 @@ AXIS_SPECS: list[AxisSpec] = [
         index=3,
         title="Loss-Level Parallelism",
         principle="More loss-level parallelism (more frequent feedback)",
-        prior_multiplier=1.34,
         keywords=["learner", "gradient", "minibatch", "feedback", "update frequency", "pipeline", "allreduce"],
         wins=[
             ImprovementCandidate(
@@ -102,7 +98,6 @@ AXIS_SPECS: list[AxisSpec] = [
         index=4,
         title="Loss Signal Quality",
         principle="Better loss signal (better critic models)",
-        prior_multiplier=1.39,
         keywords=["critic", "value", "advantage", "reward model", "bootstrap", "distributional", "td"],
         wins=[
             ImprovementCandidate(
@@ -127,7 +122,6 @@ AXIS_SPECS: list[AxisSpec] = [
         index=5,
         title="Parameter-Level Parallelism",
         principle="More parameter-level parallelism (bigger base models)",
-        prior_multiplier=1.25,
         keywords=["model size", "parameter", "sharding", "fsdp", "tensor parallel", "moe", "transformer"],
         wins=[
             ImprovementCandidate(
@@ -152,7 +146,6 @@ AXIS_SPECS: list[AxisSpec] = [
         index=6,
         title="Hyperparameter Quality",
         principle="Better quality hyperparameters (better optimizer models)",
-        prior_multiplier=1.22,
         keywords=["optimizer", "learning rate", "schedule", "entropy", "tuning", "sweep", "pbt"],
         wins=[
             ImprovementCandidate(
@@ -183,10 +176,8 @@ EXECUTION_METRICS: list[ExecutionMetricId] = [
     "reversibility",
 ]
 
-_AXIS_WEIGHT_TOTAL = sum(spec.prior_multiplier - 1.0 for spec in AXIS_SPECS)
-AXIS_IMPACT_WEIGHTS: dict[AxisId, float] = {
-    spec.axis_id: (spec.prior_multiplier - 1.0) / _AXIS_WEIGHT_TOTAL for spec in AXIS_SPECS
-}
+_UNIFORM_AXIS_WEIGHT = 1.0 / len(AXIS_SPECS)
+AXIS_IMPACT_WEIGHTS: dict[AxisId, float] = {spec.axis_id: _UNIFORM_AXIS_WEIGHT for spec in AXIS_SPECS}
 
 SIMPLE_POSITIVE_KEYWORDS = [
     "bug fix",
@@ -517,22 +508,37 @@ def _dedupe_ranked_tasks(ranked_tasks: list[RankedTask]) -> list[RankedTask]:
     return deduped
 
 
-def _build_axis_panel(spec: AxisSpec, papers: list[ResearchPaperRecord]) -> AxisPanel:
+def _axis_signal_for_dashboard(
+    record: ResearchPaperRecord,
+    axis_id: AxisId,
+    llm_scores_by_gid: Optional[dict[str, LLMTaskScores]],
+) -> float:
+    if llm_scores_by_gid is None:
+        return _axis_signals(record).get(axis_id, 0.0)
+    if record.gid not in llm_scores_by_gid:
+        return 0.0
+    return _bounded(llm_scores_by_gid[record.gid].axis_scores[axis_id])
+
+
+def _build_axis_panel(
+    spec: AxisSpec,
+    papers: list[ResearchPaperRecord],
+    llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None,
+) -> AxisPanel:
     scored_papers: list[tuple[ResearchPaperRecord, float]] = []
     for paper in papers:
-        signals = _axis_signals(paper)
-        if spec.axis_id not in signals:
+        signal = _axis_signal_for_dashboard(paper, spec.axis_id, llm_scores_by_gid)
+        if signal <= 0.0:
             continue
-        scored_papers.append((paper, signals[spec.axis_id]))
+        scored_papers.append((paper, signal))
 
     scored_papers.sort(key=lambda item: item[1], reverse=True)
 
     evidence_count = len(scored_papers)
     evidence_mass = sum(score for _, score in scored_papers)
-    evidence_boost = 1.0 + min(0.45, evidence_count * 0.03 + evidence_mass * 0.05)
-    projected_multiplier = round(spec.prior_multiplier * evidence_boost, 2)
-    confidence = round(min(0.95, 0.38 + evidence_count * 0.06 + evidence_mass * 0.04), 2)
-    opportunity_score = round((projected_multiplier - 1.0) * confidence, 3)
+    confidence = round(min(0.95, evidence_count / max(1, len(papers))), 2)
+    mean_axis_score = 0.0 if evidence_count == 0 else evidence_mass / evidence_count
+    opportunity_score = round(mean_axis_score * confidence, 3)
 
     evidence_titles = [paper.title for paper, _ in scored_papers[:4]]
     ranked_wins = sorted(spec.wins, key=lambda win: win.expected_multiplier, reverse=True)
@@ -542,8 +548,6 @@ def _build_axis_panel(spec: AxisSpec, papers: list[ResearchPaperRecord]) -> Axis
         index=spec.index,
         title=spec.title,
         principle=spec.principle,
-        prior_multiplier=spec.prior_multiplier,
-        projected_multiplier=projected_multiplier,
         confidence=confidence,
         evidence_count=evidence_count,
         evidence_titles=evidence_titles,
@@ -552,19 +556,20 @@ def _build_axis_panel(spec: AxisSpec, papers: list[ResearchPaperRecord]) -> Axis
     )
 
 
-def build_dashboard_snapshot(papers: list[ResearchPaperRecord]) -> DashboardSnapshot:
-    panels = [_build_axis_panel(spec, papers) for spec in AXIS_SPECS]
-    ranked_panels = sorted(
-        panels,
-        key=lambda panel: (panel.opportunity_score, panel.projected_multiplier, -panel.index),
-        reverse=True,
-    )
-    combined_multiplier = round(prod(panel.projected_multiplier for panel in ranked_panels), 2)
-    return DashboardSnapshot.build(combined_multiplier=combined_multiplier, ranked_axes=ranked_panels)
+def build_dashboard_snapshot(
+    papers: list[ResearchPaperRecord],
+    llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None,
+) -> DashboardSnapshot:
+    panels = [_build_axis_panel(spec, papers, llm_scores_by_gid=llm_scores_by_gid) for spec in AXIS_SPECS]
+    # Keep board order stable at axes 1..6 for wall-screen readability.
+    return DashboardSnapshot.build(ranked_axes=panels)
 
 
-def build_dashboard_snapshot_from_cache(cache_path: Path) -> DashboardSnapshot:
-    return build_dashboard_snapshot(load_cached_papers(cache_path))
+def build_dashboard_snapshot_from_cache(
+    cache_path: Path,
+    llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None,
+) -> DashboardSnapshot:
+    return build_dashboard_snapshot(load_cached_papers(cache_path), llm_scores_by_gid=llm_scores_by_gid)
 
 
 def build_task_ranking_snapshot(
@@ -572,14 +577,14 @@ def build_task_ranking_snapshot(
     limit: Optional[int] = 50,
     llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None,
     dedupe_titles: bool = True,
+    require_llm_scores: bool = False,
 ) -> TaskRankingSnapshot:
-    ranked_tasks = [
-        _build_ranked_task(
-            paper,
-            llm_scores=None if llm_scores_by_gid is None else llm_scores_by_gid.get(paper.gid),
-        )
-        for paper in papers
-    ]
+    ranked_tasks: list[RankedTask] = []
+    for paper in papers:
+        llm_scores = None if llm_scores_by_gid is None else llm_scores_by_gid.get(paper.gid)
+        if require_llm_scores and llm_scores is None:
+            continue
+        ranked_tasks.append(_build_ranked_task(paper, llm_scores=llm_scores))
     ranked_tasks = sorted(
         ranked_tasks,
         key=lambda task: (
@@ -597,7 +602,7 @@ def build_task_ranking_snapshot(
         ranked_tasks = ranked_tasks[: max(0, limit)]
 
     return TaskRankingSnapshot.build(
-        tasks_scored=len(papers),
+        tasks_scored=len(ranked_tasks) if require_llm_scores else len(papers),
         impact_metrics=[spec.axis_id for spec in AXIS_SPECS],
         execution_metrics=EXECUTION_METRICS,
         ranked_tasks=ranked_tasks,
@@ -632,10 +637,12 @@ def build_task_ranking_snapshot_from_cache(
     limit: Optional[int] = 50,
     llm_scores_by_gid: Optional[dict[str, LLMTaskScores]] = None,
     dedupe_titles: bool = True,
+    require_llm_scores: bool = False,
 ) -> TaskRankingSnapshot:
     return build_task_ranking_snapshot(
         load_cached_papers(cache_path),
         limit=limit,
         llm_scores_by_gid=llm_scores_by_gid,
         dedupe_titles=dedupe_titles,
+        require_llm_scores=require_llm_scores,
     )
