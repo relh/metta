@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from metta.chatprop.config import ChatPropConfig, DaemonConfig, SourceConfig
+from metta.chatprop.config import ChatpropConfig, DaemonConfig, SourceConfig
 from metta.chatprop.local.daemon import get_status
 
 
-def _make_config(tmp_path: Path) -> ChatPropConfig:
-    return ChatPropConfig(
+def _make_config(tmp_path: Path) -> ChatpropConfig:
+    return ChatpropConfig(
         claude_code=SourceConfig(path=tmp_path / "claude"),
         codex=SourceConfig(path=tmp_path / "codex"),
         daemon=DaemonConfig(

@@ -25,9 +25,6 @@ class ChatpropConfig:
     state_dir: Path
 
 
-ChatPropConfig = ChatpropConfig
-
-
 def default_state_dir() -> Path:
     return Path.home() / ".chatprop"
 

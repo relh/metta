@@ -323,9 +323,9 @@ def _repo_from_cwd(cwd: str, *, cache: dict[str, str | None]) -> str | None:
 
     path = Path(cwd).expanduser()
     generic_names = {"", "gt", "co_gas", "users", "relh"}
+    parts = list(path.parts)
 
     # Prefer explicit co_gas repo segment when available.
-    parts = list(path.parts)
     for index, part in enumerate(parts):
         if part.lower() != "co_gas":
             continue

@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import metta.chatprop.local.backend.server as server_module
-from metta.chatprop.config import ChatPropConfig, DaemonConfig, SourceConfig
+from metta.chatprop.config import ChatpropConfig, DaemonConfig, SourceConfig
 from metta.chatprop.local.backend.server import (
     _branch_outcome_from_sources,
     _build_catalog,
@@ -22,8 +22,8 @@ from metta.chatprop.local.backend.server import (
 from metta.chatprop.scanner import TranscriptFile
 
 
-def _make_config(tmp_path: Path) -> ChatPropConfig:
-    return ChatPropConfig(
+def _make_config(tmp_path: Path) -> ChatpropConfig:
+    return ChatpropConfig(
         claude_code=SourceConfig(path=tmp_path / "claude"),
         codex=SourceConfig(path=tmp_path / "codex"),
         daemon=DaemonConfig(

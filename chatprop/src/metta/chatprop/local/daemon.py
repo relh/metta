@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from metta.chatprop.config import ChatPropConfig
+from metta.chatprop.config import ChatpropConfig
 from metta.chatprop.local.indexer import add_transcript_to_index, extract_branches_from_transcript
 from metta.chatprop.local.models import BranchIndex, ManifestEntry, TranscriptMetadata, TranscriptSource, utc_now_iso
 
@@ -34,15 +34,15 @@ class DaemonStatus:
     manifest_entry_count: int
 
 
-def _archive_root(config: ChatPropConfig) -> Path:
+def _archive_root(config: ChatpropConfig) -> Path:
     return config.state_dir.expanduser() / "archive"
 
 
-def _manifest_path(config: ChatPropConfig) -> Path:
+def _manifest_path(config: ChatpropConfig) -> Path:
     return config.state_dir.expanduser() / "manifest.json"
 
 
-def _index_path(config: ChatPropConfig) -> Path:
+def _index_path(config: ChatpropConfig) -> Path:
     return _archive_root(config) / "index.json"
 
 
@@ -83,7 +83,7 @@ def _write_json_atomic(path: Path, payload: dict[str, object]) -> None:
     tmp_path.replace(path)
 
 
-def _read_index(config: ChatPropConfig) -> BranchIndex:
+def _read_index(config: ChatpropConfig) -> BranchIndex:
     path = _index_path(config)
     payload = _read_json_dict(path)
     branches_raw = payload.get("branches")
@@ -101,12 +101,12 @@ def _read_index(config: ChatPropConfig) -> BranchIndex:
     )
 
 
-def _write_index(config: ChatPropConfig, index: BranchIndex) -> None:
+def _write_index(config: ChatpropConfig, index: BranchIndex) -> None:
     path = _index_path(config)
     _write_json_atomic(path, index.to_dict())
 
 
-def _read_manifest(config: ChatPropConfig) -> dict[str, ManifestEntry]:
+def _read_manifest(config: ChatpropConfig) -> dict[str, ManifestEntry]:
     manifest_path = _manifest_path(config)
     raw = _read_json_dict(manifest_path)
 
@@ -137,20 +137,20 @@ def _read_manifest(config: ChatPropConfig) -> dict[str, ManifestEntry]:
     return entries
 
 
-def _write_manifest(config: ChatPropConfig, entries: dict[str, ManifestEntry]) -> None:
+def _write_manifest(config: ChatpropConfig, entries: dict[str, ManifestEntry]) -> None:
     manifest_path = _manifest_path(config)
     payload = {path: entry.to_dict() for path, entry in sorted(entries.items())}
     _write_json_atomic(manifest_path, payload)
 
 
-def _write_metadata(config: ChatPropConfig, metadata: TranscriptMetadata) -> None:
+def _write_metadata(config: ChatpropConfig, metadata: TranscriptMetadata) -> None:
     key = _archive_metadata_key(metadata.session_id)
     path = _archive_root(config) / key
     _write_json_atomic(path, metadata.to_dict())
 
 
 def _archive_transcript(
-    config: ChatPropConfig,
+    config: ChatpropConfig,
     source: TranscriptSource,
     session_id: str,
     mtime_ns: int,
@@ -163,7 +163,7 @@ def _archive_transcript(
     return key
 
 
-def _iter_source_files(config: ChatPropConfig):
+def _iter_source_files(config: ChatpropConfig):
     for source, root in (
         ("claude-code", config.claude_code.path.expanduser()),
         ("codex", config.codex.path.expanduser()),
@@ -220,7 +220,7 @@ def _extract_session_details(path: Path) -> tuple[str, str, str]:
 
 def _archive_path(
     *,
-    config: ChatPropConfig,
+    config: ChatpropConfig,
     index: BranchIndex,
     source: TranscriptSource,
     transcript_path: Path,
@@ -250,7 +250,7 @@ def _archive_path(
     return entry, updated_index
 
 
-def run_daemon_once(config: ChatPropConfig) -> DaemonRunStats:
+def run_daemon_once(config: ChatpropConfig) -> DaemonRunStats:
     manifest = _read_manifest(config)
     index = _read_index(config)
 
@@ -296,7 +296,7 @@ def run_daemon_once(config: ChatPropConfig) -> DaemonRunStats:
     )
 
 
-def run_daemon_forever(config: ChatPropConfig) -> None:
+def run_daemon_forever(config: ChatpropConfig) -> None:
     while True:
         stats = run_daemon_once(config)
         print(
@@ -308,7 +308,7 @@ def run_daemon_forever(config: ChatPropConfig) -> None:
         time.sleep(config.daemon.poll_interval_seconds)
 
 
-def upload_session(config: ChatPropConfig, session_id: str) -> TranscriptMetadata:
+def upload_session(config: ChatpropConfig, session_id: str) -> TranscriptMetadata:
     target_id = session_id.strip()
     if not target_id:
         raise ValueError("session_id cannot be empty")
@@ -334,7 +334,7 @@ def upload_session(config: ChatPropConfig, session_id: str) -> TranscriptMetadat
     raise FileNotFoundError(f"session_id not found: {target_id}")
 
 
-def get_status(config: ChatPropConfig) -> DaemonStatus:
+def get_status(config: ChatpropConfig) -> DaemonStatus:
     manifest = _read_manifest(config)
     index = _read_index(config)
     archive_root = _archive_root(config)
