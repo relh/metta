@@ -338,14 +338,6 @@ def get_file_linters() -> list[FileLinter]:
             ),
         ),
         FileLinter(
-            name="Markdown",
-            extensions=(".md", ".mdx"),
-            required_binaries=("pnpm",),
-            runner=_make_prettier_runner(
-                extensions=(".md", ".mdx"),
-            ),
-        ),
-        FileLinter(
             name="Shell",
             extensions=(".sh", ".bash"),
             required_binaries=("pnpm",),
