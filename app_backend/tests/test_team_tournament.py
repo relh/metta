@@ -37,7 +37,12 @@ from metta.app_backend.tournament.commissioners.teams.config import (
     ThresholdElim,
 )
 from metta.app_backend.tournament.commissioners.teams.db_helpers import TeamMembershipChangeRequest
-from metta.app_backend.tournament.commissioners.teams.stage_planning import _policy_pool, _score_pool, _team_pool
+from metta.app_backend.tournament.commissioners.teams.stage_planning import (
+    StageBinding,
+    _policy_pool,
+    _score_pool,
+    _team_pool,
+)
 from metta.app_backend.tournament.referees.base import MatchCountEntry, MatchRequest, RefereeBase
 from metta.app_backend.tournament.referees.teams.constants import MAX_FAILED_ATTEMPTS
 from metta.app_backend.tournament.referees.teams.policy_stage import (
@@ -820,6 +825,98 @@ async def test_compute_policy_scores_excludes_retired_pool_players(stats_repo: s
         scores = await commissioner._compute_policy_scores(pool.id)
 
         assert scores == {pv_active.id: 1.0}
+
+
+@pytest.mark.asyncio
+async def test_sample_stage_excludes_eliminated_policies(stats_repo: str) -> None:  # noqa: ARG001
+    """Policies eliminated (but not retired) in a policy eval stage must not appear in sampled teams.
+
+    All three policies are non-retired in the score source pool (so _compute_policy_scores
+    returns scores for all three), but only the first two have PoolPlayers in the sample
+    pool. The sample stage must restrict sampling to policies present in the team pool.
+    """
+
+    def game_model(_pv_ids: list[UUID], _assignments: list[int]) -> dict[UUID, float]:
+        return {pv: 1.0 for pv in _pv_ids}
+
+    config = TeamTournamentConfig(
+        game=GameEnvGenerator(num_agents=8),
+        stages=[
+            PolicyEvalStage(policies_per_team=1, matches_per_combo=1),
+            SampleStage(team_size=8, num_teams=4),
+            TeamEvalStage(matches_per_team=1, cull_fraction=0.0),
+            ScoreStage(top_k=1),
+        ],
+    )
+
+    commissioner = DryRunTeamCommissioner(game_model, season_id=uuid4())
+    commissioner.season_name = f"teams-sample-elim-{uuid4().hex[:8]}"
+
+    async with db_session() as session:
+        season = Season(
+            name=commissioner.season_name,
+            canonical=True,
+            team_tournament_config=config.model_dump(mode="json"),
+        )
+        session.add(season)
+        await session.flush()
+        commissioner.season_id = season.id
+        await commissioner._load_config()
+
+        policy_eval_pool = Pool(season_id=season.id, name="stage-1")
+        session.add(policy_eval_pool)
+        await session.flush()
+
+        sample_pool = Pool(season_id=season.id, name="sample-1")
+        session.add(sample_pool)
+        await session.flush()
+
+        policies = []
+        pvs = []
+        for i in range(3):
+            p = Policy(name=f"policy-{i}-{uuid4().hex[:8]}", user_id="test")
+            session.add(p)
+            await session.flush()
+            pv = PolicyVersion(policy_id=p.id, version=1)
+            session.add(pv)
+            await session.flush()
+            policies.append(p)
+            pvs.append(pv)
+
+        for pv in pvs:
+            pp = PoolPlayer(pool_id=policy_eval_pool.id, policy_version_id=pv.id, retired=False)
+            session.add(pp)
+            await session.flush()
+            m = Match(pool_id=policy_eval_pool.id, assignments=[0] * 8, status=MatchStatus.completed)
+            session.add(m)
+            await session.flush()
+            session.add(MatchPlayer(match_id=m.id, pool_player_id=pp.id, policy_index=0, score=1.0))
+
+        for pv in pvs[:2]:
+            session.add(PoolPlayer(pool_id=sample_pool.id, policy_version_id=pv.id))
+
+        await session.commit()
+
+        binding = StageBinding(
+            index=1,
+            stage=config.stages[1],
+            display_name="test-sample",
+            input_pool="sample-1",
+            output_pool="team-round-1",
+            score_source_pool="stage-1",
+        )
+
+        sample_stage = config.stages[1]
+        assert isinstance(sample_stage, SampleStage)
+        pools = await commissioner._get_pools(season.id)
+        await commissioner._run_sample_stage(season, pools, binding, sample_stage)
+
+        pools = await commissioner._get_pools(season.id)
+        team_pool = pools["team-round-1"]
+        teams = await commissioner._get_teams(team_pool.id)
+
+        all_pv_ids = {tpv.policy_version_id for team in teams for tpv in team.policy_versions}
+        assert pvs[2].id not in all_pv_ids, "Eliminated policy should not appear in any sampled team"
 
 
 @pytest.mark.asyncio

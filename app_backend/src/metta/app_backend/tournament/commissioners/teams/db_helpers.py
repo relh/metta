@@ -220,7 +220,14 @@ class TeamDbHelpersMixin:
             pv_ids = [tpv.policy_version_id for tpv in sorted_slots]
             unique_pvs = list(dict.fromkeys(pv_ids))
 
-            if any(pv not in pp_by_pv for pv in unique_pvs):
+            missing_pvs = [pv for pv in unique_pvs if pv not in pp_by_pv]
+            if missing_pvs:
+                team.eliminated = True
+                logger.warning(
+                    "Eliminating team %s: references retired/missing pool players %s",
+                    team.id,
+                    [str(pv)[:8] for pv in missing_pvs],
+                )
                 continue
 
             pv_to_idx = {pv: i for i, pv in enumerate(unique_pvs)}

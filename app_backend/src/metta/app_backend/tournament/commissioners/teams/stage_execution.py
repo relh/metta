@@ -428,6 +428,11 @@ class TeamStageExecutionMixin:
 
         score_pool_name = binding.score_source_pool or binding.input_pool
         scores = await self._compute_policy_scores(pools[score_pool_name].id)
+
+        team_pool_players = await self._get_pool_players(output_pool.id)
+        available_pv_ids = {pp.policy_version_id for pp in team_pool_players}
+        scores = {pv_id: score for pv_id, score in scores.items() if pv_id in available_pv_ids}
+
         sampled_teams = sample_teams(
             scores,
             team_size=stage.team_size,
