@@ -1,14 +1,29 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 import type { BardoPolicy, BardoWorldState } from '../lib/bardo-types'
+import {
+  BARDO_ATLAS_SIZE,
+  BARDO_LOBBY_DECORATIONS,
+  BARDO_PORTALS,
+  BARDO_ROOM_UNIT_RECTS,
+  BARDO_SPRITE_FRAMES,
+  OVERFLOW_ROOM_SLOT_ID,
+  accentForSubmitter,
+  buildSubmitterRoomPlan,
+  pointInRect,
+  portalForPolicy,
+  spriteForPolicy,
+  type BardoPortal,
+  type BardoRoomSlotId,
+  type BardoSpriteId,
+} from '../lib/bardo-lobby-layout'
 
 const WORLD_POLL_MS = 15_000
-const WORLD_STEP_MS = 60
-
-const PORTAL = { x: 0.9, y: 0.16 }
+const WORLD_STEP_MS = 70
+const PORTAL_CAPTURE_DISTANCE = 0.028
 
 type ActorState = {
   x: number
@@ -25,8 +40,10 @@ type RenderedPolicy = BardoPolicy & {
   y: number
   hidden: boolean
   busy: boolean
-  color: string
-  initials: string
+  roomId: BardoRoomSlotId
+  roomLabel: string
+  spriteId: BardoSpriteId
+  accentColor: string
 }
 
 function clamp01(value: number): number {
@@ -54,87 +71,50 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
   return Math.hypot(dx, dy)
 }
 
-function spawnPoint(policyId: string): { x: number; y: number } {
-  return {
-    x: 0.07 + 0.76 * seededUnit(`${policyId}:spawn:x`),
-    y: 0.2 + 0.72 * seededUnit(`${policyId}:spawn:y`),
-  }
-}
-
-function portalQueueTarget(policyId: string): { x: number; y: number } {
-  return {
-    x: PORTAL.x - 0.05 + 0.04 * seededUnit(`${policyId}:portal:x`),
-    y: PORTAL.y + 0.03 + 0.08 * seededUnit(`${policyId}:portal:y`),
-  }
-}
-
-function portalExitPoint(policyId: string): { x: number; y: number } {
-  return {
-    x: PORTAL.x - 0.06 + 0.03 * seededUnit(`${policyId}:exit:x`),
-    y: PORTAL.y + 0.11 + 0.04 * seededUnit(`${policyId}:exit:y`),
-  }
-}
-
-function nextWanderTarget(policyId: string, cycle: number): { x: number; y: number; lingerMs: number } {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const x = 0.06 + 0.85 * seededUnit(`${policyId}:wander:x:${cycle}:${attempt}`)
-    const y = 0.18 + 0.77 * seededUnit(`${policyId}:wander:y:${cycle}:${attempt}`)
-    const isPortalZone = x > 0.76 && y < 0.4
-    if (isPortalZone) continue
-
-    const lingerMs = 2200 + Math.floor(2200 * seededUnit(`${policyId}:linger:${cycle}:${attempt}`))
-    return { x, y, lingerMs }
-  }
-
-  return {
-    x: 0.5,
-    y: 0.5,
-    lingerMs: 2600,
-  }
-}
-
-function colorForPolicy(policyId: string): string {
-  const hue = Math.floor(seededUnit(`${policyId}:h`) * 360)
-  const saturation = 62 + Math.floor(seededUnit(`${policyId}:s`) * 16)
-  const lightness = 47 + Math.floor(seededUnit(`${policyId}:l`) * 10)
-  return `hsl(${hue} ${saturation}% ${lightness}%)`
-}
-
-function policyInitials(name: string): string {
-  const tokens = name
-    .split(/[._-]+/)
-    .map((token) => token.trim())
-    .filter((token) => token.length > 0)
-
-  if (tokens.length === 0) {
-    return name.slice(0, 2).toUpperCase()
-  }
-
-  if (tokens.length === 1) {
-    return tokens[0].slice(0, 2).toUpperCase()
-  }
-
-  return `${tokens[0][0]}${tokens[tokens.length - 1][0]}`.toUpperCase()
+function asPercent(value: number): string {
+  return `${(clamp01(value) * 100).toFixed(3)}%`
 }
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function asPercent(value: number): string {
-  return `${(clamp01(value) * 100).toFixed(3)}%`
+function portalQueueTarget(policyId: string, portal: BardoPortal): { x: number; y: number } {
+  return {
+    x: clamp01(portal.x - 0.03 + 0.06 * seededUnit(`${policyId}:${portal.id}:x`)),
+    y: clamp01(portal.y + 0.028 + 0.065 * seededUnit(`${policyId}:${portal.id}:y`)),
+  }
 }
 
-function ensureActorState(store: Map<string, ActorState>, policyId: string): ActorState {
+function roomSpawnPoint(policyId: string, roomId: BardoRoomSlotId): { x: number; y: number } {
+  return pointInRect(`${policyId}:${roomId}:spawn`, BARDO_ROOM_UNIT_RECTS[roomId], 0)
+}
+
+function atlasSpriteStyle(spriteId: BardoSpriteId, size: number): CSSProperties {
+  const frame = BARDO_SPRITE_FRAMES[spriteId]
+  const scale = size / frame.width
+
+  return {
+    width: `${size}px`,
+    height: `${size}px`,
+    backgroundImage: "url('/assets/mettagrid/atlas_mini.png')",
+    backgroundSize: `${BARDO_ATLAS_SIZE * scale}px ${BARDO_ATLAS_SIZE * scale}px`,
+    backgroundPosition: `-${frame.x * scale}px -${frame.y * scale}px`,
+    imageRendering: 'pixelated',
+    backgroundRepeat: 'no-repeat',
+  }
+}
+
+function ensureActorState(store: Map<string, ActorState>, policyId: string, roomId: BardoRoomSlotId): ActorState {
   const existing = store.get(policyId)
   if (existing) return existing
 
-  const initial = spawnPoint(policyId)
+  const spawn = roomSpawnPoint(policyId, roomId)
   const actorState: ActorState = {
-    x: initial.x,
-    y: initial.y,
-    targetX: initial.x,
-    targetY: initial.y,
+    x: spawn.x,
+    y: spawn.y,
+    targetX: spawn.x,
+    targetY: spawn.y,
     cycle: 0,
     nextRetargetAtMs: 0,
     hidden: false,
@@ -162,6 +142,7 @@ export function BardoLobby() {
       document.documentElement.removeAttribute('data-theme')
       return
     }
+
     document.documentElement.setAttribute('data-theme', requestedTheme)
   }, [requestedTheme])
 
@@ -210,6 +191,20 @@ export function BardoLobby() {
     }
   }, [loadWorldState])
 
+  const roomPlan = useMemo(() => buildSubmitterRoomPlan(world?.policies ?? []), [world])
+
+  const roomById = useMemo(
+    () =>
+      roomPlan.rooms.reduce(
+        (acc, room) => {
+          acc[room.slotId] = room
+          return acc
+        },
+        {} as Record<BardoRoomSlotId, (typeof roomPlan.rooms)[number]>
+      ),
+    [roomPlan]
+  )
+
   useEffect(() => {
     if (!world) return
 
@@ -223,7 +218,8 @@ export function BardoLobby() {
     }
 
     for (const policy of world.policies) {
-      ensureActorState(actorStore, policy.policyId)
+      const roomId = roomPlan.policyRoomById[policy.policyId] ?? OVERFLOW_ROOM_SLOT_ID
+      ensureActorState(actorStore, policy.policyId, roomId)
     }
 
     const tick = () => {
@@ -231,43 +227,49 @@ export function BardoLobby() {
       const nextFrame: RenderedPolicy[] = []
 
       for (const policy of world.policies) {
-        const actor = ensureActorState(actorStore, policy.policyId)
+        const roomId = roomPlan.policyRoomById[policy.policyId] ?? OVERFLOW_ROOM_SLOT_ID
+        const room = roomById[roomId]
+        const roomRect = BARDO_ROOM_UNIT_RECTS[roomId]
+        const actor = ensureActorState(actorStore, policy.policyId, roomId)
         const busy = policy.activeJobIds.length > 0
 
         if (busy) {
-          const queueTarget = portalQueueTarget(policy.policyId)
+          const portal = portalForPolicy(policy.policyId)
+          const queueTarget = portalQueueTarget(policy.policyId, portal)
           actor.targetX = queueTarget.x
           actor.targetY = queueTarget.y
+
+          if (distance(actor, portal) < PORTAL_CAPTURE_DISTANCE) {
+            actor.hidden = true
+          }
         } else {
           if (actor.hidden) {
-            const portalExit = portalExitPoint(policy.policyId)
+            const roomEntry = roomSpawnPoint(policy.policyId, roomId)
             actor.hidden = false
-            actor.x = portalExit.x
-            actor.y = portalExit.y
-            actor.targetX = portalExit.x
-            actor.targetY = portalExit.y
+            actor.x = roomEntry.x
+            actor.y = roomEntry.y
+            actor.targetX = roomEntry.x
+            actor.targetY = roomEntry.y
             actor.nextRetargetAtMs = 0
           }
 
           const shouldRetarget =
-            now >= actor.nextRetargetAtMs || distance(actor, { x: actor.targetX, y: actor.targetY }) < 0.02
+            now >= actor.nextRetargetAtMs || distance(actor, { x: actor.targetX, y: actor.targetY }) < 0.018
 
           if (shouldRetarget) {
             actor.cycle += 1
-            const nextTarget = nextWanderTarget(policy.policyId, actor.cycle)
+            const nextTarget = pointInRect(`${policy.policyId}:${roomId}:wander`, roomRect, actor.cycle)
             actor.targetX = nextTarget.x
             actor.targetY = nextTarget.y
             actor.nextRetargetAtMs = now + nextTarget.lingerMs
           }
         }
 
-        const easing = busy ? 0.18 : 0.08
+        const easing = busy ? 0.18 : 0.11
         actor.x += (actor.targetX - actor.x) * easing
         actor.y += (actor.targetY - actor.y) * easing
-
-        if (busy && distance(actor, PORTAL) < 0.03) {
-          actor.hidden = true
-        }
+        actor.x = clamp01(actor.x)
+        actor.y = clamp01(actor.y)
 
         nextFrame.push({
           ...policy,
@@ -275,18 +277,21 @@ export function BardoLobby() {
           y: actor.y,
           hidden: busy && actor.hidden,
           busy,
-          color: colorForPolicy(policy.policyId),
-          initials: policyInitials(policy.name),
+          roomId,
+          roomLabel: room?.label ?? 'Overflow Annex',
+          spriteId: spriteForPolicy(policy.policyId),
+          accentColor: accentForSubmitter(policy.userName || policy.userId),
         })
       }
 
+      nextFrame.sort((left, right) => left.y - right.y || left.policyId.localeCompare(right.policyId))
       setRenderedPolicies(nextFrame)
     }
 
     tick()
     const interval = setInterval(tick, WORLD_STEP_MS)
     return () => clearInterval(interval)
-  }, [world])
+  }, [roomById, roomPlan.policyRoomById, world])
 
   const visiblePolicies = useMemo(() => renderedPolicies.filter((policy) => !policy.hidden), [renderedPolicies])
 
@@ -295,22 +300,9 @@ export function BardoLobby() {
     [hoveredPolicyId, visiblePolicies]
   )
 
-  const nearbyPolicies = useMemo(() => {
-    if (!hoveredPolicy) return []
-
-    return visiblePolicies
-      .filter((policy) => policy.policyId !== hoveredPolicy.policyId)
-      .map((policy) => ({
-        policy,
-        dist: distance(hoveredPolicy, policy),
-      }))
-      .filter((entry) => entry.dist < 0.15)
-      .sort((left, right) => left.dist - right.dist)
-      .slice(0, 6)
-      .map((entry) => entry.policy)
-  }, [hoveredPolicy, visiblePolicies])
-
   const inEpisodeCount = world?.policies.filter((policy) => policy.activeJobIds.length > 0).length ?? 0
+  const occupiedRoomsCount = roomPlan.rooms.filter((room) => room.policyCount > 0).length
+  const totalPolicies = world?.policies.length ?? 0
   const lastUpdatedLabel = world
     ? new Date(world.generatedAt).toLocaleTimeString([], {
         hour: 'numeric',
@@ -324,44 +316,93 @@ export function BardoLobby() {
       <section className="bardo-card">
         <header className="bardo-header">
           <div>
-            <p className="bardo-kicker">Between Episodes</p>
+            <p className="bardo-kicker">Gathering Grid</p>
             <h1>Bardo Lobby</h1>
             <p className="bardo-subtitle">
-              Latest policy versions wander here. Policies in pending or running episode jobs drift to the portal and
-              phase out until they return.
+              Submitter rooms ring the map while episode portals line the north gate. Top submitters each get a room,
+              and overflow submitters share the annex.
             </p>
           </div>
           <div className="bardo-stats" role="status" aria-live="polite">
             <p>
-              <span>Visible now</span>
-              <strong>{visiblePolicies.length}</strong>
+              <span>Policies</span>
+              <strong>{totalPolicies}</strong>
             </p>
             <p>
-              <span>In episode</span>
+              <span>Rooms active</span>
+              <strong>
+                {occupiedRoomsCount}/{roomPlan.rooms.length}
+              </strong>
+            </p>
+            <p>
+              <span>Portaling</span>
               <strong>{inEpisodeCount}</strong>
-            </p>
-            <p>
-              <span>Active jobs</span>
-              <strong>{world?.activeJobs.length ?? 0}</strong>
             </p>
           </div>
         </header>
 
         {errorMessage ? <div className="bardo-alert">{errorMessage}</div> : null}
 
-        <div className="bardo-world" role="img" aria-label="Bardo lobby world map">
-          <div className="bardo-world-glow" />
+        <div className="bardo-world" role="img" aria-label="Bardo lobby room grid">
           <div className="bardo-world-grid" />
-
-          <div
-            className="bardo-portal"
-            style={{
-              left: asPercent(PORTAL.x),
-              top: asPercent(PORTAL.y),
-            }}
-          >
-            <span>Episode Portal</span>
+          <div className="bardo-lobby-zone">
+            <span>Commons Lobby</span>
           </div>
+
+          {roomPlan.rooms.map((room) => {
+            const rect = BARDO_ROOM_UNIT_RECTS[room.slotId]
+            const width = rect.maxX - rect.minX
+            const height = rect.maxY - rect.minY
+            return (
+              <div
+                key={room.slotId}
+                className={`bardo-room bardo-room-${room.edge} ${room.policyCount > 0 ? 'occupied' : ''}`}
+                style={{
+                  left: asPercent(rect.minX),
+                  top: asPercent(rect.minY),
+                  width: asPercent(width),
+                  height: asPercent(height),
+                }}
+              >
+                <p className="bardo-room-label">{room.label}</p>
+                <p className="bardo-room-meta">
+                  {room.policyCount} policy{room.policyCount === 1 ? '' : 'ies'}
+                </p>
+                {room.overflowSubmitters.length > 0 ? (
+                  <p className="bardo-room-overflow" title={room.overflowSubmitters.join(', ')}>
+                    {room.overflowSubmitters.join(', ')}
+                  </p>
+                ) : null}
+              </div>
+            )
+          })}
+
+          {BARDO_PORTALS.map((portal) => (
+            <div
+              key={portal.id}
+              className="bardo-portal"
+              style={{
+                left: asPercent(portal.x),
+                top: asPercent(portal.y),
+              }}
+            >
+              <span>{portal.label}</span>
+            </div>
+          ))}
+
+          {BARDO_LOBBY_DECORATIONS.map((decoration) => (
+            <div
+              key={decoration.id}
+              className="bardo-decoration"
+              style={{
+                left: asPercent(decoration.x),
+                top: asPercent(decoration.y),
+              }}
+              title={decoration.label}
+            >
+              <span className="bardo-sprite" style={atlasSpriteStyle(decoration.spriteId, 24)} />
+            </div>
+          ))}
 
           {visiblePolicies.map((policy) => (
             <button
@@ -371,13 +412,15 @@ export function BardoLobby() {
               style={{
                 left: asPercent(policy.x),
                 top: asPercent(policy.y),
-                backgroundColor: policy.color,
+                borderColor: policy.accentColor,
+                boxShadow: `0 0 0 2px color-mix(in srgb, ${policy.accentColor} 38%, transparent)`,
+                zIndex: `${20 + Math.floor(policy.y * 120)}`,
               }}
               title={`${policy.name} • ${policy.userName}`}
               onMouseEnter={() => setHoveredPolicyId(policy.policyId)}
               onMouseLeave={() => setHoveredPolicyId((current) => (current === policy.policyId ? null : current))}
             >
-              <span>{policy.initials}</span>
+              <span className="bardo-policy-sprite" style={atlasSpriteStyle(policy.spriteId, 30)} />
             </button>
           ))}
 
@@ -391,31 +434,26 @@ export function BardoLobby() {
             >
               <p className="bardo-tooltip-name">{hoveredPolicy.name}</p>
               <p className="bardo-tooltip-owner">by {hoveredPolicy.userName}</p>
+              <p className="bardo-tooltip-meta">Room: {hoveredPolicy.roomLabel}</p>
               <p className="bardo-tooltip-meta">
                 {hoveredPolicy.busy
-                  ? `In episode job (${hoveredPolicy.activeJobIds.length})`
-                  : `${nearbyPolicies.length} nearby policy${nearbyPolicies.length === 1 ? '' : 'ies'}`}
+                  ? `Routing to ${portalForPolicy(hoveredPolicy.policyId).label}`
+                  : `Waiting in ${hoveredPolicy.roomLabel}`}
               </p>
-              {nearbyPolicies.length > 0 ? (
-                <div className="bardo-tooltip-neighbors">
-                  {nearbyPolicies.map((neighbor) => (
-                    <span key={neighbor.policyId}>{neighbor.name}</span>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
 
           {isLoading ? (
             <div className="bardo-loading">
-              <span>Loading policies into Bardo...</span>
+              <span>Syncing lobby roster...</span>
             </div>
           ) : null}
         </div>
 
         <footer className="bardo-footer">
           <span>Updated {lastUpdatedLabel}</span>
-          <span>Latest versions only</span>
+          <span>Top submitters get dedicated rooms</span>
+          <span>{world?.activeJobs.length ?? 0} active jobs</span>
           {nameFilter ? <span>Filter: “{nameFilter}”</span> : <span>All policies</span>}
         </footer>
       </section>
