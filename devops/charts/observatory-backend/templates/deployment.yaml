@@ -86,10 +86,10 @@ spec:
           resources:
             requests:
               memory: "1Gi"
-              ephemeral-storage: "256Mi"
+              ephemeral-storage: "10Gi"
             limits:
               memory: "4Gi"
-              ephemeral-storage: "2Gi"
+              ephemeral-storage: "10Gi"
           ports:
             - containerPort: 8000
           startupProbe:

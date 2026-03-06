@@ -40,6 +40,9 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.oauth2_proxy.secret_name | required "oauth2_proxy.secret_name is required" }}
                   key: cookie-secret
+          resources:
+            requests:
+              ephemeral-storage: "2Gi"
           ports:
             - containerPort: 4180
               protocol: TCP

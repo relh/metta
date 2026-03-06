@@ -51,5 +51,6 @@ spec:
           resources:
             requests:
               memory: "1Gi"
+              ephemeral-storage: "2Gi"
             limits:
               memory: "4Gi"

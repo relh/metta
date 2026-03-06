@@ -24,5 +24,6 @@ spec:
           resources:
             requests:
               memory: "256Mi"
+              ephemeral-storage: "10Gi"
             limits:
               memory: "1Gi"
