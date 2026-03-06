@@ -1,7 +1,8 @@
+from collections import defaultdict
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
@@ -11,7 +12,7 @@ from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.user_data import load_user_ids
-from vibeservatory.backend.dashboard_backend.auth import User, get_user
+from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
 from vibeservatory.backend.dashboard_backend.database import db_session
 
 PAGE_SIZE = 500
@@ -45,9 +46,7 @@ def _isoformat_utc(value: datetime) -> str:
 
 
 def _latest_policy_version(policy: Policy) -> PolicyVersion | None:
-    if not policy.versions:
-        return None
-    return max(policy.versions, key=lambda version: (version.version, version.created_at))
+    return max(policy.versions, key=lambda version: (version.version, version.created_at), default=None)
 
 
 async def _fetch_all_policies(name_filter: str | None) -> list[Policy]:
@@ -114,11 +113,11 @@ def _normalize_active_jobs(jobs: list[JobRequest]) -> list[BardoActiveJob]:
 def _collect_active_job_policy_version_usage(
     jobs: list[BardoActiveJob],
 ) -> dict[str, set[str]]:
-    active_by_policy_version_id: dict[str, set[str]] = {}
+    active_by_policy_version_id: defaultdict[str, set[str]] = defaultdict(set)
     for job in jobs:
         for policy_version_id in job.policyVersionIds:
-            active_by_policy_version_id.setdefault(policy_version_id, set()).add(job.id)
-    return active_by_policy_version_id
+            active_by_policy_version_id[policy_version_id].add(job.id)
+    return dict(active_by_policy_version_id)
 
 
 async def load_bardo_world_state(*, name_filter: str | None, include_active_jobs: bool) -> BardoWorldStateResponse:
@@ -169,10 +168,9 @@ def create_bardo_router() -> APIRouter:
     @router.get("/bardo/v1/world-state")
     @timed_http_handler
     async def get_world_state(
-        user: User | None = Depends(get_user),
+        _user: SoftmaxUser,
         q: str | None = Query(default=None),
     ) -> BardoWorldStateResponse:
-        include_active_jobs = bool(user and user.is_softmax_team_member)
-        return await load_bardo_world_state(name_filter=q, include_active_jobs=include_active_jobs)
+        return await load_bardo_world_state(name_filter=q, include_active_jobs=True)
 
     return router

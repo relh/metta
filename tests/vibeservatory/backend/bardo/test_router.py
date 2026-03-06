@@ -10,8 +10,9 @@ from fastapi.testclient import TestClient
 
 import vibeservatory.backend.dashboard_backend.bardo.router as bardo_router
 from metta.app_backend.models.job_request import JobStatus
-from vibeservatory.backend.dashboard_backend.auth import User, get_user
+from vibeservatory.backend.dashboard_backend.auth import User, get_softmax_user_or_raise
 from vibeservatory.backend.dashboard_backend.bardo.router import create_bardo_router
+from vibeservatory.backend.dashboard_backend.config import settings
 
 
 def test_bardo_world_state_includes_active_jobs_for_softmax(
@@ -51,7 +52,7 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
         assert user_ids == {"user-alpha"}
         return {"user-alpha": "Alice"}
 
-    async def fake_get_user():
+    async def fake_get_softmax_user():
         return User(id="user-alpha", email="alice@softmax.com", is_softmax_team_member=True)
 
     monkeypatch.setattr(bardo_router, "_fetch_all_policies", fake_fetch_all_policies)
@@ -60,7 +61,7 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
 
     app = FastAPI()
     app.include_router(create_bardo_router())
-    app.dependency_overrides[get_user] = fake_get_user
+    app.dependency_overrides[get_softmax_user_or_raise] = fake_get_softmax_user
     client = TestClient(app, base_url="http://localhost")
 
     response = client.get("/bardo/v1/world-state?q=alpha")
@@ -88,62 +89,37 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
     assert isinstance(payload["generatedAt"], str)
 
 
-def test_bardo_world_state_hides_active_jobs_for_non_softmax(
+def test_bardo_world_state_requires_authentication(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    policy_id = uuid4()
-    policy_version_id = uuid4()
-
-    policy = SimpleNamespace(
-        id=policy_id,
-        name="beta-policy",
-        user_id="user-beta",
-        versions=[
-            SimpleNamespace(
-                id=policy_version_id,
-                version=1,
-                created_at=datetime(2026, 3, 4, 18, 0, tzinfo=UTC),
-            ),
-        ],
-    )
-
-    async def fake_fetch_all_policies(name_filter: str | None):
-        assert name_filter is None
-        return [policy]
-
-    async def fake_fetch_active_episode_jobs(include_active_jobs: bool):
-        assert include_active_jobs is False
-        return []
-
-    async def fake_resolve_user_names(user_ids: set[str]):
-        assert user_ids == {"user-beta"}
-        return {}
-
-    async def fake_get_user():
-        return User(id="user-beta", email="beta@external.test", is_softmax_team_member=False)
-
-    monkeypatch.setattr(bardo_router, "_fetch_all_policies", fake_fetch_all_policies)
-    monkeypatch.setattr(bardo_router, "_fetch_active_episode_jobs", fake_fetch_active_episode_jobs)
-    monkeypatch.setattr(bardo_router, "_resolve_user_names", fake_resolve_user_names)
+    monkeypatch.setattr(settings, "DASHBOARD_DEV_AUTH_BYPASS", False)
+    monkeypatch.setattr(settings, "DASHBOARD_AUTH_SECRET", "test-secret")
 
     app = FastAPI()
     app.include_router(create_bardo_router())
-    app.dependency_overrides[get_user] = fake_get_user
     client = TestClient(app, base_url="http://localhost")
 
     response = client.get("/bardo/v1/world-state")
-    assert response.status_code == 200
+    assert response.status_code == 401
 
-    payload = response.json()
-    assert payload["activeJobs"] == []
-    assert payload["policies"] == [
-        {
-            "policyId": str(policy_id),
-            "policyVersionId": str(policy_version_id),
-            "name": "beta-policy",
-            "userId": "user-beta",
-            "userName": "user-beta",
-            "createdAt": "2026-03-04T18:00:00Z",
-            "activeJobIds": [],
-        }
-    ]
+
+def test_bardo_world_state_rejects_non_softmax_users(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "DASHBOARD_DEV_AUTH_BYPASS", False)
+    monkeypatch.setattr(settings, "DASHBOARD_AUTH_SECRET", "test-secret")
+
+    app = FastAPI()
+    app.include_router(create_bardo_router())
+    client = TestClient(app, base_url="http://localhost")
+
+    response = client.get(
+        "/bardo/v1/world-state",
+        headers={
+            "X-Auth-Secret": "test-secret",
+            "X-User-Id": "user-beta",
+            "X-User-Email": "beta@external.test",
+            "X-User-Is-Softmax-Team-Member": "false",
+        },
+    )
+    assert response.status_code == 403

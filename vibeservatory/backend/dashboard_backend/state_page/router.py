@@ -18,7 +18,6 @@ from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, J
 from metta.app_backend.models.policies import PolicyVersion
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
 from metta.app_backend.queries import episode_queries, policy_queries
-from metta.app_backend.queries.role_percentile_queries import ROLE_METRICS, compute_policy_role_percentiles
 from metta.app_backend.replay.summarizer import parse_replay, select_replay_episodes, summarize_replay
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.tournament.commissioners.factory import build_commissioner
@@ -35,6 +34,7 @@ from vibeservatory.backend.dashboard_backend.anthropic_client import (
 from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
 from vibeservatory.backend.dashboard_backend.cogames_diagnose.router import list_run_summaries
 from vibeservatory.backend.dashboard_backend.database import db_session
+from vibeservatory.backend.dashboard_backend.role_stats.queries import ROLE_METRICS, compute_policy_role_percentiles
 from vibeservatory.backend.dashboard_backend.state_page import diagnostics as claude_dashboard
 from vibeservatory.backend.dashboard_backend.state_page.capability_audit import build_capability_code_audit
 from vibeservatory.backend.dashboard_backend.state_page.diagnostics import (

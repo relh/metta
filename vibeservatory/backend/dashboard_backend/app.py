@@ -4,13 +4,14 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
-from metta.app_backend.routes.role_stats_routes import create_role_stats_router
+from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
 from vibeservatory.backend.dashboard_backend.bardo.router import create_bardo_router
 from vibeservatory.backend.dashboard_backend.chatprop.router import create_chatprop_router
 from vibeservatory.backend.dashboard_backend.cogames_diagnose.router import create_cogames_diagnose_router
 from vibeservatory.backend.dashboard_backend.config import settings
 from vibeservatory.backend.dashboard_backend.database import configure_dashboard_db
 from vibeservatory.backend.dashboard_backend.pantheon.router import create_pantheon_router
+from vibeservatory.backend.dashboard_backend.role_stats.router import create_role_stats_router
 from vibeservatory.backend.dashboard_backend.state_page.router import create_dashboard_router
 from vibeservatory.backend.dashboard_backend.trainboard.router import create_trainboard_router
 
@@ -67,7 +68,7 @@ def create_app() -> FastAPI:
         return JSONResponse({"ok": True})
 
     @app.get("/internal/openapi.json", include_in_schema=False)
-    async def internal_openapi() -> JSONResponse:
+    async def internal_openapi(_user: SoftmaxUser) -> JSONResponse:
         schema = get_openapi(
             title=app.title,
             version=app.version,
@@ -76,7 +77,7 @@ def create_app() -> FastAPI:
         return JSONResponse(schema)
 
     @app.get("/internal/docs", include_in_schema=False)
-    async def internal_docs():
+    async def internal_docs(_user: SoftmaxUser):
         return get_swagger_ui_html(openapi_url="/internal/openapi.json", title=f"{app.title} Internal Docs")
 
     return app

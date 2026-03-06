@@ -5,13 +5,13 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from metta.app_backend.auth import NoAuthRequired
-from metta.app_backend.queries.role_percentile_queries import (
+from metta.app_backend.route_logger import timed_http_handler
+from vibeservatory.backend.dashboard_backend.auth import ExternalUser
+from vibeservatory.backend.dashboard_backend.role_stats.queries import (
     ROLE_METRICS,
     compute_policy_role_percentiles,
     compute_role_leaderboard,
 )
-from metta.app_backend.route_logger import timed_http_handler
 
 
 class RoleMetricDef(BaseModel):
@@ -48,12 +48,9 @@ class RoleLeaderboardRow(BaseModel):
 def create_role_stats_router() -> APIRouter:
     router = APIRouter(prefix="/stats/roles", tags=["roles"])
 
-    def _clamp_limit(limit: int) -> int:
-        return max(1, min(limit, 500))
-
     @router.get("/definitions")
     @timed_http_handler
-    async def get_role_definitions(_user: NoAuthRequired) -> RoleDefsResponse:
+    async def get_role_definitions(_user: ExternalUser) -> RoleDefsResponse:
         return RoleDefsResponse(
             roles={
                 role: [
@@ -73,30 +70,28 @@ def create_role_stats_router() -> APIRouter:
     async def get_policy_percentiles(
         pool_id: UUID,
         policy_version_id: UUID,
-        _user: NoAuthRequired,
+        _user: ExternalUser,
     ) -> list[RolePercentileRow]:
         rows = await compute_policy_role_percentiles(pool_id, policy_version_id)
-        if rows:
-            return [RolePercentileRow.model_validate(row) for row in rows]
-
-        raise HTTPException(status_code=404, detail="No role metrics found for this policy in this pool")
+        if not rows:
+            raise HTTPException(status_code=404, detail="No role metrics found for this policy in this pool")
+        return [RolePercentileRow.model_validate(row) for row in rows]
 
     @router.get("/pools/{pool_id}/roles/{role}/leaderboard")
     @timed_http_handler
     async def get_leaderboard(
         pool_id: UUID,
         role: str,
-        _user: NoAuthRequired,
+        _user: ExternalUser,
         limit: int = 100,
     ) -> list[RoleLeaderboardRow]:
         if role not in ROLE_METRICS:
             raise HTTPException(status_code=404, detail=f"Unknown role '{role}'")
 
-        clamped_limit = _clamp_limit(limit)
+        clamped_limit = max(1, min(limit, 500))
         rows = await compute_role_leaderboard(pool_id, role, limit=clamped_limit)
-        if rows:
-            return [RoleLeaderboardRow.model_validate(row) for row in rows]
-
-        raise HTTPException(status_code=404, detail="No role metrics found for this pool")
+        if not rows:
+            raise HTTPException(status_code=404, detail="No role metrics found for this pool")
+        return [RoleLeaderboardRow.model_validate(row) for row in rows]
 
     return router

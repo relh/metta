@@ -10,6 +10,7 @@ from metta.chatprop.local.backend import server as chatprop_server
 from metta.chatprop.local.backend.server import FRONTEND_ROOT
 from metta.chatprop.local.flowchart import write_flowchart_outputs
 from metta.chatprop.scanner import find_transcripts_for_branches
+from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
 
 CHATPROP_BASE_PATH = "/chatprop"
 
@@ -69,17 +70,18 @@ def create_chatprop_router() -> APIRouter:
         return Response(content=body, media_type=content_type)
 
     @router.get("/api/health")
-    async def chatprop_health() -> dict[str, bool]:
+    async def chatprop_health(_user: SoftmaxUser) -> dict[str, bool]:
         return {"ok": True}
 
     @router.get("/api/catalog")
-    async def chatprop_catalog(refresh: str = Query(default="0")) -> dict[str, Any]:
+    async def chatprop_catalog(_user: SoftmaxUser, refresh: str = Query(default="0")) -> dict[str, Any]:
         refresh_enabled = refresh in {"1", "true", "yes"}
         payload = chatprop_server._build_catalog(load_config(), refresh=refresh_enabled)
         return payload
 
     @router.post("/api/catalog/jobs")
     async def chatprop_catalog_job_create(
+        _user: SoftmaxUser,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         payload = payload or {}
@@ -87,14 +89,17 @@ def create_chatprop_router() -> APIRouter:
         return chatprop_server._create_catalog_job(bool(refresh_enabled))
 
     @router.get("/api/catalog/jobs/{job_id}")
-    async def chatprop_catalog_job_status(job_id: str) -> dict[str, Any]:
+    async def chatprop_catalog_job_status(job_id: str, _user: SoftmaxUser) -> dict[str, Any]:
         job = chatprop_server._get_catalog_job(job_id.strip())
         if job is None:
             raise HTTPException(status_code=404, detail="Unknown catalog job")
         return job
 
     @router.post("/api/analysis/find")
-    async def chatprop_analysis_find(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def chatprop_analysis_find(
+        _user: SoftmaxUser,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = payload or {}
         branches = _extract_branches_or_400(payload)
         config = load_config()
@@ -115,14 +120,20 @@ def create_chatprop_router() -> APIRouter:
         }
 
     @router.post("/api/analysis/context")
-    async def chatprop_analysis_context(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def chatprop_analysis_context(
+        _user: SoftmaxUser,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = payload or {}
         branches = _extract_branches_or_400(payload)
         context = chatprop_server.build_analysis_context(branches, load_config())
         return {"branches": branches, "length": len(context), "context": context}
 
     @router.post("/api/analysis/run")
-    async def chatprop_analysis_run(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def chatprop_analysis_run(
+        _user: SoftmaxUser,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = payload or {}
         branches = _extract_branches_or_400(payload)
         output = chatprop_server.run_analysis(branches, load_config())
@@ -131,7 +142,10 @@ def create_chatprop_router() -> APIRouter:
         return {"branches": branches, "output": output}
 
     @router.post("/api/flowchart/render")
-    async def chatprop_flowchart_render(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def chatprop_flowchart_render(
+        _user: SoftmaxUser,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = payload or {}
         options = chatprop_server._flowchart_options_from_payload(payload)
         if options is None:
@@ -140,7 +154,10 @@ def create_chatprop_router() -> APIRouter:
         return chatprop_server._flowchart_payload_with_catalog(workflow_graph, options=options, catalog=catalog)
 
     @router.post("/api/flowchart/save")
-    async def chatprop_flowchart_save(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    async def chatprop_flowchart_save(
+        _user: SoftmaxUser,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = payload or {}
         options = chatprop_server._flowchart_options_from_payload(payload)
         if options is None:

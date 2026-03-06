@@ -14,7 +14,7 @@ Related code paths:
 What it does:
 
 - Serves Vibeservatory dashboard endpoints from `vibeservatory/backend/dashboard_backend/state_page/router.py`
-- Also mounts role-stats endpoints from `metta.app_backend.routes.role_stats_routes`
+- Also mounts role-stats endpoints from `vibeservatory/backend/dashboard_backend/role_stats/router.py`
 - Exposes internal docs at `http://127.0.0.1:8010/internal/docs`
 - Hides public docs (`/docs` is disabled)
 - Forces read-only DB usage for all dashboard queries in this process

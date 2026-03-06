@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import literal, select
 
 from metta.app_backend.config import DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
-from metta.app_backend.queries import role_percentile_queries as rpq
+from vibeservatory.backend.dashboard_backend.role_stats import queries as rpq
 
 
 class _FakeExecuteResult:
