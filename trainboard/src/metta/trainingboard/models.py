@@ -179,6 +179,21 @@ class MeaningfulResultMetrics(BaseModel):
     threshold_definition: str
 
 
+PipelineAssessmentStatus = Literal["good", "thin", "critical", "not_measurable"]
+
+
+class PipelineAssessment(BaseModel):
+    status: PipelineAssessmentStatus
+    headline: str
+    detail: str
+
+
+class TrainingPipelineAssessments(BaseModel):
+    concurrent_experiments: PipelineAssessment
+    search_space_coverage: PipelineAssessment
+    meaningful_result_cadence: PipelineAssessment
+
+
 class TrainingPipelineSnapshot(BaseModel):
     generated_at: str
     available: bool
@@ -187,6 +202,7 @@ class TrainingPipelineSnapshot(BaseModel):
     experiments: Optional[TrainingExperimentMetrics] = None
     search_coverage: Optional[SearchCoverageMetrics] = None
     meaningful_results: Optional[MeaningfulResultMetrics] = None
+    assessments: Optional[TrainingPipelineAssessments] = None
 
     @classmethod
     def unavailable(cls, source: str, note: str) -> "TrainingPipelineSnapshot":
@@ -218,3 +234,43 @@ class ResearchFunnelSnapshot(BaseModel):
     paper_repo_tasks: int = Field(ge=0)
     paper_repo_implemented_tasks: int = Field(ge=0)
     stages: ResearchFunnelStages
+
+
+class CogsguardTrainDefaultsAudit(BaseModel):
+    command: str
+    default_layout: str
+    default_num_agents: int = Field(ge=1)
+    default_max_steps: int = Field(ge=1)
+    default_policy_assets: list[str]
+    default_losses: list[str]
+    conditional_losses: list[str]
+    progress_metric: str
+
+
+class MultiPolicySupportAudit(BaseModel):
+    supported: bool
+    mechanism: str
+    evidence_paths: list[str]
+    example_recipe: str
+    example_policies: list[str]
+    example_slices: list[str]
+
+
+class LaunchReliabilityAudit(BaseModel):
+    has_automatic_retry: bool
+    retry_strategy: str
+    notes: list[str]
+
+
+class LossInventoryAudit(BaseModel):
+    recipe_loss_keys: list[str]
+    core_loss_modules: list[str]
+
+
+class TrainingPipelineAuditSnapshot(BaseModel):
+    generated_at: str
+    supports_multi_policy_training: bool
+    cogsguard_train_defaults: CogsguardTrainDefaultsAudit
+    multi_policy: MultiPolicySupportAudit
+    launch_reliability: LaunchReliabilityAudit
+    loss_inventory: LossInventoryAudit

@@ -9,14 +9,24 @@ import os
 import sys
 import time
 import urllib.parse
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
 
 from metta.trainingboard.llm_scoring import default_llm_cache_path, load_llm_score_cache
-from metta.trainingboard.models import LLMTaskScores, TrainingPipelineSnapshot
+from metta.trainingboard.models import (
+    CogsguardTrainDefaultsAudit,
+    LaunchReliabilityAudit,
+    LLMTaskScores,
+    LossInventoryAudit,
+    MultiPolicySupportAudit,
+    TrainingPipelineAuditSnapshot,
+    TrainingPipelineSnapshot,
+)
 from metta.trainingboard.pipeline_metrics import (
     build_research_funnel_snapshot,
+    build_training_pipeline_audit_snapshot,
     build_training_pipeline_snapshot_from_samples,
     fetch_wandb_state_samples,
 )
@@ -42,10 +52,13 @@ WANDB_STATE_LIMIT_ENV = "TRAININGBOARD_WANDB_STATE_LIMIT"
 WANDB_DEFAULT_ENTITY = "metta-research"
 WANDB_DEFAULT_PROJECT = "metta"
 PIPELINE_CACHE_TTL_SECONDS = 300
+PIPELINE_AUDIT_CACHE_TTL_SECONDS = 1800
 
 _pipeline_cache_payload: Optional[dict] = None
 _pipeline_cache_key: Optional[tuple[str, str, int]] = None
 _pipeline_cache_expires_at: float = 0.0
+_pipeline_audit_cache_payload: Optional[dict] = None
+_pipeline_audit_cache_expires_at: float = 0.0
 
 
 def _normalize_base_path(raw: str) -> str:
@@ -186,28 +199,31 @@ def build_board_payload_for_state_dir(state_dir: Path) -> dict:
         "dashboard": build_dashboard_for_state_dir(state_dir),
         "task_ranking": build_task_ranking_for_state_dir(state_dir),
         "pipeline": build_pipeline_snapshot_for_state_dir(state_dir),
+        "pipeline_audit": build_pipeline_audit_for_state_dir(state_dir),
         "research_funnel": build_research_funnel_for_state_dir(state_dir),
     }
 
 
-def _enabled_flag(name: str) -> bool:
-    raw_value = os.environ.get(name, "")
+def _wandb_metrics_enabled() -> bool:
+    raw_value = os.environ.get(WANDB_ENABLE_ENV)
+    if raw_value is None:
+        return True
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _wandb_per_state_limit() -> int:
-    raw_limit = os.environ.get(WANDB_STATE_LIMIT_ENV, "300").strip()
+    raw_limit = os.environ.get(WANDB_STATE_LIMIT_ENV, "30").strip()
     if not raw_limit.isdigit():
-        return 300
+        return 30
     numeric_limit = int(raw_limit)
     return max(10, min(1000, numeric_limit))
 
 
 def build_pipeline_snapshot_for_state_dir(_state_dir: Path) -> dict:
-    if not _enabled_flag(WANDB_ENABLE_ENV):
+    if not _wandb_metrics_enabled():
         return TrainingPipelineSnapshot.unavailable(
             source="wandb_state_samples",
-            note=f"Set {WANDB_ENABLE_ENV}=1 to enable live pipeline metrics.",
+            note=f"Set {WANDB_ENABLE_ENV}=1 (or unset it) to enable live pipeline metrics.",
         ).model_dump()
 
     entity = os.environ.get(WANDB_ENTITY_ENV, WANDB_DEFAULT_ENTITY)
@@ -241,6 +257,53 @@ def build_pipeline_snapshot_for_state_dir(_state_dir: Path) -> dict:
     _pipeline_cache_key = cache_key
     _pipeline_cache_expires_at = now_monotonic + PIPELINE_CACHE_TTL_SECONDS
     return payload
+
+
+def build_pipeline_audit_for_state_dir(_state_dir: Path) -> dict:
+    now_monotonic = time.monotonic()
+    global _pipeline_audit_cache_payload, _pipeline_audit_cache_expires_at
+    if _pipeline_audit_cache_payload is not None and now_monotonic < _pipeline_audit_cache_expires_at:
+        return _pipeline_audit_cache_payload
+
+    try:
+        payload = build_training_pipeline_audit_snapshot().model_dump()
+    except Exception as exc:
+        payload = _build_unavailable_pipeline_audit_payload(exc)
+    _pipeline_audit_cache_payload = payload
+    _pipeline_audit_cache_expires_at = now_monotonic + PIPELINE_AUDIT_CACHE_TTL_SECONDS
+    return payload
+
+
+def _build_unavailable_pipeline_audit_payload(exc: Exception) -> dict:
+    note = f"Pipeline audit unavailable: {type(exc).__name__}: {exc}"
+    return TrainingPipelineAuditSnapshot(
+        generated_at=datetime.now(tz=UTC).isoformat(),
+        supports_multi_policy_training=False,
+        cogsguard_train_defaults=CogsguardTrainDefaultsAudit(
+            command="-",
+            default_layout="-",
+            default_num_agents=1,
+            default_max_steps=1,
+            default_policy_assets=[],
+            default_losses=[],
+            conditional_losses=[],
+            progress_metric="-",
+        ),
+        multi_policy=MultiPolicySupportAudit(
+            supported=False,
+            mechanism="Unavailable",
+            evidence_paths=[],
+            example_recipe="-",
+            example_policies=[],
+            example_slices=[],
+        ),
+        launch_reliability=LaunchReliabilityAudit(
+            has_automatic_retry=False,
+            retry_strategy="Unavailable",
+            notes=[note],
+        ),
+        loss_inventory=LossInventoryAudit(recipe_loss_keys=[], core_loss_modules=[]),
+    ).model_dump()
 
 
 def build_research_funnel_for_state_dir(state_dir: Path) -> dict:
@@ -320,6 +383,10 @@ class TrainingBoardHandler(BaseHTTPRequestHandler):
 
         if request_path == "/api/v1/pipeline":
             self._write_json(200, build_pipeline_snapshot_for_state_dir(self.server.state_dir))
+            return
+
+        if request_path == "/api/v1/pipeline-audit":
+            self._write_json(200, build_pipeline_audit_for_state_dir(self.server.state_dir))
             return
 
         if request_path == "/api/v1/research-funnel":

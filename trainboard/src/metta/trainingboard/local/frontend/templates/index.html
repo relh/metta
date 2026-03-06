@@ -329,6 +329,12 @@
         gap: 10px;
         grid-template-columns: repeat(4, minmax(180px, 1fr));
       }
+      .assessment-grid {
+        margin-top: 10px;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(220px, 1fr));
+      }
       .health-card {
         border: 1px solid var(--line-soft);
         border-radius: 12px;
@@ -348,6 +354,40 @@
         line-height: 1;
       }
       .health-meta {
+        margin-top: 5px;
+        color: var(--muted);
+        font-size: clamp(11px, 0.82vw, 14px);
+      }
+      .assessment-card {
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
+        background: rgba(7, 14, 23, 0.92);
+        padding: 10px;
+      }
+      .assessment-title {
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: clamp(10px, 0.75vw, 12px);
+      }
+      .assessment-status {
+        margin-top: 5px;
+        font-size: clamp(16px, 1.15vw, 20px);
+        font-weight: 700;
+      }
+      .assessment-status.good {
+        color: var(--focus);
+      }
+      .assessment-status.thin {
+        color: var(--focus-3);
+      }
+      .assessment-status.critical {
+        color: var(--danger);
+      }
+      .assessment-status.not_measurable {
+        color: var(--muted);
+      }
+      .assessment-detail {
         margin-top: 5px;
         color: var(--muted);
         font-size: clamp(11px, 0.82vw, 14px);
@@ -454,6 +494,9 @@
         .system-grid {
           grid-template-columns: repeat(2, minmax(180px, 1fr));
         }
+        .assessment-grid {
+          grid-template-columns: 1fr;
+        }
         .system-columns,
         .funnel-grid {
           grid-template-columns: 1fr;
@@ -505,6 +548,7 @@
       <section class="systems">
         <h2>Training Pipeline Health</h2>
         <div class="system-grid" id="pipelineHealthCards"></div>
+        <div class="assessment-grid" id="pipelineAssessmentCards"></div>
         <div class="system-columns">
           <article class="system-panel">
             <h3>Search Space Coverage (30d)</h3>
@@ -515,6 +559,14 @@
             <ul class="kv-list" id="meaningfulResultsSummary"></ul>
           </article>
         </div>
+      </section>
+
+      <section class="systems">
+        <h2>Metta Training Pipeline Baseline</h2>
+        <article class="system-panel">
+          <h3>Canonical Snapshot (Code-Backed)</h3>
+          <ul class="kv-list" id="pipelineBaselineSummary"></ul>
+        </article>
       </section>
 
       <section class="funnel">

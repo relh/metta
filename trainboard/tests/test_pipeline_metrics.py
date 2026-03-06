@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from metta.trainingboard.models import LLMTaskScores, ResearchPaperRecord, TaskExecutionScores
 from metta.trainingboard.pipeline_metrics import (
     WandbRunSample,
+    _extract_assignment_int,
     build_research_funnel_snapshot,
     build_training_pipeline_snapshot_from_samples,
+    fetch_wandb_state_samples,
 )
 
 
@@ -133,6 +137,9 @@ def test_training_pipeline_snapshot_computes_concurrency_and_meaningful_rate() -
     assert snapshot.meaningful_results.primary_metric == "env_collective/cogs/aligned.junction.held"
     assert snapshot.meaningful_results.measurable is True
     assert snapshot.meaningful_results.meaningful_events_7d >= 2
+    assert snapshot.assessments.concurrent_experiments.status in {"good", "thin"}
+    assert snapshot.assessments.search_space_coverage.status in {"good", "thin"}
+    assert snapshot.assessments.meaningful_result_cadence.status in {"good", "thin"}
 
 
 def test_training_pipeline_snapshot_leaves_primary_metric_empty_when_unlogged() -> None:
@@ -153,3 +160,62 @@ def test_training_pipeline_snapshot_leaves_primary_metric_empty_when_unlogged() 
     assert snapshot.meaningful_results.primary_metric == ""
     assert snapshot.meaningful_results.primary_metric_coverage_ratio == 0.0
     assert snapshot.meaningful_results.measurable is False
+    assert snapshot.assessments.meaningful_result_cadence.status == "not_measurable"
+
+
+def test_fetch_wandb_state_samples_skips_broken_summary_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _BrokenSummaryRun:
+        id = "broken-run"
+        name = "broken-run"
+        display_name = "broken-run"
+        created_at = "2026-03-06T00:00:00+00:00"
+        tags: list[str] = []
+
+        @property
+        def summary(self) -> dict[str, float]:
+            msg = "summary unavailable"
+            raise ValueError(msg)
+
+    class _Api:
+        def __init__(self, timeout: int) -> None:
+            self.timeout = timeout
+
+        def runs(
+            self,
+            _path: str,
+            *,
+            filters: dict[str, str],
+            order: str,
+            per_page: int,
+            lazy: bool,
+        ) -> list[_BrokenSummaryRun]:
+            assert filters["state"] in {"running", "finished", "crashed"}
+            assert order == "-created_at"
+            assert per_page >= 50
+            if filters["state"] == "finished":
+                assert lazy is False
+            else:
+                assert lazy is True
+            return [_BrokenSummaryRun()]
+
+    class _WandbModule:
+        Api = _Api
+
+    monkeypatch.setattr("importlib.import_module", lambda _name: _WandbModule())
+    samples = fetch_wandb_state_samples(entity="metta-research", project="metta", per_state_limit=5)
+
+    assert len(samples) == 3
+    assert all(sample.run_id == "broken-run" for sample in samples)
+    assert all(sample.summary_metrics == {} for sample in samples)
+
+
+def test_extract_assignment_int_allows_whitespace_around_equals() -> None:
+    module_text = "\n".join(
+        [
+            "DEFAULT_NUM_AGENTS = 8",
+            "DEFAULT_MAX_STEPS: int = 10_000",
+        ]
+    )
+
+    assert _extract_assignment_int(module_text, "DEFAULT_NUM_AGENTS", default=1) == 8
+    assert _extract_assignment_int(module_text, "DEFAULT_MAX_STEPS", default=1) == 10000

@@ -1,6 +1,8 @@
 import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 
+import { PolicyDashboardEmbed } from "../policy-dashboard/PolicyDashboardEmbed";
+
 export default function TrainBoardPage() {
   if (!config.trainBoardUrl) {
     return (
@@ -23,12 +25,7 @@ export default function TrainBoardPage() {
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-114px)]">
-        <iframe
-          title="Train Board"
-          src={config.trainBoardUrl}
-          className="bg-background h-full w-full border-0"
-          referrerPolicy="no-referrer"
-        />
+        <PolicyDashboardEmbed src={config.trainBoardUrl} />
       </div>
     </SoftmaxGuard>
   );

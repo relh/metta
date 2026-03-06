@@ -26,6 +26,9 @@ Top Bets is the global top-15 list, split into:
 Board mode also shows:
 
 - Training pipeline health: running now, 7d starts (lower-bound), 7d crash rate, stale-running count
+- Pipeline assessments: direct status for concurrency, search-space coverage, and meaningful-result cadence
+- Canonical training pipeline baseline (code-backed): cogsguard defaults, losses, launch reliability posture, and
+  multi-policy support evidence
 - Search-space coverage: family concentration and entropy over recent run-name families
 - Meaningful-result cadence: primary quality metric, coverage, and meaningful event rate
 - Paper-to-repo-to-metta funnel: stage counts + conversion rates
@@ -60,18 +63,23 @@ uv run trainingboard serve --host 127.0.0.1 --port 8877
 
 Open `http://127.0.0.1:8877`.
 
-### Optional live W&B pipeline metrics
+### Live W&B pipeline metrics
 
-Pipeline health is computed from W&B state samples only when enabled:
+Pipeline health attempts live W&B state sampling by default.
 
 ```bash
-export TRAININGBOARD_ENABLE_WANDB_METRICS=1
 export TRAININGBOARD_WANDB_ENTITY=metta-research   # optional
 export TRAININGBOARD_WANDB_PROJECT=metta           # optional
-export TRAININGBOARD_WANDB_STATE_LIMIT=300         # optional, min 10 max 1000
+export TRAININGBOARD_WANDB_STATE_LIMIT=30          # optional, min 10 max 1000
 ```
 
-When disabled, board mode still renders and marks pipeline metrics as unavailable.
+To force-disable live metrics:
+
+```bash
+export TRAININGBOARD_ENABLE_WANDB_METRICS=0
+```
+
+When unavailable, board mode still renders and shows explicit assessment/audit status.
 
 ## Typical Workflow
 

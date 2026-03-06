@@ -195,6 +195,21 @@ function healthCardHtml(label, value, meta = "") {
   `;
 }
 
+function assessmentCardHtml(label, assessment) {
+  const status = String(assessment?.status || "not_measurable");
+  const headline = assessment?.headline || "Not measurable";
+  const detail = assessment?.detail || "-";
+  const statusLabel = status.replaceAll("_", " ");
+  return `
+    <article class="assessment-card">
+      <div class="assessment-title">${escapeHtml(label)}</div>
+      <div class="assessment-status ${escapeHtml(status)}">${escapeHtml(statusLabel)}</div>
+      <div class="assessment-headline">${escapeHtml(headline)}</div>
+      <div class="assessment-detail">${escapeHtml(detail)}</div>
+    </article>
+  `;
+}
+
 function kvRowHtml(label, value) {
   return `<li><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></li>`;
 }
@@ -270,6 +285,29 @@ function renderPipelineSnapshot(pipeline) {
   ].join("");
 }
 
+function renderPipelineAssessments(pipeline) {
+  const assessmentsRoot = document.getElementById("pipelineAssessmentCards");
+  if (!assessmentsRoot) {
+    return;
+  }
+
+  if (!pipeline.available) {
+    assessmentsRoot.innerHTML = assessmentCardHtml("Pipeline assessments", {
+      status: "not_measurable",
+      headline: "Live metrics are unavailable.",
+      detail: (pipeline.notes || [])[0] || "Enable live W&B metrics.",
+    });
+    return;
+  }
+
+  const assessments = pipeline.assessments || {};
+  assessmentsRoot.innerHTML = [
+    assessmentCardHtml("Concurrent experiments", assessments.concurrent_experiments),
+    assessmentCardHtml("Search space coverage", assessments.search_space_coverage),
+    assessmentCardHtml("Meaningful result cadence", assessments.meaningful_result_cadence),
+  ].join("");
+}
+
 function renderResearchFunnel(funnel) {
   const stagesRoot = document.getElementById("researchFunnelStages");
   const summaryRoot = document.getElementById("researchFunnelSummary");
@@ -303,6 +341,33 @@ function renderResearchFunnel(funnel) {
   ].join("");
 }
 
+function renderPipelineAudit(audit) {
+  const summaryRoot = document.getElementById("pipelineBaselineSummary");
+  if (!summaryRoot) {
+    return;
+  }
+  if (!audit || !audit.generated_at) {
+    summaryRoot.innerHTML = kvRowHtml("Status", "Unavailable");
+    return;
+  }
+
+  const defaults = audit.cogsguard_train_defaults || {};
+  const multiPolicy = audit.multi_policy || {};
+  const launch = audit.launch_reliability || {};
+  const inventory = audit.loss_inventory || {};
+  summaryRoot.innerHTML = [
+    kvRowHtml("Snapshot generated", formatDate(audit.generated_at)),
+    kvRowHtml("Train command", defaults.command || "-"),
+    kvRowHtml("Cogsguard defaults", `${defaults.default_layout || "-"} / ${Number(defaults.default_num_agents || 0)} agents`),
+    kvRowHtml("Default losses", (defaults.default_losses || []).join(", ") || "-"),
+    kvRowHtml("Multi-policy support", audit.supports_multi_policy_training ? "Yes" : "No"),
+    kvRowHtml("Multi-policy example", multiPolicy.example_recipe || "-"),
+    kvRowHtml("Example policies", (multiPolicy.example_policies || []).join(", ") || "-"),
+    kvRowHtml("Launch auto-retry", launch.has_automatic_retry ? "Enabled" : "Not built-in"),
+    kvRowHtml("Recipe loss keys", Number((inventory.recipe_loss_keys || []).length)),
+  ].join("");
+}
+
 async function fetchBoardData() {
   const response = await fetch(withBasePath('/api/v1/board'))
   if (!response.ok) {
@@ -312,7 +377,7 @@ async function fetchBoardData() {
   return response.json()
 }
 
-function renderDashboard(snapshot, taskRanking, pipeline, funnel) {
+function renderDashboard(snapshot, taskRanking, pipeline, funnel, pipelineAudit) {
   const generatedNode = document.getElementById('generatedAt')
   const scoringNode = document.getElementById('scoringMode')
   const panelRoot = document.getElementById('axisPanels')
@@ -343,6 +408,8 @@ function renderDashboard(snapshot, taskRanking, pipeline, funnel) {
     bucketHtml('Later', 'later', laterTasks, impactMetrics, executionMetrics),
   ].join('')
   renderPipelineSnapshot(pipeline)
+  renderPipelineAssessments(pipeline)
+  renderPipelineAudit(pipelineAudit)
   renderResearchFunnel(funnel)
 }
 
@@ -357,8 +424,9 @@ async function refreshDashboard(trigger = 'manual') {
     const snapshot = board.dashboard || {}
     const taskRanking = board.task_ranking || {}
     const pipeline = board.pipeline || {}
+    const pipelineAudit = board.pipeline_audit || {}
     const funnel = board.research_funnel || {}
-    renderDashboard(snapshot, taskRanking, pipeline, funnel)
+    renderDashboard(snapshot, taskRanking, pipeline, funnel, pipelineAudit)
     const betCount = (taskRanking?.ranked_tasks || []).length
     const axisCount = (snapshot?.ranked_axes || []).length
     const llmScoredTasks = Number(snapshot?.llm_scored_tasks || 0)
