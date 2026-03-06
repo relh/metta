@@ -5,12 +5,16 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
-from metta.chatprop.config import load_config
-from metta.chatprop.local.backend import server as chatprop_server
-from metta.chatprop.local.backend.server import FRONTEND_ROOT
-from metta.chatprop.local.flowchart import write_flowchart_outputs
-from metta.chatprop.scanner import find_transcripts_for_branches
 from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
+from vibeservatory.backend.dashboard_backend.local_package_bootstrap import ensure_repo_src_on_path
+
+CHATPROP_SRC_ROOT = ensure_repo_src_on_path("chatprop/src")
+
+from metta.chatprop.config import load_config  # noqa: E402
+from metta.chatprop.local.backend import server as chatprop_server  # noqa: E402
+from metta.chatprop.local.backend.server import FRONTEND_ROOT  # noqa: E402
+from metta.chatprop.local.flowchart import write_flowchart_outputs  # noqa: E402
+from metta.chatprop.scanner import find_transcripts_for_branches  # noqa: E402
 
 CHATPROP_BASE_PATH = "/chatprop"
 

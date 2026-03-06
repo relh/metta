@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import mimetypes
-import sys
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Response
 
+from vibeservatory.backend.dashboard_backend.local_package_bootstrap import ensure_repo_src_on_path
+
 TRAINBOARD_BASE_PATH = "/train-board"
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
-TRAINBOARD_SRC_ROOT = REPO_ROOT / "trainboard" / "src"
-if str(TRAINBOARD_SRC_ROOT) not in sys.path:
-    sys.path.append(str(TRAINBOARD_SRC_ROOT))
+TRAINBOARD_SRC_ROOT = ensure_repo_src_on_path("trainboard/src")
 
 from metta.trainingboard.local.backend import server as trainboard_server  # noqa: E402
 
