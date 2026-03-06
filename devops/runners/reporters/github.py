@@ -38,11 +38,12 @@ def _llm_eval_transcript_sections() -> list[str]:
         return []
     sections = ["", "", "## LLM Eval Transcripts", ""]
     for path in transcript_files:
-        name = path.stem
         content = path.read_text().strip()
-        sections.append(f"<details><summary>{name}</summary>")
+        heading = content.split("\n", 1)[0].lstrip("# ").strip()
+        body = content.split("\n", 1)[1].strip() if "\n" in content else ""
+        sections.append(f"<details><summary><strong>{heading}</strong></summary>")
         sections.append("")
-        sections.append(content)
+        sections.append(body)
         sections.append("")
         sections.append("</details>")
         sections.append("")

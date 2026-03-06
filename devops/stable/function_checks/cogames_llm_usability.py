@@ -31,20 +31,36 @@ def _get_anthropic_client() -> AnthropicBedrock:
 def _save_transcript(scenario_name: str, transcript: Transcript, judgment: Judgment) -> None:
     LLM_EVAL_TRANSCRIPT_DIR.mkdir(parents=True, exist_ok=True)
     path = LLM_EVAL_TRANSCRIPT_DIR / f"{scenario_name}.md"
+    status = "PASS" if judgment.passed else "FAIL"
+    scores = f"d={judgment.discovery} i={judgment.interpretation} c={judgment.completeness} e={judgment.efficiency}"
     parts = [
-        f"# {scenario_name}",
+        f"# {scenario_name} — {status} [{scores}]",
         "",
-        f"**Passed**: {judgment.passed}  ",
-        f"**Scores**: discovery={judgment.discovery} interpretation={judgment.interpretation} "
-        f"completeness={judgment.completeness} efficiency={judgment.efficiency}  ",
-        f"**Tokens**: {transcript.total_input_tokens} in / {transcript.total_output_tokens} out  ",
-        f"**Completed**: {transcript.completed} | **Failed**: {transcript.failed} | **Gave up**: {transcript.gave_up}",
+        f"Tokens: {transcript.total_input_tokens} in / {transcript.total_output_tokens} out  ",
+        f"Completed: {transcript.completed} | Failed: {transcript.failed} | Gave up: {transcript.gave_up}",
     ]
     if judgment.cli_confusion_notes.strip():
-        parts.extend(["", f"**CLI confusion**: {judgment.cli_confusion_notes}"])
-    parts.extend(["", "## Transcript", "", "```", transcript.format_for_judge(), "```", ""])
+        parts.extend(["", f"CLI confusion: {judgment.cli_confusion_notes}"])
+    parts.extend(["", "## Task", "", f"> {transcript.task}", "", "## Transcript", ""])
+    for i, turn in enumerate(transcript.turns, 1):
+        parts.append(f"### Turn {i}")
+        if turn.assistant_text:
+            parts.extend(["", f"**Assistant**: {turn.assistant_text}"])
+        if turn.command:
+            parts.extend(["", f"**Command**: `{turn.command}`", ""])
+            parts.append("<pre>")
+            parts.append(_escape_html(turn.stdout))
+            parts.append("</pre>")
+            if turn.stderr:
+                parts.extend(["", "**Stderr**:", "", "<pre>", _escape_html(turn.stderr), "</pre>"])
+            parts.append(f"\nExit code: {turn.exit_code}")
+        parts.append("")
     path.write_text("\n".join(parts))
     logger.info("Saved transcript to %s", path)
+
+
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _run_scenario(

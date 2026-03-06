@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +46,7 @@ BASH_TOOL = {
 _RESTRICTED_PATH_DIRS = ["/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"]
 _MAX_STDOUT = 10000
 _MAX_STDERR = 5000
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 @dataclass
@@ -100,10 +102,10 @@ def _execute_command(command: str, bin_dir: Path, timeout_s: int) -> tuple[str, 
         capture_output=True,
         text=True,
         timeout=timeout_s,
-        env=dict(os.environ, PATH=path),
+        env=dict(os.environ, PATH=path, NO_COLOR="1", TERM="dumb"),
     )
-    stdout = result.stdout[:_MAX_STDOUT]
-    stderr = result.stderr[:_MAX_STDERR]
+    stdout = _ANSI_RE.sub("", result.stdout[:_MAX_STDOUT])
+    stderr = _ANSI_RE.sub("", result.stderr[:_MAX_STDERR])
     return stdout, stderr, result.returncode
 
 
