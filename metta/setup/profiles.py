@@ -2,7 +2,7 @@ from enum import Enum
 
 from typing_extensions import NotRequired, TypedDict
 
-from metta.common.util.constants import METTA_AWS_ACCOUNT_ID, METTA_SKYPILOT_URL, METTA_WANDB_ENTITY
+from metta.common.util.constants import METTA_AWS_ACCOUNT_ID, METTA_AWS_REGION, METTA_SKYPILOT_URL, METTA_WANDB_ENTITY
 
 
 class UserType(Enum):
@@ -47,6 +47,7 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "githooks": {"enabled": True},
             "observatory-key": {"enabled": False},
             "aws": {"enabled": False},
+            "bedrock": {"enabled": False},
             "wandb": {"enabled": False},
             "skypilot": {"enabled": False},
             "tailscale": {"enabled": False},
@@ -64,6 +65,7 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "githooks": {"enabled": True},
             "observatory-key": {"enabled": False},
             "aws": {"enabled": True},
+            "bedrock": {"enabled": False},
             "wandb": {"enabled": True},
             "skypilot": {"enabled": True},
             "tailscale": {"enabled": False},
@@ -81,6 +83,7 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "githooks": {"enabled": False},
             "observatory-key": {"enabled": False},
             "aws": {"enabled": True, "expected_connection": METTA_AWS_ACCOUNT_ID},
+            "bedrock": {"enabled": False},
             "wandb": {"enabled": True, "expected_connection": METTA_WANDB_ENTITY},
             "skypilot": {"enabled": False},
             "tailscale": {"enabled": False},
@@ -101,6 +104,7 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "githooks": {"enabled": True},
             "observatory-key": {"enabled": True, "expected_connection": "@stem.ai"},
             "aws": {"enabled": True, "expected_connection": METTA_AWS_ACCOUNT_ID},
+            "bedrock": {"enabled": True, "expected_connection": METTA_AWS_REGION},
             "smart-plugs": {"enabled": True},
             "wandb": {"enabled": True, "expected_connection": METTA_WANDB_ENTITY},
             "skypilot": {"enabled": True, "expected_connection": METTA_SKYPILOT_URL},
