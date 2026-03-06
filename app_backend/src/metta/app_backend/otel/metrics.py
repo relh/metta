@@ -19,7 +19,7 @@ METRICS_SERVICE_NAME = "observatory-backend"
 
 
 class MetricsSettings(BaseSettings):
-    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Optional[str] = None
+    OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None
     OTEL_METRICS_CONSOLE: bool = False
 
 
@@ -29,11 +29,8 @@ def init_meter_provider() -> None:
     settings = MetricsSettings()
     readers: list[PeriodicExportingMetricReader] = []
 
-    if settings.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:
-        # Use Delta temporality for counters/histograms - preferred by Datadog and avoids
-        # issues with cumulative counter resets on pod restarts causing metric loss
+    if settings.OTEL_EXPORTER_OTLP_ENDPOINT:
         otlp_exporter = OTLPMetricExporter(
-            endpoint=settings.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
             preferred_temporality={
                 Counter: AggregationTemporality.DELTA,
                 Histogram: AggregationTemporality.DELTA,

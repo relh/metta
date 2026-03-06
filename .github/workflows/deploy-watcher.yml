@@ -71,7 +71,9 @@ jobs:
             orchestrator \
             ./devops/charts/orchestrator \
             --reuse-values \
-            --set watcher.imageTag=${{ steps.resolve-tag.outputs.tag }}
+            --set watcher.imageTag=${{ steps.resolve-tag.outputs.tag }} \
+            --set otel.enabled=true \
+            --set otel.env=production
       - name: Collect deploy failure diagnostics
         if: failure()
         uses: ./.github/actions/deploy-failure-diagnostics

@@ -48,10 +48,7 @@ def init_otel_tracing(service_name: str) -> None:
     This module configures tracing only (TracerProvider + optional OTLP span export).
     It does not configure logging, log correlation, or log export.
 
-    Tracing behavior is controlled via environment variables:
-      - OTEL_TRACES_ENABLED: set to "true" to export spans (default: false)
-      - OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: where to send spans
-      - OTEL_EXPORTER_OTLP_PROTOCOL, OTEL_EXPORTER_OTLP_HEADERS, etc.: exporter options
+    Tracing behavior is controlled via environment variables in Helm chart.
 
     If you want trace/span IDs injected into Python logs and/or logs exported via OTLP,
     run the application with OpenTelemetry Python auto-instrumentation and its logging env vars
@@ -69,7 +66,7 @@ def init_otel_tracing(service_name: str) -> None:
     _tracer_provider = tracer_provider
     otel_trace.set_tracer_provider(tracer_provider)
 
-    if os.getenv("OTEL_TRACES_ENABLED", "").lower() in ("1", "true"):
+    if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
         try:
             # Exporter reads standard env vars for endpoint/protocol/headers/etc.
             tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))

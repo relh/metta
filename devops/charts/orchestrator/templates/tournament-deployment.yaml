@@ -6,9 +6,6 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-tournament
     app.kubernetes.io/instance: {{ .Release.Name }}
-    tags.datadoghq.com/env: {{ .Values.datadog.env | quote }}
-    tags.datadoghq.com/service: "tournament-runner"
-    tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
 spec:
   replicas: 1
   strategy:
@@ -20,10 +17,6 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ .Release.Name }}-tournament
-        tags.datadoghq.com/env: {{ .Values.datadog.env | quote }}
-        tags.datadoghq.com/service: "tournament-runner"
-        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
-        admission.datadoghq.com/enabled: "true"
     spec:
       serviceAccountName: {{ include "orchestrator.serviceAccountName" . }}
       initContainers:
@@ -60,16 +53,7 @@ spec:
             secretKeyRef:
               name: {{ .Values.secrets.machineToken }}
               key: token
-        - name: HOST_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://$(HOST_IP):4318"
-        - name: OTEL_EXPORTER_OTLP_PROTOCOL
-          value: "http/protobuf"
-        - name: OTEL_TRACES_ENABLED
-          value: "true"
+        {{- include "orchestrator.otelEnv" . | nindent 8 }}
         envFrom:
         - secretRef:
             name: {{ .Values.tournament.dbSecret }}

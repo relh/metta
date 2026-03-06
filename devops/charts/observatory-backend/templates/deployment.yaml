@@ -2,12 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Release.Name }}
-  {{- if .Values.datadog }}
-  labels:
-    tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
-    tags.datadoghq.com/service: "observatory-backend"
-    tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
-  {{- end }}
 spec:
   replicas: {{ .Values.replicaCount }}
   minReadySeconds: 10
@@ -23,12 +17,6 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}
-        {{- if .Values.datadog }}
-        tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
-        tags.datadoghq.com/service: "observatory-backend"
-        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
-        admission.datadoghq.com/enabled: "true"
-        {{- end }}
     spec:
       serviceAccountName: {{ .Release.Name }}
       topologySpreadConstraints:
@@ -66,10 +54,7 @@ spec:
             value: "8000"
           - name: STATS_SERVER_URI
             value: "https://{{ .Values.host }}"
-          - name: HOST_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.hostIP
+          {{- include "observatory-backend.otelEnv" . | nindent 10 }}
           {{- if .Values.env }}
           {{- range $key, $value := .Values.env }}
           - name: {{ $key }}

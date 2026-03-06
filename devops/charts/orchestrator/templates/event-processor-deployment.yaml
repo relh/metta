@@ -6,11 +6,6 @@ metadata:
   labels:
     app.kubernetes.io/name: {{ .Release.Name }}-event-processor
     app.kubernetes.io/instance: {{ .Release.Name }}
-    {{- if .Values.datadog.enabled }}
-    tags.datadoghq.com/env: {{ .Values.datadog.env | quote }}
-    tags.datadoghq.com/service: "k8s-event-processor"
-    tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
-    {{- end }}
 spec:
   replicas: 1
   selector:
@@ -20,12 +15,6 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ .Release.Name }}-event-processor
-        {{- if .Values.datadog.enabled }}
-        tags.datadoghq.com/env: {{ .Values.datadog.env | quote }}
-        tags.datadoghq.com/service: "k8s-event-processor"
-        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
-        admission.datadoghq.com/enabled: "true"
-        {{- end }}
     spec:
       serviceAccountName: {{ include "orchestrator.serviceAccountName" . }}
       initContainers:
@@ -69,20 +58,7 @@ spec:
               name: {{ .Values.eventProcessor.dbSecret }}
               key: STATS_DB_URI
         {{- end }}
-        - name: HOST_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.hostIP
-        - name: OTEL_EXPORTER_OTLP_ENDPOINT
-          value: "http://$(HOST_IP):4318"
-        - name: OTEL_EXPORTER_OTLP_PROTOCOL
-          value: "http/protobuf"
-        - name: OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
-          value: "http://$(HOST_IP):4318/v1/metrics"
-        - name: OTEL_TRACES_ENABLED
-          value: "true"
-        - name: OTEL_SERVICE_NAME
-          value: "k8s-event-processor"
+        {{- include "orchestrator.otelEnv" . | nindent 8 }}
         - name: EVAL_CLUSTER_ROLE_ARN
           value: {{ .Values.eventProcessor.evalClusterRoleArn | quote }}
         - name: EVAL_CLUSTER_NAME

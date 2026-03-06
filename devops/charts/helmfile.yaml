@@ -110,6 +110,10 @@ releases:
     chart: ./orchestrator
     version: 0.1.0
     namespace: observatory
+    values:
+      - otel:
+          enabled: true
+          env: production
 
   - name: home
     chart: ./home

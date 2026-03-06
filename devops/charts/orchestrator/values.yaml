@@ -13,17 +13,14 @@ serviceAccount:
 
 env:
   BACKEND_URL: "https://api.observatory.softmax-research.net"
-  DD_TRACE_ENABLED: "true"
 
 secrets:
   wandb: "wandb-api-secret"
   machineToken: "machine-token-secret"
 
-# Datadog agent is deployed as a separate service
-# This controls how the orchestrator connects to Datadog
-datadog:
-  enabled: true
-  env: "production"
+otel:
+  enabled: false
+  env: ""
 
 watcher:
   enabled: true

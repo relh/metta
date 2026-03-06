@@ -35,6 +35,9 @@ jobs:
       namespace: observatory
       release: observatory-backend
       chart: ./devops/charts/observatory-backend
+      production_helm_values: |
+        --set otel.enabled=true \
+        --set otel.env=production
 
   deploy-orchestrator:
     name: "Deploy Orchestrator"
@@ -71,7 +74,9 @@ jobs:
             ./devops/charts/orchestrator \
             --reuse-values \
             --set image.name=metta-app-backend \
-            --set image.tag=${{ needs.build-and-deploy-backend.outputs.image_tag }}
+            --set image.tag=${{ needs.build-and-deploy-backend.outputs.image_tag }} \
+            --set otel.enabled=true \
+            --set otel.env=production
       - name: Collect deploy failure diagnostics
         if: failure()
         uses: ./.github/actions/deploy-failure-diagnostics
