@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 import fastapi
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from pydantic.main import BaseModel
 
 from metta.app_backend.auth import NoAuthRequired, get_user
@@ -32,6 +33,7 @@ from metta.app_backend.routes import (
     tournament_routes,
 )
 from metta.app_backend.routes.docs_routes import collect_public_tags, create_docs_router
+from metta.common.otel.tracing import init_otel_tracing
 
 _API_DESCRIPTION = """\
 Observatory is the Softmax Research platform for AI policy tournaments and evaluation.
@@ -176,6 +178,7 @@ def setup_logging():
 def create_app() -> fastapi.FastAPI:
     setup_logging()
     init_meter_provider()
+    init_otel_tracing("observatory-backend")
 
     @asynccontextmanager
     async def lifespan(_: fastapi.FastAPI):
@@ -231,6 +234,8 @@ def create_app() -> fastapi.FastAPI:
 
     public_tags = collect_public_tags(routers)
     app.include_router(create_docs_router(app, public_tags, internal_description=_INTERNAL_API_DESCRIPTION))
+
+    FastAPIInstrumentor.instrument_app(app)
 
     return app
 

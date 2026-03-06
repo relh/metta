@@ -33,6 +33,7 @@ dependencies = [
   "kopf>=1.37.0",
   "kubernetes>=31.0.0",
   "alembic>=1.17.0",
+  "opentelemetry-instrumentation-fastapi>=0.50b0",
 ]
 
 [dependency-groups]
