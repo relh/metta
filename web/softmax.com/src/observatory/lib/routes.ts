@@ -135,10 +135,6 @@ export function episodeJobsRoute(params?: { jobId?: string }) {
   return "/observatory/episode-jobs";
 }
 
-export function evalTasksRoute() {
-  return "/observatory/eval-tasks";
-}
-
 export function trainBoardRoute() {
   return "/observatory/train-board";
 }

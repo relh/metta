@@ -237,7 +237,6 @@ def configure_for_benchmark(
     # Disable eval and checkpoint overhead.
     tool.evaluator.epoch_interval = 0
     tool.evaluator.evaluate_local = False
-    tool.evaluator.evaluate_remote = False
     for asset in tool.policy_assets.values():
         asset.checkpoint = False
 

@@ -23,7 +23,6 @@ from metta.app_backend.otel.http_metrics import HttpMetricsMiddleware
 from metta.app_backend.otel.metrics import init_meter_provider
 from metta.app_backend.routes import (
     episode_routes,
-    eval_task_routes,
     job_routes,
     service_accounts_routes,
     smart_plug_routes,
@@ -211,7 +210,6 @@ def create_app() -> fastapi.FastAPI:
 
     routers = [
         episode_routes.create_episode_router(),
-        eval_task_routes.create_eval_task_router(),
         sql_routes.create_sql_router(),
         stats_routes.create_stats_router(),
         sweep_routes.create_sweep_router(),

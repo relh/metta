@@ -24,6 +24,9 @@ def _should_validate_git_state(skip_git_check: bool) -> bool:
     if os.getenv("SKYPILOT_TASK_ID"):
         logger.info("Running on SkyPilot, skipping git validation")
         return False
+    if os.getenv("CI"):
+        logger.info("Running in CI, skipping git validation")
+        return False
     return True
 
 

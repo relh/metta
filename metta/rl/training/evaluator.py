@@ -12,14 +12,13 @@ from pydantic import Field
 
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.cogworks.curriculum import Curriculum
-from metta.common.util.git_helpers import GitError, get_current_git_branch, get_task_commit_hash
+from metta.common.util.git_helpers import GitError, get_task_commit_hash
 from metta.common.util.git_repo import REPO_SLUG
 from metta.common.util.heartbeat import record_heartbeat
 from metta.common.wandb.context import WandbRun
 from metta.rl.training import TrainerComponent
 from metta.rl.utils import should_run
 from metta.sim.handle_results import render_eval_summary
-from metta.sim.remote import evaluate_remotely
 from metta.sim.simulate_and_record import ObservatoryWriter, WandbWriter, simulate_and_record
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.utils.auto_config import auto_replay_dir
@@ -37,10 +36,6 @@ class EvaluatorConfig(Config):
     evaluate_local: bool = Field(
         default_factory=lambda: os.getenv("SKYPILOT_TASK_ID") is None,
         description="Run evals locally. Defaults to True locally, False on SkyPilot.",
-    )
-    evaluate_remote: bool = Field(
-        default_factory=lambda: os.getenv("SKYPILOT_TASK_ID") is not None,
-        description="Run evals remotely via Observatory. Defaults to False locally, True on SkyPilot.",
     )
     num_training_tasks: int = 2
     parallel_evals: int = Field(
@@ -60,10 +55,6 @@ class EvaluatorConfig(Config):
     replay_dir: Optional[str] = None
     skip_git_check: bool = Field(default=False)
     git_hash: str | None = Field(default=None)
-    use_branch_checkout: bool = Field(
-        default=False,
-        description="Use git branch name instead of commit SHA for remote eval checkout (useful for rewritten history)",
-    )
     verbose: bool = Field(default=False)
     allow_eval_without_stats: bool = Field(
         default=False,
@@ -105,32 +96,14 @@ class Evaluator(TrainerComponent):
         self._prev_epoch_for_evaluation: Optional[int] = None
 
         self._replay_dir = config.replay_dir or auto_replay_dir()
-        self._evaluate_remote = config.evaluate_remote and stats_client is not None
 
         self._git_hash = config.git_hash
-        if self._evaluate_remote and not self._git_hash:
+        if not self._git_hash:
             try:
-                if config.use_branch_checkout:
-                    # Use branch name instead of commit SHA
-                    branch_name = get_current_git_branch(
-                        target_repo=REPO_SLUG,
-                        skip_git_check=config.skip_git_check,
-                    )
-                    if branch_name:
-                        logger.info(f"Using branch-based checkout: {branch_name}")
-                        self._git_hash = branch_name
-                    else:
-                        logger.warning("Could not determine branch, falling back to commit hash")
-                        self._git_hash = get_task_commit_hash(
-                            target_repo=REPO_SLUG,
-                            skip_git_check=config.skip_git_check,
-                        )
-                else:
-                    # Use commit SHA (default behavior)
-                    self._git_hash = get_task_commit_hash(
-                        target_repo=REPO_SLUG,
-                        skip_git_check=config.skip_git_check,
-                    )
+                self._git_hash = get_task_commit_hash(
+                    target_repo=REPO_SLUG,
+                    skip_git_check=config.skip_git_check,
+                )
             except GitError as e:
                 raise GitError(f"{e}\n\nYou can skip this check with evaluator.skip_git_check=true") from e
 
@@ -194,17 +167,6 @@ class Evaluator(TrainerComponent):
                 epoch=epoch,
                 agent_step=agent_step,
             )
-
-        # Remote evaluation
-        if self._evaluate_remote and self._stats_client and policy_version_id:
-            response = evaluate_remotely(
-                simulations=sim_run_configs,
-                policy_uris=[f"metta://policy/{policy_version_id}"],
-                stats_client=self._stats_client,
-                git_hash=self._git_hash,
-                push_metrics_to_wandb=(self._wandb_run is not None),
-            )
-            logger.info(f"Created remote evaluation task {response}")
 
         # Local evaluation
         if self._config.evaluate_local:

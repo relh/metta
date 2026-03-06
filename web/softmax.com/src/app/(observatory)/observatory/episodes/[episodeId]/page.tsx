@@ -47,9 +47,6 @@ export default async function EpisodeDetailPage(
             <span title={formatDate(episode.created_at)}>
               Created: {formatRelativeTime(episode.created_at)}
             </span>
-            {episode.eval_task_id && (
-              <span>Eval Task: {episode.eval_task_id}</span>
-            )}
             {episode.job_id && (
               <a
                 href={episodeJobsRoute({ jobId: episode.job_id })}

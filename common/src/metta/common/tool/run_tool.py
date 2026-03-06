@@ -34,7 +34,7 @@ from metta.common.util.text_styles import bold, cyan, green, red, yellow
 
 logger = logging.getLogger(__name__)
 
-_KNOWN_TOOLS = {"train", "evaluate", "evaluate_remote", "play", "replay", "sweep"}
+_KNOWN_TOOLS = {"train", "evaluate", "play", "replay", "sweep"}
 
 # Lazy torch initialization flag - only initialize when actually running a tool
 _torch_initialized = False
@@ -425,8 +425,6 @@ Common tools:
   evaluate        - Run evaluation suite
   play            - Interactive browser-based gameplay
   replay          - View recorded gameplay
-  evaluate_remote - Remote evaluation
-
 Advanced:
   %(prog)s arena.train -h                           # List all arguments
   %(prog)s arena.train --dry-run                    # Validate without running

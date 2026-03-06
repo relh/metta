@@ -1,6 +1,3 @@
-orchestrator:
-  enabled: true
-
 replicaCount: 1
 
 image:
@@ -16,22 +13,11 @@ serviceAccount:
 
 env:
   BACKEND_URL: "https://api.observatory.softmax-research.net"
-  CONTAINER_RUNTIME: "k8s"
-  POLL_INTERVAL: "5"
-  WORKER_IDLE_TIMEOUT: "1200"
   DD_TRACE_ENABLED: "true"
 
 secrets:
   wandb: "wandb-api-secret"
   machineToken: "machine-token-secret"
-
-resources:
-  requests:
-    cpu: 2500m
-    memory: 16Gi
-  limits:
-    cpu: 4000m
-    memory: 48Gi
 
 # Datadog agent is deployed as a separate service
 # This controls how the orchestrator connects to Datadog

@@ -30,68 +30,6 @@ type WithUser<T extends { user?: Schemas["UserRow"] | null }> = Omit<
 // ── User ────────────────────────────────────────────────────────────────
 export type UserRow = Schemas["UserRow"];
 
-// ── Eval tasks (not in generated spec — routes have include_in_schema=False) ──
-export type TaskStatus =
-  | "unprocessed"
-  | "running"
-  | "canceled"
-  | "done"
-  | "error"
-  | "system_error";
-
-export type EvalTask = {
-  user_id: string;
-  user: UserRow | null;
-  id: number;
-  command: string;
-  data_uri: string | null;
-  git_hash: string | null;
-  attributes: Record<string, any>;
-  created_at: string;
-  is_finished: boolean;
-  latest_attempt_id: number | null;
-  attempt_number: number;
-  status: TaskStatus;
-  status_details: Record<string, any> | null;
-  assigned_at: string | null;
-  assignee: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-  output_log_path: string | null;
-};
-
-export type TaskAttempt = {
-  id: number;
-  task_id: number;
-  attempt_number: number;
-  assigned_at: string | null;
-  assignee: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-  output_log_path: string | null;
-  status: TaskStatus;
-  status_details: Record<string, any> | null;
-};
-
-export type PaginatedEvalTasksResponse = {
-  tasks: EvalTask[];
-  total_count: number;
-  page: number;
-  page_size: number;
-  total_pages: number;
-};
-
-export type TaskAttemptsResponse = {
-  attempts: TaskAttempt[];
-};
-
-export type EvalTaskCreateRequest = {
-  command: string;
-  git_hash?: string | null;
-  data_file?: Record<string, any> | null;
-  attributes?: Record<string, any>;
-};
-
 // ── Policies ────────────────────────────────────────────────────────────
 export type PolicyRow = WithUser<Schemas["PolicyRow"]>;
 export type PolicyVersionRow = WithUser<Schemas["PolicyVersionRow"]>;

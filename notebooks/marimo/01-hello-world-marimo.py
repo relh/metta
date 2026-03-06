@@ -851,7 +851,6 @@ def _(
 
         evaluator_cfg = EvaluatorConfig(
             epoch_interval=20,  # Frequent evaluation to monitor for unlearning
-            evaluate_remote=False,
             evaluate_local=True,
             replay_dir=f"s3://softmax-public/replays/{run_name}",
         )
@@ -1557,7 +1556,6 @@ def _(
 
         evaluator_cfg = EvaluatorConfig(
             epoch_interval=10,  # More frequent evaluation to monitor unlearning
-            evaluate_remote=False,
             evaluate_local=True,
             replay_dir=f"s3://softmax-public/replays/{run_name2}",
         )

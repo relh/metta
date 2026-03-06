@@ -27,7 +27,6 @@ def test_build_simulations_defaults_to_curriculum_tasks() -> None:
     cfg = EvaluatorConfig(
         epoch_interval=1,
         evaluate_local=False,
-        evaluate_remote=False,
         replay_dir="replays",
         num_training_tasks=2,
     )
@@ -52,7 +51,6 @@ def test_build_simulations_respects_training_replay_overrides() -> None:
     cfg = EvaluatorConfig(
         epoch_interval=1,
         evaluate_local=False,
-        evaluate_remote=False,
         replay_dir="replays",
         num_training_tasks=2,
         training_replay_envs=[custom_sim],

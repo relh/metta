@@ -161,7 +161,6 @@ def main() -> int:
     # Avoid eval/checkpoint overhead in the hot path (microbench cares about rollout+train).
     tool.evaluator.epoch_interval = 0
     tool.evaluator.evaluate_local = False
-    tool.evaluator.evaluate_remote = False
     tool.policy_assets["learner0"].checkpoint = False
 
     tool.trainer.total_timesteps = int(args.total_timesteps)

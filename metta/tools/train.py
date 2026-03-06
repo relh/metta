@@ -222,7 +222,6 @@ class TrainTool(Tool):
         return CheckpointManager(
             run=namespace,
             system_cfg=self.system,
-            require_remote_enabled=self.evaluator.evaluate_remote,
         )
 
     def invoke(self, args: dict[str, str]) -> int | None:
@@ -293,7 +292,6 @@ class TrainTool(Tool):
         checkpoint_manager = CheckpointManager(
             run=run_name,
             system_cfg=self.system,
-            require_remote_enabled=self.evaluator.evaluate_remote,
             storage_decision=storage_decision,
         )
 

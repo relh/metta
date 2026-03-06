@@ -108,7 +108,7 @@ def run_fast_train_tool(
         policy_assets={"learner0": PolicyAssetConfig(architecture=policy_cfg.model_copy(deep=True))},
         stats_server_uri=None,
         checkpointer=checkpointer or CheckpointerConfig(epoch_interval=1),
-        evaluator=evaluator or EvaluatorConfig(epoch_interval=0, evaluate_local=False, evaluate_remote=False),
+        evaluator=evaluator or EvaluatorConfig(epoch_interval=0, evaluate_local=False),
     )
     tool.invoke({})
     return CheckpointManager(run=run_name, system_cfg=system_cfg)

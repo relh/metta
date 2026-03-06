@@ -1,11 +1,9 @@
 import { Suspense } from "react";
 
-import { Card } from "@observatory/components/Card";
 import { CopyableUri } from "@observatory/components/CopyableUri";
 import { LinkButton } from "@observatory/components/LinkButton";
 import { Spinner } from "@observatory/components/Spinner";
 import { UserDisplay } from "@observatory/components/UserDisplay";
-import { TasksTable } from "@observatory/EvalTasks/TasksTable";
 import { ServerDebugDrain } from "@observatory/lib/debug/ServerDebugDrain";
 import { getRepo } from "@observatory/lib/repo/server";
 import { policyDashboardRoute, policyRoute } from "@observatory/lib/routes";
@@ -81,10 +79,6 @@ export default async function PolicyVersionPage(
           policyVersionId={policyVersionId}
         />
       </Suspense>
-
-      <Card title="Tasks">
-        <TasksTable initialFilters={{ command: policyVersionId }} hideFilters />
-      </Card>
     </div>
   );
 }

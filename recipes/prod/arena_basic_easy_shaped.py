@@ -279,7 +279,7 @@ def train_ci() -> TrainTool:
             forward_pass_minibatch_target_size=96,
             vectorization="serial",
         ),
-        evaluator=EvaluatorConfig(evaluate_local=False, evaluate_remote=False),
+        evaluator=EvaluatorConfig(evaluate_local=False),
         checkpointer=CheckpointerConfig(epoch_interval=1),
         policy_assets={"learner0": PolicyAssetConfig(architecture=DefaultPolicyConfig())},
         wandb=WandbConfig.Off(),

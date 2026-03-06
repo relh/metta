@@ -9,8 +9,6 @@ from pydantic import BaseModel
 
 from metta.app_backend.clients.base_client import BaseAppBackendClient, NotAuthenticatedError, get_machine_token
 from metta.app_backend.models.job_request import JobRequest, JobRequestCreate, JobRequestUpdate, JobStatus, JobType
-from metta.app_backend.queries.eval_task_queries import EvalTaskRow
-from metta.app_backend.routes.eval_task_routes import TaskCreateRequest, TaskFilterParams, TasksResponse
 from metta.app_backend.routes.sql_routes import SQLQueryResponse
 from metta.app_backend.routes.stats_routes import (
     BulkEpisodeUploadResponse,
@@ -59,13 +57,6 @@ class StatsClient(BaseAppBackendClient):
 
     def get_policy_version(self, policy_version_id: uuid.UUID) -> PolicyVersionRow:
         return self._make_request(PolicyVersionRow, "GET", f"/stats/policy-versions/{policy_version_id}")
-
-    def create_eval_task(self, request: TaskCreateRequest) -> EvalTaskRow:
-        return self._make_request(EvalTaskRow, "POST", "/tasks", json=request.model_dump(mode="json"))
-
-    def get_all_tasks(self, filters: TaskFilterParams | None = None) -> TasksResponse:
-        params = filters.model_dump(mode="json", exclude_none=True) if filters else {}
-        return self._make_request(TasksResponse, "GET", "/tasks/all", params=params)
 
     def sql_query(self, query: str) -> SQLQueryResponse:
         return self._make_request(SQLQueryResponse, "POST", "/sql/query", json={"query": query})

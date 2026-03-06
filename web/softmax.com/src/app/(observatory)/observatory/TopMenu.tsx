@@ -23,7 +23,6 @@ import {
   chatpropRoute,
   diagnoseRoute,
   episodeJobsRoute,
-  evalTasksRoute,
   pantheonRoute,
   policiesRoute,
   policyDashboardRoute,
@@ -184,12 +183,6 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
                 isActive={pathname === "/observatory/sql-query"}
               >
                 SQL Query
-              </MenuLink>
-              <MenuLink
-                href={evalTasksRoute()}
-                isActive={pathname.startsWith("/observatory/eval-tasks")}
-              >
-                Remote Jobs
               </MenuLink>
               <MenuLink
                 href={smartPlugsRoute()}

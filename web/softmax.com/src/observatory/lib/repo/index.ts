@@ -5,13 +5,10 @@ import type {
   EpisodeQueryRequest,
   EpisodeQueryResponse,
   EpisodeStatsResponse,
-  EvalTask,
-  EvalTaskCreateRequest,
   JobRequest,
   JobStatus,
   LeaderboardEntry,
   MembershipHistoryEntry,
-  PaginatedEvalTasksResponse,
   PoliciesResponse,
   PolicySummary,
   PolicyVersionRow,
@@ -35,7 +32,6 @@ import type {
   SubmissionResponse,
   TableInfo,
   TableSchema,
-  TaskAttemptsResponse,
   TeamSummary,
 } from "@observatory/lib/api";
 import { isOutageSimulated } from "@observatory/lib/debug/simulate-outage";
@@ -52,8 +48,6 @@ export type {
   EpisodeQueryResponse,
   EpisodeStatsResponse,
   EpisodeWithTags,
-  EvalTask,
-  EvalTaskCreateRequest,
   JobEpisodeInfo,
   JobMatchInfo,
   JobPolicyVersionSummary,
@@ -61,7 +55,6 @@ export type {
   JobStatus,
   LeaderboardEntry,
   MembershipHistoryEntry,
-  PaginatedEvalTasksResponse,
   PoliciesResponse,
   PolicyRow,
   PolicyStatsDetail,
@@ -91,9 +84,6 @@ export type {
   SubmissionResponse,
   TableInfo,
   TableSchema,
-  TaskAttempt,
-  TaskAttemptsResponse,
-  TaskStatus,
   TeamCogSummary,
   TeamSummary,
   UserRow,
@@ -118,16 +108,6 @@ export type MatchStatus =
   | "running"
   | "completed"
   | "failed";
-
-export type TaskFilters = {
-  command?: string;
-  user_id?: string;
-  status?: string;
-  assignee?: string;
-  git_hash?: string;
-  created_at?: string;
-  assigned_at?: string;
-};
 
 export const ALL_JOB_STATUSES = [
   "pending",
@@ -375,51 +355,6 @@ export class Repo {
     return this.apiCallWithBody<AIQueryResponse>("/sql/generate-query", {
       description,
     });
-  }
-
-  async createEvalTask(request: EvalTaskCreateRequest): Promise<EvalTask> {
-    return this.apiCallWithBody<EvalTask>("/tasks", request);
-  }
-
-  async getEvalTasksPaginated(
-    page: number,
-    pageSize: number,
-    filters: TaskFilters,
-  ): Promise<PaginatedEvalTasksResponse> {
-    const params = new URLSearchParams();
-    params.append("page", page.toString());
-    params.append("page_size", pageSize.toString());
-
-    // Only append non-empty filter values
-    if (filters.command?.trim())
-      params.append("command", filters.command.trim());
-    if (filters.user_id?.trim())
-      params.append("user_id", filters.user_id.trim());
-    if (filters.status?.trim()) params.append("status", filters.status.trim());
-    if (filters.assignee?.trim())
-      params.append("assignee", filters.assignee.trim());
-    if (filters.git_hash?.trim())
-      params.append("git_hash", filters.git_hash.trim());
-    if (filters.created_at?.trim())
-      params.append("created_at", filters.created_at.trim());
-    if (filters.assigned_at?.trim())
-      params.append("assigned_at", filters.assigned_at.trim());
-
-    return this.apiCall<PaginatedEvalTasksResponse>(
-      `/tasks/paginated?${params}`,
-    );
-  }
-
-  async getEvalTask(taskId: number): Promise<EvalTask> {
-    return this.apiCall<EvalTask>(`/tasks/${taskId}`);
-  }
-
-  async getTaskAttempts(taskId: number): Promise<TaskAttemptsResponse> {
-    return this.apiCall<TaskAttemptsResponse>(`/tasks/${taskId}/attempts`);
-  }
-
-  getTaskLogUrl(taskId: number, logType: "output"): string {
-    return `${this.baseUrl}/tasks/${taskId}/logs/${logType}`;
   }
 
   // Policy methods

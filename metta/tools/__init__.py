@@ -7,7 +7,6 @@ if TYPE_CHECKING:
     from metta.tools.eval import EvaluateTool, EvalWithResultTool
     from metta.tools.play import PlayTool
     from metta.tools.replay import ReplayTool
-    from metta.tools.request_remote_eval import RequestRemoteEvalTool
     from metta.tools.resolve_uri import ResolveUriTool
     from metta.tools.stub import StubTool
     from metta.tools.sweep import SweepTool
@@ -18,7 +17,6 @@ _TOOL_MODULES = {
     "EvaluateTool": "metta.tools.eval",
     "PlayTool": "metta.tools.play",
     "ReplayTool": "metta.tools.replay",
-    "RequestRemoteEvalTool": "metta.tools.request_remote_eval",
     "ResolveUriTool": "metta.tools.resolve_uri",
     "StubTool": "metta.tools.stub",
     "SweepTool": "metta.tools.sweep",
@@ -43,7 +41,6 @@ __all__ = [
     "EvaluateTool",
     "PlayTool",
     "ReplayTool",
-    "RequestRemoteEvalTool",
     "ResolveUriTool",
     "StubTool",
     "SweepTool",
