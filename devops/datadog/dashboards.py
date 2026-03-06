@@ -546,9 +546,301 @@ def stable_runner_health_dashboard() -> dict:
     }
 
 
+_PROD_FILTER = "service:observatory-backend,env:production,job_type:episode"
+_LIVE_SPAN = "4h"
+
+
+def _flow_qv_sum(title: str, queries: list[str], formula: str, *, precision: int = 0, unit: str = "") -> dict:
+    named_queries = [{"data_source": "metrics", "name": f"q{i}", "query": q} for i, q in enumerate(queries)]
+    fmt: dict = {"formula": formula}
+    if unit:
+        fmt["number_format"] = {"unit": {"type": "canonical_unit", "unit_name": unit}}
+    return {
+        "definition": {
+            "type": "query_value",
+            "title": title,
+            "title_size": "13",
+            "requests": [
+                {
+                    "queries": named_queries,
+                    "formulas": [fmt],
+                    "response_format": "scalar",
+                }
+            ],
+            "timeseries_background": {"type": "area"},
+            "time": {"live_span": _LIVE_SPAN},
+            "precision": precision,
+            "autoscale": True,
+        },
+    }
+
+
+def _flow_qv(title: str, query: str, *, precision: int = 0, unit: str = "") -> dict:
+    return _flow_qv_sum(title, [query], "q0", precision=precision, unit=unit)
+
+
+def _flow_group(title: str, widgets: list[dict], *, x: int, y: int, width: int, height: int) -> dict:
+    return {
+        "definition": {
+            "type": "group",
+            "title": title,
+            "layout_type": "ordered",
+            "widgets": widgets,
+        },
+        "layout": {"x": x, "y": y, "width": width, "height": height},
+    }
+
+
+def pipeline_dashboard() -> dict:
+    y = 0
+    _TREND_SPAN = "1mo"
+
+    # ── Pipeline Flow (live) ──
+    def _at(widget: dict, *, x: int, y: int, w: int, h: int) -> dict:
+        return {**widget, "layout": {"x": x, "y": y, "width": w, "height": h}}
+
+    _arrow: dict = {
+        "definition": {
+            "type": "note",
+            "content": "\u2794",
+            "font_size": "36",
+            "text_align": "center",
+            "vertical_align": "center",
+            "background_color": "transparent",
+            "show_tick": False,
+            "has_padding": False,
+        },
+    }
+
+    flow_widgets = [
+        _at(
+            _flow_qv_sum(
+                "Queued Jobs",
+                [
+                    f"avg:job.outstanding_count{{{_PROD_FILTER},status:pending}}",
+                    f"avg:job.outstanding_count{{{_PROD_FILTER},status:dispatched}}",
+                ],
+                "q0 + q1",
+            ),
+            x=0,
+            y=0,
+            w=3,
+            h=2,
+        ),
+        _at(
+            _flow_qv_sum(
+                "Avg Wait",
+                [
+                    f"avg:job.stage_duration{{{_PROD_FILTER},stage:pending}}",
+                    f"avg:job.stage_duration{{{_PROD_FILTER},stage:dispatched}}",
+                ],
+                "q0 + q1",
+                unit="second",
+                precision=1,
+            ),
+            x=0,
+            y=2,
+            w=3,
+            h=2,
+        ),
+        _at(_arrow, x=3, y=0, w=1, h=4),
+        _at(
+            _flow_qv(
+                "Running Jobs",
+                f"avg:job.outstanding_count{{{_PROD_FILTER},status:running}}",
+            ),
+            x=4,
+            y=0,
+            w=3,
+            h=2,
+        ),
+        _at(
+            _flow_qv(
+                "Avg Duration",
+                f"avg:job.stage_duration{{{_PROD_FILTER},stage:running}}",
+                unit="second",
+                precision=1,
+            ),
+            x=4,
+            y=2,
+            w=3,
+            h=2,
+        ),
+        _at(_arrow, x=7, y=0, w=1, h=4),
+        _at(
+            _flow_qv(
+                "Completed /hr",
+                f"sum:job.state_transition{{{_PROD_FILTER},to_status:completed}}.as_count().rollup(sum, 3600)",
+            ),
+            x=8,
+            y=0,
+            w=2,
+            h=2,
+        ),
+        _at(
+            _flow_qv(
+                "Failed /hr",
+                f"sum:job.state_transition{{{_PROD_FILTER},to_status:failed}}.as_count().rollup(sum, 3600)",
+            ),
+            x=10,
+            y=0,
+            w=2,
+            h=2,
+        ),
+    ]
+    flow_group = _flow_group(
+        "Current Pipeline",
+        flow_widgets,
+        x=0,
+        y=y,
+        width=12,
+        height=6,
+    )
+    y += 6
+
+    # ── Per-job averages (top row: 5 small charts) ──
+    _dur_fmt = {"number_format": {"unit": {"type": "canonical_unit", "unit_name": "second"}}}
+
+    def _trend_ts(title: str, queries: list[dict], formulas: list[dict], **kwargs) -> dict:
+        defn: dict = {
+            "title": title,
+            "type": "timeseries",
+            "requests": [
+                {
+                    "queries": queries,
+                    "formulas": formulas,
+                    "response_format": "timeseries",
+                    "display_type": kwargs.get("display_type", "line"),
+                }
+            ],
+            "yaxis": {"include_zero": True},
+            "time": {"live_span": _TREND_SPAN},
+        }
+        if "style" in kwargs:
+            defn["requests"][0]["style"] = kwargs["style"]
+        return {"definition": defn}
+
+    # Row 0: [Queued 0-3][Running 4-7][Time/Step 8-11]
+    # Row 1: [Throughput 0-11]
+    history_widgets = [
+        _at(
+            _trend_ts(
+                "Avg Queued Time",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "pend",
+                        "query": f"avg:job.stage_duration{{{_PROD_FILTER},stage:pending}}",
+                    },
+                    {
+                        "data_source": "metrics",
+                        "name": "disp",
+                        "query": f"avg:job.stage_duration{{{_PROD_FILTER},stage:dispatched}}",
+                    },
+                ],
+                [{"formula": "pend + disp", "alias": "queued", **_dur_fmt}],
+            ),
+            x=0,
+            y=0,
+            w=4,
+            h=4,
+        ),
+        _at(
+            _trend_ts(
+                "Avg Running Time",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "run",
+                        "query": f"avg:job.stage_duration{{{_PROD_FILTER},stage:running}}",
+                    },
+                ],
+                [{"formula": "run", "alias": "running", **_dur_fmt}],
+            ),
+            x=4,
+            y=0,
+            w=4,
+            h=4,
+        ),
+        _at(
+            _trend_ts(
+                "Avg Running Time per Step",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "dur",
+                        "query": f"avg:job.stage_duration{{{_PROD_FILTER},stage:running}}",
+                    },
+                    {"data_source": "metrics", "name": "steps", "query": f"avg:episode.length{{{_PROD_FILTER}}}"},
+                ],
+                [{"formula": "dur / steps", "alias": "per step", **_dur_fmt}],
+            ),
+            x=8,
+            y=0,
+            w=4,
+            h=4,
+        ),
+        _at(
+            _trend_ts(
+                "Job Throughput (per day)",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "ok",
+                        "query": (
+                            f"sum:job.state_transition{{{_PROD_FILTER},to_status:completed}}"
+                            ".as_count().rollup(sum, 86400)"
+                        ),
+                    },
+                    {
+                        "data_source": "metrics",
+                        "name": "fail",
+                        "query": (
+                            f"sum:job.state_transition{{{_PROD_FILTER},to_status:failed}}.as_count().rollup(sum, 86400)"
+                        ),
+                    },
+                ],
+                [
+                    {"formula": "ok", "alias": "completed"},
+                    {"formula": "fail", "alias": "failed", "style": {"palette": "warm"}},
+                ],
+                display_type="bars",
+                style={"palette": "dog_classic"},
+            ),
+            x=0,
+            y=4,
+            w=12,
+            h=4,
+        ),
+    ]
+    averages_group = _flow_group(
+        "History",
+        history_widgets,
+        x=0,
+        y=y,
+        width=12,
+        height=9,
+    )
+    y += 9
+
+    return {
+        "title": "Tournament Pipeline",
+        "description": (
+            "Live pipeline flow, per-job duration/cost averages, and aggregate throughput and cost trends."
+        ),
+        "layout_type": "ordered",
+        "tags": ["team:infra"],
+        "widgets": [
+            flow_group,
+            averages_group,
+        ],
+    }
+
+
 ALL_DASHBOARDS = [
     skills_leaderboard_dashboard,
     stable_runner_health_dashboard,
+    pipeline_dashboard,
 ]
 
 
