@@ -20,6 +20,7 @@ from typing import Any, Callable, cast
 from uuid import UUID
 
 from botocore.exceptions import ClientError
+from httpx import HTTPStatusError
 from kubernetes import client
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
@@ -57,7 +58,7 @@ POLL_INTERVAL_SECONDS = 5
 BATCH_SIZE = 500
 RECONCILE_INTERVAL_SECONDS = 60
 GAUGE_REFRESH_INTERVAL_SECONDS = 30
-RECONCILE_GRACE_PERIOD_SECONDS = 86400  # 1 day — last-resort safety net for truly stuck jobs
+RECONCILE_GRACE_PERIOD_SECONDS = 600  # 10 min — catch jobs stuck in running/dispatched with no pod
 WORKER_THREADS = 16
 BACKGROUND_IO_THREADS = 8
 
@@ -637,18 +638,24 @@ def _update_job_status(
     now = datetime.now(UTC)
     running_at = now if status == JobStatus.running else None
     completed_at = now if status in (JobStatus.completed, JobStatus.failed) else None
-    stats_client.update_job(
-        job_id,
-        JobRequestUpdate(
-            status=status,
-            error=error,
-            error_type=error_type,
-            worker=worker,
-            result=result,
-            running_at=running_at,
-            completed_at=completed_at,
-        ),
-    )
+    try:
+        stats_client.update_job(
+            job_id,
+            JobRequestUpdate(
+                status=status,
+                error=error,
+                error_type=error_type,
+                worker=worker,
+                result=result,
+                running_at=running_at,
+                completed_at=completed_at,
+            ),
+        )
+    except HTTPStatusError as e:
+        if e.response.status_code == 409:
+            logger.info(f"Job {job_id} status update to {status.value} returned 409 (already updated), ignoring")
+            return
+        raise
 
 
 def _fetch_job_if_actionable(stats_client: StatsClient, ctx: EventCtx) -> JobRequest | None:
