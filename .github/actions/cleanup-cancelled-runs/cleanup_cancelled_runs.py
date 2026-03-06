@@ -37,9 +37,9 @@ def is_superseded_run(cancelled_run: Any, all_runs: Sequence[Any]) -> bool:
       be a manual cancel) so we conservatively keep it.
     - Zero newer runs means genuinely cancelled (manual or other).
 
-    Note: the Discord notification action uses a simpler heuristic (any newer run =
-    superseded) because mislabeling a notification is low-cost, while mislabeling
-    for deletion is destructive.
+    Note: the Discord notification action uses the same heuristic to decide whether
+    to label a run as superseded in status messages. Both paths intentionally treat
+    a single newer cancelled run as ambiguous (likely manual cancel).
 
     For main branch, we match any run on main (including merge_queue synthetic branches)
     since they all represent commits to the same branch.
