@@ -2,7 +2,6 @@ import { Metadata } from "next";
 
 import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
-import { buildEmbeddedPantheonUrl } from "@observatory/lib/pantheon";
 
 import { PolicyDashboardEmbed } from "../policy-dashboard/PolicyDashboardEmbed";
 
@@ -25,12 +24,10 @@ export default function PantheonPage() {
     );
   }
 
-  const pantheonUrl = buildEmbeddedPantheonUrl(config.pantheonUrl);
-
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-114px)]">
-        <PolicyDashboardEmbed src={pantheonUrl} />
+        <PolicyDashboardEmbed src={config.pantheonUrl} />
       </div>
     </SoftmaxGuard>
   );

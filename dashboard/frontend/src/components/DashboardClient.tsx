@@ -4191,7 +4191,7 @@ export function DashboardClient() {
             <Link className="vibeservatory-service-link" href="/diagnose">
               Diagnose Service
             </Link>
-            <Link className="vibeservatory-service-link vibeservatory-service-link-pantheon" href="/?tab=pantheon">
+            <Link className="vibeservatory-service-link vibeservatory-service-link-pantheon" href="/pantheon/v0">
               Pantheon Service
             </Link>
           </section>
