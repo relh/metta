@@ -9,6 +9,7 @@ py-modules = []
 [project]
 dependencies = [
   "altair>=5.5.0",
+  "anthropic>=0.64.0",
   "anywidget>=0.9.18",
   "asana>=5.2.2",
   "bidict>=0.23.1",

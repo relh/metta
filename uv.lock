@@ -2458,6 +2458,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "altair" },
+    { name = "anthropic" },
     { name = "anywidget" },
     { name = "asana" },
     { name = "bidict" },
@@ -2599,6 +2600,7 @@ testing = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.17.0" },
     { name = "altair", specifier = ">=5.5.0" },
+    { name = "anthropic", specifier = ">=0.64.0" },
     { name = "anywidget", specifier = ">=0.9.18" },
     { name = "asana", specifier = ">=5.2.2" },
     { name = "bidict", specifier = ">=0.23.1" },
