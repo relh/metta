@@ -82,6 +82,7 @@ jobs:
               - '**/*.py'
               - '**/*.cpp'
               - '**/*.hpp'
+              - '**/*.nim'
               - '**/*.toml'
               - '**/conftest.py'
               - '**/pyproject.toml'
