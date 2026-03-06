@@ -44,9 +44,9 @@ from metta.app_backend.job_runner.shared import (
     replay_public_uri,
 )
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients, new_tournament_clients
-from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus
+from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus, JobType
 from metta.app_backend.models.k8s_events import K8sEvent
-from metta.app_backend.otel.job_metrics import compute_job_cost
+from metta.app_backend.otel.job_metrics import compute_job_cost, get_job_metrics
 from metta.common.otel.tracing import init_otel_tracing, trace
 from metta.common.util.log_config import init_logging, suppress_noisy_logs
 from mettagrid.runner.types import PureSingleEpisodeResult, RunnerError, RuntimeInfo
@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 POLL_INTERVAL_SECONDS = 5
 BATCH_SIZE = 500
 RECONCILE_INTERVAL_SECONDS = 60
+GAUGE_REFRESH_INTERVAL_SECONDS = 30
 RECONCILE_GRACE_PERIOD_SECONDS = 86400  # 1 day — last-resort safety net for truly stuck jobs
 WORKER_THREADS = 16
 BACKGROUND_IO_THREADS = 8
@@ -147,12 +148,14 @@ def _mark_processed_batch(engine, event_ids: list[int]) -> None:
     if not event_ids:
         return
     now = datetime.now(UTC)
+    metrics = get_job_metrics()
     with Session(engine) as session:
         for eid in event_ids:
             event = session.get(K8sEvent, eid)
             if event:
                 event.processed_at = now
                 session.add(event)
+                metrics.record_event_processing_lag(event.created_at, now)
         session.commit()
 
 
@@ -562,6 +565,19 @@ def _read_runner_error(job_id: UUID) -> RunnerError | None:
         raise
 
 
+def _get_pod_finished_at(event_data: dict) -> datetime | None:
+    """Extract container finishedAt from k8s event, the actual pod termination time."""
+    pod_data = event_data.get("object", {})
+    for cs in pod_data.get("status", {}).get("containerStatuses", []):
+        finished = cs.get("state", {}).get("terminated", {}).get("finishedAt")
+        if finished:
+            if isinstance(finished, str):
+                return datetime.fromisoformat(finished.replace("Z", "+00:00"))
+            if isinstance(finished, datetime):
+                return finished.replace(tzinfo=UTC) if finished.tzinfo is None else finished
+    return None
+
+
 def _build_result_metadata(
     event_data: dict,
     core_v1: client.CoreV1Api,
@@ -572,10 +588,9 @@ def _build_result_metadata(
 ) -> dict[str, Any]:
     """Build metadata persisted on job results for both success and failure paths.
 
-    Cost is computed from the earlier of dispatched_at/running_at to capture pod
-    startup time (node provisioning, image pull) which is also billable.
+    Cost is computed from dispatched_at (or running_at) to the pod's actual
+    termination time (finishedAt), falling back to now if unavailable.
     """
-    now = datetime.now(UTC)
     result_data: dict[str, Any] = {}
     runner_image, runner_image_id = _get_runner_images_from_event(event_data)
     if runner_image:
@@ -588,11 +603,12 @@ def _build_result_metadata(
     instance_type = pricing_info.get("instance_type")
     capacity_type = pricing_info.get("capacity_type")
     cost_start = dispatched_at or running_at
+    cost_end = _get_pod_finished_at(event_data) or datetime.now(UTC)
     if cost_start and instance_type:
         cost_per_pod_hour = get_instance_hourly_cost(
             instance_type, capacity_type, region=get_dispatch_config().EVAL_CLUSTER_REGION
         )
-        cost = compute_job_cost(cost_start, now, cost_per_pod_hour)
+        cost = compute_job_cost(cost_start, cost_end, cost_per_pod_hour)
         if cost is not None:
             result_data["cost_usd"] = round(cost, 6)
         elif cost_per_pod_hour <= 0:
@@ -618,8 +634,20 @@ def _update_job_status(
         if error and not current.error:
             stats_client.update_job(job_id, JobRequestUpdate(error=error, error_type=error_type))
         return
+    now = datetime.now(UTC)
+    running_at = now if status == JobStatus.running else None
+    completed_at = now if status in (JobStatus.completed, JobStatus.failed) else None
     stats_client.update_job(
-        job_id, JobRequestUpdate(status=status, error=error, error_type=error_type, worker=worker, result=result)
+        job_id,
+        JobRequestUpdate(
+            status=status,
+            error=error,
+            error_type=error_type,
+            worker=worker,
+            result=result,
+            running_at=running_at,
+            completed_at=completed_at,
+        ),
     )
 
 
@@ -941,6 +969,12 @@ def _reconcile_stale_jobs(stats_client: StatsClient, core_v1: client.CoreV1Api):
         )
 
 
+def _refresh_outstanding_gauges() -> None:
+    engine = _get_db_engine()
+    with Session(engine) as session:
+        get_job_metrics().update_running_counts(session, {JobType.episode})
+
+
 def run_event_processor():
     cfg = get_dispatch_config()
     start_health_server()
@@ -950,12 +984,18 @@ def run_event_processor():
     logger.info(f"Event processor started: stats_server_uri={cfg.STATS_SERVER_URI}")
 
     last_reconcile = time.monotonic()
+    last_gauge_refresh = 0.0
     executor = ThreadPoolExecutor(max_workers=WORKER_THREADS)
 
     try:
         while True:
             update_heartbeat()
             try:
+                now = time.monotonic()
+                if now - last_gauge_refresh >= GAUGE_REFRESH_INTERVAL_SECONDS:
+                    _refresh_outstanding_gauges()
+                    last_gauge_refresh = now
+
                 clients = _get_k8s_clients()
                 if clients is None:
                     logger.warning("Eval cluster clients unavailable, retrying in 30s")

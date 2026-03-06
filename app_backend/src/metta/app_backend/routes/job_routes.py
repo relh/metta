@@ -317,7 +317,6 @@ def create_job_router() -> APIRouter:
                 transition_time=result.time,
                 error_type=job_request.error_type,
             )
-            await metrics.update_running_counts(session, {job.job_type for job in job_requests})
             return [job_request.id for job_request in job_requests]
 
     @router.get("")
@@ -605,10 +604,6 @@ def create_job_router() -> APIRouter:
 
             await session.commit()
             await session.refresh(job)
-
-            if status_changed:
-                metrics = get_job_metrics()
-                await metrics.update_running_counts(session, {job.job_type})
             return job
 
     # Policy logs are per-agent (N per job), so they use dedicated endpoints rather than

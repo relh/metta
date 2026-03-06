@@ -1,14 +1,14 @@
 """Job-specific OTel metrics (state transitions, stage durations, running counts)."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
 from opentelemetry import metrics as otel_metrics
 from opentelemetry.metrics import CallbackOptions, Observation
 from sqlalchemy import func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlmodel import col, select
 
 from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
@@ -60,6 +60,11 @@ class JobMetrics:
             description="Number of environment steps in a completed episode",
             unit="1",
         )
+        self._event_processing_lag_histogram = meter.create_histogram(
+            "job.event_processing_lag",
+            description="Time between k8s event insertion and processing",
+            unit="s",
+        )
         self._running_counts: dict[str, int] = {}
         self._outstanding_counts: dict[tuple[str, str], int] = {}
         meter.create_observable_gauge(
@@ -85,6 +90,13 @@ class JobMetrics:
         snapshot = dict(self._outstanding_counts)
         return [Observation(count, {"job_type": jt, "status": st}) for (jt, st), count in snapshot.items()]
 
+    def record_event_processing_lag(self, created_at: datetime, processed_at: datetime) -> None:
+        c = created_at.replace(tzinfo=UTC) if created_at.tzinfo is None else created_at
+        p = processed_at.replace(tzinfo=UTC) if processed_at.tzinfo is None else processed_at
+        lag = (p - c).total_seconds()
+        if lag >= 0:
+            self._event_processing_lag_histogram.record(lag)
+
     def record_episode_length(self, steps: int, job_type: str) -> None:
         self._episode_length_histogram.record(
             steps,
@@ -97,6 +109,7 @@ class JobMetrics:
         start_at: Optional[datetime],
         end_at: datetime,
         job_type: JobType,
+        outcome: str = "",
     ) -> None:
         if start_at is None:
             return
@@ -107,10 +120,10 @@ class JobMetrics:
         duration_seconds = (end_at - start_at).total_seconds()
         if duration_seconds < 0:
             return
-        self._stage_duration_histogram.record(
-            duration_seconds,
-            attributes={"stage": stage, "job_type": job_type.value},
-        )
+        attrs: dict[str, str] = {"stage": stage, "job_type": job_type.value}
+        if outcome:
+            attrs["outcome"] = outcome
+        self._stage_duration_histogram.record(duration_seconds, attributes=attrs)
 
     def record_transition(
         self,
@@ -130,33 +143,22 @@ class JobMetrics:
                 "error_type": error_type or "none",
             },
         )
+        outcome = to_status.value if to_status in (JobStatus.completed, JobStatus.failed) else ""
         if from_status == JobStatus.pending:
             self._record_stage_duration("pending", job.created_at, transition_time, job.job_type)
         elif from_status == JobStatus.dispatched:
-            # Reconciliation can mark dispatched -> completed/failed without a running phase.
-            self._record_stage_duration("dispatched", job.dispatched_at, transition_time, job.job_type)
-            # Pod failed during startup (never reached running). Node was still billable.
+            self._record_stage_duration("dispatched", job.dispatched_at, transition_time, job.job_type, outcome=outcome)
             if cost_usd is not None and cost_usd > 0:
-                self._cost_counter.add(cost_usd, attributes={"job_type": job.job_type.value})
+                self._cost_counter.add(cost_usd, attributes={"job_type": job.job_type.value, "outcome": outcome})
         elif from_status == JobStatus.running:
-            self._record_stage_duration("running", job.running_at, transition_time, job.job_type)
+            self._record_stage_duration("running", job.running_at, transition_time, job.job_type, outcome=outcome)
             if cost_usd is not None and cost_usd > 0:
-                self._cost_counter.add(cost_usd, attributes={"job_type": job.job_type.value})
+                self._cost_counter.add(cost_usd, attributes={"job_type": job.job_type.value, "outcome": outcome})
 
-    async def update_running_counts(self, session: AsyncSession, job_types: set[JobType]) -> None:
-        if not job_types:
-            return
-
+    def _apply_counts(self, result: Sequence[Any], job_types: set[JobType]) -> None:
         outstanding_statuses = [JobStatus.pending, JobStatus.dispatched, JobStatus.running]
-        result = await session.execute(
-            select(JobRequest.job_type, JobRequest.status, func.count())
-            .where(col(JobRequest.status).in_(outstanding_statuses))
-            .where(col(JobRequest.job_type).in_(job_types))
-            .group_by(JobRequest.job_type, JobRequest.status)
-        )
-
         counts_by_type_status: dict[tuple[JobType, JobStatus], int] = {}
-        for job_type, status, count in result.all():
+        for job_type, status, count in result:
             counts_by_type_status[(job_type, status)] = count
 
         for job_type in job_types:
@@ -164,6 +166,21 @@ class JobMetrics:
                 key = (job_type.value, status.value)
                 self._outstanding_counts[key] = counts_by_type_status.get((job_type, status), 0)
             self._running_counts[job_type.value] = counts_by_type_status.get((job_type, JobStatus.running), 0)
+
+    def _counts_query(self, job_types: set[JobType]):
+        outstanding_statuses = [JobStatus.pending, JobStatus.dispatched, JobStatus.running]
+        return (
+            select(JobRequest.job_type, JobRequest.status, func.count())
+            .where(col(JobRequest.status).in_(outstanding_statuses))
+            .where(col(JobRequest.job_type).in_(job_types))
+            .group_by(JobRequest.job_type, JobRequest.status)
+        )
+
+    def update_running_counts(self, session: Session, job_types: set[JobType]) -> None:
+        if not job_types:
+            return
+        result = session.execute(self._counts_query(job_types))
+        self._apply_counts(result.all(), job_types)
 
 
 @lru_cache

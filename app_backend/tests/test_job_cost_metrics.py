@@ -82,7 +82,7 @@ class TestCostEmission:
 
         assert len(recorded) == 1
         assert recorded[0]["amount"] == pytest.approx(0.20, abs=1e-9)
-        assert recorded[0]["attributes"] == {"job_type": "episode"}
+        assert recorded[0]["attributes"] == {"job_type": "episode", "outcome": "completed"}
 
     def test_running_to_failed_emits_cost(self):
         """Failed jobs still consumed compute; cost must be recorded."""
@@ -94,6 +94,7 @@ class TestCostEmission:
 
         assert len(recorded) == 1
         assert recorded[0]["amount"] == pytest.approx(0.10, abs=1e-9)
+        assert recorded[0]["attributes"] == {"job_type": "episode", "outcome": "failed"}
 
     def test_cost_usd_passed_directly(self):
         """When cost_usd is provided, it should be used directly."""
@@ -130,6 +131,7 @@ class TestCostEmission:
 
         assert len(recorded) == 1
         assert recorded[0]["amount"] == pytest.approx(0.15)
+        assert recorded[0]["attributes"] == {"job_type": "episode", "outcome": "failed"}
 
     def test_dispatched_to_failed_no_cost_without_cost_usd(self):
         """dispatched→failed without pre-computed cost_usd should not emit."""
@@ -579,7 +581,7 @@ class TestRouteIntegration:
         stats_client.update_job(job_ids[0], JobRequestUpdate(status=JobStatus.completed))
         assert len(cost_adds) == 1  # running→completed: cost emitted exactly once
         assert cost_adds[0]["amount"] == pytest.approx(0.192)
-        assert cost_adds[0]["attributes"] == {"job_type": "episode"}
+        assert cost_adds[0]["attributes"] == {"job_type": "episode", "outcome": "completed"}
 
     def test_failed_from_running_emits_cost(self, stats_client, monkeypatch: pytest.MonkeyPatch):
         """running→failed must also emit cost (compute was consumed)."""
