@@ -155,7 +155,7 @@ def _mark_processed_batch(engine, event_ids: list[int]) -> None:
             if event:
                 event.processed_at = now
                 session.add(event)
-                metrics.record_event_processing_lag(event.created_at, now)
+                metrics.record_event_processing_lag(event.created_at, now, job_type=JobType.episode.value)
         session.commit()
 
 

@@ -90,12 +90,15 @@ class JobMetrics:
         snapshot = dict(self._outstanding_counts)
         return [Observation(count, {"job_type": jt, "status": st}) for (jt, st), count in snapshot.items()]
 
-    def record_event_processing_lag(self, created_at: datetime, processed_at: datetime) -> None:
+    def record_event_processing_lag(self, created_at: datetime, processed_at: datetime, job_type: str = "") -> None:
         c = created_at.replace(tzinfo=UTC) if created_at.tzinfo is None else created_at
         p = processed_at.replace(tzinfo=UTC) if processed_at.tzinfo is None else processed_at
         lag = (p - c).total_seconds()
         if lag >= 0:
-            self._event_processing_lag_histogram.record(lag)
+            attrs: dict[str, str] = {}
+            if job_type:
+                attrs["job_type"] = job_type
+            self._event_processing_lag_histogram.record(lag, attributes=attrs)
 
     def record_episode_length(self, steps: int, job_type: str) -> None:
         self._episode_length_histogram.record(

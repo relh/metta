@@ -782,6 +782,45 @@ def pipeline_dashboard() -> dict:
         ),
         _at(
             _trend_ts(
+                "Avg Postprocessing",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "lag",
+                        "query": f"avg:job.event_processing_lag{{{_PROD_FILTER}}}",
+                    },
+                ],
+                [{"formula": "lag", "alias": "event lag", **_dur_fmt}],
+            ),
+            x=0,
+            y=4,
+            w=6,
+            h=4,
+        ),
+        _at(
+            _trend_ts(
+                "Avg Cost per Job",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "cost",
+                        "query": f"sum:job.cost{{{_PROD_FILTER}}}.as_count()",
+                    },
+                    {
+                        "data_source": "metrics",
+                        "name": "n",
+                        "query": (f"sum:job.state_transition{{{_PROD_FILTER},to_status:completed}}.as_count()"),
+                    },
+                ],
+                [{"formula": "cost / n", "alias": "$/job"}],
+            ),
+            x=6,
+            y=4,
+            w=6,
+            h=4,
+        ),
+        _at(
+            _trend_ts(
                 "Job Throughput (per day)",
                 [
                     {
@@ -808,8 +847,27 @@ def pipeline_dashboard() -> dict:
                 style={"palette": "dog_classic"},
             ),
             x=0,
-            y=4,
-            w=12,
+            y=8,
+            w=6,
+            h=4,
+        ),
+        _at(
+            _trend_ts(
+                "Total Daily Cost",
+                [
+                    {
+                        "data_source": "metrics",
+                        "name": "cost",
+                        "query": f"sum:job.cost{{{_PROD_FILTER}}}.as_count().rollup(sum, 86400)",
+                    },
+                ],
+                [{"formula": "cost", "alias": "$/day"}],
+                display_type="bars",
+                style={"palette": "cool"},
+            ),
+            x=6,
+            y=8,
+            w=6,
             h=4,
         ),
     ]
@@ -819,9 +877,9 @@ def pipeline_dashboard() -> dict:
         x=0,
         y=y,
         width=12,
-        height=9,
+        height=13,
     )
-    y += 9
+    y += 13
 
     return {
         "title": "Tournament Pipeline",
