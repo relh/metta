@@ -21,6 +21,7 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
     policy_id = uuid4()
     policy_version_id = uuid4()
     active_job_id = uuid4()
+    season_id = uuid4()
 
     policy = SimpleNamespace(
         id=policy_id,
@@ -52,12 +53,34 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
         assert user_ids == {"user-alpha"}
         return {"user-alpha": "Alice"}
 
+    async def fake_fetch_canonical_seasons():
+        return [
+            SimpleNamespace(
+                id=season_id,
+                name="Beta CvC",
+                version=7,
+                compat_version="0.17",
+                created_at=datetime(2026, 2, 26, 18, 36, tzinfo=UTC),
+                pools=[SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())],
+            )
+        ]
+
+    async def fake_fetch_pool_player_memberships_for_seasons(season_ids):
+        assert season_ids == [season_id]
+        return [(season_id, policy_version_id, False)]
+
     async def fake_get_softmax_user():
         return User(id="user-alpha", email="alice@softmax.com", is_softmax_team_member=True)
 
     monkeypatch.setattr(bardo_router, "_fetch_all_policies", fake_fetch_all_policies)
     monkeypatch.setattr(bardo_router, "_fetch_active_episode_jobs", fake_fetch_active_episode_jobs)
     monkeypatch.setattr(bardo_router, "_resolve_user_names", fake_resolve_user_names)
+    monkeypatch.setattr(bardo_router, "_fetch_canonical_seasons", fake_fetch_canonical_seasons)
+    monkeypatch.setattr(
+        bardo_router,
+        "_fetch_pool_player_memberships_for_seasons",
+        fake_fetch_pool_player_memberships_for_seasons,
+    )
 
     app = FastAPI()
     app.include_router(create_bardo_router())
@@ -84,6 +107,19 @@ def test_bardo_world_state_includes_active_jobs_for_softmax(
             "userName": "Alice",
             "createdAt": "2026-03-05T01:00:00Z",
             "activeJobIds": [str(active_job_id)],
+            "seasonIds": [str(season_id)],
+        }
+    ]
+    assert payload["seasons"] == [
+        {
+            "seasonId": str(season_id),
+            "name": "Beta CvC",
+            "version": 7,
+            "compatVersion": "0.17",
+            "createdAt": "2026-02-26T18:36:00Z",
+            "stageCount": 2,
+            "entrantCount": 1,
+            "activeEntrantCount": 1,
         }
     ]
     assert isinstance(payload["generatedAt"], str)

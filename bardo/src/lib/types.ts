@@ -6,6 +6,7 @@ export type BardoPolicy = {
   userName: string
   createdAt: string
   activeJobIds: string[]
+  seasonIds: string[]
 }
 
 export type BardoActiveJob = {
@@ -14,8 +15,20 @@ export type BardoActiveJob = {
   policyVersionIds: string[]
 }
 
+export type BardoSeason = {
+  seasonId: string
+  name: string
+  version: number
+  compatVersion: string | null
+  createdAt: string
+  stageCount: number
+  entrantCount: number
+  activeEntrantCount: number
+}
+
 export type BardoWorldState = {
   generatedAt: string
   policies: BardoPolicy[]
   activeJobs: BardoActiveJob[]
+  seasons: BardoSeason[]
 }

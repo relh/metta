@@ -1,16 +1,50 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 
+import {
+  BARDO_PORTALS,
+  buildBuildingPortals,
+  buildSeasonBuildingPlan,
+  pointInRect,
+  pointOutsideBuildings,
+  portalForPolicy,
+  type BardoBuildingPortal,
+  type BardoSeasonBuilding,
+} from '../lib/bardo-lobby-layout'
 import type { BardoPolicy, BardoWorldState } from '../lib/types'
 
 const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
 const BARDO_AUTH_TOKEN_SESSION_STORAGE_KEY = 'bardo-auth-token'
-const WORLD_POLL_MS = 15_000
-const WORLD_STEP_MS = 60
-
-const PORTAL = { x: 0.9, y: 0.16 }
+const WORLD_POLL_MS = 5_000
+const WORLD_STEP_MS = 70
+const PORTAL_CAPTURE_DISTANCE = 0.03
+const LIVE_STALE_MS = WORLD_POLL_MS * 3
+const METTASCOPE_BUILDING_SPRITES = [
+  '/assets/mettascope/objects/hub.png',
+  '/assets/mettascope/objects/hub.working.png',
+  '/assets/mettascope/objects/hub.ready.png',
+  '/assets/mettascope/objects/factory.png',
+  '/assets/mettascope/objects/lab.png',
+  '/assets/mettascope/objects/temple.png',
+  '/assets/mettascope/objects/armory.png',
+  '/assets/mettascope/objects/converter.png',
+]
+const METTASCOPE_PORTAL_SPRITES = [
+  '/assets/mettascope/objects/junction.png',
+  '/assets/mettascope/objects/junction.working.png',
+  '/assets/mettascope/objects/generator_blue.png',
+  '/assets/mettascope/objects/charger.png',
+]
+const METTASCOPE_POLICY_SPRITES = [
+  '/assets/mettascope/objects/aligner.png',
+  '/assets/mettascope/objects/miner.png',
+  '/assets/mettascope/objects/scout.png',
+  '/assets/mettascope/objects/scrambler.png',
+]
+const METTASCOPE_CARRIER_SPRITE = '/assets/mettascope/objects/ship.png'
 
 type ActorState = {
   x: number
@@ -20,6 +54,7 @@ type ActorState = {
   cycle: number
   nextRetargetAtMs: number
   hidden: boolean
+  homeKey: string
 }
 
 type RenderedPolicy = BardoPolicy & {
@@ -29,6 +64,12 @@ type RenderedPolicy = BardoPolicy & {
   busy: boolean
   color: string
   initials: string
+  seasonId: string | null
+  seasonLabel: string
+  submittedSeasonCount: number
+  activePortalLabel: string
+  motionPhaseMs: number
+  sprite: string
 }
 
 function clamp01(value: number): number {
@@ -56,50 +97,15 @@ function distance(a: { x: number; y: number }, b: { x: number; y: number }): num
   return Math.hypot(dx, dy)
 }
 
-function spawnPoint(policyId: string): { x: number; y: number } {
-  return {
-    x: 0.07 + 0.76 * seededUnit(`${policyId}:spawn:x`),
-    y: 0.2 + 0.72 * seededUnit(`${policyId}:spawn:y`),
-  }
-}
-
-function portalQueueTarget(policyId: string): { x: number; y: number } {
-  return {
-    x: PORTAL.x - 0.05 + 0.04 * seededUnit(`${policyId}:portal:x`),
-    y: PORTAL.y + 0.03 + 0.08 * seededUnit(`${policyId}:portal:y`),
-  }
-}
-
-function portalExitPoint(policyId: string): { x: number; y: number } {
-  return {
-    x: PORTAL.x - 0.06 + 0.03 * seededUnit(`${policyId}:exit:x`),
-    y: PORTAL.y + 0.11 + 0.04 * seededUnit(`${policyId}:exit:y`),
-  }
-}
-
-function nextWanderTarget(policyId: string, cycle: number): { x: number; y: number; lingerMs: number } {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const x = 0.06 + 0.85 * seededUnit(`${policyId}:wander:x:${cycle}:${attempt}`)
-    const y = 0.18 + 0.77 * seededUnit(`${policyId}:wander:y:${cycle}:${attempt}`)
-    const isPortalZone = x > 0.76 && y < 0.4
-    if (isPortalZone) continue
-
-    const lingerMs = 2200 + Math.floor(2200 * seededUnit(`${policyId}:linger:${cycle}:${attempt}`))
-    return { x, y, lingerMs }
-  }
-
-  return {
-    x: 0.5,
-    y: 0.5,
-    lingerMs: 2600,
-  }
-}
-
 function colorForPolicy(policyId: string): string {
   const hue = Math.floor(seededUnit(`${policyId}:h`) * 360)
   const saturation = 62 + Math.floor(seededUnit(`${policyId}:s`) * 16)
-  const lightness = 47 + Math.floor(seededUnit(`${policyId}:l`) * 10)
+  const lightness = 46 + Math.floor(seededUnit(`${policyId}:l`) * 12)
   return `hsl(${hue} ${saturation}% ${lightness}%)`
+}
+
+function spriteFromSeed(seed: string, sprites: readonly string[]): string {
+  return sprites[hashString(seed) % sprites.length]
 }
 
 function policyInitials(name: string): string {
@@ -108,14 +114,8 @@ function policyInitials(name: string): string {
     .map((token) => token.trim())
     .filter((token) => token.length > 0)
 
-  if (tokens.length === 0) {
-    return name.slice(0, 2).toUpperCase()
-  }
-
-  if (tokens.length === 1) {
-    return tokens[0].slice(0, 2).toUpperCase()
-  }
-
+  if (tokens.length === 0) return name.slice(0, 2).toUpperCase()
+  if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase()
   return `${tokens[0][0]}${tokens[tokens.length - 1][0]}`.toUpperCase()
 }
 
@@ -125,6 +125,28 @@ function toErrorMessage(error: unknown): string {
 
 function asPercent(value: number): string {
   return `${(clamp01(value) * 100).toFixed(3)}%`
+}
+
+function secondsSince(fromMs: number, toMs: number): number {
+  return Math.max(0, Math.floor((toMs - fromMs) / 1000))
+}
+
+function freshnessLabel(lastRefreshAtMs: number | null, nowMs: number): string {
+  if (!lastRefreshAtMs) return '—'
+  const ageSeconds = secondsSince(lastRefreshAtMs, nowMs)
+  if (ageSeconds < 60) return `${ageSeconds}s ago`
+  const minutes = Math.floor(ageSeconds / 60)
+  return `${minutes}m ago`
+}
+
+function portalQueueTarget(policyId: string, portal: BardoBuildingPortal | { id: string; x: number; y: number }): {
+  x: number
+  y: number
+} {
+  return {
+    x: clamp01(portal.x - 0.03 + 0.06 * seededUnit(`${policyId}:${portal.id}:x`)),
+    y: clamp01(portal.y + 0.03 + 0.07 * seededUnit(`${policyId}:${portal.id}:y`)),
+  }
 }
 
 function trimToNull(value: string | null | undefined): string | null {
@@ -177,23 +199,68 @@ export function resolveBardoAuthToken(): string | null {
   return null
 }
 
-function ensureActorState(store: Map<string, ActorState>, policyId: string): ActorState {
+function ensureActorState(
+  store: Map<string, ActorState>,
+  policyId: string,
+  spawn: { x: number; y: number },
+  homeKey: string
+): ActorState {
   const existing = store.get(policyId)
-  if (existing) return existing
+  if (existing) {
+    if (existing.homeKey === homeKey) return existing
 
-  const initial = spawnPoint(policyId)
+    existing.homeKey = homeKey
+    existing.hidden = false
+    existing.x = spawn.x
+    existing.y = spawn.y
+    existing.targetX = spawn.x
+    existing.targetY = spawn.y
+    existing.cycle = 0
+    existing.nextRetargetAtMs = 0
+    return existing
+  }
+
   const actorState: ActorState = {
-    x: initial.x,
-    y: initial.y,
-    targetX: initial.x,
-    targetY: initial.y,
+    x: spawn.x,
+    y: spawn.y,
+    targetX: spawn.x,
+    targetY: spawn.y,
     cycle: 0,
     nextRetargetAtMs: 0,
     hidden: false,
+    homeKey,
   }
 
   store.set(policyId, actorState)
   return actorState
+}
+
+function homeSpawnPoint(
+  policyId: string,
+  seasonId: string | null,
+  buildingBySeasonId: Record<string, BardoSeasonBuilding>,
+  buildings: ReadonlyArray<BardoSeasonBuilding>
+): { x: number; y: number } {
+  if (!seasonId) {
+    return pointOutsideBuildings(`${policyId}:outside:spawn`, buildings, 0)
+  }
+
+  const building = buildingBySeasonId[seasonId]
+  if (!building) {
+    return pointOutsideBuildings(`${policyId}:outside:spawn`, buildings, 0)
+  }
+
+  return pointInRect(`${policyId}:${seasonId}:spawn`, building.rect, 0)
+}
+
+function actorHomeKey(
+  seasonId: string | null,
+  building: BardoSeasonBuilding | undefined,
+  buildingCount: number
+): string {
+  if (!seasonId || !building) return `outside:${buildingCount}`
+  const { minX, minY, maxX, maxY } = building.rect
+  return `season:${seasonId}:${minX.toFixed(3)}:${minY.toFixed(3)}:${maxX.toFixed(3)}:${maxY.toFixed(3)}`
 }
 
 export function BardoLobby() {
@@ -206,6 +273,8 @@ export function BardoLobby() {
   const [isLoading, setIsLoading] = useState(true)
   const [renderedPolicies, setRenderedPolicies] = useState<RenderedPolicy[]>([])
   const [hoveredPolicyId, setHoveredPolicyId] = useState<string | null>(null)
+  const [lastRefreshAtMs, setLastRefreshAtMs] = useState<number | null>(null)
+  const [nowMs, setNowMs] = useState<number>(() => Date.now())
 
   const actorsRef = useRef<Map<string, ActorState>>(new Map())
 
@@ -233,7 +302,15 @@ export function BardoLobby() {
 
     const payload = (await response.json()) as BardoWorldState
     setWorld(payload)
+    setLastRefreshAtMs(Date.now())
   }, [nameFilter])
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNowMs(Date.now())
+    }, 1_000)
+    return () => clearInterval(interval)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -264,6 +341,32 @@ export function BardoLobby() {
     }
   }, [loadWorldState])
 
+  const seasonPlan = useMemo(() => buildSeasonBuildingPlan(world?.policies ?? [], world?.seasons ?? []), [world])
+  const buildingPortals = useMemo(() => buildBuildingPortals(seasonPlan.buildings), [seasonPlan.buildings])
+
+  const buildingBySeasonId = useMemo(
+    () =>
+      seasonPlan.buildings.reduce(
+        (acc, building) => {
+          acc[building.seasonId] = building
+          return acc
+        },
+        {} as Record<string, BardoSeasonBuilding>
+      ),
+    [seasonPlan.buildings]
+  )
+  const buildingPortalBySeasonId = useMemo(
+    () =>
+      buildingPortals.reduce(
+        (acc, portal) => {
+          acc[portal.seasonId] = portal
+          return acc
+        },
+        {} as Record<string, BardoBuildingPortal>
+      ),
+    [buildingPortals]
+  )
+
   useEffect(() => {
     if (!world) return
 
@@ -277,7 +380,11 @@ export function BardoLobby() {
     }
 
     for (const policy of world.policies) {
-      ensureActorState(actorStore, policy.policyId)
+      const seasonId = seasonPlan.policySeasonById[policy.policyId] ?? null
+      const building = seasonId ? buildingBySeasonId[seasonId] : undefined
+      const spawn = homeSpawnPoint(policy.policyId, seasonId, buildingBySeasonId, seasonPlan.buildings)
+      const homeKey = actorHomeKey(seasonId, building, seasonPlan.buildings.length)
+      ensureActorState(actorStore, policy.policyId, spawn, homeKey)
     }
 
     const tick = () => {
@@ -285,43 +392,52 @@ export function BardoLobby() {
       const nextFrame: RenderedPolicy[] = []
 
       for (const policy of world.policies) {
-        const actor = ensureActorState(actorStore, policy.policyId)
+        const seasonId = seasonPlan.policySeasonById[policy.policyId] ?? null
+        const building = seasonId ? buildingBySeasonId[seasonId] : undefined
+        const buildingPortal = seasonId ? buildingPortalBySeasonId[seasonId] : undefined
+        const activePortal = buildingPortal ?? portalForPolicy(policy.policyId)
+        const spawn = homeSpawnPoint(policy.policyId, seasonId, buildingBySeasonId, seasonPlan.buildings)
+        const homeKey = actorHomeKey(seasonId, building, seasonPlan.buildings.length)
+        const actor = ensureActorState(actorStore, policy.policyId, spawn, homeKey)
         const busy = policy.activeJobIds.length > 0
 
         if (busy) {
-          const queueTarget = portalQueueTarget(policy.policyId)
+          const queueTarget = portalQueueTarget(policy.policyId, activePortal)
           actor.targetX = queueTarget.x
           actor.targetY = queueTarget.y
+
+          if (distance(actor, activePortal) < PORTAL_CAPTURE_DISTANCE) {
+            actor.hidden = true
+          }
         } else {
           if (actor.hidden) {
-            const portalExit = portalExitPoint(policy.policyId)
             actor.hidden = false
-            actor.x = portalExit.x
-            actor.y = portalExit.y
-            actor.targetX = portalExit.x
-            actor.targetY = portalExit.y
+            actor.x = spawn.x
+            actor.y = spawn.y
+            actor.targetX = spawn.x
+            actor.targetY = spawn.y
             actor.nextRetargetAtMs = 0
           }
 
           const shouldRetarget =
-            now >= actor.nextRetargetAtMs || distance(actor, { x: actor.targetX, y: actor.targetY }) < 0.02
+            now >= actor.nextRetargetAtMs || distance(actor, { x: actor.targetX, y: actor.targetY }) < 0.018
 
           if (shouldRetarget) {
             actor.cycle += 1
-            const nextTarget = nextWanderTarget(policy.policyId, actor.cycle)
+            const nextTarget = building
+              ? pointInRect(`${policy.policyId}:${seasonId}:wander`, building.rect, actor.cycle)
+              : pointOutsideBuildings(`${policy.policyId}:outside:wander`, seasonPlan.buildings, actor.cycle)
             actor.targetX = nextTarget.x
             actor.targetY = nextTarget.y
             actor.nextRetargetAtMs = now + nextTarget.lingerMs
           }
         }
 
-        const easing = busy ? 0.18 : 0.08
+        const easing = busy ? 0.18 : 0.11
         actor.x += (actor.targetX - actor.x) * easing
         actor.y += (actor.targetY - actor.y) * easing
-
-        if (busy && distance(actor, PORTAL) < 0.03) {
-          actor.hidden = true
-        }
+        actor.x = clamp01(actor.x)
+        actor.y = clamp01(actor.y)
 
         nextFrame.push({
           ...policy,
@@ -331,16 +447,23 @@ export function BardoLobby() {
           busy,
           color: colorForPolicy(policy.policyId),
           initials: policyInitials(policy.name),
+          seasonId,
+          seasonLabel: building?.label ?? 'Outside Commons',
+          submittedSeasonCount: policy.seasonIds.length,
+          activePortalLabel: activePortal.label,
+          motionPhaseMs: Math.floor(seededUnit(`${policy.policyId}:motion`) * 2_400),
+          sprite: spriteFromSeed(`${policy.policyId}:role`, METTASCOPE_POLICY_SPRITES),
         })
       }
 
+      nextFrame.sort((left, right) => left.y - right.y || left.policyId.localeCompare(right.policyId))
       setRenderedPolicies(nextFrame)
     }
 
     tick()
     const interval = setInterval(tick, WORLD_STEP_MS)
     return () => clearInterval(interval)
-  }, [world])
+  }, [buildingBySeasonId, buildingPortalBySeasonId, seasonPlan.buildings, seasonPlan.policySeasonById, world])
 
   const visiblePolicies = useMemo(() => renderedPolicies.filter((policy) => !policy.hidden), [renderedPolicies])
 
@@ -349,22 +472,20 @@ export function BardoLobby() {
     [hoveredPolicyId, visiblePolicies]
   )
 
-  const nearbyPolicies = useMemo(() => {
-    if (!hoveredPolicy) return []
-
-    return visiblePolicies
-      .filter((policy) => policy.policyId !== hoveredPolicy.policyId)
-      .map((policy) => ({
-        policy,
-        dist: distance(hoveredPolicy, policy),
-      }))
-      .filter((entry) => entry.dist < 0.15)
-      .sort((left, right) => left.dist - right.dist)
-      .slice(0, 6)
-      .map((entry) => entry.policy)
-  }, [hoveredPolicy, visiblePolicies])
-
+  const totalPolicies = world?.policies.length ?? 0
+  const submittedCount = world?.policies.filter((policy) => policy.seasonIds.length > 0).length ?? 0
+  const outsideCount = totalPolicies - submittedCount
   const inEpisodeCount = world?.policies.filter((policy) => policy.activeJobIds.length > 0).length ?? 0
+  const busyCountBySeasonId = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const policy of renderedPolicies) {
+      if (!policy.busy || !policy.seasonId) continue
+      counts[policy.seasonId] = (counts[policy.seasonId] ?? 0) + 1
+    }
+    return counts
+  }, [renderedPolicies])
+  const freshness = freshnessLabel(lastRefreshAtMs, nowMs)
+  const isLive = lastRefreshAtMs !== null && nowMs - lastRefreshAtMs <= LIVE_STALE_MS
   const lastUpdatedLabel = world
     ? new Date(world.generatedAt).toLocaleTimeString([], {
         hour: 'numeric',
@@ -378,60 +499,154 @@ export function BardoLobby() {
       <section className="bardo-card">
         <header className="bardo-header">
           <div>
-            <p className="bardo-kicker">Between Episodes</p>
+            <p className="bardo-kicker">Tournament District</p>
             <h1>Bardo Lobby</h1>
             <p className="bardo-subtitle">
-              Latest policy versions wander here. Policies in pending or running episode jobs drift to the portal and
-              phase out until they return.
+              Aboard the station, each tournament season has its own habitat tower. Submitted policies drift inside
+              those towers, while unsubmitted policies roam the outer concourse.
             </p>
           </div>
           <div className="bardo-stats" role="status" aria-live="polite">
             <p>
-              <span>Visible now</span>
-              <strong>{visiblePolicies.length}</strong>
+              <span>Policies</span>
+              <strong>{totalPolicies}</strong>
+            </p>
+            <p>
+              <span>Buildings</span>
+              <strong>{seasonPlan.buildings.length}</strong>
             </p>
             <p>
               <span>In episode</span>
               <strong>{inEpisodeCount}</strong>
-            </p>
-            <p>
-              <span>Active jobs</span>
-              <strong>{world?.activeJobs.length ?? 0}</strong>
             </p>
           </div>
         </header>
 
         {errorMessage ? <div className="bardo-alert">{errorMessage}</div> : null}
 
-        <div className="bardo-world" role="img" aria-label="Bardo lobby world map">
+        <div className="bardo-world" role="img" aria-label="Bardo station with tournament towers and roaming policies">
+          <div className="bardo-spacefield" />
+          <div className="bardo-hull-shadow" />
+          <div className="bardo-mettascope-overlay" />
           <div className="bardo-world-glow" />
           <div className="bardo-world-grid" />
-
-          <div
-            className="bardo-portal"
-            style={{
-              left: asPercent(PORTAL.x),
-              top: asPercent(PORTAL.y),
-            }}
-          >
-            <span>Episode Portal</span>
+          <div className="bardo-station-ring" />
+          <div className="bardo-observation-deck" />
+          <div className="bardo-carrier">
+            <Image
+              className="bardo-carrier-sprite"
+              src={METTASCOPE_CARRIER_SPRITE}
+              alt=""
+              aria-hidden="true"
+              width={512}
+              height={512}
+              unoptimized
+            />
           </div>
+          <div className="bardo-commons-label">
+            <span>Outside Commons</span>
+          </div>
+
+          {seasonPlan.buildings.map((building) => (
+            <div
+              key={building.seasonId}
+              className={`bardo-building ${building.policyCount > 0 ? 'occupied' : ''}`}
+              style={{
+                left: asPercent(building.rect.minX),
+                top: asPercent(building.rect.minY),
+                width: asPercent(building.rect.maxX - building.rect.minX),
+                height: asPercent(building.rect.maxY - building.rect.minY),
+              }}
+            >
+              <Image
+                className="bardo-building-sprite"
+                src={spriteFromSeed(`building:${building.seasonId}`, METTASCOPE_BUILDING_SPRITES)}
+                alt=""
+                aria-hidden="true"
+                width={256}
+                height={256}
+                unoptimized
+              />
+              <p className="bardo-building-name">{building.label}</p>
+              <div className="bardo-building-signals">
+                {[0, 1, 2].map((idx) => (
+                  <span
+                    key={`${building.seasonId}:signal:${idx}`}
+                    className={idx < Math.min(3, busyCountBySeasonId[building.seasonId] ?? 0) ? 'active' : ''}
+                  />
+                ))}
+              </div>
+              <p className="bardo-building-meta">
+                {building.policyCount} visible · {building.activeEntrantCount}/{building.entrantCount} active
+              </p>
+              <p className="bardo-building-meta">
+                Compat {building.compatVersion ?? 'n/a'} · {building.stageCount} stage
+                {building.stageCount === 1 ? '' : 's'}
+              </p>
+              <div className="bardo-building-door" />
+            </div>
+          ))}
+
+          {buildingPortals.map((portal) => (
+            <div
+              key={portal.id}
+              className={`bardo-building-portal bardo-building-portal-${portal.dockSide} ${
+                (busyCountBySeasonId[portal.seasonId] ?? 0) > 0 ? 'active' : ''
+              }`}
+              style={{
+                left: asPercent(portal.x),
+                top: asPercent(portal.y),
+              }}
+            >
+              <Image
+                className="bardo-portal-sprite"
+                src={spriteFromSeed(`portal:${portal.seasonId}`, METTASCOPE_PORTAL_SPRITES)}
+                alt=""
+                aria-hidden="true"
+                width={256}
+                height={256}
+                unoptimized
+              />
+              <span>{portal.label}</span>
+            </div>
+          ))}
+          {BARDO_PORTALS.map((portal) => (
+            <div
+              key={portal.id}
+              className="bardo-portal bardo-commons-portal"
+              style={{
+                left: asPercent(portal.x),
+                top: asPercent(portal.y),
+              }}
+              title={portal.label}
+            />
+          ))}
 
           {visiblePolicies.map((policy) => (
             <button
               key={policy.policyId}
               type="button"
-              className={`bardo-policy ${policy.busy ? 'busy' : ''}`}
+              className={`bardo-policy ${policy.busy ? 'busy' : ''} ${policy.seasonId ? 'inside' : 'outside'}`}
               style={{
                 left: asPercent(policy.x),
                 top: asPercent(policy.y),
                 backgroundColor: policy.color,
+                animationDelay: `${policy.motionPhaseMs}ms`,
               }}
-              title={`${policy.name} • ${policy.userName}`}
+              title={`${policy.name} • ${policy.userName} • ${policy.seasonLabel}`}
               onMouseEnter={() => setHoveredPolicyId(policy.policyId)}
               onMouseLeave={() => setHoveredPolicyId((current) => (current === policy.policyId ? null : current))}
             >
-              <span>{policy.initials}</span>
+              <Image
+                className="bardo-policy-sprite"
+                src={policy.sprite}
+                alt=""
+                aria-hidden="true"
+                width={192}
+                height={192}
+                unoptimized
+              />
+              <span className="bardo-policy-initials">{policy.initials}</span>
             </button>
           ))}
 
@@ -445,31 +660,35 @@ export function BardoLobby() {
             >
               <p className="bardo-tooltip-name">{hoveredPolicy.name}</p>
               <p className="bardo-tooltip-owner">by {hoveredPolicy.userName}</p>
+              <p className="bardo-tooltip-meta">Location: {hoveredPolicy.seasonLabel}</p>
+              {hoveredPolicy.submittedSeasonCount > 1 ? (
+                <p className="bardo-tooltip-meta">Submitted to {hoveredPolicy.submittedSeasonCount} seasons</p>
+              ) : null}
               <p className="bardo-tooltip-meta">
                 {hoveredPolicy.busy
-                  ? `In episode job (${hoveredPolicy.activeJobIds.length})`
-                  : `${nearbyPolicies.length} nearby policy${nearbyPolicies.length === 1 ? '' : 'ies'}`}
+                  ? `Routing to ${hoveredPolicy.activePortalLabel}`
+                  : hoveredPolicy.seasonId
+                    ? `Inside ${hoveredPolicy.seasonLabel}`
+                    : 'Wandering outside all season buildings'}
               </p>
-              {nearbyPolicies.length > 0 ? (
-                <div className="bardo-tooltip-neighbors">
-                  {nearbyPolicies.map((neighbor) => (
-                    <span key={neighbor.policyId}>{neighbor.name}</span>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ) : null}
 
           {isLoading ? (
             <div className="bardo-loading">
-              <span>Loading policies into Bardo...</span>
+              <span>Loading tournament district...</span>
             </div>
           ) : null}
         </div>
 
         <footer className="bardo-footer">
+          <span className={`bardo-footer-live ${isLive ? 'is-live' : 'is-stale'}`}>
+            {isLive ? 'Live' : 'Stale'} · {freshness}
+          </span>
+          <span>Auto refresh {WORLD_POLL_MS / 1_000}s</span>
           <span>Updated {lastUpdatedLabel}</span>
-          <span>Latest versions only</span>
+          <span>{outsideCount} outside buildings</span>
+          <span>{world?.activeJobs.length ?? 0} active jobs</span>
           {nameFilter ? <span>Filter: “{nameFilter}”</span> : <span>All policies</span>}
         </footer>
       </section>
