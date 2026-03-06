@@ -24,3 +24,7 @@ bardo_url: https://vibeservatory.softmax-research.net/bardo
 
 db_migrate: true
 cronjobs: true
+
+otel:
+  enabled: false
+  env: "" # overridden by CI/CD pipeline (production / preview)

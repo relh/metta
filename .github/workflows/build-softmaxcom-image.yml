@@ -25,6 +25,9 @@ jobs:
       namespace: softmax-com
       release: softmax-com
       chart: ./devops/charts/softmax-com
+      production_helm_values: |
+        --set otel.enabled=true \
+        --set otel.env=production
       preview_helm_values: |
         --set host=${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('softmax-com-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }} \
         --set resources.requests.cpu=100m \
@@ -34,5 +37,7 @@ jobs:
         --set frontend.replicas=1 \
         --set frontend.min_available=0 \
         --set cronjobs=false \
-        --set db_migrate=false
+        --set db_migrate=false \
+        --set otel.enabled=true \
+        --set otel.env=preview
       preview_host: "${{ (github.event_name == 'pull_request' && github.event.action != 'closed') && format('softmax-com-preview-{0}.softmax-research.net', github.event.pull_request.number) || '' }}"
