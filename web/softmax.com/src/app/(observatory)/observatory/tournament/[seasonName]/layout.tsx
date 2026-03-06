@@ -11,6 +11,7 @@ import { ServerDebugDrain } from "@observatory/lib/debug/ServerDebugDrain";
 import { getRepo } from "@observatory/lib/repo/server";
 import {
   matchesRoute,
+  seasonLeaderboardRoute,
   seasonPlayersRoute,
   seasonTeamsRoute,
 } from "@observatory/lib/routes";
@@ -114,6 +115,9 @@ export default async function SeasonPage({
       )
     : undefined;
 
+  const hasScorePolicies = stageContext.progress?.stage_flow.some(
+    (stage) => stage.kind === "score_policies",
+  );
   const tabs: LinkTab[] = [
     { id: "players", label: "Players", href: seasonPlayersRoute(seasonName) },
     {
@@ -133,6 +137,16 @@ export default async function SeasonPage({
             ...(stageContext.progress
               ? { allowedStageKinds: ["team_eval"] }
               : {}),
+          },
+        ]
+      : []),
+    ...(hasScorePolicies
+      ? [
+          {
+            id: "tournament",
+            label: "Tournament",
+            href: seasonLeaderboardRoute(seasonName),
+            allowedStageKinds: ["score_policies"],
           },
         ]
       : []),

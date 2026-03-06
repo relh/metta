@@ -88,7 +88,9 @@ export function resolveSelectedStage(
   const fallback = defaultSelectedStage(stages, stageFlow, started);
   if (!rawStage) return fallback;
   const stageNames = new Set(stages.map((stage) => stage.name));
-  return stageNames.has(rawStage) ? rawStage : fallback;
+  if (stageNames.has(rawStage)) return rawStage;
+  const flowInputPools = new Set(stageFlow.map((stage) => stage.input_pool));
+  return flowInputPools.has(rawStage) ? rawStage : fallback;
 }
 
 export function stageKindForPool(
