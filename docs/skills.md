@@ -20,6 +20,10 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 | `cf.`   | Control-flow / meta-execution                        | cf.really                           |
 | `n.`    | Nishad-specific variants (only when truly personal)  | n.debug-jobs                        |
 | `relh.` | Richard-specific variants (only when truly personal) | relh.cb.branch-hygiene              |
+| `rl.research.` | RL research pipeline (full flow + phase skills) | rl.research.begin, rl.research.task-characterize |
+| `rl.feature.` | RL feature build pipeline (spec → algorithm → launch) | rl.feature.build |
+| `rl.improve.` | RL recipe improvement (diagnose → fix → launch → evaluate loop) | rl.improve.begin |
+| `rl.analyze.` | RL training run analysis (signal planning + analysis) | rl.analyze.begin, rl.analyze.analyze |
 
 ## Rules
 
@@ -132,6 +136,15 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `relh.cb.branch-hygiene`
 - `relh.pr.merge-conflicts`
 - `relh.tr.run-recipe`
+- `rl.analyze.analyze`
+- `rl.analyze.begin`
+- `rl.feature.build`
+- `rl.improve.begin`
+- `rl.research.begin`
+- `rl.research.deep-research`
+- `rl.research.literature-review`
+- `rl.research.synthesize`
+- `rl.research.task-characterize`
 - `sk.implement-docs-skills`
 - `sk.learn-skills`
 - `sk.make-skill`

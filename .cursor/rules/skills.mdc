@@ -44,6 +44,15 @@ Prefix conventions and namespaces live in `docs/skills.md`.
 - tr.policy-save-load-audit
 - pr.summary
 - r.make-package
+- rl.feature.build
+- rl.improve.begin
+- rl.research.begin
+- rl.research.deep-research
+- rl.research.literature-review
+- rl.research.synthesize
+- rl.research.task-characterize
+- rl.analyze.begin
+- rl.analyze.analyze
 - tr.recipe-curriculum-audit
 - cb.review-main
 - relh.tr.run-recipe
