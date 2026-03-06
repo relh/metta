@@ -127,7 +127,7 @@ jobs:
               else
                 echo "<stable_release_process.log missing>"
               fi
-            } > devops/stable/state/discord_summary.txt
+            } | tee devops/stable/state/discord_summary.txt > devops/stable/state/discord_errors.txt
           fi
 
           exit $release_exit_code
@@ -145,6 +145,13 @@ jobs:
         uses: ./.github/actions/discord-webhook
         with:
           webhook-url: ${{ github.ref == 'refs/heads/main' && secrets.DISCORD_STABLE_HOOK || secrets.DISCORD_INFRA_ALERTS_TESTING_HOOK }}
+          content-file: devops/stable/state/discord_errors.txt
+
+      - name: Send Discord summary
+        if: always() && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/discord-webhook
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK_URL }}
           content-file: devops/stable/state/discord_summary.txt
 
       - name: Upload logs

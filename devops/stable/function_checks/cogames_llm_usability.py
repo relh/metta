@@ -91,6 +91,7 @@ def _assert_judgment(scenario_name: str, judgment: Judgment) -> None:
     check_group=StableCheckGroup.CLI_HEALTH,
 )
 def setup_llm_eval_venv(_ctx: StableCheckContext) -> None:
+    """Create a fresh isolated venv with the cogames CLI installed for LLM eval checks."""
     if _LLM_EVAL_VENV_DIR.exists():
         shutil.rmtree(_LLM_EVAL_VENV_DIR)
     _LLM_EVAL_VENV_DIR.mkdir(parents=True, exist_ok=True)
@@ -116,6 +117,7 @@ def llm_eval_spectator_leaderboard(_ctx: StableCheckContext) -> None:
     depends_on=setup_llm_eval_venv,
 )
 def llm_eval_tournament_progress(_ctx: StableCheckContext) -> None:
+    """LLM eval: agent uses cogames CLI to check if the current season is stuck, what stage it's in, and match count."""
     _, judgment = _run_scenario(scenario=SCENARIOS["tournament_progress"], bin_dir=_LLM_EVAL_VENV_BIN_DIR)
     _assert_judgment("tournament_progress", judgment)
 
@@ -126,6 +128,7 @@ def llm_eval_tournament_progress(_ctx: StableCheckContext) -> None:
     depends_on=setup_llm_eval_venv,
 )
 def llm_eval_important_tournaments(_ctx: StableCheckContext) -> None:
+    """LLM eval: agent uses cogames CLI to identify active seasons, the default season, and each tournament's type."""
     _, judgment = _run_scenario(scenario=SCENARIOS["important_tournaments"], bin_dir=_LLM_EVAL_VENV_BIN_DIR)
     _assert_judgment("important_tournaments", judgment)
 
@@ -136,6 +139,7 @@ def llm_eval_important_tournaments(_ctx: StableCheckContext) -> None:
     depends_on=setup_llm_eval_venv,
 )
 def llm_eval_debug_submission_error(_ctx: StableCheckContext) -> None:
+    """LLM eval: agent uses cogames CLI to find a failed policy submission and retrieve its error logs."""
     _, judgment = _run_scenario(scenario=SCENARIOS["debug_submission_error"], bin_dir=_LLM_EVAL_VENV_BIN_DIR)
     _assert_judgment("debug_submission_error", judgment)
 
@@ -146,6 +150,7 @@ def llm_eval_debug_submission_error(_ctx: StableCheckContext) -> None:
     depends_on=setup_llm_eval_venv,
 )
 def llm_eval_debug_submission_performance(_ctx: StableCheckContext) -> None:
+    """LLM eval: agent uses cogames CLI to inspect match results and episode details for a poorly performing policy."""
     _, judgment = _run_scenario(scenario=SCENARIOS["debug_submission_performance"], bin_dir=_LLM_EVAL_VENV_BIN_DIR)
     _assert_judgment("debug_submission_performance", judgment)
 
@@ -156,5 +161,6 @@ def llm_eval_debug_submission_performance(_ctx: StableCheckContext) -> None:
     depends_on=setup_llm_eval_venv,
 )
 def llm_eval_tournament_game_rules(_ctx: StableCheckContext) -> None:
+    """LLM eval: agent uses cogames CLI to explain game rule and objective differences across tournament missions."""
     _, judgment = _run_scenario(scenario=SCENARIOS["tournament_game_rules"], bin_dir=_LLM_EVAL_VENV_BIN_DIR)
     _assert_judgment("tournament_game_rules", judgment)

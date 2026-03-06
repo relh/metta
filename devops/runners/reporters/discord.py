@@ -11,19 +11,22 @@ def write_discord_summary(jobs: CategorizedJobs, state_dir: Path) -> None:
     num_passed = len(jobs["passed"])
     num_failed = len(jobs["failed"])
     num_skipped = len(jobs["skipped"])
-    lines = [f"**{run_title}** (passed={num_passed}, failed={num_failed}, skipped={num_skipped})", ""]
+    header = f"**{run_title}** (passed={num_passed}, failed={num_failed}, skipped={num_skipped})"
 
-    all_jobs = jobs["failed"] + jobs["passed"] + jobs["skipped"]
+    gh_server = os.environ.get("GITHUB_SERVER_URL")
+    gh_repo = os.environ.get("GITHUB_REPOSITORY")
+    gh_run_id = os.environ.get("GITHUB_RUN_ID")
+    run_url_line = (
+        f"\n<{gh_server}/{gh_repo}/actions/runs/{gh_run_id}>" if (gh_server and gh_repo and gh_run_id) else ""
+    )
 
-    for job in all_jobs:
+    def job_lines(job):
         name = job.name.split(".")[-1]
         duration = f"{job.duration_s:.0f}s" if job.duration_s else "??"
         status = job_status(job)
-        lines.append(f"**{name}** (t={duration}, status={status})")
-        lines.append(f"> {job.description}")
+        lines = [f"**{name}** (t={duration}, status={status})", f"> {job.description}"]
         if job_failed(job):
-            lines.append("")
-            lines.append("*Error Details:*")
+            lines += ["*Error Details:*"]
             if job.acceptance_failures:
                 lines.append("- acceptance criteria not met")
                 for failure in job.acceptance_failures:
@@ -36,10 +39,20 @@ def write_discord_summary(jobs: CategorizedJobs, state_dir: Path) -> None:
                     "View the Action Run link below and download "
                     "log artifacts to inspect."
                 )
+        lines.append("")
+        return lines
 
-    gh_server = os.environ.get("GITHUB_SERVER_URL")
-    gh_repo = os.environ.get("GITHUB_REPOSITORY")
-    gh_run_id = os.environ.get("GITHUB_RUN_ID")
-    if gh_server and gh_repo and gh_run_id:
-        lines.append(f"\n<{gh_server}/{gh_repo}/actions/runs/{gh_run_id}>")
-    (state_dir / "discord_summary.txt").write_text("\n".join(lines))
+    # discord_summary.txt — all jobs (for #auto-notifications)
+    all_lines = [header, ""]
+    for job in jobs["failed"] + jobs["passed"] + jobs["skipped"]:
+        all_lines.extend(job_lines(job))
+    all_lines.append(run_url_line)
+    (state_dir / "discord_summary.txt").write_text("\n".join(all_lines))
+
+    # discord_errors.txt — failed jobs only (for alert channel)
+    if jobs["failed"]:
+        error_lines = [header, ""]
+        for job in jobs["failed"]:
+            error_lines.extend(job_lines(job))
+        error_lines.append(run_url_line)
+        (state_dir / "discord_errors.txt").write_text("\n".join(error_lines))

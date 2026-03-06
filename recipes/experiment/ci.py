@@ -70,6 +70,7 @@ def play_null() -> PlayTool:
     check_group=StableCheckGroup.INTERNAL_TRAINING_LIGHT,
 )
 def play_smoke() -> PlayTool:
+    """Smoke test: run play with a null agent, log renderer, and 10 steps."""
     cfg = play_null()
     cfg.render = "log"
     cfg.max_steps = 10
