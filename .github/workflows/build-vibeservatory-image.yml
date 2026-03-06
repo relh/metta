@@ -4,8 +4,11 @@ on:
   push:
     branches: [main]
     paths:
-      - "dashboard/frontend/**"
-      - "devops/charts/dashboard/**"
+      - "bardo/**"
+      - "dashboard/**"
+      - "pantheon/**"
+      - "diagnose/**"
+      - "devops/charts/vibeservatory-frontend/**"
       - ".github/workflows/build-vibeservatory-image.yml"
   workflow_dispatch: {}
 
@@ -19,13 +22,19 @@ jobs:
     secrets: inherit
     with:
       image_name: metta-app-frontend
-      dockerfile: dashboard/frontend/Dockerfile
+      dockerfile: dashboard/Dockerfile
       tag_suffix: -dashboard
       docker_build_args: |
         NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.vibeservatory.softmax-research.net
+        BARDO_BASE_PATH=/bardo
+        NEXT_PUBLIC_BARDO_BASE_PATH=/bardo
+        PANTHEON_BASE_PATH=/pantheon
+        NEXT_PUBLIC_PANTHEON_BASE_PATH=/pantheon
+        DIAGNOSE_BASE_PATH=/diagnose
+        NEXT_PUBLIC_DIAGNOSE_BASE_PATH=/diagnose
       namespace: observatory
       release: dashboard
-      chart: ./devops/charts/dashboard
+      chart: ./devops/charts/vibeservatory-frontend
       production_helm_values: >-
         --install
         --atomic --timeout 10m

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { resolveBardoAuthToken } from './BardoLobby'
+import { prefixBardoPath, resolveBardoAuthToken } from './BardoLobby'
 
 afterEach(() => {
   window.sessionStorage.clear()
@@ -44,5 +44,21 @@ describe('resolveBardoAuthToken', () => {
     document.cookie = 'observatory_auth_token=cookie-token'
 
     expect(resolveBardoAuthToken()).toBe('cookie-token')
+  })
+})
+
+describe('prefixBardoPath', () => {
+  it('returns unchanged root path when base path is empty', () => {
+    expect(prefixBardoPath('', '/assets/mettascope/objects/ship.png')).toBe('/assets/mettascope/objects/ship.png')
+  })
+
+  it('prefixes rooted paths with the configured base path', () => {
+    expect(prefixBardoPath('/bardo', '/assets/mettascope/objects/ship.png')).toBe(
+      '/bardo/assets/mettascope/objects/ship.png'
+    )
+  })
+
+  it('normalizes trailing slashes and non-rooted input paths', () => {
+    expect(prefixBardoPath('/bardo/', 'api/world-state')).toBe('/bardo/api/world-state')
   })
 })

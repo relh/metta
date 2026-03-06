@@ -1,0 +1,40 @@
+host: vibeservatory.softmax-research.net
+
+apiUrl: https://api.vibeservatory.softmax-research.net
+observatoryAuthCookieName: observatory_auth_token
+healthPath: /bardo
+
+image:
+  registry: 751442549699.dkr.ecr.us-east-1.amazonaws.com
+  name: metta-app-frontend
+  tag: "" # will be set by CI/CD pipeline
+
+cert_manager_issuer: letsencrypt
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 1000m
+    memory: 256Mi
+    ephemeral-storage: 2Gi
+  limits:
+    cpu: 2000m
+    memory: 1Gi
+
+datadog:
+  enabled: true
+  env: production # overridden by CI/CD pipeline as needed
+
+bardo:
+  proxyUrl: http://127.0.0.1:5175/bardo
+  worldStateUrl: https://api.vibeservatory.softmax-research.net/bardo/v1/world-state
+  port: "5175"
+
+pantheon:
+  proxyUrl: http://127.0.0.1:5176/pantheon
+  port: "5176"
+
+diagnose:
+  proxyUrl: http://127.0.0.1:5177/diagnose
+  port: "5177"

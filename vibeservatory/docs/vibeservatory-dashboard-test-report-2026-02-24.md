@@ -40,7 +40,7 @@ Result:
 ### Frontend tests
 
 ```bash
-cd dashboard/frontend
+cd dashboard
 pnpm test
 pnpm type-check
 ```
@@ -53,7 +53,7 @@ Result:
 ### Live API smoke (no Anthropic key)
 
 ```bash
-dashboard/scripts/live_api_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
+vibeservatory/scripts/live_api_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 ```
 
 Result:
@@ -73,7 +73,7 @@ Reliability spot check:
 
 ```bash
 DASHBOARD_URL=https://policy-dashboard.softmax-research.net \
-dashboard/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
+vibeservatory/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 ```
 
 Final run result:

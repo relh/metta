@@ -1,0 +1,30 @@
+{
+  "name": "@softmax/pantheon",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "PANTHEON_BASE_PATH=/pantheon NEXT_PUBLIC_PANTHEON_BASE_PATH=/pantheon next dev --webpack -p 5176",
+    "build": "next build",
+    "start": "PANTHEON_BASE_PATH=/pantheon NEXT_PUBLIC_PANTHEON_BASE_PATH=/pantheon next start -p 5176",
+    "type-check": "tsc --noEmit",
+    "lint:eslint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.2.13",
+    "@types/react-dom": "^19.1.0",
+    "eslint": "^9.32.0",
+    "eslint-config-next": "16.1.6",
+    "jsdom": "^27.0.0",
+    "typescript": "^5.2.2",
+    "vitest": "^3.2.4"
+  }
+}

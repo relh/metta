@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev --webpack -p 5175",
+    "dev": "BARDO_BASE_PATH=/bardo NEXT_PUBLIC_BARDO_BASE_PATH=/bardo next dev --webpack -p 5175",
     "build": "next build",
-    "start": "next start -p 5175",
+    "start": "BARDO_BASE_PATH=/bardo NEXT_PUBLIC_BARDO_BASE_PATH=/bardo next start -p 5175",
     "type-check": "tsc --noEmit",
     "lint:eslint": "eslint .",
     "test": "vitest run"

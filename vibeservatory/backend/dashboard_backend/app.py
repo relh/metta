@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_swagger_ui_html
@@ -15,15 +18,23 @@ from vibeservatory.backend.dashboard_backend.role_stats.router import create_rol
 from vibeservatory.backend.dashboard_backend.state_page.router import create_dashboard_router
 from vibeservatory.backend.dashboard_backend.trainboard.router import create_trainboard_router
 
-REQUIRED_ROUTE_PATHS = frozenset(
-    {
-        "/bardo/v1/world-state",
-        "/dashboard/v1/cogames-diagnose/runs",
-        "/dashboard/v1/pantheon/stories",
-        "/chatprop/api/health",
-        "/train-board/api/health",
+
+def _load_required_route_paths_from_contract() -> frozenset[str]:
+    contract_path = Path(__file__).resolve().parents[2] / "iframe_surfaces.json"
+    payload = json.loads(contract_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise RuntimeError(f"Invalid iframe surface contract payload in {contract_path}")
+    required_routes = {
+        entry["backend_required_route"]
+        for entry in payload
+        if isinstance(entry, dict) and isinstance(entry.get("backend_required_route"), str)
     }
-)
+    if not required_routes:
+        raise RuntimeError(f"No backend_required_route entries found in {contract_path}")
+    return frozenset(required_routes)
+
+
+REQUIRED_ROUTE_PATHS = _load_required_route_paths_from_contract()
 
 
 def _assert_required_routes(app: FastAPI) -> None:

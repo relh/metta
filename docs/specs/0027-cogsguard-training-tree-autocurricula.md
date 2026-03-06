@@ -33,7 +33,7 @@ Branch integration context:
 
 - `richard-standalonedashboard` introduces a standalone package under `dashboard/`:
   - `vibeservatory/backend` serves dashboard API outside `app_backend` route ownership
-  - `dashboard/frontend` is the new dashboard UI surface
+  - `dashboard` is the new dashboard UI surface
 - `richard-observatory-read-replica` introduces infra-managed readonly DB URI secret for dashboard usage:
   - secret name default: `observatory/dashboard/readonly-db-uri`
   - intent: dashboard reads from read-replica endpoint with non-writer credentials

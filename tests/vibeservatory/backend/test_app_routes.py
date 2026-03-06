@@ -17,6 +17,7 @@ def test_dashboard_app_registers_embedded_service_routes(
 
     route_paths = {route.path for route in dashboard_app.app.routes}
     assert "/bardo/v1/world-state" in route_paths
+    assert "/dashboard/v1/policies/versions/default/data" in route_paths
     assert "/dashboard/v1/cogames-diagnose/runs" in route_paths
     assert "/dashboard/v1/pantheon/stories" in route_paths
     assert "/chatprop/api/health" in route_paths

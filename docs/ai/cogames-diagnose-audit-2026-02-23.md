@@ -7,10 +7,10 @@ Audit of current implementation against the Thread Vision spec for Cogames Diagn
 - Diagnose engine: `packages/cogames/src/cogames/diagnose.py`
 - Vibeservatory backend diagnose API: `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
 - Dashboard frontend diagnose views:
-  - `dashboard/frontend/src/components/CogamesDiagnosePanel.tsx`
-  - `dashboard/frontend/src/app/diagnose/page.tsx`
-  - `dashboard/frontend/src/app/diagnose/[runId]/page.tsx`
-  - `dashboard/frontend/src/lib/api.ts`
+  - `dashboard/src/components/CogamesDiagnosePanel.tsx`
+  - `diagnose/src/app/page.tsx`
+  - `diagnose/src/app/[runId]/page.tsx`
+  - `dashboard/src/lib/api.ts`
 
 ## Summary Verdict
 
@@ -189,9 +189,9 @@ Impact:
 - Dashboard diagnose backend routes:
   - `vibeservatory/backend/dashboard_backend/cogames_diagnose/router.py`
 - Dashboard diagnose views/API types:
-  - `dashboard/frontend/src/components/CogamesDiagnosePanel.tsx`
-  - `dashboard/frontend/src/app/diagnose/[runId]/page.tsx`
-  - `dashboard/frontend/src/lib/api.ts`
+  - `dashboard/src/components/CogamesDiagnosePanel.tsx`
+  - `diagnose/src/app/[runId]/page.tsx`
+  - `dashboard/src/lib/api.ts`
 
 ## Tests executed during audit
 

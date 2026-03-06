@@ -1,0 +1,38 @@
+[
+  {
+    "name": "bardo",
+    "top_level_folder": "bardo",
+    "frontend_host_path": "/bardo",
+    "backend_required_route": "/bardo/v1/world-state"
+  },
+  {
+    "name": "pantheon",
+    "top_level_folder": "pantheon",
+    "frontend_host_path": "/pantheon/v0",
+    "backend_required_route": "/dashboard/v1/pantheon/stories"
+  },
+  {
+    "name": "policy-dashboard",
+    "top_level_folder": "policy-dashboard",
+    "frontend_host_path": "/policy-dashboard",
+    "backend_required_route": "/dashboard/v1/policies/versions/default/data"
+  },
+  {
+    "name": "chatprop",
+    "top_level_folder": "chatprop",
+    "frontend_host_path": "/chatprop",
+    "backend_required_route": "/chatprop/api/health"
+  },
+  {
+    "name": "trainboard",
+    "top_level_folder": "trainboard",
+    "frontend_host_path": "/train-board",
+    "backend_required_route": "/train-board/api/health"
+  },
+  {
+    "name": "diagnose",
+    "top_level_folder": "diagnose",
+    "frontend_host_path": "/diagnose",
+    "backend_required_route": "/dashboard/v1/cogames-diagnose/runs"
+  }
+]

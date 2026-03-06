@@ -1,5 +1,6 @@
 :root {
   color-scheme: light;
+  --bardo-wall-atlas: url('/assets/mettascope/wall_atlas.png');
   --bg-top: #d5e2f2;
   --bg-bottom: #a0b5cd;
   --card-bg: rgba(239, 246, 255, 0.82);
@@ -220,7 +221,7 @@ html[data-theme='dark'] .bardo-stats p {
       rgba(0, 0, 0, 0.2) 0 3px,
       rgba(141, 188, 233, 0.02) 3px 6px
     ),
-    url('/assets/mettascope/wall_atlas.png');
+    var(--bardo-wall-atlas);
   background-size: 100% 100%, 100% 100%, 320px 320px, 520px 595px;
   background-repeat: no-repeat, no-repeat, repeat, repeat;
   image-rendering: pixelated;

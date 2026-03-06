@@ -1,0 +1,5 @@
+apiVersion: v2
+name: vibeservatory-frontend
+description: Shared Vibeservatory frontend surfaces
+type: application
+version: 0.1.0

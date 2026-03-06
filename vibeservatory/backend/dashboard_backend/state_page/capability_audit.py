@@ -299,8 +299,8 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 (
                     "axis fields in frontend schema",
-                    "dashboard/frontend/src/lib/api.ts",
-                    _contains_all("dashboard/frontend/src/lib/api.ts", "axes: DiagnoseAxisScore[]"),
+                    "dashboard/src/lib/api.ts",
+                    _contains_all("dashboard/src/lib/api.ts", "axes: DiagnoseAxisScore[]"),
                 ),
             ],
         ),
@@ -309,17 +309,17 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
             [
                 (
                     "probe fields in frontend schema",
-                    "dashboard/frontend/src/lib/api.ts",
+                    "dashboard/src/lib/api.ts",
                     _contains_all(
-                        "dashboard/frontend/src/lib/api.ts",
+                        "dashboard/src/lib/api.ts",
                         "stage1_probe_catalog",
                         "stage1_probe_evaluations",
                     ),
                 ),
                 (
                     "probe card builder",
-                    "dashboard/frontend/src/components/SkillTreePanel.tsx",
-                    _contains_all("dashboard/frontend/src/components/SkillTreePanel.tsx", "buildDiagnoseProbeCards"),
+                    "dashboard/src/components/SkillTreePanel.tsx",
+                    _contains_all("dashboard/src/components/SkillTreePanel.tsx", "buildDiagnoseProbeCards"),
                 ),
             ],
         ),
@@ -328,13 +328,13 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
             [
                 (
                     "symptom fields in frontend schema",
-                    "dashboard/frontend/src/lib/api.ts",
-                    _contains_all("dashboard/frontend/src/lib/api.ts", "symptoms: DiagnoseSymptom[]"),
+                    "dashboard/src/lib/api.ts",
+                    _contains_all("dashboard/src/lib/api.ts", "symptoms: DiagnoseSymptom[]"),
                 ),
                 (
                     "symptom card builder",
-                    "dashboard/frontend/src/components/SkillTreePanel.tsx",
-                    _contains_all("dashboard/frontend/src/components/SkillTreePanel.tsx", "buildDiagnoseSymptomCards"),
+                    "dashboard/src/components/SkillTreePanel.tsx",
+                    _contains_all("dashboard/src/components/SkillTreePanel.tsx", "buildDiagnoseSymptomCards"),
                 ),
             ],
         ),
@@ -350,8 +350,8 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 (
                     "kpi diagnostic cards in capabilities tab",
-                    "dashboard/frontend/src/components/SkillTreePanel.tsx",
-                    _contains_all("dashboard/frontend/src/components/SkillTreePanel.tsx", "buildKpiDiagnosticCards"),
+                    "dashboard/src/components/SkillTreePanel.tsx",
+                    _contains_all("dashboard/src/components/SkillTreePanel.tsx", "buildKpiDiagnosticCards"),
                 ),
             ],
         ),
@@ -376,8 +376,8 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 (
                     "instrumentation cards in capabilities tab",
-                    "dashboard/frontend/src/components/SkillTreePanel.tsx",
-                    _contains_all("dashboard/frontend/src/components/SkillTreePanel.tsx", "buildInstrumentationCards"),
+                    "dashboard/src/components/SkillTreePanel.tsx",
+                    _contains_all("dashboard/src/components/SkillTreePanel.tsx", "buildInstrumentationCards"),
                 ),
             ],
         ),
@@ -402,8 +402,8 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 (
                     "behavior slice cards in capabilities tab",
-                    "dashboard/frontend/src/components/SkillTreePanel.tsx",
-                    _contains_all("dashboard/frontend/src/components/SkillTreePanel.tsx", "buildBehaviorSliceCards"),
+                    "dashboard/src/components/SkillTreePanel.tsx",
+                    _contains_all("dashboard/src/components/SkillTreePanel.tsx", "buildBehaviorSliceCards"),
                 ),
             ],
         ),

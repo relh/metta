@@ -10,8 +10,8 @@ Merge-base diff vs `origin/main`:
 
 - `vibeservatory/docs/vibeservatory-dashboard-how-to-run.md`
 - `vibeservatory/docs/vibeservatory-dashboard-test-report-2026-02-24.md`
-- `dashboard/scripts/live_ui_smoke.sh`
-- `dashboard/scripts/capture_observatory_storage_state.sh`
+- `vibeservatory/scripts/live_ui_smoke.sh`
+- `vibeservatory/scripts/capture_observatory_storage_state.sh`
 - `vibeservatory/README.md`
 
 Scope assessment:
@@ -26,7 +26,7 @@ Checked docs for command accuracy and consistency with code:
 
 - Runbook commands align with:
   - `vibeservatory/backend/dashboard_backend/main.py`
-  - `dashboard/frontend/package.json`
+  - `dashboard/package.json`
   - `skills/cg.policy-dashboard/generate.py --help`
   - `uv run cogames diagnose --help`
 - Test report matches executed commands and observed outcomes.
@@ -36,15 +36,15 @@ Checked docs for command accuracy and consistency with code:
 
 Problem found:
 
-- `dashboard/scripts/live_ui_smoke.sh` defaulted to Observatory embed URL, while selector checks were designed for
+- `vibeservatory/scripts/live_ui_smoke.sh` defaulted to Observatory embed URL, while selector checks were designed for
   standalone dashboard content.
 - This caused false-negative tab failures in some runs.
 
 Refactor performed:
 
-- `dashboard/scripts/live_ui_smoke.sh`
+- `vibeservatory/scripts/live_ui_smoke.sh`
   - default `DASHBOARD_URL` changed to `https://policy-dashboard.softmax-research.net`
-- `dashboard/scripts/capture_observatory_storage_state.sh`
+- `vibeservatory/scripts/capture_observatory_storage_state.sh`
   - default capture URL changed to `https://policy-dashboard.softmax-research.net`
 - `vibeservatory/README.md`
   - updated notes to reflect standalone default and embed override behavior

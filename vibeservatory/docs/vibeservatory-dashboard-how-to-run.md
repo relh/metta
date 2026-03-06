@@ -15,7 +15,7 @@ uv run python -m vibeservatory.backend.dashboard_backend.main
 Start frontend:
 
 ```bash
-cd dashboard/frontend
+cd dashboard
 pnpm install
 NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010 pnpm dev
 ```

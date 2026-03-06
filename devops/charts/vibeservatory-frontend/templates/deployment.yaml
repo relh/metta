@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  {{- if .Values.datadog.enabled }}
+  labels:
+    tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
+    tags.datadoghq.com/service: "vibeservatory-frontend"
+    tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        {{- if .Values.datadog.enabled }}
+        tags.datadoghq.com/env: {{ required "datadog.env is required" .Values.datadog.env | quote }}
+        tags.datadoghq.com/service: "vibeservatory-frontend"
+        tags.datadoghq.com/version: {{ .Values.image.tag | quote }}
+        admission.datadoghq.com/enabled: "true"
+        {{- end }}
+    spec:
+      containers:
+        - name: server
+          image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ required "tag is required" .Values.image.tag }}"
+          imagePullPolicy: Always
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+          - name: NEXT_PUBLIC_DASHBOARD_API_BASE_URL
+            value: "{{ .Values.apiUrl }}"
+          - name: OBSERVATORY_AUTH_COOKIE_NAME
+            value: "{{ .Values.observatoryAuthCookieName }}"
+          - name: NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME
+            value: "{{ .Values.observatoryAuthCookieName }}"
+          - name: BARDO_PROXY_URL
+            value: "{{ .Values.bardo.proxyUrl }}"
+          - name: BARDO_WORLD_STATE_URL
+            value: "{{ .Values.bardo.worldStateUrl }}"
+          - name: BARDO_PORT
+            value: "{{ .Values.bardo.port }}"
+          - name: PANTHEON_PROXY_URL
+            value: "{{ .Values.pantheon.proxyUrl }}"
+          - name: PANTHEON_PORT
+            value: "{{ .Values.pantheon.port }}"
+          - name: DIAGNOSE_PROXY_URL
+            value: "{{ .Values.diagnose.proxyUrl }}"
+          - name: DIAGNOSE_PORT
+            value: "{{ .Values.diagnose.port }}"
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              path: "{{ .Values.healthPath | default "/bardo" }}"
+              port: 3000
+          readinessProbe:
+            httpGet:
+              path: "{{ .Values.healthPath | default "/bardo" }}"
+              port: 3000

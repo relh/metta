@@ -5,9 +5,20 @@ Canonical docs for the Vibeservatory backend live here.
 Related code paths:
 
 - Backend: `vibeservatory/backend/dashboard_backend/`
-- Standalone frontend: `dashboard/frontend/`
-- Dev/smoke scripts: `dashboard/scripts/`
+- Standalone frontend: `dashboard/`
+- Standalone surface frontends: `bardo/`, `pantheon/`, `diagnose/`
+- Surface folders: `policy-dashboard/` (docs alias for dashboard route), `pantheon/`, `diagnose/`, `chatprop/`, `trainboard/`, `bardo/`
+- Dev/smoke scripts: `vibeservatory/scripts/`
 - Additional docs: `vibeservatory/docs/`
+- Surface contract: `vibeservatory/iframe_surfaces.json`
+
+## Service Boundaries
+
+Canonical naming and ownership:
+
+- `Vibeservatory` is the service that hosts these six surfaces and their backend endpoints.
+- `Observatory` (`softmax.com/observatory`) is a separate service/deployment that embeds Vibeservatory surfaces in iframes.
+- These services run in parallel; Observatory is not the host of the surface apps.
 
 ## Backend
 
@@ -15,6 +26,7 @@ What it does:
 
 - Serves Vibeservatory dashboard endpoints from `vibeservatory/backend/dashboard_backend/state_page/router.py`
 - Also mounts role-stats endpoints from `vibeservatory/backend/dashboard_backend/role_stats/router.py`
+- Mounts all six surface backends (bardo, pantheon, policy-dashboard, chatprop, trainboard, diagnose)
 - Exposes internal docs at `http://127.0.0.1:8010/internal/docs`
 - Hides public docs (`/docs` is disabled)
 - Forces read-only DB usage for all dashboard queries in this process
@@ -54,7 +66,7 @@ What it does:
 Run:
 
 ```bash
-cd dashboard/frontend
+cd dashboard
 pnpm install
 pnpm dev
 ```
@@ -63,22 +75,48 @@ Environment:
 
 - `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` (default `http://127.0.0.1:8010`)
 
+## Standalone Bardo Frontend
+
+What it does:
+
+- Standalone bardo UI served from top-level `bardo/`
+- Uses Vibeservatory backend route `/bardo/v1/world-state`
+
+Run:
+
+```bash
+cd bardo
+pnpm install
+pnpm dev
+```
+
+Open: `http://127.0.0.1:5175/bardo`
+
+Environment:
+
+- `BARDO_BASE_PATH` (default `/bardo`)
+- `NEXT_PUBLIC_BARDO_BASE_PATH` (default `/bardo`; should match `BARDO_BASE_PATH`)
+- `BARDO_WORLD_STATE_URL` (default `http://127.0.0.1:8010/bardo/v1/world-state`)
+
 ## Local Development
 
 Production uses a private RDS read replica (`main-pg-ro...`) that is not directly reachable from laptops in many
 environments (private subnets + security group ingress from EKS only).
 
-Quickstart (backend + frontend together, live read-only DB via EKS tunnel):
+Quickstart (backend + frontends together, live read-only DB via EKS tunnel):
 
 ```bash
-dashboard/scripts/dev_local.sh
+vibeservatory/scripts/dev_local.sh
 ```
 
 This starts:
 
 - Vibeservatory backend at `http://127.0.0.1:8010`
 - Standalone dashboard frontend at `http://127.0.0.1:5174`
-- Frontend API base set to local backend (`NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010`)
+- Standalone bardo frontend at `http://127.0.0.1:5175/bardo`
+- Standalone pantheon frontend at `http://127.0.0.1:5176/pantheon`
+- Standalone diagnose frontend at `http://127.0.0.1:5177/diagnose`
+- Dashboard API base set to local backend (`NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010`)
 
 Manual Alternative A: local snapshot
 
@@ -107,7 +145,7 @@ uv run python -m vibeservatory.backend.dashboard_backend.main
 4. Start frontend:
 
 ```bash
-cd dashboard/frontend
+cd dashboard
 pnpm install
 NEXT_PUBLIC_DASHBOARD_API_BASE_URL=http://127.0.0.1:8010 pnpm dev
 ```
@@ -174,8 +212,9 @@ kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true
 ## Production Deployment
 
 - Frontend workflow: `.github/workflows/build-vibeservatory-image.yml`
-  - Deploys Helm chart: `devops/charts/dashboard/`
-  - Host: `https://vibeservatory.softmax-research.net` (Policy Dashboard at `/policy-dashboard`)
+  - Deploys Helm chart: `devops/charts/vibeservatory-frontend/`
+  - Host: `https://vibeservatory.softmax-research.net` (`/policy-dashboard`, `/bardo`, `/pantheon`, `/diagnose`)
+  - Runtime model: one frontend deployment/container serving all four routes (dashboard + bardo + pantheon + diagnose)
 - Backend workflow: `.github/workflows/deploy-vibeservatory.yml`
   - Deploys Helm chart: `devops/charts/vibeservatory/`
   - Host: `https://api.vibeservatory.softmax-research.net`
@@ -197,7 +236,7 @@ URI currently comes from `observatory/readonly-db-uri` in AWS Secrets Manager (t
 Fast API-level smoke:
 
 ```bash
-dashboard/scripts/live_api_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
+vibeservatory/scripts/live_api_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 ```
 
 Optional env:
@@ -209,8 +248,8 @@ Optional env:
 Full UI smoke with captured auth storage state:
 
 ```bash
-dashboard/scripts/capture_observatory_storage_state.sh
-dashboard/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
+vibeservatory/scripts/capture_observatory_storage_state.sh
+vibeservatory/scripts/live_ui_smoke.sh 7e16ac5f-7fe6-4970-940c-acc2d6c29013
 ```
 
 Notes:

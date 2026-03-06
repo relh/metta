@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 
@@ -17,11 +17,20 @@ import {
 import type { BardoPolicy, BardoWorldState } from '../lib/types'
 
 const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.trim() || 'observatory_auth_token'
+const BARDO_BASE_PATH = (process.env.NEXT_PUBLIC_BARDO_BASE_PATH?.trim() || '').replace(/\/$/, '')
 const BARDO_AUTH_TOKEN_SESSION_STORAGE_KEY = 'bardo-auth-token'
 const WORLD_POLL_MS = 5_000
 const WORLD_STEP_MS = 70
 const PORTAL_CAPTURE_DISTANCE = 0.03
 const LIVE_STALE_MS = WORLD_POLL_MS * 3
+
+export function prefixBardoPath(basePath: string, path: string): string {
+  const normalizedBasePath = basePath.trim().replace(/\/$/, '')
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${normalizedBasePath}${normalizedPath}`
+}
+
+const WORLD_STATE_ENDPOINT = prefixBardoPath(BARDO_BASE_PATH, '/api/world-state')
 const METTASCOPE_BUILDING_SPRITES = [
   '/assets/mettascope/objects/hub.png',
   '/assets/mettascope/objects/hub.working.png',
@@ -31,20 +40,21 @@ const METTASCOPE_BUILDING_SPRITES = [
   '/assets/mettascope/objects/temple.png',
   '/assets/mettascope/objects/armory.png',
   '/assets/mettascope/objects/converter.png',
-]
+].map((path) => prefixBardoPath(BARDO_BASE_PATH, path))
 const METTASCOPE_PORTAL_SPRITES = [
   '/assets/mettascope/objects/junction.png',
   '/assets/mettascope/objects/junction.working.png',
   '/assets/mettascope/objects/generator_blue.png',
   '/assets/mettascope/objects/charger.png',
-]
+].map((path) => prefixBardoPath(BARDO_BASE_PATH, path))
 const METTASCOPE_POLICY_SPRITES = [
   '/assets/mettascope/objects/aligner.png',
   '/assets/mettascope/objects/miner.png',
   '/assets/mettascope/objects/scout.png',
   '/assets/mettascope/objects/scrambler.png',
-]
-const METTASCOPE_CARRIER_SPRITE = '/assets/mettascope/objects/ship.png'
+].map((path) => prefixBardoPath(BARDO_BASE_PATH, path))
+const METTASCOPE_CARRIER_SPRITE = prefixBardoPath(BARDO_BASE_PATH, '/assets/mettascope/objects/ship.png')
+const BARDO_WALL_ATLAS = prefixBardoPath(BARDO_BASE_PATH, '/assets/mettascope/wall_atlas.png')
 
 type ActorState = {
   x: number
@@ -139,7 +149,10 @@ function freshnessLabel(lastRefreshAtMs: number | null, nowMs: number): string {
   return `${minutes}m ago`
 }
 
-function portalQueueTarget(policyId: string, portal: BardoBuildingPortal | { id: string; x: number; y: number }): {
+function portalQueueTarget(
+  policyId: string,
+  portal: BardoBuildingPortal | { id: string; x: number; y: number }
+): {
   x: number
   y: number
 } {
@@ -277,6 +290,13 @@ export function BardoLobby() {
   const [nowMs, setNowMs] = useState<number>(() => Date.now())
 
   const actorsRef = useRef<Map<string, ActorState>>(new Map())
+  const bardoStyleVariables = useMemo(
+    () =>
+      ({
+        '--bardo-wall-atlas': `url('${BARDO_WALL_ATLAS}')`,
+      }) as CSSProperties,
+    []
+  )
 
   useEffect(() => {
     if (requestedTheme !== 'dark' && requestedTheme !== 'light') {
@@ -289,7 +309,7 @@ export function BardoLobby() {
   const loadWorldState = useCallback(async () => {
     const query = new URLSearchParams()
     if (nameFilter) query.set('q', nameFilter)
-    const endpoint = query.size > 0 ? `/api/world-state?${query.toString()}` : '/api/world-state'
+    const endpoint = query.size > 0 ? `${WORLD_STATE_ENDPOINT}?${query.toString()}` : WORLD_STATE_ENDPOINT
 
     const authToken = resolveBardoAuthToken()
     const headers = authToken ? { 'X-Auth-Token': authToken } : undefined
@@ -495,7 +515,7 @@ export function BardoLobby() {
     : '—'
 
   return (
-    <main className="bardo-shell">
+    <main className="bardo-shell" style={bardoStyleVariables}>
       <section className="bardo-card">
         <header className="bardo-header">
           <div>

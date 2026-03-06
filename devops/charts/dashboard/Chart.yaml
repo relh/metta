@@ -1,5 +1,0 @@
-apiVersion: v2
-name: dashboard
-description: Standalone policy dashboard frontend
-type: application
-version: 0.1.0
