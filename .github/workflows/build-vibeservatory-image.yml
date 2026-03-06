@@ -22,7 +22,7 @@ jobs:
       dockerfile: dashboard/frontend/Dockerfile
       tag_suffix: -dashboard
       docker_build_args: |
-        NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.policy-dashboard.vibeservatory.softmax-research.net
+        NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.vibeservatory.softmax-research.net
       namespace: observatory
       release: dashboard
       chart: ./devops/charts/dashboard

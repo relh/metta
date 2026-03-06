@@ -32,12 +32,6 @@ export default async function DiagnoseIndexPage() {
       </header>
 
       <section className="card grid" style={{ gap: 12 }}>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <Link href="/" style={{ color: '#1f6feb', textDecoration: 'none' }}>
-            ← Back to dashboard
-          </Link>
-        </div>
-
         {error ? (
           <p style={{ margin: 0, color: '#b42318' }}>
             <strong>Error:</strong> {error}

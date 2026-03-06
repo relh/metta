@@ -34,7 +34,7 @@ export const config: Config = {
   ),
   pantheonUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_PANTHEON_URL,
-    "http://127.0.0.1:5174/policy-dashboard",
+    "http://127.0.0.1:5174",
   ),
   trainBoardUrl: resolveFragileServiceUrl(
     process.env.OBSERVATORY_TRAIN_BOARD_URL,

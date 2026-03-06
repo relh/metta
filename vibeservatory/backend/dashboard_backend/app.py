@@ -14,6 +14,23 @@ from vibeservatory.backend.dashboard_backend.pantheon.router import create_panth
 from vibeservatory.backend.dashboard_backend.state_page.router import create_dashboard_router
 from vibeservatory.backend.dashboard_backend.trainboard.router import create_trainboard_router
 
+REQUIRED_ROUTE_PATHS = frozenset(
+    {
+        "/bardo/v1/world-state",
+        "/dashboard/v1/cogames-diagnose/runs",
+        "/dashboard/v1/pantheon/stories",
+        "/chatprop/api/health",
+        "/train-board/api/health",
+    }
+)
+
+
+def _assert_required_routes(app: FastAPI) -> None:
+    route_paths = {route.path for route in app.routes}
+    missing_routes = sorted(REQUIRED_ROUTE_PATHS - route_paths)
+    if missing_routes:
+        raise RuntimeError(f"Dashboard app missing required routes: {', '.join(missing_routes)}")
+
 
 def create_app() -> FastAPI:
     configure_dashboard_db()
@@ -43,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(create_cogames_diagnose_router())
     app.include_router(create_pantheon_router())
     app.include_router(create_role_stats_router())
+    _assert_required_routes(app)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> JSONResponse:
