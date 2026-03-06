@@ -208,6 +208,18 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
               Bardo
             </MenuLink>
             <MenuLink
+              href={pantheonRoute()}
+              isActive={pathname.startsWith("/observatory/pantheon")}
+              className="tracking-wide italic"
+              activeClassName="border-violet-500 text-violet-500"
+              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+              style={{
+                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+              }}
+            >
+              Pantheon
+            </MenuLink>
+            <MenuLink
               href={policyDashboardRoute()}
               isActive={pathname.startsWith("/observatory/policy-dashboard")}
               className="tracking-wide italic"
@@ -217,7 +229,7 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
                 fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
               }}
             >
-              Policy Dashboard
+              Dashboard
             </MenuLink>
             <MenuLink
               href={diagnoseRoute()}
@@ -230,18 +242,6 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
               }}
             >
               Diagnose
-            </MenuLink>
-            <MenuLink
-              href={pantheonRoute()}
-              isActive={pathname.startsWith("/observatory/pantheon")}
-              className="tracking-wide italic"
-              activeClassName="border-violet-500 text-violet-500"
-              inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-              style={{
-                fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-              }}
-            >
-              Pantheon
             </MenuLink>
             <MenuLink
               href={trainBoardRoute()}

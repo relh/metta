@@ -46,7 +46,7 @@ type EpisodeStatusFilter = 'all' | 'completed' | 'failed'
 type EpisodeSortKey = 'created_at' | 'opponent' | 'team' | 'reward' | 'steps' | 'noop_rate'
 type SortDir = 'asc' | 'desc'
 
-const DASHBOARD_TABS: DashboardTab[] = ['overview', 'capabilities', 'coordination', 'performance', 'pantheon']
+const DASHBOARD_TABS: DashboardTab[] = ['overview', 'capabilities', 'coordination', 'performance']
 
 const OPPONENT_COLORS = [
   '#3b82f6',
@@ -2356,13 +2356,6 @@ export function DashboardClient() {
               className={activeTab === 'performance' ? 'active-tab' : ''}
             >
               Episodes
-            </button>
-            <button
-              type="button"
-              onClick={() => activateTab('pantheon')}
-              className={activeTab === 'pantheon' ? 'tab-pantheon active-tab' : 'tab-pantheon'}
-            >
-              Pantheon
             </button>
           </section>
 
