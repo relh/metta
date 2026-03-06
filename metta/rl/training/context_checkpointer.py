@@ -174,11 +174,7 @@ class ContextCheckpointer(TrainerComponent):
     def _save_state(self) -> None:
         context = self.context
 
-        try:
-            context.state.stopwatch_state = context.stopwatch.save_state()
-        except Exception as exc:  # pragma: no cover - defensive guard
-            logger.debug("Unable to capture stopwatch state: %s", exc)
-            context.state.stopwatch_state = None
+        context.state.stopwatch_state = context.stopwatch.save_state()
 
         context.state.loss_states = {name: loss.state_dict() for name, loss in context.losses.items()}
 

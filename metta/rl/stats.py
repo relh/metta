@@ -7,7 +7,6 @@ from typing import Any
 import numpy as np
 import torch
 
-from metta.rl.trainer_config import TrainerConfig
 from metta.rl.training import Experience
 from mettagrid.profiling.stopwatch import Stopwatch
 from mettagrid.util.dict_utils import unroll_nested_dict
@@ -89,34 +88,13 @@ def process_training_stats(
     raw_stats: dict[str, Any],
     losses_stats: dict[str, Any],
     experience: Experience,
-    trainer_config: TrainerConfig,
 ) -> dict[str, Any]:
-    """Process training statistics into a clean format.
-
-    Args:
-        raw_stats: Raw statistics dictionary (possibly with lists of values)
-        losses_stats: Loss statistics dictionary
-        experience: Experience object with stats() method
-        trainer_config: Training configuration
-
-    Returns:
-        Dictionary with processed statistics including:
-        - mean_stats: Raw stats converted to means
-        - losses_stats: Loss statistics
-        - experience_stats: Experience buffer statistics
-        - environment_stats: Environment-specific stats
-        - overview: High-level metrics like average reward
-    """
+    """Process training statistics into a clean format."""
     # Convert lists to means
-    mean_stats = {}
-    for k, v in raw_stats.items():
-        try:
-            mean_stats[k] = np.mean(v)
-        except (TypeError, ValueError):
-            mean_stats[k] = v
+    mean_stats = {k: np.mean(v) for k, v in raw_stats.items()}
 
     # Get loss and experience statistics
-    experience_stats = experience.stats() if hasattr(experience, "stats") else {}
+    experience_stats = experience.stats()
 
     # Calculate environment statistics
     environment_stats = {

@@ -1,4 +1,3 @@
-import importlib
 from typing import Any, Callable, Iterable, Optional
 
 import torch
@@ -55,10 +54,6 @@ class Trainer:
         self._cfg = cfg
         self._trajectory_isolation = trajectory_isolation
         self._device = device
-        try:
-            importlib.import_module("pufferlib._C")
-        except ImportError:
-            raise ImportError("Failed to import C/CUDA kernel. Try: pip install --no-build-isolation") from None
         if self._cfg.detect_anomaly:
             torch.autograd.set_detect_anomaly(True)
             logger.warning("Torch autograd anomaly detection enabled; backward will be slower.")
@@ -324,27 +319,21 @@ class Trainer:
         current_epoch = self._context.epoch
 
         for component in self._components:
-            try:
-                if callback_type == TrainerCallback.STEP:
-                    if (
-                        component.should_handle_step(current_step=current_step, previous_step=previous_step)
-                        and infos is not None
-                    ):
-                        component.on_step(infos)
-                elif callback_type == TrainerCallback.EPOCH_END:
-                    if component.should_handle_epoch(current_epoch):
-                        component.on_epoch_end(current_epoch)
-                elif callback_type == TrainerCallback.ROLLOUT_END:
-                    component.on_rollout_end()
-                elif callback_type == TrainerCallback.TRAINING_COMPLETE:
-                    component.on_training_complete()
-                elif callback_type == TrainerCallback.FAILURE:
-                    component.on_failure()
-            except Exception as e:
-                logger.error(
-                    f"Component {component.__class__.__name__} {callback_type.value} callback failed: {e}",
-                    exc_info=True,
-                )
+            if callback_type == TrainerCallback.STEP:
+                if (
+                    component.should_handle_step(current_step=current_step, previous_step=previous_step)
+                    and infos is not None
+                ):
+                    component.on_step(infos)
+            elif callback_type == TrainerCallback.EPOCH_END:
+                if component.should_handle_epoch(current_epoch):
+                    component.on_epoch_end(current_epoch)
+            elif callback_type == TrainerCallback.ROLLOUT_END:
+                component.on_rollout_end()
+            elif callback_type == TrainerCallback.TRAINING_COMPLETE:
+                component.on_training_complete()
+            elif callback_type == TrainerCallback.FAILURE:
+                component.on_failure()
 
     def restore(self) -> None:
         """Restore trainer state from checkpoints.

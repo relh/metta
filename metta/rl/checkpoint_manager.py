@@ -172,81 +172,25 @@ class CheckpointManager:
         return checkpoint_dir.as_uri()
 
     def load_policy_optimizer_state(self, policy_uri: str | None) -> Optional[Dict[str, Any]]:
-        if not policy_uri:
-            return None
-        try:
-            parsed = resolve_uri(policy_uri)
-        except ValueError as exc:
-            logger.debug("Skipping optimizer state for %s: %s", policy_uri, exc)
-            return None
-
-        if parsed.local_path and parsed.local_path.is_dir():
-            optimizer_path = parsed.local_path / OPTIMIZER_STATE_FILENAME
-            if optimizer_path.exists():
-                return torch.load(optimizer_path, map_location="cpu", weights_only=False)
-            return None
-
-        if not parsed.canonical.endswith(".zip"):
-            return None
-
-        try:
-            with local_copy(parsed.canonical) as local_path, zipfile.ZipFile(local_path, "r") as zipf:
-                with zipf.open(OPTIMIZER_STATE_FILENAME) as handle:
-                    return torch.load(handle, map_location="cpu", weights_only=False)
-        except KeyError:
-            return None
-        except (OSError, zipfile.BadZipFile) as exc:
-            logger.debug("Failed to read optimizer state from %s: %s", parsed.canonical, exc)
-            return None
+        return self._load_state_file_from_policy_uri(
+            policy_uri,
+            filename=OPTIMIZER_STATE_FILENAME,
+            debug_label="optimizer state",
+        )
 
     def _write_optimizer_state(self, checkpoint_dir: Path, optimizer_state: dict[str, Any]) -> None:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(
-            dir=checkpoint_dir,
-            prefix=f".{OPTIMIZER_STATE_FILENAME}.",
-            suffix=".tmp",
-            delete=False,
-        ) as tmp_file:
-            tmp_path = Path(tmp_file.name)
-        try:
-            torch.save(optimizer_state, tmp_path)
-            tmp_path.replace(checkpoint_dir / OPTIMIZER_STATE_FILENAME)
-        except Exception:
-            if tmp_path.exists():
-                tmp_path.unlink()
-            raise
+        self._atomic_torch_save(checkpoint_dir, OPTIMIZER_STATE_FILENAME, optimizer_state)
 
     def load_trainer_state(self, policy_uri: str | None = None) -> Optional[Dict[str, Any]]:
         trainer_file = self.checkpoint_dir / "trainer_state.pt"
         if trainer_file.exists():
             return torch.load(trainer_file, map_location="cpu", weights_only=False)
-        if not policy_uri:
-            return None
-
-        try:
-            parsed = resolve_uri(policy_uri)
-        except ValueError as exc:
-            logger.debug("Skipping trainer state for %s: %s", policy_uri, exc)
-            return None
-
-        if parsed.local_path and parsed.local_path.is_dir():
-            trainer_path = parsed.local_path / "trainer_state.pt"
-            if trainer_path.exists():
-                return torch.load(trainer_path, map_location="cpu", weights_only=False)
-            return None
-
-        if not parsed.canonical.endswith(".zip"):
-            return None
-
-        try:
-            with local_copy(parsed.canonical) as local_path, zipfile.ZipFile(local_path, "r") as zipf:
-                with zipf.open("trainer_state.pt") as handle:
-                    return torch.load(handle, map_location="cpu", weights_only=False)
-        except KeyError:
-            return None
-        except (OSError, zipfile.BadZipFile) as exc:
-            logger.debug("Failed to read trainer state from %s: %s", parsed.canonical, exc)
-            return None
+        return self._load_state_file_from_policy_uri(
+            policy_uri,
+            filename="trainer_state.pt",
+            debug_label="trainer state",
+        )
 
     def save_trainer_state(
         self,
@@ -270,17 +214,56 @@ class CheckpointManager:
         if loss_states is not None:
             state["loss_states"] = loss_states
 
+        self._atomic_torch_save(self.checkpoint_dir, trainer_file.name, state)
+
+    def _load_state_file_from_policy_uri(
+        self,
+        policy_uri: str | None,
+        *,
+        filename: str,
+        debug_label: str,
+    ) -> Optional[Dict[str, Any]]:
+        if not policy_uri:
+            return None
+        try:
+            parsed = resolve_uri(policy_uri)
+        except ValueError as exc:
+            logger.debug("Skipping %s for %s: %s", debug_label, policy_uri, exc)
+            return None
+
+        if parsed.local_path and parsed.local_path.is_dir():
+            state_path = parsed.local_path / filename
+            if state_path.exists():
+                return torch.load(state_path, map_location="cpu", weights_only=False)
+            return None
+
+        if not parsed.canonical.endswith(".zip"):
+            return None
+
+        try:
+            with (
+                local_copy(parsed.canonical) as local_path,
+                zipfile.ZipFile(local_path, "r") as zipf,
+                zipf.open(filename) as handle,
+            ):
+                return torch.load(handle, map_location="cpu", weights_only=False)
+        except KeyError:
+            return None
+        except (OSError, zipfile.BadZipFile) as exc:
+            logger.debug("Failed to read %s from %s: %s", debug_label, parsed.canonical, exc)
+            return None
+
+    def _atomic_torch_save(self, checkpoint_dir: Path, filename: str, payload: Any) -> None:
         with tempfile.NamedTemporaryFile(
-            dir=self.checkpoint_dir,
-            prefix=".trainer_state.pt.",
+            dir=checkpoint_dir,
+            prefix=f".{filename}.",
             suffix=".tmp",
             delete=False,
         ) as tmp_file:
             tmp_path = Path(tmp_file.name)
-            try:
-                torch.save(state, tmp_path)
-                tmp_path.replace(trainer_file)
-            except Exception:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-                raise
+
+        try:
+            torch.save(payload, tmp_path)
+            tmp_path.replace(checkpoint_dir / filename)
+        finally:
+            tmp_path.unlink(missing_ok=True)

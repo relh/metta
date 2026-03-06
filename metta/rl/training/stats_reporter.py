@@ -376,7 +376,6 @@ class StatsReporter(TrainerComponent):
             raw_stats=self._state.rollout_stats,
             losses_stats=losses_stats,
             experience=experience,
-            trainer_config=trainer_cfg,
         )
 
         overview = processed.setdefault("overview", {})
@@ -513,21 +512,13 @@ class StatsReporter(TrainerComponent):
         system_monitor = getattr(self.context, "system_monitor", None)
         if system_monitor is None:
             return {}
-        try:
-            return system_monitor.stats()
-        except Exception as exc:  # pragma: no cover
-            logger.debug("System monitor stats failed: %s", exc, exc_info=True)
-            return {}
+        return system_monitor.stats()
 
     def _collect_memory_stats(self) -> dict[str, Any]:
         memory_monitor = getattr(self.context, "memory_monitor", None)
         if memory_monitor is None:
             return {}
-        try:
-            return memory_monitor.stats()
-        except Exception as exc:  # pragma: no cover
-            logger.debug("Memory monitor stats failed: %s", exc, exc_info=True)
-            return {}
+        return memory_monitor.stats()
 
     def _collect_hyperparameters(self, *, optimizer: torch.optim.Optimizer | None) -> dict[str, Any]:
         hyperparameters: dict[str, Any] = {}

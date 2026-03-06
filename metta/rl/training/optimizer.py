@@ -60,18 +60,6 @@ def create_optimizer(cfg: OptimizerConfig, policy: Policy | DistributedPolicy) -
         allowed_types = ("adam", "muon", "adamw_schedulefree", "sgd_schedulefree")
         raise ValueError(f"Optimizer type must be one of {allowed_types}, got {optimizer_type}")
 
-    # # Load optimizer state if available
-    # if trainer_state and "optimizer_state" in trainer_state:
-    #     try:
-    #         optimizer.load_state_dict(trainer_state["optimizer_state"])
-    #         logger.info("Successfully loaded optimizer state from checkpoint")
-    #     except ValueError:
-    #         logger.warning("Optimizer state dict doesn't match. Starting with fresh optimizer state.")
-
-    # Note: For ScheduleFree optimizers, we don't call train() here.
-    # The trainer will call train() before the first training phase.
-    # Calling train() too early can interfere with optimizer state initialization.
-
     return optimizer
 
 
