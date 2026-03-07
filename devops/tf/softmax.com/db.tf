@@ -19,9 +19,10 @@ resource "aws_db_instance" "postgres" {
   engine         = "postgres"
   engine_version = var.db_postgres_version
 
-  instance_class    = var.db_instance_class
-  allocated_storage = var.db_allocated_storage
-  multi_az          = true
+  instance_class               = var.db_instance_class
+  allocated_storage            = var.db_allocated_storage
+  performance_insights_enabled = true
+  multi_az                     = true
 
   db_subnet_group_name   = data.aws_db_subnet_group.db.name
   vpc_security_group_ids = [data.aws_security_group.db.id]

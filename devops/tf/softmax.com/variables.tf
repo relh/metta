@@ -17,7 +17,7 @@ variable "db_postgres_version" {
 variable "db_instance_class" {
   description = "The instance class for the RDS database"
   type        = string
-  default     = "db.t3.micro"
+  default     = "db.t4g.medium"
 }
 
 variable "db_allocated_storage" {
