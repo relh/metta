@@ -90,7 +90,7 @@ Options are evaluated in priority order; higher-priority options can preempt act
 
 ### 5) Rollout validation
 
-Extend `packages/cogames-agents/scripts/run_cogsguard_rollout.py` to assert:
+Extend `cogames-agents/scripts/run_cogsguard_rollout.py` to assert:
 
 - Each role is selected at least once when gear agents are enabled.
 - Miners attempt mining and deposit near aligned depots.

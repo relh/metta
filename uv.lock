@@ -688,7 +688,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "cogames-agents"
-source = { editable = "packages/cogames-agents" }
+source = { editable = "cogames-agents" }
 dependencies = [
     { name = "cogames" },
     { name = "mettagrid" },
@@ -716,7 +716,7 @@ provides-extras = ["test"]
 [[package]]
 name = "cogames-rl-researcher"
 version = "0.1.0"
-source = { editable = "packages/cogames-rl-researcher" }
+source = { editable = "cogames-rl-researcher" }
 dependencies = [
     { name = "cogames" },
     { name = "pydantic" },
@@ -2571,8 +2571,8 @@ requires-dist = [
     { name = "bidict", specifier = ">=0.23.1" },
     { name = "boto3", specifier = ">=1.38.32" },
     { name = "cogames", editable = "packages/cogames" },
-    { name = "cogames-agents", editable = "packages/cogames-agents" },
-    { name = "cogames-rl-researcher", editable = "packages/cogames-rl-researcher" },
+    { name = "cogames-agents", editable = "cogames-agents" },
+    { name = "cogames-rl-researcher", editable = "cogames-rl-researcher" },
     { name = "colorama", specifier = ">=0.4.6" },
     { name = "cortexcore", editable = "packages/cortex" },
     { name = "cpplint", specifier = ">=2.0.2" },

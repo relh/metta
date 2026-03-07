@@ -147,11 +147,11 @@ packages/mettagrid/nim/vibescope/nim.cfg
 !packages/mettagrid/nim/vibescope/data/resources/
 !packages/mettagrid/nim/vibescope/data/replays/
 !packages/mettagrid/nim/vibescope/data/replays/pens.json.z
-packages/cogames-agents/src/cogames_agents/policy/nim_agents/nim.cfg
+cogames-agents/src/cogames_agents/policy/nim_agents/nim.cfg
 packages/tribal_village/nim.cfg
 
 # Nim Agents
-packages/cogames-agents/src/cogames_agents/policy/nim_agents/bindings/generated
+cogames-agents/src/cogames_agents/policy/nim_agents/bindings/generated
 bindings/generated/
 
 # Uncategorized

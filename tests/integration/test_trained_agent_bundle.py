@@ -19,7 +19,7 @@ from mettagrid.runner.episode_runner import run_episode_isolated
 from mettagrid.runner.types import EpisodeSpec
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SETUP_SCRIPT = Path("packages/cogames-agents/trained_setup_script.py")
+SETUP_SCRIPT = Path("cogames-agents/trained_setup_script.py")
 AGENT_DIR = Path("agent")
 CORTEX_PYPROJECT = Path("packages/cortex/pyproject.toml")
 CORTEX_SRC = Path("packages/cortex/src")

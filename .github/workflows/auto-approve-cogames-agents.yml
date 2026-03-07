@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize]
     paths:
-      - "packages/cogames-agents/**"
+      - "cogames-agents/**"
 
 jobs:
   auto-approve:
@@ -14,7 +14,7 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - name: Check if PR only touches packages/cogames-agents
+      - name: Check if PR only touches cogames-agents
         id: check
         run: |
           mapfile -t FILES < <(gh pr view ${{ github.event.pull_request.number }} --json files --jq '.files[].path')
@@ -24,7 +24,7 @@ jobs:
           fi
           ALL_MATCH=true
           for f in "${FILES[@]}"; do
-            if [[ ! "$f" =~ ^packages/cogames-agents/ ]]; then
+            if [[ ! "$f" =~ ^cogames-agents/ ]]; then
               ALL_MATCH=false
               break
             fi

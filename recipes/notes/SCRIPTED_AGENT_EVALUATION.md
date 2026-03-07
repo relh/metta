@@ -383,7 +383,7 @@ uv run python packages/cogames/scripts/evaluate_scripted_agents.py
 
 ### BaselineAgent
 
-**File**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/baseline_agent.py`
+**File**: `cogames-agents/src/cogames_agents/policy/scripted_agent/baseline_agent.py`
 
 **Core Features**:
 
@@ -409,7 +409,7 @@ uv run python packages/cogames/scripts/evaluate_scripted_agents.py
 
 ### UnclippingAgent (extends BaselineAgent)
 
-**File**: `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/unclipping_agent.py`
+**File**: `cogames-agents/src/cogames_agents/policy/scripted_agent/unclipping_agent.py`
 
 **Added Features**:
 

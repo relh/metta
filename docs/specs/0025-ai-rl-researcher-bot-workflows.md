@@ -24,7 +24,7 @@ Implement a reaper-supervised actor/critic researcher loop with two entrypoints:
 - `swarm` (optional mode): multi-agent worker fan-out coordinated by Claude, used when broader experiment search or
   faster triage is beneficial.
 
-Implementation home for this system is a dedicated meta-agent package: `packages/cogames-rl-researcher`.
+Implementation home for this system is a dedicated meta-agent package: `cogames-rl-researcher`.
 
 Additional sprint services in the same package:
 

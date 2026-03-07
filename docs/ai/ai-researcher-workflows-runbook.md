@@ -6,8 +6,8 @@ This runbook covers what is already implemented in `metta` for the AI researcher
 
 If you want an AI coding agent to run the workflow from a single prompt ("run the neophyte workflow"), use:
 
-- `packages/cogames-rl-researcher/prompts/run-neophyte-workflow.md`
-- `packages/cogames-rl-researcher/prompts/run-experienced-workflow.md`
+- `cogames-rl-researcher/prompts/run-neophyte-workflow.md`
+- `cogames-rl-researcher/prompts/run-experienced-workflow.md`
 
 These prompts orchestrate the existing scripts as tools, including tutorial readthrough, policy creation, training,
 startup/submit, and reporting.
@@ -15,15 +15,15 @@ startup/submit, and reporting.
 One-line agent launch:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent codex --profile neophyte
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent claude --profile experienced
+./cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent codex --profile neophyte
+./cogames-rl-researcher/scripts/run_ai_researcher_agent_workflow.py --agent claude --profile experienced
 ```
 
 ## What Exists Today
 
 Implementation package:
 
-- `packages/cogames-rl-researcher`
+- `cogames-rl-researcher`
 
 Primary runnable workflows:
 
@@ -68,13 +68,13 @@ cogames login
 Optional: run tests for this package:
 
 ```bash
-uv run pytest packages/cogames-rl-researcher/tests -q
+uv run pytest cogames-rl-researcher/tests -q
 ```
 
 ## Startup Workflow (From Scratch)
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_startup.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_startup.py \
   --policy metta://policy/role_py \
   --policy-name my-policy \
   --season beta-cvc
@@ -103,7 +103,7 @@ agent: codex
 timeout: 180
 ---
 Run the canonical neophyte researcher workflow end-to-end using
-`packages/cogames-rl-researcher/prompts/run-neophyte-workflow.md`.
+`cogames-rl-researcher/prompts/run-neophyte-workflow.md`.
 EOF
 
 git add -f .agent/jobs/ai-researcher-neophyte.md
@@ -128,7 +128,7 @@ agent: codex
 timeout: 240
 ---
 Run the canonical experienced researcher workflow end-to-end using
-`packages/cogames-rl-researcher/prompts/run-experienced-workflow.md`.
+`cogames-rl-researcher/prompts/run-experienced-workflow.md`.
 EOF
 
 git add -f .agent/jobs/ai-researcher-experienced.md
@@ -152,7 +152,7 @@ Success signal: the one-shot job file is removed and a cleanup commit appears:
 Use the `run_dir` printed by startup:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_resume.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_resume.py \
   --source ./artifacts/ai_researcher/<startup_run_dir>
 ```
 
@@ -160,12 +160,12 @@ Optional enhancements:
 
 ```bash
 # include explicit log-mining context
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_resume.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_resume.py \
   --source ./artifacts/ai_researcher/<startup_run_dir> \
   --log-mining-report ./artifacts/ai_researcher/log_mining_report.json
 
 # emit optional swarm plan
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_resume.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_resume.py \
   --source ./artifacts/ai_researcher/<startup_run_dir> \
   --emit-swarm-plan \
   --swarm-workers 4
@@ -174,7 +174,7 @@ Optional enhancements:
 ## One-Command Research Loop
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_research.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_research.py \
   --policy metta://policy/role_py \
   --policy-name my-policy \
   --train-command "uv run ./tools/run.py train arena run=my_exp trainer.total_timesteps=100000" \
@@ -184,7 +184,7 @@ Optional enhancements:
 If you only want submission/diagnosis orchestration:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_research.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_research.py \
   --policy metta://policy/role_py \
   --policy-name my-policy \
   --skip-train \
@@ -196,7 +196,7 @@ If you only want submission/diagnosis orchestration:
 Log mining service:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_log_mining_service.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_log_mining_service.py \
   --log-root ./artifacts \
   --log-root ./logs \
   --output ./artifacts/ai_researcher/log_mining_report.json \
@@ -206,13 +206,13 @@ Log mining service:
 Continuous mode:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_log_mining_service.py --watch
+./cogames-rl-researcher/scripts/run_ai_researcher_log_mining_service.py --watch
 ```
 
 Crash defect intake:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
   --store-dir ./artifacts/ai_researcher/defects \
   submit \
   --reporter codex \
@@ -223,11 +223,11 @@ Crash defect intake:
 Regenerate backlog and fix plan:
 
 ```bash
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
   --store-dir ./artifacts/ai_researcher/defects \
   backlog
 
-./packages/cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
+./cogames-rl-researcher/scripts/run_ai_researcher_defect_intake.py \
   --store-dir ./artifacts/ai_researcher/defects \
   fix-plan
 ```
@@ -336,5 +336,5 @@ Key artifact outputs from sweep:
 
 Post-sweep package tests:
 
-- `uv run pytest packages/cogames-rl-researcher/tests -q`
+- `uv run pytest cogames-rl-researcher/tests -q`
 - result: `44 passed, 1 skipped`

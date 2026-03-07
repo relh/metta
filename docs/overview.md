@@ -345,7 +345,7 @@ cogames leaderboard            # View rankings
 
 ## 6. CoGames-Agents: Scripted and Evolved Policies
 
-**Location:** `packages/cogames-agents/` | **Languages:** Python + compiled Nim
+**Location:** `cogames-agents/` | **Languages:** Python + compiled Nim
 
 ### Python Scripted Agents
 

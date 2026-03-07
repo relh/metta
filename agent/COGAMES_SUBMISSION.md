@@ -10,7 +10,7 @@ uv run cogames upload \
   -p ./train_dir/<run>/checkpoints/<run>:<version> \
   --include-files agent \
   --include-files packages/cortex \
-  --setup-script packages/cogames-agents/trained_setup_script.py \
+  --setup-script cogames-agents/trained_setup_script.py \
   -n <submission-name> \
   --dry-run
 ```
@@ -22,7 +22,7 @@ uv run cogames upload \
   -p ./train_dir/my_run/checkpoints/my_run:v30 \
   --include-files agent \
   --include-files packages/cortex \
-  --setup-script packages/cogames-agents/trained_setup_script.py \
+  --setup-script cogames-agents/trained_setup_script.py \
   -n my-trained-policy \
   --dry-run
 ```

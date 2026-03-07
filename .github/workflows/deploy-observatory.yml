@@ -10,7 +10,7 @@ on:
       - "common/**"
       - "packages/mettagrid/**"
       - "packages/cogames/**"
-      - "packages/cogames-agents/**"
+      - "cogames-agents/**"
       - "devops/docker/Dockerfile.backend"
       - "devops/charts/observatory-backend/**"
       - "devops/charts/orchestrator/**"

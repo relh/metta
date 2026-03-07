@@ -3,7 +3,7 @@
 > **Status:** Implemented (post-audit closeout)  
 > **Author:** Richard + Codex  
 > **Date:** 2026-02-23  
-> **Scope:** `packages/cogames-rl-researcher`
+> **Scope:** `cogames-rl-researcher`
 
 ## Context
 
@@ -209,7 +209,7 @@ Escalation:
 
 Package tests:
 
-- `uv run pytest packages/cogames-rl-researcher/tests -q`
+- `uv run pytest cogames-rl-researcher/tests -q`
 
 Results after closeout should include:
 

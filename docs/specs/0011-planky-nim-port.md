@@ -87,7 +87,7 @@ Mirror the Python module split, but kept Nim-idiomatic:
 - Export a single `PlankyPolicy` ref object from `nim_agents.nim` with `newPlankyPolicy(string)` and `stepBatch(...)`.
 - Keep init config as JSON:
   - `{ "env": <PolicyEnvInterface JSON>, "planky": <PlankyConfig> }`
-- Keep Python wrapper class in `packages/cogames-agents` only as:
+- Keep Python wrapper class in `cogames-agents` only as:
   - URI parameter mapping + constructing init JSON + subclassing `NimMultiAgentPolicy`
 
 ### Incremental Port Plan

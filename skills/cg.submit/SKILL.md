@@ -57,10 +57,10 @@ After it completes, report the Episode Stats table (gear, reward) to the user.
 
 ## Step 4: Upload
 
-Run from `packages/cogames-agents/`:
+Run from `cogames-agents/`:
 
 ```bash
-cd packages/cogames-agents
+cd cogames-agents
 uv run cogames upload \
   -p "class=<full_class_path>" \
   -n "<name>" \
@@ -72,7 +72,7 @@ uv run cogames upload \
 Example:
 
 ```bash
-cd packages/cogames-agents
+cd cogames-agents
 uv run cogames upload \
   -p "class=cogames_agents.policy.nim_agents.agents.NlankyAgentsMultiPolicy" \
   -n "daveey.nlanky" \
@@ -115,7 +115,7 @@ Leaderboard:  uv run cogames leaderboard --season <season>
 | ------------- | ------------------------- | ---------------------- |
 | Name          | `<git-user>.<policy>`     | User chooses           |
 | Season        | `beta-cvc`                | From `cogames seasons` |
-| Working dir   | `packages/cogames-agents` | -                      |
+| Working dir   | `cogames-agents` | -                      |
 | Include-files | `src/cogames_agents`      | Explicit path          |
 | Setup script  | `setup_script.py`         | Explicit path          |
 
