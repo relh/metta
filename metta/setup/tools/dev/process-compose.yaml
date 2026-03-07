@@ -111,6 +111,22 @@ processes:
         condition: process_healthy
 
   # ===========================================================================
+  # JAEGER (TRACE COLLECTION)
+  # ===========================================================================
+  # Collects OpenTelemetry traces from the backend server.
+  # UI at http://localhost:16686, OTLP HTTP receiver on port 4318.
+  jaeger:
+    command: bash -c "docker rm -f jaeger 2>/dev/null; docker run --rm --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/jaeger:latest"
+    readiness_probe:
+      http_get:
+        host: localhost
+        port: 16686
+        path: /
+      initial_delay_seconds: 3
+      period_seconds: 2
+      failure_threshold: 10
+
+  # ===========================================================================
   # BACKEND SERVER (FastAPI)
   # ===========================================================================
   # The Observatory API server. Binds to 0.0.0.0:8000 so it's accessible
@@ -120,10 +136,14 @@ processes:
   # (127.0.0.1 for direct Mac, host.docker.internal for devcontainer).
   server:
     command: metta dev server
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     depends_on:
       postgres:
         condition: process_healthy
       localstack:
+        condition: process_healthy
+      jaeger:
         condition: process_healthy
     readiness_probe:
       http_get:

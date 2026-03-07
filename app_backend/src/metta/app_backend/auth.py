@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from metta.app_backend.config import settings
 from metta.app_backend.models.service_accounts import TokenPrefixType
 from metta.app_backend.queries.service_account_queries import get_service_account_user
+from metta.common.otel.tracing import trace
 
 
 class User(BaseModel):
@@ -109,6 +110,7 @@ MaybeAuthenticatedUser = Annotated[Optional[User], Depends(get_user)]  # always 
 NoAuthRequired = Annotated[None, Depends(_no_auth)]  # always succeeds, no-op
 
 
+@trace("auth.validate_token")
 async def validate_token_via_login_service(token: str) -> Optional[User]:
     """Validate a machine token via the login service and return the user if valid.
 

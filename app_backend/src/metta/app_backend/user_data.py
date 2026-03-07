@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from metta.app_backend.auth import User
 from metta.app_backend.config import settings
+from metta.common.otel.tracing import trace
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ def _user_row(info: dict, user_id: str, *, include_sensitive: bool) -> UserRow:
     )
 
 
+@trace("user_data.load_user_ids")
 async def load_user_ids(user_ids: list[str], *, include_sensitive: bool = True) -> dict[str, UserRow]:
     """Resolve user IDs to UserRow objects via the softmax.com API.
 

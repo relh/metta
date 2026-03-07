@@ -15,6 +15,7 @@ import fastapi
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from pydantic.main import BaseModel
 
 from metta.app_backend.auth import NoAuthRequired, get_user
@@ -179,6 +180,7 @@ def create_app() -> fastapi.FastAPI:
     setup_logging()
     init_meter_provider()
     init_otel_tracing("observatory-backend")
+    SQLAlchemyInstrumentor().instrument()
 
     @asynccontextmanager
     async def lifespan(_: fastapi.FastAPI):

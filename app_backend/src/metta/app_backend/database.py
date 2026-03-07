@@ -9,7 +9,8 @@ from alembic import command
 from alembic.config import Config
 from fastapi import Depends
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext import asyncio as sqla_async
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from metta.app_backend.config import settings
 
@@ -63,12 +64,12 @@ def _get_engine(read_only: bool = False) -> AsyncEngine:
             return _get_engine(read_only=False)
         if _read_only_engine is None:
             async_url = _get_async_url(_get_db_uri(read_only=True))
-            _read_only_engine = create_async_engine(async_url, pool_size=5, max_overflow=10)
+            _read_only_engine = sqla_async.create_async_engine(async_url, pool_size=5, max_overflow=10)
         return _read_only_engine
 
     if _engine is None:
         async_url = _get_async_url(_get_db_uri(read_only=False))
-        _engine = create_async_engine(async_url, pool_size=5, max_overflow=10)
+        _engine = sqla_async.create_async_engine(async_url, pool_size=5, max_overflow=10)
     return _engine
 
 
