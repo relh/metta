@@ -8,6 +8,7 @@ on:
       - "dashboard/**"
       - "pantheon/**"
       - "diagnose/**"
+      - "devops/docker/Dockerfile.vibeservatory-frontend"
       - "devops/charts/vibeservatory-frontend/**"
       - ".github/workflows/build-vibeservatory-image.yml"
   workflow_dispatch: {}
@@ -22,7 +23,7 @@ jobs:
     secrets: inherit
     with:
       image_name: metta-app-frontend
-      dockerfile: dashboard/Dockerfile
+      dockerfile: devops/docker/Dockerfile.vibeservatory-frontend
       tag_suffix: -dashboard
       docker_build_args: |
         NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.vibeservatory.softmax-research.net

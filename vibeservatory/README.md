@@ -212,6 +212,7 @@ kubectl -n observatory delete pod ro-db-proxy --ignore-not-found=true
 ## Production Deployment
 
 - Frontend workflow: `.github/workflows/build-vibeservatory-image.yml`
+  - Dockerfile: `devops/docker/Dockerfile.vibeservatory-frontend`
   - Deploys Helm chart: `devops/charts/vibeservatory-frontend/`
   - Host: `https://vibeservatory.softmax-research.net` (`/policy-dashboard`, `/bardo`, `/pantheon`, `/diagnose`)
   - Runtime model: one frontend deployment/container serving all four routes (dashboard + bardo + pantheon + diagnose)

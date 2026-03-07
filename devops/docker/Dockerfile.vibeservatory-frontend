@@ -1,5 +1,6 @@
+# Canonical Dockerfile for the shared Vibeservatory frontend image.
 # This Dockerfile relies on turborepo to optimize the build process.
-# Building this image requires the entire metta repo to be used as a build context, due to the global `pnpm-lock.yaml` file.
+# Building this image requires the entire metta repo as build context due to the global `pnpm-lock.yaml`.
 
 # ================================ Base image - pnpm and turbo ==========================
 FROM node:24-bookworm-slim AS base
