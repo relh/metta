@@ -70,6 +70,7 @@ spec:
           {{- end }}
           resources:
             requests:
+              cpu: "1"
               memory: "1Gi"
               ephemeral-storage: "10Gi"
             limits:

@@ -50,6 +50,7 @@ spec:
               name: {{ .Values.frontend.secret_name }}
           resources:
             requests:
+              cpu: "1"
               memory: "1Gi"
               ephemeral-storage: "2Gi"
             limits:
