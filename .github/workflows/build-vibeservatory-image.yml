@@ -28,10 +28,13 @@ jobs:
         NEXT_PUBLIC_DASHBOARD_API_BASE_URL=https://api.vibeservatory.softmax-research.net
         BARDO_BASE_PATH=/bardo
         NEXT_PUBLIC_BARDO_BASE_PATH=/bardo
+        BARDO_PROXY_URL=http://127.0.0.1:5175/bardo
         PANTHEON_BASE_PATH=/pantheon
         NEXT_PUBLIC_PANTHEON_BASE_PATH=/pantheon
+        PANTHEON_PROXY_URL=http://127.0.0.1:5176/pantheon
         DIAGNOSE_BASE_PATH=/diagnose
         NEXT_PUBLIC_DIAGNOSE_BASE_PATH=/diagnose
+        DIAGNOSE_PROXY_URL=http://127.0.0.1:5177/diagnose
       namespace: observatory
       release: dashboard
       chart: ./devops/charts/vibeservatory-frontend

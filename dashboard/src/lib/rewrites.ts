@@ -6,17 +6,17 @@ function trimToNull(value: string | undefined): string | null {
 }
 
 function defaultBardoProxyUrl(nodeEnv: string | undefined): string | null {
-  if (nodeEnv === 'production') return null
+  void nodeEnv
   return 'http://127.0.0.1:5175/bardo'
 }
 
 function defaultPantheonProxyUrl(nodeEnv: string | undefined): string | null {
-  if (nodeEnv === 'production') return null
+  void nodeEnv
   return 'http://127.0.0.1:5176/pantheon'
 }
 
 function defaultDiagnoseProxyUrl(nodeEnv: string | undefined): string | null {
-  if (nodeEnv === 'production') return null
+  void nodeEnv
   return 'http://127.0.0.1:5177/diagnose'
 }
 
