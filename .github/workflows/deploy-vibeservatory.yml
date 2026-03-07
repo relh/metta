@@ -34,6 +34,4 @@ jobs:
       release: vibeservatory
       chart: ./devops/charts/vibeservatory
       production_helm_values: >-
-        --install
-        --atomic --timeout 10m
         --set datadog.env=production
