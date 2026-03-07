@@ -154,6 +154,11 @@ packages/tribal_village/nim.cfg
 cogames-agents/src/cogames_agents/policy/nim_agents/bindings/generated
 bindings/generated/
 
+# Legacy moved package paths. Ignore stale local artifacts left behind after the
+# packages were moved to the repo root.
+packages/cogames-agents/
+packages/cogames-rl-researcher/
+
 # Uncategorized
 .terraform*
 terraform.tfstate
