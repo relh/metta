@@ -18,6 +18,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 | `wt.`   | Git worktree utilities                               | wt.cleanup                          |
 | `r.`    | Repo scaffolding / package creation                  | r.make-package                      |
 | `cf.`   | Control-flow / meta-execution                        | cf.really                           |
+| `hr.`   | Hiring / recruiting pipeline                         | hr.screen-resumes                   |
 | `n.`    | Nishad-specific variants (only when truly personal)  | n.debug-jobs                        |
 | `relh.` | Richard-specific variants (only when truly personal) | relh.cb.branch-hygiene              |
 | `rl.research.` | RL research pipeline (full flow + phase skills) | rl.research.begin, rl.research.task-characterize |
@@ -93,6 +94,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `do.kiosk-update`
 - `do.mettabox-ops`
 - `do.worktrunk`
+- `hr.screen-resumes`
 - `n.add-publishable-package`
 - `n.add-season`
 - `n.create-aws-account`
