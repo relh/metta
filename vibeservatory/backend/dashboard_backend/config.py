@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     DASHBOARD_HOST: str = "127.0.0.1"
     DASHBOARD_PORT: int = 8010
     DASHBOARD_CORS_ORIGINS: str = "*"
+    DASHBOARD_GZIP_MIN_SIZE: int = 1024
     DASHBOARD_COGAMES_DIAGNOSE_ROOT: str | None = None
     DASHBOARD_PANTHEON_ROOT: str | None = None
 

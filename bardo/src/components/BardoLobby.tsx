@@ -133,6 +133,11 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException) return error.name === 'AbortError'
+  return error instanceof Error && error.name === 'AbortError'
+}
+
 function asPercent(value: number): string {
   return `${(clamp01(value) * 100).toFixed(3)}%`
 }
@@ -290,6 +295,8 @@ export function BardoLobby() {
   const [nowMs, setNowMs] = useState<number>(() => Date.now())
 
   const actorsRef = useRef<Map<string, ActorState>>(new Map())
+  const worldStateEtagRef = useRef<string | null>(null)
+  const worldStateAbortRef = useRef<AbortController | null>(null)
   const bardoStyleVariables = useMemo(
     () =>
       ({
@@ -306,24 +313,48 @@ export function BardoLobby() {
     document.documentElement.setAttribute('data-theme', requestedTheme)
   }, [requestedTheme])
 
-  const loadWorldState = useCallback(async () => {
-    const query = new URLSearchParams()
-    if (nameFilter) query.set('q', nameFilter)
-    const endpoint = query.size > 0 ? `${WORLD_STATE_ENDPOINT}?${query.toString()}` : WORLD_STATE_ENDPOINT
-
-    const authToken = resolveBardoAuthToken()
-    const headers = authToken ? { 'X-Auth-Token': authToken } : undefined
-    const response = await fetch(endpoint, { cache: 'no-store', headers })
-
-    if (!response.ok) {
-      const payload = (await response.json().catch(() => ({ error: '' }))) as { error?: string }
-      throw new Error(payload.error || `Bardo request failed (${response.status})`)
-    }
-
-    const payload = (await response.json()) as BardoWorldState
-    setWorld(payload)
-    setLastRefreshAtMs(Date.now())
+  useEffect(() => {
+    worldStateEtagRef.current = null
   }, [nameFilter])
+
+  const loadWorldState = useCallback(
+    async (signal: AbortSignal) => {
+      const query = new URLSearchParams()
+      if (nameFilter) query.set('q', nameFilter)
+      const endpoint = query.size > 0 ? `${WORLD_STATE_ENDPOINT}?${query.toString()}` : WORLD_STATE_ENDPOINT
+
+      const authToken = resolveBardoAuthToken()
+      const headers: Record<string, string> = {}
+      if (authToken) headers['X-Auth-Token'] = authToken
+      if (worldStateEtagRef.current) headers['If-None-Match'] = worldStateEtagRef.current
+
+      const response = await fetch(endpoint, {
+        cache: 'no-store',
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
+        signal,
+      })
+
+      if (response.status === 304) {
+        setLastRefreshAtMs(Date.now())
+        return
+      }
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({ error: '' }))) as { error?: string }
+        throw new Error(payload.error || `Bardo request failed (${response.status})`)
+      }
+
+      const etag = response.headers.get('etag')?.trim()
+      if (etag) {
+        worldStateEtagRef.current = etag
+      }
+
+      const payload = (await response.json()) as BardoWorldState
+      setWorld(payload)
+      setLastRefreshAtMs(Date.now())
+    },
+    [nameFilter]
+  )
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -334,19 +365,30 @@ export function BardoLobby() {
 
   useEffect(() => {
     let cancelled = false
+    let inFlight = false
 
     const refresh = async () => {
+      if (inFlight) return
+      inFlight = true
+      const controller = new AbortController()
+      worldStateAbortRef.current = controller
       try {
-        await loadWorldState()
+        await loadWorldState(controller.signal)
         if (!cancelled) {
           setErrorMessage(null)
           setIsLoading(false)
         }
       } catch (error) {
+        if (isAbortError(error)) return
         if (!cancelled) {
           setErrorMessage(toErrorMessage(error))
           setIsLoading(false)
         }
+      } finally {
+        if (worldStateAbortRef.current === controller) {
+          worldStateAbortRef.current = null
+        }
+        inFlight = false
       }
     }
 
@@ -357,6 +399,8 @@ export function BardoLobby() {
 
     return () => {
       cancelled = true
+      worldStateAbortRef.current?.abort()
+      worldStateAbortRef.current = null
       clearInterval(interval)
     }
   }, [loadWorldState])

@@ -11,8 +11,15 @@ from fastapi.testclient import TestClient
 import vibeservatory.backend.dashboard_backend.bardo.router as bardo_router
 from metta.app_backend.models.job_request import JobStatus
 from vibeservatory.backend.dashboard_backend.auth import User, get_softmax_user_or_raise
-from vibeservatory.backend.dashboard_backend.bardo.router import create_bardo_router
+from vibeservatory.backend.dashboard_backend.bardo.router import BardoWorldStateResponse, create_bardo_router
 from vibeservatory.backend.dashboard_backend.config import settings
+
+
+@pytest.fixture(autouse=True)
+def clear_bardo_world_state_cache() -> None:
+    clear_cache = getattr(bardo_router, "_clear_bardo_world_state_cache", None)
+    if clear_cache is not None:
+        clear_cache()
 
 
 def test_bardo_world_state_includes_active_jobs_for_softmax(
@@ -159,3 +166,46 @@ def test_bardo_world_state_rejects_non_softmax_users(
         },
     )
     assert response.status_code == 403
+
+
+def test_bardo_world_state_uses_etag_cache_and_304_for_matching_if_none_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    load_calls = 0
+
+    async def fake_get_softmax_user():
+        return User(id="user-alpha", email="alpha@softmax.com", is_softmax_team_member=True)
+
+    async def fake_load_world_state(*, name_filter: str | None, include_active_jobs: bool) -> BardoWorldStateResponse:
+        nonlocal load_calls
+        load_calls += 1
+        assert name_filter == "alpha"
+        assert include_active_jobs is True
+        return BardoWorldStateResponse(
+            generatedAt="2026-03-07T18:36:00Z",
+            policies=[],
+            activeJobs=[],
+            seasons=[],
+        )
+
+    monkeypatch.setattr(bardo_router, "load_bardo_world_state", fake_load_world_state)
+    monkeypatch.setattr(bardo_router, "WORLD_STATE_CACHE_TTL_SECONDS", 60.0)
+
+    app = FastAPI()
+    app.include_router(create_bardo_router())
+    app.dependency_overrides[get_softmax_user_or_raise] = fake_get_softmax_user
+    client = TestClient(app, base_url="http://localhost")
+
+    first = client.get("/bardo/v1/world-state?q=alpha")
+    assert first.status_code == 200
+    assert first.headers.get("cache-control") == "private, no-cache"
+    etag = first.headers.get("etag")
+    assert etag is not None and etag
+    assert load_calls == 1
+
+    second = client.get("/bardo/v1/world-state?q=alpha", headers={"If-None-Match": etag})
+    assert second.status_code == 304
+    assert second.content == b""
+    assert second.headers.get("etag") == etag
+    assert second.headers.get("cache-control") == "private, no-cache"
+    assert load_calls == 1

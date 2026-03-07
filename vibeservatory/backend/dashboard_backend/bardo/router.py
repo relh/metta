@@ -1,8 +1,13 @@
+import asyncio
+import hashlib
+import json
+import time
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
@@ -10,7 +15,6 @@ from sqlmodel import col, select
 from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
-from metta.app_backend.queries import policy_queries
 from metta.app_backend.route_logger import timed_http_handler
 from metta.app_backend.user_data import load_user_ids
 from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
@@ -18,6 +22,8 @@ from vibeservatory.backend.dashboard_backend.database import db_session
 
 PAGE_SIZE = 500
 ACTIVE_EPISODE_JOB_STATUSES = [JobStatus.pending, JobStatus.dispatched, JobStatus.running]
+WORLD_STATE_CACHE_TTL_SECONDS = 4.0
+WORLD_STATE_CACHE_CONTROL = "private, no-cache"
 
 
 class BardoPolicy(BaseModel):
@@ -55,6 +61,18 @@ class BardoWorldStateResponse(BaseModel):
     seasons: list[BardoSeason]
 
 
+@dataclass
+class _CachedWorldStateSnapshot:
+    response: BardoWorldStateResponse
+    etag: str
+    expires_at_monotonic: float
+
+
+_WORLD_STATE_CACHE: dict[tuple[str | None, bool], _CachedWorldStateSnapshot] = {}
+_WORLD_STATE_CACHE_LOCK = asyncio.Lock()
+_WORLD_STATE_COMPUTE_LOCKS: dict[tuple[str | None, bool], asyncio.Lock] = {}
+
+
 def _isoformat_utc(value: datetime) -> str:
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
@@ -68,11 +86,17 @@ async def _fetch_all_policies(name_filter: str | None) -> list[Policy]:
     normalized_filter = name_filter.strip() if name_filter else None
 
     for offset in range(0, 1_000_000, PAGE_SIZE):
-        page, _total = await policy_queries.get_policies(
-            name_fuzzy=normalized_filter,
-            limit=PAGE_SIZE,
-            offset=offset,
-        )
+        async with db_session(read_only=True) as session:
+            query = (
+                select(Policy)
+                .order_by(col(Policy.created_at).desc())
+                .options(selectinload(Policy.versions))
+                .limit(PAGE_SIZE)
+                .offset(offset)
+            )
+            if normalized_filter:
+                query = query.where(col(Policy.name).ilike(f"%{normalized_filter}%"))
+            page = list((await session.execute(query)).scalars().all())
         policies.extend(page)
         if len(page) < PAGE_SIZE:
             break
@@ -258,15 +282,105 @@ async def load_bardo_world_state(*, name_filter: str | None, include_active_jobs
     )
 
 
+def _normalize_etag(value: str) -> str:
+    normalized = value.strip()
+    if normalized.startswith("W/"):
+        normalized = normalized[2:].strip()
+    if normalized.startswith('"') and normalized.endswith('"') and len(normalized) >= 2:
+        normalized = normalized[1:-1]
+    return normalized
+
+
+def _if_none_match_matches(if_none_match: str | None, etag: str) -> bool:
+    if not if_none_match:
+        return False
+    values = [value.strip() for value in if_none_match.split(",") if value.strip()]
+    if "*" in values:
+        return True
+    normalized_etag = _normalize_etag(etag)
+    return any(_normalize_etag(value) == normalized_etag for value in values)
+
+
+def _world_state_cache_key(name_filter: str | None, include_active_jobs: bool) -> tuple[str | None, bool]:
+    normalized_name_filter = name_filter.strip().lower() if name_filter and name_filter.strip() else None
+    return (normalized_name_filter, include_active_jobs)
+
+
+def _world_state_etag(response: BardoWorldStateResponse) -> str:
+    payload = response.model_dump(mode="json")
+    payload.pop("generatedAt", None)
+    encoded_payload = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    digest = hashlib.sha256(encoded_payload).hexdigest()
+    return f'W/"{digest}"'
+
+
+async def _world_state_compute_lock_for_key(key: tuple[str | None, bool]) -> asyncio.Lock:
+    async with _WORLD_STATE_CACHE_LOCK:
+        lock = _WORLD_STATE_COMPUTE_LOCKS.get(key)
+        if lock is not None:
+            return lock
+        new_lock = asyncio.Lock()
+        _WORLD_STATE_COMPUTE_LOCKS[key] = new_lock
+        return new_lock
+
+
+async def _load_cached_world_state_snapshot(
+    *,
+    name_filter: str | None,
+    include_active_jobs: bool,
+) -> _CachedWorldStateSnapshot:
+    key = _world_state_cache_key(name_filter, include_active_jobs)
+    now_monotonic = time.monotonic()
+    cached = _WORLD_STATE_CACHE.get(key)
+    if cached is not None and cached.expires_at_monotonic > now_monotonic:
+        return cached
+
+    lock = await _world_state_compute_lock_for_key(key)
+    async with lock:
+        now_monotonic = time.monotonic()
+        cached = _WORLD_STATE_CACHE.get(key)
+        if cached is not None and cached.expires_at_monotonic > now_monotonic:
+            return cached
+
+        response = await load_bardo_world_state(name_filter=name_filter, include_active_jobs=include_active_jobs)
+        snapshot = _CachedWorldStateSnapshot(
+            response=response,
+            etag=_world_state_etag(response),
+            expires_at_monotonic=now_monotonic + WORLD_STATE_CACHE_TTL_SECONDS,
+        )
+        _WORLD_STATE_CACHE[key] = snapshot
+        return snapshot
+
+
+def _clear_bardo_world_state_cache() -> None:
+    _WORLD_STATE_CACHE.clear()
+    _WORLD_STATE_COMPUTE_LOCKS.clear()
+
+
 def create_bardo_router() -> APIRouter:
     router = APIRouter(tags=["dashboard"])
 
     @router.get("/bardo/v1/world-state")
     @timed_http_handler
     async def get_world_state(
+        request: Request,
+        response: Response,
         _user: SoftmaxUser,
         q: str | None = Query(default=None),
     ) -> BardoWorldStateResponse:
-        return await load_bardo_world_state(name_filter=q, include_active_jobs=True)
+        snapshot = await _load_cached_world_state_snapshot(name_filter=q, include_active_jobs=True)
+        response.headers["Cache-Control"] = WORLD_STATE_CACHE_CONTROL
+        response.headers["ETag"] = snapshot.etag
+
+        if _if_none_match_matches(request.headers.get("if-none-match"), snapshot.etag):
+            return Response(
+                status_code=304,
+                headers={
+                    "Cache-Control": WORLD_STATE_CACHE_CONTROL,
+                    "ETag": snapshot.etag,
+                },
+            )
+
+        return snapshot.response
 
     return router
