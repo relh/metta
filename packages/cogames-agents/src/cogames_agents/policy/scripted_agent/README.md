@@ -1,7 +1,7 @@
 # Scripted Agent Policies (cogames-agents)
 
-This file mirrors the scripted-agent reference used by the `cogames` CLI docs, kept here so the package ships the full
-details alongside the implementations.
+Mirrors the scripted-agent reference used by the `cogames` CLI docs so the package ships full details alongside the
+implementations.
 
 Teaching-friendly scripted agents for CoGames evaluation and ablation studies, plus a tiny demo policy and the CogsGuard
 team-play scripted policy.
@@ -105,7 +105,7 @@ energy regen.
 
 - ✅ Visual discovery (explores to find stations and extractors)
 - ✅ Resource gathering (navigates to extractors, handles cooldowns)
-- ✅ Heart assembly (deposits resources at hub)
+- ✅ Heart assembly (deposits resources at assembler)
 - ✅ Heart delivery (brings hearts to chest)
 - ✅ Energy management (recharges when low)
 - ✅ Extractor tracking (remembers positions, cooldowns, remaining uses)
@@ -153,16 +153,21 @@ uv run cogames play --mission evals.diagnostic_radial -p baseline --cogs 4
 - ✅ Extractor restoration
 - ✅ Resource deficit management (ensures enough resources for both unclipping and hearts)
 
-**Unclip Item Mapping**: | Clipped Resource | Unclip Item | Crafted From | Glyph |
-|-----------------|-------------|--------------|-------| | Oxygen | decoder | carbon | gear | | Carbon | modulator |
-oxygen | gear | | Germanium | resonator | silicon | gear | | Silicon | scrambler | germanium | gear |
+**Unclip Item Mapping**:
+
+| Clipped Resource | Unclip Item | Crafted From | Glyph |
+| ---------------- | ----------- | ------------ | ----- |
+| Oxygen           | decoder     | carbon       | gear  |
+| Carbon           | modulator   | oxygen       | gear  |
+| Germanium        | resonator   | silicon      | gear  |
+| Silicon          | scrambler   | germanium    | gear  |
 
 **Workflow**:
 
 1. Detects clipped extractor blocking progress
 2. Gathers craft resource (e.g., carbon for decoder)
 3. Changes glyph to "gear"
-4. Crafts unclip item at hub
+4. Crafts unclip item at assembler
 5. Navigates to clipped extractor
 6. Uses item to unclip
 7. Resumes normal gathering
@@ -208,7 +213,7 @@ All agents use a phase-based state machine:
 ```python
 class Phase(Enum):
     GATHER = "gather"          # Collecting resources
-    ASSEMBLE = "assemble"      # Crafting heart at hub
+    ASSEMBLE = "assemble"      # Crafting heart at assembler
     DELIVER = "deliver"        # Bringing heart to chest
     RECHARGE = "recharge"      # Restoring energy
     CRAFT_UNCLIP = "craft_unclip"  # UnclippingAgent only
@@ -228,7 +233,7 @@ Shared `pathfinding.py` module provides:
 
 Agents parse egocentric observations (11×11 grid) to detect:
 
-- Stations (hub, chest, junction, extractors)
+- Stations (assembler, chest, charger, extractors)
 - Other agents
 - Walls and obstacles
 - Agent state (resources, energy, inventory)

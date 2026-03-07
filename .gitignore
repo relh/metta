@@ -170,6 +170,9 @@ tools/dev/python_imports/*.txt
 # Claude memory directories
 .memory/
 .beads/
+.runtime/
+.claude/
+.logs/
 
 # AI-generated implementation plans (ephemeral, not for review)
 docs/plans/
