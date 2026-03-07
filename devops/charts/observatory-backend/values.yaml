@@ -30,6 +30,7 @@ env:
   EVAL_S3_BUCKET: "observatory-private"
   POLICY_S3_BUCKET: "observatory-private"
   RESULTS_S3_BUCKET: "observatory-private"
+  LOGIN_SERVICE_URL: http://softmax-com-frontend.softmax-com.svc.cluster.local
 
 secrets:
   machineToken: "machine-token-secret"
