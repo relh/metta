@@ -12,11 +12,15 @@ from fastapi import APIRouter, Body, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
-from metta.app_backend.config import DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.queries import episode_queries, policy_queries
+from metta.app_backend.queries.episode_metrics import (
+    aggregate_policy_agent_counts,
+    aggregate_policy_metrics,
+    filter_agent_metrics,
+)
 from metta.app_backend.queries.episode_queries import EpisodeWithTags
 from metta.app_backend.queries.policy_queries import PolicyNameTakenError
 from metta.app_backend.route_logger import timed_http_handler
@@ -28,9 +32,6 @@ logger = logging.getLogger(__name__)
 
 
 POLICY_NAME_MAX_LENGTH = 64
-
-
-ALLOWED_EPISODE_AGENT_METRICS = set(DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST)
 
 
 def _validate_policy_name(name: str) -> str:
@@ -386,28 +387,15 @@ def create_stats_router() -> APIRouter:
             agent_policy_map = {agent_id: uuid.UUID(pv_id) for agent_id, pv_id in agent_policy_map_str.items()}
 
             raw_agent_metrics = read_agent_metrics(conn, str(episode_id))
-            agent_metrics_result = [
-                (agent_id, metric_name, metric_value)
-                for agent_id, metric_name, metric_value in raw_agent_metrics
-                if metric_name in ALLOWED_EPISODE_AGENT_METRICS
-            ]
+            agent_metrics_result = filter_agent_metrics(raw_agent_metrics)
 
-            policy_metrics: dict[uuid.UUID, dict[str, float]] = {}
-            for agent_id, metric_name, metric_value in agent_metrics_result:
-                if agent_id not in agent_policy_map:
-                    continue
-                pv_id = agent_policy_map[agent_id]
-                metrics_for_policy = policy_metrics.setdefault(pv_id, {})
-                metrics_for_policy[metric_name] = metrics_for_policy.get(metric_name, 0.0) + float(metric_value)
+            policy_agent_counts = aggregate_policy_agent_counts(agent_policy_map)
+            policy_metrics_agg = aggregate_policy_metrics(agent_metrics_result, agent_policy_map)
 
-            policy_agent_counts: dict[uuid.UUID, int] = {}
-            for _agent_id, pv_id in agent_policy_map.items():
-                policy_agent_counts[pv_id] = policy_agent_counts.get(pv_id, 0) + 1
-
-            policy_versions = [(pv_id, count) for pv_id, count in policy_agent_counts.items()]
+            policy_versions = list(policy_agent_counts.items())
             policy_metrics_list = [
                 (pv_id, metric_name, value)
-                for pv_id, metrics in policy_metrics.items()
+                for pv_id, metrics in policy_metrics_agg.items()
                 for metric_name, value in metrics.items()
             ]
 

@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 from metta.app_backend.job_runner.event_processor import _reconcile_stale_jobs
@@ -8,7 +8,6 @@ from metta.app_backend.models.job_request import JobStatus
 
 
 def test_reconcile_handles_naive_job_timestamps():
-    stats_client = MagicMock()
     core_v1 = MagicMock()
     core_v1.list_namespaced_pod.return_value = SimpleNamespace(items=[])
 
@@ -20,8 +19,11 @@ def test_reconcile_handles_naive_job_timestamps():
         dispatched_at=None,
         created_at=datetime.now(UTC).replace(tzinfo=None),
     )
-    stats_client.list_jobs.return_value = [job]
 
-    _reconcile_stale_jobs(stats_client, core_v1)
+    with (
+        patch("metta.app_backend.job_runner.event_processor.list_jobs_by_status", return_value=[job]),
+        patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update,
+    ):
+        _reconcile_stale_jobs(core_v1)
 
-    stats_client.update_job.assert_not_called()
+    mock_update.assert_not_called()

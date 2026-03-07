@@ -34,7 +34,6 @@ def _failed_event(job_id: UUID) -> K8sEvent:
 
 def test_failed_event_updates_job_with_runtime_info() -> None:
     job_id = uuid4()
-    stats_client = MagicMock()
     job = JobRequest(
         id=job_id,
         job={"policy_uris": ["mock://random"], "assignments": [0], "env": {"game": {"num_agents": 1}}},
@@ -42,23 +41,23 @@ def test_failed_event_updates_job_with_runtime_info() -> None:
         job_type=JobType.episode,
         user_id="test-user",
     )
-    stats_client.get_job.return_value = job
 
-    def _apply_update(update_job_id: UUID, update) -> None:
-        assert update_job_id == job_id
-        if update.status is not None:
-            job.status = update.status
-        if update.error is not None:
-            job.error = update.error
-        if update.result is not None:
-            job.result = update.result
+    result_capture: dict = {}
 
-    stats_client.update_job.side_effect = _apply_update
+    def _mock_update_job_status(jid, status, error=None, error_type=None, worker=None, result=None):
+        if jid == job_id:
+            job.status = status
+            if error is not None:
+                job.error = error
+            if result is not None:
+                result_capture.update(result)
 
     core_v1 = MagicMock()
     batch_v1 = MagicMock()
 
     with (
+        patch("metta.app_backend.job_runner.event_processor._fetch_job_if_actionable", return_value=job),
+        patch("metta.app_backend.job_runner.event_processor._update_job_status", side_effect=_mock_update_job_status),
         patch("metta.app_backend.job_runner.event_processor.capture_pod_logs"),
         patch("metta.app_backend.job_runner.event_processor._read_runner_error", return_value=None),
         patch("metta.app_backend.job_runner.event_processor._extract_error_from_logs_with_retry", return_value="boom"),
@@ -73,12 +72,11 @@ def test_failed_event_updates_job_with_runtime_info() -> None:
         ),
         patch("metta.app_backend.job_runner.event_processor._delete_k8s_job"),
     ):
-        _process_event(stats_client, core_v1, batch_v1, _failed_event(job_id))
+        _process_event(core_v1, batch_v1, _failed_event(job_id))
 
     assert job.status == JobStatus.failed
-    assert isinstance(job.result, dict)
-    assert job.result["runner_image"] == RUNNER_IMAGE
-    assert job.result["runner_image_id"] == RUNNER_IMAGE_ID
-    assert job.result["instance_type"] == "m5.xlarge"
-    assert job.result["git_commit"] == "abc123"
-    assert job.result["cogames_version"] == "0.5.0"
+    assert result_capture["runner_image"] == RUNNER_IMAGE
+    assert result_capture["runner_image_id"] == RUNNER_IMAGE_ID
+    assert result_capture["instance_type"] == "m5.xlarge"
+    assert result_capture["git_commit"] == "abc123"
+    assert result_capture["cogames_version"] == "0.5.0"

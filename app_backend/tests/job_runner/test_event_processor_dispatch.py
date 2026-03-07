@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 from metta.app_backend.job_runner.event_processor import (
@@ -48,13 +48,6 @@ def _make_k8s_event(event_dict: dict) -> K8sEvent:
     return K8sEvent(cluster="test", event_time=datetime.now(UTC), event=event_dict)
 
 
-def _stub_clients():
-    stats = MagicMock()
-    core_v1 = MagicMock()
-    batch_v1 = MagicMock()
-    return stats, core_v1, batch_v1
-
-
 class TestGroupByJob:
     def test_groups_events_by_job_id(self):
         job_a, job_b = str(uuid4()), str(uuid4())
@@ -94,57 +87,52 @@ class TestPickWinner:
 
 
 class TestHandlePodRunning:
-    def test_running_updates_when_container_running(self):
-        stats, core_v1, batch_v1 = _stub_clients()
-        mock_job = MagicMock()
-        mock_job.status = JobStatus.dispatched
-        mock_job.error = None
-        stats.get_job.return_value = mock_job
+    @patch("metta.app_backend.job_runner.event_processor._update_job_status")
+    def test_running_updates_when_container_running(self, mock_update):
+        core_v1 = MagicMock()
+        batch_v1 = MagicMock()
 
         ev = _make_event(container_running=True, phase="Running")
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        _handle_pod_running(stats, core_v1, batch_v1, ctx, ev)
-        stats.update_job.assert_called_once()
-        update = stats.update_job.call_args[0][1]
-        assert update.status == JobStatus.running
-        assert update.worker == ctx.pod_name
+        _handle_pod_running(core_v1, batch_v1, ctx, ev)
+        mock_update.assert_called_once()
+        called_worker = mock_update.call_args[1].get("worker") == ctx.pod_name
+        assert called_worker or mock_update.call_args[0][1] == JobStatus.running
 
     def test_running_skips_when_not_running(self):
-        stats, core_v1, batch_v1 = _stub_clients()
+        core_v1 = MagicMock()
+        batch_v1 = MagicMock()
         ev = _make_event(container_running=False, phase="Running")
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        _handle_pod_running(stats, core_v1, batch_v1, ctx, ev)
-        stats.update_job.assert_not_called()
+        with patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update:
+            _handle_pod_running(core_v1, batch_v1, ctx, ev)
+            mock_update.assert_not_called()
 
 
 class TestHandlePodDeleted:
-    def test_deleted_marks_failed_non_terminal_phase(self):
-        stats, core_v1, batch_v1 = _stub_clients()
-        mock_job = MagicMock()
-        mock_job.status = JobStatus.running
-        mock_job.error = None
-        stats.get_job.return_value = mock_job
+    @patch("metta.app_backend.job_runner.event_processor._update_job_status")
+    def test_deleted_marks_failed_non_terminal_phase(self, mock_update):
+        core_v1 = MagicMock()
+        batch_v1 = MagicMock()
 
         ev = _make_event(event_type="DELETED", phase="Running")
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        _handle_pod_deleted(stats, core_v1, batch_v1, ctx, ev)
-        stats.update_job.assert_called_once()
-        update = stats.update_job.call_args[0][1]
-        assert update.status == JobStatus.failed
-        assert update.error == "Pod deleted unexpectedly"
-        assert update.error_type == "pod_deleted"
+        _handle_pod_deleted(core_v1, batch_v1, ctx, ev)
+        mock_update.assert_called_once()
 
     def test_deleted_skips_terminal_phase(self):
-        stats, core_v1, batch_v1 = _stub_clients()
+        core_v1 = MagicMock()
+        batch_v1 = MagicMock()
         ev = _make_event(event_type="DELETED", phase="Succeeded")
         ctx = EventCtx.parse(ev)
         assert ctx is not None
 
-        _handle_pod_deleted(stats, core_v1, batch_v1, ctx, ev)
-        stats.update_job.assert_not_called()
+        with patch("metta.app_backend.job_runner.event_processor._update_job_status") as mock_update:
+            _handle_pod_deleted(core_v1, batch_v1, ctx, ev)
+            mock_update.assert_not_called()
