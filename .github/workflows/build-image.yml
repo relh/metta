@@ -26,3 +26,5 @@ jobs:
           image_name: metta
           dockerfile: devops/docker/Dockerfile
           aws_role: ${{ vars.AWS_ROLE }}
+          dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}

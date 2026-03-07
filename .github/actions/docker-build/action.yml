@@ -1,5 +1,5 @@
 name: "Build Docker Image"
-description: "Build Docker image"
+description: "Build Docker image and push to ECR and optionally Docker Hub"
 
 inputs:
   image_name:
@@ -23,6 +23,18 @@ inputs:
     description: "Additional Docker build args (newline-delimited KEY=VALUE entries)"
     required: false
     default: ""
+  dockerhub_username:
+    description: "Docker Hub username (optional - if provided, will also push to Docker Hub)"
+    required: false
+    default: ""
+  dockerhub_token:
+    description: "Docker Hub token (optional)"
+    required: false
+    default: ""
+  dockerhub_repo:
+    description: "Docker Hub repository (optional, defaults to softmax-inc/<image_name>)"
+    required: false
+    default: ""
 
 outputs:
   tag:
@@ -42,11 +54,42 @@ runs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
+    - name: Login to Docker Hub
+      if: ${{ inputs.dockerhub_username != '' && inputs.dockerhub_token != '' }}
+      uses: docker/login-action@v3
+      with:
+        username: ${{ inputs.dockerhub_username }}
+        password: ${{ inputs.dockerhub_token }}
+
+    - name: Compute image list
+      id: images
+      shell: bash
+      run: |
+        ECR_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ inputs.image_name }}"
+        IMAGES="$ECR_IMAGE"
+
+        # Add Docker Hub if credentials provided
+        if [ -n "${{ inputs.dockerhub_username }}" ] && [ -n "${{ inputs.dockerhub_token }}" ]; then
+          if [ -n "${{ inputs.dockerhub_repo }}" ]; then
+            DOCKERHUB_IMAGE="${{ inputs.dockerhub_repo }}"
+          else
+            DOCKERHUB_IMAGE="softmax-inc/${{ inputs.image_name }}"
+          fi
+          IMAGES="$ECR_IMAGE"$'\n'"$DOCKERHUB_IMAGE"
+        fi
+
+        # Use heredoc for multiline output
+        {
+          echo "list<<EOF"
+          echo "$IMAGES"
+          echo "EOF"
+        } >> $GITHUB_OUTPUT
+
     - name: Extract metadata (tags, labels) for Docker
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ steps.login-ecr.outputs.registry }}/${{ inputs.image_name }}
+        images: ${{ steps.images.outputs.list }}
         tags: |
           type=sha,format=long,priority=1000,suffix=${{ inputs.suffix }}
           type=sha,priority=999,suffix=${{ inputs.suffix }}
