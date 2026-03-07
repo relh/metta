@@ -4,7 +4,7 @@ import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 import { buildEmbeddedDiagnoseUrl } from "@observatory/lib/diagnose";
 
-import { PolicyDashboardEmbed } from "../policy-dashboard/PolicyDashboardEmbed";
+import { SurfaceEmbed } from "../SurfaceEmbed";
 
 export default function DiagnosePage() {
   if (!config.diagnoseUrl) {
@@ -30,7 +30,7 @@ export default function DiagnosePage() {
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-114px)]">
-        <PolicyDashboardEmbed src={diagnoseUrl} />
+        <SurfaceEmbed src={diagnoseUrl} serviceName="Diagnose" />
       </div>
     </SoftmaxGuard>
   );

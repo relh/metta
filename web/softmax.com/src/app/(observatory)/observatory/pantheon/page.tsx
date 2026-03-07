@@ -3,7 +3,7 @@ import { Metadata } from "next";
 import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 
-import { PolicyDashboardEmbed } from "../policy-dashboard/PolicyDashboardEmbed";
+import { SurfaceEmbed } from "../SurfaceEmbed";
 
 export default function PantheonPage() {
   if (!config.pantheonUrl) {
@@ -27,7 +27,7 @@ export default function PantheonPage() {
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-114px)]">
-        <PolicyDashboardEmbed src={config.pantheonUrl} />
+        <SurfaceEmbed src={config.pantheonUrl} serviceName="Pantheon" />
       </div>
     </SoftmaxGuard>
   );

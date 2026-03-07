@@ -4,7 +4,7 @@ import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 import { buildEmbeddedDiagnoseUrl } from "@observatory/lib/diagnose";
 
-import { PolicyDashboardEmbed } from "../../policy-dashboard/PolicyDashboardEmbed";
+import { SurfaceEmbed } from "../../SurfaceEmbed";
 
 type DiagnoseRunParams = {
   runId: string;
@@ -39,7 +39,7 @@ export default async function DiagnoseRunPage({
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-114px)]">
-        <PolicyDashboardEmbed src={diagnoseUrl} />
+        <SurfaceEmbed src={diagnoseUrl} serviceName="Diagnose" />
       </div>
     </SoftmaxGuard>
   );

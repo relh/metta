@@ -1,15 +1,17 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
 
-import { uploadDiagnoseBundle } from '../lib/api'
+import { type DiagnoseUploadResponse, uploadDiagnoseBundle } from '../lib/api'
 
 const DEFAULT_DIAGNOSE_COMMAND =
   'uv run cogames diagnose class=random --mission-set cogsguard_evals --bundle-zip ./diagnose-results.zip'
 
-export function DiagnoseUploadPanel() {
-  const router = useRouter()
+type DiagnoseUploadPanelProps = {
+  onUploaded?: (uploaded: DiagnoseUploadResponse) => void
+}
+
+export function DiagnoseUploadPanel({ onUploaded }: DiagnoseUploadPanelProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -23,7 +25,7 @@ export function DiagnoseUploadPanel() {
     try {
       const uploaded = await uploadDiagnoseBundle(bundle)
       setSuccess(`Imported ${uploaded.run_id} from ${bundle.name}.`)
-      router.refresh()
+      onUploaded?.(uploaded)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

@@ -14,19 +14,17 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function resolveThemedSrc(src: string, authToken: string | null): string {
-  try {
-    const url = new URL(src, window.location.origin);
-    const isDark = document.documentElement.classList.contains("dark");
-    url.hash = authToken ? encodeURIComponent(authToken) : "";
-    url.searchParams.set("theme", isDark ? "dark" : "light");
-    return url.toString();
-  } catch {
-    return src;
-  }
-}
+type SurfaceEmbedProps = {
+  src: string;
+  serviceName: string;
+  iframeTitle?: string;
+};
 
-export function BardoEmbed({ src }: { src: string }) {
+export function SurfaceEmbed({
+  src,
+  serviceName,
+  iframeTitle,
+}: SurfaceEmbedProps) {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [themedSrc, setThemedSrc] = useState<string | null>(null);
 
@@ -36,6 +34,22 @@ export function BardoEmbed({ src }: { src: string }) {
     let cancelled = false;
     let authToken: string | null = null;
     let authTokenExpiresAtMs = 0;
+
+    const resolvedServiceName =
+      serviceName.trim().length > 0 ? serviceName.trim() : "Service";
+    const serviceNameLower = resolvedServiceName.toLowerCase();
+
+    function resolveThemedSrc(authToken: string | null): string {
+      try {
+        const url = new URL(src, window.location.origin);
+        const isDark = document.documentElement.classList.contains("dark");
+        url.hash = authToken ? encodeURIComponent(authToken) : "";
+        url.searchParams.set("theme", isDark ? "dark" : "light");
+        return url.toString();
+      } catch {
+        return src;
+      }
+    }
 
     const fetchSessionToken = async (): Promise<{
       authToken: string;
@@ -47,7 +61,7 @@ export function BardoEmbed({ src }: { src: string }) {
       });
       if (!response.ok) {
         throw new Error(
-          `Failed to create bardo session token (${response.status})`,
+          `Failed to create ${serviceNameLower} token (${response.status})`,
         );
       }
 
@@ -56,7 +70,6 @@ export function BardoEmbed({ src }: { src: string }) {
       if (!nextToken) {
         throw new Error("Session token API returned an empty token");
       }
-
       const expiresAtRaw = String(payload.expiresAt ?? "").trim();
       const expiresAtMs = Date.parse(expiresAtRaw);
       if (!Number.isFinite(expiresAtMs)) {
@@ -65,8 +78,7 @@ export function BardoEmbed({ src }: { src: string }) {
       return { authToken: nextToken, expiresAtMs };
     };
 
-    const updateThemedSrc = () =>
-      setThemedSrc(resolveThemedSrc(src, authToken));
+    const updateThemedSrc = () => setThemedSrc(resolveThemedSrc(authToken));
 
     const refreshSessionTokenIfNeeded = async () => {
       if (
@@ -75,7 +87,6 @@ export function BardoEmbed({ src }: { src: string }) {
       )
         return;
       const next = await fetchSessionToken();
-      if (cancelled) return;
       authToken = next.authToken;
       authTokenExpiresAtMs = next.expiresAtMs;
       updateThemedSrc();
@@ -87,9 +98,9 @@ export function BardoEmbed({ src }: { src: string }) {
 
       try {
         const next = await fetchSessionToken();
-        if (cancelled) return;
         authToken = next.authToken;
         authTokenExpiresAtMs = next.expiresAtMs;
+
         updateThemedSrc();
 
         observer = new MutationObserver(updateThemedSrc);
@@ -106,7 +117,7 @@ export function BardoEmbed({ src }: { src: string }) {
         }, TOKEN_REFRESH_CHECK_MS);
       } catch (error) {
         if (!cancelled) {
-          setThemedSrc(resolveThemedSrc(src, null));
+          setThemedSrc(resolveThemedSrc(null));
           setBootstrapError(toErrorMessage(error));
         }
       }
@@ -121,12 +132,16 @@ export function BardoEmbed({ src }: { src: string }) {
         clearInterval(refreshInterval);
       }
     };
-  }, [src]);
+  }, [serviceName, src]);
+
+  const resolvedServiceName =
+    serviceName.trim().length > 0 ? serviceName.trim() : "Service";
+  const serviceNameLower = resolvedServiceName.toLowerCase();
 
   if (!themedSrc) {
     return (
       <div className="text-foreground-muted flex h-full w-full items-center justify-center">
-        Preparing bardo session...
+        Preparing {serviceNameLower} session...
       </div>
     );
   }
@@ -135,11 +150,11 @@ export function BardoEmbed({ src }: { src: string }) {
     <>
       {bootstrapError ? (
         <div className="mb-2 rounded bg-red-500/15 px-3 py-2 text-sm text-red-500">
-          Unable to prepare bardo authentication: {bootstrapError}
+          Unable to prepare {serviceNameLower} authentication: {bootstrapError}
         </div>
       ) : null}
       <iframe
-        title="Policy Bardo"
+        title={iframeTitle ?? resolvedServiceName}
         src={themedSrc}
         className="bg-background h-full w-full border-0"
         referrerPolicy="no-referrer"

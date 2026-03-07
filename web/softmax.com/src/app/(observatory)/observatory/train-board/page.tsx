@@ -1,7 +1,7 @@
 import { config } from "@observatory/config";
 import { SoftmaxGuard } from "@observatory/components/SoftmaxGuard";
 
-import { PolicyDashboardEmbed } from "../policy-dashboard/PolicyDashboardEmbed";
+import { SurfaceEmbed } from "../SurfaceEmbed";
 
 export default function TrainBoardPage() {
   if (!config.trainBoardUrl) {
@@ -25,7 +25,7 @@ export default function TrainBoardPage() {
   return (
     <SoftmaxGuard>
       <div className="h-[calc(100vh-114px)]">
-        <PolicyDashboardEmbed src={config.trainBoardUrl} />
+        <SurfaceEmbed src={config.trainBoardUrl} serviceName="Train Board" />
       </div>
     </SoftmaxGuard>
   );
