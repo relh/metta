@@ -212,12 +212,20 @@ def dashboards_sync(
         "--dry-run",
         help="Print dashboard configs without syncing to Datadog.",
     ),
+    title_filter: str | None = typer.Option(
+        None,
+        "--title",
+        "-t",
+        help="Only sync dashboards whose title contains this substring.",
+    ),
 ) -> None:
     """Sync dashboard definitions to Datadog."""
     from devops.datadog.dashboards import get_all_dashboard_configs  # noqa: PLC0415
     from devops.datadog.dashboards_client import DatadogDashboardsClient  # noqa: PLC0415
 
     configs = get_all_dashboard_configs()
+    if title_filter:
+        configs = [c for c in configs if title_filter.lower() in c["title"].lower()]
 
     if dry_run:
         typer.echo(f"Would sync {len(configs)} dashboards:\n")

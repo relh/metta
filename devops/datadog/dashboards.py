@@ -547,7 +547,6 @@ def stable_runner_health_dashboard() -> dict:
 
 
 _PROD_FILTER = "service:observatory-backend,env:production,job_type:episode"
-_LIVE_SPAN = "4h"
 
 
 def _flow_qv_sum(title: str, queries: list[str], formula: str, *, precision: int = 0, unit: str = "") -> dict:
@@ -568,7 +567,6 @@ def _flow_qv_sum(title: str, queries: list[str], formula: str, *, precision: int
                 }
             ],
             "timeseries_background": {"type": "area"},
-            "time": {"live_span": _LIVE_SPAN},
             "precision": precision,
             "autoscale": True,
         },
@@ -668,9 +666,10 @@ def pipeline_dashboard() -> dict:
         ),
         _at(_arrow, x=7, y=0, w=1, h=4),
         _at(
-            _flow_qv(
+            _flow_qv_sum(
                 "Completed /hr",
-                f"sum:job.state_transition{{{_PROD_FILTER},to_status:completed}}.as_count().rollup(sum, 3600)",
+                [f"avg:job.state_transition{{{_PROD_FILTER},to_status:completed}}.as_rate()"],
+                "q0 * 3600",
             ),
             x=8,
             y=0,
@@ -678,9 +677,10 @@ def pipeline_dashboard() -> dict:
             h=2,
         ),
         _at(
-            _flow_qv(
+            _flow_qv_sum(
                 "Failed /hr",
-                f"sum:job.state_transition{{{_PROD_FILTER},to_status:failed}}.as_count().rollup(sum, 3600)",
+                [f"avg:job.state_transition{{{_PROD_FILTER},to_status:failed}}.as_rate()"],
+                "q0 * 3600",
             ),
             x=10,
             y=0,
