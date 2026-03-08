@@ -70,7 +70,7 @@ spec:
           {{- end }}
           resources:
             requests:
-              cpu: "1"
+              cpu: "2"
               memory: "1Gi"
               ephemeral-storage: "10Gi"
             limits:
@@ -83,7 +83,7 @@ spec:
               path: /whoami
               port: 8000
             periodSeconds: 5
-            failureThreshold: 60 # allow up to 60*5 seconds = 5 minutes (accounting for uv sync)
+            failureThreshold: 120 # allow up to 120*5 seconds = 10 minutes (5GB image pull + app startup)
             timeoutSeconds: 3
           livenessProbe:
             httpGet:
