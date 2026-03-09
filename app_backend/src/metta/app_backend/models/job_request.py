@@ -51,7 +51,7 @@ class JobRequestUpdate(SQLModel):
     )
     error: str | None = Field(default=None, description="Tracks k8s-lifecycle errors, not semantic job errors")
     error_type: str | None = Field(
-        default=None, description="Classified error type: timeout, oom, policy_error, unknown"
+        default=None, description="Classified error type: timeout, oom, policy_error, crash, unknown"
     )
     running_at: datetime | None = None
     completed_at: datetime | None = None

@@ -15,7 +15,7 @@ from mettagrid.runner.types import RunnerError
 def test_error_types_are_distinct():
     """Verify the new error types are distinct from 'unknown'."""
     lifecycle_error_types = ["pod_not_found", "pod_deleted", "result_missing", "result_error"]
-    runtime_error_types = ["policy_error", "timeout", "oom", "config_error", "unknown"]
+    runtime_error_types = ["policy_error", "timeout", "oom", "config_error", "crash", "unknown"]
 
     assert set(lifecycle_error_types).isdisjoint(set(runtime_error_types))
     assert "unknown" not in lifecycle_error_types
