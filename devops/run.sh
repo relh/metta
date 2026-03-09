@@ -21,6 +21,9 @@ export PYTHONPATH=${PYTHONPATH:-}:$(pwd)
 export PYTHONOPTIMIZE=1
 export WANDB_DIR="./wandb"
 export DATA_DIR=${DATA_DIR:-./train_dir}
+if [[ "${PYTORCH_CUDA_ALLOC_CONF:-}" != *"expandable_segments"* ]]; then
+  export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:+${PYTORCH_CUDA_ALLOC_CONF},}expandable_segments:True"
+fi
 
 echo "[INFO] Starting training..."
 
