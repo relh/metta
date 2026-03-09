@@ -35,6 +35,7 @@ jobs:
         --set resources.limits.cpu=1000m \
         --set resources.limits.memory=512Mi \
         --set frontend.replicas=1 \
+        --set frontend.autoscaling.enabled=false \
         --set frontend.min_available=0 \
         --set cronjobs=false \
         --set db_migrate=false \

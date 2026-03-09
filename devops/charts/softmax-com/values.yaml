@@ -10,8 +10,13 @@ cert_manager_issuer: letsencrypt
 
 frontend:
   secret_name: softmax-com-frontend-secrets
-  replicas: 5
+  replicas: 5 # only used when autoscaling is disabled
   min_available: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
 
 observatory_api_url: http://observatory-backend.observatory.svc.cluster.local:8000
 
