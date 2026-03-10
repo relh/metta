@@ -45,12 +45,61 @@ jobs:
           name: sdist
           path: dist/*.tar.gz
 
-  build-wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [blacksmith-4vcpu-ubuntu-2404, macos-14]
+  build-wheels-linux:
+    name: Build Linux wheels
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.1"
+
+      - uses: pypa/cibuildwheel@v3.2.0
+        env:
+          CIBW_BUILD: "cp311-* cp312-*"
+          CIBW_SKIP: "*-musllinux* *i686"
+          CIBW_ARCHS_LINUX: auto
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_34
+          CIBW_BEFORE_ALL_LINUX: |-
+            git config --global --add safe.directory /project
+            dnf install -y dnf-plugins-core
+            dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
+            dnf install -y cuda-toolkit-12-8
+            ln -sfn /usr/local/cuda-12.8 /usr/local/cuda
+            /usr/local/cuda/bin/nvcc --version
+          CIBW_ENVIRONMENT_LINUX: >-
+            CUDA_HOME=/usr/local/cuda
+            PATH=/usr/local/cuda/bin:$PATH
+            LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+            TORCH_CUDA_ARCH_LIST='8.0;8.6;8.9;9.0+PTX'
+            PUFFERLIB_BUILD_CUDA=1
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >-
+            auditwheel repair {wheel} --wheel-dir {dest_dir}
+            --exclude libtorch.so
+            --exclude libtorch_cpu.so
+            --exclude libtorch_cuda.so
+            --exclude libtorch_python.so
+            --exclude libc10.so
+            --exclude libc10_cuda.so
+            --exclude libcudart.so.12
+            --exclude libgomp.so.1
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          CI: "true"
+        with:
+          package-dir: packages/pufferlib-core
+          output-dir: wheelhouse
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-blacksmith-4vcpu-ubuntu-2404
+          path: wheelhouse/*.whl
+
+  build-wheels-macos:
+    name: Build macOS wheels
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v6
         with:
@@ -65,16 +114,6 @@ jobs:
           CIBW_BUILD: "cp311-* cp312-*"
           CIBW_SKIP: "*-musllinux* *i686"
           CIBW_ARCHS_MACOS: "arm64"
-          CIBW_ARCHS_LINUX: auto
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_34
-          CIBW_BEFORE_ALL_LINUX: git config --global --add safe.directory /project
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >-
-            auditwheel repair {wheel} --wheel-dir {dest_dir}
-            --exclude libtorch.so
-            --exclude libtorch_cpu.so
-            --exclude libtorch_python.so
-            --exclude libc10.so
-            --exclude libgomp.so.1
           CIBW_REPAIR_WHEEL_COMMAND_MACOS: ""
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
           CI: "true"
@@ -84,11 +123,73 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-macos-14
           path: wheelhouse/*.whl
 
+  verify-linux-wheels:
+    name: Verify Linux CUDA wheel on Python ${{ matrix.python-version }}
+    needs: build-wheels-linux
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    strategy:
+      matrix:
+        include:
+          - python-version: "3.11"
+            python-tag: cp311
+          - python-version: "3.12"
+            python-tag: cp312
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-blacksmith-4vcpu-ubuntu-2404
+          path: dist
+
+      - name: Install torch and built wheel
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.9.0
+          WHEEL=$(ls dist/pufferlib_core-*-${{ matrix.python-tag }}-${{ matrix.python-tag }}-manylinux_2_34_x86_64.whl)
+          python -m pip install --force-reinstall --no-deps "$WHEEL"
+
+      - name: Verify CUDA kernel registration
+        run: |
+          python - <<'PY'
+          import importlib.machinery
+          import importlib.metadata
+          import importlib.util
+          import pathlib
+          import sys
+          import types
+
+          import torch
+
+          version = importlib.metadata.version("pufferlib-core")
+          dist = importlib.metadata.distribution("pufferlib-core")
+          extension_suffixes = tuple(importlib.machinery.EXTENSION_SUFFIXES)
+          extension_relpath = next(
+              path
+              for path in dist.files or []
+              if path.name.startswith("_C") and path.name.endswith(extension_suffixes)
+          )
+          extension_path = pathlib.Path(dist.locate_file(extension_relpath))
+          package = types.ModuleType("pufferlib")
+          package.__path__ = [str(extension_path.parent)]
+          sys.modules["pufferlib"] = package
+          spec = importlib.util.spec_from_file_location("pufferlib._C", extension_path)
+          module = importlib.util.module_from_spec(spec)
+          sys.modules["pufferlib._C"] = module
+          spec.loader.exec_module(module)
+          assert torch._C._dispatch_has_kernel_for_dispatch_key(
+              "pufferlib::compute_puff_advantage",
+              "CUDA",
+          ), f"{version} wheel is missing CUDA dispatch registration"
+          PY
+
   publish:
-    needs: [build-sdist, build-wheels]
+    needs: [build-sdist, build-wheels-linux, build-wheels-macos, verify-linux-wheels]
     if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.publish == 'yes' }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     env:
@@ -113,7 +214,7 @@ jobs:
 
   notify-discord:
     name: Notify Discord
-    needs: [build-sdist, build-wheels, publish]
+    needs: [build-sdist, build-wheels-linux, build-wheels-macos, verify-linux-wheels, publish]
     if: always()
     runs-on: blacksmith-2vcpu-ubuntu-2404
     permissions:
