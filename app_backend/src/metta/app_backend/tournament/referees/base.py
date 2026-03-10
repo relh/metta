@@ -1,7 +1,7 @@
 import math
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import NamedTuple
+from typing import Any, NamedTuple, Sequence
 from uuid import UUID
 
 from metta_alo.scoring import Scorer, WeightedScorer
@@ -31,6 +31,8 @@ class MatchCountEntry(NamedTuple):
 
 MatchCountKey = tuple[tuple[UUID, ...], tuple[int, ...]]
 MatchCounts = dict[MatchCountKey, MatchCountEntry]
+# Keep each IN-list safely under Postgres's 65,535 bind-parameter limit.
+EPISODE_POLICY_QUERY_BATCH_SIZE = 30_000
 
 
 class EpisodeTags(BaseModel):
@@ -65,6 +67,28 @@ class LeaderboardStatsRow(BaseModel):
     match_count: int
     score_stddev: float | None = None
     score_percentiles: dict[int, float] = Field(default_factory=dict)
+
+
+async def _load_episode_policy_agent_counts(
+    session: Any,
+    episode_ids: Sequence[UUID],
+    *,
+    batch_size: int = EPISODE_POLICY_QUERY_BATCH_SIZE,
+) -> dict[UUID, dict[UUID, int]]:
+    agent_counts_by_episode: dict[UUID, dict[UUID, int]] = defaultdict(dict)
+    unique_episode_ids = list(dict.fromkeys(episode_ids))
+    for start in range(0, len(unique_episode_ids), batch_size):
+        batch = unique_episode_ids[start : start + batch_size]
+        counts_result = await session.execute(
+            select(
+                EpisodePolicy.episode_id,
+                EpisodePolicy.policy_version_id,
+                EpisodePolicy.num_agents,
+            ).where(col(EpisodePolicy.episode_id).in_(batch))
+        )
+        for ep_id, pv_id, num_agents in counts_result.all():
+            agent_counts_by_episode[ep_id][pv_id] = num_agents
+    return agent_counts_by_episode
 
 
 def compute_weighted_score_stddev(
@@ -226,17 +250,7 @@ class RefereeBase(ABC):
         episode_ids = [md.episode_id for md in match_data.values() if md.episode_id is not None]
 
         # Fetch agent counts — query EpisodePolicy directly, no need to join Episode table
-        agent_counts_by_episode: dict[UUID, dict[UUID, int]] = defaultdict(dict)
-        if episode_ids:
-            counts_result = await session.execute(
-                select(
-                    EpisodePolicy.episode_id,
-                    EpisodePolicy.policy_version_id,
-                    EpisodePolicy.num_agents,
-                ).where(col(EpisodePolicy.episode_id).in_(episode_ids))
-            )
-            for ep_id, pv_id, num_agents in counts_result.all():
-                agent_counts_by_episode[ep_id][pv_id] = num_agents
+        agent_counts_by_episode = await _load_episode_policy_agent_counts(session, episode_ids)
 
         # Build scored matches
         all_policy_ids: set[UUID] = set()
