@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Sequence, cast
 from uuid import UUID, uuid4
 
 import pytest
 from sqlmodel import col, select
 
+import metta.app_backend.database as database
 from metta.app_backend.database import db_session
 from metta.app_backend.models.episodes import Episode, EpisodePolicy, EpisodePolicyMetric
 from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
@@ -13,12 +15,8 @@ from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.models.tournament import Match, MatchPlayer, MatchStatus, Pool, PoolPlayer, Season
 from metta.app_backend.tournament.commissioners.base import CommissionerBase, MembershipChangeRequest
 from metta.app_backend.tournament.commissioners.teams.config import GameEnvGenerator, PolicyEvalStage
-from metta.app_backend.tournament.referees.base import (
-    MatchCounts,
-    MatchRequest,
-    RefereeBase,
-    _load_episode_policy_agent_counts,
-)
+from metta.app_backend.tournament.referees.base import MatchCounts, MatchRequest, RefereeBase, ScoredMatchData
+from metta.app_backend.tournament.referees.leaderboard_rows import group_match_rows
 from metta.app_backend.tournament.referees.teams.policy_stage import MockPolicyStageReferee
 from mettagrid.config.mettagrid_config import MettaGridConfig
 
@@ -50,35 +48,108 @@ class _TestReferee(RefereeBase):
 
 
 class _ExecuteRowsResult:
-    def __init__(self, rows: list[tuple[UUID, UUID, int]]) -> None:
+    def __init__(self, rows: list[SimpleNamespace]) -> None:
         self._rows = rows
 
-    def all(self) -> list[tuple[UUID, UUID, int]]:
+    def all(self) -> list[SimpleNamespace]:
         return self._rows
 
 
-class _RecordingEpisodePolicySession:
-    def __init__(self, policy_version_id: UUID) -> None:
-        self._policy_version_id = policy_version_id
-        self.batch_sizes: list[int] = []
+class _RecordingLeaderboardSession:
+    def __init__(self, rows: list[SimpleNamespace]) -> None:
+        self._rows = rows
+        self.execute_count = 0
+        self.queries: list[str] = []
 
-    async def execute(self, query: Any) -> _ExecuteRowsResult:
-        compiled = query.compile()
-        episode_ids = next(value for value in compiled.params.values() if isinstance(value, list))
-        self.batch_sizes.append(len(episode_ids))
-        return _ExecuteRowsResult([(episode_id, self._policy_version_id, 2) for episode_id in episode_ids])
+    async def execute(self, query: object) -> _ExecuteRowsResult:
+        self.execute_count += 1
+        self.queries.append(str(query))
+        return _ExecuteRowsResult(self._rows)
+
+
+class _RecordingScorer:
+    def __init__(self) -> None:
+        self.scored_matches: list[ScoredMatchData] = []
+
+    def compute_scores(
+        self,
+        policy_version_ids: Sequence[UUID],
+        matches: Sequence[Any],
+    ) -> dict[UUID, float]:
+        self.scored_matches = [cast(ScoredMatchData, match) for match in matches]
+        if not self.scored_matches:
+            return {}
+        first_match = self.scored_matches[0]
+        return {policy_id: first_match.policy_scores[policy_id] for policy_id in policy_version_ids}
+
+
+def test_group_match_rows_collects_joined_agent_counts() -> None:
+    match_id = uuid4()
+    policy_a = uuid4()
+    policy_b = uuid4()
+    rows = [
+        SimpleNamespace(
+            match_id=match_id,
+            assignments=[0, 1, 1],
+            policy_index=0,
+            score=1.0,
+            policy_version_id=policy_a,
+            num_agents=1,
+        ),
+        SimpleNamespace(
+            match_id=match_id,
+            assignments=[0, 1, 1],
+            policy_index=1,
+            score=2.0,
+            policy_version_id=policy_b,
+            num_agents=2,
+        ),
+    ]
+
+    grouped = group_match_rows(rows, include_num_agents=True)
+
+    assert grouped[match_id].players == [(0, 1.0, policy_a), (1, 2.0, policy_b)]
+    assert grouped[match_id].policy_agent_counts == {policy_a: 1, policy_b: 2}
 
 
 @pytest.mark.asyncio
-async def test_load_episode_policy_agent_counts_batches_large_lookups() -> None:
-    policy_version_id = uuid4()
-    episode_ids = [uuid4() for _ in range(5)]
-    session = _RecordingEpisodePolicySession(policy_version_id)
+async def test_get_leaderboard_with_stats_joins_episode_policy_agent_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    match_id = uuid4()
+    policy_a = uuid4()
+    policy_b = uuid4()
+    session = _RecordingLeaderboardSession(
+        [
+            SimpleNamespace(
+                match_id=match_id,
+                assignments=[0, 1, 1],
+                policy_index=0,
+                score=1.0,
+                policy_version_id=policy_a,
+                num_agents=1,
+            ),
+            SimpleNamespace(
+                match_id=match_id,
+                assignments=[0, 1, 1],
+                policy_index=1,
+                score=2.0,
+                policy_version_id=policy_b,
+                num_agents=2,
+            ),
+        ]
+    )
+    scorer = _RecordingScorer()
+    referee = _TestReferee()
+    referee.scorer = cast(Any, scorer)
+    monkeypatch.setattr(database, "get_db", lambda: session)
 
-    agent_counts = await _load_episode_policy_agent_counts(session, episode_ids, batch_size=2)
+    leaderboard = await referee.get_leaderboard_with_stats(uuid4())
 
-    assert session.batch_sizes == [2, 2, 1]
-    assert agent_counts == {episode_id: {policy_version_id: 2} for episode_id in episode_ids}
+    assert session.execute_count == 1
+    assert "LEFT OUTER JOIN episode_policies" in session.queries[0]
+    assert " IN (" not in session.queries[0].upper()
+    assert len(scorer.scored_matches) == 1
+    assert scorer.scored_matches[0].policy_agent_counts == {policy_a: 1, policy_b: 2}
+    assert {row.policy_version_id for row in leaderboard} == {policy_a, policy_b}
 
 
 @pytest.mark.asyncio
