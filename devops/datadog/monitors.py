@@ -123,7 +123,7 @@ def k8s_crashloopbackoff_monitor() -> dict:
     )
 
     return {
-        "name": "[Kubernetes] Pod {{pod_name.name}} is CrashloopBackOff on namespace {{kube_namespace.name}}",
+        "name": "[Kubernetes] CrashLoopBackOff Pod",
         "type": "query alert",
         "query": (
             "max(last_10m):default_zero("
@@ -160,7 +160,7 @@ def k8s_node_count_monitor() -> dict:
     indicates runaway orchestrator scaling.
     """
     return {
-        "name": "[Kubernetes] Too many nodes: {{value}}",
+        "name": "[Kubernetes] Too Many Nodes",
         "type": "query alert",
         "query": "avg(last_1d):avg:kubernetes_state.node.count{kube_cluster_name:main} > 200",
         "message": (
@@ -186,7 +186,7 @@ def job_queue_buildup_monitor() -> dict:
     indicating the system can't process jobs fast enough. Backpressure kicks in at 300.
     """
     return {
-        "name": "[Tournament] Job Queue Buildup: {{value}} outstanding",
+        "name": "[Tournament] Job Queue Buildup",
         "type": "query alert",
         "query": "avg(last_5m):sum:job.outstanding_count{service:observatory-backend} > 280",
         "message": (
@@ -291,7 +291,7 @@ def job_lifecycle_failure_rate_monitor() -> dict:
     Includes minimum volume guard to avoid false positives on low traffic.
     """
     return {
-        "name": "[Tournament] High Job Lifecycle Failure Rate: {{value}}%",
+        "name": "[Tournament] High Job Lifecycle Failure Rate",
         "type": "query alert",
         "query": (
             "sum(last_15m):"
@@ -332,7 +332,7 @@ def job_high_oom_rate_monitor() -> dict:
     more memory or there's a memory leak. Includes minimum volume guard.
     """
     return {
-        "name": "[Tournament] High OOM Rate: {{value}}% of failures",
+        "name": "[Tournament] High OOM Rate",
         "type": "query alert",
         "query": (
             "sum(last_15m):"
@@ -373,7 +373,7 @@ def job_high_pending_queue_monitor() -> dict:
     which tracks total outstanding jobs.
     """
     return {
-        "name": "[Tournament] High Pending Queue: {{value}} pending",
+        "name": "[Tournament] High Pending Queue",
         "type": "query alert",
         "query": "avg(last_10m):avg:job.outstanding_count{status:pending,service:observatory-backend} > 100",
         "message": (
@@ -403,7 +403,7 @@ def job_high_pending_queue_monitor() -> dict:
 def job_dispatched_queue_stuck_monitor() -> dict:
     """Monitor for sustained queue in dispatched state (scheduled but not running)."""
     return {
-        "name": "[Tournament] High Dispatched Queue: {{value}} dispatched",
+        "name": "[Tournament] High Dispatched Queue",
         "type": "query alert",
         "query": (
             f"avg(last_10m):avg:job.outstanding_count{{status:dispatched,{TOURNAMENT_EPISODE_METRIC_FILTER}}} > 25"
@@ -436,7 +436,7 @@ def job_slow_dispatch_monitor() -> dict:
     indicating K8s scheduling issues. Note: only measures completed dispatches.
     """
     return {
-        "name": "[Tournament] Slow Job Dispatch: {{value}}s p95",
+        "name": "[Tournament] Slow Job Dispatch",
         "type": "query alert",
         "query": "avg(last_30m):p95:job.stage_duration{stage:dispatched,service:observatory-backend}",
         "message": (
@@ -472,7 +472,7 @@ def job_no_activity_monitor() -> dict:
     check that may alert during legitimate downtime, but catches stuck commissioners.
     """
     return {
-        "name": "[Tournament] No Job Activity: {{value}} jobs in 10min",
+        "name": "[Tournament] No Job Activity",
         "type": "query alert",
         "query": ("sum(last_10m):sum:job.state_transition{service:observatory-backend}.as_count() < 1"),
         "message": (
@@ -511,7 +511,7 @@ def job_daily_cost_monitor() -> dict:
     runaway eval scaling or unexpectedly long-running jobs.
     """
     return {
-        "name": "[Tournament] Daily Job Cost: ${{value}}",
+        "name": "[Tournament] Daily Job Cost",
         "type": "query alert",
         "query": "sum(last_1d):sum:job.cost{service:observatory-backend}.as_count() > 10000",
         "message": (
@@ -571,7 +571,7 @@ def tournament_dispatch_activity_drop_monitor() -> dict:
 def tournament_unscored_completed_matches_monitor() -> dict:
     """Monitor for completed matches that remain unscored in commissioner sync."""
     return {
-        "name": "[Tournament] Completed Matches Waiting for Scores: {{value}}",
+        "name": "[Tournament] Completed Matches Waiting for Scores",
         "type": "query alert",
         "query": (
             "avg(last_15m):max:tournament.unscored_completed_matches{service:observatory-backend,env:production} > 10"
@@ -632,7 +632,7 @@ def latest_compat_runner_stale_monitor() -> dict:
 def observatory_api_5xx_density_monitor() -> dict:
     """Monitor for sustained high 5xx density on observatory API traffic."""
     return {
-        "name": "[Observatory API] High 5xx Density: {{value}}%",
+        "name": "[Observatory API] High 5xx Density",
         "type": "query alert",
         "query": (
             "sum(last_10m):("
@@ -664,7 +664,7 @@ def observatory_api_5xx_density_monitor() -> dict:
 def observatory_api_reachability_drop_monitor() -> dict:
     """Monitor for sudden drop in observatory API traffic (possible DNS/routing outage)."""
     return {
-        "name": "[Observatory API] Reachability Drop: {{value}} req/10m",
+        "name": "[Observatory API] Reachability Drop",
         "type": "query alert",
         "query": (f"sum(last_10m):sum:http.server.request.count{{{OBSERVATORY_API_METRIC_FILTER}}}.as_count() < 5"),
         "message": (
@@ -691,7 +691,7 @@ def observatory_api_reachability_drop_monitor() -> dict:
 def episode_length_spike_monitor() -> dict:
     """Monitor for sustained episode-length spikes in episode jobs."""
     return {
-        "name": "[Tournament] Episode Length Spike: {{value}} avg steps",
+        "name": "[Tournament] Episode Length Spike",
         "type": "query alert",
         "query": (
             "avg(last_10m):avg:episode.length{service:observatory-backend,env:production,job_type:episode} > 11000"
