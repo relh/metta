@@ -62,6 +62,20 @@ def _make_metrics():
     return metrics, recorded
 
 
+def _make_state_transition_metrics():
+    """Create a JobMetrics instance with instrumented transition counter."""
+    metrics = JobMetrics()
+    recorded: list[dict] = []
+    orig_add = metrics._state_transition_counter.add
+
+    def capture_add(amount, attributes=None, context=None):
+        recorded.append({"amount": amount, "attributes": attributes})
+        orig_add(amount, attributes=attributes, context=context)
+
+    metrics._state_transition_counter.add = capture_add  # type: ignore[assignment]
+    return metrics, recorded
+
+
 def _clear_pricing_caches():
     pricing_mod._on_demand_cache.clear()
     pricing_mod._spot_cache.clear()
@@ -213,6 +227,35 @@ class TestNoCostEmission:
         metrics.record_transition(JobStatus.running, JobStatus.completed, job, now, error_type=None, cost_usd=0.0)
 
         assert len(recorded) == 0
+
+
+class TestTransitionCompatTag:
+    def test_compat_version_extracted_from_episode_runner_image(self):
+        metrics, transitions = _make_state_transition_metrics()
+        now = datetime.now(UTC)
+        job = JobRequest(
+            id=uuid4(),
+            job_type=JobType.episode,
+            job={"episode_runner_image": "ghcr.io/metta-ai/episode-runner:compat-v0.7"},
+            status=JobStatus.pending,
+            user_id="test",
+            created_at=now,
+        )
+
+        metrics.record_transition(JobStatus.pending, JobStatus.dispatched, job, now, error_type=None)
+
+        assert len(transitions) == 1
+        assert transitions[0]["attributes"]["compat_version"] == "0.7"
+
+    def test_compat_version_defaults_to_none_when_missing(self):
+        metrics, transitions = _make_state_transition_metrics()
+        now = datetime.now(UTC)
+        job = _make_job(created_at=now)
+
+        metrics.record_transition(JobStatus.pending, JobStatus.dispatched, job, now, error_type=None)
+
+        assert len(transitions) == 1
+        assert transitions[0]["attributes"]["compat_version"] == "none"
 
 
 # ── EC2 pricing lookup ─────────────────────────────────────────────────

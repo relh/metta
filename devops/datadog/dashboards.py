@@ -8,10 +8,12 @@ from devops.stable.stable_check_metrics import (
     STABLE_CHECK_EFFECTIVE_STATUS_METRIC,
     STABLE_CHECK_RAW_STATUS_METRIC,
 )
+from metta.common.compat_version import get_compat_version
 
 METRIC = "metta.skills.usage"
 TIMEFRAME = "2d"
 STABLE_TIMEFRAME = "1w"
+LATEST_COMPAT_VERSION = get_compat_version()
 
 
 def _toplist_widget(title: str, *, group_by: str, x: int = 0, y: int = 0, width: int = 6, height: int = 4) -> dict:
@@ -667,6 +669,76 @@ def stable_runner_health_dashboard() -> dict:
                 "precision": 2,
             },
             "layout": {"x": 8, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "Dispatched Jobs (30m sum)",
+                "requests": [
+                    {
+                        "q": (
+                            "sum:job.state_transition{to_status:dispatched,"
+                            "service:observatory-backend,env:production,job_type:episode}.as_count()"
+                        ),
+                        "aggregator": "sum",
+                    }
+                ],
+                "time": {"live_span": "30m"},
+                "precision": 0,
+            },
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "Dispatched Queue (10m avg)",
+                "requests": [
+                    {
+                        "q": (
+                            "avg:job.outstanding_count{status:dispatched,"
+                            "service:observatory-backend,env:production,job_type:episode}"
+                        ),
+                        "aggregator": "avg",
+                    }
+                ],
+                "time": {"live_span": "10m"},
+                "precision": 1,
+            },
+            "layout": {"x": 3, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "Unscored Completed (15m max)",
+                "requests": [
+                    {
+                        "q": "max:tournament.unscored_completed_matches{service:observatory-backend,env:production}",
+                        "aggregator": "max",
+                    }
+                ],
+                "time": {"live_span": "15m"},
+                "precision": 0,
+            },
+            "layout": {"x": 6, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": f"Compat v{LATEST_COMPAT_VERSION} Running (6h sum)",
+                "requests": [
+                    {
+                        "q": (
+                            "sum:job.state_transition{to_status:running,"
+                            "service:observatory-backend,env:production,job_type:episode,"
+                            f"compat_version:{LATEST_COMPAT_VERSION}" + "}.as_count()"
+                        ),
+                        "aggregator": "sum",
+                    }
+                ],
+                "time": {"type": "live", "unit": "hour", "value": 6},
+                "precision": 0,
+            },
+            "layout": {"x": 9, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
         },
         {
             "definition": {

@@ -11,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from metta_alo.scoring import compute_average_scores_per_agent
+from opentelemetry import metrics as otel_metrics
 from opentelemetry import trace as otel_trace
 from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
@@ -56,6 +57,17 @@ from metta.common.otel.tracing import trace
 
 logger = logging.getLogger(__name__)
 tracer = otel_trace.get_tracer(__name__)
+meter = otel_metrics.get_meter(__name__)
+matches_scheduled_per_cycle_histogram = meter.create_histogram(
+    "tournament.matches_scheduled_per_cycle",
+    description="Matches scheduled per commissioner cycle",
+    unit="1",
+)
+unscored_completed_matches_histogram = meter.create_histogram(
+    "tournament.unscored_completed_matches",
+    description="Completed matches that still have at least one unscored player",
+    unit="1",
+)
 
 
 def _rss_mb() -> str:
@@ -235,6 +247,7 @@ class CommissionerBase(ABC):
 
         if total_scheduled > 0:
             logger.info(f"Scheduled {total_scheduled} new matches")
+        matches_scheduled_per_cycle_histogram.record(total_scheduled, attributes={"season": self.season_name})
 
         logger.info(f"[{self.season_name}] scheduling done, getting membership changes (rss={_rss_mb()})")
         changes = await self.get_membership_changes(pools)
@@ -459,6 +472,10 @@ class CommissionerBase(ABC):
         for match, episode_id in matches_with_episodes:
             if episode_id and any(mp.score is None for mp in match.players):
                 matches_needing_scores.append((match, episode_id))
+        unscored_completed_matches_histogram.record(
+            len(matches_needing_scores),
+            attributes={"season": self.season_name},
+        )
 
         if not matches_needing_scores:
             return False

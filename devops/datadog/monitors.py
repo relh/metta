@@ -16,6 +16,7 @@ from devops.stable.stable_check_metrics import (
     job_path_to_job_tag,
 )
 from devops.stable.stable_check_registry import discover_stable_checks
+from metta.common.compat_version import get_compat_version
 
 WEBHOOK_DISCORD = "@webhook-Discord"
 WEBHOOK_ONCALL = "@oncall-on-call"
@@ -29,6 +30,8 @@ STABLE_STALE_QUERY_LOOKBACK = f"last_{STABLE_STALE_HOURS}h"
 STABLE_FAILED_SERVICE_CHECK_LAST_COUNT = 1
 OBSERVATORY_API_METRIC_FILTER = "service:observatory-backend,env:production"
 OBSERVATORY_API_5XX_FILTER = f"{OBSERVATORY_API_METRIC_FILTER},http.status_code:5*"
+TOURNAMENT_EPISODE_METRIC_FILTER = "service:observatory-backend,env:production,job_type:episode"
+LATEST_COMPAT_VERSION = get_compat_version()
 
 
 def monitor_key_tag_for_name(monitor_name: str) -> str:
@@ -225,7 +228,7 @@ def job_failure_rate_monitor() -> dict:
         "message": (
             "{{value}} infrastructure job failures in the last 15 minutes (excludes policy and config errors).\n\n"
             "Check error types in Datadog or: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
-            f"{WEBHOOK_DISCORD}"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
         ),
         "tags": [
             "env:production",
@@ -397,6 +400,35 @@ def job_high_pending_queue_monitor() -> dict:
     }
 
 
+def job_dispatched_queue_stuck_monitor() -> dict:
+    """Monitor for sustained queue in dispatched state (scheduled but not running)."""
+    return {
+        "name": "[Tournament] High Dispatched Queue: {{value}} dispatched",
+        "type": "query alert",
+        "query": (
+            f"avg(last_10m):avg:job.outstanding_count{{status:dispatched,{TOURNAMENT_EPISODE_METRIC_FILTER}}} > 25"
+        ),
+        "message": (
+            "{{value}} jobs are stuck in dispatched state over the last 10 minutes.\n\n"
+            "This means jobs are being scheduled but not reaching running state.\n\n"
+            "Check:\n"
+            "- K8s node availability / autoscaling\n"
+            "- Runner pod scheduling errors\n"
+            "- https://observatory.softmax-research.net/episode-jobs?status=dispatched\n\n"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 25, "warning": 10},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
 def job_slow_dispatch_monitor() -> dict:
     """Monitor for slow job dispatch times.
 
@@ -502,6 +534,97 @@ def job_daily_cost_monitor() -> dict:
             "notify_no_data": False,
             "renotify_interval": 60,
             "include_tags": False,
+        },
+    }
+
+
+def tournament_dispatch_activity_drop_monitor() -> dict:
+    """Monitor for no new job dispatch transitions over a sustained window."""
+    return {
+        "name": "[Tournament] No Jobs Dispatched in 30m",
+        "type": "query alert",
+        "query": (
+            "sum(last_30m):"
+            f"sum:job.state_transition{{to_status:dispatched,{TOURNAMENT_EPISODE_METRIC_FILTER}}}.as_count() < 1"
+        ),
+        "message": (
+            "No tournament jobs were dispatched in the last 30 minutes.\n\n"
+            "This can indicate commissioner/scheduling stalls when tournaments should be active.\n\n"
+            "Check:\n"
+            "- Tournament commissioner logs\n"
+            "- Active tournaments and queue state\n"
+            "- https://observatory.softmax-research.net/tournaments\n\n"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 1},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 60,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
+def tournament_unscored_completed_matches_monitor() -> dict:
+    """Monitor for completed matches that remain unscored in commissioner sync."""
+    return {
+        "name": "[Tournament] Completed Matches Waiting for Scores: {{value}}",
+        "type": "query alert",
+        "query": (
+            "avg(last_15m):max:tournament.unscored_completed_matches{service:observatory-backend,env:production} > 10"
+        ),
+        "message": (
+            "{{value}} completed matches still have unscored players.\n\n"
+            "Jobs are finishing but leaderboard scores are not being populated in time.\n\n"
+            "Check:\n"
+            "- commissioner _sync_match_scores logs\n"
+            "- episode metrics ingestion health\n"
+            "- observatory DB lag\n\n"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 10, "warning": 3},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
+def latest_compat_runner_stale_monitor() -> dict:
+    """Monitor for lack of jobs reaching running on latest compat image."""
+    return {
+        "name": f"[Tournament] No Running Jobs on compat-v{LATEST_COMPAT_VERSION} in 6h",
+        "type": "query alert",
+        "query": (
+            "sum(last_6h):"
+            "sum:job.state_transition{"
+            f"to_status:running,{TOURNAMENT_EPISODE_METRIC_FILTER},compat_version:{LATEST_COMPAT_VERSION}"
+            "}.as_count() < 1"
+        ),
+        "message": (
+            f"No jobs reached running on compat-v{LATEST_COMPAT_VERSION} in the last 6 hours.\n\n"
+            "This can indicate latest compat episode-runner image rollout/availability issues.\n\n"
+            "Check:\n"
+            "- episode-runner image tags in registry\n"
+            "- season compat_version settings\n"
+            "- config validation failures in episode jobs\n\n"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:tournament"],
+        "priority": 2,
+        "thresholds": {"critical": 1},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 120,
+            "include_tags": False,
+            "require_full_window": True,
         },
     }
 
@@ -661,7 +784,7 @@ def job_total_failure_rate_monitor() -> dict:
             "{{value}} total job failures in the last 15 minutes (all error types).\n\n"
             "Check specific monitors for breakdown by error type (infra, config).\n\n"
             "Check: https://observatory.softmax-research.net/episode-jobs?status=failed\n\n"
-            f"{WEBHOOK_DISCORD}"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
         ),
         "tags": [
             "env:production",
@@ -685,11 +808,15 @@ ALL_MONITORS = [
     k8s_node_count_monitor,
     observatory_api_5xx_density_monitor,
     observatory_api_reachability_drop_monitor,
+    tournament_dispatch_activity_drop_monitor,
     job_failure_rate_monitor,
     job_config_error_monitor,
     job_total_failure_rate_monitor,
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
+    job_dispatched_queue_stuck_monitor,
+    tournament_unscored_completed_matches_monitor,
+    latest_compat_runner_stale_monitor,
     job_daily_cost_monitor,
     episode_recording_failures_monitor,
     episode_length_spike_monitor,

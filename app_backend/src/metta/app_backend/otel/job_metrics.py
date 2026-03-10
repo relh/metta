@@ -1,5 +1,6 @@
 """Job-specific OTel metrics (state transitions, stage durations, running counts)."""
 
+import re
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -13,6 +14,24 @@ from sqlmodel import col, select
 
 from metta.app_backend.models.job_request import JobRequest, JobStatus, JobType
 from metta.app_backend.otel.metrics import init_meter_provider
+
+_COMPAT_IMAGE_TAG_PATTERN = re.compile(r":compat-v(?P<compat_version>\d+\.\d+)$")
+
+
+def _extract_compat_version(job_payload: dict[str, Any]) -> str:
+    image = job_payload.get("episode_runner_image")
+    if isinstance(image, str):
+        match = _COMPAT_IMAGE_TAG_PATTERN.search(image.strip())
+        if match:
+            return match.group("compat_version")
+
+    env = job_payload.get("env")
+    if isinstance(env, dict):
+        compat_version = env.get("compat_version")
+        if isinstance(compat_version, str) and compat_version.strip():
+            return compat_version.strip()
+
+    return "none"
 
 
 def compute_job_cost(
@@ -144,6 +163,7 @@ class JobMetrics:
                 "to_status": to_status.value,
                 "job_type": job.job_type.value,
                 "error_type": error_type or "none",
+                "compat_version": _extract_compat_version(job.job),
             },
         )
         outcome = to_status.value if to_status in (JobStatus.completed, JobStatus.failed) else ""

@@ -64,6 +64,10 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "API 5xx Density (10m %)" in titles
     assert "API Latency Avg (10m s)" in titles
     assert "CrashLoopBackOff Containers (10m max)" in titles
+    assert "Dispatched Jobs (30m sum)" in titles
+    assert "Dispatched Queue (10m avg)" in titles
+    assert "Unscored Completed (15m max)" in titles
+    assert f"Compat v{dashboards.LATEST_COMPAT_VERSION} Running (6h sum)" in titles
     assert "CrashLoopBackOff Top Namespaces" in titles
     assert "CrashLoopBackOff Top Pods" in titles
     assert "Stable Monitor Alerts" in titles
@@ -87,6 +91,9 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "http.server.request.count" in query_text
     assert "http.server.request.duration" in query_text
     assert "http.status_code:5*" in query_text
+    assert "status:dispatched" in query_text
+    assert "tournament.unscored_completed_matches" in query_text
+    assert f"compat_version:{dashboards.LATEST_COMPAT_VERSION}" in query_text
     assert "reason:crashloopbackoff" in query_text
     assert "tag:service:stable-runner tag:managed-by:code" in query_text
     assert "tag:managed-by:code -tag:service:stable-runner" in query_text
@@ -147,6 +154,35 @@ def test_k8s_crashloopbackoff_monitor_pages_on_call() -> None:
     assert "!kube_namespace:monitoring" in config["query"]
     assert monitors.WEBHOOK_DISCORD in config["message"]
     assert monitors.WEBHOOK_ONCALL in config["message"]
+
+
+def test_tournament_progress_monitors_config() -> None:
+    dispatch_drop = monitors.tournament_dispatch_activity_drop_monitor()
+    assert dispatch_drop["type"] == "query alert"
+    assert "to_status:dispatched" in dispatch_drop["query"]
+    assert "service:observatory-backend,env:production,job_type:episode" in dispatch_drop["query"]
+    assert dispatch_drop["thresholds"]["critical"] == 1
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in dispatch_drop["message"]
+
+    dispatched_queue = monitors.job_dispatched_queue_stuck_monitor()
+    assert dispatched_queue["type"] == "query alert"
+    assert "job.outstanding_count" in dispatched_queue["query"]
+    assert "status:dispatched" in dispatched_queue["query"]
+    assert dispatched_queue["thresholds"]["critical"] == 25
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in dispatched_queue["message"]
+
+    unscored = monitors.tournament_unscored_completed_matches_monitor()
+    assert unscored["type"] == "query alert"
+    assert "tournament.unscored_completed_matches" in unscored["query"]
+    assert unscored["thresholds"]["critical"] == 10
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in unscored["message"]
+
+    compat = monitors.latest_compat_runner_stale_monitor()
+    assert compat["type"] == "query alert"
+    assert "to_status:running" in compat["query"]
+    assert f"compat_version:{monitors.LATEST_COMPAT_VERSION}" in compat["query"]
+    assert compat["thresholds"]["critical"] == 1
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in compat["message"]
 
 
 def test_monitor_names_are_unique() -> None:

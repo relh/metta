@@ -8,6 +8,7 @@ from sqlmodel import col, select
 from metta.app_backend.database import db_session
 from metta.app_backend.health_server import start_health_server, update_heartbeat
 from metta.app_backend.models.tournament import Season
+from metta.app_backend.otel.metrics import init_meter_provider
 from metta.app_backend.tournament.commissioners.factory import build_commissioner
 from metta.app_backend.tournament.registry import SEASONS
 from metta.app_backend.tournament.season_resolver import get_or_create_season
@@ -87,5 +88,6 @@ def roll_season(season_name: str, *, compat_version: str | None = None) -> None:
 if __name__ == "__main__":
     init_logging()
     suppress_noisy_logs()
+    init_meter_provider()
     init_otel_tracing(service_name="tournament-runner")
     run_commissioner()
