@@ -733,7 +733,7 @@ def episode_recording_failures_monitor() -> dict:
         "thresholds": {"critical": 3},
         "options": {
             "notify_no_data": False,
-            "renotify_interval": 60,
+            "renotify_interval": 60 * 24,  # minutes; 24h
             "include_tags": False,
         },
     }
