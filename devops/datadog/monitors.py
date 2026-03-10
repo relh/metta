@@ -26,6 +26,8 @@ TOURNAMENT_EPISODE_RECORDING_FAILURES_MONITOR_NAME = "[Tournament] Episode Recor
 STABLE_STALE_HOURS = 28
 STABLE_STALE_QUERY_LOOKBACK = f"last_{STABLE_STALE_HOURS}h"
 STABLE_FAILED_SERVICE_CHECK_LAST_COUNT = 1
+OBSERVATORY_API_METRIC_FILTER = "service:observatory-backend,env:production"
+OBSERVATORY_API_5XX_FILTER = f"{OBSERVATORY_API_METRIC_FILTER},http.status_code:5*"
 
 
 def monitor_key_tag_for_name(monitor_name: str) -> str:
@@ -503,6 +505,65 @@ def job_daily_cost_monitor() -> dict:
     }
 
 
+def observatory_api_5xx_density_monitor() -> dict:
+    """Monitor for sustained high 5xx density on observatory API traffic."""
+    return {
+        "name": "[Observatory API] High 5xx Density: {{value}}%",
+        "type": "query alert",
+        "query": (
+            "sum(last_10m):("
+            f"sum:http.server.request.count{{{OBSERVATORY_API_5XX_FILTER}}}.as_count() / "
+            f"sum:http.server.request.count{{{OBSERVATORY_API_METRIC_FILTER}}}.as_count()"
+            ") * 100 > 5"
+        ),
+        "message": (
+            "{{value}}% of observatory API requests are returning 5xx over the last 10 minutes.\n\n"
+            "This usually means user-visible API failures and can include DNS/routing fallout.\n\n"
+            "Check:\n"
+            "- Stable Runner V2 dashboard (Episode + Job Runtime Health)\n"
+            "- observatory-backend logs for 5xx spikes\n\n"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:observatory-backend"],
+        "priority": 2,
+        "thresholds": {"critical": 5},
+        "options": {
+            "notify_no_data": True,
+            "no_data_timeframe": 10,
+            "renotify_interval": 30,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
+def observatory_api_reachability_drop_monitor() -> dict:
+    """Monitor for sudden drop in observatory API traffic (possible DNS/routing outage)."""
+    return {
+        "name": "[Observatory API] Reachability Drop: {{value}} req/10m",
+        "type": "query alert",
+        "query": (f"sum(last_10m):sum:http.server.request.count{{{OBSERVATORY_API_METRIC_FILTER}}}.as_count() < 5"),
+        "message": (
+            "Only {{value}} observatory API requests were seen in the last 10 minutes.\n\n"
+            "If this is unexpected, investigate DNS and edge routing for api.observatory.softmax-research.net.\n\n"
+            "Check:\n"
+            "- DNS resolution for api.observatory.softmax-research.net\n"
+            "- Ingress / load balancer health\n"
+            "- Recent deploys or network changes\n\n"
+            f"{WEBHOOK_TOURNAMENT_ALERTS}"
+        ),
+        "tags": ["env:production", "team:infra", "managed-by:code", "service:observatory-backend"],
+        "priority": 2,
+        "thresholds": {"critical": 5},
+        "options": {
+            "notify_no_data": False,
+            "renotify_interval": 30,
+            "include_tags": False,
+            "require_full_window": True,
+        },
+    }
+
+
 def episode_length_spike_monitor() -> dict:
     """Monitor for sustained episode-length spikes in episode jobs."""
     return {
@@ -621,6 +682,8 @@ ALL_MONITORS = [
     k8s_deployment_replicas_monitor,
     k8s_crashloopbackoff_monitor,
     k8s_node_count_monitor,
+    observatory_api_5xx_density_monitor,
+    observatory_api_reachability_drop_monitor,
     job_failure_rate_monitor,
     job_config_error_monitor,
     job_total_failure_rate_monitor,

@@ -396,6 +396,7 @@ def stable_runner_health_dashboard() -> dict:
     stable_widgets = _offset_widgets(stable_widgets, y_offset=stable_section_header_y)
     runtime_section_header_y = max(widget["layout"]["y"] + widget["layout"]["height"] for widget in stable_widgets) + 1
     runtime_metrics_start_y = runtime_section_header_y + 2
+    observatory_api_filter = "service:observatory-backend,env:production"
 
     runtime_widgets = [
         {
@@ -598,6 +599,66 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": STABLE_TIMEFRAME},
             },
             "layout": {"x": 4, "y": runtime_metrics_start_y + 18, "width": 8, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "API Requests (10m sum)",
+                "requests": [
+                    {
+                        "q": f"sum:http.server.request.count{{{observatory_api_filter}}}.as_count()",
+                        "aggregator": "sum",
+                    }
+                ],
+                "time": {"live_span": "10m"},
+                "precision": 0,
+            },
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "API 5xx Density (10m %)",
+                "requests": [
+                    {
+                        "queries": [
+                            {
+                                "data_source": "metrics",
+                                "name": "errors",
+                                "query": (
+                                    "sum:http.server.request.count"
+                                    f"{{{observatory_api_filter},http.status_code:5*}}.as_count()"
+                                ),
+                            },
+                            {
+                                "data_source": "metrics",
+                                "name": "total",
+                                "query": f"sum:http.server.request.count{{{observatory_api_filter}}}.as_count()",
+                            },
+                        ],
+                        "formulas": [{"formula": "(errors / total) * 100"}],
+                        "response_format": "scalar",
+                    }
+                ],
+                "time": {"live_span": "10m"},
+                "precision": 2,
+            },
+            "layout": {"x": 4, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "API Latency Avg (10m s)",
+                "requests": [
+                    {
+                        "q": f"avg:http.server.request.duration{{{observatory_api_filter}}}",
+                        "aggregator": "avg",
+                    }
+                ],
+                "time": {"live_span": "10m"},
+                "precision": 2,
+            },
+            "layout": {"x": 8, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
         },
     ]
 

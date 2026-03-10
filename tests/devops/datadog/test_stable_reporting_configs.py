@@ -60,6 +60,9 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "Job Status Transitions (count)" in titles
     assert "Episode Length (10m avg)" in titles
     assert "Episode Length Trend (episode jobs)" in titles
+    assert "API Requests (10m sum)" in titles
+    assert "API 5xx Density (10m %)" in titles
+    assert "API Latency Avg (10m s)" in titles
     assert "Stable Monitor Alerts" in titles
     assert "Non-Stable Monitor Alerts" in titles
     assert STABLE_CHECK_RAW_STATUS_METRIC in query_text
@@ -78,6 +81,9 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "to_status:failed" in query_text
     assert "by {error_type}.as_count().rollup(sum, 60)" in query_text
     assert "episode.length" in query_text
+    assert "http.server.request.count" in query_text
+    assert "http.server.request.duration" in query_text
+    assert "http.status_code:5*" in query_text
     assert "tag:service:stable-runner tag:managed-by:code" in query_text
     assert "tag:managed-by:code -tag:service:stable-runner" in query_text
     assert "criterion:runs_success" in query_text
@@ -110,6 +116,24 @@ def test_episode_recording_failures_monitor_config() -> None:
     assert config["priority"] == 2
     assert config["thresholds"]["critical"] == 3
     assert monitors.WEBHOOK_TOURNAMENT_ALERTS in config["message"]
+
+
+def test_observatory_api_monitors_config() -> None:
+    error_density = monitors.observatory_api_5xx_density_monitor()
+    assert error_density["type"] == "query alert"
+    assert "http.server.request.count" in error_density["query"]
+    assert "http.status_code:5*" in error_density["query"]
+    assert "service:observatory-backend,env:production" in error_density["query"]
+    assert error_density["thresholds"]["critical"] == 5
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in error_density["message"]
+
+    reachability = monitors.observatory_api_reachability_drop_monitor()
+    assert reachability["type"] == "query alert"
+    assert "http.server.request.count" in reachability["query"]
+    assert "service:observatory-backend,env:production" in reachability["query"]
+    assert "< 5" in reachability["query"]
+    assert reachability["thresholds"]["critical"] == 5
+    assert monitors.WEBHOOK_TOURNAMENT_ALERTS in reachability["message"]
 
 
 def test_monitor_names_are_unique() -> None:
