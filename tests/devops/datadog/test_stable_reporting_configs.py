@@ -63,6 +63,9 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "API Requests (10m sum)" in titles
     assert "API 5xx Density (10m %)" in titles
     assert "API Latency Avg (10m s)" in titles
+    assert "CrashLoopBackOff Containers (10m max)" in titles
+    assert "CrashLoopBackOff Top Namespaces" in titles
+    assert "CrashLoopBackOff Top Pods" in titles
     assert "Stable Monitor Alerts" in titles
     assert "Non-Stable Monitor Alerts" in titles
     assert STABLE_CHECK_RAW_STATUS_METRIC in query_text
@@ -84,6 +87,7 @@ def test_stable_dashboard_exists_with_expected_queries() -> None:
     assert "http.server.request.count" in query_text
     assert "http.server.request.duration" in query_text
     assert "http.status_code:5*" in query_text
+    assert "reason:crashloopbackoff" in query_text
     assert "tag:service:stable-runner tag:managed-by:code" in query_text
     assert "tag:managed-by:code -tag:service:stable-runner" in query_text
     assert "criterion:runs_success" in query_text
@@ -134,6 +138,15 @@ def test_observatory_api_monitors_config() -> None:
     assert "< 5" in reachability["query"]
     assert reachability["thresholds"]["critical"] == 5
     assert monitors.WEBHOOK_TOURNAMENT_ALERTS in reachability["message"]
+
+
+def test_k8s_crashloopbackoff_monitor_pages_on_call() -> None:
+    config = monitors.k8s_crashloopbackoff_monitor()
+    assert config["type"] == "query alert"
+    assert "reason:crashloopbackoff" in config["query"]
+    assert "!kube_namespace:monitoring" in config["query"]
+    assert monitors.WEBHOOK_DISCORD in config["message"]
+    assert monitors.WEBHOOK_ONCALL in config["message"]
 
 
 def test_monitor_names_are_unique() -> None:

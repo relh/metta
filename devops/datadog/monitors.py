@@ -19,6 +19,7 @@ from devops.stable.stable_check_registry import discover_stable_checks
 
 WEBHOOK_DISCORD = "@webhook-Discord"
 WEBHOOK_ONCALL = "@oncall-on-call"
+WEBHOOK_INFRA_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
 WEBHOOK_STABLE_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
 WEBHOOK_TOURNAMENT_ALERTS = f"{WEBHOOK_DISCORD} {WEBHOOK_ONCALL}"
 TOURNAMENT_EPISODE_RECORDING_FAILURES_MONITOR_NAME = "[Tournament] Episode Recording Failures"
@@ -134,7 +135,7 @@ def k8s_crashloopbackoff_monitor() -> dict:
             "{{#is_recovery}}\n"
             "{{pod_name.name}} recovered\n"
             "{{/is_recovery}}\n\n"
-            f"{WEBHOOK_DISCORD}"
+            f"{WEBHOOK_INFRA_ALERTS}"
         ),
         "tags": ["env:production", "team:infra", "managed-by:code"],
         "priority": 2,

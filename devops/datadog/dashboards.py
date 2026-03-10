@@ -397,6 +397,14 @@ def stable_runner_health_dashboard() -> dict:
     runtime_section_header_y = max(widget["layout"]["y"] + widget["layout"]["height"] for widget in stable_widgets) + 1
     runtime_metrics_start_y = runtime_section_header_y + 2
     observatory_api_filter = "service:observatory-backend,env:production"
+    crashloop_filter = (
+        "reason:crashloopbackoff,"
+        "!kube_namespace:monitoring,"
+        "!pod_name:skypilot-monitor*,"
+        "!pod_name:pr-similarity-cache-*,"
+        "!pod_name:observatory-pr-*,"
+        "!pod_name:softmax-com-pr-*"
+    )
 
     runtime_widgets = [
         {
@@ -659,6 +667,53 @@ def stable_runner_health_dashboard() -> dict:
                 "precision": 2,
             },
             "layout": {"x": 8, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "CrashLoopBackOff Containers (10m max)",
+                "requests": [
+                    {
+                        "q": (f"sum:kubernetes_state.container.status_report.count.waiting{{{crashloop_filter}}}"),
+                        "aggregator": "max",
+                    }
+                ],
+                "time": {"live_span": "10m"},
+                "precision": 0,
+            },
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 27, "width": 4, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "toplist",
+                "title": "CrashLoopBackOff Top Namespaces",
+                "requests": [
+                    {
+                        "q": (
+                            "top(sum:kubernetes_state.container.status_report.count.waiting"
+                            f"{{{crashloop_filter}}} by {{kube_namespace}}, 10, 'last', 'desc')"
+                        )
+                    }
+                ],
+                "time": {"live_span": STABLE_TIMEFRAME},
+            },
+            "layout": {"x": 4, "y": runtime_metrics_start_y + 27, "width": 4, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "toplist",
+                "title": "CrashLoopBackOff Top Pods",
+                "requests": [
+                    {
+                        "q": (
+                            "top(max:kubernetes_state.container.status_report.count.waiting"
+                            f"{{{crashloop_filter}}} by {{kube_namespace,pod_name}}, 10, 'last', 'desc')"
+                        )
+                    }
+                ],
+                "time": {"live_span": STABLE_TIMEFRAME},
+            },
+            "layout": {"x": 8, "y": runtime_metrics_start_y + 27, "width": 4, "height": 3},
         },
     ]
 
