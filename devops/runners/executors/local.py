@@ -49,12 +49,34 @@ class LocalExecutor(JobExecutor):
             return JobResult(job=job, status=JobStatus.FAILED, exit_code=1, error=str(e))
 
         exit_code = int(result)
+        error: str | None = None
+        if exit_code == 124:
+            error = f"Timeout after {job.timeout_s}s"
+        elif exit_code != 0:
+            error = self._tail_log(job)
         return JobResult(
             job=job,
             status=JobStatus.SUCCEEDED if exit_code == 0 else JobStatus.FAILED,
             exit_code=exit_code,
-            error=f"Timeout after {job.timeout_s}s" if exit_code == 124 else None,
+            error=error,
         )
+
+    @staticmethod
+    def _tail_log(job: Job, max_bytes: int = 300) -> str | None:
+        """Read the tail of the job log to extract the error message."""
+        if not job.logs_path:
+            return None
+        log_path = Path(job.logs_path)
+        if not log_path.is_file():
+            return None
+        size = log_path.stat().st_size
+        if size == 0:
+            return None
+        with open(log_path, "rb") as f:
+            if size > max_bytes:
+                f.seek(-max_bytes, 2)
+            tail = f.read().decode("utf-8", errors="replace").strip()
+        return tail or None
 
     def _run_local_cmd(self, job: Job, log_path: Path, timeout_s: int) -> int:
         """Run a local command and return exit code."""
