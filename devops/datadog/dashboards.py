@@ -314,9 +314,85 @@ def stable_runner_health_dashboard() -> dict:
         },
         "layout": {"x": 0, "y": 8, "width": 12, "height": 6},
     }
-    stable_section_header_y = (
-        non_stable_monitor_alerts_widget["layout"]["y"] + non_stable_monitor_alerts_widget["layout"]["height"] + 1
+    stable_status_timeline_widget = {
+        "definition": {
+            "type": "wildcard",
+            "title": "Stable Check Effective Status Timeline by Job (last 48h, hourly)",
+            "requests": [
+                {
+                    "queries": [
+                        {
+                            "name": "status_query",
+                            "data_source": "metrics",
+                            "query": (
+                                f"max:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by "
+                                "{job}.rollup(min, 3600).fill(last, 604800)"
+                            ),
+                        }
+                    ],
+                    "formulas": [{"formula": "status_query", "alias": "status"}],
+                    "response_format": "timeseries",
+                }
+            ],
+            "specification": {
+                "type": "vega-lite",
+                "contents": {
+                    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                    "data": {"name": "table1"},
+                    "width": {"step": 28},
+                    "transform": [
+                        {
+                            "calculate": "isValid(datum.status) ? datum.status : null",
+                            "as": "status_value",
+                        },
+                        {"filter": "isValid(datum.status_value)"},
+                        {
+                            "calculate": (
+                                "datum.status_value < 0 ? 'failed' : "
+                                "(datum.status_value > 0 ? 'passed' : 'non_blocking')"
+                            ),
+                            "as": "status_label",
+                        },
+                    ],
+                    "encoding": {
+                        "x": {
+                            "field": "_time",
+                            "type": "ordinal",
+                            "timeUnit": "utcyearmonthdatehours",
+                            "title": "Hour Bucket (UTC)",
+                            "axis": {"labelAngle": -55, "labelOverlap": False},
+                            "scale": {"paddingInner": 0.12, "paddingOuter": 0.05},
+                        },
+                        "y": {"field": "job", "type": "nominal", "title": "Job"},
+                        "color": {
+                            "field": "status_label",
+                            "type": "nominal",
+                            "title": "Status",
+                            "scale": {
+                                "domain": ["failed", "non_blocking", "passed"],
+                                "range": ["#d64545", "#f2c037", "#2f9e44"],
+                            },
+                        },
+                        "tooltip": [
+                            {"field": "job", "type": "nominal", "title": "Job"},
+                            {"field": "_time", "type": "temporal", "title": "Time"},
+                            {"field": "status_value", "type": "quantitative", "title": "Effective status"},
+                            {"field": "status_label", "type": "nominal", "title": "Label"},
+                        ],
+                    },
+                    "mark": {"type": "rect", "stroke": "#0b0f1a", "strokeWidth": 0.8},
+                },
+            },
+            "time": {"live_span": "2d"},
+        },
+        "layout": {"x": 0, "y": 15, "width": 12, "height": 8},
+    }
+    managed_monitors_bottom_y = max(
+        stable_monitor_alerts_widget["layout"]["y"] + stable_monitor_alerts_widget["layout"]["height"],
+        non_stable_monitor_alerts_widget["layout"]["y"] + non_stable_monitor_alerts_widget["layout"]["height"],
+        stable_status_timeline_widget["layout"]["y"] + stable_status_timeline_widget["layout"]["height"],
     )
+    stable_section_header_y = managed_monitors_bottom_y + 1
     stable_widgets = _offset_widgets(stable_widgets, y_offset=stable_section_header_y)
     runtime_section_header_y = max(widget["layout"]["y"] + widget["layout"]["height"] for widget in stable_widgets) + 1
     runtime_metrics_start_y = runtime_section_header_y + 2
@@ -538,6 +614,7 @@ def stable_runner_health_dashboard() -> dict:
             _section_header("Managed Monitors", x=0, y=0),
             stable_monitor_alerts_widget,
             non_stable_monitor_alerts_widget,
+            stable_status_timeline_widget,
             _section_header("Stable Runner Checks", x=0, y=stable_section_header_y),
             *stable_widgets,
             _section_header("Episode + Job Runtime Health", x=0, y=runtime_section_header_y),
