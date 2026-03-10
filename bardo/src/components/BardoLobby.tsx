@@ -536,9 +536,11 @@ export function BardoLobby() {
     [hoveredPolicyId, visiblePolicies]
   )
 
-  const totalPolicies = world?.policies.length ?? 0
+  const shownPolicyCount = world?.policies.length ?? 0
+  const totalPolicies = world?.totalPolicies ?? shownPolicyCount
+  const isSampledView = shownPolicyCount < totalPolicies
   const submittedCount = world?.policies.filter((policy) => policy.seasonIds.length > 0).length ?? 0
-  const outsideCount = totalPolicies - submittedCount
+  const outsideCount = shownPolicyCount - submittedCount
   const inEpisodeCount = world?.policies.filter((policy) => policy.activeJobIds.length > 0).length ?? 0
   const busyCountBySeasonId = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -572,16 +574,20 @@ export function BardoLobby() {
           </div>
           <div className="bardo-stats" role="status" aria-live="polite">
             <p>
-              <span>Policies</span>
-              <strong>{totalPolicies}</strong>
+              <span>{isSampledView ? 'Shown' : 'Policies'}</span>
+              <strong>{shownPolicyCount}</strong>
             </p>
             <p>
-              <span>Buildings</span>
-              <strong>{seasonPlan.buildings.length}</strong>
+              <span>{isSampledView ? 'Total policies' : 'Buildings'}</span>
+              <strong>{isSampledView ? totalPolicies : seasonPlan.buildings.length}</strong>
             </p>
             <p>
-              <span>In episode</span>
-              <strong>{inEpisodeCount}</strong>
+              <span>{isSampledView ? 'Buildings' : 'In episode'}</span>
+              <strong>{isSampledView ? seasonPlan.buildings.length : inEpisodeCount}</strong>
+            </p>
+            <p>
+              <span>Active jobs</span>
+              <strong>{world?.activeJobs.length ?? 0}</strong>
             </p>
           </div>
         </header>
@@ -751,9 +757,14 @@ export function BardoLobby() {
           </span>
           <span>Auto refresh {WORLD_POLL_MS / 1_000}s</span>
           <span>Updated {lastUpdatedLabel}</span>
-          <span>{outsideCount} outside buildings</span>
-          <span>{world?.activeJobs.length ?? 0} active jobs</span>
-          {nameFilter ? <span>Filter: “{nameFilter}”</span> : <span>All policies</span>}
+          <span>{outsideCount} outside buildings in view</span>
+          {nameFilter ? (
+            <span>Filter: “{nameFilter}”</span>
+          ) : isSampledView ? (
+            <span>Showing {shownPolicyCount} sampled policies</span>
+          ) : (
+            <span>All policies</span>
+          )}
         </footer>
       </section>
     </main>

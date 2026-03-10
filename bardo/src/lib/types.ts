@@ -28,6 +28,7 @@ export type BardoSeason = {
 
 export type BardoWorldState = {
   generatedAt: string
+  totalPolicies: number
   policies: BardoPolicy[]
   activeJobs: BardoActiveJob[]
   seasons: BardoSeason[]

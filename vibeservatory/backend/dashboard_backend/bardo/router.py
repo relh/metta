@@ -21,6 +21,7 @@ from vibeservatory.backend.dashboard_backend.auth import SoftmaxUser
 from vibeservatory.backend.dashboard_backend.database import db_session
 
 PAGE_SIZE = 500
+VISIBLE_POLICY_LIMIT = 50
 ACTIVE_EPISODE_JOB_STATUSES = [JobStatus.pending, JobStatus.dispatched, JobStatus.running]
 WORLD_STATE_CACHE_TTL_SECONDS = 4.0
 WORLD_STATE_CACHE_CONTROL = "private, no-cache"
@@ -56,6 +57,7 @@ class BardoActiveJob(BaseModel):
 
 class BardoWorldStateResponse(BaseModel):
     generatedAt: str
+    totalPolicies: int
     policies: list[BardoPolicy]
     activeJobs: list[BardoActiveJob]
     seasons: list[BardoSeason]
@@ -237,6 +239,30 @@ def _collect_active_job_policy_version_usage(
     return dict(active_by_policy_version_id)
 
 
+def _stable_policy_sample_key(policy: BardoPolicy) -> tuple[str, str]:
+    digest = hashlib.sha256(policy.policyId.encode("utf-8")).hexdigest()
+    return digest, policy.policyId
+
+
+def _limit_visible_policies(policy_rows: list[BardoPolicy], limit: int) -> list[BardoPolicy]:
+    if len(policy_rows) <= limit:
+        return policy_rows
+
+    # Always keep active policies visible, then fill remaining slots with a stable sample so the lobby doesn't churn.
+    active_policy_rows = [policy for policy in policy_rows if policy.activeJobIds]
+    if len(active_policy_rows) >= limit:
+        limited = sorted(active_policy_rows, key=_stable_policy_sample_key)[:limit]
+    else:
+        inactive_policy_rows = [policy for policy in policy_rows if not policy.activeJobIds]
+        sampled_inactive_policy_rows = sorted(inactive_policy_rows, key=_stable_policy_sample_key)[
+            : limit - len(active_policy_rows)
+        ]
+        limited = active_policy_rows + sampled_inactive_policy_rows
+
+    limited.sort(key=lambda policy: policy.createdAt, reverse=True)
+    return limited
+
+
 async def load_bardo_world_state(*, name_filter: str | None, include_active_jobs: bool) -> BardoWorldStateResponse:
     policies = await _fetch_all_policies(name_filter)
     active_jobs_raw = await _fetch_active_episode_jobs(include_active_jobs)
@@ -274,8 +300,13 @@ async def load_bardo_world_state(*, name_filter: str | None, include_active_jobs
         )
 
     policy_rows.sort(key=lambda row: row.createdAt, reverse=True)
+    total_policy_count = len(policy_rows)
+    if not name_filter:
+        policy_rows = _limit_visible_policies(policy_rows, limit=VISIBLE_POLICY_LIMIT)
+
     return BardoWorldStateResponse(
         generatedAt=_isoformat_utc(datetime.now(UTC)),
+        totalPolicies=total_policy_count,
         policies=policy_rows,
         activeJobs=active_jobs,
         seasons=seasons,
