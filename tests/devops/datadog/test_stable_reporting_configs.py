@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from types import SimpleNamespace
 
 import devops.datadog.dashboards as dashboards
@@ -109,6 +110,13 @@ def test_episode_recording_failures_monitor_config() -> None:
     assert config["priority"] == 2
     assert config["thresholds"]["critical"] == 3
     assert monitors.WEBHOOK_TOURNAMENT_ALERTS in config["message"]
+
+
+def test_monitor_names_are_unique() -> None:
+    configs = monitors.get_all_monitor_configs()
+    counts = Counter(config["name"] for config in configs)
+    duplicates = {name: count for name, count in counts.items() if count > 1}
+    assert not duplicates, f"Duplicate monitor names found: {duplicates}"
 
 
 def test_stable_monitors_generated_per_job(monkeypatch) -> None:

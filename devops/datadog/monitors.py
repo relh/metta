@@ -617,47 +617,6 @@ def job_total_failure_rate_monitor() -> dict:
     }
 
 
-def episode_recording_failure_monitor() -> dict:
-    """Monitor for episode recording failures in the event processor.
-
-    Fires when the event processor successfully receives results from a pod but
-    fails to write them to observatory (e.g. due to schema changes, S3 errors).
-    Jobs end up marked completed but with no episode/replay data stored.
-    """
-    return {
-        "name": "[Tournament] Episode Recording Failures",
-        "type": "log alert",
-        "query": (
-            'logs("service:k8s-event-processor \\"Failed to record episode for job\\"").index("*")'
-            '.rollup("count").last("5m") > 3'
-        ),
-        "message": (
-            "{{value}} episode recording failures in the last 5 minutes.\n\n"
-            "Jobs are completing but episode/replay data is NOT being saved to observatory. "
-            "This is a silent data loss — users won't see results.\n\n"
-            "Common causes:\n"
-            "- Schema validation error (mettagrid/cogames update changed job fields)\n"
-            "- S3 write failure\n"
-            "- DuckDB error during bulk upload\n\n"
-            "Check k8s-event-processor logs for the full traceback.\n\n"
-            f"{WEBHOOK_DISCORD}"
-        ),
-        "tags": [
-            "env:production",
-            "team:infra",
-            "managed-by:code",
-            "service:tournament",
-        ],
-        "priority": 2,
-        "thresholds": {"critical": 3},
-        "options": {
-            "notify_no_data": False,
-            "renotify_interval": 30,
-            "include_tags": False,
-        },
-    }
-
-
 ALL_MONITORS = [
     k8s_deployment_replicas_monitor,
     k8s_crashloopbackoff_monitor,
@@ -665,7 +624,6 @@ ALL_MONITORS = [
     job_failure_rate_monitor,
     job_config_error_monitor,
     job_total_failure_rate_monitor,
-    episode_recording_failure_monitor,
     job_queue_buildup_monitor,
     job_high_pending_queue_monitor,
     job_daily_cost_monitor,
