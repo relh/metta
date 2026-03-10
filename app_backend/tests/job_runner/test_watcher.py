@@ -2,7 +2,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from kubernetes.client.rest import ApiException
+from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 
 from metta.app_backend.job_runner.watcher import (
     _list_and_sync,
