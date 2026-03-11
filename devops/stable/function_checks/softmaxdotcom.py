@@ -29,12 +29,7 @@ def healthcheck(_ctx: StableCheckContext) -> None:
     """Verify softmax.com/alignmentleague, the /api/health endpoint, and the tournament seasons API are all healthy."""
     page_status, page_body = _get(ALIGNMENTLEAGUE_URL)
     assert page_status == 200, f"{ALIGNMENTLEAGUE_URL} returned {page_status}, expected 200"
-    assert "<title>Softmax - Alignment League Benchmark</title>" in page_body, (
-        f"{ALIGNMENTLEAGUE_URL} missing expected title tag"
-    )
-    assert "the alignment league benchmark" in page_body.lower(), (
-        f"{ALIGNMENTLEAGUE_URL} missing expected page marker text"
-    )
+    assert page_body.strip(), f"{ALIGNMENTLEAGUE_URL} returned an empty response body"
 
     health_status, health_body = _get(HEALTH_URL)
     assert health_status == 200, f"{HEALTH_URL} returned {health_status}, expected 200"

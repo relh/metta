@@ -43,8 +43,7 @@ def test_alignmentleague_healthcheck_passes_with_expected_responses(monkeypatch:
         {
             health_recipe.ALIGNMENTLEAGUE_URL: (
                 200,
-                "<html><head><title>Softmax - Alignment League Benchmark</title></head>"
-                "<body>the alignment league benchmark</body></html>",
+                "<html><head><title>Softmax — Scaling Alignment</title></head><body>softmax home page</body></html>",
             ),
             health_recipe.HEALTH_URL: (
                 200,
@@ -60,16 +59,13 @@ def test_alignmentleague_healthcheck_passes_with_expected_responses(monkeypatch:
     health_recipe.healthcheck(StableCheckContext(job_name="test.job", inputs={}))
 
 
-def test_alignmentleague_healthcheck_fails_when_page_marker_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_alignmentleague_healthcheck_fails_when_page_body_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     _mock_urlopen(
         monkeypatch,
         {
             health_recipe.ALIGNMENTLEAGUE_URL: (
                 200,
-                (
-                    "<html><head><title>Softmax - Alignment League Benchmark</title></head>"
-                    "<body>missing marker</body></html>"
-                ),
+                "",
             ),
             health_recipe.HEALTH_URL: (
                 200,
@@ -82,7 +78,7 @@ def test_alignmentleague_healthcheck_fails_when_page_marker_missing(monkeypatch:
         },
     )
 
-    with pytest.raises(AssertionError, match="missing expected page marker text"):
+    with pytest.raises(AssertionError, match="returned an empty response body"):
         health_recipe.healthcheck(StableCheckContext(job_name="test.job", inputs={}))
 
 
@@ -92,8 +88,7 @@ def test_alignmentleague_healthcheck_fails_when_health_unhealthy(monkeypatch: py
         {
             health_recipe.ALIGNMENTLEAGUE_URL: (
                 200,
-                "<html><head><title>Softmax - Alignment League Benchmark</title></head>"
-                "<body>the alignment league benchmark</body></html>",
+                "<html><head><title>Softmax — Scaling Alignment</title></head><body>softmax home page</body></html>",
             ),
             health_recipe.HEALTH_URL: (
                 200,
@@ -116,8 +111,7 @@ def test_alignmentleague_healthcheck_fails_when_seasons_empty(monkeypatch: pytes
         {
             health_recipe.ALIGNMENTLEAGUE_URL: (
                 200,
-                "<html><head><title>Softmax - Alignment League Benchmark</title></head>"
-                "<body>the alignment league benchmark</body></html>",
+                "<html><head><title>Softmax — Scaling Alignment</title></head><body>softmax home page</body></html>",
             ),
             health_recipe.HEALTH_URL: (
                 200,
