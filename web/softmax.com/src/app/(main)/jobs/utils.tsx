@@ -17,6 +17,10 @@ const jobSchema = z.object({
 export type Job = MdxDocument<typeof jobSchema>;
 
 const dir = "src/app/(main)/jobs/jobs";
+const legacyJobAnchors = {
+  softwareengineer: "software-engineer",
+  sdecontractor: "software-engineer-contractor",
+} as const;
 
 const AboutSoftmax = () => (
   <>
@@ -63,4 +67,11 @@ export async function getJob(slug: string): Promise<Job> {
     schema: jobSchema,
     components: jobMdxComponents,
   });
+}
+
+export function getLegacyJobRedirectHref(slug: string): string {
+  const anchor = Object.hasOwn(legacyJobAnchors, slug)
+    ? legacyJobAnchors[slug as keyof typeof legacyJobAnchors]
+    : undefined;
+  return anchor ? `/jobs#${anchor}` : "/jobs";
 }
