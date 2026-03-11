@@ -720,7 +720,7 @@ describe('DashboardClient', () => {
     expect(screen.getByText('Composition Slices')).toBeTruthy()
   })
 
-  it('loads pantheon motifs when Pantheon tab is selected', async () => {
+  it('loads pantheon motifs when the Pantheon tab is preselected in the URL', async () => {
     const response: DashboardResponse = {
       policy: { id: 'policy-pantheon', name: 'glanky', version: 12, rank: 1, score: 3.1, matches: 18 },
       episodes: [],
@@ -761,14 +761,8 @@ describe('DashboardClient', () => {
       ],
     })
 
-    window.history.replaceState({}, '', '/?policyVersionId=policy-pantheon')
+    window.history.replaceState({}, '', '/?policyVersionId=policy-pantheon&tab=pantheon')
     render(<DashboardClient />)
-
-    await waitFor(() => {
-      expect(screen.queryByRole('progressbar')).toBeNull()
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Pantheon' }))
 
     await waitFor(() => {
       expect(api.fetchPantheonStories).toHaveBeenCalledTimes(1)

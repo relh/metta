@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { fetchDashboardData, fetchDashboardDefaultData, fetchPantheonStories } from './api'
+import {
+  fetchDashboardAnalysis,
+  fetchDashboardData,
+  fetchDashboardDefaultData,
+  fetchPantheonStories,
+  uploadDiagnoseBundle,
+} from './api'
 import type { DashboardResponse } from './api'
 
 const DASHBOARD_RESPONSE: DashboardResponse = {
@@ -141,5 +147,38 @@ describe('dashboard api', () => {
 
     expect(response.stories).toEqual([])
     expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/pantheon/stories')
+  })
+
+  it('posts dashboard analysis with a trimmed anthropic header', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ analysis: 'looks good', data_sources: ['dashboard'] })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await fetchDashboardAnalysis(DASHBOARD_RESPONSE.policy.id, '  test-key  ')
+
+    expect(response.analysis).toBe('looks good')
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      `/dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/analysis`
+    )
+    const requestInit = fetchMock.mock.calls[0][1] as RequestInit
+    const headers = requestInit.headers as Record<string, string>
+    expect(requestInit.method).toBe('POST')
+    expect(requestInit.body).toBe('{}')
+    expect(headers['X-Anthropic-Api-Key']).toBe('test-key')
+  })
+
+  it('uploads diagnose bundles as multipart without forcing json content-type', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ run_id: 'run-1', manifest: null })))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await uploadDiagnoseBundle(new File(['zip-data'], 'bundle.zip', { type: 'application/zip' }))
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/cogames-diagnose/runs/upload')
+    const requestInit = fetchMock.mock.calls[0][1] as RequestInit
+    const headers = requestInit.headers as Record<string, string>
+    expect(requestInit.method).toBe('POST')
+    expect(requestInit.body).toBeInstanceOf(FormData)
+    expect(headers['Content-Type']).toBeUndefined()
   })
 })
