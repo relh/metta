@@ -1,6 +1,5 @@
 import { AccountCard } from "@/components/account/AccountCard";
 import { AccountSignInPrompt } from "@/components/account/AccountSignInPrompt";
-import { Container } from "@/components/Container";
 import { H2 } from "@/components/H2";
 import { LinkButton } from "@/components/LinkButton";
 import { auth } from "@/lib/auth";
@@ -42,57 +41,50 @@ export default async function AccountPage() {
     : null;
 
   return (
-    <Container>
-      <div className="mb-8">
-        {!isLoggedIn && (
-          <section className="mt-8">
-            <H2>Sign In</H2>
-            <p className="mb-4 text-[#4a5f8c]">
-              Sign in to manage your account.
-            </p>
-            <AccountSignInPrompt />
-          </section>
-        )}
+    <main className="mx-auto w-full max-w-[760px] px-4 py-10 sm:px-6 md:py-14">
+      {!isLoggedIn && (
+        <section>
+          <H2>Sign In</H2>
+          <p className="mb-4 text-[#4a5f8c]">Sign in to manage your account.</p>
+          <AccountSignInPrompt />
+        </section>
+      )}
 
-        {isLoggedIn && (
-          <section className="mt-8">
-            <H2>
-              {profileCompleted ? "Your Account" : "Complete Your Profile"}
-            </H2>
-            <div className="mt-4 mb-8">
-              {!profileCompleted && (
-                <div className="mb-4 rounded-2xl border border-[#d8d2bf] bg-[#fffef8] p-6">
-                  <p className="text-[#4a5f8c]">
-                    Please complete your profile to participate in the Alignment
-                    League.
-                  </p>
-                </div>
-              )}
-              <AccountCard
-                user={{
-                  name: dbUser?.name ?? session.user?.name ?? "",
-                  email: dbUser?.email ?? session.user?.email ?? "",
-                  institution: dbUser?.institution ?? "",
-                  profileCompleted,
-                  tosVersion: dbUser?.tosVersion ?? null,
-                  consentServiceUpdates: dbUser?.consentServiceUpdates ?? false,
-                  consentMarketing: dbUser?.consentMarketing ?? false,
-                }}
-                discordUserId={discordAccount?.providerAccountId}
-                discordEnabled={discordEnabled}
-              />
-            </div>
-            <div className="flex gap-4">
-              <LinkButton href="/alignmentleague">Alignment League</LinkButton>
-              {profileCompleted && (
-                <LinkButton href="/observatory" theme="primary">
-                  Observatory
-                </LinkButton>
-              )}
-            </div>
-          </section>
-        )}
-      </div>
-    </Container>
+      {isLoggedIn && (
+        <section>
+          <H2>{profileCompleted ? "Your Account" : "Complete Your Profile"}</H2>
+          <div className="mt-4 mb-8">
+            {!profileCompleted && (
+              <div className="mb-4 rounded-2xl border border-[#d8d2bf] bg-[#fffef8] p-6">
+                <p className="text-[#4a5f8c]">
+                  Please complete your profile to participate in the Alignment
+                  League.
+                </p>
+              </div>
+            )}
+            <AccountCard
+              user={{
+                name: dbUser?.name ?? session.user?.name ?? "",
+                email: dbUser?.email ?? session.user?.email ?? "",
+                institution: dbUser?.institution ?? "",
+                profileCompleted,
+                tosVersion: dbUser?.tosVersion ?? null,
+                consentServiceUpdates: dbUser?.consentServiceUpdates ?? false,
+                consentMarketing: dbUser?.consentMarketing ?? false,
+              }}
+              discordUserId={discordAccount?.providerAccountId}
+              discordEnabled={discordEnabled}
+            />
+          </div>
+          <div className="flex gap-4">
+            {profileCompleted && (
+              <LinkButton href="/observatory" theme="primary">
+                Open Observatory
+              </LinkButton>
+            )}
+          </div>
+        </section>
+      )}
+    </main>
   );
 }

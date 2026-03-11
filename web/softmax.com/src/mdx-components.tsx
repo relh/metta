@@ -9,7 +9,7 @@ import { Waveform } from "./components/Waveform";
 
 export const commonMdxComponents: MDXComponents = {
   Waveform,
-  // default typography - used on frontpage
+  // default typography
   // it can be overridden for blog posts (different heading styles)
   p: P,
   a: A,

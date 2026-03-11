@@ -25,6 +25,53 @@
   }
 }
 
+.ias-link {
+  color: black;
+  text-decoration: none;
+  line-height: 1.5;
+  padding-bottom: 0.1em;
+  background: url("/Assets/ul.svg") no-repeat bottom / 100% 0.5em;
+  transition: color 0.1s;
+}
+.ias-link:hover {
+  color: #859fbe;
+  background-size: 100% 100px;
+}
+
+.ias-link-subtle {
+  color: #555;
+  transition: color 0.1s;
+}
+
+.ias-link:hover .ias-link-subtle {
+  color: inherit;
+}
+
+.ias-link-with-icon {
+  color: black;
+  transition: color 0.1s;
+}
+
+.ias-link-with-icon:hover {
+  color: #859fbe;
+}
+
+.ias-link-with-icon:hover .ias-link {
+  color: inherit;
+  background-size: 100% 100px;
+}
+
+.ias-link.ias-link-muted {
+  color: #999;
+  background: none;
+  border-bottom: 1px solid #999;
+  padding-bottom: 0.05em;
+}
+.ias-link.ias-link-muted:hover {
+  color: #859fbe;
+  border-bottom-color: #859fbe;
+}
+
 @font-face {
   font-family: "ABC Marfa Variable";
   src: url("/Assets/Fonts/ABCMarfa-Regular.woff2") format("woff2");

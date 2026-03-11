@@ -92,6 +92,7 @@ This repo uses dot-separated namespaces for skill names (e.g., `pr.fix-ci`).
 - `do.fix-alembic-startup-crash-move-migrations-pre-deploy-helm`
 - `do.implement-deployment-dashboard`
 - `do.kiosk-update`
+- `do.local-softmax-com-website-auth`
 - `do.mettabox-ops`
 - `do.worktrunk`
 - `hr.screen-resumes`

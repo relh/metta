@@ -1,0 +1,64 @@
+---
+title: "Autocoding vs Vibecoding"
+snippet: "Two distinct postures for working with AI agents in software: exploratory vibe loops and production-grade autonomous loops."
+excerpt: "Adapted from Yatharth's Notes on Dust essay on vibecoding vs autocoding."
+date: 2026-01-08
+period: "Jan '26"
+author: "Yatharth"
+listDate: "Jan 8th 2026"
+featured: true
+related:
+  - label: "AI Coding Agents as RL Optimisers"
+    href: "/recyclopedia/ai-coding-agents-as-rl-optimisers"
+---
+
+A useful split is emerging in AI-assisted programming: **vibecoding** and **autocoding**. They look similar from a distance because both involve delegating implementation to models, but they optimize for different constraints and should be used differently.
+
+## Two postures, not one ladder
+
+Vibecoding is exploratory. You describe a direction, inspect behavior, then steer by feel. You are trying to get to a useful shape quickly, and complete code comprehension is optional while you are still searching.
+
+Autocoding is operational. You let agents run longer autonomous loops inside a real codebase where failures have consequences. The focus shifts from "does this feel right?" to "is this correct, reviewable, and safe to ship?"
+
+The key point is that autocoding is not simply "better vibecoding." These are different modes for different risk profiles.
+
+## Main constraint in each mode
+
+- Vibecoding: speed of insight. Fast iteration matters most.
+- Autocoding: correctness with oversight. Speed is bounded by trust and verification.
+
+When code can page someone at 3am, oversight cannot be optional.
+
+## Jam sessions vs studio production
+
+The article's music analogy is useful:
+
+- Vibecoding behaves like a jam session: generate riffs, improvise, keep momentum.
+- Autocoding behaves like studio production: repeatable process, tighter checks, fewer surprises.
+
+Both are creative, but one tolerates rough edges while the other is accountable to production reality.
+
+## The role of back-pressure
+
+Autocoding improves when you create tight feedback loops that quickly reject bad changes and reward good ones. In practice that means giving agents infrastructure that constrains drift:
+
+- runnable tests
+- linting and format checks
+- clear specs and interfaces
+- local environments that resemble production
+
+These systems let agents take longer runs without losing human oversight.
+
+## How the two modes support each other
+
+You can use vibecoding to discover a promising approach, then shift into autocoding to harden and integrate it.
+
+You can also use autocoding scaffolding (tests, specs, constraints) to make vibecoding sessions more productive by reducing obvious failure paths.
+
+## Why this distinction matters for teams
+
+The useful organizational question is not "are we using AI enough?" but:
+
+**How long can our agents run autonomously while still producing work we can trust?**
+
+That gives teams a concrete operational objective. Vibecoding can remain a high-velocity edge activity, while autocoding becomes the disciplined mode for core systems.

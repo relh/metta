@@ -81,6 +81,7 @@ Shared skills live in `skills/`:
 - `do.fix-alembic-startup-crash-move-migrations-pre-deploy-helm`
 - `do.implement-deployment-dashboard`
 - `do.kiosk-update`
+- `do.local-softmax-com-website-auth`
 - `do.mettabox-ops`
 - `do.worktrunk`
 - `n.add-publishable-package`

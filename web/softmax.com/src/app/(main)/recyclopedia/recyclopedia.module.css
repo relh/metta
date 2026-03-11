@@ -1,0 +1,451 @@
+.page {
+  color: #000d;
+  background: #fffdf4;
+  font:
+    400 16px / 24px "Courier New",
+    courier,
+    monospace;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.main {
+  margin: 0 auto;
+  max-width: 62rem;
+  padding: 0 2rem 6rem;
+}
+
+.header {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  margin-block: 2.5rem 3rem;
+}
+
+.logoLink {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  text-decoration: none;
+}
+
+.logoMark {
+  height: 48px;
+  width: auto;
+}
+
+.logoWordmark {
+  height: 28px;
+  width: auto;
+}
+
+.slash {
+  color: #ccc;
+  font-size: 36px;
+  font-weight: 300;
+  line-height: 1;
+  user-select: none;
+}
+
+.wrap {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 0.5em;
+  margin-left: -0.4em;
+  padding-right: 4.4em;
+  position: relative;
+  white-space: nowrap;
+}
+
+.trackTitleWrap {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5em;
+  white-space: nowrap;
+}
+
+.trackTitle {
+  align-items: center;
+  background: url("/Assets/ul.svg") no-repeat bottom / 100% 0.5em;
+  color: #000d;
+  display: inline-flex;
+  font:
+    700 30px/38px "Merriweather Sans",
+    sans-serif;
+  padding-bottom: 0.1em;
+  text-decoration: none;
+  transition: color 0.1s;
+  white-space: nowrap;
+}
+
+.trackIcon {
+  display: block;
+  flex-shrink: 0;
+  height: 2.2em;
+  width: 2.2em;
+}
+
+.trackTitle[href]:hover {
+  background-size: 100% 100px;
+  color: #859fbe;
+}
+
+.stamp {
+  background:
+    linear-gradient(170deg, hsl(14 83% 51% / 12%), hsl(14 83% 51% / 6%)),
+    hsl(14 83% 51% / 8%);
+  border: 1.2px solid hsl(14 83% 41% / 58%);
+  border-radius: 3px 7px 4px 8px;
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 7%);
+  color: hsl(14 83% 32%);
+  font:
+    700 11px/1.1 "Merriweather Sans",
+    sans-serif;
+  isolation: isolate;
+  letter-spacing: 0.12em;
+  padding: 0.45em 0.6em 0.38em;
+  position: absolute;
+  right: -1.2em;
+  rotate: 7deg;
+  text-decoration: none;
+  text-transform: uppercase;
+  top: -0.86em;
+}
+
+.stamp::before,
+.stamp::after {
+  border: 1px solid hsl(14 83% 37% / 46%);
+  border-radius: 6px 3px 7px 4px;
+  content: "";
+  inset: -2px -1px -1px -2px;
+  pointer-events: none;
+  position: absolute;
+}
+
+.stamp::before {
+  rotate: -1.3deg;
+}
+
+.stamp::after {
+  border-color: hsl(14 83% 37% / 32%);
+  inset: -1px -2px -2px -1px;
+  rotate: 1.4deg;
+}
+
+.stamp:hover {
+  color: hsl(14 83% 45%);
+  opacity: 0.85;
+}
+
+.macrodata {
+  margin: 0 0 2rem;
+  width: fit-content;
+  max-width: 100%;
+  min-inline-size: min(100%, 28rem);
+}
+
+.macroRow {
+  align-items: center;
+  border: 1px solid #0006;
+  border-bottom-width: 0;
+  display: flex;
+  padding: 0.2em 0;
+}
+
+.macroRow:first-child {
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+}
+
+.macroRow:last-child {
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  border-bottom-width: 1px;
+}
+
+.macroRow dt {
+  color: #0008;
+  flex: 0 0 3.8rem;
+  font:
+    500 0.5rem / 1.2 "Merriweather Sans",
+    sans-serif;
+  letter-spacing: -0.5px;
+  padding-right: 0.8rem;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.macroRow dd {
+  border-left: 1px solid #0006;
+  flex: 1 1 auto;
+  font:
+    400 16px / 24px "Courier New",
+    courier,
+    monospace;
+  margin: 0;
+  padding-left: 0.8rem;
+}
+
+.macroTitle dd {
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.macrodata + .h1 {
+  margin-top: 0;
+}
+
+.macroLinks {
+  align-items: center;
+  display: inline-flex;
+  flex-flow: row wrap;
+  gap: 0.35rem;
+}
+
+.dot {
+  color: #0006;
+}
+
+.h1 {
+  background: url("/Assets/ul.svg") no-repeat bottom / 100% 0.5em;
+  color: #000d;
+  font:
+    700 16px / 24px "Courier New",
+    courier,
+    monospace;
+  margin: 1.5rem 0 1.4rem;
+  max-width: max-content;
+  opacity: 0.9;
+  padding-bottom: 0.1rem;
+}
+
+.section {
+  margin: 1.5rem 0;
+}
+
+.sectionTitle {
+  font:
+    700 16px / 24px "Courier New",
+    courier,
+    monospace;
+  margin: 0 0 1rem;
+}
+
+.plainLink {
+  color: inherit;
+  text-decoration: none;
+}
+
+.plainLink:hover {
+  color: #859fbe;
+}
+
+.indexIntro {
+  font:
+    400 16px / 24px "Courier New",
+    courier,
+    monospace;
+  margin: 0 0 1.5rem;
+  max-width: 43rem;
+}
+
+.featuredList {
+  font:
+    400 16px / 24px "Courier New",
+    courier,
+    monospace;
+  list-style-type: disc;
+  margin: 0 0 1.5rem 1rem;
+  padding: 0;
+}
+
+.featuredList li + li {
+  margin-top: 0.75rem;
+}
+
+.noteLink {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 1.5px;
+}
+
+.noteLink:hover {
+  color: #859fbe;
+}
+
+.noteDate {
+  color: #0008;
+  font-style: italic;
+}
+
+.lede {
+  font:
+    400 16px / 24px "Courier New",
+    courier,
+    monospace;
+  margin: 0 0 1.5rem;
+  max-width: 43rem;
+}
+
+.noteBody {
+  font:
+    400 16px / 24px "Courier New",
+    courier,
+    monospace;
+  max-width: 43rem;
+}
+
+.noteBody p {
+  margin: 0 0 1.5rem;
+}
+
+.noteBody h2,
+.noteBody h3,
+.noteBody h4 {
+  font:
+    700 16px / 24px "Courier New",
+    courier,
+    monospace;
+  margin: 0 0 1rem;
+}
+
+.noteBody h2 {
+  margin-top: 2.2rem;
+}
+
+.noteBody ul,
+.noteBody ol {
+  margin: 0 0 1.5rem 1rem;
+  padding: 0;
+}
+
+.noteBody li + li {
+  margin-top: 0.75rem;
+}
+
+.noteBody blockquote {
+  border-left: 2px solid #0008;
+  margin: 0 0 1.5rem;
+  padding-left: 1rem;
+}
+
+.noteBody pre {
+  background: hsl(35 8% 86%);
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem;
+}
+
+.noteBody code {
+  background: hsl(35 8% 82%);
+  font-size: 0.9rem;
+  padding: 0.2em;
+}
+
+.noteBody pre code {
+  background: none;
+  padding: 0;
+}
+
+.noteBody em {
+  background: hsl(45 50% 98%);
+  border-bottom: 1.5px solid #fff;
+  font-style: normal;
+  padding: 0.15em 0.1em;
+}
+
+.noteBody a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 1.5px;
+}
+
+.noteBody a:hover {
+  color: #859fbe;
+}
+
+.noteBody aside {
+  background: hsl(45 20% 95%);
+  border-bottom: 1px solid #0002;
+  border-top: 2px solid #fff4;
+  box-shadow: 0 2px 8px #0001;
+  font:
+    400 13px / 21px "Merriweather Sans",
+    sans-serif;
+  margin: 0 0 1.5rem;
+  padding: 0.5rem;
+}
+
+.noteBody aside em {
+  background: none;
+  border: 0;
+  display: block;
+  font-style: normal;
+  font-weight: 600;
+  padding: 0;
+}
+
+.noteBody aside p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 1200px) {
+  .trackTitle {
+    font:
+      700 28px/36px "Merriweather Sans",
+      sans-serif;
+  }
+}
+
+@media (max-width: 700px) {
+  .main {
+    padding: 0 1rem 4rem;
+  }
+
+  .header {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-block: 2rem 2.5rem;
+  }
+
+  .logoMark {
+    height: 42px;
+  }
+
+  .logoWordmark {
+    height: 24px;
+  }
+
+  .slash {
+    font-size: 30px;
+  }
+
+  .trackTitle {
+    font:
+      700 24px/32px "Merriweather Sans",
+      sans-serif;
+  }
+
+  .trackIcon {
+    height: 1.8em;
+    width: 1.8em;
+  }
+
+  .wrap {
+    padding-right: 3.6em;
+  }
+
+  .stamp {
+    font-size: 9px;
+    right: -1em;
+    top: -0.7em;
+  }
+}

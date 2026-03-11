@@ -15,15 +15,92 @@ const postSchema = z.object({
   author: z.string().optional(),
   date: z.iso.date(),
   isDraft: z.boolean().optional(),
+  snippet: z.string().optional(),
 });
 
 export type Post = MdxDocument<typeof postSchema>;
 
 const blogMdxComponents: MDXComponents = {
-  // I'm not sure if this is useful, but Jekyll version used different heading
-  // styles for blog posts.
-  // Maybe this can be standardized later.
-  h2: (props) => <h2 className="text-[1.75em] font-bold" {...props} />,
+  h2: ({ children }) => (
+    <h2
+      style={{
+        font: "700 24px/32px 'Merriweather Sans', sans-serif",
+        color: "#0E2758",
+        margin: "2.5rem 0 0.75rem",
+      }}
+    >
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3
+      style={{
+        font: "600 19px/28px 'Merriweather Sans', sans-serif",
+        color: "#0E2758",
+        margin: "2rem 0 0.5rem",
+      }}
+    >
+      {children}
+    </h3>
+  ),
+  p: ({ children }) => (
+    <p
+      style={{
+        font: "400 18px/32px 'Merriweather', serif",
+        margin: "0 0 1.2rem",
+        maxWidth: "38rem",
+      }}
+    >
+      {children}
+    </p>
+  ),
+  ul: ({ children }) => (
+    <ul
+      style={{
+        font: "400 18px/32px 'Merriweather', serif",
+        margin: "0 0 1.2rem",
+        paddingLeft: "1.4rem",
+        maxWidth: "38rem",
+      }}
+    >
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol
+      style={{
+        font: "400 18px/32px 'Merriweather', serif",
+        margin: "0 0 1.2rem",
+        paddingLeft: "1.4rem",
+        maxWidth: "38rem",
+      }}
+    >
+      {children}
+    </ol>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote
+      style={{
+        borderLeft: "3px solid #e8e4dc",
+        margin: "1.5rem 0",
+        paddingLeft: "1.2rem",
+        color: "#555",
+        fontStyle: "italic",
+        maxWidth: "38rem",
+      }}
+    >
+      {children}
+    </blockquote>
+  ),
+  hr: () => (
+    <hr
+      style={{
+        border: "none",
+        borderTop: "1px solid #e8e4dc",
+        margin: "2.5rem 0",
+      }}
+    />
+  ),
 };
 
 export async function getSortedPosts(): Promise<Post[]> {

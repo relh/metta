@@ -396,9 +396,9 @@ def softmax_com(
     backend: Annotated[str, typer.Option("--backend", "-b", help="Select backend: local or prod")] = "local",
 ):
     env = base_env()
-    env["NEXTAUTH_URL"] = f"http://{LOCALHOST}:3002"  # must match the port from web/softmax.com/package.json
+    env.setdefault("NEXTAUTH_URL", f"http://{LOCALHOST}:3002")  # must match the port from web/softmax.com/package.json
     env["SITE_URL"] = f"http://{LOCALHOST}:3002"
-    env["NEXTAUTH_SECRET"] = "dev-nextauth-secret"
+    env.setdefault("NEXTAUTH_SECRET", "dev-nextauth-secret")
     env["DATABASE_URL"] = get_db_uri("softmax-com")
 
     # These are tied to a sandbox oauth app under nishu-builder's account.
@@ -409,8 +409,8 @@ def softmax_com(
     github_oauth_raw = get_secretsmanager_secret("github/oauth-dev", require_exists=False)
     if github_oauth_raw is not None:
         github_oauth_secret = json.loads(github_oauth_raw)
-        env["GITHUB_CLIENT_ID"] = github_oauth_secret["GITHUB_CLIENT_ID"]
-        env["GITHUB_CLIENT_SECRET"] = github_oauth_secret["GITHUB_CLIENT_SECRET"]
+        env.setdefault("GITHUB_CLIENT_ID", github_oauth_secret["GITHUB_CLIENT_ID"])
+        env.setdefault("GITHUB_CLIENT_SECRET", github_oauth_secret["GITHUB_CLIENT_SECRET"])
 
     discord_oauth_raw = get_secretsmanager_secret("discord/oauth-dev", require_exists=False)
     if discord_oauth_raw is not None:

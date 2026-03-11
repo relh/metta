@@ -18,11 +18,21 @@ const nextConfig: NextConfig = {
       {
         source: "/alb",
         destination: "/alignmentleague",
-        permanent: true,
+        permanent: false,
+      },
+      {
+        source: "/alb/:path*",
+        destination: "/",
+        permanent: false,
       },
       {
         source: "/privacy-policy.pdf",
         destination: "/privacy",
+        permanent: true,
+      },
+      {
+        source: "/inspiration",
+        destination: "/blog/inspiration",
         permanent: true,
       },
     ];

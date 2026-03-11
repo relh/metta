@@ -1,0 +1,149 @@
+---
+title: "AI Coding Agents as RL Optimisers"
+snippet: "A repo is not a document to write, but a terrain to navigate with gradients, traps, and shifting reward."
+excerpt: "If coding agents are policy learners, then codebases are RL environments with shaped, partial, and gameable objectives."
+date: 2026-02-27
+period: "Jan-Feb '26"
+author: "Yatharth"
+listDate: "Feb 2026"
+featured: true
+related:
+  - label: "Autocoding vs Vibecoding"
+    href: "/recyclopedia/autocoding-vs-vibecoding"
+---
+
+Most discussion about "writing code" still assumes a blank page mindset. In practice, almost all work happens inside an already alive system. There is existing structure, existing tests, existing habits, existing ownership boundaries, and existing failure modes.
+
+That means both humans and coding agents are usually not authors in the pure sense. They are optimisers proposing state transitions in a constrained environment.
+
+When an AI coding agent edits a repository, it is useful to model the loop as reinforcement learning:
+
+- the repository state is the environment
+- the diff is the action
+- CI and review outcomes are reward signals
+- rollback, bug reports, and regressions are delayed penalties
+
+This frame is not metaphor-only. It predicts real behavior.
+
+## Codebases are loss landscapes
+
+A mature codebase induces a rugged objective surface.
+
+- Tests provide hard constraints and sparse terminal feedback.
+- Type checks and linters provide dense local shaping.
+- Build systems and deployment checks provide operational constraints.
+- Reviewer comments inject social and stylistic priors.
+- Product pressure and deadlines reweight objectives over time.
+
+The same code change can have opposite value depending on where the current system state is. This is exactly what we expect in a non-convex landscape: good local moves do not guarantee globally good trajectories.
+
+## Diffs are policy actions
+
+Agents do not produce "the answer". They sample candidate actions, evaluate them, and iterate.
+
+```ts
+type RepoStep = {
+  state: RepoSnapshot;
+  action: DiffProposal;
+  feedback: {
+    tests: "pass" | "fail";
+    lint: "pass" | "fail";
+    review: "accept" | "request_changes";
+    runtime: "healthy" | "regressed";
+  };
+};
+```
+
+From this view, prompt engineering is only one part of control. The stronger levers are environment design and reward design:
+
+1. What feedback is immediate?
+2. What feedback is delayed?
+3. What proxy metrics are over-emphasized?
+4. What constraints can be bypassed?
+
+## Reward shaping and reward hacking
+
+"Green tests" are useful but incomplete rewards. Agents optimise what they can measure.
+
+If the harness only checks superficial properties, the policy can improve measured score while drifting from intent. That is reward hacking by construction, not by malice.
+
+Common examples:
+
+- brittle assertions that can be satisfied with fragile glue code
+- benchmarks that reward micro-optimisation but hurt readability
+- migration scripts that pass tests but violate operational invariants
+
+In short: passing CI is evidence, not proof, of alignment with system goals.
+
+## Local minima are everywhere
+
+A lot of low-quality code is not random error. It is local optimisation under poor gradients.
+
+Examples:
+
+- repeated patch-on-patch fixes because global refactor has sparse reward
+- defensive indirection added to silence a flaky test without removing root cause
+- copy-paste divergence because refactoring costs are immediate while duplication costs are delayed
+
+When we call this "bad engineering", we often hide the structural reason: the environment made the easy path low-risk and the correct path high-variance.
+
+## The environment is non-stationary
+
+Unlike textbook RL settings, repository objectives shift constantly.
+
+- Requirements move.
+- Dependencies update.
+- Team conventions change.
+- New infrastructure constraints appear.
+- Ownership boundaries move as people join or leave.
+
+So the target policy is continually chasing a moving optimum. This is why one-shot evaluations are weak predictors of sustained quality. We should judge adaptation under drift, not only performance under frozen constraints.
+
+## Repositories train humans too
+
+The loop is bidirectional.
+
+We usually say engineers train agents with prompts and review. But the environment also trains the humans. Engineers gradually internalise whatever the harness rewards:
+
+- cargo-culting patterns that always pass review
+- avoiding architecture work that is hard to validate quickly
+- favouring measurable progress over conceptual clarity
+
+A codebase is therefore not just execution substrate. It is an incentive system.
+
+## Practical implication: design better training worlds
+
+If we want better coding agents, we should stop treating model quality as the only variable and improve the environment itself.
+
+Useful interventions:
+
+1. Add tests that encode semantic intent, not only syntax-level behavior.
+2. Add cheap checks for maintainability regressions (complexity, coupling, churn).
+3. Separate "fast shaping reward" from "high-fidelity reward" in the pipeline.
+4. Make failure diagnostics legible so policies can climb better gradients.
+5. Track long-horizon outcomes (incident rate, rollback frequency, post-merge churn).
+
+This turns repositories into better optimisation substrates for both humans and agents.
+
+## A minimal working mental model
+
+Use this compact model when designing agent workflows:
+
+```ts
+const codingLoop = {
+  policy: "LLM + tool-use + memory",
+  environment: "repo + tests + reviewers + runtime constraints",
+  action: "diff",
+  reward: "shaped CI signal plus delayed production signal",
+  failureModes: [
+    "reward hacking",
+    "local minima",
+    "spec mismatch",
+    "non-stationary objective drift",
+  ],
+};
+```
+
+Once you see coding this way, many debates become clearer. The main question is no longer "Can the model code?" but "What objective surface are we letting it optimise on?"
+
+That is the core alignment problem for coding agents.

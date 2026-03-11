@@ -3,7 +3,7 @@ export const P = (props: React.ComponentProps<"p">) => {
   return (
     <p
       {...props}
-      className="my-4 text-justify text-[1.1em] leading-[1.7] first:mt-0 last:mb-0"
+      className="mt-2 mb-4 text-[1.1em] leading-[1.7] first:mt-0 last:mb-0"
     />
   );
 };
