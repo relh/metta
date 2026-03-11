@@ -6,7 +6,7 @@ from typing import cast
 
 from pydantic import Field
 
-from cogames.cogs_vs_clips.terrain import MachinaArena
+from cogames.cogs_vs_clips.buildings import MachinaArena
 from cogames.core import CoGameMission, CoGameSite
 from metta.games.games import register  # noqa: E402
 from metta.games.hunger.variants import parse_variants
