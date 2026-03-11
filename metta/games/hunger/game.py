@@ -22,7 +22,7 @@ from mettagrid.config.mettagrid_config import (
 from mettagrid.config.obs_config import GlobalObsConfig, ObsConfig
 from mettagrid.config.render_config import RenderConfig
 from mettagrid.mapgen.mapgen import MapGen
-from mettagrid.mapgen.scenes.base_hub import BaseHub
+from mettagrid.mapgen.scenes.compound import Compound
 
 
 class HungerGame(CoGameMission):
@@ -95,7 +95,7 @@ class HungerGame(CoGameMission):
                     building_weights={},
                     biome_weights={"forest": 1.0},
                     dungeon_weights={"none": 1.0},
-                    hub=BaseHub.Config(
+                    hub=Compound.Config(
                         spawn_count=num_agents,
                         hub_object="empty",
                         corner_bundle="none",

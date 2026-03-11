@@ -84,7 +84,7 @@ if TYPE_CHECKING:
 # Debug flag - set to True to see detailed agent behavior
 DEBUG = False
 GEAR_SEARCH_OFFSETS = [
-    # BaseHub places stations ~4-5 rows below the hub, spaced by 2 columns.
+    # Compound places stations ~4-5 rows below the hub, spaced by 2 columns.
     # Search those slots first to capture early gear windows.
     (4, -4),
     (4, -2),
