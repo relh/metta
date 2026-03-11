@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -69,7 +70,7 @@ def test_default_dashboard_data_returns_404_when_default_policy_missing(monkeypa
         return None, None
 
     @asynccontextmanager
-    async def fake_db_session(*, read_only: bool = False) -> Any:
+    async def fake_db_session(*, read_only: bool = False) -> AsyncIterator[Any]:
         assert read_only
         yield SimpleNamespace()
 
@@ -230,7 +231,7 @@ def test_dashboard_data_builds_commissioner_with_season_id(
         return _FakeCommissioner()
 
     @asynccontextmanager
-    async def fake_db_session(*, read_only: bool = False) -> Any:
+    async def fake_db_session(*, read_only: bool = False) -> AsyncIterator[Any]:
         assert read_only
         session = _FakeSession(
             [
@@ -329,7 +330,7 @@ def test_dashboard_data_embeds_role_percentiles_when_requested(monkeypatch: Any)
         ]
 
     @asynccontextmanager
-    async def fake_db_session(*, read_only: bool = False) -> Any:
+    async def fake_db_session(*, read_only: bool = False) -> AsyncIterator[Any]:
         assert read_only
         session = _FakeSession(
             [
@@ -404,7 +405,7 @@ def test_role_percentiles_uses_first_pool_with_data(monkeypatch: Any) -> None:
         return policy_version_id, fake_policy_version
 
     @asynccontextmanager
-    async def fake_db_session(*, read_only: bool = False) -> Any:
+    async def fake_db_session(*, read_only: bool = False) -> AsyncIterator[Any]:
         assert read_only
         yield SimpleNamespace()
 

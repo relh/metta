@@ -16,7 +16,6 @@ const AUTH_COOKIE_NAME = process.env.NEXT_PUBLIC_OBSERVATORY_AUTH_COOKIE_NAME?.t
 const SESSION_TOKEN_KEY = 'policy-dashboard-auth-token'
 const POLICY_VERSIONS_BASE_PATH = '/dashboard/v1/policies/versions'
 const DIAGNOSE_RUNS_BASE_PATH = '/dashboard/v1/cogames-diagnose/runs'
-const DASHBOARD_DATA_QUERY = new URLSearchParams({ include: 'role_percentiles,diagnose_runs' }).toString()
 
 export const DASHBOARD_API_BASE_URL =
   process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL?.replace(/\/$/, '') ?? DEFAULT_BASE_URL
@@ -174,14 +173,12 @@ function diagnoseRunPath(runId: string, suffix: string): string {
 }
 
 export async function fetchDashboardData(policyVersionId: string): Promise<DashboardResponse> {
-  return await dashboardRequest<DashboardResponse>(policyVersionPath(policyVersionId, `/data?${DASHBOARD_DATA_QUERY}`))
+  return await dashboardRequest<DashboardResponse>(policyVersionPath(policyVersionId, '/data'))
 }
 
 export async function fetchDashboardDefaultData(): Promise<DashboardResponse> {
   try {
-    return await dashboardRequest<DashboardResponse>(
-      `${POLICY_VERSIONS_BASE_PATH}/default/data?${DASHBOARD_DATA_QUERY}`
-    )
+    return await dashboardRequest<DashboardResponse>(`${POLICY_VERSIONS_BASE_PATH}/default/data`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (!message.startsWith('422: Invalid policy version id format') && !message.startsWith('404:')) {

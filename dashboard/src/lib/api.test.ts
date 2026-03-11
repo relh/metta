@@ -64,10 +64,12 @@ describe('dashboard api', () => {
     expect(response.policy.id).toBe(DASHBOARD_RESPONSE.policy.id)
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(String(fetchMock.mock.calls[0][0])).toContain('/dashboard/v1/policies/versions/default/data')
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('include=')
     expect(String(fetchMock.mock.calls[1][0])).toContain('/dashboard/v1/policies/versions/default')
     expect(String(fetchMock.mock.calls[2][0])).toContain(
       `/dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/data`
     )
+    expect(String(fetchMock.mock.calls[2][0])).not.toContain('include=')
   })
 
   it('retries GET once on transient 503 before failing', async () => {
@@ -86,6 +88,17 @@ describe('dashboard api', () => {
 
     expect(response.policy.id).toBe(DASHBOARD_RESPONSE.policy.id)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('fetches the main dashboard summary without eager role or diagnose embeds', async () => {
+    const fetchMock = mockDashboardFetch()
+
+    await fetchDashboardData(DASHBOARD_RESPONSE.policy.id)
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain(
+      `/dashboard/v1/policies/versions/${encodeURIComponent(DASHBOARD_RESPONSE.policy.id)}/data`
+    )
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('include=')
   })
 
   it('prefers URL hash token over cookie, stores it in sessionStorage, and scrubs it from the URL', async () => {

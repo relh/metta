@@ -11,7 +11,6 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import String, cast, exists, func, literal, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import aliased
 
 from metta.app_backend.database import get_db, with_db
 from metta.app_backend.models.episodes import (
@@ -159,72 +158,15 @@ async def get_episodes(
 ) -> list[EpisodeWithTags]:
     session = get_db()
 
-    tags_cte = (
-        select(
-            EpisodeTag.episode_id,
-            func.jsonb_object_agg(EpisodeTag.key, EpisodeTag.value).label("tags"),
-        )
-        .group_by(EpisodeTag.episode_id)
-        .cte("episode_tags_agg")
-    )
-
-    episode_alias = aliased(Episode)
-    avg_rewards_cte = (
-        select(
-            episode_alias.id.label("episode_id"),
-            func.jsonb_object_agg(
-                cast(PolicyVersion.id, String),
-                EpisodePolicyMetric.value / func.nullif(EpisodePolicy.num_agents, 0),
-            )
-            .filter(
-                (EpisodePolicyMetric.metric_name == "reward")
-                & EpisodePolicy.num_agents.is_not(None)
-                & (EpisodePolicy.num_agents > 0)
-            )
-            .label("avg_rewards"),
-        )
-        .select_from(episode_alias)
-        .join(EpisodePolicy, EpisodePolicy.episode_id == episode_alias.id)
-        .join(PolicyVersion, PolicyVersion.id == EpisodePolicy.policy_version_id)
-        .join(
-            EpisodePolicyMetric,
-            (EpisodePolicyMetric.episode_internal_id == episode_alias.internal_id)
-            & (EpisodePolicyMetric.pv_internal_id == PolicyVersion.internal_id),
-        )
-        .group_by(episode_alias.id)
-        .cte("episode_avg_rewards")
-    )
-
-    job_cte = (
-        select(
-            EpisodeJob.episode_id,
-            func.min(cast(EpisodeJob.job_id, String)).label("job_id"),
-        )
-        .group_by(EpisodeJob.episode_id)
-        .cte("episode_job_agg")
-    )
-
-    attributes_expr = func.coalesce(Episode.attributes, cast(literal("{}"), JSONB)).label("attributes")
-    tags_expr = func.coalesce(tags_cte.c.tags, cast(literal("{}"), JSONB)).label("tags")
-    avg_rewards_expr = func.coalesce(avg_rewards_cte.c.avg_rewards, cast(literal("{}"), JSONB)).label("avg_rewards")
-
-    stmt = (
-        select(
-            Episode.id,
-            Episode.replay_url,
-            Episode.thumbnail_url,
-            attributes_expr,
-            Episode.eval_task_id,
-            Episode.created_at,
-            tags_expr,
-            avg_rewards_expr,
-            job_cte.c.job_id.label("job_id"),
-        )
-        .select_from(Episode)
-        .outerjoin(tags_cte, tags_cte.c.episode_id == Episode.id)
-        .outerjoin(avg_rewards_cte, avg_rewards_cte.c.episode_id == Episode.id)
-        .outerjoin(job_cte, job_cte.c.episode_id == Episode.id)
-    )
+    scope_stmt = select(
+        Episode.id,
+        Episode.internal_id,
+        Episode.replay_url,
+        Episode.thumbnail_url,
+        Episode.attributes,
+        Episode.eval_task_id,
+        Episode.created_at,
+    ).select_from(Episode)
 
     where_conditions = []
 
@@ -258,14 +200,86 @@ async def get_episodes(
             where_conditions.append(exists(tag_query))
 
     if where_conditions:
-        stmt = stmt.where(*where_conditions)
+        scope_stmt = scope_stmt.where(*where_conditions)
 
-    stmt = stmt.order_by(Episode.created_at.desc())
+    scope_stmt = scope_stmt.order_by(Episode.created_at.desc())
 
     if limit is not None:
-        stmt = stmt.limit(limit)
+        scope_stmt = scope_stmt.limit(limit)
     if offset > 0:
-        stmt = stmt.offset(offset)
+        scope_stmt = scope_stmt.offset(offset)
+
+    episode_scope = scope_stmt.cte("episode_scope")
+    episode_scope_ids = select(episode_scope.c.id)
+
+    tags_cte = (
+        select(
+            EpisodeTag.episode_id,
+            func.jsonb_object_agg(EpisodeTag.key, EpisodeTag.value).label("tags"),
+        )
+        .where(EpisodeTag.episode_id.in_(episode_scope_ids))
+        .group_by(EpisodeTag.episode_id)
+        .cte("episode_tags_agg")
+    )
+
+    avg_rewards_cte = (
+        select(
+            episode_scope.c.id.label("episode_id"),
+            func.jsonb_object_agg(
+                cast(PolicyVersion.id, String),
+                EpisodePolicyMetric.value / func.nullif(EpisodePolicy.num_agents, 0),
+            )
+            .filter(
+                (EpisodePolicyMetric.metric_name == "reward")
+                & EpisodePolicy.num_agents.is_not(None)
+                & (EpisodePolicy.num_agents > 0)
+            )
+            .label("avg_rewards"),
+        )
+        .select_from(episode_scope)
+        .join(EpisodePolicy, EpisodePolicy.episode_id == episode_scope.c.id)
+        .join(PolicyVersion, PolicyVersion.id == EpisodePolicy.policy_version_id)
+        .join(
+            EpisodePolicyMetric,
+            (EpisodePolicyMetric.episode_internal_id == episode_scope.c.internal_id)
+            & (EpisodePolicyMetric.pv_internal_id == PolicyVersion.internal_id),
+        )
+        .group_by(episode_scope.c.id)
+        .cte("episode_avg_rewards")
+    )
+
+    job_cte = (
+        select(
+            EpisodeJob.episode_id,
+            func.min(cast(EpisodeJob.job_id, String)).label("job_id"),
+        )
+        .where(EpisodeJob.episode_id.in_(episode_scope_ids))
+        .group_by(EpisodeJob.episode_id)
+        .cte("episode_job_agg")
+    )
+
+    attributes_expr = func.coalesce(episode_scope.c.attributes, cast(literal("{}"), JSONB)).label("attributes")
+    tags_expr = func.coalesce(tags_cte.c.tags, cast(literal("{}"), JSONB)).label("tags")
+    avg_rewards_expr = func.coalesce(avg_rewards_cte.c.avg_rewards, cast(literal("{}"), JSONB)).label("avg_rewards")
+
+    stmt = (
+        select(
+            episode_scope.c.id,
+            episode_scope.c.replay_url,
+            episode_scope.c.thumbnail_url,
+            attributes_expr,
+            episode_scope.c.eval_task_id,
+            episode_scope.c.created_at,
+            tags_expr,
+            avg_rewards_expr,
+            job_cte.c.job_id.label("job_id"),
+        )
+        .select_from(episode_scope)
+        .outerjoin(tags_cte, tags_cte.c.episode_id == episode_scope.c.id)
+        .outerjoin(avg_rewards_cte, avg_rewards_cte.c.episode_id == episode_scope.c.id)
+        .outerjoin(job_cte, job_cte.c.episode_id == episode_scope.c.id)
+    )
+    stmt = stmt.order_by(episode_scope.c.created_at.desc())
 
     rows = (await session.execute(stmt)).mappings().all()
 

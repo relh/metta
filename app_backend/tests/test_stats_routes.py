@@ -1,8 +1,10 @@
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
@@ -13,6 +15,25 @@ from metta.app_backend.models.tournament import Pool, PoolPlayer, Season
 from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.test_support.client_adapter import get_user_headers
 from mettagrid.runner.episode_runner import MAX_POLICY_SIZE_BYTES
+
+
+class _EmptyMappingsResult:
+    def all(self) -> list[dict[str, object]]:
+        return []
+
+
+class _EmptyExecuteResult:
+    def mappings(self) -> _EmptyMappingsResult:
+        return _EmptyMappingsResult()
+
+
+class _CaptureSession:
+    def __init__(self) -> None:
+        self.statements: list[Any] = []
+
+    async def execute(self, stmt: Any) -> _EmptyExecuteResult:
+        self.statements.append(stmt)
+        return _EmptyExecuteResult()
 
 
 @pytest.mark.asyncio
@@ -163,6 +184,23 @@ async def test_query_episodes_by_id_includes_avg_rewards_and_replay(
     assert episode["id"] == str(episode_id)
     assert episode["replay_url"] == "https://example.com/replays/episode-test"
     assert episode["avg_rewards"][str(pv_id)] == pytest.approx(5.0)
+
+
+@pytest.mark.asyncio
+async def test_get_episodes_limits_scope_before_aggregating(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _CaptureSession()
+    monkeypatch.setattr(episode_queries, "get_db", lambda: session)
+
+    await episode_queries.get_episodes.__wrapped__(primary_policy_version_ids=[uuid.uuid4()], limit=25)
+
+    assert len(session.statements) == 1
+    compiled = str(session.statements[0].compile(dialect=postgresql.dialect()))
+    normalized_sql = " ".join(compiled.split())
+    assert "WITH episode_scope AS (SELECT episodes.id AS id, episodes.internal_id AS internal_id" in normalized_sql
+    assert "ORDER BY episodes.created_at DESC LIMIT" in normalized_sql
+    assert "FROM episode_scope LEFT OUTER JOIN episode_tags_agg" in normalized_sql
+    assert "episode_tags.episode_id IN (SELECT episode_scope.id FROM episode_scope)" in normalized_sql
+    assert "JOIN episode_policies ON episode_policies.episode_id = episode_scope.id" in normalized_sql
 
 
 # --- Authorization Tests ---

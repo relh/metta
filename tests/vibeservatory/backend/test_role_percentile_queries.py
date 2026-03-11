@@ -3,69 +3,31 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import literal, select
+from cachetools import TTLCache
 
 from metta.app_backend.config import DEFAULT_EPISODE_AGENT_METRIC_ALLOWLIST
 from vibeservatory.backend.dashboard_backend.role_stats import queries as rpq
-
-
-class _FakeExecuteResult:
-    def __init__(self, rows: list[dict[str, object]]) -> None:
-        self._rows = rows
-
-    def mappings(self) -> "_FakeExecuteResult":
-        return self
-
-    def all(self) -> list[dict[str, object]]:
-        return self._rows
-
-
-class _FakeSession:
-    def __init__(self, rows: list[dict[str, object]]) -> None:
-        self._rows = rows
-
-    async def execute(self, _query: object) -> _FakeExecuteResult:
-        return _FakeExecuteResult(self._rows)
 
 
 @pytest.mark.asyncio
 async def test_metric_percentiles_uses_first_available_alias_source(monkeypatch: pytest.MonkeyPatch) -> None:
     policy_a = uuid4()
     policy_b = uuid4()
-    rows = [
-        {
-            "policy_version_id": policy_a,
-            "metric_name": "germanium.lost",
-            "avg_value": 6.0,
-            "sample_count": 5,
+    source_metrics_by_policy = {
+        policy_a: {
+            "germanium.lost": {"avg": 6.0, "samples": 5},
+            "germanium.deposited": {"avg": 2.0, "samples": 5},
         },
-        {
-            "policy_version_id": policy_a,
-            "metric_name": "germanium.deposited",
-            "avg_value": 2.0,
-            "sample_count": 5,
+        policy_b: {
+            "germanium.lost": {"avg": 1.0, "samples": 4},
         },
-        {
-            "policy_version_id": policy_b,
-            "metric_name": "germanium.lost",
-            "avg_value": 1.0,
-            "sample_count": 4,
-        },
-    ]
-    session = _FakeSession(rows=rows)
-
-    monkeypatch.setattr(rpq, "get_db", lambda: session)
-    monkeypatch.setattr(
-        rpq,
-        "_pool_episode_internal_ids",
-        lambda _pool_id: select(literal(1).label("episode_internal_id")).subquery("pool_episodes"),
-    )
+    }
     metric = rpq.RoleMetric(
         "germanium.deposited",
         ("germanium.deposited", "germanium.lost"),
         higher_is_better=True,
     )
-    results = await rpq._metric_percentiles(uuid4(), metric)
+    results = await rpq._metric_percentiles(metric, source_metrics_by_policy)
     by_policy = {row["policy_version_id"]: row for row in results}
 
     assert by_policy[policy_a]["avg_value"] == 2.0
@@ -111,7 +73,10 @@ def test_role_metric_catalog_keeps_miner_deposits_and_death_metric() -> None:
 async def test_compute_role_percentile_payloads_uses_metric_weights(monkeypatch: pytest.MonkeyPatch) -> None:
     policy_id = uuid4()
 
-    async def _fake_metric_percentiles(_pool_id: UUID, metric: rpq.RoleMetric) -> list[dict[str, object]]:
+    async def _fake_metric_percentiles(
+        metric: rpq.RoleMetric,
+        _source_metrics_by_policy: dict[UUID, dict[str, dict[str, float | int]]],
+    ) -> list[dict[str, object]]:
         # Force one low priority metric percentile and high others to verify weighted averaging.
         percentile = 0.0 if metric.key == "junction.aligned" else 100.0
         return [
@@ -124,7 +89,15 @@ async def test_compute_role_percentile_payloads_uses_metric_weights(monkeypatch:
             }
         ]
 
+    async def _fake_pool_source_metrics_by_policy(
+        _pool_id: UUID,
+        _source_metric_names: tuple[str, ...],
+    ) -> dict[UUID, dict[str, dict[str, float | int]]]:
+        return {policy_id: {"junction.aligned_by_agent": {"avg": 1.0, "samples": 10}}}
+
+    monkeypatch.setattr(rpq, "_pool_source_metrics_by_policy", _fake_pool_source_metrics_by_policy)
     monkeypatch.setattr(rpq, "_metric_percentiles", _fake_metric_percentiles)
+    monkeypatch.setattr(rpq, "_role_percentile_payload_cache", TTLCache(maxsize=16, ttl=300))
 
     rows = await rpq._compute_role_percentile_payloads(uuid4(), roles=("aligner",))
     assert len(rows) == 1

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from cachetools import TTLCache
 from sqlalchemy import func, select
 
 from metta.app_backend.database import get_db, with_db
@@ -126,6 +127,12 @@ ROLE_METRICS: dict[str, list[RoleMetric]] = {
     ],
 }
 
+ROLE_PERCENTILE_CACHE_TTL_SECONDS = 300
+_role_percentile_payload_cache: TTLCache[tuple[UUID, tuple[str, ...]], tuple[dict[str, Any], ...]] = TTLCache(
+    maxsize=128,
+    ttl=ROLE_PERCENTILE_CACHE_TTL_SECONDS,
+)
+
 
 def _validate_role_metrics(role_metrics: dict[str, list[RoleMetric]]) -> None:
     for role, metrics in role_metrics.items():
@@ -167,50 +174,11 @@ def _pool_episode_internal_ids(pool_id: UUID):
 
 
 async def _metric_percentiles(
-    pool_id: UUID,
     metric: RoleMetric,
+    source_metrics_by_policy: dict[UUID, dict[str, dict[str, float | int]]],
 ) -> list[dict[str, Any]]:
-    session = get_db()
-    pool_episodes = _pool_episode_internal_ids(pool_id)
-    stmt = (
-        select(
-            PolicyVersion.id.label("policy_version_id"),
-            EpisodeAgentMetric.metric_name.label("metric_name"),
-            func.avg(EpisodeAgentMetric.value).label("avg_value"),
-            func.count().label("sample_count"),
-        )
-        .select_from(EpisodeAgentMetric)
-        .join(pool_episodes, pool_episodes.c.episode_internal_id == EpisodeAgentMetric.episode_internal_id)
-        .join(PolicyVersion, PolicyVersion.internal_id == EpisodeAgentMetric.pv_internal_id)
-        .where(EpisodeAgentMetric.metric_name.in_(metric.source_names))
-        .group_by(PolicyVersion.id, EpisodeAgentMetric.metric_name)
-    )
-    rows = (await session.execute(stmt)).mappings().all()
-    if not rows:
-        # If the metric is absent for the entire pool, it should not affect role scoring.
-        return []
-
-    by_policy: dict[UUID, dict[str, Any]] = {}
-    for row in rows:
-        pv_id = row["policy_version_id"]
-        source_name = str(row["metric_name"])
-        avg_value = float(row["avg_value"])
-        sample_count = int(row["sample_count"])
-
-        policy_bucket = by_policy.setdefault(
-            pv_id,
-            {
-                "source_metrics": {},
-            },
-        )
-        policy_bucket["source_metrics"][source_name] = {
-            "avg": avg_value,
-            "samples": sample_count,
-        }
-
     selected_source_by_policy: dict[UUID, tuple[float, int]] = {}
-    for pv_id, data in by_policy.items():
-        source_metrics = data["source_metrics"]
+    for pv_id, source_metrics in source_metrics_by_policy.items():
         selected_source = next((source for source in metric.source_names if source in source_metrics), None)
         if selected_source is None:
             continue
@@ -233,10 +201,65 @@ async def _metric_percentiles(
                 "avg_value": float(value),
                 "sample_count": sample_count,
                 "percentile": float(percentile),
-                "source_metrics": by_policy[pv_id]["source_metrics"],
+                "source_metrics": source_metrics_by_policy[pv_id],
             }
         )
     return results
+
+
+def _cache_key_for_roles(pool_id: UUID, roles: tuple[str, ...]) -> tuple[UUID, tuple[str, ...]]:
+    return pool_id, tuple(sorted(roles))
+
+
+def _source_metric_names_for_roles(roles: tuple[str, ...]) -> tuple[str, ...]:
+    names: list[str] = []
+    seen: set[str] = set()
+    for role in roles:
+        for metric in ROLE_METRICS[role]:
+            for source_name in metric.source_names:
+                if source_name in seen:
+                    continue
+                seen.add(source_name)
+                names.append(source_name)
+    return tuple(names)
+
+
+async def _pool_source_metrics_by_policy(
+    pool_id: UUID,
+    source_metric_names: tuple[str, ...],
+) -> dict[UUID, dict[str, dict[str, float | int]]]:
+    if len(source_metric_names) == 0:
+        return {}
+
+    session = get_db()
+    pool_episodes = _pool_episode_internal_ids(pool_id)
+    stmt = (
+        select(
+            PolicyVersion.id.label("policy_version_id"),
+            EpisodeAgentMetric.metric_name.label("metric_name"),
+            func.avg(EpisodeAgentMetric.value).label("avg_value"),
+            func.count().label("sample_count"),
+        )
+        .select_from(EpisodeAgentMetric)
+        .join(pool_episodes, pool_episodes.c.episode_internal_id == EpisodeAgentMetric.episode_internal_id)
+        .join(PolicyVersion, PolicyVersion.internal_id == EpisodeAgentMetric.pv_internal_id)
+        .where(EpisodeAgentMetric.metric_name.in_(source_metric_names))
+        .group_by(PolicyVersion.id, EpisodeAgentMetric.metric_name)
+    )
+    rows = (await session.execute(stmt)).mappings().all()
+
+    source_metrics_by_policy: dict[UUID, dict[str, dict[str, float | int]]] = {}
+    for row in rows:
+        pv_id = row["policy_version_id"]
+        source_name = str(row["metric_name"])
+        avg_value = float(row["avg_value"])
+        sample_count = int(row["sample_count"])
+        policy_bucket = source_metrics_by_policy.setdefault(pv_id, {})
+        policy_bucket[source_name] = {
+            "avg": avg_value,
+            "samples": sample_count,
+        }
+    return source_metrics_by_policy
 
 
 async def _compute_role_percentile_payloads(
@@ -249,12 +272,22 @@ async def _compute_role_percentile_payloads(
         unknown_csv = ", ".join(sorted(unknown_roles))
         raise ValueError(f"Unknown role(s) requested: {unknown_csv}")
 
+    cache_key = _cache_key_for_roles(pool_id, selected_roles)
+    cached = _role_percentile_payload_cache.get(cache_key)
+    if cached is not None:
+        return list(cached)
+
+    source_metrics_by_policy = await _pool_source_metrics_by_policy(
+        pool_id,
+        _source_metric_names_for_roles(selected_roles),
+    )
+
     role_payloads: dict[tuple[UUID, str], dict[str, Any]] = {}
 
     for role in selected_roles:
         metrics = ROLE_METRICS[role]
         for metric in metrics:
-            rows = await _metric_percentiles(pool_id, metric)
+            rows = await _metric_percentiles(metric, source_metrics_by_policy)
             for row in rows:
                 pv_id = row["policy_version_id"]
                 key = (pv_id, role)
@@ -300,6 +333,7 @@ async def _compute_role_percentile_payloads(
             }
         )
 
+    _role_percentile_payload_cache[cache_key] = tuple(role_rows)
     return role_rows
 
 
