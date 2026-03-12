@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { Prisma } from "@/generated/prisma/client";
 
 import { prisma } from "@/lib/db/prisma";
 import { isDevMode } from "@/observatory/config";
@@ -10,6 +11,57 @@ export type UserInfo = {
   discordId: string | null;
   isSoftmaxTeamMember: boolean;
 };
+
+type DbUserWithAccounts = Prisma.UserGetPayload<{
+  include: { accounts: true };
+}>;
+
+async function getSoftmaxTeamMemberIds(
+  dbUsers: DbUserWithAccounts[],
+): Promise<Set<string>> {
+  const allGitHubAccountIds = dbUsers.flatMap((user) =>
+    user.accounts
+      .filter((a) => a.provider === "github")
+      .map((a) => a.providerAccountId),
+  );
+
+  const teamMembers = await prisma.gitHubTeamMember.findMany({
+    where: {
+      userId: { in: allGitHubAccountIds },
+    },
+    select: { userId: true },
+  });
+
+  return new Set(teamMembers.map((member) => member.userId));
+}
+
+function buildUserInfo(
+  dbUser: DbUserWithAccounts,
+  teamMemberIds: Set<string>,
+): UserInfo {
+  const gitHubAccountIds = dbUser.accounts
+    .filter((a) => a.provider === "github")
+    .map((a) => a.providerAccountId);
+
+  let isSoftmaxTeamMember = gitHubAccountIds.some((id) =>
+    teamMemberIds.has(id),
+  );
+  if (isDevMode()) {
+    isSoftmaxTeamMember = true;
+  }
+
+  const discordId =
+    dbUser.accounts.find((a) => a.provider === "discord")?.providerAccountId ??
+    null;
+
+  return {
+    id: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name,
+    discordId,
+    isSoftmaxTeamMember,
+  };
+}
 
 // used by /api/validate
 export async function loadUserByMachineToken(
@@ -40,31 +92,8 @@ export async function loadUserByMachineToken(
     where: { id: machineToken.id },
     data: { lastUsedAt: new Date() },
   });
-
-  let isSoftmaxTeamMember = !!(await prisma.gitHubTeamMember.findFirst({
-    where: {
-      userId: {
-        in: machineToken.user.accounts
-          .filter((a) => a.provider === "github")
-          .map((a) => a.providerAccountId),
-      },
-    },
-  }));
-  if (isDevMode()) {
-    isSoftmaxTeamMember = true;
-  }
-
-  const discordId =
-    machineToken.user.accounts.find((a) => a.provider === "discord")
-      ?.providerAccountId ?? null;
-
-  return {
-    id: machineToken.user.id,
-    email: machineToken.user.email,
-    name: machineToken.user.name,
-    discordId,
-    isSoftmaxTeamMember,
-  };
+  const teamMemberIds = await getSoftmaxTeamMemberIds([machineToken.user]);
+  return buildUserInfo(machineToken.user, teamMemberIds);
 }
 
 export async function loadUserById(id: string): Promise<UserInfo | null> {
@@ -78,31 +107,8 @@ export async function loadUserById(id: string): Promise<UserInfo | null> {
   if (!dbUser) {
     return null;
   }
-
-  let isSoftmaxTeamMember = !!(await prisma.gitHubTeamMember.findFirst({
-    where: {
-      userId: {
-        in: dbUser.accounts
-          .filter((a) => a.provider === "github")
-          .map((a) => a.providerAccountId),
-      },
-    },
-  }));
-  if (isDevMode()) {
-    isSoftmaxTeamMember = true;
-  }
-
-  const discordId =
-    dbUser.accounts.find((a) => a.provider === "discord")?.providerAccountId ??
-    null;
-
-  return {
-    id: dbUser.id,
-    email: dbUser.email,
-    name: dbUser.name,
-    discordId,
-    isSoftmaxTeamMember,
-  };
+  const teamMemberIds = await getSoftmaxTeamMemberIds([dbUser]);
+  return buildUserInfo(dbUser, teamMemberIds);
 }
 
 // used by /api/users/resolve for bulk user lookups
@@ -119,51 +125,23 @@ export async function loadUsersByIds(
       accounts: true,
     },
   });
-
-  // Collect all GitHub account IDs for a single team membership query
-  const allGitHubAccountIds = dbUsers.flatMap((user) =>
-    user.accounts
-      .filter((a) => a.provider === "github")
-      .map((a) => a.providerAccountId),
-  );
-
-  // Fetch all team memberships in one query
-  const teamMembers = await prisma.gitHubTeamMember.findMany({
-    where: {
-      userId: { in: allGitHubAccountIds },
-    },
-    select: { userId: true },
-  });
-
-  const teamMemberIds = new Set(teamMembers.map((m) => m.userId));
+  const teamMemberIds = await getSoftmaxTeamMemberIds(dbUsers);
 
   // Build result map
   const result = new Map<string, UserInfo>();
   for (const dbUser of dbUsers) {
-    const gitHubAccountIds = dbUser.accounts
-      .filter((a) => a.provider === "github")
-      .map((a) => a.providerAccountId);
-
-    let isSoftmaxTeamMember = gitHubAccountIds.some((id) =>
-      teamMemberIds.has(id),
-    );
-
-    if (isDevMode()) {
-      isSoftmaxTeamMember = true;
-    }
-
-    const discordId =
-      dbUser.accounts.find((a) => a.provider === "discord")
-        ?.providerAccountId ?? null;
-
-    result.set(dbUser.id, {
-      id: dbUser.id,
-      email: dbUser.email,
-      name: dbUser.name,
-      discordId,
-      isSoftmaxTeamMember,
-    });
+    result.set(dbUser.id, buildUserInfo(dbUser, teamMemberIds));
   }
 
   return result;
+}
+
+export async function loadAllUsers(): Promise<UserInfo[]> {
+  const dbUsers = await prisma.user.findMany({
+    include: {
+      accounts: true,
+    },
+  });
+  const teamMemberIds = await getSoftmaxTeamMemberIds(dbUsers);
+  return dbUsers.map((dbUser) => buildUserInfo(dbUser, teamMemberIds));
 }

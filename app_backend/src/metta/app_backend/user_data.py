@@ -6,17 +6,13 @@ from typing import Optional
 
 import httpx
 from cachetools import TTLCache
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from metta.app_backend.auth import User
 from metta.app_backend.config import settings
 from metta.common.otel.tracing import trace
 
 logger = logging.getLogger(__name__)
-
-# Per-user cache of raw API response dicts. Sensitive-field filtering
-# happens at read time so a single cache entry serves all callers.
-_user_info_cache: TTLCache[str, dict] = TTLCache(maxsize=4096, ttl=300)
 
 
 class UserRow(BaseModel):
@@ -32,16 +28,34 @@ class Ownable(BaseModel):
     user: UserRow | None = None
 
 
-def _user_row(info: dict, user_id: str, *, include_sensitive: bool) -> UserRow:
-    raw_name = info.get("name")
-    raw_email = info.get("email")
-    raw_discord_id = info.get("discordId")
+class LoginServiceUserInfo(BaseModel):
+    id: str
+    name: Optional[str] = None
+    email: Optional[str] = None
+    is_softmax_team_member: bool = Field(default=False, alias="isSoftmaxTeamMember")
+    discord_id: Optional[str] = Field(default=None, alias="discordId")
+
+
+class ResolveUsersResponse(BaseModel):
+    users: dict[str, LoginServiceUserInfo]
+
+
+class ListUsersResponse(BaseModel):
+    users: list[LoginServiceUserInfo]
+
+
+# Per-user cache of login-service responses. Sensitive-field filtering happens
+# at read time so a single cache entry serves all callers.
+_user_info_cache: TTLCache[str, LoginServiceUserInfo] = TTLCache(maxsize=4096, ttl=300)
+
+
+def _user_row(info: LoginServiceUserInfo, *, include_sensitive: bool) -> UserRow:
     return UserRow(
-        id=str(info.get("id", user_id)),
-        name=str(raw_name) if raw_name is not None else None,
-        email=str(raw_email) if include_sensitive and raw_email is not None else None,
-        is_softmax_team_member=bool(info.get("isSoftmaxTeamMember", False)) if include_sensitive else None,
-        discord_id=str(raw_discord_id) if include_sensitive and raw_discord_id is not None else None,
+        id=info.id,
+        name=info.name,
+        email=info.email if include_sensitive else None,
+        is_softmax_team_member=info.is_softmax_team_member if include_sensitive else None,
+        discord_id=info.discord_id if include_sensitive else None,
     )
 
 
@@ -56,7 +70,7 @@ async def load_user_ids(user_ids: list[str], *, include_sensitive: bool = True) 
 
     # Snapshot cached entries so TTL expiry between the write and read
     # phases can't silently drop users.
-    resolved: dict[str, dict] = {}
+    resolved: dict[str, LoginServiceUserInfo] = {}
     uncached_ids: list[str] = []
     for uid in user_ids:
         cached = _user_info_cache.get(uid)
@@ -78,13 +92,33 @@ async def load_user_ids(user_ids: list[str], *, include_sensitive: bool = True) 
             if resp.status_code != 200:
                 logger.warning("User resolve endpoint returned %d", resp.status_code)
             else:
-                for uid, info in resp.json().get("users", {}).items():
+                payload = ResolveUsersResponse.model_validate(resp.json())
+                for uid, info in payload.users.items():
                     _user_info_cache[uid] = info
                     resolved[uid] = info
         except Exception:
             logger.warning("Failed to resolve user data", exc_info=(not settings.LOCAL_DEV))
 
-    return {uid: _user_row(info, uid, include_sensitive=include_sensitive) for uid, info in resolved.items()}
+    return {uid: _user_row(info, include_sensitive=include_sensitive) for uid, info in resolved.items()}
+
+
+@trace("user_data.load_all_users")
+async def load_all_users(*, include_sensitive: bool = True) -> list[UserRow]:
+    if not settings.OBSERVATORY_AUTH_SECRET:
+        raise RuntimeError("OBSERVATORY_AUTH_SECRET is not configured")
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{settings.LOGIN_SERVICE_URL}/api/users",
+            headers={"X-Auth-Secret": settings.OBSERVATORY_AUTH_SECRET},
+            timeout=5.0,
+        )
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"User list endpoint returned {resp.status_code}")
+
+    payload = ListUsersResponse.model_validate(resp.json())
+    return [_user_row(user, include_sensitive=include_sensitive) for user in payload.users]
 
 
 async def load_user_id(user_id: str, *, include_sensitive: bool = True) -> Optional[UserRow]:

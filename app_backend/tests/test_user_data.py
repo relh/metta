@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from metta.app_backend.auth import User
-from metta.app_backend.user_data import Ownable, UserRow, _user_info_cache, fill_user_data
+from metta.app_backend.user_data import Ownable, UserRow, _user_info_cache, fill_user_data, load_all_users
 
 
 @pytest.fixture(autouse=True)
@@ -17,6 +17,7 @@ RESOLVE_USERS = {
     "u1": {"id": "u1", "name": "Alice", "email": "alice@softmax.com", "isSoftmaxTeamMember": True},
     "u2": {"id": "u2", "name": "Bob", "email": "bob@example.com", "isSoftmaxTeamMember": False},
 }
+LIST_USERS = {"users": list(RESOLVE_USERS.values())}
 
 SOFTMAX_USER = User(id="u1", email="admin@softmax.com", is_softmax_team_member=True)
 REGULAR_USER = User(id="u2", email="user@example.com", is_softmax_team_member=False)
@@ -28,6 +29,7 @@ def mock_http():
     with patch("metta.app_backend.user_data.httpx.AsyncClient") as MockClient:
         client = AsyncMock()
         client.post.return_value = httpx.Response(200, json={"users": RESOLVE_USERS})
+        client.get.return_value = httpx.Response(200, json=LIST_USERS)
         MockClient.return_value.__aenter__ = AsyncMock(return_value=client)
         MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
         yield client
@@ -139,3 +141,13 @@ async def test_sends_correct_request(mock_http):
         headers={"X-Auth-Secret": "my-secret"},
         timeout=5.0,
     )
+
+
+@pytest.mark.asyncio
+async def test_load_all_users(mock_http):
+    users = await load_all_users()
+
+    assert users == [
+        UserRow(id="u1", name="Alice", email="alice@softmax.com", is_softmax_team_member=True),
+        UserRow(id="u2", name="Bob", email="bob@example.com", is_softmax_team_member=False),
+    ]

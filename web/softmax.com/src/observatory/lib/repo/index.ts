@@ -321,11 +321,27 @@ export class Repo {
     }>("/whoami");
   }
 
-  async getAdminUsersScaffold(): Promise<{
-    message: string;
+  async getAdminUsersReport(): Promise<{
+    users: Array<{
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      is_softmax_team_member?: boolean | null;
+      discord_id?: string | null;
+      first_policy_upload_at?: string | null;
+      last_policy_upload_at?: string | null;
+    }>;
   }> {
     return this.apiCall<{
-      message: string;
+      users: Array<{
+        id: string;
+        name?: string | null;
+        email?: string | null;
+        is_softmax_team_member?: boolean | null;
+        discord_id?: string | null;
+        first_policy_upload_at?: string | null;
+        last_policy_upload_at?: string | null;
+      }>;
     }>("/admin/users");
   }
 

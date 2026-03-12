@@ -895,8 +895,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** Admin Users Scaffold */
-    get: operations["admin_users_scaffold_admin_users_get"];
+    /** Admin Users Report */
+    get: operations["admin_users_report_admin_users_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1056,10 +1056,27 @@ export interface components {
       /** Query */
       query: string;
     };
-    /** AdminUsersScaffoldResponse */
-    AdminUsersScaffoldResponse: {
-      /** Message */
-      message: string;
+    /** AdminUserReportRow */
+    AdminUserReportRow: {
+      /** Id */
+      id: string;
+      /** Name */
+      name?: string | null;
+      /** Email */
+      email?: string | null;
+      /** Is Softmax Team Member */
+      is_softmax_team_member?: boolean | null;
+      /** Discord Id */
+      discord_id?: string | null;
+      /** First Policy Upload At */
+      first_policy_upload_at?: string | null;
+      /** Last Policy Upload At */
+      last_policy_upload_at?: string | null;
+    };
+    /** AdminUsersReportResponse */
+    AdminUsersReportResponse: {
+      /** Users */
+      users: components["schemas"]["AdminUserReportRow"][];
     };
     /** AgentResult */
     AgentResult: {
@@ -4174,7 +4191,7 @@ export interface operations {
       };
     };
   };
-  admin_users_scaffold_admin_users_get: {
+  admin_users_report_admin_users_get: {
     parameters: {
       query?: never;
       header?: never;
@@ -4189,7 +4206,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["AdminUsersScaffoldResponse"];
+          "application/json": components["schemas"]["AdminUsersReportResponse"];
         };
       };
     };
