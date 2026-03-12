@@ -38,6 +38,11 @@ def test_run_tool_game_version_short_hash_resolution_regression() -> None:
     assert resolved == full_result.stdout.strip()
 
 
+def test_run_tool_game_version_empty_alias_raises_clear_error() -> None:
+    with pytest.raises(ValueError, match="not configured"):
+        game_version_module.resolve_game_version("bad_alias", aliases={"bad_alias": ""})
+
+
 def test_run_tool_game_version_arg_parsing_regression() -> None:
     version, filtered = game_version_module.parse_game_version_args(
         ["train", "--game-version", "deadbeef", "arena", "--verbose"]

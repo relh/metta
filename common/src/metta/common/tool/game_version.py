@@ -120,12 +120,8 @@ def ensure_game_version_worktree(repo_root: Path | str, version_name: str, commi
     return worktree_path
 
 
-def game_version_active() -> bool:
-    return os.getenv("METTA_GAME_VERSION_ACTIVE") == "1"
-
-
 def run_in_game_version(version: str, argv: list[str], command: list[str]) -> int:
-    if game_version_active():
+    if os.getenv("METTA_GAME_VERSION_ACTIVE") == "1":
         return -1
     commit = resolve_game_version(version)
     repo_root = get_repo_root()
