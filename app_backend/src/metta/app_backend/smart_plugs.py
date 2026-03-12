@@ -90,25 +90,14 @@ def _get_config() -> _SmartPlugConfig:
     return _config_cache
 
 
-def _get_device(key: str) -> SmartPlugDevice:
-    devices = {device.key: device for device in _get_config().plugs}
-    if key not in devices:
-        raise KeyError(f"Unknown smart plug key: {key}")
-    return devices[key]
-
-
-def _build_url(endpoint: str) -> str:
+async def _post(endpoint: str, payload: dict[str, Any]) -> Any:
+    await _rate_limiter.wait()
     config = _get_config()
     if not config.server_host:
         raise RuntimeError("Smart plug server host is not configured")
     if not config.auth_key:
         raise RuntimeError("Smart plug auth key is not configured")
-    return f"{config.server_host}/v2/devices/api/{endpoint}?auth_key={config.auth_key}"
-
-
-async def _post(endpoint: str, payload: dict[str, Any]) -> Any:
-    await _rate_limiter.wait()
-    url = _build_url(endpoint)
+    url = f"{config.server_host}/v2/devices/api/{endpoint}?auth_key={config.auth_key}"
     async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
         response = await client.post(url, json=payload)
     response.raise_for_status()
@@ -118,17 +107,6 @@ async def _post(endpoint: str, payload: dict[str, Any]) -> Any:
         return response.json()
     except ValueError:
         return {}
-
-
-def _extract_switch_status(status: Any, channel: int) -> dict[str, Any] | None:
-    if not isinstance(status, dict):
-        return None
-    switch_value = status.get(f"switch:{channel}", status.get("switch"))
-    if isinstance(switch_value, list):
-        return switch_value[channel] if 0 <= channel < len(switch_value) else None
-    if isinstance(switch_value, dict):
-        return switch_value
-    return None
 
 
 async def fetch_statuses(keys: Optional[list[str]] = None) -> list[SmartPlugStatus]:
@@ -155,7 +133,14 @@ async def fetch_statuses(keys: Optional[list[str]] = None) -> list[SmartPlugStat
     for device in devices:
         raw = status_by_id.get(device.device_id, {})
         status = raw.get("status", {})
-        switch_status = _extract_switch_status(status, device.channel)
+        switch_status = None
+        if isinstance(status, dict):
+            switch_value = status.get(f"switch:{device.channel}", status.get("switch"))
+            if isinstance(switch_value, list):
+                if 0 <= device.channel < len(switch_value):
+                    switch_status = switch_value[device.channel]
+            elif isinstance(switch_value, dict):
+                switch_status = switch_value
         is_on = None
         apower = None
         if isinstance(switch_status, dict):
@@ -175,7 +160,10 @@ async def fetch_statuses(keys: Optional[list[str]] = None) -> list[SmartPlugStat
 
 
 async def set_power(key: str, on: bool, toggle_after: Optional[int] = None) -> None:
-    device = _get_device(key)
+    devices = {device.key: device for device in _get_config().plugs}
+    if key not in devices:
+        raise KeyError(f"Unknown smart plug key: {key}")
+    device = devices[key]
 
     payload: dict[str, Any] = {"id": device.device_id, "on": on, "channel": device.channel}
     if toggle_after is not None:
