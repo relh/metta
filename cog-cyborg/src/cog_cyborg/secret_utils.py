@@ -11,10 +11,15 @@ def resolve_api_key(
     env_var: str,
 ) -> str | None:
     if direct_value:
-        return direct_value.strip()
+        stripped = direct_value.strip()
+        if stripped:
+            return stripped
 
     if file_path:
-        return Path(file_path).read_text().strip()
+        try:
+            return Path(file_path).read_text().strip()
+        except (FileNotFoundError, PermissionError):
+            pass
 
     value = os.getenv(env_var)
     if value:

@@ -88,6 +88,13 @@ class RetrievedMemoryRecord(BaseModel):
 
 
 @runtime_checkable
+class PlanView(Protocol):
+    def read_plan(self, max_chars: int = 4000) -> str: ...
+    def replace_plan(self, text: str) -> None: ...
+    def append_plan(self, text: str) -> None: ...
+
+
+@runtime_checkable
 class MemoryView(Protocol):
     def recent_records(self, limit: int = 10) -> list[MemoryRecord]: ...
     def retrieve(self, query: MemoryQuery, limit: int = 10) -> list[RetrievedMemoryRecord]: ...
@@ -95,6 +102,14 @@ class MemoryView(Protocol):
     def read_scratchpad(self) -> str: ...
     def replace_scratchpad(self, text: str) -> None: ...
     def append_scratchpad(self, text: str) -> None: ...
+    def get(self, key: str, default: object = None) -> object: ...
+    def setdefault(self, key: str, default: object = None) -> object: ...
+    def __contains__(self, key: object) -> bool: ...
+    def __getitem__(self, key: str) -> object: ...
+    def __setitem__(self, key: str, value: object) -> None: ...
+    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]: ...
+    def splitlines(self, keepends: bool = False) -> list[str]: ...
+    def strip(self, chars: str | None = None) -> str: ...
 
 
 @dataclass(slots=True)
@@ -104,3 +119,32 @@ class MettagridSDK:
     helpers: MettagridHelpers
     memory: MemoryView
     log: LogSink
+    plan: PlanView | None = None
+
+    @property
+    def scratchpad(self) -> str:
+        return self.memory.read_scratchpad()
+
+    def read_scratchpad(self) -> str:
+        return self.memory.read_scratchpad()
+
+    def replace_scratchpad(self, text: str) -> None:
+        self.memory.replace_scratchpad(text)
+
+    def append_scratchpad(self, text: str) -> None:
+        self.memory.append_scratchpad(text)
+
+    def read_plan(self, max_chars: int = 4000) -> str:
+        if self.plan is None:
+            return ""
+        return self.plan.read_plan(max_chars=max_chars)
+
+    def replace_plan(self, text: str) -> None:
+        if self.plan is None:
+            return
+        self.plan.replace_plan(text)
+
+    def append_plan(self, text: str) -> None:
+        if self.plan is None:
+            return
+        self.plan.append_plan(text)

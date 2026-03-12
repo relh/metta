@@ -18,7 +18,9 @@ def get_default_anthropic_model(*, use_bedrock: bool) -> str:
     if use_bedrock:
         model = os.getenv("ANTHROPIC_MODEL")
         if model:
-            return model
+            stripped = model.strip()
+            if stripped:
+                return stripped
         return DEFAULT_BEDROCK_MODEL
 
     return DEFAULT_ANTHROPIC_MODEL

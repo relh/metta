@@ -20,6 +20,7 @@ from mettagrid_sdk.sdk.types import (
     MemoryView,
     MettagridSDK,
     PlanMemoryRecord,
+    PlanView,
     RetrievedMemoryRecord,
 )
 
@@ -43,6 +44,7 @@ __all__ = [
     "MettagridHelpers",
     "MettagridSDK",
     "MettagridState",
+    "PlanView",
     "PlanMemoryRecord",
     "RetrievedMemoryRecord",
     "ReviewRequest",

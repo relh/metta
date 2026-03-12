@@ -32,6 +32,12 @@ def test_get_default_anthropic_model_prefers_env_override(monkeypatch) -> None:
     assert get_default_anthropic_model(use_bedrock=True) == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 
+def test_get_default_anthropic_model_strips_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("ANTHROPIC_MODEL", "  us.anthropic.claude-haiku-4-5-20251001-v1:0  ")
+
+    assert get_default_anthropic_model(use_bedrock=True) == "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+
 def test_get_default_anthropic_model_has_bedrock_default(monkeypatch) -> None:
     monkeypatch.delenv("ANTHROPIC_MODEL", raising=False)
 

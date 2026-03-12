@@ -90,14 +90,35 @@ def test_memory_store_persists_scratchpad(tmp_path: Path) -> None:
 
 
 def test_memory_store_supports_keyed_scratchpad_updates(tmp_path: Path) -> None:
-    store = MemoryStore(scratchpad_file=tmp_path / "memory.md")
+    scratchpad_file = tmp_path / "memory.md"
+    store = MemoryStore(scratchpad_file=scratchpad_file)
+    store.replace_scratchpad('# World Model\n- phase: resource_coverage\n- inv: {"carbon": 1}')
 
-    store["phase"] = "resource_coverage"
+    assert store.get("phase") == "resource_coverage"
+    assert store["inv"] == {"carbon": 1}
+
+    store["phase"] = "aligner_pressure"
+    store["missing"] = ["oxygen", "silicon"]
+    store["seen_count"] = 4
     store["hearts_online"] = False
     store.setdefault("goal", "open coverage")
-    store["phase"] = "aligner_pressure"
 
-    assert store["phase"] == "aligner_pressure"
-    assert store.get("hearts_online") is False
-    assert "goal" in store
-    assert "phase: aligner_pressure" in store.read_scratchpad()
+    reloaded = MemoryStore(scratchpad_file=scratchpad_file)
+
+    assert reloaded["phase"] == "aligner_pressure"
+    assert reloaded.get("missing") == ["oxygen", "silicon"]
+    assert reloaded.get("seen_count") == 4
+    assert reloaded.get("hearts_online") is False
+    assert "goal" in reloaded
+    assert "# World Model" in reloaded.read_scratchpad()
+
+
+def test_memory_store_supports_string_like_scratchpad_reads(tmp_path: Path) -> None:
+    scratchpad_file = tmp_path / "memory.md"
+    store = MemoryStore(scratchpad_file=scratchpad_file)
+    store.replace_scratchpad("phase: resource_coverage\nstep: 12\nnote: hold east")
+
+    assert str(store) == "phase: resource_coverage\nstep: 12\nnote: hold east"
+    assert store.split("\n")[0] == "phase: resource_coverage"
+    assert store.splitlines()[-1] == "note: hold east"
+    assert store.strip().startswith("phase:")

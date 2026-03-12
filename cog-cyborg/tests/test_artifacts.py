@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gc
+import os
 from pathlib import Path
 
 from cog_cyborg.memory import MemoryStore
@@ -98,7 +99,7 @@ def test_artifact_store_supports_live_bundle_files(tmp_path: Path) -> None:
     )
 
     store.write_main_source('def step(sdk):\n    return {"role": "miner"}')
-    store.replace_plan("# Plan\n- Open with miners")
+    store.replace_plan("# Plan\n- Open with miners\n- Shift on pressure")
     store.replace_scratchpad("Open with mining coverage.")
     store.append_scratchpad("\nShift to aligners on contact.")
     store.append_experience_record(
@@ -129,7 +130,9 @@ def test_artifact_store_supports_live_bundle_files(tmp_path: Path) -> None:
     context = store.build_prompt_context()
 
     assert 'return {"role": "miner"}' in store.read_main_source()
-    assert store.read_plan().startswith("# Plan")
+    assert store.read_main_source().startswith("def step(sdk):")
+    assert os.access(main_file, os.X_OK)
+    assert "Shift on pressure" in store.read_plan()
     assert "aligners on contact" in store.read_scratchpad()
     assert store.read_recent_experience_records(max_entries=1)[0].summary == "Enemy spotted east."
     assert store.read_recent_decision_records(max_entries=1)[0].trigger_name == "enemy_seen"
@@ -227,3 +230,42 @@ def test_artifact_store_builds_retrieved_semantic_context(tmp_path: Path) -> Non
     assert "RETRIEVED SEMANTIC MEMORY" in context
     assert "East lane is contested and risky for aligners." in context
     assert "Miner deposited safely" not in context
+
+
+def test_artifact_store_can_exclude_live_workspace_files_from_prompt_context(
+    tmp_path: Path,
+) -> None:
+    store = ArtifactStore(
+        main_file=tmp_path / "main.py",
+        strategy_file=tmp_path / "plan.md",
+        scratchpad_file=tmp_path / "memory.md",
+        experience_file=tmp_path / "experience.jsonl",
+    )
+    store.write_main_source('def step(sdk):\n    return {"role": "miner"}')
+    store.replace_plan("# Plan\n- Open with miners")
+    store.replace_scratchpad("Hold east lane.")
+    store.append_experience_record(
+        ExperienceTraceRecord(step=3, agent_id=0, summary="Enemy spotted east.", policy_source="main.py")
+    )
+
+    context = store.build_prompt_context(
+        include_main_source=False,
+        include_plan=False,
+        include_scratchpad=False,
+    )
+
+    assert "LIVE MAIN.PY" not in context
+    assert "LIVE PLAN.MD" not in context
+    assert "PRIVATE SCRATCHPAD" not in context
+    assert "EXPERIENCE TRACE" in context
+
+
+def test_artifact_store_appends_log_text(tmp_path: Path) -> None:
+    log_file = tmp_path / "pilot.log"
+    store = ArtifactStore(log_file=log_file)
+
+    store.append_log_text("step=1 policy compiled\n")
+    store.append_log_text("step=2 review requested\n")
+
+    assert "step=1 policy compiled" in store.read_log_tail()
+    assert "step=2 review requested" in store.read_log_tail()

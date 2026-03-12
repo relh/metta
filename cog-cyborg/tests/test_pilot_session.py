@@ -3,8 +3,14 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+import pytest
 from cog_cyborg.providers import CodeReviewResponse
-from cog_cyborg.runtime import ArtifactStore, LivePolicyBundleSession, PolicyGenerationRecord
+from cog_cyborg.runtime import (
+    ArtifactStore,
+    BoundedPolicyError,
+    LivePolicyBundleSession,
+    PolicyGenerationRecord,
+)
 from mettagrid_sdk.sdk import (
     ActionCatalog,
     ActionDescriptor,
@@ -145,10 +151,10 @@ class _BlockingCodeBackend:
         return self._response
 
 
-def _build_sdk() -> MettagridSDK:
+def _build_sdk(*, step: int = 5) -> MettagridSDK:
     state = MettagridState(
         game="cogsguard",
-        step=5,
+        step=step,
         self_state=SelfState(
             entity_id="agent-0",
             entity_type="agent",
@@ -200,6 +206,7 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
         main_file=tmp_path / "main.py",
         strategy_file=tmp_path / "plan.md",
         scratchpad_file=tmp_path / "memory.md",
+        log_file=tmp_path / "transcript.log",
         experience_file=tmp_path / "experience.jsonl",
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
@@ -215,15 +222,16 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
                     '    sdk.log.request_review(ReviewRequest(trigger_name="enemy_seen", prompt="Switch roles."))\n'
                     '    return {"role": "miner"}'
                 ),
-                replace_plan="# Plan\n- Open with mining coverage",
                 replace_scratchpad="Open with mining coverage.",
+                replace_plan="# Plan\n- Open with miners",
             ),
             CodeReviewResponse(
                 action="memory_and_policy",
                 set_policy='def step(sdk):\n    return {"role": "aligner"}',
-                replace_plan="# Plan\n- Transition into aligner pressure",
                 replace_scratchpad="Transition into aligner pressure.",
+                replace_plan="# Plan\n- Press with aligners",
                 review_summary="Enemy contact triggered a rewrite.",
+                metadata={"stop_reason": "end_turn", "output_tokens": 222},
             ),
         ]
     )
@@ -234,11 +242,27 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
     assert result.success is True
     assert result.return_value == {"role": "miner"}
     assert store.read_main_source().endswith('return {"role": "aligner"}')
-    assert store.read_plan().endswith("aligner pressure")
+    assert store.read_plan() == "# Plan\n- Press with aligners"
     assert store.read_scratchpad() == "Transition into aligner pressure."
     decision = store.read_recent_decision_records(max_entries=1)[0]
     assert decision.policy_updated is True
     assert decision.request_summary == "Switch roles."
+    assert decision.plan_updated is True
+    assert decision.metadata["stop_reason"] == "end_turn"
+    assert store.read_recent_generation_records(max_entries=1)[0].metadata["output_tokens"] == 222
+    initial_request = backend.calls[0]
+    assert initial_request.current_plan == ""
+    rewrite_request = backend.calls[1]
+    assert rewrite_request.current_plan == "# Plan\n- Open with miners"
+    assert "LIVE PLAN.MD" not in rewrite_request.experience_tail
+    assert "PRIVATE SCRATCHPAD" not in rewrite_request.experience_tail
+    assert "LIVE MAIN.PY" not in rewrite_request.experience_tail
+    transcript = store.read_log_tail(max_chars=4000)
+    assert "review_request:" in transcript
+    assert "- source: sdk.log.request_review" in transcript
+    assert "plan_updated=yes" in transcript
+    assert "summary: Enemy contact triggered a rewrite." in transcript
+    assert "llm_response:" in transcript
 
 
 def test_live_policy_bundle_session_supports_external_review_rewrites(tmp_path: Path) -> None:
@@ -578,50 +602,9 @@ def test_live_policy_bundle_session_treats_failed_reviews_as_noops(tmp_path: Pat
     assert decision.trigger_name == "enemy_seen"
     assert decision.action == "none"
     assert decision.metadata["review_error"] == "ValueError: Code review response did not contain a JSON object"
-
-
-def test_live_policy_bundle_session_debug_snapshot_exposes_inflight_initial_generation() -> None:
-    backend = _BlockingCodeBackend(
-        CodeReviewResponse(
-            action="policy",
-            set_policy='def step(sdk):\n    return {"role": "miner"}',
-        )
-    )
-    session = LivePolicyBundleSession(backend=backend)
-    ensure_complete = threading.Event()
-
-    def ensure_policy() -> None:
-        session._ensure_policy(
-            sdk=_build_sdk(),
-            prompt="write live policy",
-            step=1,
-            agent_id=0,
-            goal="coverage",
-            metadata=None,
-        )
-        ensure_complete.set()
-
-    thread = threading.Thread(target=ensure_policy)
-    thread.start()
-    assert backend.entered.wait(timeout=1.0)
-
-    snapshot = session.debug_snapshot()
-
-    assert snapshot["registered_triggers"] == []
-    assert snapshot["pending_review"] == {
-        "step": 1,
-        "agent_id": 0,
-        "trigger_name": "initial_generation",
-        "request_source": "initial_generation",
-        "request_summary": "Generate the initial policy.",
-    }
-
-    backend.release.set()
-    thread.join(timeout=1.0)
-    assert not thread.is_alive()
-    assert ensure_complete.is_set()
-    assert session.policy_source.endswith('return {"role": "miner"}')
-    assert "pending_review" not in session.debug_snapshot()
+    transcript = store.read_log_tail(max_chars=4000)
+    assert "review_error: ValueError: Code review response did not contain a JSON object" in transcript
+    assert "summary: Review failed: ValueError: Code review response did not contain a JSON object" in transcript
 
 
 def test_live_policy_bundle_session_debug_snapshot_tracks_registered_trigger_names() -> None:
@@ -652,3 +635,124 @@ def test_live_policy_bundle_session_debug_snapshot_tracks_registered_trigger_nam
     )
 
     assert session.debug_snapshot()["registered_triggers"] == ["enemy_seen", "phase_shift"]
+
+
+def test_live_policy_bundle_session_records_failed_initial_policy_updates(tmp_path: Path) -> None:
+    store = ArtifactStore(
+        main_file=tmp_path / "main.py",
+        strategy_file=tmp_path / "plan.md",
+        scratchpad_file=tmp_path / "memory.md",
+        log_file=tmp_path / "transcript.log",
+        generation_file=tmp_path / "generation.jsonl",
+    )
+    backend = _FakeCodeBackend(
+        [
+            CodeReviewResponse(
+                action="memory_and_policy",
+                set_policy='import os\n\ndef step(sdk):\n    return {"role": "miner"}',
+                replace_scratchpad="Attempted initial scratchpad update.",
+                replace_plan="# Plan\n- Avoid imports",
+                metadata={"raw_response_text": '{"action":"policy","set_policy":"import os"}'},
+            )
+        ]
+    )
+    session = LivePolicyBundleSession(backend=backend, artifact_store=store)
+
+    with pytest.raises(BoundedPolicyError, match="imports are not allowed"):
+        session.execute(sdk=_build_sdk(), prompt="write live policy", step=5, agent_id=0, goal="coverage")
+
+    record = store.read_recent_generation_records(max_entries=1)[0]
+    assert record.success is False
+    assert record.error_message is not None
+    assert "imports are not allowed" in record.error_message
+    assert record.raw_response == '{"action":"policy","set_policy":"import os"}'
+    assert store.read_plan() == "# Plan\n- Avoid imports"
+    assert store.read_scratchpad() == "Attempted initial scratchpad update."
+    transcript = store.read_log_tail(max_chars=4000)
+    assert "policy_update_error: BoundedPolicyError: imports are not allowed in sdk policy code" in transcript
+    assert "llm_response:" in transcript
+
+
+def test_live_policy_bundle_session_debug_snapshot_captures_log_triggered_review() -> None:
+    backend = _FakeCodeBackend(
+        [
+            CodeReviewResponse(
+                action="policy",
+                set_policy=(
+                    "def step(sdk):\n"
+                    '    sdk.log.register_review_trigger("enemy_seen", "Replan after contact.", target="policy")\n'
+                    "    sdk.log.write(\n"
+                    "        LogRecord(\n"
+                    '            level="info",\n'
+                    '            message="Enemy on east lane.",\n'
+                    "            step=sdk.state.step,\n"
+                    '            data={"trigger": "enemy_seen", "enemy_count": 2},\n'
+                    "        )\n"
+                    "    )\n"
+                    '    return {"role": "miner"}'
+                ),
+                metadata={"raw_response_text": '{"reply":"initial"}'},
+            ),
+            CodeReviewResponse(
+                action="policy",
+                set_policy='def step(sdk):\n    return {"role": "aligner"}',
+                review_summary="Enemy contact triggered a rewrite.",
+                metadata={
+                    "raw_response_text": '{"reply":"rewrite"}',
+                    "stop_reason": "end_turn",
+                    "output_tokens": 222,
+                    "api_latency_ms": 321.5,
+                },
+            ),
+        ]
+    )
+    session = LivePolicyBundleSession(backend=backend)
+
+    result = session.execute(sdk=_build_sdk(), prompt="write live policy", step=5, agent_id=0, goal="pressure")
+    snapshot = session.debug_snapshot()
+
+    assert result.success is True
+    assert [event["kind"] for event in snapshot["events"]] == ["llm_review", "policy_step", "llm_review"]
+    assert snapshot["events"][1]["selected_review_source"] == "sdk.log.write(data.trigger)"
+    assert snapshot["events"][1]["triggering_log"]["message"] == "Enemy on east lane."
+    assert snapshot["events"][2]["request_summary"] == "Enemy on east lane."
+    assert snapshot["events"][2]["review_summary"] == "Enemy contact triggered a rewrite."
+    assert snapshot["events"][2]["raw_response_text"] == '{"reply":"rewrite"}'
+    assert snapshot["events"][2]["output_tokens"] == 222
+    assert "## Step 5 Agent 0 runtime -> llm" in snapshot["transcript_tail"]
+    assert "## Step 5 Agent 0 llm -> runtime" in snapshot["transcript_tail"]
+
+
+def test_live_policy_bundle_session_skips_note_only_runtime_transcript_updates(tmp_path: Path) -> None:
+    store = ArtifactStore(
+        main_file=tmp_path / "main.py",
+        log_file=tmp_path / "transcript.log",
+        experience_file=tmp_path / "experience.jsonl",
+        decision_file=tmp_path / "decisions.jsonl",
+        generation_file=tmp_path / "generation.jsonl",
+        execution_file=tmp_path / "execution.jsonl",
+        policy_file=tmp_path / "policy.md",
+    )
+    backend = _FakeCodeBackend(
+        [
+            CodeReviewResponse(
+                action="policy",
+                set_policy=(
+                    "def step(sdk):\n"
+                    '    return {"role": "miner", "objective": "resource_coverage", "note": f"step={sdk.state.step}"}'
+                ),
+            )
+        ]
+    )
+    session = LivePolicyBundleSession(backend=backend, artifact_store=store)
+
+    first = session.execute(sdk=_build_sdk(step=1), prompt="write live policy", step=1, agent_id=0, goal="coverage")
+    second = session.execute(sdk=_build_sdk(step=2), prompt="reuse live policy", step=2, agent_id=0, goal="coverage")
+    snapshot = session.debug_snapshot()
+    transcript = store.read_log_tail(max_chars=4000)
+
+    assert first.success is True
+    assert second.success is True
+    assert [event["kind"] for event in snapshot["events"]] == ["llm_review", "policy_step"]
+    assert "## Step 1 Agent 0 runtime -> llm" in transcript
+    assert "## Step 2 Agent 0 runtime -> llm" not in transcript

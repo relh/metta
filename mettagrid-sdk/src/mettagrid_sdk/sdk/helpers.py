@@ -72,7 +72,13 @@ class StateHelperCatalog(HelperCatalog):
         self._state = state
 
     def agent_id(self) -> int:
-        return int(self._state.self_state.attributes.get("agent_id", 0))
+        value = self._state.self_state.attributes.get("agent_id", 0)
+        if isinstance(value, (int, float, bool)):
+            return int(value)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
 
     def shared_inventory(self) -> dict[str, int]:
         if self._state.team_summary is None:

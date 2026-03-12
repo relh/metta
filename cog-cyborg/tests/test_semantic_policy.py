@@ -103,6 +103,22 @@ def test_semantic_policy_unsticks_two_cell_extractor_oscillation(cogsguard_env_i
     assert action.name in cogsguard_env_info.action_names
 
 
+def test_semantic_policy_resets_resource_bias_after_directive_step(cogsguard_env_info) -> None:
+    mission = make_cogsguard_mission(num_agents=8, max_steps=20)
+    sim = Simulation(mission.make_env())
+    agent_policy = MettagridSemanticPolicy(cogsguard_env_info).agent_policy(0)
+    directives = iter((MacroDirective(resource_bias="oxygen"), MacroDirective()))
+    agent_policy._macro_directive = lambda state: next(directives)  # type: ignore[method-assign]
+
+    first_action = agent_policy.step(sim.agent(0).observation)
+    second_action = agent_policy.step(sim.agent(0).observation)
+
+    assert first_action.name in cogsguard_env_info.action_names
+    assert second_action.name in cogsguard_env_info.action_names
+    assert agent_policy.infos["directive_resource_bias"] == ""
+    assert agent_policy._resource_bias == "carbon"
+
+
 def test_semantic_policy_uses_independent_world_models(cogsguard_env_info) -> None:
     policy = MettagridSemanticPolicy(cogsguard_env_info)
 

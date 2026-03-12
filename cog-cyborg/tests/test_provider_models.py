@@ -97,3 +97,15 @@ def test_coerce_code_review_response_promotes_partial_action_when_payload_adds_s
 
     assert response.action == "policy"
     assert response.set_policy == 'def step(sdk):\n    return {"objective": "aligner_pressure"}'
+
+
+def test_coerce_code_review_response_accepts_canonical_plan_field() -> None:
+    response = coerce_code_review_response(
+        {
+            "action": "memory",
+            "replace_plan": "phase: economy_bootstrap\nnext: rebuild hearts",
+        }
+    )
+
+    assert response.action == "memory"
+    assert response.replace_plan == "phase: economy_bootstrap\nnext: rebuild hearts"

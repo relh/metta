@@ -129,6 +129,52 @@ class FakeMemory:
     def append_scratchpad(self, text: str) -> None:
         self._scratchpad += text
 
+    def get(self, key: str, default: object = None) -> object:
+        prefix = f"{key}: "
+        for line in self._scratchpad.splitlines():
+            if line.startswith(prefix):
+                return line[len(prefix) :]
+        return default
+
+    def setdefault(self, key: str, default: object = None) -> object:
+        value = self.get(key, None)
+        if value is not None:
+            return value
+        self._scratchpad += ("" if not self._scratchpad else "\n") + f"{key}: {default}"
+        return default
+
+    def __contains__(self, key: object) -> bool:
+        return isinstance(key, str) and self.get(key, None) is not None
+
+    def __getitem__(self, key: str) -> object:
+        value = self.get(key, None)
+        if value is None:
+            raise KeyError(key)
+        return value
+
+    def __setitem__(self, key: str, value: object) -> None:
+        prefix = f"{key}: "
+        lines = []
+        replaced = False
+        for line in self._scratchpad.splitlines():
+            if line.startswith(prefix):
+                lines.append(f"{key}: {value}")
+                replaced = True
+            else:
+                lines.append(line)
+        if not replaced:
+            lines.append(f"{key}: {value}")
+        self._scratchpad = "\n".join(lines)
+
+    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
+        return self._scratchpad.split(sep, maxsplit)
+
+    def splitlines(self, keepends: bool = False) -> list[str]:
+        return self._scratchpad.splitlines(keepends)
+
+    def strip(self, chars: str | None = None) -> str:
+        return self._scratchpad.strip(chars)
+
 
 class FakeLog:
     def __init__(self) -> None:
@@ -144,6 +190,20 @@ class FakeLog:
 
     def request_review(self, request: ReviewRequest) -> None:
         self.requests.append(request)
+
+
+class FakePlan:
+    def __init__(self) -> None:
+        self._plan = "# Plan\n- Hold the east lane"
+
+    def read_plan(self, max_chars: int = 4000) -> str:
+        return self._plan[-max_chars:]
+
+    def replace_plan(self, text: str) -> None:
+        self._plan = text
+
+    def append_plan(self, text: str) -> None:
+        self._plan += text
 
 
 def test_mettagrid_sdk_contracts_hold_semantic_state() -> None:
@@ -235,6 +295,34 @@ def test_sdk_supports_review_triggers_and_mutable_scratchpad() -> None:
     assert "Avoid overcommitting" in sdk.memory.read_scratchpad()
     assert log.triggers[0].name == "enemy_lane_seen"
     assert log.requests[0].target == "memory"
+
+
+def test_sdk_exposes_scratchpad_helpers() -> None:
+    memory = FakeMemory()
+    plan = FakePlan()
+    sdk = MettagridSDK(
+        state=MettagridState(
+            game="cogsguard",
+            self_state=SelfState(entity_id="agent-1", entity_type="agent", position=GridPosition(x=0, y=0)),
+        ),
+        actions=FakeActions(),
+        helpers=FakeHelpers(),
+        memory=memory,
+        log=FakeLog(),
+        plan=plan,
+    )
+
+    assert sdk.scratchpad == "Hold the east lane."
+    assert sdk.read_scratchpad() == "Hold the east lane."
+    assert sdk.read_plan() == "# Plan\n- Hold the east lane"
+
+    sdk.replace_scratchpad("Phase: bootstrap")
+    sdk.append_scratchpad("\nKeep mining carbon.")
+    sdk.replace_plan("# Plan\n- Bootstrap hearts")
+    sdk.append_plan("\n- Rotate into aligners")
+
+    assert memory.read_scratchpad() == "Phase: bootstrap\nKeep mining carbon."
+    assert plan.read_plan() == "# Plan\n- Bootstrap hearts\n- Rotate into aligners"
 
 
 def test_action_outcome_tracks_terminal_reason() -> None:
@@ -378,3 +466,17 @@ def test_state_helper_catalog_summarizes_visible_entities_and_recent_events() ->
     assert helpers.position() == (4, -2)
     assert helpers.visible_entity_counts() == {"hub": 1, "junction": 2}
     assert helpers.recent_event_types() == ["enemy_seen", "heart_acquired"]
+
+
+def test_state_helper_catalog_tolerates_non_numeric_agent_id() -> None:
+    state = MettagridState(
+        game="cogsguard",
+        self_state=SelfState(
+            entity_id="agent-x",
+            entity_type="agent",
+            position=GridPosition(x=0, y=0),
+            attributes={"agent_id": "abc"},
+        ),
+    )
+
+    assert StateHelperCatalog(state).agent_id() == 0

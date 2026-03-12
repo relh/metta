@@ -298,7 +298,8 @@ class SemanticCogAgentPolicy(AgentPolicy):
         self._vibe_actions = set(policy_env_info.vibe_action_names)
         self._fallback_action = "noop" if "noop" in self._action_names else policy_env_info.action_names[0]
         self._explore_index = 0
-        self._resource_bias = _ELEMENTS[agent_id % len(_ELEMENTS)]
+        self._default_resource_bias = _ELEMENTS[agent_id % len(_ELEMENTS)]
+        self._resource_bias = self._default_resource_bias
         self._last_inventory_signature: tuple[tuple[str, int], ...] | None = None
         self._stalled_steps = 0
         self._oscillation_steps = 0
@@ -339,8 +340,9 @@ class SemanticCogAgentPolicy(AgentPolicy):
 
         directive = self._sanitize_macro_directive(self._macro_directive(state))
         self._current_directive = directive
-        if directive.resource_bias is not None:
-            self._resource_bias = directive.resource_bias
+        self._resource_bias = (
+            self._default_resource_bias if directive.resource_bias is None else directive.resource_bias
+        )
         role = directive.role or self._desired_role(state)
         action, summary = self._choose_action(state, role)
         self._record_navigation_observation(current_pos, summary)
@@ -379,6 +381,7 @@ class SemanticCogAgentPolicy(AgentPolicy):
         self._temp_blocks.clear()
         self._step_index = 0
         self._explore_index = 0
+        self._resource_bias = self._default_resource_bias
         self._last_inventory_signature = None
         self._stalled_steps = 0
         self._oscillation_steps = 0

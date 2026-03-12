@@ -127,6 +127,13 @@ class ArtifactStore:
             return
         self._append_text_atomic(self.semantic_memory_file, record.model_dump_json() + "\n")
 
+    def append_log_text(self, text: str) -> None:
+        if self.log_file is None:
+            return
+        if not text:
+            return
+        self._append_text_atomic(self.log_file, text)
+
     def write_main_source(self, source: str) -> None:
         if self.main_file is None:
             return
@@ -230,6 +237,9 @@ class ArtifactStore:
         max_strategy_chars: int = 4000,
         max_policy_chars: int = 6000,
         max_log_chars: int = 3000,
+        include_main_source: bool = True,
+        include_plan: bool = True,
+        include_scratchpad: bool = True,
         max_semantic_records: int = 6,
         memory_query: MemoryQuery | None = None,
     ) -> str:
@@ -240,15 +250,15 @@ class ArtifactStore:
         if policy_text:
             sections.append(f"=== CROSS-SESSION POLICY DOC ===\n{policy_text}")
 
-        main_text = self.read_main_source(max_chars=max_policy_chars)
+        main_text = self.read_main_source(max_chars=max_policy_chars) if include_main_source else ""
         if main_text:
             sections.append(f"=== LIVE MAIN.PY ===\n{main_text}")
 
-        strategy_text = self.read_strategy(max_chars=max_strategy_chars)
+        strategy_text = self.read_strategy(max_chars=max_strategy_chars) if include_plan else ""
         if strategy_text:
             sections.append(f"=== LIVE PLAN.MD ===\n{strategy_text}")
 
-        scratchpad_text = self.read_scratchpad(max_chars=max_strategy_chars)
+        scratchpad_text = self.read_scratchpad(max_chars=max_strategy_chars) if include_scratchpad else ""
         if scratchpad_text:
             sections.append(f"=== PRIVATE SCRATCHPAD ===\n{scratchpad_text}")
         if self.semantic_memory_file is not None and self.semantic_memory_file.exists() and memory_query is not None:
