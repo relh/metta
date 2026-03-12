@@ -13,7 +13,7 @@ from metta.app_backend.models.episodes import (
     EpisodePolicyMetric,
     EpisodeTag,
 )
-from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus
+from metta.app_backend.models.job_request import JobPolicyVersion, JobRequest, JobRequestUpdate, JobStatus
 from metta.app_backend.models.policies import Policy, PolicyVersion
 from metta.app_backend.otel.job_metrics import get_job_metrics
 from metta.app_backend.queries.episode_metrics import (
@@ -140,6 +140,20 @@ def resolve_policy_version_id(engine: Engine, uri: str) -> UUID | None:
         return pv.id if pv else None
 
 
+def get_job_policy_version_ids(engine: Engine, job_id: UUID) -> list[UUID]:
+    with Session(engine) as session:
+        stmt = select(JobPolicyVersion.position, JobPolicyVersion.policy_version_id).where(
+            JobPolicyVersion.job_id == job_id
+        )
+        rows = sorted(session.exec(stmt).all(), key=lambda row: row[0])
+
+    positions = [position for position, _ in rows]
+    if positions != list(range(len(rows))):
+        raise ValueError(f"Job {job_id} has non-contiguous job_policy_versions positions: {positions}")
+
+    return [policy_version_id for _, policy_version_id in rows]
+
+
 def _policy_uuid_to_internal_id(session: Session, pv_uuids: list[UUID]) -> dict[UUID, int]:
     if not pv_uuids:
         return {}
@@ -154,16 +168,12 @@ def record_episode_direct(
     episode_id: UUID,
     job_id: UUID,
     episode_tags: dict[str, str],
-    policy_version_ids: list[UUID | None],
+    policy_version_ids: list[UUID],
     replay_uri: str | None,
     assignments: list[int],
     agent_metrics: list[tuple[int, str, float]],
 ) -> None:
-    agent_policy_map: dict[int, UUID] = {}
-    for agent_id, assignment in enumerate(assignments):
-        pv_id = policy_version_ids[assignment]
-        if pv_id:
-            agent_policy_map[agent_id] = pv_id
+    agent_policy_map = {agent_id: policy_version_ids[assignment] for agent_id, assignment in enumerate(assignments)}
 
     filtered = filter_agent_metrics(agent_metrics)
     policy_agent_counts = aggregate_policy_agent_counts(agent_policy_map)
@@ -185,10 +195,11 @@ def record_episode_direct(
         session.flush()
 
         pv_uuid_to_internal = _policy_uuid_to_internal_id(session, list(policy_agent_counts.keys()))
+        missing_internal_ids = sorted(str(pv_id) for pv_id in policy_agent_counts if pv_id not in pv_uuid_to_internal)
+        if missing_internal_ids:
+            raise ValueError(f"Missing PolicyVersion.internal_id for episode policies: {missing_internal_ids}")
 
         for pv_id, metrics in policy_metrics.items():
-            if pv_id not in pv_uuid_to_internal:
-                continue
             pv_internal = pv_uuid_to_internal[pv_id]
             for metric_name, value in metrics.items():
                 session.add(
@@ -201,11 +212,7 @@ def record_episode_direct(
                 )
 
         for agent_id, metric_name, metric_value in filtered:
-            if agent_id not in agent_policy_map:
-                continue
             pv_id = agent_policy_map[agent_id]
-            if pv_id not in pv_uuid_to_internal:
-                continue
             session.add(
                 EpisodeAgentMetric(
                     episode_internal_id=episode.internal_id,

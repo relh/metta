@@ -6,8 +6,8 @@ from sqlalchemy import Engine
 from metta.app_backend.models.job_request import JobRequestUpdate
 from metta.app_backend.otel.job_metrics import get_job_metrics
 from metta.app_backend.queries.job_queries import (
+    get_job_policy_version_ids,
     record_episode_direct,
-    resolve_policy_version_id,
     update_job,
 )
 from mettagrid.runner.types import EpisodeJobSummary, PureSingleEpisodeResult
@@ -24,7 +24,11 @@ def record_job_episode(
     result_data: dict[str, str] | None = None,
     replay_uri: str | None = None,
 ) -> uuid.UUID:
-    policy_version_ids = [resolve_policy_version_id(engine, uri) for uri in job.policy_uris]
+    policy_version_ids = get_job_policy_version_ids(engine, job_id)
+    if len(policy_version_ids) != len(job.policy_uris):
+        raise ValueError(
+            f"Job {job_id} has {len(policy_version_ids)} stored policy versions for {len(job.policy_uris)} policy URIs"
+        )
     episode_tags = {"job_id": str(job_id), **job.episode_tags}
     episode_id = uuid.uuid4()
 

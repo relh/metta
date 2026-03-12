@@ -679,6 +679,7 @@ def _handle_pod_succeeded(
             _delete_k8s_job(batch_v1, ctx.job_name)
         return
 
+    result_data: dict[str, Any] | None = None
     try:
         result_data = _build_result_metadata(
             event_data,
@@ -701,8 +702,14 @@ def _handle_pod_succeeded(
         logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name})")
     except Exception as e:
         logger.error(f"Failed to record episode for job {ctx.job_id}: {e}", exc_info=True)
-        _update_job_status(ctx.job_id, JobStatus.completed)
-        logger.info(f"Job {ctx.job_id} completed (pod {ctx.pod_name}), episode recording failed")
+        _update_job_status(
+            ctx.job_id,
+            JobStatus.failed,
+            error=f"Episode recording failed: {e}",
+            error_type="result_error",
+            result=result_data or None,
+        )
+        logger.info(f"Job {ctx.job_id} failed (pod {ctx.pod_name}), episode recording failed")
 
     _fire_and_forget(capture_pod_logs, core_v1, ctx.pod_name, ctx.job_id)
     if ctx.job_name:
