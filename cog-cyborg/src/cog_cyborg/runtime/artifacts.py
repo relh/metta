@@ -4,6 +4,9 @@ import threading
 import weakref
 from pathlib import Path
 
+from mettagrid_sdk.sdk import MemoryQuery, MemoryRecord
+
+from cog_cyborg.memory.store import MemoryStore
 from cog_cyborg.runtime.execution import PolicyExecutionRecord
 from cog_cyborg.runtime.models import ExperienceTraceRecord, PolicyGenerationRecord, ReviewDecisionRecord
 
@@ -55,6 +58,7 @@ class ArtifactStore:
         log_file: Path | None = None,
         execution_file: Path | None = None,
         generation_file: Path | None = None,
+        semantic_memory_file: Path | None = None,
         main_file: Path | None = None,
         scratchpad_file: Path | None = None,
         experience_file: Path | None = None,
@@ -65,6 +69,7 @@ class ArtifactStore:
         self.log_file = log_file
         self.execution_file = execution_file
         self.generation_file = generation_file
+        self.semantic_memory_file = semantic_memory_file
         self.main_file = main_file
         self.scratchpad_file = scratchpad_file
         self.experience_file = experience_file
@@ -76,6 +81,7 @@ class ArtifactStore:
             log_file,
             execution_file,
             generation_file,
+            semantic_memory_file,
             main_file,
             scratchpad_file,
             experience_file,
@@ -115,6 +121,11 @@ class ArtifactStore:
         if self.generation_file is None:
             return
         self._append_text_atomic(self.generation_file, record.model_dump_json() + "\n")
+
+    def append_semantic_record(self, record: MemoryRecord) -> None:
+        if self.semantic_memory_file is None:
+            return
+        self._append_text_atomic(self.semantic_memory_file, record.model_dump_json() + "\n")
 
     def write_main_source(self, source: str) -> None:
         if self.main_file is None:
@@ -192,6 +203,12 @@ class ArtifactStore:
         selected = self._read_tail_lines(self.generation_file, max_lines=max_entries)
         return [PolicyGenerationRecord.model_validate_json(line) for line in selected if line.strip()]
 
+    def read_recent_semantic_records(self, max_entries: int = 8) -> list[MemoryRecord]:
+        if self.semantic_memory_file is None or not self.semantic_memory_file.exists():
+            return []
+        store = MemoryStore.from_file(self.semantic_memory_file)
+        return store.recent_records(limit=max_entries)
+
     def read_recent_experience_records(self, max_entries: int = 8) -> list[ExperienceTraceRecord]:
         if self.experience_file is None or not self.experience_file.exists():
             return []
@@ -213,8 +230,11 @@ class ArtifactStore:
         max_strategy_chars: int = 4000,
         max_policy_chars: int = 6000,
         max_log_chars: int = 3000,
+        max_semantic_records: int = 6,
+        memory_query: MemoryQuery | None = None,
     ) -> str:
         sections: list[str] = []
+        semantic_context = ""
 
         policy_text = self.read_policy(max_chars=max_policy_chars)
         if policy_text:
@@ -231,7 +251,19 @@ class ArtifactStore:
         scratchpad_text = self.read_scratchpad(max_chars=max_strategy_chars)
         if scratchpad_text:
             sections.append(f"=== PRIVATE SCRATCHPAD ===\n{scratchpad_text}")
+        if self.semantic_memory_file is not None and self.semantic_memory_file.exists() and memory_query is not None:
+            semantic_store = MemoryStore.from_file(self.semantic_memory_file)
+            semantic_context = semantic_store.render_prompt_context(memory_query, limit=max_semantic_records)
+            if semantic_context:
+                sections.append(semantic_context)
 
+        if self.semantic_memory_file is not None and self.semantic_memory_file.exists() and memory_query is None:
+            semantic_records = self.read_recent_semantic_records(max_entries=max_semantic_records)
+            if semantic_records:
+                lines = ["=== SEMANTIC MEMORY RECORDS ==="]
+                for record in semantic_records:
+                    lines.append(f"  - [{record.kind}] step={record.step} {record.summary}")
+                sections.append("\n".join(lines))
         log_tail = self.read_log_tail(max_chars=max_log_chars)
         if log_tail:
             sections.append(f"=== REVIEW TRANSCRIPT LOG ===\n{log_tail}")

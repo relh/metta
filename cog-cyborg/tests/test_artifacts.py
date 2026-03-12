@@ -3,10 +3,11 @@ from __future__ import annotations
 import gc
 from pathlib import Path
 
+from cog_cyborg.memory import MemoryStore
 from cog_cyborg.runtime.artifacts import ArtifactStore
 from cog_cyborg.runtime.execution import PolicyExecutionRecord, PolicyExecutionResult
 from cog_cyborg.runtime.models import ExperienceTraceRecord, ReviewDecisionRecord
-from mettagrid_sdk.sdk import LogRecord
+from mettagrid_sdk.sdk import GridPosition, LogRecord, MemoryQuery
 
 
 def test_artifact_store_strategy_and_prompt_context(tmp_path: Path) -> None:
@@ -172,7 +173,9 @@ def test_artifact_store_ignores_missing_main_file_during_chmod(tmp_path: Path, m
     assert store.main_file.read_text(encoding="utf-8").startswith("#!/usr/bin/env python3\n")
 
 
-def test_artifact_store_append_lock_cache_does_not_retain_completed_paths(tmp_path: Path) -> None:
+def test_artifact_store_append_lock_cache_does_not_retain_completed_paths(
+    tmp_path: Path,
+) -> None:
     log_file = tmp_path / "pilot_transcript.log"
     ArtifactStore(log_file=log_file)
 
@@ -181,3 +184,46 @@ def test_artifact_store_append_lock_cache_does_not_retain_completed_paths(tmp_pa
 
     assert log_file.read_text(encoding="utf-8") == "step=1 compiled\n"
     assert log_file.resolve() not in ArtifactStore._append_locks
+
+
+def test_artifact_store_builds_retrieved_semantic_context(tmp_path: Path) -> None:
+    semantic_memory_file = tmp_path / "semantic_memory.jsonl"
+    store = ArtifactStore(semantic_memory_file=semantic_memory_file)
+    memory_store = MemoryStore(backing_file=semantic_memory_file)
+
+    memory_store.append_belief(
+        record_id="belief-east",
+        belief_type="east_lane_contested",
+        summary="East lane is contested and risky for aligners.",
+        game="cogsguard",
+        step=40,
+        role_context="aligner",
+        tags=["junction", "east_lane", "aligner"],
+        importance=0.95,
+        confidence=0.8,
+    )
+    memory_store.append_event(
+        record_id="evt-hub",
+        event_type="deposit_complete",
+        summary="Miner deposited safely at the west hub.",
+        game="cogsguard",
+        step=41,
+        role_context="miner",
+        tags=["hub", "west_lane", "miner"],
+        importance=0.4,
+        location=GridPosition(x=-2, y=0),
+    )
+
+    context = store.build_prompt_context(
+        memory_query=MemoryQuery(
+            game="cogsguard",
+            step=45,
+            role_context="aligner",
+            target_tags=["junction", "east_lane", "aligner"],
+            text="What should aligners remember about the east junction lane?",
+        )
+    )
+
+    assert "RETRIEVED SEMANTIC MEMORY" in context
+    assert "East lane is contested and risky for aligners." in context
+    assert "Miner deposited safely" not in context
