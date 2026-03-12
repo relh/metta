@@ -4,13 +4,13 @@ variable "region" {
 }
 
 variable "sso_instance_arn" {
-  type        = string
-  description = "ARN of the IAM Identity Center instance"
+  type    = string
+  default = "arn:aws:sso:::instance/ssoins-7223aa6587f15bea"
 }
 
 variable "identity_store_id" {
-  type        = string
-  description = "Identity Store ID for IAM Identity Center"
+  type    = string
+  default = "d-9067ceb8bd"
 }
 
 variable "contractor_group_name" {
