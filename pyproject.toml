@@ -33,6 +33,7 @@ dependencies = [
   "httpx>=0.28.1",
   "imageio>=2.37.0",
   "jmespath>=1.0.1",
+  "mettagrid-sdk",
   "matplotlib>=3.10.3",
   "metta-agent",
   "metta-app-backend",
@@ -141,7 +142,7 @@ filterwarnings = [
 markers = ["slow: marks tests as slow (deselect with '-m \"not slow\"')"]
 console_output_style = "progress"
 addopts = "-n auto --import-mode=importlib --ignore-glob=**/bazel-*"
-pythonpath = [".", "packages/mettagrid/python/src"]
+pythonpath = [".", "packages/mettagrid/python/src", "mettagrid-sdk/src"]
 norecursedirs = ["bazel-*", ".bazel_output"]
 
 [tool.uv]
@@ -159,6 +160,7 @@ members = [
   "packages/cogames",
   "packages/cortex",
   "packages/gitta",
+  "mettagrid-sdk",
   "packages/mettagrid",
   # Intentionally excluded: packages/pufferlib-core defaults to PyPI wheels.
   # Local override: uv pip install --editable packages/pufferlib-core --no-deps
@@ -173,6 +175,7 @@ cogames-rl-researcher = { workspace = true }
 cogames = { workspace = true }
 cortexcore = { workspace = true }
 gitta = { workspace = true }
+mettagrid-sdk = { workspace = true }
 metta-agent = { workspace = true }
 metta-app-backend = { workspace = true }
 metta-common = { workspace = true }

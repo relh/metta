@@ -22,6 +22,7 @@ members = [
     "metta-common",
     "metta-pr-similarity-mcp",
     "mettagrid",
+    "mettagrid-sdk",
     "softmax",
 ]
 
@@ -2453,6 +2454,7 @@ dependencies = [
     { name = "metta-app-backend" },
     { name = "metta-chatprop" },
     { name = "metta-common" },
+    { name = "mettagrid-sdk" },
     { name = "ninja" },
     { name = "numpy" },
     { name = "nvidia-ml-py" },
@@ -2596,6 +2598,7 @@ requires-dist = [
     { name = "metta-app-backend", editable = "app_backend" },
     { name = "metta-chatprop", editable = "chatprop" },
     { name = "metta-common", editable = "common" },
+    { name = "mettagrid-sdk", editable = "mettagrid-sdk" },
     { name = "ninja", specifier = ">=1.11.1" },
     { name = "numpy", specifier = "==2.3.3" },
     { name = "nvidia-ml-py" },
@@ -2964,6 +2967,21 @@ testing = [
     { name = "pytest", specifier = ">=8.3.3" },
     { name = "pytest-benchmark", specifier = ">=5.1.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
+]
+
+[[package]]
+name = "mettagrid-sdk"
+version = "0.1.0"
+source = { editable = "mettagrid-sdk" }
+dependencies = [
+    { name = "mettagrid" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mettagrid", editable = "packages/mettagrid" },
+    { name = "pydantic", specifier = ">=2.12.2" },
 ]
 
 [[package]]
