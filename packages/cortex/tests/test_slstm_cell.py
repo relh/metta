@@ -1,11 +1,16 @@
 """Tests for sLSTM cell implementation (Triton vs vanilla parity)."""
 
+import pytest
 import torch
-from cortex.blocks import PostUpBlock
-from cortex.cells.slstm import sLSTMCell
 from cortex.config import PostUpBlockConfig, sLSTMCellConfig
+from cortex.cores.slstm import sLSTMCell
 from cortex.kernels.pytorch.slstm import slstm_sequence_pytorch
-from cortex.kernels.triton.slstm import slstm_sequence_triton
+from cortex.scaffolds import PostUpBlock
+
+try:
+    from cortex.kernels.triton.slstm import slstm_sequence_triton
+except ImportError:  # pragma: no cover - optional dependency
+    slstm_sequence_triton = None
 
 
 def get_test_device():
@@ -608,6 +613,8 @@ def test_slstm_kernel_recurrent_mix_parity_nonzero_recurrent_weights() -> None:
     """Ensure recurrent-mix math matches between Triton and PyTorch for non-zero recurrent weights."""
     torch.manual_seed(31415)
 
+    if slstm_sequence_triton is None:
+        pytest.skip("Triton not installed")
     if not torch.cuda.is_available():
         print("⊘ Skipping kernel parity test (CUDA not available)")
         return

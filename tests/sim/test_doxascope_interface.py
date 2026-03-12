@@ -181,14 +181,14 @@ class Test05CortexActivationExtractionInterface:
     def test_can_find_cortex_in_policy_components(self):
         """Verify we can find CortexTD in a policy's components using Doxascope's pattern."""
         import torch.nn as nn  # noqa: PLC0415
-        from cortex import LSTMCellConfig, PassThroughBlockConfig  # noqa: PLC0415
+        from cortex import LSTMCoreConfig, PassThroughScaffoldConfig  # noqa: PLC0415
 
         # Create a real CortexTD component
         stack_config = CortexStackConfig(
             d_hidden=64,
-            blocks=[
-                PassThroughBlockConfig(
-                    cell=LSTMCellConfig(hidden_size=64, num_layers=1),
+            scaffolds=[
+                PassThroughScaffoldConfig(
+                    core=LSTMCoreConfig(hidden_size=64, num_layers=1),
                 ),
             ],
         )
@@ -237,15 +237,15 @@ class Test05CortexActivationExtractionInterface:
     def test_cortex_state_structure_for_extraction(self):
         """Verify that _rollout_current_state has the structure Doxascope expects for extraction."""
         import torch  # noqa: PLC0415
-        from cortex import LSTMCellConfig, PassThroughBlockConfig  # noqa: PLC0415
+        from cortex import LSTMCoreConfig, PassThroughScaffoldConfig  # noqa: PLC0415
         from tensordict import TensorDict  # noqa: PLC0415
 
         # Create a CortexTD component
         stack_config = CortexStackConfig(
             d_hidden=64,
-            blocks=[
-                PassThroughBlockConfig(
-                    cell=LSTMCellConfig(hidden_size=64, num_layers=1),
+            scaffolds=[
+                PassThroughScaffoldConfig(
+                    core=LSTMCoreConfig(hidden_size=64, num_layers=1),
                 ),
             ],
         )

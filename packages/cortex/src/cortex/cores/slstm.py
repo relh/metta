@@ -9,14 +9,14 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
-from cortex.cells.conv import CausalConv1d
-from cortex.cells.core import AxonLayer, update_parent_state
+from cortex.config import CausalConv1dConfig, sLSTMCellConfig
+from cortex.cores.base import MemoryCell
+from cortex.cores.conv import CausalConv1d
+from cortex.cores.core import AxonLayer, update_parent_state
 
 # Reuse utilities from mLSTM for normalization and init
-from cortex.cells.mlstm import MultiHeadLayerNorm, bias_linspace_init_
-from cortex.cells.registry import register_cell
-from cortex.config import CausalConv1dConfig, sLSTMCellConfig
+from cortex.cores.mlstm import MultiHeadLayerNorm, bias_linspace_init_
+from cortex.cores.registry import register_cell
 from cortex.kernels.pytorch.slstm import slstm_sequence_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend

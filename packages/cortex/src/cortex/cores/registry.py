@@ -2,8 +2,8 @@
 
 from typing import Callable, Type
 
-from cortex.cells.base import MemoryCell
 from cortex.config import CellConfig
+from cortex.cores.base import MemoryCell
 
 # Global registry mapping config classes to cell classes
 _CELL_REGISTRY: dict[Type[CellConfig], Type[MemoryCell]] = {}

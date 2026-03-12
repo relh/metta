@@ -8,9 +8,9 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
-from cortex.cells.registry import register_cell
 from cortex.config import LSTMCellConfig
+from cortex.cores.base import MemoryCell
+from cortex.cores.registry import register_cell
 from cortex.kernels.pytorch.lstm import lstm_sequence_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend

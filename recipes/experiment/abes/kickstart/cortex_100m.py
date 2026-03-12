@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Sequence
 
+from cortex.cells import AGaLiTeCellConfig, AxonCellConfig, sLSTMCellConfig
 from cortex.stacks import build_cortex_auto_config
 
 import metta.cogworks.curriculum as cc
@@ -116,13 +117,15 @@ def train(
         stack_cfg = build_cortex_auto_config(
             d_hidden=512,
             num_layers=8,
-            pattern=[
-                "Ag,A",
-                "Ag,A",
-                "Ag,A",
-                "Ag,A,S",
-            ]
-            * 2,
+            layers=(
+                [
+                    [AGaLiTeCellConfig(), AxonCellConfig()],
+                    [AGaLiTeCellConfig(), AxonCellConfig()],
+                    [AGaLiTeCellConfig(), AxonCellConfig()],
+                    [AGaLiTeCellConfig(), AxonCellConfig(), sLSTMCellConfig()],
+                ]
+                * 2
+            ),
             post_norm=True,
             compile_blocks=True,
         )

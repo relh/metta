@@ -17,14 +17,16 @@ from dataclasses import dataclass
 from typing import Callable, Dict
 
 import torch
+from cortex.cells import AxonCellConfig, XLCellConfig, mLSTMCellConfig, sLSTMCellConfig
 from cortex.config import (
     AxonConfig,
     CortexStackConfig,
     PassThroughBlockConfig,
     PostUpBlockConfig,
     PreUpBlockConfig,
-    mLSTMCellConfig,
-    sLSTMCellConfig,
+    XLCoreConfig,
+    mLSTMCoreConfig,
+    sLSTMCoreConfig,
 )
 from cortex.factory import build_cortex
 from cortex.stacks import CortexStack, build_cortex_auto_stack, build_hf_stack
@@ -175,18 +177,39 @@ STACKS: Dict[str, StackSpec] = {
     # Mixed auto stack cycling Axon/mLSTM/sLSTM with PreUp/PreUp/PostUp
     "cortex_auto": StackSpec(
         name="cortex_auto_stack",
-        builder=lambda: build_cortex_auto_stack(d_hidden=128, num_layers=2, compile_blocks=False, pattern="AMS"),
+        builder=lambda: build_cortex_auto_stack(
+            d_hidden=128,
+            num_layers=2,
+            compile_blocks=False,
+            layers=[[AxonCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()]] * 2,
+        ),
         d_hidden=128,
     ),
     # Variant with per-block torch.compile enabled for A/B comparisons
     "cortex_auto_compiled": StackSpec(
         name="cortex_auto_stack",
-        builder=lambda: build_cortex_auto_stack(d_hidden=128, num_layers=2, compile_blocks=True, pattern="AXMS"),
+        builder=lambda: build_cortex_auto_stack(
+            d_hidden=128,
+            num_layers=2,
+            compile_blocks=True,
+            layers=[[AxonCellConfig(), XLCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()]] * 2,
+        ),
         d_hidden=128,
     ),
     "cortex_auto_axon": StackSpec(
         name="cortex_auto_stack",
-        builder=lambda: build_cortex_auto_stack(d_hidden=128, num_layers=2, pattern="M^X^S^"),
+        builder=lambda: build_cortex_auto_stack(
+            d_hidden=128,
+            num_layers=2,
+            layers=[
+                [
+                    mLSTMCellConfig(core=mLSTMCoreConfig(use_axon_layer=True, use_axon_qkv=True)),
+                    XLCellConfig(core=XLCoreConfig(use_axon_qkv=True)),
+                    sLSTMCellConfig(core=sLSTMCoreConfig(use_axon_layer=True)),
+                ]
+            ]
+            * 2,
+        ),
         d_hidden=128,
     ),
     "smollm": StackSpec(

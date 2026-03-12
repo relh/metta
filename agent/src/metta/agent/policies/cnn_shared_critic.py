@@ -1,5 +1,6 @@
 from typing import List
 
+from cortex.cells import CellConfig, LSTMCellConfig
 from cortex.config import RoutedAdapterConfig
 from cortex.stacks import build_cortex_auto_config
 from pydantic import ConfigDict, Field
@@ -28,7 +29,7 @@ class CnnSharedCriticConfig(PolicyArchitecture):
     pass_state_during_training: bool = True
 
     core_resnet_layers: int = 1
-    core_resnet_pattern: str = "L"
+    core_resnet_cells: list[CellConfig] = Field(default_factory=lambda: [LSTMCellConfig()])
     core_use_layer_norm: bool = False
     core_compile: bool = False
     cortex_routed_adapter: RoutedAdapterConfig | None = None
@@ -61,7 +62,7 @@ class CnnSharedCriticConfig(PolicyArchitecture):
                 stack_cfg=build_cortex_auto_config(
                     d_hidden=self.latent_dim,
                     num_layers=self.core_resnet_layers,
-                    pattern=self.core_resnet_pattern,
+                    layers=[self.core_resnet_cells] * self.core_resnet_layers,
                     post_norm=self.core_use_layer_norm,
                     compile_blocks=self.core_compile,
                     routed_adapter=self.cortex_routed_adapter,

@@ -9,9 +9,9 @@ import torch.nn as nn
 import torch.nn.functional
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
-from cortex.cells.registry import register_cell
 from cortex.config import CausalConv1dConfig
+from cortex.cores.base import MemoryCell
+from cortex.cores.registry import register_cell
 from cortex.kernels.pytorch.conv1d import causal_conv1d_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend

@@ -6,10 +6,10 @@ from typing import Optional, Tuple
 
 from tensordict import TensorDict
 
-from cortex.blocks.base import BaseBlock
-from cortex.blocks.registry import register_block
-from cortex.cells.base import MemoryCell
 from cortex.config import PassThroughBlockConfig
+from cortex.cores.base import MemoryCell
+from cortex.scaffolds.base import BaseBlock
+from cortex.scaffolds.registry import register_block
 from cortex.types import MaybeState, ResetMask, Tensor
 
 

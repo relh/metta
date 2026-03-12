@@ -5,12 +5,12 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Iterator, Optional, Tuple
 
-import cortex.cells.core.axon_cell as cell_mod
+import cortex.cores.core.axon_cell as cell_mod
 import cortex.utils as utils_mod
 import torch
 import torch.nn as nn
-from cortex.cells.core import AxonCell
 from cortex.config import AxonConfig
+from cortex.cores.core import AxonCell
 
 from .common import (
     BenchmarkCase,
@@ -36,7 +36,7 @@ def _force_axon_backend(which: str) -> Iterator[None]:  # type: ignore[override]
 
     AxonCell imports the selector into its module namespace, so we patch both
     ``cortex.utils.select_backend`` and the alias bound in
-    ``cortex.cells.core.axon_cell``.
+    ``cortex.cores.core.axon_cell``.
     """
     if which == "auto":
         # no-op context manager

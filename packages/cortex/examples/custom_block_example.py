@@ -3,16 +3,16 @@
 
 import torch
 import torch.nn as nn
-from cortex import register_block
-from cortex.blocks.base import BaseBlock
-from cortex.cells.base import MemoryCell
-from cortex.config import BlockConfig, CortexStackConfig, LSTMCellConfig
+from cortex import register_scaffold
+from cortex.config import CortexStackConfig, LSTMCoreConfig, ScaffoldConfig
+from cortex.cores.base import MemoryCell
+from cortex.scaffolds.base import BaseBlock
 from cortex.types import MaybeState, ResetMask, Tensor
 from pydantic import Field
 
 
 # Step 1: Define custom block configuration
-class GatedResidualBlockConfig(BlockConfig):
+class GatedResidualBlockConfig(ScaffoldConfig):
     """Configuration for a custom gated residual block.
 
     This block applies a gate to control the residual connection.
@@ -23,7 +23,7 @@ class GatedResidualBlockConfig(BlockConfig):
 
 
 # Step 2: Implement and register the custom block
-@register_block(GatedResidualBlockConfig)
+@register_scaffold(GatedResidualBlockConfig)
 class GatedResidualBlock(BaseBlock):
     """A custom block with gated residual connections.
 
@@ -89,15 +89,15 @@ def test_custom_block():
     # Create a recipe with custom blocks
     recipe = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
+        scaffolds=[
             # Mix standard and custom blocks
             GatedResidualBlockConfig(
-                cell=LSTMCellConfig(hidden_size=128, num_layers=1),
+                core=LSTMCoreConfig(hidden_size=128, num_layers=1),
                 gate_activation="sigmoid",
                 residual_weight=0.3,
             ),
             GatedResidualBlockConfig(
-                cell=LSTMCellConfig(hidden_size=128, num_layers=2),
+                core=LSTMCoreConfig(hidden_size=128, num_layers=2),
                 gate_activation="tanh",
                 residual_weight=0.7,
             ),
@@ -107,10 +107,10 @@ def test_custom_block():
 
     print("Custom Recipe Configuration:")
     print(f"  d_hidden: {recipe.d_hidden}")
-    print(f"  num_blocks: {len(recipe.blocks)}")
+    print(f"  num_scaffolds: {len(recipe.blocks)}")
     for i, block in enumerate(recipe.blocks):
         if isinstance(block, GatedResidualBlockConfig):
-            print(f"  Block {i}: GatedResidual (gate={block.gate_activation}, weight={block.residual_weight})")
+            print(f"  Scaffold {i}: GatedResidual (gate={block.gate_activation}, weight={block.residual_weight})")
     print()
 
     # Build the stack using the standard CortexStack - no custom class needed!
@@ -119,7 +119,7 @@ def test_custom_block():
 
     stack = CortexStack(recipe)
 
-    print(f"Built custom stack with {len(stack.blocks)} blocks")
+    print(f"Built custom stack with {len(stack.blocks)} scaffolds")
 
     # Test forward pass
     x = torch.randn(batch_size, seq_len, d_hidden, device=device, dtype=dtype)
@@ -135,14 +135,14 @@ def test_custom_block():
     # Show how the registry works
     print("\n" + "=" * 40)
     print("How the registry system works:")
-    print("1. Custom blocks are registered with @register_block decorator")
-    print("2. CortexStack automatically builds any registered block type")
+    print("1. Custom scaffolds are registered with @register_scaffold decorator")
+    print("2. CortexStack automatically builds any registered scaffold type")
     print("3. No need to modify CortexStack or create custom classes!")
     print("\nThe registry makes the system fully extensible:")
-    print("- Define your BlockConfig subclass")
-    print("- Define your Block subclass")
-    print("- Use @register_block(YourConfig) on your block class")
-    print("- That's it! Your block is now usable in any CortexStack")
+    print("- Define your ScaffoldConfig subclass")
+    print("- Define your scaffold class")
+    print("- Use @register_scaffold(YourConfig) on your scaffold class")
+    print("- That's it! Your scaffold is now usable in any CortexStack")
 
 
 if __name__ == "__main__":

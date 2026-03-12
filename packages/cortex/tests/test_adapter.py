@@ -2,12 +2,12 @@
 
 import torch
 from cortex import (
-    AdapterBlockConfig,
+    AdapterScaffoldConfig,
     CortexStack,
     CortexStackConfig,
-    LSTMCellConfig,
-    PassThroughBlockConfig,
-    PreUpBlockConfig,
+    LSTMCoreConfig,
+    PassThroughScaffoldConfig,
+    PreUpScaffoldConfig,
 )
 
 
@@ -22,9 +22,9 @@ def test_adapter_identity_at_init():
     # Create a stack with an adapter wrapping a PassThrough block
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
+        scaffolds=[
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
                 bottleneck=16,
                 per_channel_gate=False,
             )
@@ -64,10 +64,10 @@ def test_adapter_wraps_preup():
 
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            AdapterBlockConfig(
-                base_block=PreUpBlockConfig(
-                    cell=LSTMCellConfig(hidden_size=None, num_layers=1),
+        scaffolds=[
+            AdapterScaffoldConfig(
+                base_scaffold=PreUpScaffoldConfig(
+                    core=LSTMCoreConfig(hidden_size=None, num_layers=1),
                     proj_factor=2.0,
                 ),
                 bottleneck=16,
@@ -100,9 +100,9 @@ def test_adapter_state_management():
 
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
+        scaffolds=[
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
                 bottleneck=16,
             )
         ],
@@ -141,9 +141,9 @@ def test_adapter_reset_handling():
 
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
+        scaffolds=[
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
                 bottleneck=16,
             )
         ],
@@ -176,9 +176,9 @@ def test_adapter_gradient_flow():
 
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
+        scaffolds=[
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
                 bottleneck=16,
             )
         ],
@@ -219,16 +219,16 @@ def test_adapter_multiple_in_stack():
 
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
+        scaffolds=[
+            PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
                 bottleneck=16,
             ),
-            PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=64, num_layers=1)),
-            AdapterBlockConfig(
-                base_block=PreUpBlockConfig(
-                    cell=LSTMCellConfig(hidden_size=None, num_layers=1),
+            PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=64, num_layers=1)),
+            AdapterScaffoldConfig(
+                base_scaffold=PreUpScaffoldConfig(
+                    core=LSTMCoreConfig(hidden_size=None, num_layers=1),
                     proj_factor=2.0,
                 ),
                 bottleneck=32,

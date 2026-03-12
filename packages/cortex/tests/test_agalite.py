@@ -6,8 +6,8 @@ import os
 
 import pytest
 import torch
-from cortex.cells.agalite import AGaLiTeCell
 from cortex.config import AGaLiTeCellConfig
+from cortex.cores.agalite import AGaLiTeCell
 from cortex.kernels.pytorch.agalite import discounted_sum_pytorch
 from tensordict import TensorDict
 

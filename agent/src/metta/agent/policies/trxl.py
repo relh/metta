@@ -1,6 +1,7 @@
 from typing import List
 
-from cortex.config import XLCellConfig
+from cortex.cells import XLCellConfig
+from cortex.config import XLCoreConfig
 from cortex.stacks import build_cortex_auto_config
 
 from metta.agent.components.actor import ActionProbsConfig, ActorHeadConfig
@@ -52,8 +53,8 @@ class TRXLConfig(PolicyArchitecture):
             stack_cfg=build_cortex_auto_config(
                 d_hidden=_latent_dim,
                 num_layers=_memory_num_layers,
-                pattern="X",
-                override_global_configs=[XLCellConfig(mem_len=_xl_mem_len)],
+                layers=[[XLCellConfig()]] * _memory_num_layers,
+                override_global_configs=[XLCoreConfig(mem_len=_xl_mem_len)],
                 post_norm=True,
             ),
         ),

@@ -2,7 +2,7 @@
 
 This module adapts the open-source ``flashrnn`` kernels from Maximilian Beck
 to provide a single-layer LSTM forward/backward implementation that matches the
-PyTorch reference used by :class:`cortex.cells.lstm.LSTMCell`. The kernels have
+PyTorch reference used by :class:`cortex.cores.lstm.LSTMCell`. The kernels have
 been extended to honour batch-first reset masks, which zero the recurrent state
 before a step.
 """

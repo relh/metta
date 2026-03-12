@@ -3,10 +3,10 @@
 import torch
 from cortex import (
     CortexStackConfig,
-    LSTMCellConfig,
-    PassThroughBlockConfig,
-    PostUpBlockConfig,
-    PreUpBlockConfig,
+    LSTMCoreConfig,
+    PassThroughScaffoldConfig,
+    PostUpScaffoldConfig,
+    PreUpScaffoldConfig,
     build_cortex,
 )
 
@@ -25,23 +25,23 @@ def test_cortex_stack():
     # Create a recipe with mixed block types
     recipe = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            PreUpBlockConfig(
-                cell=LSTMCellConfig(
+        scaffolds=[
+            PreUpScaffoldConfig(
+                core=LSTMCoreConfig(
                     hidden_size=None,  # Inferred as d_inner = proj_factor * d_hidden
                     num_layers=1,
                     dropout=0.1,
                 ),
                 proj_factor=2.0,
             ),
-            PassThroughBlockConfig(
-                cell=LSTMCellConfig(
+            PassThroughScaffoldConfig(
+                core=LSTMCoreConfig(
                     hidden_size=256,  # Must match d_hidden
                     num_layers=1,
                 ),
             ),
-            PostUpBlockConfig(
-                cell=LSTMCellConfig(
+            PostUpScaffoldConfig(
+                core=LSTMCoreConfig(
                     hidden_size=None,  # Inferred as d_hidden
                     num_layers=1,
                 ),
@@ -53,16 +53,16 @@ def test_cortex_stack():
 
     print("Recipe Configuration:")
     print(f"  d_hidden: {recipe.d_hidden}")
-    print(f"  num_blocks: {len(recipe.blocks)}")
-    for i, block in enumerate(recipe.blocks):
-        block_type = type(block).__name__.replace("BlockConfig", "")
-        proj_str = f" (proj_factor={block.proj_factor})" if hasattr(block, "proj_factor") else ""
-        print(f"  Block {i}: {block_type}{proj_str}")
+    print(f"  num_scaffolds: {len(recipe.blocks)}")
+    for i, scaffold in enumerate(recipe.blocks):
+        scaffold_type = type(scaffold).__name__.replace("ScaffoldConfig", "")
+        proj_str = f" (proj_factor={scaffold.proj_factor})" if hasattr(scaffold, "proj_factor") else ""
+        print(f"  Scaffold {i}: {scaffold_type}{proj_str}")
     print()
 
     # Build the cortex stack
     cortex = build_cortex(recipe)
-    print(f"Built CortexStack with {len(cortex.blocks)} blocks")
+    print(f"Built CortexStack with {len(cortex.blocks)} scaffolds")
 
     # Count parameters
     num_params = sum(p.numel() for p in cortex.parameters())
@@ -153,9 +153,9 @@ def test_cortex_stack():
     # Test passthrough-only stack
     passthrough_recipe = CortexStackConfig(
         d_hidden=128,
-        blocks=[
-            PassThroughBlockConfig(
-                cell=LSTMCellConfig(hidden_size=128, num_layers=1),
+        scaffolds=[
+            PassThroughScaffoldConfig(
+                core=LSTMCoreConfig(hidden_size=128, num_layers=1),
             )
             for _ in range(3)
         ],
@@ -170,9 +170,9 @@ def test_cortex_stack():
     # Test preup-only stack
     preup_recipe = CortexStackConfig(
         d_hidden=64,
-        blocks=[
-            PreUpBlockConfig(
-                cell=LSTMCellConfig(hidden_size=None, num_layers=1),
+        scaffolds=[
+            PreUpScaffoldConfig(
+                core=LSTMCoreConfig(hidden_size=None, num_layers=1),
                 proj_factor=2.0,
             )
         ],

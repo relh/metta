@@ -1,5 +1,6 @@
 from typing import List
 
+from cortex.cells import LSTMCellConfig
 from cortex.stacks import build_cortex_auto_config
 
 from metta.agent.components.actor import ActionProbsConfig, ActorHeadConfig
@@ -53,7 +54,7 @@ class ViTGRPOConfig(PolicyArchitecture):
             stack_cfg=build_cortex_auto_config(
                 d_hidden=_latent_dim,
                 num_layers=1,
-                pattern="L",
+                layers=[[LSTMCellConfig()]],
                 post_norm=False,
                 compile_blocks=False,
             ),

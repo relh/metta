@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from cortex import CortexStackConfig, LSTMCellConfig, PassThroughBlockConfig, RoutedAdapterConfig
+from cortex import CortexStackConfig, LSTMCoreConfig, PassThroughScaffoldConfig, RoutedAdapterConfig
 from tensordict import TensorDict
 
 from metta.agent.components.cortex import CortexTD, CortexTDConfig
@@ -14,7 +14,7 @@ from metta.agent.utils import ensure_sequence_metadata
 def _make_component(*, num_slots: int, num_agents_per_env: int = 8) -> CortexTD:
     stack_cfg = CortexStackConfig(
         d_hidden=16,
-        blocks=[PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=16, num_layers=1))],
+        scaffolds=[PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=16, num_layers=1))],
         post_norm=False,
         compile_blocks=False,
         routed_adapter=RoutedAdapterConfig(num_slots=num_slots, rank=2),
@@ -147,7 +147,7 @@ def test_cortex_routed_adapter_requires_agent_slot_ids() -> None:
 def test_cortex_routed_adapter_validates_num_slots_vs_num_agents() -> None:
     stack_cfg = CortexStackConfig(
         d_hidden=16,
-        blocks=[PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=16, num_layers=1))],
+        scaffolds=[PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=16, num_layers=1))],
         post_norm=False,
         compile_blocks=False,
         routed_adapter=RoutedAdapterConfig(num_slots=9, rank=2),

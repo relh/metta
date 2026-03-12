@@ -1,13 +1,15 @@
-"""Auto builder: stacks of Column layers built from AXMS patterns."""
+"""Auto builder: stacks of Column layers built from explicit cell lists."""
 
 from __future__ import annotations
 
-from typing import Iterable, List, cast
+from typing import Iterable, List, Sequence, cast
 
 from pydantic import BaseModel
 
-from cortex.blocks.column.auto import build_column_auto_config
-from cortex.config import BlockConfig, CortexStackConfig, RoutedAdapterConfig, RouterConfig
+from cortex.cells import CellConfig as PublicCellConfig
+from cortex.cells import default_cells
+from cortex.config import CortexStackConfig, RoutedAdapterConfig, RouterConfig, ScaffoldConfig
+from cortex.scaffolds.column.auto import build_column_auto_config
 from cortex.stacks.base import CortexStack
 
 
@@ -15,33 +17,24 @@ def build_cortex_auto_config(
     *,
     d_hidden: int,
     num_layers: int = 2,
-    pattern: str | list[str] | None = "AXMS",
-    custom_map: dict[str, BlockConfig] | None = None,
+    layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None = None,
     router: RouterConfig | None = None,
     post_norm: bool = True,
     compile_blocks: bool = True,
     override_global_configs: Iterable[BaseModel] | None = None,
     routed_adapter: RoutedAdapterConfig | None = None,
 ) -> CortexStackConfig:
-    """Build a CortexStackConfig with Column layers from AXMS patterns."""
+    """Build a CortexStackConfig with Column layers from explicit cell lists."""
 
-    if pattern is None:
-        patterns: list[str] = ["AXMS"] * num_layers
-    elif isinstance(pattern, str):
-        patterns = [pattern] * num_layers
-    else:
-        if len(pattern) != num_layers:
-            raise ValueError(f"pattern list length {len(pattern)} != num_layers {num_layers}")
-        patterns = list(pattern)
+    configured_layers = _resolve_layers(num_layers=num_layers, layers=layers)
 
-    blocks: list[BlockConfig] = []
-    for pat in patterns:
-        col_cfg = build_column_auto_config(d_hidden=d_hidden, pattern=pat, router=router, custom_map=custom_map)
+    blocks: list[ScaffoldConfig] = []
+    for layer_cells in configured_layers:
+        col_cfg = build_column_auto_config(d_hidden=d_hidden, cells=layer_cells, router=router)
         blocks.append(col_cfg)
 
-    # Optionally apply global overrides by type (e.g., XLCellConfig(mem_len=64)).
     if override_global_configs:
-        blocks = [cast(BlockConfig, _apply_overrides_model(b, override_global_configs)) for b in blocks]
+        blocks = [cast(ScaffoldConfig, _apply_overrides_model(block, override_global_configs)) for block in blocks]
 
     return CortexStackConfig(
         blocks=blocks,
@@ -56,20 +49,19 @@ def build_cortex_auto_stack(
     *,
     d_hidden: int,
     num_layers: int = 4,
-    pattern: str | list[str] | None = "AXMS",
-    custom_map: dict[str, BlockConfig] | None = None,
+    layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None = None,
     router: RouterConfig | None = None,
     post_norm: bool = True,
     compile_blocks: bool = True,
     override_global_configs: Iterable[BaseModel] | None = None,
     routed_adapter: RoutedAdapterConfig | None = None,
 ) -> CortexStack:
-    """Build a Column-based CortexStack with per-layer patterns."""
+    """Build a Column-based CortexStack with per-layer cells."""
+
     cfg = build_cortex_auto_config(
         d_hidden=d_hidden,
         num_layers=num_layers,
-        pattern=pattern,
-        custom_map=custom_map,
+        layers=layers,
         router=router,
         post_norm=post_norm,
         compile_blocks=compile_blocks,
@@ -77,6 +69,19 @@ def build_cortex_auto_stack(
         routed_adapter=routed_adapter,
     )
     return CortexStack(cfg)
+
+
+def _resolve_layers(
+    *,
+    num_layers: int,
+    layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None,
+) -> list[list[PublicCellConfig | ScaffoldConfig]]:
+    if layers is not None:
+        configured_layers = [list(layer) for layer in layers]
+        if not configured_layers:
+            raise ValueError("layers produced no Column scaffolds")
+        return configured_layers
+    return [[cast(PublicCellConfig, _clone_model(cell)) for cell in default_cells()] for _ in range(num_layers)]
 
 
 def _clone_model(model: BaseModel) -> BaseModel:
@@ -88,7 +93,6 @@ def _clone_model(model: BaseModel) -> BaseModel:
 def _merge_model(model: BaseModel, update: BaseModel) -> BaseModel:
     """Return a new model with explicitly set fields from update overriding model."""
     fields_set = getattr(update, "model_fields_set", None) or getattr(update, "__fields_set__", None)
-    # Pydantic v2 path
     if hasattr(model, "model_copy") and hasattr(update, "model_dump"):
         if fields_set:
             dump_all = update.model_dump()
@@ -96,7 +100,6 @@ def _merge_model(model: BaseModel, update: BaseModel) -> BaseModel:
         else:
             upd = update.model_dump(exclude_unset=True)
         return model.model_copy(update=upd)  # type: ignore[attr-defined]
-    # Pydantic v1 fallback (no try/except)
     upd_data = update.dict()
     if fields_set:
         upd = {k: upd_data[k] for k in fields_set if k in upd_data}
@@ -108,18 +111,10 @@ def _merge_model(model: BaseModel, update: BaseModel) -> BaseModel:
 
 
 def _apply_overrides_model(model: BaseModel, overrides: Iterable[BaseModel]) -> BaseModel:
-    """Recursively apply overrides by matching model types.
+    for override in overrides:
+        if isinstance(model, type(override)):
+            return _merge_model(model, override)
 
-    Any submodel whose type matches one of the override models' types is
-    reconstructed with the override's fields merged on top of the original.
-    """
-    # Direct match: merge and return
-    for ov in overrides:
-        if isinstance(model, type(ov)):
-            return _merge_model(model, ov)
-
-    # Otherwise, recurse into fields
-    # Build a shallow clone to avoid mutating the input instance
     cloned = _clone_model(model)
     fields = getattr(cloned, "model_fields", None) or getattr(cloned, "__fields__", {})
     for name in fields:

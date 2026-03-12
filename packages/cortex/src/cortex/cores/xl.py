@@ -9,10 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
-from cortex.cells.core import AxonLayer, update_parent_state
-from cortex.cells.registry import register_cell
 from cortex.config import XLCellConfig
+from cortex.cores.base import MemoryCell
+from cortex.cores.core import AxonLayer, update_parent_state
+from cortex.cores.registry import register_cell
 from cortex.kernels.pytorch.txl import txl_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 

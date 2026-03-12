@@ -4,12 +4,13 @@
 import torch
 import torch.nn as nn
 from cortex import (
-    CellConfig,
+    CoreConfig,
     CortexStack,
     CortexStackConfig,
-    MemoryCell,
-    PassThroughBlockConfig,
-    register_cell,
+    LSTMCoreConfig,
+    MemoryCore,
+    PassThroughScaffoldConfig,
+    register_core,
 )
 from cortex.types import MaybeState, ResetMask, Tensor
 from pydantic import Field
@@ -17,8 +18,8 @@ from tensordict import TensorDict
 
 
 # Step 1: Define custom cell configuration
-class GRUCellConfig(CellConfig):
-    """Configuration for a GRU cell."""
+class GRUCellConfig(CoreConfig):
+    """Configuration for a GRU core."""
 
     num_layers: int = Field(default=1, ge=1)
     bias: bool = Field(default=True)
@@ -26,9 +27,9 @@ class GRUCellConfig(CellConfig):
 
 
 # Step 2: Implement and register the custom cell
-@register_cell(GRUCellConfig)
-class GRUCell(MemoryCell):
-    """GRU cell implementation with TensorDict state management."""
+@register_core(GRUCellConfig)
+class GRUCell(MemoryCore):
+    """GRU core implementation with TensorDict state management."""
 
     def __init__(self, cfg: GRUCellConfig) -> None:
         super().__init__(hidden_size=cfg.hidden_size)
@@ -108,38 +109,33 @@ def test_custom_cell():
     d_hidden = 64
 
     # Create a recipe mixing LSTM and GRU cells
-    from cortex import LSTMCellConfig  # noqa: PLC0415
-
     recipe = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            # LSTM block
-            PassThroughBlockConfig(
-                cell=LSTMCellConfig(hidden_size=64, num_layers=1),
+        scaffolds=[
+            PassThroughScaffoldConfig(
+                core=LSTMCoreConfig(hidden_size=64, num_layers=1),
             ),
-            # GRU block (our custom cell)
-            PassThroughBlockConfig(
-                cell=GRUCellConfig(hidden_size=64, num_layers=2),
+            PassThroughScaffoldConfig(
+                core=GRUCellConfig(hidden_size=64, num_layers=2),
             ),
-            # Another LSTM block
-            PassThroughBlockConfig(
-                cell=LSTMCellConfig(hidden_size=64, num_layers=1),
+            PassThroughScaffoldConfig(
+                core=LSTMCoreConfig(hidden_size=64, num_layers=1),
             ),
         ],
         post_norm=True,
     )
 
-    print("Mixed Cell Types Configuration:")
+    print("Mixed Core Types Configuration:")
     print(f"  d_hidden: {recipe.d_hidden}")
-    print(f"  num_blocks: {len(recipe.blocks)}")
+    print(f"  num_scaffolds: {len(recipe.blocks)}")
     for i, block in enumerate(recipe.blocks):
         cell_type = type(block.cell).__name__.replace("Config", "")
-        print(f"  Block {i}: {cell_type}")
+        print(f"  Scaffold {i}: {cell_type}")
     print()
 
     # Build the stack - it automatically handles both LSTM and GRU cells!
     stack = CortexStack(recipe)
-    print(f"Built stack with {len(stack.blocks)} blocks (mixed cell types)")
+    print(f"Built stack with {len(stack.blocks)} scaffolds (mixed core types)")
 
     # Test forward pass
     x = torch.randn(batch_size, seq_len, d_hidden, device=device, dtype=dtype)
@@ -162,12 +158,12 @@ def test_custom_cell():
     print("\n✓ Custom cell test passed!")
 
     print("\n" + "=" * 40)
-    print("How the cell registry system works:")
-    print("1. Define your CellConfig subclass with custom parameters")
-    print("2. Define your Cell subclass extending MemoryCell")
-    print("3. Use @register_cell(YourConfig) on your cell class")
-    print("4. Your cell is now usable in any block configuration!")
-    print("\nThe system is fully extensible for both blocks AND cells.")
+    print("How the core registry system works:")
+    print("1. Define your CoreConfig subclass with custom parameters")
+    print("2. Define your core class extending MemoryCore")
+    print("3. Use @register_core(YourConfig) on your core class")
+    print("4. Your core is now usable in any scaffold configuration!")
+    print("\nThe system is fully extensible for both scaffolds and cores.")
 
 
 if __name__ == "__main__":

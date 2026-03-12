@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
-from cortex.cells.conv import CausalConv1d
-from cortex.cells.core import AxonLayer, update_parent_state
-from cortex.cells.registry import register_cell
 from cortex.config import CausalConv1dConfig, mLSTMCellConfig
+from cortex.cores.base import MemoryCell
+from cortex.cores.conv import CausalConv1d
+from cortex.cores.core import AxonLayer, update_parent_state
+from cortex.cores.registry import register_cell
 from cortex.kernels.pytorch.mlstm import (
     mlstm_chunkwise_simple,
     mlstm_recurrent_step_stabilized_simple,

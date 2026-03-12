@@ -1,5 +1,6 @@
 from typing import List
 
+from cortex.cells import AGaLiTeCellConfig, AxonCellConfig, CellConfig, sLSTMCellConfig
 from cortex.stacks import build_cortex_auto_config
 from pydantic import ConfigDict, Field
 
@@ -38,8 +39,9 @@ class ViTSharedCriticConfig(PolicyArchitecture):
     # Trunk configuration
     # Number of Axon layers in the trunk
     cortex_num_layers: int = 2
-    # Pattern for trunk layers (e.g., "A" for Axon blocks, "L" for linear)
-    cortex_pattern: str = "Ag,A,S"
+    cortex_cells: list[CellConfig] = Field(
+        default_factory=lambda: [AGaLiTeCellConfig(), AxonCellConfig(), sLSTMCellConfig()]
+    )
     # Enable layer normalization after each trunk layer
     cortex_use_layer_norm: bool = False
     # Whether to torch.compile the trunk (Cortex stack)
@@ -88,7 +90,7 @@ class ViTSharedCriticConfig(PolicyArchitecture):
                 stack_cfg=build_cortex_auto_config(
                     d_hidden=self.latent_dim,
                     num_layers=self.cortex_num_layers,
-                    pattern=self.cortex_pattern,
+                    layers=[self.cortex_cells] * self.cortex_num_layers,
                     post_norm=self.cortex_use_layer_norm,
                     compile_blocks=self.cortex_compile,
                 ),

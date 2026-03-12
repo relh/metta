@@ -9,11 +9,11 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.blocks.base import BaseBlock
-from cortex.blocks.registry import build_block, register_block
-from cortex.cells import build_cell
-from cortex.cells.base import MemoryCell
 from cortex.config import AdapterBlockConfig
+from cortex.cores import build_cell
+from cortex.cores.base import MemoryCell
+from cortex.scaffolds.base import BaseBlock
+from cortex.scaffolds.registry import build_block, register_block
 from cortex.types import MaybeState, ResetMask, Tensor
 
 

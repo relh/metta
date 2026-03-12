@@ -1,6 +1,7 @@
 from typing import List
 
-from cortex.config import AGaLiTeCellConfig
+from cortex.cells import AGaLiTeCellConfig
+from cortex.config import AGaLiTeCoreConfig
 from cortex.stacks import build_cortex_auto_config
 
 from metta.agent.components.actor import ActionProbsConfig, ActorHeadConfig
@@ -53,8 +54,8 @@ class AGaLiTeConfig(PolicyArchitecture):
             stack_cfg=build_cortex_auto_config(
                 d_hidden=_latent_dim,
                 num_layers=_memory_num_layers,
-                pattern="Ag",
-                override_global_configs=[AGaLiTeCellConfig(eta=_eta, r=_r)],
+                layers=[[AGaLiTeCellConfig()]] * _memory_num_layers,
+                override_global_configs=[AGaLiTeCoreConfig(eta=_eta, r=_r)],
                 post_norm=True,
             ),
         ),

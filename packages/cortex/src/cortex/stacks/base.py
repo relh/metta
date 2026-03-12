@@ -9,11 +9,11 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.blocks import ColumnBlock, build_block
-from cortex.blocks.base import BaseBlock
-from cortex.cells import build_cell
 from cortex.config import CortexStackConfig
+from cortex.cores import build_cell
 from cortex.routed_adapter import apply_routed_adapter_, use_route_ids
+from cortex.scaffolds import ColumnBlock, build_block
+from cortex.scaffolds.base import BaseBlock
 from cortex.types import MaybeState, ResetMask, Tensor
 
 logger = logging.getLogger(__name__)

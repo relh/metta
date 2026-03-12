@@ -3,6 +3,7 @@ import types
 from typing import List, Optional
 
 import torch
+from cortex.cells import XLCellConfig
 from cortex.stacks import build_cortex_auto_config
 from tensordict import TensorDict
 from tensordict.nn import TensorDictModule as TDM
@@ -74,7 +75,7 @@ class FastDynamicsConfig(PolicyArchitecture):
             stack_cfg=build_cortex_auto_config(
                 d_hidden=_latent_dim,
                 num_layers=_memory_num_layers,
-                pattern="X",
+                layers=[[XLCellConfig()]] * _memory_num_layers,
                 post_norm=True,
             ),
         ),

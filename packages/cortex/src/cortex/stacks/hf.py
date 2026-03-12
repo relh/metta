@@ -7,8 +7,8 @@ from typing import Optional
 import torch
 from transformers import AutoModelForCausalLM, PreTrainedModel
 
-from cortex.cells.hf_llama import HFLlamaLayerConfig  # noqa: F401
 from cortex.config import CortexStackConfig, PassThroughBlockConfig
+from cortex.cores.hf_llama import HFLlamaLayerConfig  # noqa: F401
 from cortex.stacks.base import CortexStack
 
 

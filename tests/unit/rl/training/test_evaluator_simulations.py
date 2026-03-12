@@ -29,6 +29,7 @@ def test_build_simulations_defaults_to_curriculum_tasks() -> None:
         evaluate_local=False,
         replay_dir="replays",
         num_training_tasks=2,
+        skip_git_check=True,
     )
 
     evaluator = _make_evaluator(cfg)
@@ -54,6 +55,7 @@ def test_build_simulations_respects_training_replay_overrides() -> None:
         replay_dir="replays",
         num_training_tasks=2,
         training_replay_envs=[custom_sim],
+        skip_git_check=True,
     )
 
     evaluator = _make_evaluator(cfg)

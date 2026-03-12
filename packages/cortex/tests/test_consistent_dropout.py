@@ -3,10 +3,10 @@
 import pytest
 import torch
 import torch.nn as nn
-from cortex.blocks import build_block
-from cortex.cells import build_cell
 from cortex.config import LSTMCellConfig, PostUpBlockConfig, PostUpGatedBlockConfig, PreUpBlockConfig
 from cortex.consistent_dropout import ConsistentDropout, ConsistentDropoutModule, reset_consistent_dropout
+from cortex.cores import build_cell
+from cortex.scaffolds import build_block
 from cortex.stacks import build_cortex_auto_stack
 
 

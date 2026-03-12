@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 import torch
-from cortex.cells.core import AxonLayer
+from cortex.cores.core import AxonLayer
 from tensordict import TensorDict
 
 

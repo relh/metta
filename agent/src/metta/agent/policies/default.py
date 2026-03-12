@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from cortex.config import BlockConfig, CortexStackConfig, RoutedAdapterConfig
+from cortex.cells import AGaLiTeCellConfig, AxonCellConfig, CellConfig, sLSTMCellConfig
+from cortex.config import CortexStackConfig, RoutedAdapterConfig
 from cortex.rl.feature_extractors import (
     FeatureExtractorConfig,
     TokenPerceiverFeatureExtractorConfig,
@@ -42,8 +43,7 @@ class DefaultPolicyConfig(PolicyArchitecture):
 
     # Cortex trunk configuration
     cortex_num_layers: int = 2
-    cortex_pattern: str = "Ag,A,S"
-    cortex_custom_map: Optional[dict[str, BlockConfig]] = None
+    cortex_cells: Optional[list[CellConfig]] = None
     cortex_stack_cfg: Optional[CortexStackConfig] = None
     cortex_use_layer_norm: bool = False
     cortex_compile: bool = False
@@ -84,16 +84,13 @@ class DefaultPolicyConfig(PolicyArchitecture):
             )
         )
 
-        if self.cortex_stack_cfg is not None and self.cortex_custom_map is not None:
-            raise ValueError("Specify only one of cortex_custom_map or cortex_stack_cfg")
-
         stack_cfg = self.cortex_stack_cfg
         if stack_cfg is None:
+            cortex_cells = self.cortex_cells or [AGaLiTeCellConfig(), AxonCellConfig(), sLSTMCellConfig()]
             stack_cfg = build_cortex_auto_config(
                 d_hidden=extractor_out_dim,
                 num_layers=self.cortex_num_layers,
-                pattern=self.cortex_pattern,
-                custom_map=self.cortex_custom_map,
+                layers=[cortex_cells] * self.cortex_num_layers,
                 post_norm=self.cortex_use_layer_norm,
                 compile_blocks=self.cortex_compile,
                 routed_adapter=self.cortex_routed_adapter,

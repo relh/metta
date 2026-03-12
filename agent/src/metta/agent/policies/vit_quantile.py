@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 import torch
+from cortex.cells import LSTMCellConfig
 from cortex.stacks import build_cortex_auto_config
 from tensordict import TensorDict
 
@@ -88,7 +89,7 @@ class ViTQuantileConfig(PolicyArchitecture):
                     stack_cfg=build_cortex_auto_config(
                         d_hidden=self._latent_dim,
                         num_layers=1,
-                        pattern="L",
+                        layers=[[LSTMCellConfig()]],
                         post_norm=False,
                         compile_blocks=self.cortex_compile,
                     ),

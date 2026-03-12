@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cortex import RoutedAdapterConfig
+from cortex import AxonCellConfig, RoutedAdapterConfig
 from cortex.rl.feature_extractors import (
     BoxCNNFeatureExtractorConfig,
     TokenMLPFeatureExtractorConfig,
@@ -58,8 +58,8 @@ def test_core_policy_architecture_to_spec_round_trip_with_token_perceiver_extrac
     assert reconstructed.model_dump(mode="json") == cfg.model_dump(mode="json")
 
 
-def test_core_policy_architecture_to_spec_round_trip_with_cortex_custom_map() -> None:
-    cfg = DefaultPolicyConfig(cortex_custom_map={})
+def test_core_policy_architecture_to_spec_round_trip_with_cortex_cells() -> None:
+    cfg = DefaultPolicyConfig(cortex_cells=[AxonCellConfig()])
 
     reconstructed = PolicyArchitecture.from_spec(cfg.to_spec())
     assert isinstance(reconstructed, DefaultPolicyConfig)

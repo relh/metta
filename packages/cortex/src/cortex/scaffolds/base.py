@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
+from cortex.cores.base import MemoryCell
 from cortex.types import MaybeState, ResetMask, Tensor
 
 

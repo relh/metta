@@ -2,9 +2,9 @@
 
 import pytest
 import torch
-from cortex.blocks import PreUpBlock
-from cortex.cells.mlstm import mLSTMCell
 from cortex.config import PreUpBlockConfig, mLSTMCellConfig
+from cortex.cores.mlstm import mLSTMCell
+from cortex.scaffolds import PreUpBlock
 from cortex.utils import TRITON_AVAILABLE
 
 
@@ -769,8 +769,8 @@ def test_mlstm_reset_mask_functionality() -> None:
     )
 
     # Test 8: mLSTMCell end-to-end with reset mask (sequence vs. step)
-    from cortex.cells.mlstm import mLSTMCell  # local import to avoid circularities  # noqa: PLC0415
     from cortex.config import mLSTMCellConfig  # noqa: PLC0415
+    from cortex.cores.mlstm import mLSTMCell  # local import to avoid circularities  # noqa: PLC0415
 
     # Use kernel_size=1 to avoid conv-state dependence across timesteps,
     # ensuring step/sequence parity under resets.

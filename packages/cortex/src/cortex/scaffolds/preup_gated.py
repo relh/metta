@@ -8,13 +8,13 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.blocks.base import BaseBlock
-from cortex.blocks.gru_gating import GRUGatingUnit
-from cortex.blocks.registry import register_block
-from cortex.cells.base import MemoryCell
-from cortex.cells.mlstm import mLSTMCell
 from cortex.config import PreUpGatedBlockConfig
 from cortex.consistent_dropout import ConsistentDropout
+from cortex.cores.base import MemoryCell
+from cortex.cores.mlstm import mLSTMCell
+from cortex.scaffolds.base import BaseBlock
+from cortex.scaffolds.gru_gating import GRUGatingUnit
+from cortex.scaffolds.registry import register_block
 from cortex.types import MaybeState, ResetMask, Tensor
 
 

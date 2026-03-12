@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple
 
-import cortex.cells.core.axon_cell as cell_mod
+import cortex.cores.core.axon_cell as cell_mod
 import cortex.utils as utils_mod
 import torch
-from cortex.cells.core import AxonCell
 from cortex.config import AxonConfig
+from cortex.cores.core import AxonCell
 
 from .common import (
     BenchmarkCase,

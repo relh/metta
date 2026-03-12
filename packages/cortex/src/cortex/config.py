@@ -114,9 +114,9 @@ class AxonConfig(CellConfig):
 class BlockConfig(BaseModel):
     """Base configuration for cortex blocks."""
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
-    cell: SerializeAsAny[CellConfig | None] = Field(default=None)
+    cell: SerializeAsAny[CellConfig | None] = Field(default=None, alias="core")
 
     def get_cell_hidden_size(self, d_hidden: int) -> int:
         """Compute cell hidden size from stack's external dimension."""
@@ -131,7 +131,7 @@ class BlockConfig(BaseModel):
             tag = value.get("cell_type")
             if not isinstance(tag, str) or not tag:
                 return value
-            from cortex.cells.registry import get_cell_config_class  # noqa: PLC0415
+            from cortex.cores.registry import get_cell_config_class  # noqa: PLC0415
 
             cfg_cls = get_cell_config_class(tag)
             return cfg_cls.model_validate(value)
@@ -192,7 +192,7 @@ class AdapterBlockConfig(BlockConfig):
     """Configuration for adapter blocks with identity-initialized residual paths."""
 
     block_type: str = "adapter"
-    base_block: SerializeAsAny[BlockConfig]
+    base_block: SerializeAsAny[BlockConfig] = Field(alias="base_scaffold")
     cell: CellConfig | None = None
     bottleneck: int = Field(default=64, ge=1)
     dropout: float = Field(default=0.0, ge=0.0, le=1.0)
@@ -212,7 +212,7 @@ class AdapterBlockConfig(BlockConfig):
             tag = value.get("block_type")
             if not isinstance(tag, str) or not tag:
                 return value
-            from cortex.blocks.registry import get_block_config_class  # noqa: PLC0415
+            from cortex.scaffolds.registry import get_block_config_class  # noqa: PLC0415
 
             cfg_cls = get_block_config_class(tag)
             return cfg_cls.model_validate(value)
@@ -242,7 +242,9 @@ class RoutedAdapterConfig(BaseModel):
 class CortexStackConfig(BaseModel):
     """Configuration for a sequential stack of blocks."""
 
-    blocks: list[SerializeAsAny[BlockConfig]]
+    model_config = ConfigDict(populate_by_name=True)
+
+    blocks: list[SerializeAsAny[BlockConfig]] = Field(alias="scaffolds")
     d_hidden: int = Field(ge=1)
     post_norm: bool = Field(default=True)
     compile_blocks: bool = Field(default=True)
@@ -261,7 +263,7 @@ class CortexStackConfig(BaseModel):
             if isinstance(item, Mapping):
                 tag = item.get("block_type")
                 if isinstance(tag, str) and tag:
-                    from cortex.blocks.registry import get_block_config_class  # noqa: PLC0415
+                    from cortex.scaffolds.registry import get_block_config_class  # noqa: PLC0415
 
                     cfg_cls = get_block_config_class(tag)
                     out.append(cfg_cls.model_validate(item))
@@ -324,7 +326,7 @@ class ColumnBlockConfig(BlockConfig):
             if isinstance(item, Mapping):
                 tag = item.get("block_type")
                 if isinstance(tag, str) and tag:
-                    from cortex.blocks.registry import get_block_config_class  # noqa: PLC0415
+                    from cortex.scaffolds.registry import get_block_config_class  # noqa: PLC0415
 
                     cfg_cls = get_block_config_class(tag)
                     out.append(cfg_cls.model_validate(item))
@@ -333,23 +335,58 @@ class ColumnBlockConfig(BlockConfig):
         return out
 
 
+CoreConfig = CellConfig
+LSTMCoreConfig = LSTMCellConfig
+CausalConv1dCoreConfig = CausalConv1dConfig
+mLSTMCoreConfig = mLSTMCellConfig
+sLSTMCoreConfig = sLSTMCellConfig
+XLCoreConfig = XLCellConfig
+AGaLiTeCoreConfig = AGaLiTeCellConfig
+AxonCoreConfig = AxonConfig
+
+ScaffoldConfig = BlockConfig
+PassThroughScaffoldConfig = PassThroughBlockConfig
+PreUpScaffoldConfig = PreUpBlockConfig
+PreUpGatedScaffoldConfig = PreUpGatedBlockConfig
+PostUpScaffoldConfig = PostUpBlockConfig
+PostUpGatedScaffoldConfig = PostUpGatedBlockConfig
+AdapterScaffoldConfig = AdapterBlockConfig
+ColumnScaffoldConfig = ColumnBlockConfig
+
 __all__ = [
     "CellConfig",
+    "CoreConfig",
     "CausalConv1dConfig",
+    "CausalConv1dCoreConfig",
     "LSTMCellConfig",
+    "LSTMCoreConfig",
     "mLSTMCellConfig",
+    "mLSTMCoreConfig",
     "sLSTMCellConfig",
+    "sLSTMCoreConfig",
     "XLCellConfig",
+    "XLCoreConfig",
+    "AGaLiTeCellConfig",
+    "AGaLiTeCoreConfig",
     "AxonConfig",
+    "AxonCoreConfig",
     "BlockConfig",
+    "ScaffoldConfig",
     "PassThroughBlockConfig",
+    "PassThroughScaffoldConfig",
     "PreUpBlockConfig",
+    "PreUpScaffoldConfig",
     "PreUpGatedBlockConfig",
+    "PreUpGatedScaffoldConfig",
     "PostUpBlockConfig",
+    "PostUpScaffoldConfig",
     "PostUpGatedBlockConfig",
+    "PostUpGatedScaffoldConfig",
     "AdapterBlockConfig",
+    "AdapterScaffoldConfig",
     "RoutedAdapterConfig",
     "CortexStackConfig",
     "RouterConfig",
     "ColumnBlockConfig",
+    "ColumnScaffoldConfig",
 ]

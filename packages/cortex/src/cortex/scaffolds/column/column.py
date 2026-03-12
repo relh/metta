@@ -10,12 +10,12 @@ import torch.nn as nn
 from tensordict import TensorDict
 from torch._dynamo import disable
 
-from cortex.blocks.base import BaseBlock
-from cortex.blocks.column.routers import GlobalContextRouter, TokenRefiner
-from cortex.blocks.registry import build_block, register_block
-from cortex.cells import build_cell
-from cortex.cells.base import MemoryCell
 from cortex.config import BlockConfig, ColumnBlockConfig
+from cortex.cores import build_cell
+from cortex.cores.base import MemoryCell
+from cortex.scaffolds.base import BaseBlock
+from cortex.scaffolds.column.routers import GlobalContextRouter, TokenRefiner
+from cortex.scaffolds.registry import build_block, register_block
 from cortex.types import MaybeState, ResetMask, Tensor
 
 

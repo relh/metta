@@ -1,5 +1,6 @@
 from typing import List
 
+from cortex.cells import LSTMCellConfig
 from cortex.stacks import build_cortex_auto_config
 
 from metta.agent.components.actor import ActionProbsConfig, ActorHeadConfig
@@ -52,7 +53,7 @@ class ViTSize2Config(PolicyArchitecture):
             stack_cfg=build_cortex_auto_config(
                 d_hidden=_latent_dim,
                 num_layers=2,
-                pattern="L",
+                layers=[[LSTMCellConfig()]] * 2,
                 post_norm=False,
             ),
             pass_state_during_training=pass_state_during_training,

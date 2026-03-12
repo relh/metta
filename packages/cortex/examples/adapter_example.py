@@ -7,12 +7,12 @@ making them perfect for fine-tuning pretrained models without disrupting learned
 
 import torch
 from cortex import (
-    AdapterBlockConfig,
+    AdapterScaffoldConfig,
     CortexStack,
     CortexStackConfig,
-    LSTMCellConfig,
-    PassThroughBlockConfig,
-    PreUpBlockConfig,
+    LSTMCoreConfig,
+    PassThroughScaffoldConfig,
+    PreUpScaffoldConfig,
 )
 
 
@@ -29,9 +29,9 @@ def test_basic_adapter():
     # Create a stack with an adapter wrapping a simple LSTM block
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=128, num_layers=1)),
+        scaffolds=[
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=128, num_layers=1)),
                 bottleneck=32,  # Small bottleneck for efficiency
                 per_channel_gate=False,  # Scalar gate
             )
@@ -81,13 +81,13 @@ def test_freezing_and_training():
     # Create stack with multiple blocks, some wrapped with adapters
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
-            PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=128, num_layers=1)),  # Regular block
-            AdapterBlockConfig(
-                base_block=PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=128, num_layers=1)),
+        scaffolds=[
+            PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=128, num_layers=1)),
+            AdapterScaffoldConfig(
+                base_scaffold=PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=128, num_layers=1)),
                 bottleneck=32,
-            ),  # Adapter
-            PassThroughBlockConfig(cell=LSTMCellConfig(hidden_size=128, num_layers=1)),  # Regular block
+            ),
+            PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=128, num_layers=1)),
         ],
         post_norm=True,
     )
@@ -108,7 +108,7 @@ def test_freezing_and_training():
     # Freeze all non-adapter blocks
     frozen_count = 0
     for i, block in enumerate(stack.blocks):
-        from cortex.blocks.adapter import AdapterBlock  # noqa: PLC0415
+        from cortex.scaffolds.adapter import AdapterBlock  # noqa: PLC0415
 
         if not isinstance(block, AdapterBlock):
             for param in block.parameters():
@@ -151,9 +151,9 @@ def test_adapter_wrapping_preup():
     config = CortexStackConfig(
         d_hidden=d_hidden,
         blocks=[
-            AdapterBlockConfig(
-                base_block=PreUpBlockConfig(
-                    cell=LSTMCellConfig(hidden_size=None, num_layers=2),  # Inferred: 2x upsampling
+            AdapterScaffoldConfig(
+                base_scaffold=PreUpScaffoldConfig(
+                    core=LSTMCoreConfig(hidden_size=None, num_layers=2),
                     proj_factor=2.0,
                 ),
                 bottleneck=64,

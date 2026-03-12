@@ -1,6 +1,6 @@
 """AxonCell: Streaming RTU cell (diagonal input weights) with multi-backend support.
 
-Moved from ``cortex.cells.axons`` to ``cortex.cells.core.axon_cell``.
+Moved from ``cortex.cores.axons`` to ``cortex.cores.core.axon_cell``.
 This version optionally allows ``out_dim != hidden_size`` to support AxonLayer.
 """
 
@@ -13,9 +13,9 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.cells.base import MemoryCell
-from cortex.cells.registry import register_cell
 from cortex.config import AxonConfig
+from cortex.cores.base import MemoryCell
+from cortex.cores.registry import register_cell
 from cortex.kernels.cuda import srht_cuda
 from cortex.kernels.pytorch.rtu.rtu_stream_diag import rtu_stream_diag_pytorch
 from cortex.kernels.pytorch.rtu.rtu_stream_fullrank import rtu_stream_full_pytorch

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Type
 
-from cortex.blocks.base import BaseBlock
-from cortex.cells.base import MemoryCell
 from cortex.config import BlockConfig
+from cortex.cores.base import MemoryCell
+from cortex.scaffolds.base import BaseBlock
 
 # Type for block builder functions
 BlockBuilder = Callable[[BlockConfig, int, MemoryCell], BaseBlock]

@@ -2,8 +2,8 @@
 
 import pytest
 import torch
-from cortex.cells.lstm import LSTMCell
 from cortex.config import LSTMCellConfig
+from cortex.cores.lstm import LSTMCell
 from cortex.kernels.pytorch.lstm import lstm_sequence_pytorch
 from cortex.utils import TRITON_AVAILABLE
 
