@@ -1,13 +1,6 @@
 #!/usr/bin/env python3
-"""
-Specific tests for AWS profile setup functionality.
-
-These tests focus on the AWS profile configuration, particularly ensuring
-that `export AWS_PROFILE=softmax` is added to shell config files when
-using the softmax profile.
-"""
-
 import os
+import textwrap
 
 import pytest
 
@@ -39,6 +32,10 @@ class AWSAssertionsMixin:
             return False
         content = config_file.read_text()
         return f"[sso-session {session_name}]" in content
+
+    def _read_aws_config(self) -> str:  # type: ignore[override]
+        config_file = self.test_home / ".aws" / "config"  # type: ignore[attr-defined]
+        return config_file.read_text() if config_file.exists() else ""
 
     def _check_sso_session_has_required_fields(self, session_name: str) -> tuple[bool, str]:  # type: ignore[override]
         """Check if SSO session has all required fields."""
@@ -110,6 +107,8 @@ class TestAWSProfileSoftmax(AWSAssertionsMixin, BaseMettaSetupTest):
         # Check that specific profiles are configured
         assert self._check_aws_profile_config("softmax"), "softmax profile should be configured"
         assert self._check_aws_profile_config("softmax-admin"), "softmax-admin profile should be configured"
+        assert self._check_aws_profile_config("softmax-org"), "softmax-org profile should be configured"
+        assert self._check_aws_profile_config("polis-admin"), "polis-admin profile should be configured"
 
         # Check the exact format of the export
         zshrc_content = zshrc_path.read_text()
@@ -136,8 +135,70 @@ class TestAWSProfileSoftmax(AWSAssertionsMixin, BaseMettaSetupTest):
         assert has_fields, f"SSO session missing required configuration: {message}"
 
         # Verify profiles reference the SSO session correctly
-        config_content = (self.test_home / ".aws" / "config").read_text()
+        config_content = self._read_aws_config()
         assert "sso_session = softmax-sso" in config_content, "Profiles should reference 'sso_session = softmax-sso'"
+        assert "# BEGIN softmax-managed" in config_content, "Managed AWS config block should be marked"
+        assert "# END softmax-managed" in config_content, "Managed AWS config block should be marked"
+
+    def test_softmax_profile_aws_installation_is_idempotent(self):
+        """Repeated installs should replace the managed block instead of duplicating it."""
+        self._create_test_config(UserType.SOFTMAX)
+
+        first_result = self._run_metta_command(["install", "aws", "--force"])
+        assert first_result.returncode == 0, f"Initial AWS install failed: {first_result.stderr}"
+
+        second_result = self._run_metta_command(["install", "aws", "--force"])
+        assert second_result.returncode == 0, f"Second AWS install failed: {second_result.stderr}"
+
+        config_content = self._read_aws_config()
+        assert config_content.count("# BEGIN softmax-managed") == 1, "Managed block should only be written once"
+        assert config_content.count("# END softmax-managed") == 1, "Managed block should only be written once"
+        assert config_content.count("[profile softmax]") == 1, "Managed profiles should not be duplicated"
+        assert config_content.count("[profile softmax-org]") == 1, "Explicit managed profiles should not duplicate"
+
+    def test_softmax_force_install_preserves_unmanaged_aws_state(self):
+        """Force install should replace only managed config and preserve unrelated AWS files."""
+        aws_dir = self.test_home / ".aws"
+        aws_dir.mkdir(parents=True, exist_ok=True)
+
+        config_path = aws_dir / "config"
+        config_path.write_text(
+            textwrap.dedent(
+                """
+                [profile personal]
+                region = us-west-2
+
+                [sso-session softmax-sso]
+                sso_start_url = https://softmaxx.awsapps.com/start/
+                sso_region = us-east-1
+                sso_registration_scopes = sso:account:access
+
+                [profile softmax]
+                sso_session = softmax-sso
+                sso_account_id = 751442549699
+                sso_role_name = OldRole
+                region = us-east-1
+                """
+            ).strip()
+            + "\n"
+        )
+
+        credentials_path = aws_dir / "credentials"
+        credentials_content = "[personal]\naws_access_key_id = test\naws_secret_access_key = secret\n"
+        credentials_path.write_text(credentials_content)
+
+        self._create_test_config(UserType.SOFTMAX)
+
+        result = self._run_metta_command(["install", "aws", "--force"])
+        assert result.returncode == 0, f"AWS force install failed: {result.stderr}"
+
+        config_content = self._read_aws_config()
+        assert "[profile personal]" in config_content, "Unmanaged profiles should be preserved"
+        assert "OldRole" not in config_content, "Legacy managed profile entries should be replaced"
+        assert config_content.count("[profile softmax]") == 1, "Managed profiles should be rewritten in place"
+        assert config_content.count("# BEGIN softmax-managed") == 1, "Managed block marker should not duplicate"
+        assert config_content.count("# END softmax-managed") == 1, "Managed block marker should not duplicate"
+        assert credentials_path.read_text() == credentials_content, "Reset should not delete unrelated AWS files"
 
     def test_softmax_profile_aws_installation_with_zdotdir(self):
         """Test that softmax profile AWS installation works with ZDOTDIR set."""
