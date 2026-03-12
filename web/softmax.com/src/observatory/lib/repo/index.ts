@@ -1,6 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 
 import type {
+  AdminUserDetailResponse,
+  AdminUserPolicyRow,
+  AdminUserReportRow,
+  AdminUsersReportResponse,
   AIQueryResponse,
   EpisodeQueryRequest,
   EpisodeQueryResponse,
@@ -40,6 +44,11 @@ import { policiesRoute } from "@observatory/lib/routes";
 // Re-export generated API types so existing `import { X } from '@/lib/repo'`
 // statements continue to work.
 export type {
+  AdminUserDetailResponse,
+  AdminUserPolicyRow,
+  AdminUserPolicySeason,
+  AdminUserReportRow,
+  AdminUsersReportResponse,
   AgentStatsDetail,
   AIQueryRequest,
   AIQueryResponse,
@@ -88,6 +97,8 @@ export type {
   TeamSummary,
   UserRow,
 } from "@observatory/lib/api";
+
+export type AdminUserSubmittedPolicy = AdminUserPolicyRow;
 
 // ── Frontend-only types (not from the API spec) ─────────────────────────
 
@@ -321,28 +332,14 @@ export class Repo {
     }>("/whoami");
   }
 
-  async getAdminUsersReport(): Promise<{
-    users: Array<{
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      is_softmax_team_member?: boolean | null;
-      discord_id?: string | null;
-      first_policy_upload_at?: string | null;
-      last_policy_upload_at?: string | null;
-    }>;
-  }> {
-    return this.apiCall<{
-      users: Array<{
-        id: string;
-        name?: string | null;
-        email?: string | null;
-        is_softmax_team_member?: boolean | null;
-        discord_id?: string | null;
-        first_policy_upload_at?: string | null;
-        last_policy_upload_at?: string | null;
-      }>;
-    }>("/admin/users");
+  async getAdminUsersReport(): Promise<AdminUsersReportResponse> {
+    return this.apiCall<AdminUsersReportResponse>("/admin/users");
+  }
+
+  async getAdminUser(userId: string): Promise<AdminUserDetailResponse> {
+    return this.apiCall<AdminUserDetailResponse>(
+      `/admin/users/${encodePathSegment(userId)}`,
+    );
   }
 
   async getSmartPlugStatus(): Promise<{

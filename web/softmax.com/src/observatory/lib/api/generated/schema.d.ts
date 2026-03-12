@@ -905,6 +905,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/users/{user_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Admin User Detail */
+    get: operations["admin_user_detail_admin_users__user_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/infra/smart-plugs/status": {
     parameters: {
       query?: never;
@@ -1056,6 +1073,43 @@ export interface components {
       /** Query */
       query: string;
     };
+    /** AdminUserDetailResponse */
+    AdminUserDetailResponse: {
+      user: components["schemas"]["AdminUserReportRow"];
+      /** Submitted Policies */
+      submitted_policies: components["schemas"]["AdminUserPolicyRow"][];
+    };
+    /** AdminUserPolicyRow */
+    AdminUserPolicyRow: {
+      /**
+       * Id
+       * Format: uuid
+       */
+      id: string;
+      /** Name */
+      name: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Version Count */
+      version_count: number;
+      /** Seasons */
+      seasons: components["schemas"]["AdminUserPolicySeason"][];
+    };
+    /** AdminUserPolicySeason */
+    AdminUserPolicySeason: {
+      /** Season Name */
+      season_name: string;
+      /** Season Version */
+      season_version: number;
+      /**
+       * Submitted At
+       * Format: date-time
+       */
+      submitted_at: string;
+    };
     /** AdminUserReportRow */
     AdminUserReportRow: {
       /** Id */
@@ -1068,10 +1122,21 @@ export interface components {
       is_softmax_team_member?: boolean | null;
       /** Discord Id */
       discord_id?: string | null;
+      /** Created At */
+      created_at?: string | null;
+      /**
+       * Is Softmax Admin
+       * @default false
+       */
+      is_softmax_admin: boolean;
       /** First Policy Upload At */
       first_policy_upload_at?: string | null;
       /** Last Policy Upload At */
       last_policy_upload_at?: string | null;
+      /** First Tournament Submission At */
+      first_tournament_submission_at?: string | null;
+      /** Last Tournament Submission At */
+      last_tournament_submission_at?: string | null;
     };
     /** AdminUsersReportResponse */
     AdminUsersReportResponse: {
@@ -2510,6 +2575,8 @@ export interface components {
       is_softmax_team_member?: boolean | null;
       /** Discord Id */
       discord_id?: string | null;
+      /** Created At */
+      created_at?: string | null;
     };
     /** ValidationError */
     ValidationError: {
@@ -4207,6 +4274,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["AdminUsersReportResponse"];
+        };
+      };
+    };
+  };
+  admin_user_detail_admin_users__user_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        user_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdminUserDetailResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

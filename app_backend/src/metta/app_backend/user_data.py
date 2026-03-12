@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -21,6 +22,7 @@ class UserRow(BaseModel):
     email: Optional[str] = None
     is_softmax_team_member: Optional[bool] = None
     discord_id: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class Ownable(BaseModel):
@@ -34,6 +36,7 @@ class LoginServiceUserInfo(BaseModel):
     email: Optional[str] = None
     is_softmax_team_member: bool = Field(default=False, alias="isSoftmaxTeamMember")
     discord_id: Optional[str] = Field(default=None, alias="discordId")
+    created_at: Optional[datetime] = Field(default=None, alias="createdAt")
 
 
 class ResolveUsersResponse(BaseModel):
@@ -56,6 +59,7 @@ def _user_row(info: LoginServiceUserInfo, *, include_sensitive: bool) -> UserRow
         email=info.email if include_sensitive else None,
         is_softmax_team_member=info.is_softmax_team_member if include_sensitive else None,
         discord_id=info.discord_id if include_sensitive else None,
+        created_at=info.created_at if include_sensitive else None,
     )
 
 

@@ -30,6 +30,44 @@ type WithUser<T extends { user?: Schemas["UserRow"] | null }> = Omit<
 // ── User ────────────────────────────────────────────────────────────────
 export type UserRow = Schemas["UserRow"];
 
+// ── Admin ───────────────────────────────────────────────────────────────
+export type AdminUserReportRow = Omit<
+  Schemas["AdminUserReportRow"],
+  | "name"
+  | "email"
+  | "is_softmax_team_member"
+  | "discord_id"
+  | "created_at"
+  | "first_policy_upload_at"
+  | "last_policy_upload_at"
+  | "first_tournament_submission_at"
+  | "last_tournament_submission_at"
+> & {
+  name: string | null;
+  email: string | null;
+  is_softmax_team_member: boolean | null;
+  discord_id: string | null;
+  created_at: string | null;
+  first_policy_upload_at: string | null;
+  last_policy_upload_at: string | null;
+  first_tournament_submission_at: string | null;
+  last_tournament_submission_at: string | null;
+};
+export type AdminUserDetailResponse = Omit<
+  Schemas["AdminUserDetailResponse"],
+  "user"
+> & {
+  user: AdminUserReportRow;
+};
+export type AdminUserPolicyRow = Schemas["AdminUserPolicyRow"];
+export type AdminUserPolicySeason = Schemas["AdminUserPolicySeason"];
+export type AdminUsersReportResponse = Omit<
+  Schemas["AdminUsersReportResponse"],
+  "users"
+> & {
+  users: AdminUserReportRow[];
+};
+
 // ── Policies ────────────────────────────────────────────────────────────
 export type PolicyRow = WithUser<Schemas["PolicyRow"]>;
 export type PolicyVersionRow = WithUser<Schemas["PolicyVersionRow"]>;

@@ -35,7 +35,7 @@ export default async function AdminUsersPage() {
     <SoftmaxAdminGuard>
       <StandardPageLayout>
         <div className="space-y-2">
-          <h1>Admin Users</h1>
+          <h1>Users</h1>
           <p className="text-foreground-muted max-w-4xl text-balance">
             All signed-up users, joined with their first and most recent policy
             upload timestamps from Observatory.

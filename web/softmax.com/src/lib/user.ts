@@ -10,6 +10,7 @@ export type UserInfo = {
   name: string | null;
   discordId: string | null;
   isSoftmaxTeamMember: boolean;
+  createdAt: string;
 };
 
 type DbUserWithAccounts = Prisma.UserGetPayload<{
@@ -60,6 +61,7 @@ function buildUserInfo(
     name: dbUser.name,
     discordId,
     isSoftmaxTeamMember,
+    createdAt: dbUser.createdAt.toISOString(),
   };
 }
 

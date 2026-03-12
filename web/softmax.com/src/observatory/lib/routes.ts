@@ -147,6 +147,10 @@ export function adminUsersRoute() {
   return "/observatory/admin/users";
 }
 
+export function adminUserRoute(userId: string) {
+  return `/observatory/admin/users/${encodeURIComponent(userId)}`;
+}
+
 export function bardoRoute() {
   return "/observatory/bardo";
 }

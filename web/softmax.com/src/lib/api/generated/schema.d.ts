@@ -1618,6 +1618,8 @@ export interface components {
       is_softmax_team_member?: boolean | null;
       /** Discord Id */
       discord_id?: string | null;
+      /** Created At */
+      created_at?: string | null;
     };
     /** ValidationError */
     ValidationError: {
