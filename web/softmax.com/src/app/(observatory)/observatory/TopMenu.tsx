@@ -192,6 +192,14 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
               >
                 Smart Plugs
               </MenuLink>
+              {isSoftmaxAdmin && (
+                <MenuLink
+                  href={adminUsersRoute()}
+                  isActive={pathname.startsWith("/observatory/admin")}
+                >
+                  Admin
+                </MenuLink>
+              )}
             </>
           )}
         </div>
@@ -269,20 +277,6 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
             >
               Chatprop
             </MenuLink>
-            {isSoftmaxAdmin && (
-              <MenuLink
-                href={adminUsersRoute()}
-                isActive={pathname.startsWith("/observatory/admin")}
-                className="tracking-wide italic"
-                activeClassName="border-violet-500 text-violet-500"
-                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
-                style={{
-                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
-                }}
-              >
-                Admin
-              </MenuLink>
-            )}
           </div>
         )}
       </div>

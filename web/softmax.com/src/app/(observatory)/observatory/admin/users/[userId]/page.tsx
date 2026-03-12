@@ -20,7 +20,7 @@ import { getRepo } from "@observatory/lib/repo/server";
 import { adminUsersRoute, policyRoute } from "@observatory/lib/routes";
 import { formatDate, formatRelativeTime } from "@observatory/utils/datetime";
 
-import { AdminUserBadges } from "../AdminUserBadges";
+import { AdminUserRoles } from "../AdminUserRoles";
 
 function displayName(
   name: string | null,
@@ -74,13 +74,7 @@ export default async function AdminUserPage({
             <p className="text-foreground-muted text-xs font-semibold tracking-wide uppercase">
               User
             </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1>{title}</h1>
-              <AdminUserBadges
-                isSoftmaxTeamMember={user.is_softmax_team_member}
-                isSoftmaxAdmin={user.is_softmax_admin}
-              />
-            </div>
+            <h1>{title}</h1>
             <div className="text-foreground-muted flex flex-wrap gap-3 text-sm">
               {user.email && <span>{user.email}</span>}
               <span>{submittedPolicies.length} submitted policies</span>
@@ -101,6 +95,16 @@ export default async function AdminUserPage({
               <p className="text-foreground font-mono text-sm break-all">
                 {user.id}
               </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-foreground-muted text-xs font-semibold tracking-wide uppercase">
+                Roles
+              </p>
+              <AdminUserRoles
+                isSoftmaxTeamMember={user.is_softmax_team_member}
+                isSoftmaxAdmin={user.is_softmax_admin}
+                className="text-sm"
+              />
             </div>
             <div className="space-y-1">
               <p className="text-foreground-muted text-xs font-semibold tracking-wide uppercase">
@@ -171,24 +175,22 @@ export default async function AdminUserPage({
                         </StyledLink>
                       </TD>
                       <TD>
-                        <span className="bg-surface-alt border-border inline-flex items-center rounded border px-2 py-1 text-xs text-nowrap">
-                          {policy.version_count} version
-                          {policy.version_count === 1 ? "" : "s"}
-                        </span>
+                        {policy.version_count} version
+                        {policy.version_count === 1 ? "" : "s"}
                       </TD>
                       <TD title={formatDate(policy.created_at)}>
                         {formatRelativeTime(policy.created_at)}
                       </TD>
                       <TD>
-                        <div className="flex flex-wrap gap-2">
+                        <div className="space-y-1">
                           {policy.seasons.map((season) => (
-                            <span
+                            <div
                               key={`${policy.id}-${season.season_name}-v${season.season_version}`}
                               title={`Submitted ${formatDate(season.submitted_at)}`}
-                              className="bg-surface-alt border-border inline-flex items-center rounded-full border px-2 py-0.5 text-xs"
+                              className="text-sm"
                             >
                               {season.season_name}:v{season.season_version}
-                            </span>
+                            </div>
                           ))}
                         </div>
                       </TD>
