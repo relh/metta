@@ -19,6 +19,7 @@ import {
 } from "@observatory/components/Dropdown";
 import { ThemeToggle } from "@observatory/components/ThemeToggle";
 import {
+  adminUsersRoute,
   bardoRoute,
   chatpropRoute,
   diagnoseRoute,
@@ -82,7 +83,8 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
 }) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { apiBaseUrl, isSoftmaxTeamMember, repo } = use(AppContext);
+  const { apiBaseUrl, isSoftmaxAdmin, isSoftmaxTeamMember, repo } =
+    use(AppContext);
 
   const isPoliciesActive =
     pathname === "/" || pathname.startsWith("/observatory/policies");
@@ -267,6 +269,20 @@ export const TopMenu: FC<{ currentUser: string; devMode: boolean }> = ({
             >
               Chatprop
             </MenuLink>
+            {isSoftmaxAdmin && (
+              <MenuLink
+                href={adminUsersRoute()}
+                isActive={pathname.startsWith("/observatory/admin")}
+                className="tracking-wide italic"
+                activeClassName="border-violet-500 text-violet-500"
+                inactiveClassName="border-transparent text-violet-400 hover:text-violet-600"
+                style={{
+                  fontFamily: "'Comic Sans MS', 'Marker Felt', cursive",
+                }}
+              >
+                Admin
+              </MenuLink>
+            )}
           </div>
         )}
       </div>

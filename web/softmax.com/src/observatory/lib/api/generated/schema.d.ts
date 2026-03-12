@@ -888,6 +888,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/admin/users": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Admin Users Scaffold */
+    get: operations["admin_users_scaffold_admin_users_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/infra/smart-plugs/status": {
     parameters: {
       query?: never;
@@ -916,57 +933,6 @@ export interface paths {
     put?: never;
     /** Set Power State */
     post: operations["set_power_state_infra_smart_plugs_power_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/roles/definitions": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Role Definitions */
-    get: operations["get_role_definitions_stats_roles_definitions_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/roles/pools/{pool_id}/policy-versions/{policy_version_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Policy Percentiles */
-    get: operations["get_policy_percentiles_stats_roles_pools__pool_id__policy_versions__policy_version_id__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/stats/roles/pools/{pool_id}/roles/{role}/leaderboard": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Get Leaderboard */
-    get: operations["get_leaderboard_stats_roles_pools__pool_id__roles__role__leaderboard_get"];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1089,6 +1055,11 @@ export interface components {
     AIQueryResponse: {
       /** Query */
       query: string;
+    };
+    /** AdminUsersScaffoldResponse */
+    AdminUsersScaffoldResponse: {
+      /** Message */
+      message: string;
     };
     /** AgentResult */
     AgentResult: {
@@ -1365,7 +1336,7 @@ export interface components {
       error?: string | null;
       /**
        * Error Type
-       * @description Classified error type: timeout, oom, policy_error, unknown
+       * @description Classified error type: timeout, oom, policy_error, crash, unknown
        */
       error_type?: string | null;
       /** Running At */
@@ -1468,7 +1439,7 @@ export interface components {
       error?: string | null;
       /**
        * Error Type
-       * @description Classified error type: timeout, oom, policy_error, unknown
+       * @description Classified error type: timeout, oom, policy_error, crash, unknown
        */
       error_type?: string | null;
       /** Running At */
@@ -1940,63 +1911,6 @@ export interface components {
        * @enum {string}
        */
       status: "complete" | "active" | "pending";
-    };
-    /** RoleDefsResponse */
-    RoleDefsResponse: {
-      /** Roles */
-      roles: {
-        [key: string]: components["schemas"]["RoleMetricDef"][];
-      };
-    };
-    /** RoleLeaderboardRow */
-    RoleLeaderboardRow: {
-      /** Rank */
-      rank: number;
-      /**
-       * Policy Version Id
-       * Format: uuid
-       */
-      policy_version_id: string;
-      /** Policy Name */
-      policy_name: string;
-      /** Policy Version */
-      policy_version: number;
-      /** Percentile */
-      percentile: number;
-      /** Details */
-      details: {
-        [key: string]: unknown;
-      };
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
-    };
-    /** RoleMetricDef */
-    RoleMetricDef: {
-      /** Key */
-      key: string;
-      /** Source Names */
-      source_names: string[];
-      /** Higher Is Better */
-      higher_is_better: boolean;
-    };
-    /** RolePercentileRow */
-    RolePercentileRow: {
-      /** Role */
-      role: string;
-      /** Percentile */
-      percentile: number;
-      /** Details */
-      details: {
-        [key: string]: unknown;
-      };
-      /**
-       * Updated At
-       * Format: date-time
-       */
-      updated_at: string;
     };
     /** RollSeasonRequest */
     RollSeasonRequest: {
@@ -2602,6 +2516,11 @@ export interface components {
        * @default false
        */
       is_softmax_team_member: boolean;
+      /**
+       * Is Softmax Admin
+       * @default false
+       */
+      is_softmax_admin: boolean;
     };
   };
   responses: never;
@@ -4255,6 +4174,26 @@ export interface operations {
       };
     };
   };
+  admin_users_scaffold_admin_users_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AdminUsersScaffoldResponse"];
+        };
+      };
+    };
+  };
   get_status_infra_smart_plugs_status_get: {
     parameters: {
       query?: never;
@@ -4295,92 +4234,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SmartPlugSetResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_role_definitions_stats_roles_definitions_get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["RoleDefsResponse"];
-        };
-      };
-    };
-  };
-  get_policy_percentiles_stats_roles_pools__pool_id__policy_versions__policy_version_id__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        pool_id: string;
-        policy_version_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["RolePercentileRow"][];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  get_leaderboard_stats_roles_pools__pool_id__roles__role__leaderboard_get: {
-    parameters: {
-      query?: {
-        limit?: number;
-      };
-      header?: never;
-      path: {
-        pool_id: string;
-        role: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["RoleLeaderboardRow"][];
         };
       };
       /** @description Validation Error */

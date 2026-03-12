@@ -16,9 +16,12 @@ from typing import Annotated, Optional
 import httpx
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlmodel import select
 
 from metta.app_backend.config import settings
+from metta.app_backend.database import db_session
 from metta.app_backend.models.service_accounts import TokenPrefixType
+from metta.app_backend.models.user_settings import UserSettings
 from metta.app_backend.queries.service_account_queries import get_service_account_user
 from metta.common.otel.tracing import trace
 
@@ -27,6 +30,7 @@ class User(BaseModel):
     id: str
     email: str
     is_softmax_team_member: bool = Field(default=False, alias="is_softmax_team_member")
+    is_softmax_admin: bool = Field(default=False, alias="is_softmax_admin")
     is_service_account_user: bool = Field(default=False)
     discord_id: Optional[str] = Field(default=None)
 
@@ -71,9 +75,16 @@ async def get_user(request: Request) -> Optional[User]:
         user = await get_user_from_token(request)
 
     if user and user.is_softmax_team_member and request.headers.get("X-Act-As-External", "").lower() == "true":
-        user = user.model_copy(update={"is_softmax_team_member": False})
+        user = user.model_copy(update={"is_softmax_team_member": False, "is_softmax_admin": False})
 
     return user
+
+
+async def get_user_with_admin(request: Request) -> Optional[User]:
+    user = await get_user(request)
+    if not user or not user.is_softmax_team_member:
+        return user
+    return await _populate_softmax_admin(user)
 
 
 async def get_user_or_raise(request: Request) -> User:
@@ -96,6 +107,17 @@ async def get_softmax_user_or_raise(request: Request) -> User:
     return user
 
 
+async def get_softmax_admin_or_raise(request: Request) -> User:
+    user = await get_softmax_user_or_raise(request)
+    user = await _populate_softmax_admin(user)
+    if not user.is_softmax_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not a softmax admin",
+        )
+    return user
+
+
 async def _no_auth() -> None:
     pass
 
@@ -106,8 +128,21 @@ async def _no_auth() -> None:
 # To hide a specific endpoint from the public OpenAPI spec, use @exclude_from_public_docs.
 ExternalUser = Annotated[User, Depends(get_user_or_raise)]  # 401 if not logged in
 SoftmaxUser = Annotated[User, Depends(get_softmax_user_or_raise)]  # 403 if not softmax team
+SoftmaxAdmin = Annotated[User, Depends(get_softmax_admin_or_raise)]  # 403 if not softmax admin
 MaybeAuthenticatedUser = Annotated[Optional[User], Depends(get_user)]  # always succeeds, user may be None
 NoAuthRequired = Annotated[None, Depends(_no_auth)]  # always succeeds, no-op
+
+
+async def _populate_softmax_admin(user: User) -> User:
+    if not user.is_softmax_team_member:
+        return user.model_copy(update={"is_softmax_admin": False})
+
+    async with db_session(read_only=True) as session:
+        user_settings = (
+            await session.execute(select(UserSettings).where(UserSettings.user_id == user.id))
+        ).scalar_one_or_none()
+
+    return user.model_copy(update={"is_softmax_admin": False if user_settings is None else user_settings.admin})
 
 
 @trace("auth.validate_token")
@@ -119,7 +154,12 @@ async def validate_token_via_login_service(token: str) -> Optional[User]:
     so callers don't confuse infrastructure failures with bad tokens.
     """
     if settings.DEBUG_USER_EMAIL and token == settings.DEBUG_USER_EMAIL:
-        return User(id=settings.DEBUG_USER_EMAIL, email=settings.DEBUG_USER_EMAIL, is_softmax_team_member=True)
+        return User(
+            id=settings.DEBUG_USER_EMAIL,
+            email=settings.DEBUG_USER_EMAIL,
+            is_softmax_team_member=True,
+            is_softmax_admin=True,
+        )
 
     is_service_account = any([token.startswith(prefix.value) for prefix in TokenPrefixType])
 

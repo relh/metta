@@ -18,12 +18,13 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 from pydantic.main import BaseModel
 
-from metta.app_backend.auth import NoAuthRequired, get_user
+from metta.app_backend.auth import NoAuthRequired, get_user_with_admin
 from metta.app_backend.config import settings
 from metta.app_backend.database import run_alembic_upgrade
 from metta.app_backend.otel.http_metrics import HttpMetricsMiddleware
 from metta.app_backend.otel.metrics import init_meter_provider
 from metta.app_backend.routes import (
+    admin_routes,
     episode_routes,
     job_routes,
     service_accounts_routes,
@@ -110,6 +111,7 @@ versions = client.get_policy_versions(name_fuzzy="my-policy")
 class WhoAmIResponse(BaseModel):
     user_email: str
     is_softmax_team_member: bool = False
+    is_softmax_admin: bool = False
 
 
 _logging_configured = False
@@ -220,6 +222,7 @@ def create_app() -> fastapi.FastAPI:
         sweep_routes.create_sweep_router(),
         job_routes.create_job_router(),
         tournament_routes.create_tournament_router(),
+        admin_routes.create_admin_router(),
         smart_plug_routes.create_smart_plug_router(),
         service_accounts_routes.create_service_accounts_router(),
     ]
@@ -228,10 +231,11 @@ def create_app() -> fastapi.FastAPI:
 
     @app.get("/whoami")
     async def whoami(request: fastapi.Request, _user: NoAuthRequired) -> WhoAmIResponse:
-        user = await get_user(request)
+        user = await get_user_with_admin(request)
         return WhoAmIResponse(
             user_email=user.email if user else "unknown",
             is_softmax_team_member=user.is_softmax_team_member if user else False,
+            is_softmax_admin=user.is_softmax_admin if user else False,
         )
 
     public_tags = collect_public_tags(routers)

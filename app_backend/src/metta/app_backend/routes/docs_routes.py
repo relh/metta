@@ -16,7 +16,7 @@ How visibility is determined:
 4. The internal spec always includes every endpoint. Never use FastAPI's `include_in_schema=False`
    — it hides endpoints from both specs.
 
-Auth types (ExternalUser, SoftmaxUser, etc.) are enforced at runtime and are independent of
+Auth types (ExternalUser, SoftmaxUser, SoftmaxAdmin, etc.) are enforced at runtime and are independent of
 spec visibility. A SoftmaxUser endpoint on a @public_api router will appear in the public
 docs; external callers will simply get 403.
 """
@@ -31,7 +31,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.routing import APIRoute
 
-from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxUser
+from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthRequired, SoftmaxAdmin, SoftmaxUser
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
@@ -134,7 +134,7 @@ def _inject_operation_security(schema: dict, app: object) -> None:
         sig = inspect.signature(route.endpoint)
         security = None
         for param in sig.parameters.values():
-            if param.annotation is ExternalUser or param.annotation is SoftmaxUser:
+            if param.annotation is ExternalUser or param.annotation is SoftmaxUser or param.annotation is SoftmaxAdmin:
                 security = [{"BearerAuth": []}]
                 break
             if param.annotation is MaybeAuthenticatedUser:

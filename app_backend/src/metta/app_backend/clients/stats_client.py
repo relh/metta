@@ -31,6 +31,7 @@ T = TypeVar("T")
 
 class WhoAmIResponse(BaseModel):
     user_email: str
+    is_softmax_admin: bool = False
 
 
 class StatsClient(BaseAppBackendClient):

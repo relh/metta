@@ -3,7 +3,7 @@ import { FC, PropsWithChildren, use } from "react";
 
 import { AppContext } from "@observatory-app/AppContext";
 
-export const AccessDenied: FC = () => {
+export const AccessDenied: FC<{ message?: string }> = ({ message }) => {
   return (
     <div className="flex min-h-[60vh] items-center justify-center">
       <div className="max-w-md text-center">
@@ -11,7 +11,7 @@ export const AccessDenied: FC = () => {
           Access Restricted
         </h1>
         <p className="text-foreground-muted">
-          This page is only available to Softmax team members.
+          {message ?? "This page is only available to Softmax team members."}
         </p>
       </div>
     </div>
@@ -23,6 +23,18 @@ export const SoftmaxGuard: FC<PropsWithChildren> = ({ children }) => {
 
   if (!isSoftmaxTeamMember) {
     return <AccessDenied />;
+  }
+
+  return children;
+};
+
+export const SoftmaxAdminGuard: FC<PropsWithChildren> = ({ children }) => {
+  const { isSoftmaxAdmin } = use(AppContext);
+
+  if (!isSoftmaxAdmin) {
+    return (
+      <AccessDenied message="This page is only available to Softmax admins." />
+    );
   }
 
   return children;

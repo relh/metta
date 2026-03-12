@@ -18,6 +18,7 @@ import { ResetErrorProvider } from "@observatory/components/ResetErrorContext";
 import { ThemeProvider } from "@observatory/components/ThemeProvider";
 import { config } from "@observatory/config";
 import { RequestDebugPanel } from "@observatory/lib/debug/RequestDebugPanel";
+import { getRepo } from "@observatory/lib/repo/server";
 import { ServerDebugDrain } from "@observatory/lib/debug/ServerDebugDrain";
 
 async function getSessionUserId(): Promise<string | null> {
@@ -88,6 +89,8 @@ export default async function RootLayout({ children }: PropsWithChildren) {
   if (!user?.email) {
     throw new Error(`User not found: ${userId}`);
   }
+  const repo = await getRepo();
+  const observatoryUser = await repo.whoami();
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -97,6 +100,7 @@ export default async function RootLayout({ children }: PropsWithChildren) {
             <AppProvider
               apiBaseUrl="/api/observatory"
               isSoftmaxTeamMember={user?.isSoftmaxTeamMember}
+              isSoftmaxAdmin={observatoryUser.is_softmax_admin}
             >
               <AutoRefreshProvider>
                 <ResetErrorProvider>

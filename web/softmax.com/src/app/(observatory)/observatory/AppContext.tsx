@@ -16,6 +16,8 @@ export const AppContext = createContext<{
   apiBaseUrl: string;
   isSoftmaxTeamMember: boolean;
   isActuallySoftmaxTeamMember: boolean;
+  isSoftmaxAdmin: boolean;
+  isActuallySoftmaxAdmin: boolean;
   actAsExternal: boolean;
   toggleActAsExternal: () => void;
 }>({
@@ -23,6 +25,8 @@ export const AppContext = createContext<{
   apiBaseUrl: "http://localhost:8000",
   isSoftmaxTeamMember: false,
   isActuallySoftmaxTeamMember: false,
+  isSoftmaxAdmin: false,
+  isActuallySoftmaxAdmin: false,
   actAsExternal: false,
   toggleActAsExternal: () => {},
 });
@@ -31,11 +35,13 @@ export const AppProvider: FC<
   PropsWithChildren<{
     apiBaseUrl: string;
     isSoftmaxTeamMember: boolean;
+    isSoftmaxAdmin: boolean;
   }>
 > = ({
   children,
   apiBaseUrl,
   isSoftmaxTeamMember: isActuallySoftmaxTeamMember,
+  isSoftmaxAdmin: isActuallySoftmaxAdmin,
 }) => {
   const [actAsExternal, setActAsExternal] = useState(false);
   const onRequest = useCallback(
@@ -53,6 +59,7 @@ export const AppProvider: FC<
     [],
   );
   const isSoftmaxTeamMember = isActuallySoftmaxTeamMember && !actAsExternal;
+  const isSoftmaxAdmin = isActuallySoftmaxAdmin && !actAsExternal;
 
   return (
     <AppContext
@@ -61,6 +68,8 @@ export const AppProvider: FC<
         apiBaseUrl,
         isSoftmaxTeamMember,
         isActuallySoftmaxTeamMember,
+        isSoftmaxAdmin,
+        isActuallySoftmaxAdmin,
         actAsExternal,
         toggleActAsExternal,
       }}

@@ -312,11 +312,21 @@ export class Repo {
   async whoami(): Promise<{
     user_email: string;
     is_softmax_team_member: boolean;
+    is_softmax_admin: boolean;
   }> {
     return this.apiCall<{
       user_email: string;
       is_softmax_team_member: boolean;
+      is_softmax_admin: boolean;
     }>("/whoami");
+  }
+
+  async getAdminUsersScaffold(): Promise<{
+    message: string;
+  }> {
+    return this.apiCall<{
+      message: string;
+    }>("/admin/users");
   }
 
   async getSmartPlugStatus(): Promise<{

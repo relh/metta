@@ -143,6 +143,10 @@ export function chatpropRoute() {
   return "/observatory/chatprop";
 }
 
+export function adminUsersRoute() {
+  return "/observatory/admin/users";
+}
+
 export function bardoRoute() {
   return "/observatory/bardo";
 }

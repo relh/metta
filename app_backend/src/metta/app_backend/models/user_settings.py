@@ -10,6 +10,7 @@ class UserSettings(SQLModel, table=True):
     __tablename__ = "user_settings"  # type: ignore[assignment]
 
     user_id: str = Field(primary_key=True)
+    admin: bool = Field(default=False, sa_column_kwargs={"server_default": text("false")})
     settings: dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSONB, nullable=False, server_default=text("'{}'::jsonb")),

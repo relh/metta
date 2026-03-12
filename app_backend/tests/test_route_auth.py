@@ -4,9 +4,15 @@ from fastapi import FastAPI
 from fastapi.params import Depends
 from fastapi.routing import APIRoute
 
-from metta.app_backend.auth import _no_auth, get_softmax_user_or_raise, get_user, get_user_or_raise
+from metta.app_backend.auth import (
+    _no_auth,
+    get_softmax_admin_or_raise,
+    get_softmax_user_or_raise,
+    get_user,
+    get_user_or_raise,
+)
 
-AUTH_DEPENDENCIES = {get_user, get_user_or_raise, get_softmax_user_or_raise, _no_auth}
+AUTH_DEPENDENCIES = {get_user, get_user_or_raise, get_softmax_user_or_raise, get_softmax_admin_or_raise, _no_auth}
 
 FRAMEWORK_PATHS = {"/openapi.json"}
 
@@ -42,6 +48,6 @@ def test_all_routes_have_auth(test_app: FastAPI) -> None:
             missing.append(f"{method} {path} ({name})")
 
     assert not missing, (
-        "Routes without auth dependency — add ExternalUser/SoftmaxUser/MaybeAuthenticatedUser "
+        "Routes without auth dependency — add ExternalUser/SoftmaxUser/SoftmaxAdmin/MaybeAuthenticatedUser "
         "or opt out with NoAuthRequired:\n" + "\n".join(f"  {r}" for r in missing)
     )
