@@ -5,17 +5,12 @@ variable "region" {
 
 variable "sso_instance_arn" {
   type    = string
-  default = "arn:aws:sso:::instance/ssoins-7223aa6587f15bea"
+  default = "arn:aws:sso:::instance/ssoins-722343ea1d788ae8"
 }
 
-variable "identity_store_id" {
+variable "contractor_group_id" {
   type    = string
-  default = "d-9067ceb8bd"
-}
-
-variable "contractor_group_name" {
-  type    = string
-  default = "Contractors"
+  default = "f44884d8-70b1-70f3-392f-875e1f6d4b53"
 }
 
 variable "account_ids" {

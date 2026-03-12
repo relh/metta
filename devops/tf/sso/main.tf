@@ -1,18 +1,3 @@
-# Prerequisites:
-# - "Contractors" Google group must exist in Google Workspace (synced to Identity Center via SCIM)
-# - Spacelift stack created with label autoattach:aws
-
-data "aws_identitystore_group" "contractors" {
-  identity_store_id = var.identity_store_id
-
-  alternate_identifier {
-    unique_attribute {
-      attribute_path  = "DisplayName"
-      attribute_value = var.contractor_group_name
-    }
-  }
-}
-
 resource "aws_ssoadmin_permission_set" "contractor" {
   name             = "ContractorAccess"
   instance_arn     = var.sso_instance_arn
@@ -63,7 +48,7 @@ resource "aws_ssoadmin_account_assignment" "contractor" {
   instance_arn       = var.sso_instance_arn
   permission_set_arn = aws_ssoadmin_permission_set.contractor.arn
 
-  principal_id   = data.aws_identitystore_group.contractors.group_id
+  principal_id   = var.contractor_group_id
   principal_type = "GROUP"
 
   target_id   = each.value
