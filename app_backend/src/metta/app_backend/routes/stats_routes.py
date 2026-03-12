@@ -15,6 +15,7 @@ from metta.app_backend.auth import ExternalUser, MaybeAuthenticatedUser, NoAuthR
 from metta.app_backend.database import db_session
 from metta.app_backend.job_runner.config import get_dispatch_config
 from metta.app_backend.models.policies import Policy, PolicyVersion
+from metta.app_backend.notifications.discord import announce_first_policy_submission
 from metta.app_backend.queries import episode_queries, policy_queries
 from metta.app_backend.queries.episode_metrics import (
     aggregate_policy_agent_counts,
@@ -301,6 +302,9 @@ def create_stats_router() -> APIRouter:
                 )
 
         result = await _create_policy_version_from_s3_key(name=request.name, user_id=user.id, s3_key=s3_key)
+        is_first_submission = (
+            request.season is not None and (await policy_queries.count_policy_submissions_for_user(user.id)) == 0
+        )
 
         if request.season:
             from metta.app_backend.tournament.commissioners.factory import build_commissioner  # noqa: PLC0415
@@ -317,6 +321,15 @@ def create_stats_router() -> APIRouter:
                 commissioner = await build_commissioner(request.season, season_id=season.id)
                 pool_names = await commissioner.submit(result.id)
                 result.pools = pool_names
+                if is_first_submission:
+                    await announce_first_policy_submission(
+                        user_id=user.id,
+                        fallback_email=user.email,
+                        policy_name=result.name,
+                        policy_version=result.version,
+                        policy_version_id=result.id,
+                        season_name=request.season,
+                    )
             except Exception:
                 logger.warning("Failed to submit %s to season %r", result.id, request.season, exc_info=True)
                 result.submit_error = f"Failed to submit to season '{request.season}'"

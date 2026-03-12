@@ -45,6 +45,8 @@ from metta.app_backend.models.tournament import (
     Team,
     TeamPolicyVersion,
 )
+from metta.app_backend.notifications.discord import announce_first_policy_submission
+from metta.app_backend.queries import policy_queries
 from metta.app_backend.queries.episode_stats import (
     EpisodeResponse,
     PolicyVersionSummary,
@@ -1189,7 +1191,19 @@ def create_tournament_router() -> APIRouter:
         if existing:
             raise HTTPException(status_code=409, detail="Policy already submitted to this season")
 
+        is_first_submission = await policy_queries.count_policy_submissions_for_user(user.id) == 0
         pool_names = await commissioner.submit(request.policy_version_id)
+        if is_first_submission:
+            policy_version = await policy_queries.get_policy_version_with_name(request.policy_version_id)
+            if policy_version is not None and policy_version.policy.user_id == user.id:
+                await announce_first_policy_submission(
+                    user_id=user.id,
+                    fallback_email=user.email,
+                    policy_name=policy_version.policy.name,
+                    policy_version=policy_version.version,
+                    policy_version_id=policy_version.id,
+                    season_name=season_name,
+                )
         return SubmitResponse(pools=pool_names)
 
     @router.get("/policies/{policy_version_id}/memberships")

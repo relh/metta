@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     ANTHROPIC_API_KEY: str | None = None
     DISCORD_BOT_TOKEN: str | None = None
+    DISCORD_ANNOUNCEMENTS_WEBHOOK_URL: str | None = None
     LOGIN_SERVICE_URL: str = "https://softmax.com"
     RUN_MIGRATIONS: bool = Field(default=False, description="Run migrations on startup")
     SMART_PLUGS_ENABLED: bool = Field(default=False, description="Enable smart plug control routes")

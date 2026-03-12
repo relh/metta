@@ -51,8 +51,9 @@ locals {
     GITHUB_INSTALLATION_ID = jsondecode(data.aws_secretsmanager_secret_version.github_app_secret.secret_string)["installation_id"]
     GITHUB_APP_PEM         = jsondecode(data.aws_secretsmanager_secret_version.github_app_secret.secret_string)["pem"]
 
-    DISCORD_CLIENT_ID     = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_CLIENT_ID"]
-    DISCORD_CLIENT_SECRET = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_CLIENT_SECRET"]
+    DISCORD_CLIENT_ID                 = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_CLIENT_ID"]
+    DISCORD_CLIENT_SECRET             = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_CLIENT_SECRET"]
+    DISCORD_ANNOUNCEMENTS_WEBHOOK_URL = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_ANNOUNCEMENTS_WEBHOOK_URL"]
 
     # Environment Configuration
     DEV_MODE              = "false"

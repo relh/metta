@@ -9,6 +9,7 @@ import Google from "next-auth/providers/google";
 
 import { PrismaAdapter } from "@auth/prisma-adapter";
 
+import { announceNewSoftmaxSignup } from "@/lib/discord-announcements";
 import { prisma } from "./db/prisma";
 
 function buildAuthConfig(): NextAuthConfig {
@@ -110,6 +111,14 @@ function buildAuthConfig(): NextAuthConfig {
           // fall through to default
         }
         return baseUrl;
+      },
+    },
+    events: {
+      async signIn({ user, account, profile, isNewUser }) {
+        if (!isNewUser || !account) {
+          return;
+        }
+        await announceNewSoftmaxSignup({ user, account, profile });
       },
     },
     secret: process.env.NEXTAUTH_SECRET,

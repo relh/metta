@@ -228,6 +228,20 @@ async def get_policy_versions(
 
 
 @with_db
+async def count_policy_submissions_for_user(user_id: str) -> int:
+    session = get_db()
+    return (
+        await session.execute(
+            select(func.count())
+            .select_from(PoolPlayer)
+            .join(PoolPlayer.policy_version)
+            .join(PolicyVersion.policy)
+            .where(Policy.user_id == user_id)
+        )
+    ).scalar_one()
+
+
+@with_db
 async def upsert_policy_version_tags(policy_version_id: UUID, tags: dict[str, str]) -> None:
     if not tags:
         return

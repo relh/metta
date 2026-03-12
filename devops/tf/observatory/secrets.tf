@@ -59,7 +59,8 @@ resource "kubernetes_secret" "observatory_backend_env" {
     SMART_PLUGS_CONFIG_JSON = data.aws_secretsmanager_secret_version.smart_plugs_config_version.secret_string
 
     # used to send Discord notifications
-    DISCORD_BOT_TOKEN = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_BOT_TOKEN"]
+    DISCORD_BOT_TOKEN                 = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_BOT_TOKEN"]
+    DISCORD_ANNOUNCEMENTS_WEBHOOK_URL = jsondecode(data.aws_secretsmanager_secret_version.discord_app.secret_string)["DISCORD_ANNOUNCEMENTS_WEBHOOK_URL"]
   }
 }
 

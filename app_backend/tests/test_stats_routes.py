@@ -672,3 +672,59 @@ async def test_complete_upload_rejects_oversized_policy(
     assert response.status_code == 413
     assert "Policy too large" in response.json()["detail"]
     mock_s3.delete_object.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_complete_upload_announces_first_policy_submission(
+    test_client: TestClient, regular_headers: dict[str, str]
+) -> None:
+    mock_s3 = AsyncMock()
+    mock_s3.head_object.return_value = {"ContentLength": 1024}
+
+    mock_session = MagicMock()
+    mock_client_cm = AsyncMock()
+    mock_client_cm.__aenter__.return_value = mock_s3
+    mock_session.client.return_value = mock_client_cm
+
+    mock_commissioner = AsyncMock()
+    mock_commissioner.submit.return_value = ["entry-pool"]
+    season = Season(name="beta-cvc", canonical=True, public=True)
+
+    with (
+        patch("aioboto3.Session", return_value=mock_session),
+        patch(
+            "metta.app_backend.tournament.season_resolver.resolve_season",
+            AsyncMock(return_value=season),
+        ),
+        patch(
+            "metta.app_backend.tournament.commissioners.factory.build_commissioner",
+            AsyncMock(return_value=mock_commissioner),
+        ),
+        patch(
+            "metta.app_backend.routes.stats_routes.announce_first_policy_submission",
+            new=AsyncMock(),
+        ) as mock_announce,
+    ):
+        response = test_client.post(
+            "/stats/policies/submit/complete",
+            json={"upload_id": str(uuid.uuid4()), "name": "first-upload-policy", "season": "beta-cvc"},
+            headers=regular_headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "first-upload-policy"
+    assert body["version"] == 1
+    assert body["pools"] == ["entry-pool"]
+    mock_commissioner.submit.assert_awaited_once_with(uuid.UUID(body["id"]))
+    mock_announce.assert_awaited_once()
+    await_args = mock_announce.await_args
+    assert await_args is not None
+    assert await_args.kwargs == {
+        "user_id": "regular@example.com",
+        "fallback_email": "regular@example.com",
+        "policy_name": "first-upload-policy",
+        "policy_version": 1,
+        "policy_version_id": uuid.UUID(body["id"]),
+        "season_name": "beta-cvc",
+    }
