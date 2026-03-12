@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+import metta.rl.advantage as advantage_module
 from metta.rl.advantage import compute_delta_lambda, td_lambda_reverse_scan_cuda, td_lambda_reverse_scan_pytorch
 
 
@@ -74,3 +75,31 @@ def test_td_lambda_reverse_scan_cuda_matches_pytorch() -> None:
     out_pytorch = td_lambda_reverse_scan_pytorch(delta, mask_next, gamma_lambda)
 
     torch.testing.assert_close(out_cuda, out_pytorch, rtol=1e-4, atol=1e-4)
+
+
+def test_ensure_pufferlib_advantage_op_registered_imports_pufferlib_c(monkeypatch: pytest.MonkeyPatch) -> None:
+    state = {"has_op": False}
+    calls: list[str] = []
+
+    monkeypatch.setattr(advantage_module, "_has_pufferlib_advantage_op", lambda: state["has_op"])
+
+    def fake_import_module(name: str) -> object:
+        calls.append(name)
+        state["has_op"] = True
+        return object()
+
+    monkeypatch.setattr(advantage_module.importlib, "import_module", fake_import_module)
+
+    advantage_module._ensure_pufferlib_advantage_op_registered()
+
+    assert calls == ["pufferlib._C"]
+
+
+def test_ensure_pufferlib_advantage_op_registered_raises_when_registration_still_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(advantage_module, "_has_pufferlib_advantage_op", lambda: False)
+    monkeypatch.setattr(advantage_module.importlib, "import_module", lambda _name: object())
+
+    with pytest.raises(RuntimeError, match="pufferlib._C"):
+        advantage_module._ensure_pufferlib_advantage_op_registered()

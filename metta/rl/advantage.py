@@ -1,5 +1,6 @@
 """Advantage computation functions for Metta training."""
 
+import importlib
 from contextlib import nullcontext
 
 import einops
@@ -7,6 +8,25 @@ import torch
 from torch import Tensor
 
 from metta.rl import mps
+
+
+def _has_pufferlib_advantage_op() -> bool:
+    namespace = getattr(torch.ops, "pufferlib", None)
+    return namespace is not None and hasattr(namespace, "compute_puff_advantage")
+
+
+def _ensure_pufferlib_advantage_op_registered() -> None:
+    if _has_pufferlib_advantage_op():
+        return
+
+    importlib.import_module("pufferlib._C")
+    if _has_pufferlib_advantage_op():
+        return
+
+    raise RuntimeError(
+        "pufferlib Torch op registration missing: expected "
+        "torch.ops.pufferlib.compute_puff_advantage after importing pufferlib._C"
+    )
 
 
 def td_lambda_reverse_scan_pytorch(delta: Tensor, mask_next: Tensor, gamma_lambda: float) -> Tensor:
@@ -97,6 +117,7 @@ def compute_advantage(
     # Create context manager that only applies CUDA device context if needed
     device_context = torch.cuda.device(device) if device.type == "cuda" else nullcontext()
     with device_context:
+        _ensure_pufferlib_advantage_op_registered()
         torch.ops.pufferlib.compute_puff_advantage(
             values,
             rewards,
