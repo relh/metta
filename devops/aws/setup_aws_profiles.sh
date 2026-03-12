@@ -52,7 +52,10 @@ EOF
     read -r name account_id <<< "$entry"
     setup_sso_profile "$name" "$account_id" PowerUserAccess
     setup_sso_profile "${name}-admin" "$account_id" AdministratorAccess
+    setup_sso_profile "contractor-${name}" "$account_id" ContractorAccess
   done
+
+  local default_profile="${AWS_PROFILE_DEFAULT:-softmax}"
 
   # Ensure AWS_PROFILE is exported in shell rc files
   for rc in "${ZDOTDIR:-$HOME}/.zshrc" "$HOME/.bashrc"; do
@@ -60,7 +63,7 @@ EOF
       mkdir -p "$(dirname "$rc")"
       touch "$rc"
     fi
-    grep -q '^export AWS_PROFILE=' "$rc" 2> /dev/null || echo -e '\nexport AWS_PROFILE=softmax' >> "$rc"
+    grep -q '^export AWS_PROFILE=' "$rc" 2> /dev/null || echo -e "\nexport AWS_PROFILE=${default_profile}" >> "$rc"
   done
 
   echo "AWS profiles configured."
@@ -94,7 +97,7 @@ fi
 # In CI/Docker/test, just write config and exit
 if [ -n "$METTA_TEST_ENV" ] || [ -n "$CI" ] || [ -f /.dockerenv ]; then
   initialize_aws_config
-  echo "Login to AWS using: aws sso login --profile softmax"
+  echo "Login to AWS using: aws sso login --profile ${AWS_PROFILE_DEFAULT:-softmax}"
   exit 0
 fi
 
@@ -108,7 +111,7 @@ fi
 if [ -n "$AWS_SSO_NONINTERACTIVE" ]; then
   echo "Skipping interactive 'aws sso login' due to AWS_SSO_NONINTERACTIVE"
 else
-  aws sso login --profile softmax || true
+  aws sso login --profile "${AWS_PROFILE_DEFAULT:-softmax}" || true
 fi
 
 if check_sso_token; then

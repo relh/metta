@@ -46,14 +46,17 @@ class AWSSetup(SetupModule):
             Skipping setup.
             """)
             return
-        if saved_settings.user_type == UserType.SOFTMAX:
+        if saved_settings.user_type in (UserType.SOFTMAX, UserType.SOFTMAX_CONTRACTOR):
             info("""
                 Your AWS access should have been provisioned.
                 If you don't have access, contact your team lead.
 
                 Running AWS profile setup...
             """)
-            self.run_script("devops/aws/setup_aws_profiles.sh", args=["--reset"] if force else [])
+            env = {}
+            if saved_settings.user_type == UserType.SOFTMAX_CONTRACTOR:
+                env["AWS_PROFILE_DEFAULT"] = "contractor-softmax"
+            self.run_script("devops/aws/setup_aws_profiles.sh", args=["--reset"] if force else [], env=env or None)
         else:
             info("Configure your AWS credentials using `aws configure`")
 
@@ -73,7 +76,7 @@ class AWSSetup(SetupModule):
 
     def to_config_settings(self) -> AwsConfigSettings:
         saved_settings = get_saved_settings()
-        if saved_settings.user_type.is_softmax:
+        if saved_settings.user_type.is_softmax or saved_settings.user_type == UserType.SOFTMAX_CONTRACTOR:
             return AwsConfigSettings(
                 replay_dir=SOFTMAX_S3_REPLAYS_PREFIX,
                 policy_remote_prefix=SOFTMAX_S3_POLICY_PREFIX,

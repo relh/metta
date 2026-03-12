@@ -152,7 +152,9 @@ class SetupModule(ABC):
 
         return subprocess.run(cmd, **params)  # type: ignore
 
-    def run_script(self, script_path: str, args: list[str] | None = None) -> subprocess.CompletedProcess[str]:
+    def run_script(
+        self, script_path: str, args: list[str] | None = None, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
         script = self.repo_root / script_path
         if not script.exists():
             raise FileNotFoundError(f"Script not found: {script}")
@@ -161,7 +163,7 @@ class SetupModule(ABC):
         if args:
             cmd.extend(args)
 
-        return self.run_command(cmd)
+        return self.run_command(cmd, env=env)
 
     def check_connected_as(self) -> str | None:
         """

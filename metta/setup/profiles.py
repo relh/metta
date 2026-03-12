@@ -8,6 +8,7 @@ from metta.common.util.constants import METTA_AWS_ACCOUNT_ID, METTA_AWS_REGION, 
 class UserType(Enum):
     SOFTMAX = "softmax"
     SOFTMAX_DOCKER = "softmax-docker"
+    SOFTMAX_CONTRACTOR = "softmax-contractor"
     EXTERNAL = "external"
     CLOUD = "cloud"
     CUSTOM = "custom"
@@ -22,6 +23,7 @@ class UserType(Enum):
             UserType.CLOUD: "User with own cloud account",
             UserType.SOFTMAX: "Softmax employee",
             UserType.SOFTMAX_DOCKER: "Softmax (Docker)",
+            UserType.SOFTMAX_CONTRACTOR: "Softmax contractor",
             UserType.CUSTOM: "Custom configuration",
         }
         return descriptions.get(self, self.value)
@@ -90,6 +92,24 @@ PROFILE_DEFINITIONS: dict[UserType, ProfileConfig] = {
             "scratchpad": {"enabled": False},
             "pr-similarity": {"enabled": False},
             "binary-symlinks": {"enabled": True},
+        }
+    },
+    UserType.SOFTMAX_CONTRACTOR: {
+        "components": {
+            "bootstrap": {"enabled": True},
+            "system": {"enabled": True},
+            "uv": {"enabled": True},
+            "cogents": {"enabled": False},
+            "js-toolchain": {"enabled": True},
+            "githooks": {"enabled": True},
+            "observatory-key": {"enabled": False},
+            "aws": {"enabled": True},
+            "bedrock": {"enabled": True, "expected_connection": METTA_AWS_REGION},
+            "wandb": {"enabled": True},
+            "skypilot": {"enabled": False},
+            "tailscale": {"enabled": False},
+            "scratchpad": {"enabled": True},
+            "pr-similarity": {"enabled": False},
         }
     },
     UserType.SOFTMAX: {
