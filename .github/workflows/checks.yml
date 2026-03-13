@@ -83,6 +83,7 @@ jobs:
               - '**/*.cpp'
               - '**/*.hpp'
               - '**/*.nim'
+              - 'TRAINING_COMPAT_VERSION'
               - '**/*.toml'
               - '**/conftest.py'
               - '**/pyproject.toml'

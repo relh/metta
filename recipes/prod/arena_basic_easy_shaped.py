@@ -19,6 +19,7 @@ from metta.cogworks.curriculum.curriculum import (
     CurriculumConfig,
 )
 from metta.cogworks.curriculum.learning_progress_algorithm import LearningProgressConfig
+from metta.common.training_compat import format_training_compat_metric_label, get_training_compat_target
 from metta.common.wandb.context import WandbConfig
 from metta.rl.policy_assets import PolicyAssetConfig
 from metta.rl.trainer_config import TorchProfilerConfig, TrainerConfig
@@ -89,6 +90,17 @@ def simulations(env: Optional[MettaGridConfig] = None) -> list[SimulationConfig]
     return [
         SimulationConfig(suite="arena", name="basic", env=basic_env),
         SimulationConfig(suite="arena", name="combat", env=combat_env),
+    ]
+
+
+def _training_compat_acceptance(stable_check_name: str) -> list[AcceptanceCriterion]:
+    target = get_training_compat_target(stable_check_name)
+    return [
+        AcceptanceCriterion(
+            metric=target.metric,
+            threshold=target.expected_min,
+            metric_name=format_training_compat_metric_label(stable_check_name),
+        )
     ]
 
 
@@ -316,9 +328,7 @@ def evaluate_ci(policy_uri: str) -> EvaluateTool:
     datadog_metric_category="training",
     remote_gpus=1,
     remote_nodes=1,
-    acceptance=[
-        AcceptanceCriterion(metric="overview/sps", threshold=15000),
-    ],
+    acceptance=lambda: _training_compat_acceptance("arena_basic_easy_shaped.train_100m"),
 )
 def train_100m() -> TrainTool:
     """Arena single GPU - 100M timesteps."""
@@ -335,9 +345,7 @@ def train_100m() -> TrainTool:
     datadog_metric_category="training",
     remote_gpus=4,
     remote_nodes=4,
-    acceptance=[
-        AcceptanceCriterion(metric="overview/sps", threshold=52000),
-    ],
+    acceptance=lambda: _training_compat_acceptance("arena_basic_easy_shaped.train_2b"),
 )
 def train_2b() -> TrainTool:
     """Arena multi GPU - 2B timesteps."""

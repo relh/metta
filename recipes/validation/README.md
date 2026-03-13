@@ -16,6 +16,23 @@
 - **Characteristics**: 100M-2B timesteps, multi-GPU (1-16), acceptance criteria for metrics
 - **Run with**: Part of release automation (or manually via job runner tools)
 
+### Training Compat Baselines
+
+Stable training SPS gates are sourced from `TRAINING_COMPAT_VERSION` plus
+`common/src/metta/common/training_compat.py`.
+
+Each training compat entry records:
+
+- the known-good training commit
+- the env compat version it was audited against
+- the expected SPS floor for each audited stable training job
+
+PRs that touch training or env compat code without bumping `TRAINING_COMPAT_VERSION` get a reminder from
+`.github/workflows/training-compat-version-reminder.yml`.
+
+If training performance changes intentionally, bump the training compat version and update that baseline in the same
+change.
+
 ### When Adding a Prod Recipe
 
 Add **both** test types to your recipe:

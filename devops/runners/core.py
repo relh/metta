@@ -12,6 +12,7 @@ from pathlib import Path
 
 import wandb
 
+from devops.runners.acceptance_criterion import AcceptanceCriterion
 from devops.runners.job import ExecutorType, Job, JobHandle, JobStatus
 from devops.runners.metta_constants import METTA_WANDB_ENTITY, METTA_WANDB_PROJECT
 
@@ -22,6 +23,10 @@ def _now() -> datetime:
 
 def _duration_s(started_at: datetime, completed_at: datetime) -> float:
     return (completed_at - started_at).total_seconds()
+
+
+def _criterion_label(criterion: AcceptanceCriterion) -> str:
+    return criterion.metric_name or criterion.metric
 
 
 class _AcceptanceEvaluator:
@@ -52,10 +57,11 @@ class _AcceptanceEvaluator:
     def _passes_acceptance(self, job: Job) -> bool:
         failures: list[str] = []
         for c in job.acceptance:
+            label = _criterion_label(c)
             actual = job.metrics.get(c.metric)
             if actual is None:
                 job.criterion_results[c.metric] = False
-                failures.append(f"{c.metric}: missing (required {c.operator} {c.threshold})")
+                failures.append(f"{label}: missing (required {c.operator} {c.threshold})")
                 continue
 
             passed = False
@@ -80,7 +86,7 @@ class _AcceptanceEvaluator:
 
             job.criterion_results[c.metric] = passed
             if not passed:
-                failures.append(f"{c.metric}: {actual:.4g} (required {c.operator} {c.threshold})")
+                failures.append(f"{label}: {actual:.4g} (required {c.operator} {c.threshold})")
 
         if failures:
             job.acceptance_failures = failures

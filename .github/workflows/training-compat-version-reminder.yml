@@ -1,0 +1,114 @@
+name: Training compat version reminder
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "common/src/metta/common/training_compat.py"
+      - "metta/rl/**"
+      - "metta/tools/train.py"
+      - "recipes/prod/**"
+      - "packages/cogames/src/**"
+      - "packages/mettagrid/python/src/**"
+      - "packages/mettagrid/cpp/**"
+      - "COMPAT_VERSION"
+
+concurrency:
+  group: training-compat-reminder-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for TRAINING_COMPAT_VERSION change
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BASE="origin/${{ github.event.pull_request.base.ref }}"
+          TRAINING_COMPAT_CHANGED=$(git diff "$BASE"...HEAD -- TRAINING_COMPAT_VERSION | grep -c '^[+-][0-9]' || true)
+
+          TRAINING_FILES=$(git diff --name-only "$BASE"...HEAD -- \
+            common/src/metta/common/training_compat.py \
+            metta/rl/ \
+            metta/tools/train.py \
+            recipes/prod/ \
+            packages/cogames/src/ \
+            packages/mettagrid/python/src/ \
+            packages/mettagrid/cpp/ \
+            COMPAT_VERSION | grep -v 'pyproject.toml$' || true)
+
+          if [ -z "$TRAINING_FILES" ]; then
+            echo "No training/env compat files changed, skipping"
+            TRAINING_COMPAT_CHANGED=1
+          fi
+
+          EXISTING=$(gh api graphql -f query='
+            query($owner: String!, $repo: String!, $pr: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      comments(first: 1) {
+                        nodes { body }
+                      }
+                    }
+                  }
+                }
+              }
+            }' \
+            -f owner="${{ github.repository_owner }}" \
+            -f repo="${{ github.event.repository.name }}" \
+            -F pr=${{ github.event.pull_request.number }} \
+            --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.comments.nodes[0].body | test("does not bump .TRAINING_COMPAT_VERSION"))] | length')
+
+          if [ "$EXISTING" != "0" ]; then
+            echo "Reminder already exists, skipping"
+            TRAINING_COMPAT_CHANGED=1
+          fi
+
+          ANCHOR_FILE=""
+          if [ -n "$TRAINING_FILES" ]; then
+            ANCHOR_FILE=$(echo "$TRAINING_FILES" | head -1)
+          fi
+
+          echo "training_compat_changed=$TRAINING_COMPAT_CHANGED" >> "$GITHUB_OUTPUT"
+          echo "anchor_file=$ANCHOR_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Leave review comment
+        if: steps.check.outputs.training_compat_changed == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ANCHOR="${{ steps.check.outputs.anchor_file }}"
+          COMMIT=$(gh pr view ${{ github.event.pull_request.number }} --json headRefOid -q '.headRefOid')
+          PR=${{ github.event.pull_request.number }}
+
+          jq -n \
+            --arg commit "$COMMIT" \
+            --arg path "$ANCHOR" \
+            --arg body 'This PR touches audited training code or env compat code but does not bump `TRAINING_COMPAT_VERSION`.
+
+          If this change affects the known-good training baseline, bump `TRAINING_COMPAT_VERSION` and update `common/src/metta/common/training_compat.py` with the new audited baseline:
+
+          - known-good training commit
+          - matching `env_compat_version`
+          - expected SPS floors for the stable training jobs
+
+          Examples:
+
+          - changing trainer, rollout, loss, batch sizing, or stable training recipe behavior
+          - changing `COMPAT_VERSION` or env behavior that the audited training baseline depends on
+          - changing the expected SPS thresholds/topologies for the stable training checks
+
+          If the audited training baseline is unaffected, resolve this comment.' \
+            '{commit_id: $commit, path: $path, body: $body, subject_type: "file"}' \
+          | gh api "repos/${{ github.repository }}/pulls/${PR}/comments" --method POST --input -

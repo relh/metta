@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from devops.runners.acceptance_criterion import AcceptanceCriterion
 from devops.stable.stable_check_context import StableCheckContext
 from devops.stable.stable_check_groups import StableCheckGroup
 from devops.stable.stable_check_registry import discover_stable_checks, stable_check_configs_to_jobs
 from devops.stable.stable_function_check_registry import StableFunctionCheckConfig, stable_function_check
+from devops.stable.stable_tool_check_registry import StableToolCheckConfig
+from metta.common.training_compat import format_training_compat_metric_label, get_training_compat_target
 
 
 def _names(specs) -> set[str]:  # noqa: ANN001
@@ -37,6 +40,37 @@ def test_discover_jobs_unfiltered_contains_ci_and_prod_checks() -> None:
     assert "ci.play_smoke" in names
     assert "arena_basic_easy_shaped.train_100m" in names
     assert "arena_basic_easy_shaped.train_2b" in names
+
+
+def test_prod_training_checks_use_training_compat_thresholds() -> None:
+    configs = {config.name: config for config in discover_stable_checks({StableCheckGroup.INTERNAL_TRAINING_HEAVY})}
+
+    for stable_name in ("arena_basic_easy_shaped.train_100m", "arena_basic_easy_shaped.train_2b"):
+        target = get_training_compat_target(stable_name)
+        criterion = configs[stable_name].resolve_acceptance()[0]
+        assert criterion.metric == target.metric
+        assert criterion.threshold == target.expected_min
+        assert criterion.metric_name == format_training_compat_metric_label(stable_name)
+
+
+def test_stable_tool_check_config_can_resolve_acceptance_lazily() -> None:
+    def fake_check():  # noqa: ANN202
+        return None
+
+    config = StableToolCheckConfig(
+        func=fake_check,
+        timeout_s=60,
+        check_group=StableCheckGroup.INTERNAL_TRAINING_LIGHT,
+        acceptance_factory=lambda: [
+            AcceptanceCriterion(metric="overview/sps", threshold=15_000, metric_name="overview/sps [training compat]")
+        ],
+    )
+
+    acceptance = config.resolve_acceptance()
+
+    assert len(acceptance) == 1
+    assert acceptance[0].metric == "overview/sps"
+    assert acceptance[0].threshold == 15_000
 
 
 def test_specs_to_jobs_uses_function_check_adapter_for_stable_check() -> None:

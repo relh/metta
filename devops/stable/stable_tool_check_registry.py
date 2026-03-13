@@ -38,6 +38,12 @@ class StableToolCheckConfig:
     remote_nodes: int | None = None
 
     acceptance: list[AcceptanceCriterion] = field(default_factory=list)
+    acceptance_factory: Callable[[], list[AcceptanceCriterion]] | None = None
+
+    def resolve_acceptance(self) -> list[AcceptanceCriterion]:
+        if self.acceptance_factory is None:
+            return list(self.acceptance)
+        return list(self.acceptance_factory())
 
     @property
     def name(self) -> str:
@@ -56,7 +62,7 @@ def stable_tool_check(
     timeout_s: int,
     remote_gpus: int | None = None,
     remote_nodes: int | None = None,
-    acceptance: list[AcceptanceCriterion] | None = None,
+    acceptance: list[AcceptanceCriterion] | Callable[[], list[AcceptanceCriterion]] | None = None,
     check_group: StableCheckGroup,
     datadog_metric_category: str = "ci",
     lifecycle: StableCheckLifecycle = DEFAULT_LIFECYCLE,
@@ -73,6 +79,13 @@ def stable_tool_check(
                 f"expected one of {sorted(VALID_CATEGORIES)}"
             )
 
+        acceptance_list: list[AcceptanceCriterion] = []
+        acceptance_factory: Callable[[], list[AcceptanceCriterion]] | None = None
+        if callable(acceptance):
+            acceptance_factory = acceptance
+        elif acceptance is not None:
+            acceptance_list = acceptance
+
         _stable_tool_check_registry.append(
             StableToolCheckConfig(
                 func=func,
@@ -85,7 +98,8 @@ def stable_tool_check(
                 input_references=input_references or {},
                 remote_gpus=remote_gpus,
                 remote_nodes=remote_nodes,
-                acceptance=acceptance or [],
+                acceptance=acceptance_list,
+                acceptance_factory=acceptance_factory,
             )
         )
         return func
@@ -127,6 +141,7 @@ def stable_tool_check_configs_to_jobs(configs: list[StableToolCheckConfig], pref
     for config in configs:
         tool_path = f"{config.func.__module__}.{config.func.__name__}"
         job_name = config_to_job_name[config.func]
+        acceptance = config.resolve_acceptance()
 
         return_type = get_type_hints(config.func).get("return")
 
@@ -136,7 +151,7 @@ def stable_tool_check_configs_to_jobs(configs: list[StableToolCheckConfig], pref
             assert isinstance(tool, TrainTool)
             wandb_disabled = not (tool.wandb.enabled or tool.wandb == WandbConfig.Unconfigured())
 
-        if config.acceptance and wandb_disabled:
+        if acceptance and wandb_disabled:
             raise ValueError(f"{config.name} must have wandb enabled to use acceptance criteria")
 
         assert (config.remote_gpus is not None) == (config.remote_nodes is not None), (
@@ -186,7 +201,7 @@ def stable_tool_check_configs_to_jobs(configs: list[StableToolCheckConfig], pref
                 remote_nodes=config.remote_nodes,
                 dependencies=dependencies,
                 wandb_run_name=job_name if not wandb_disabled else None,
-                acceptance=config.acceptance,
+                acceptance=acceptance,
                 metadata={
                     "datadog_metric_category": config.datadog_metric_category,
                     "check_group": config.check_group.value,
