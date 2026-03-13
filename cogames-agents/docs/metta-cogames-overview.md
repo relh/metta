@@ -321,7 +321,7 @@ heart_capacity: 1
 
 **Environmental:** DarkSide (no regen), SuperCharged (+2 regen), RoughTerrain (+2 move cost), SolarFlare (-50% junction)
 
-**Mechanic:** SharedRewards, HeartChorus, HubDrawsFromChests, BalancedCorners
+**Mechanic:** SharedRewards, HeartChorus, HubDrawsFromChests
 
 **Evaluation sets:** diagnostic_evals (30+), integrated_evals (7), spanning_evals
 
