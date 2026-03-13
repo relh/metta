@@ -25,13 +25,13 @@ def get_user_headers(user: User) -> dict[str, str]:
 class TestClientAdapter:
     """Adapter that makes TestClient work like httpx.AsyncClient for StatsClient."""
 
-    def __init__(self, test_client: TestClient, user: User | None = None):
+    def __init__(self, test_client: TestClient, user: User):
         self.test_client = test_client
         self.base_url = test_client.base_url
         self.user = user
 
     @classmethod
-    def with_user(cls, test_client: TestClient, user: User | None) -> httpx.Client:
+    def with_user(cls, test_client: TestClient, user: User) -> httpx.Client:
         return cast(httpx.Client, TestClientAdapter(test_client, user=user))
 
     @classmethod
@@ -42,9 +42,7 @@ class TestClientAdapter:
         """Make a request using the TestClient synchronously."""
         # Remove headers we'll handle separately
         headers = kwargs.pop("headers", {})
-
-        if self.user:
-            headers.update(get_user_headers(self.user))
+        headers.update(get_user_headers(self.user))
 
         # Make the sync request
         return self.test_client.request(method, url, headers=headers, **kwargs)
@@ -58,7 +56,7 @@ class TestClientAdapter:
         return self.request("GET", url, **kwargs)
 
 
-def create_test_stats_client(test_client: TestClient, user: User | None = None):
+def create_test_stats_client(test_client: TestClient, user: User):
     """Create a StatsClient that works with TestClient."""
     from metta.app_backend.clients.stats_client import StatsClient  # noqa: PLC0415
 
