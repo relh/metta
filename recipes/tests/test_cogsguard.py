@@ -9,7 +9,8 @@ import random
 
 import pytest
 
-from cogames.cogs_vs_clips.config import CvCConfig
+from cogames.games.cogs_vs_clips.game.multi_team import GEAR
+from cogames.play import ELEMENTS
 from metta.agent.policies.puffer_default import PufferDefaultConfig
 from metta.cogworks.curriculum.task_generator import BucketedTaskGenerator, SingleTaskGenerator, TaskGeneratorSet
 from metta.rl.training.teacher import TeacherConfig
@@ -48,11 +49,11 @@ class TestCogsguardEnvironment:
         assert "hp" in env_config.game.resource_names
 
         # Check gear resources
-        for gear_type in CvCConfig.GEAR:
+        for gear_type in GEAR:
             assert gear_type in env_config.game.resource_names
 
         # Check element resources
-        for element in CvCConfig.ELEMENTS:
+        for element in ELEMENTS:
             assert element in env_config.game.resource_names
 
     def test_environment_simulation_runs(self) -> None:
@@ -107,8 +108,7 @@ class TestCogsguardEnvironment:
 
         # Check that key object types exist
         assert "wall" in objects
-        # Station object names are team-prefixed (e.g. "c:hub"), while render_name
-        # is unprefixed (e.g. "hub").
+        # Station object names are team-prefixed (e.g. "c:hub").
         assert "c:hub" in objects
         assert "junction" in objects
         assert "c:miner" in objects
@@ -117,7 +117,7 @@ class TestCogsguardEnvironment:
         assert "c:scrambler" in objects
 
         # Check extractors for all elements
-        for element in CvCConfig.ELEMENTS:
+        for element in ELEMENTS:
             assert f"{element}_extractor" in objects
 
 

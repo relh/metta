@@ -191,7 +191,7 @@ def test_scripted_policies_can_play_short_episode(policy: PolicyUnderTest, env_c
     reason=("Nim bindings missing. Run `nim c nim_agents.nim` in cogames-agents/src/cogames_agents/policy/nim_agents."),
 )
 def test_nlanky_aligns_junctions_in_machina() -> None:
-    _, env_cfg, _ = get_mission("cogsguard_machina_1.basic", variants_arg=None, cogs=None)
+    _, env_cfg, _ = get_mission("machina_1", variants_arg=None, cogs=None)
     env_cfg.game.max_steps = 200
     results, _ = run_episode_local(
         policy_specs=[PolicySpec(class_path="nlanky", data_path=None)],

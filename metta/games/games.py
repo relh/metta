@@ -49,11 +49,8 @@ def make_game(
     if variants and info.get("parse_variants"):
         mission = mission.with_variants(info["parse_variants"](list(variants)))
     env = mission.make_env()
-    env = env.model_copy(deep=True)
-    env.label = mission.full_name()
-    for variant in mission.variants:
-        variant.modify_env(mission, env)
-        env.label += f".{variant.name}"
+    # Variants may override max_steps (e.g. multi_year); honour the caller's explicit value.
+    env.game.max_steps = max_steps
     return env
 
 

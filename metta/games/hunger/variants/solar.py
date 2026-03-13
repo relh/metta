@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.energy import EnergyVariant
 from mettagrid.config.event_config import EventConfig, periodic
 from mettagrid.config.game_value import InventoryValue
 from mettagrid.config.handler_config import Handler, updateTarget
@@ -21,7 +22,9 @@ class SolarVariant(CoGameMissionVariant):
 
     name: str = "solar"
     description: str = "Day/night cycle: solar varies, affecting energy regen."
-    depends_on: list[str] = ["energy"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[EnergyVariant])
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
         env.game.resource_names.append("solar")

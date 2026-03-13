@@ -22,7 +22,7 @@ commands.
 
 ## Files changed
 
-- `packages/cogames/src/cogames/cogs_vs_clips/missions.py`
+- `packages/cogames/src/cogames/games/cogs_vs_clips/missions.py`
 - `packages/mettagrid/python/src/mettagrid/runner/episode_runner.py`
 - `packages/mettagrid/tests/runner/test_episode_runner.py`
 - `docs/experiments/cogsguard_role_specialists_runbook_2026-02-24.md`

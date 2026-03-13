@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.food import FoodVariant
 from metta.games.hunger.variants.seasons import (
     FOOD_DRAIN_PERIOD,
     SEASON_LENGTH,
@@ -25,7 +26,9 @@ class KidsVariant(CoGameMissionVariant):
 
     name: str = "kids"
     description: str = "Seasonal egg lifecycle: fall drop, spring hatch, kid reward."
-    depends_on: list[str] = ["food"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[FoodVariant])
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
         for r in ("egg", "kid"):

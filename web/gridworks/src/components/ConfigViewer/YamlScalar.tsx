@@ -23,7 +23,7 @@ export const YamlScalar: FC<{
     "metta.map",
     "metta.cogworks",
     "recipes.experiment",
-    "cogames.cogs_vs_clips",
+    "cogames.games.cogs_vs_clips",
   ];
 
   const repoRoot = use(RepoRootContext);

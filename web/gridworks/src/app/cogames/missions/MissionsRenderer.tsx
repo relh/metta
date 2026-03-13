@@ -22,7 +22,7 @@ export const MissionsRenderer: FC<{
         mission.mission.description
           .toLowerCase()
           .includes(filter.toLowerCase()) ||
-        mission.mission.site.name.toLowerCase().includes(filter.toLowerCase())
+        false
     );
   }, [initialMissions, filter]);
 
@@ -41,7 +41,7 @@ export const MissionsRenderer: FC<{
 
       <ul className="space-y-2">
         {filtered.map((mission) => {
-          const name = `${mission.mission.site.name}.${mission.mission.name}`;
+          const name = mission.mission.name;
 
           return (
             <li key={name}>

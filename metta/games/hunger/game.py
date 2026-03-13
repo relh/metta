@@ -6,7 +6,7 @@ from typing import cast
 
 from pydantic import Field
 
-from cogames.core import CoGameMission, CoGameSite
+from cogames.core import CoGameMission
 from cogames.games.cogs_vs_clips.missions.terrain import MachinaArena
 from metta.games.games import register  # noqa: E402
 from metta.games.hunger.variants import parse_variants
@@ -26,22 +26,25 @@ from mettagrid.mapgen.scenes.compound import Compound
 
 
 class HungerGame(CoGameMission):
+    default_variant: str = "full"
     max_steps: int = Field(default=250)  # 1 year; use multi_year_5 or multi_year_10 for longer
 
     @classmethod
     def create(cls, num_agents: int, max_steps: int) -> HungerGame:
         return cls(
-            name="basic",
+            name="hunger",
             description="Hunger game",
-            site=cls._map(num_agents),
+            map_builder=cls._map_builder(num_agents),
             num_cogs=num_agents,
+            min_cogs=1,
+            max_cogs=num_agents,
             max_steps=max_steps,
         )
 
-    def make_env(self) -> MettaGridConfig:
+    def make_base_env(self) -> MettaGridConfig:
         num_cogs = cast(int, self.num_cogs)  # always set by create()
         game = GameConfig(
-            map_builder=self.site.map_builder,
+            map_builder=self.map_builder,
             max_steps=self.max_steps,
             num_agents=num_cogs,
             resource_names=[],
@@ -79,34 +82,28 @@ class HungerGame(CoGameMission):
         return MettaGridConfig(game=game)
 
     @staticmethod
-    def _map(num_agents: int) -> CoGameSite:
-        return CoGameSite(
-            name="hunger_arena",
-            description="Hunger arena. Add variants=plant, herbivore, or carnivore.",
-            map_builder=MapGen.Config(
-                width=88,
-                height=88,
-                instance=MachinaArena.Config(
-                    spawn_count=80,
-                    base_biome="forest",
-                    base_biome_config={"seed_prob": 0.015},
-                    building_coverage=0,
-                    building_names=[],
-                    building_weights={},
-                    biome_weights={"forest": 1.0},
-                    dungeon_weights={"none": 1.0},
-                    hub=Compound.Config(
-                        spawn_count=num_agents,
-                        hub_object="empty",
-                        corner_bundle="none",
-                        cross_bundle="none",
-                        cross_distance=7,
-                        randomize_spawn_positions=True,
-                    ),
+    def _map_builder(num_agents: int) -> MapGen.Config:
+        return MapGen.Config(
+            width=88,
+            height=88,
+            instance=MachinaArena.Config(
+                spawn_count=80,
+                base_biome="forest",
+                base_biome_config={"seed_prob": 0.015},
+                building_coverage=0,
+                building_names=[],
+                building_weights={},
+                biome_weights={"forest": 1.0},
+                dungeon_weights={"none": 1.0},
+                hub=Compound.Config(
+                    spawn_count=num_agents,
+                    hub_object="empty",
+                    corner_bundle="none",
+                    cross_bundle="none",
+                    cross_distance=7,
+                    randomize_spawn_positions=True,
                 ),
             ),
-            min_cogs=1,
-            max_cogs=num_agents,
         )
 
 

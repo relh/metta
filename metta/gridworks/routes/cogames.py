@@ -1,20 +1,18 @@
 from fastapi import APIRouter, HTTPException
 
-from cogames.cogs_vs_clips.cogsguard_curriculum import split_variants
-from cogames.cogs_vs_clips.mission import CoGameMissionVariant as MissionVariant
-from cogames.cogs_vs_clips.mission import CvCMission as AnyMission
-from cogames.cogs_vs_clips.missions import MISSIONS
-from cogames.cogs_vs_clips.variants import VARIANTS
+from cogames.cli.mission import get_all_missions_list as _get_missions
+from cogames.core import CoGameMission
+from cogames.core import CoGameMissionVariant as MissionVariant
+from cogames.games.cogs_vs_clips.game import VARIANTS
+from cogames.games.cogs_vs_clips.train.cvc_curriculum import split_variants
 from metta.gridworks.common import ConfigWithExtraInfo, extend_config
 from mettagrid.mapgen.utils.storable_map import StorableMap, StorableMapDict
 
 
-def _get_mission(site_name: str, mission_name: str, variants: str = "") -> AnyMission:
-    mission = next(
-        (mission for mission in MISSIONS if mission.site.name == site_name and mission.name == mission_name), None
-    )
+def _get_mission(mission_name: str, variants: str = "") -> CoGameMission:
+    mission = next((mission for mission in _get_missions() if mission.name == mission_name), None)
     if mission is None:
-        raise HTTPException(status_code=404, detail=f"Mission {site_name}.{mission_name} not found")
+        raise HTTPException(status_code=404, detail=f"Mission {mission_name} not found")
 
     variant_names = [v for v in variants.split(",") if v]
     try:
@@ -32,22 +30,22 @@ def make_cogames_routes() -> APIRouter:
 
     @router.get("/missions")
     def get_missions() -> list[ConfigWithExtraInfo]:
-        return [extend_config(mission) for mission in MISSIONS]
+        return [extend_config(mission) for mission in _get_missions()]
 
-    @router.get("/missions/{site_name}.{mission_name}")
-    def get_mission(site_name: str, mission_name: str, variants: str = "") -> ConfigWithExtraInfo:
-        mission = _get_mission(site_name, mission_name, variants)
+    @router.get("/missions/{mission_name}")
+    def get_mission(mission_name: str, variants: str = "") -> ConfigWithExtraInfo:
+        mission = _get_mission(mission_name, variants)
         return extend_config(mission)
 
-    @router.get("/missions/{site_name}.{mission_name}/map")
-    def get_mission_map(site_name: str, mission_name: str, variants: str = "") -> StorableMapDict:
-        mission = _get_mission(site_name, mission_name, variants)
+    @router.get("/missions/{mission_name}/map")
+    def get_mission_map(mission_name: str, variants: str = "") -> StorableMapDict:
+        mission = _get_mission(mission_name, variants)
         env = mission.make_env()
         return StorableMap.from_cfg(env.game.map_builder).to_dict()
 
-    @router.get("/missions/{site_name}.{mission_name}/env")
-    def get_mission_env(site_name: str, mission_name: str, variants: str = "") -> ConfigWithExtraInfo:
-        mission = _get_mission(site_name, mission_name, variants)
+    @router.get("/missions/{mission_name}/env")
+    def get_mission_env(mission_name: str, variants: str = "") -> ConfigWithExtraInfo:
+        mission = _get_mission(mission_name, variants)
         env = mission.make_env()
         return extend_config(env)
 

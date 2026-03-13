@@ -33,7 +33,6 @@ def train(
     num_cogs: int = 4,
     variants: Optional[Sequence[str]] = None,
     eval_variants: Optional[Sequence[str]] = None,
-    eval_difficulty: str | None = None,
     policy_architecture: PolicyArchitecture | None = None,
     teacher: TeacherConfig | None = None,
     use_default_teacher: bool = False,
@@ -57,7 +56,6 @@ def train(
         num_cogs=num_cogs,
         variants=variants,
         eval_variants=eval_variants,
-        eval_difficulty=eval_difficulty,
         teacher=teacher,
         maps_cache_size=None,
     )
@@ -75,7 +73,6 @@ def train(
     _apply_full_vibes(env_cfg)
 
     eval_variant_names = _normalize_variant_names(
-        initial=[eval_difficulty] if eval_difficulty else None,
         variants=eval_variants,
     )
     eval_env = make_training_env(
@@ -138,7 +135,6 @@ def train_sweep(
     num_cogs: int = 4,
     variants: Optional[Sequence[str]] = None,
     eval_variants: Optional[Sequence[str]] = None,
-    eval_difficulty: str | None = None,
     policy_architecture: PolicyArchitecture | None = None,
     teacher: TeacherConfig | None = None,
     use_default_teacher: bool = False,
@@ -150,7 +146,6 @@ def train_sweep(
         num_cogs=num_cogs,
         variants=base_variants,
         eval_variants=eval_variants or base_variants,
-        eval_difficulty=eval_difficulty,
         policy_architecture=policy_architecture,
         teacher=teacher,
         use_default_teacher=use_default_teacher,
@@ -169,7 +164,6 @@ def evaluate_stub(*args, **kwargs) -> tools.StubTool:
 def sweep(
     sweep_name: str,
     num_cogs: int = 4,
-    eval_difficulty: str | None = "standard",
     max_trials: int = 80,
     num_parallel_trials: int = 12,
 ) -> tools.SweepTool:

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.food import FoodVariant
 from mettagrid.config.filter import actorHasAnyOf
 from mettagrid.config.handler_config import Handler, actorHas, targetHas, updateActor, updateTarget, withdraw
 from mettagrid.config.mettagrid_config import GridObjectConfig, MettaGridConfig
@@ -14,7 +15,9 @@ class CarnivoreVariant(CoGameMissionVariant):
 
     name: str = "carnivore"
     description: str = "Carnivores can tag herbivores and steal food."
-    depends_on: list[str] = ["food"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[FoodVariant])
 
     @staticmethod
     def carnivore_station_config() -> GridObjectConfig:

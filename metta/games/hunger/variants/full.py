@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.carnivore import CarnivoreVariant
+from metta.games.hunger.variants.digest import DigestVariant
+from metta.games.hunger.variants.herbivore import HerbivoreVariant
+from metta.games.hunger.variants.kids import KidsVariant
+from metta.games.hunger.variants.multi_year import MultiYear5Variant
 
 
 class FullVariant(CoGameMissionVariant):
@@ -10,4 +15,6 @@ class FullVariant(CoGameMissionVariant):
 
     name: str = "full"
     description: str = "Digest, seasons, carnivore, herbivore."
-    depends_on: list[str] = ["digest", "multi_year_5", "carnivore", "herbivore", "kids"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[DigestVariant, MultiYear5Variant, CarnivoreVariant, HerbivoreVariant, KidsVariant])

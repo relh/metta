@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.plants import PlantVariant
 from mettagrid.config.event_config import EventConfig
 from mettagrid.config.handler_config import updateTarget
 from mettagrid.config.mettagrid_config import MettaGridConfig
@@ -49,7 +50,9 @@ class SeasonsVariant(CoGameMissionVariant):
 
     name: str = "seasons"
     description: str = "Seasonal food drops replenish plant objects (summer/fall/winter/spring)."
-    depends_on: list[str] = ["plant"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[PlantVariant])
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
         num_cogs = len(env.game.agents)

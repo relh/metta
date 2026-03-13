@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.food import FoodVariant
 from mettagrid.config.filter.filter import isNot
 from mettagrid.config.handler_config import Handler, actorHas, targetHas, withdraw
 from mettagrid.config.mettagrid_config import GridObjectConfig, InventoryConfig, MettaGridConfig
@@ -20,7 +21,9 @@ class PlantVariant(CoGameMissionVariant):
 
     name: str = "plant"
     description: str = "Plant objects scatter the map. Herbivores harvest for food."
-    depends_on: list[str] = ["food"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[FoodVariant])
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
         env.game.objects["plant"] = plant_config()

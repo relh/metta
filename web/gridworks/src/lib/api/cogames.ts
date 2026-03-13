@@ -13,9 +13,6 @@ import { fetchApi } from "./utils";
 const missionSchema = z.object({
   name: z.string(),
   description: z.string(),
-  site: z.object({
-    name: z.string(),
-  }),
   num_cogs: z.number().nullable(),
 });
 

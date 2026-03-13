@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
-from metta.games.hunger.variants.seasons import YEAR_LENGTH
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.seasons import YEAR_LENGTH, SeasonsVariant
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
 
 class MultiYear5Variant(CoGameMissionVariant):
@@ -11,10 +12,12 @@ class MultiYear5Variant(CoGameMissionVariant):
 
     name: str = "multi_year_5"
     description: str = "5 years (5000 steps)."
-    depends_on: list[str] = ["seasons"]
 
-    def modify_mission(self, mission) -> None:
-        mission.max_steps = 5 * YEAR_LENGTH
+    def dependencies(self) -> Deps:
+        return Deps(required=[SeasonsVariant])
+
+    def modify_env(self, mission, env: MettaGridConfig) -> None:
+        env.game.max_steps = 5 * YEAR_LENGTH
 
 
 class MultiYear10Variant(CoGameMissionVariant):
@@ -22,7 +25,9 @@ class MultiYear10Variant(CoGameMissionVariant):
 
     name: str = "multi_year_10"
     description: str = "10 years (10000 steps)."
-    depends_on: list[str] = ["seasons"]
 
-    def modify_mission(self, mission) -> None:
-        mission.max_steps = 10 * YEAR_LENGTH
+    def dependencies(self) -> Deps:
+        return Deps(required=[SeasonsVariant])
+
+    def modify_env(self, mission, env: MettaGridConfig) -> None:
+        env.game.max_steps = 10 * YEAR_LENGTH

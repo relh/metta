@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from cogames.core import CoGameMissionVariant
+from cogames.core import CoGameMissionVariant, Deps
+from metta.games.hunger.variants.food import FoodVariant
 from mettagrid.config.event_config import EventConfig, periodic
 from mettagrid.config.handler_config import updateTarget
 from mettagrid.config.mettagrid_config import MettaGridConfig
@@ -17,7 +18,9 @@ class DigestVariant(CoGameMissionVariant):
 
     name: str = "digest"
     description: str = "Agents consume 1 food every 10 ticks."
-    depends_on: list[str] = ["food"]
+
+    def dependencies(self) -> Deps:
+        return Deps(required=[FoodVariant])
 
     def modify_env(self, mission, env: MettaGridConfig) -> None:
         max_steps = env.game.max_steps

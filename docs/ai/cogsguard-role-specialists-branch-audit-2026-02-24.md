@@ -8,7 +8,7 @@
 
 ### Changed files in scope
 
-- `packages/cogames/src/cogames/cogs_vs_clips/missions.py`
+- `packages/cogames/src/cogames/games/cogs_vs_clips/missions.py`
 - `packages/cogames/tests/test_cli.py`
 - `recipes/experiment/cogsguard.py`
 - `packages/mettagrid/python/src/mettagrid/runner/policy_server/manager.py`
@@ -74,7 +74,7 @@ Fix landed:
 
 ### Duplication findings
 
-- No duplicate role tutorial mission definitions found in `cogames/cogs_vs_clips`.
+- No duplicate role tutorial mission definitions found in `cogames/games/cogs_vs_clips`.
 - Role tutorial mission source-of-truth is singular per role.
 
 ### Command quality findings
