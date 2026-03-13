@@ -190,11 +190,11 @@ def test_live_policy_bundle_session_writes_initial_policy_once(tmp_path: Path) -
         main_file=tmp_path / "main.py",
         strategy_file=tmp_path / "plan.md",
         scratchpad_file=tmp_path / "memory.md",
+        log_file=tmp_path / "transcript.log",
         experience_file=tmp_path / "experience.jsonl",
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -211,7 +211,8 @@ def test_live_policy_bundle_session_writes_initial_policy_once(tmp_path: Path) -
     assert result.success is True
     assert result.return_value == {"role": "miner"}
     assert len(store.read_recent_generation_records(max_entries=10)) == 1
-    assert store.read_policy().count("## Step 5 (Agent 0) set_policy") == 1
+    assert store.read_main_source().endswith('return {"role": "miner"}')
+    assert "initial_generation" in store.read_log_tail(max_chars=4000)
 
 
 def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Path) -> None:

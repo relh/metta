@@ -12,7 +12,7 @@ It owns:
 - `mettagrid_sdk.runtime`
   - generic observation decoding/runtime helpers for SDK adapters
 - `mettagrid_sdk.games`
-  - game-specific semantic adapters such as Cogsguard state and events
+  - game-specific semantic adapters such as Cogsguard state, events, and skill/prompt surfaces
 
 ## Terminology
 
@@ -22,6 +22,9 @@ It owns:
 
 This package is per-cog aware but not policy-runtime specific. It defines the semantic surface that higher-level policy
 code should target.
+
+Game-specific skill summaries and semantic control-primitives belong here, not in higher-level cyborg runtimes. Those
+runtimes should consume this package's surface rather than redefining parallel prompt contracts.
 
 ## SDK Contract
 

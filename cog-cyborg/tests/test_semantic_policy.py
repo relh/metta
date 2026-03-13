@@ -3,6 +3,7 @@ from __future__ import annotations
 from cog_cyborg.policy import MettagridSemanticPolicy
 from cog_cyborg.policy.semantic_cog import _GEAR_COSTS, _HUB_OFFSETS, SharedWorldModel, _phase_name
 from mettagrid_sdk.games.cogsguard import COGSGUARD_BOOTSTRAP_HUB_OFFSETS, COGSGUARD_GEAR_COSTS
+from mettagrid_sdk.games.cogsguard.prompt_adapter import CogsguardPromptAdapter
 from mettagrid_sdk.sdk import GridPosition, MacroDirective, MettagridState, SelfState, SemanticEntity, TeamSummary
 
 from cogames.cogs_vs_clips.missions import make_cogsguard_mission
@@ -70,9 +71,10 @@ def test_semantic_policy_applies_typed_macro_directive(cogsguard_env_info) -> No
 def test_semantic_policy_surfaces_tactical_skill_library(cogsguard_env_info) -> None:
     library = MettagridSemanticPolicy(cogsguard_env_info).agent_policy(0).render_skill_library()
 
-    assert "collect_resources" in library
-    assert "capture_neutral_junction" in library
-    assert "unstick_action" in library
+    assert library == CogsguardPromptAdapter().render_skill_library()
+    assert "resource_coverage" in library
+    assert "focused_extractor_lock" in library
+    assert "lane_pressure" in library
 
 
 def test_semantic_policy_unsticks_two_cell_extractor_oscillation(cogsguard_env_info) -> None:

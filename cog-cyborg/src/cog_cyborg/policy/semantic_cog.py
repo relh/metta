@@ -13,6 +13,7 @@ from mettagrid_sdk.games.cogsguard import (
     COGSGUARD_JUNCTION_AOE_RANGE,
     COGSGUARD_ROLE_HP_THRESHOLDS,
     CogsguardEventExtractor,
+    CogsguardPromptAdapter,
     CogsguardStateAdapter,
 )
 from mettagrid_sdk.runtime.observation import ObservationEnvelope
@@ -71,6 +72,7 @@ _ALIGNER_PRIORITY = (4, 5, 6, 7, 3)
 _SCRAMBLER_PRIORITY = (7, 6)
 _GEAR_COSTS = COGSGUARD_GEAR_COSTS
 _HUB_OFFSETS = COGSGUARD_BOOTSTRAP_HUB_OFFSETS
+_COGSGUARD_PROMPT_ADAPTER = CogsguardPromptAdapter()
 _STATION_TARGETS_BY_AGENT = {
     "aligner": {
         0: (-3, 7),
@@ -396,19 +398,7 @@ class SemanticCogAgentPolicy(AgentPolicy):
         return MacroDirective()
 
     def render_skill_library(self) -> str:
-        return "\n".join(
-            [
-                "- collect_resources: mine the current extractor bias and keep the economy flowing",
-                "- deposit_resources: route carried material back to a friendly hub or junction",
-                "- acquire_heart: fetch hearts before aligner or scrambler captures",
-                "- capture_neutral_junction: align the next reachable neutral junction",
-                "- neutralize_enemy_junction: spend a heart to disrupt enemy territory",
-                "- pressure_enemy_lane: harass visible enemy presence away from contested space",
-                "- explore_frontier: scout unexplored frontier regions and update the shared world model",
-                "- retreat_to_hub: fall back when low health or unsafe",
-                "- unstick_action: break short oscillation loops around blocked targets",
-            ]
-        )
+        return _COGSGUARD_PROMPT_ADAPTER.render_skill_library()
 
     def _sanitize_macro_directive(self, directive: MacroDirective) -> MacroDirective:
         role = directive.role if directive.role in {"miner", "aligner", "scrambler", "scout"} else None
