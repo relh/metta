@@ -5,15 +5,11 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 
-def _normalize_override_key(key: str) -> str:
-    # Support authoring with trainer__lr=... (common in configs) and dot notation.
-    return key.replace("__", ".")
-
-
 def normalize_overrides(overrides: Mapping[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k, v in overrides.items():
-        out[_normalize_override_key(k)] = v
+        # Support authoring with trainer__lr=... (common in configs) and dot notation.
+        out[k.replace("__", ".")] = v
     return out
 
 
