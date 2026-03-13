@@ -692,12 +692,8 @@ def _run_recipe(recipe: str, args: list[str]) -> None:
         raise typer.Exit(e.returncode) from e
 
 
-def _canonical_game_name(target: str) -> str:
-    return target.removeprefix("game.")
-
-
 def _resolve_game_recipe(target: str, action: str) -> str:
-    game_name = _canonical_game_name(target)
+    game_name = target.removeprefix("game.")
     recipe = f"{game_name}.{action}"
     if resolve_and_load_tool_maker(recipe) is not None:
         return recipe
