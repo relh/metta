@@ -1,0 +1,4 @@
+apiVersion: v2
+name: app-manifests
+description: ArgoCD Application definitions for all managed services
+version: 0.1.0

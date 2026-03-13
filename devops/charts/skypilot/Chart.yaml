@@ -1,0 +1,7 @@
+apiVersion: v2
+name: skypilot-configs
+version: "0.1.0"
+dependencies:
+  - name: skypilot
+    repository: https://helm.skypilot.co
+    version: 0.11.1

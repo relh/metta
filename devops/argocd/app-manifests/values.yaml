@@ -1,0 +1,84 @@
+# ArgoCD Application definitions.
+#
+# Each entry becomes an ArgoCD Application resource.
+# - If `source` is set, it deploys a remote Helm chart or custom repo.
+# - Otherwise, it deploys `devops/charts/{name}` from this repo.
+# - `automated: null` disables auto-sync (manual sync via ArgoCD UI/CLI).
+# - Omitting `automated` enables auto-sync with default settings.
+#
+# See the apps.yaml template for the full Application spec.
+
+apps:
+  ########## Core infrastructure ##########
+  - name: external-dns
+    namespace: external-dns
+    branch: 03-09-argocd # TODO
+    automated: null
+
+  - name: cert-manager
+    namespace: cert-manager
+    branch: 03-09-argocd # TODO
+    automated: null
+
+  - name: ingress-nginx
+    namespace: ingress-nginx
+    branch: 03-09-argocd # TODO
+    automated: null
+
+  - name: metrics-server
+    namespace: metrics-server
+    automated: null
+    source:
+      chart: metrics-server
+      repoURL: https://kubernetes-sigs.github.io/metrics-server/
+      targetRevision: 3.12.2
+
+  - name: prometheus
+    namespace: monitoring
+    automated: null
+    branch: 03-09-argocd # TODO
+    syncOptions:
+      - ServerSideApply=true
+
+  - name: datadog
+    namespace: monitoring
+    automated: null
+    branch: 03-09-argocd # TODO
+    ignoreDifferences:
+      - group: ""
+        kind: Secret
+        name: datadog-cluster-agent
+        jsonPointers:
+          - /data/token
+      - group: ""
+        kind: ConfigMap
+        name: datadog-kpi-telemetry-configmap
+        jsonPointers:
+          - /data
+      - group: apps
+        kind: DaemonSet
+        name: datadog
+        jsonPointers:
+          - /spec/template/metadata/annotations/checksum~1clusteragent_token
+      - group: apps
+        kind: Deployment
+        name: datadog-cluster-agent
+        jsonPointers:
+          - /spec/template/metadata/annotations/checksum~1clusteragent_token
+
+  ########## System configurations ##########
+  - name: system
+    namespace: orchestrator # historical accident, TODO - move?
+    automated: null
+
+  ########## Skypilot ##########
+  - name: skypilot
+    namespace: skypilot
+    automated: null
+    branch: 03-09-argocd # TODO
+    ignoreDifferences:
+      - group: apps
+        kind: Deployment
+        name: skypilot-oauth2-proxy
+        jqPathExpressions:
+          - .spec.template.spec.containers[].env[] | select(.name == "OAUTH2_PROXY_COOKIE_SECRET")

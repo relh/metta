@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+data:
+  url: https://argocd.softmax-research.net
+  admin.enabled: "false"
+  accounts.github_actions_bot: apiKey
+  dex.config: |
+    connectors:
+    - type: github
+      id: github
+      name: GitHub
+      config:
+        clientID: $dex-github-auth:clientID
+        clientSecret: $dex-github-auth:clientSecret
+        teamNameField: slug
+        orgs:
+        - name: Metta-AI
+          teams:
+          - softmax

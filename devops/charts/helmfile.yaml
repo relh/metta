@@ -1,17 +1,3 @@
-repositories:
-  - name: external-dns
-    url: https://kubernetes-sigs.github.io/external-dns/
-  - name: cert-manager
-    url: https://charts.jetstack.io
-  - name: ingress-nginx
-    url: https://kubernetes.github.io/ingress-nginx
-  - name: metrics-server
-    url: https://kubernetes-sigs.github.io/metrics-server/
-  - name: skypilot
-    url: https://helm.skypilot.co
-  - name: datadog
-    url: https://helm.datadoghq.com
-
 templates:
   cronjob: &cronjob_template
     chart: ./cronjob
@@ -19,92 +5,6 @@ templates:
     namespace: monitoring
 
 releases:
-  ########## System configurations ##########
-  - name: system
-    chart: ./system
-    version: 0.1.0
-    namespace: orchestrator # historical accident, TODO - move?
-
-  ########## Core infrastructure ##########
-  - name: external-dns
-    chart: external-dns/external-dns
-    version: 1.17.0
-    namespace: external-dns
-    values:
-      - env:
-          - name: AWS_DEFAULT_REGION
-            value: us-east-1
-        policy: upsert-only
-        serviceAccount:
-          annotations:
-            # created by terraform
-            eks.amazonaws.com/role-arn: arn:aws:iam::751442549699:role/external-dns
-
-  - name: cert-manager
-    chart: ./cert-manager
-    version: v1.18.1
-    namespace: cert-manager
-    values:
-      - installCRDs: true
-
-  - name: ingress-nginx
-    chart: ingress-nginx/ingress-nginx
-    version: 4.11.3
-    namespace: ingress-nginx
-    values:
-      - ./helm.values/ingress-nginx-values.yaml
-
-  - name: metrics-server
-    chart: metrics-server/metrics-server
-    version: 3.12.2
-    namespace: metrics-server
-
-  - name: prometheus
-    chart: oci://ghcr.io/prometheus-community/charts/kube-prometheus-stack
-    version: 80.2.0
-    disableValidation: true
-    namespace: monitoring
-    values:
-      - ./helm.values/prometheus-values.yaml
-
-  - name: datadog
-    chart: datadog/datadog
-    version: 3.75.0
-    namespace: monitoring
-    values:
-      - ./helm.values/datadog-values.yaml
-
-  ########## Skypilot ##########
-  - name: skypilot
-    chart: skypilot/skypilot
-    version: 0.11.1
-    namespace: skypilot
-    values:
-      - ./helm.values/skypilot-values.yaml
-
-  # Uncomment the following section if you want to test a new skypilot release or configuration.
-  # Deploy with `helmfile apply -i -l name=skypilot-beta`.
-  #
-  # You'll need to copy some secrets to the new namespace:
-  #
-  # for s in lambda-ai-credentials aws-credentials softmax-infra-oauth; do
-  #   kubectl get secret $s --namespace=skypilot -o yaml | sed 's/namespace: .*/namespace: skypilot-beta/' | kubectl apply -f -
-  # done
-
-  # - name: skypilot-beta
-  #   chart: skypilot/skypilot
-  #   version: 0.0.0
-  #   namespace: skypilot-beta
-  #   values:
-  #     - ./helm.values/skypilot-values.yaml
-  #     - apiService:
-  #         image: berkeleyskypilot/skypilot:0.10.3
-  #       rbac:
-  #         manageRbacPolicies: false
-  #         manageSystemComponents: false
-  #       ingress:
-  #         host: skypilot-api-beta.softmax-research.net
-
   ########## Softmax apps ##########
   - name: orchestrator
     chart: ./orchestrator
@@ -119,8 +19,6 @@ releases:
     chart: ./home
     version: 0.1.0
     namespace: home
-
-  # Note: Observatory is deployed automatically by Github Actions.
 
   ########## Cronjobs ##########
   # Shared cronjob template for all periodic tasks

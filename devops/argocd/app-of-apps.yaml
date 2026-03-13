@@ -1,0 +1,18 @@
+# App-of-apps pattern: this root Application manages all other ArgoCD Applications.
+# https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/#app-of-apps
+#
+# Applied manually via: kubectl apply -f devops/argocd/app-of-apps.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    path: devops/argocd/app-manifests
+    repoURL: git@github.com:Metta-AI/metta.git
+    targetRevision: 03-09-argocd # FIXME
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd

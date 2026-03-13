@@ -1,0 +1,9 @@
+external-dns:
+  env:
+    - name: AWS_DEFAULT_REGION
+      value: us-east-1
+  policy: upsert-only
+  serviceAccount:
+    annotations:
+      # created by terraform
+      eks.amazonaws.com/role-arn: arn:aws:iam::751442549699:role/external-dns

@@ -1,0 +1,6 @@
+dependencies:
+- name: skypilot
+  repository: https://helm.skypilot.co
+  version: 0.11.1
+digest: sha256:b4dcb249409e748ca893af2587162c3a4a2fe72dd176b5121ad300b0be0c7ee7
+generated: "2026-03-12T15:33:16.819213-03:00"
