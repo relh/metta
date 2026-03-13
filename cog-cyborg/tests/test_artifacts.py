@@ -13,18 +13,15 @@ from mettagrid_sdk.sdk import GridPosition, LogRecord, MemoryQuery
 
 def test_artifact_store_strategy_and_prompt_context(tmp_path: Path) -> None:
     strategy_file = tmp_path / "plan.md"
-    policy_file = tmp_path / "policy.md"
     log_file = tmp_path / "fastpolicy.log"
     execution_file = tmp_path / "execution.jsonl"
     store = ArtifactStore(
         strategy_file=strategy_file,
-        policy_file=policy_file,
         log_file=log_file,
         execution_file=execution_file,
     )
 
     store.replace_plan("# Plan\n- Prioritize junction control over extractor loops.")
-    store.append_policy_update(step=7, agent_id=0, policy_source="def step(sdk):\n    return 'noop'")
     store.append_execution_record(
         PolicyExecutionRecord(
             step=8,
@@ -41,8 +38,6 @@ def test_artifact_store_strategy_and_prompt_context(tmp_path: Path) -> None:
     log_file.write_text("step=7 reward=1.0\nstep=8 reward=0.0")
 
     context = store.build_prompt_context(max_memory_entries=3, max_strategy_chars=2000)
-    assert "CROSS-SESSION POLICY DOC" in context
-    assert "def step(sdk):" in context
     assert "LIVE PLAN.MD" in context
     assert "Prioritize junction control" in context
     assert "REVIEW TRANSCRIPT LOG" in context

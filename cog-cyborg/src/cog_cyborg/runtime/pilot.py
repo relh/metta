@@ -538,7 +538,6 @@ class LivePolicyBundleSession:
                     metadata={} if metadata is None else metadata,
                 )
             )
-            self._artifact_store.append_policy_update(step=step, agent_id=agent_id, policy_source=policy_source)
 
     def _append_failed_generation_record(
         self,

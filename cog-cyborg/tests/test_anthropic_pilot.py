@@ -557,7 +557,6 @@ def test_anthropic_pilot_prompt_includes_current_plan_without_duplication(tmp_pa
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     store.replace_plan("# Plan\n- Open with miners")
     fake_client = _FakeClient(_review_response(_directive_policy_source(note="opening coverage")))
@@ -625,7 +624,6 @@ def test_anthropic_pilot_session_persists_per_agent_artifacts(tmp_path: Path) ->
     assert (agent_root / "experience_trace.jsonl").exists()
     assert (agent_root / "pilot_generation.jsonl").exists()
     assert (agent_root / "pilot_execution.jsonl").exists()
-    assert (agent_root / "pilot_policy.md").exists()
     assert (agent_root / "review_transcript.log").exists()
     assert "initial_generation" in (agent_root / "review_transcript.log").read_text(encoding="utf-8")
 
@@ -639,7 +637,6 @@ def test_anthropic_pilot_session_exposes_live_plan_helpers_to_generated_policy(t
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     fake_client = _FakeClient(
         _review_response(

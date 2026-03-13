@@ -211,7 +211,6 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -257,6 +256,7 @@ def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Pat
     assert "LIVE PLAN.MD" not in rewrite_request.experience_tail
     assert "PRIVATE SCRATCHPAD" not in rewrite_request.experience_tail
     assert "LIVE MAIN.PY" not in rewrite_request.experience_tail
+    assert "CROSS-SESSION POLICY DOC" not in rewrite_request.experience_tail
     transcript = store.read_log_tail(max_chars=4000)
     assert "review_request:" in transcript
     assert "- source: sdk.log.request_review" in transcript
@@ -274,7 +274,6 @@ def test_live_policy_bundle_session_supports_external_review_rewrites(tmp_path: 
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -324,7 +323,6 @@ def test_live_policy_bundle_session_can_skip_step_trace_artifacts(tmp_path: Path
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=execution_file,
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -354,7 +352,6 @@ def test_live_policy_bundle_session_preserves_review_hook_flags_on_scratchpad_re
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     store.replace_scratchpad("phase: resource_coverage\nreview_hooks_ready: true\nhooks_ready: true")
     backend = _FakeCodeBackend(
@@ -390,7 +387,6 @@ def test_live_policy_bundle_session_preserves_typed_runtime_keys_on_scratchpad_r
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     store.replace_scratchpad("phase: resource_coverage\ndeposit_cycles: 2\nreview_hooks_ready: true")
     backend = _FakeCodeBackend(
@@ -424,7 +420,6 @@ def test_live_policy_bundle_session_uses_typed_review_requests_inside_log_record
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -475,7 +470,6 @@ def test_live_policy_bundle_session_uses_returned_objective_in_same_step_review_
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -523,7 +517,6 @@ def test_live_policy_bundle_session_can_suppress_selected_review_request(tmp_pat
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -576,7 +569,6 @@ def test_live_policy_bundle_session_treats_failed_reviews_as_noops(tmp_path: Pat
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [
@@ -731,7 +723,6 @@ def test_live_policy_bundle_session_skips_note_only_runtime_transcript_updates(t
         decision_file=tmp_path / "decisions.jsonl",
         generation_file=tmp_path / "generation.jsonl",
         execution_file=tmp_path / "execution.jsonl",
-        policy_file=tmp_path / "policy.md",
     )
     backend = _FakeCodeBackend(
         [

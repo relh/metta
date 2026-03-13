@@ -46,7 +46,6 @@ class ArtifactStore:
             log_file=root / log_file_name,
             experience_file=root / CODE_MODE_EXPERIENCE_FILE,
             decision_file=root / CODE_MODE_DECISION_FILE,
-            policy_file=root / f"{prefix}_policy.md",
             execution_file=root / f"{prefix}_execution.jsonl",
             generation_file=root / f"{prefix}_generation.jsonl",
         )
@@ -54,7 +53,6 @@ class ArtifactStore:
     def __init__(
         self,
         strategy_file: Path | None = None,
-        policy_file: Path | None = None,
         log_file: Path | None = None,
         execution_file: Path | None = None,
         generation_file: Path | None = None,
@@ -65,7 +63,6 @@ class ArtifactStore:
         decision_file: Path | None = None,
     ) -> None:
         self.strategy_file = strategy_file
-        self.policy_file = policy_file
         self.log_file = log_file
         self.execution_file = execution_file
         self.generation_file = generation_file
@@ -77,7 +74,6 @@ class ArtifactStore:
 
         for path in [
             strategy_file,
-            policy_file,
             log_file,
             execution_file,
             generation_file,
@@ -100,17 +96,6 @@ class ArtifactStore:
             return
         current = self.read_plan()
         self.strategy_file.write_text(current + text, encoding="utf-8")
-
-    def append_policy_update(self, *, step: int, agent_id: int, policy_source: str) -> None:
-        if self.policy_file is None:
-            return
-
-        text = policy_source.strip()
-        if not text:
-            return
-
-        entry = f"## Step {step} (Agent {agent_id}) set_policy\n```python\n{text}\n```\n\n"
-        self._append_text_atomic(self.policy_file, entry)
 
     def append_execution_record(self, record: PolicyExecutionRecord) -> None:
         if self.execution_file is None:
@@ -186,11 +171,6 @@ class ArtifactStore:
     def read_plan(self, max_chars: int = 4000) -> str:
         return self.read_strategy(max_chars=max_chars)
 
-    def read_policy(self, max_chars: int = 6000) -> str:
-        if self.policy_file is None or not self.policy_file.exists():
-            return ""
-        return self._read_tail_text(self.policy_file, max_chars=max_chars).strip()
-
     def read_log_tail(self, max_chars: int = 3000) -> str:
         if self.log_file is None or not self.log_file.exists():
             return ""
@@ -245,10 +225,6 @@ class ArtifactStore:
     ) -> str:
         sections: list[str] = []
         semantic_context = ""
-
-        policy_text = self.read_policy(max_chars=max_policy_chars)
-        if policy_text:
-            sections.append(f"=== CROSS-SESSION POLICY DOC ===\n{policy_text}")
 
         main_text = self.read_main_source(max_chars=max_policy_chars) if include_main_source else ""
         if main_text:
