@@ -6,6 +6,7 @@ import sys
 import pytest
 
 from metta.common.tests_support import run_tool_in_process
+from metta.common.tool import run_tool as run_tool_module
 from metta.common.tool.recipe_registry import recipe_registry
 
 
@@ -169,6 +170,28 @@ def test_two_token_not_treated_as_bare_tool(invoke_run_tool):
     assert "Available 'evaluate' implementations:" not in output
     # Should show help for the specific tool instead
     assert "Available Arguments" in output or "Function Parameters" in output
+
+
+def test_compat_version_dispatches_before_tool_resolution(monkeypatch, capsys, with_extra_imports_root):  # noqa: ANN001
+    called: dict[str, str] = {}
+
+    def _fake_run_in_compat_version(version: str) -> int:
+        called["version"] = version
+        return 23
+
+    monkeypatch.setattr(run_tool_module, "_run_in_compat_version", _fake_run_in_compat_version)
+
+    result = run_tool_in_process(
+        "--compat-version",
+        "0.18",
+        "mypackage.tools.NoSuchTool",
+        monkeypatch=monkeypatch,
+        capsys=capsys,
+        argv0="run_tool.py",
+    )
+
+    assert result.returncode == 23
+    assert called["version"] == "0.18"
 
 
 # --------------------------------------------------------------------------------------

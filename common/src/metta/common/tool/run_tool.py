@@ -26,6 +26,7 @@ from rich.console import Console
 
 from metta.common.tool import Tool
 from metta.common.tool.game_version import parse_game_version_args, run_in_game_version
+from metta.common.tool.package_compat import parse_package_compat_args, run_in_compat_version
 from metta.common.tool.recipe_registry import recipe_registry
 from metta.common.tool.schema import get_pydantic_field_info
 from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker
@@ -44,6 +45,12 @@ def _run_in_game_version(version: str) -> int:
     argv = parse_game_version_args(sys.argv[1:])[1]
     cmd = ["uv", "run", "./tools/run.py"] if shutil.which("uv") else [sys.executable, "./tools/run.py"]
     return run_in_game_version(version, argv, cmd)
+
+
+def _run_in_compat_version(compat_version: str) -> int:
+    argv = parse_package_compat_args(sys.argv[1:])[1]
+    cmd = ["uv", "run", "./tools/run.py"] if shutil.which("uv") else [sys.executable, "./tools/run.py"]
+    return run_in_compat_version(compat_version, argv, cmd)
 
 
 def _ensure_torch_initialized() -> None:
@@ -462,6 +469,15 @@ constructor/function vs configuration overrides based on introspection.
         ),
     )
     parser.add_argument(
+        "--compat-version",
+        "--compat_version",
+        dest="compat_version",
+        help=(
+            "Run the tool with published cogames/mettagrid packages for a compat release "
+            "while keeping the current branch's metta code."
+        ),
+    )
+    parser.add_argument(
         "--list",
         action="store_true",
         help="List tools defined by the resolved recipe module and exit",
@@ -473,6 +489,19 @@ constructor/function vs configuration overrides based on introspection.
     # Parse known args; keep unknowns to validate separation between runner flags and tool args
     known_args, unknown_args = parser.parse_known_args()
     console = Console()
+
+    if known_args.game_version and known_args.compat_version:
+        output_error(f"{red('Error:')} --game-version and --compat-version cannot be used together.")
+        return 2
+
+    if known_args.compat_version:
+        try:
+            exit_code = _run_in_compat_version(known_args.compat_version)
+        except Exception as exc:
+            output_error(f"{red('Error:')} {exc}")
+            return 1
+        if exit_code >= 0:
+            return exit_code
 
     if known_args.game_version:
         try:

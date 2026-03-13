@@ -178,6 +178,17 @@ Use `--game-version <commit-or-alias>` to run tools against a historical game ve
 git worktree under `.metta/game_versions` and re-run the command from there. Clean up cached worktrees with
 `git worktree list` and `git worktree prune`, or remove a specific entry with `git worktree remove <path>`.
 
+## Compat Package Overlays
+
+Use `--compat-version <X.Y>` to keep the current branch's `metta` code while overlaying published `cogames` and
+`mettagrid` packages for that compat release. The runner creates a cached virtualenv under `.metta/compat_packages`,
+installs `cogames==X.Y.*` from the package index, lets the published `cogames` dependency pin the matching published
+`mettagrid`, and then re-runs the command with that virtualenv's `site-packages` prepended to `PYTHONPATH`.
+
+```bash
+./tools/run.py --compat-version 0.18 train arena run=test --dry-run
+```
+
 ## Argument Classification
 
 ```bash
