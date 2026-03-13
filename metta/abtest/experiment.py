@@ -13,15 +13,6 @@ def normalize_overrides(overrides: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _jsonish(v: Any) -> str:
-    # tools/run.py has minimal heuristics, including JSON parsing for containers.
-    if isinstance(v, (dict, list)):
-        import json  # noqa: PLC0415
-
-        return json.dumps(v)
-    return str(v)
-
-
 @dataclass(frozen=True)
 class ABVariant:
     name: str
@@ -129,7 +120,12 @@ def materialize_runs(
             merged["wandb.tags"] = list(dict.fromkeys(merged_tags))
 
             # Keep deterministic ordering for readability and testability.
-            args = [f"{k}={_jsonish(merged[k])}" for k in sorted(merged)]
+            import json  # noqa: PLC0415
+
+            args = [
+                f"{k}={json.dumps(merged[k]) if isinstance(merged[k], (dict, list)) else merged[k]}"
+                for k in sorted(merged)
+            ]
             runs.append(
                 ABRun(
                     experiment=exp.name,
