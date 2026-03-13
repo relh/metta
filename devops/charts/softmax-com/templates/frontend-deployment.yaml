@@ -21,6 +21,8 @@ spec:
           env:
             - name: AUTH_TRUST_HOST
               value: "true"
+            - name: AUTH_REDIRECT_PROXY_URL
+              value: https://softmax.com/api/auth
             - name: OBSERVATORY_POLICY_DASHBOARD_URL
               value: "{{ .Values.policy_dashboard_url }}"
             - name: OBSERVATORY_DIAGNOSE_URL
