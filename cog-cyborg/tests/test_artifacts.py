@@ -55,6 +55,17 @@ def test_artifact_store_tail_reads_only_recent_plan_entries(tmp_path: Path) -> N
     assert "line-199" in strategy_tail
 
 
+def test_artifact_store_append_plan_preserves_large_existing_plan(tmp_path: Path) -> None:
+    strategy_file = tmp_path / "plan.md"
+    store = ArtifactStore(strategy_file=strategy_file)
+    original_plan = "# Plan\n" + "\n".join(f"- step {index:03d} {'x' * 80}" for index in range(80))
+
+    store.replace_plan(original_plan)
+    store.append_plan("\n- appended follow-up")
+
+    assert strategy_file.read_text(encoding="utf-8") == original_plan + "\n- appended follow-up"
+
+
 def test_artifact_store_reads_recent_execution_records(tmp_path: Path) -> None:
     execution_file = tmp_path / "execution.jsonl"
     store = ArtifactStore(execution_file=execution_file)

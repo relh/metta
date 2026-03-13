@@ -94,8 +94,7 @@ class ArtifactStore:
     def append_plan(self, text: str) -> None:
         if self.strategy_file is None:
             return
-        current = self.read_plan()
-        self.strategy_file.write_text(current + text, encoding="utf-8")
+        self._append_text_atomic(self.strategy_file, text)
 
     def append_execution_record(self, record: PolicyExecutionRecord) -> None:
         if self.execution_file is None:
@@ -142,8 +141,7 @@ class ArtifactStore:
     def append_scratchpad(self, text: str) -> None:
         if self.scratchpad_file is None:
             return
-        current = self.read_scratchpad()
-        self.scratchpad_file.write_text(current + text, encoding="utf-8")
+        self._append_text_atomic(self.scratchpad_file, text)
 
     def read_scratchpad(self, max_chars: int | None = None) -> str:
         if self.scratchpad_file is None or not self.scratchpad_file.exists():
