@@ -67,16 +67,6 @@ def build_tree_nodes(
     return sorted(nodes_by_closure.values(), key=lambda node: (node.depth, len(node.variants), node.variants))
 
 
-def _scope_to_interface(task_env: MettaGridConfig, interface_env: MettaGridConfig) -> MettaGridConfig:
-    scoped = task_env.model_copy(deep=True)
-    scoped.game.resource_names = list(dict.fromkeys([*interface_env.game.resource_names, *scoped.game.resource_names]))
-    scoped.game.tags = list(dict.fromkeys([*interface_env.game.tags, *scoped.game.tags]))
-    for name, object_cfg in interface_env.game.objects.items():
-        if name not in scoped.game.objects:
-            scoped.game.objects[name] = object_cfg.model_copy(deep=True)
-    return scoped
-
-
 class TreeTaskGenerator(TaskGenerator):
     class Config(TaskGeneratorConfig["TreeTaskGenerator"]):
         game: str = Field(description="Registered game name")
@@ -115,7 +105,14 @@ class TreeTaskGenerator(TaskGenerator):
             max_steps=self._config.max_steps,
             variants=node.variants,
         )
-        scoped = _scope_to_interface(env, self._interface_env)
+        scoped = env.model_copy(deep=True)
+        scoped.game.resource_names = list(
+            dict.fromkeys([*self._interface_env.game.resource_names, *scoped.game.resource_names])
+        )
+        scoped.game.tags = list(dict.fromkeys([*self._interface_env.game.tags, *scoped.game.tags]))
+        for name, object_cfg in self._interface_env.game.objects.items():
+            if name not in scoped.game.objects:
+                scoped.game.objects[name] = object_cfg.model_copy(deep=True)
         scoped.label = f"{scoped.label}.tree_depth_{node.depth}"
         self._last_bucket_values = {
             "tree_depth": float(node.depth),
