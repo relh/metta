@@ -68,13 +68,6 @@ class _MemoryStub:
                 return line[len(prefix) :]
         return default
 
-    def setdefault(self, key: str, default: object = None) -> object:
-        value = self.get(key, None)
-        if value is not None:
-            return value
-        self._scratchpad += ("" if not self._scratchpad else "\n") + f"{key}: {default}"
-        return default
-
     def __contains__(self, key: object) -> bool:
         return isinstance(key, str) and self.get(key, None) is not None
 
@@ -97,15 +90,6 @@ class _MemoryStub:
         if not replaced:
             lines.append(f"{key}: {value}")
         self._scratchpad = "\n".join(lines)
-
-    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
-        return self._scratchpad.split(sep, maxsplit)
-
-    def splitlines(self, keepends: bool = False) -> list[str]:
-        return self._scratchpad.splitlines(keepends)
-
-    def strip(self, chars: str | None = None) -> str:
-        return self._scratchpad.strip(chars)
 
 
 class _LogStub:

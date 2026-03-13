@@ -101,7 +101,7 @@ def test_memory_store_supports_keyed_scratchpad_updates(tmp_path: Path) -> None:
     store["missing"] = ["oxygen", "silicon"]
     store["seen_count"] = 4
     store["hearts_online"] = False
-    store.setdefault("goal", "open coverage")
+    store["goal"] = "open coverage"
 
     reloaded = MemoryStore(scratchpad_file=scratchpad_file)
 
@@ -113,12 +113,13 @@ def test_memory_store_supports_keyed_scratchpad_updates(tmp_path: Path) -> None:
     assert "# World Model" in reloaded.read_scratchpad()
 
 
-def test_memory_store_supports_string_like_scratchpad_reads(tmp_path: Path) -> None:
+def test_memory_store_reads_scratchpad_explicitly(tmp_path: Path) -> None:
     scratchpad_file = tmp_path / "memory.md"
     store = MemoryStore(scratchpad_file=scratchpad_file)
     store.replace_scratchpad("phase: resource_coverage\nstep: 12\nnote: hold east")
 
-    assert str(store) == "phase: resource_coverage\nstep: 12\nnote: hold east"
-    assert store.split("\n")[0] == "phase: resource_coverage"
-    assert store.splitlines()[-1] == "note: hold east"
-    assert store.strip().startswith("phase:")
+    scratchpad = store.read_scratchpad()
+
+    assert scratchpad.split("\n")[0] == "phase: resource_coverage"
+    assert scratchpad.splitlines()[-1] == "note: hold east"
+    assert scratchpad.strip().startswith("phase:")

@@ -228,13 +228,6 @@ class MemoryStore:
         value = self._scratchpad_value(key)
         return default if value is _MISSING else value
 
-    def setdefault(self, key: str, default: Any = None) -> Any:
-        value = self._scratchpad_value(key)
-        if value is not _MISSING:
-            return value
-        self[key] = default
-        return default
-
     def __contains__(self, key: object) -> bool:
         return isinstance(key, str) and self._scratchpad_value(key) is not _MISSING
 
@@ -263,18 +256,6 @@ class MemoryStore:
             if not replaced:
                 updated_lines.append(f"- {key}: {rendered_value}" if updated_lines else f"{key}: {rendered_value}")
             self._write_scratchpad_locked("\n".join(updated_lines))
-
-    def split(self, sep: str | None = None, maxsplit: int = -1) -> list[str]:
-        return self.read_scratchpad().split(sep, maxsplit)
-
-    def splitlines(self, keepends: bool = False) -> list[str]:
-        return self.read_scratchpad().splitlines(keepends)
-
-    def strip(self, chars: str | None = None) -> str:
-        return self.read_scratchpad().strip(chars)
-
-    def __str__(self) -> str:
-        return self.read_scratchpad()
 
     def _scratchpad_value(self, key: str) -> Any:
         for line in reversed(self.read_scratchpad().splitlines()):
