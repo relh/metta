@@ -23,6 +23,7 @@ from botocore.exceptions import ClientError
 from kubernetes import client
 from kubernetes.client.rest import ApiException  # type: ignore[attr-defined]
 from kubernetes.config.kube_config import load_kube_config
+from sqlalchemy import func
 from sqlmodel import Session, create_engine, select
 
 from metta.app_backend.config import settings
@@ -45,6 +46,7 @@ from metta.app_backend.job_runner.shared import (
 from metta.app_backend.job_runner.tournament_cluster import get_tournament_clients, new_tournament_clients
 from metta.app_backend.models.job_request import JobRequest, JobRequestUpdate, JobStatus, JobType
 from metta.app_backend.models.k8s_events import K8sEvent
+from metta.app_backend.otel.event_processor_metrics import get_event_processor_metrics
 from metta.app_backend.otel.job_metrics import compute_job_cost, get_job_metrics
 from metta.app_backend.queries.job_queries import get_job, list_jobs_by_status, update_job
 from metta.common.otel.tracing import init_otel_tracing, trace
@@ -139,6 +141,30 @@ def _fetch_unprocessed_events(session: Session, limit: int = BATCH_SIZE) -> list
         .limit(limit)
     )
     return list(session.exec(stmt).all())
+
+
+def _get_unprocessed_backlog_stats() -> tuple[int, float]:
+    """Return current unprocessed backlog size and oldest event age in seconds."""
+    with Session(_get_db_engine(), expire_on_commit=False) as session:
+        stmt = select(func.count(), func.min(K8sEvent.event_time)).where(K8sEvent.processed_at.is_(None))  # type: ignore[arg-type,union-attr]
+        count, oldest_event_time = cast(tuple[int, datetime | None], session.exec(stmt).one())
+    if oldest_event_time is None:
+        return count, 0.0
+    oldest_age_seconds = (datetime.now(UTC) - oldest_event_time.astimezone(UTC)).total_seconds()
+    return count, max(oldest_age_seconds, 0.0)
+
+
+def _update_backlog_metrics() -> None:
+    backlog_count, backlog_oldest_age_seconds = _get_unprocessed_backlog_stats()
+    event_metrics = get_event_processor_metrics()
+    event_metrics.update_backlog(backlog_count, backlog_oldest_age_seconds)
+
+
+def _refresh_backlog_metrics_best_effort() -> None:
+    try:
+        _update_backlog_metrics()
+    except Exception as e:
+        logger.warning(f"Failed to refresh backlog metrics: {e}")
 
 
 def _mark_processed_batch(engine, event_ids: list[int]) -> None:
@@ -883,8 +909,10 @@ def _process_batch(executor: ThreadPoolExecutor, cfg_dispatch) -> int:
         else:
             logger.error(f"Failed to process event {winner.id}: {exc}", exc_info=exc)
 
+    processed_count = len(all_event_ids) + len(processed_ids)
     _mark_processed_batch(engine, all_event_ids + processed_ids)
-    return len(all_event_ids) + len(processed_ids)
+    _refresh_backlog_metrics_best_effort()
+    return processed_count
 
 
 def _get_job_info(pod: client.V1Pod) -> tuple[UUID, str] | None:
@@ -978,11 +1006,11 @@ def run_event_processor():
         while True:
             update_heartbeat()
             try:
+                _refresh_backlog_metrics_best_effort()
                 now = time.monotonic()
                 if now - last_gauge_refresh >= GAUGE_REFRESH_INTERVAL_SECONDS:
                     _refresh_outstanding_gauges()
                     last_gauge_refresh = now
-
                 clients = _get_k8s_clients()
                 if clients is None:
                     logger.warning("Eval cluster clients unavailable, retrying in 30s")

@@ -584,6 +584,36 @@ def stable_runner_health_dashboard() -> dict:
         {
             "definition": {
                 "type": "query_value",
+                "title": "Unprocessed k8s_events",
+                "requests": [
+                    {
+                        "q": "max:k8s_event.unprocessed_count{service:observatory-backend,env:production}",
+                        "aggregator": "last",
+                    }
+                ],
+                "time": {"live_span": STABLE_TIMEFRAME},
+                "precision": 0,
+            },
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 18, "width": 6, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
+                "title": "Oldest Unprocessed k8s_event Age (s)",
+                "requests": [
+                    {
+                        "q": "max:k8s_event.unprocessed_oldest_age_seconds{service:observatory-backend,env:production}",
+                        "aggregator": "last",
+                    }
+                ],
+                "time": {"live_span": STABLE_TIMEFRAME},
+                "precision": 0,
+            },
+            "layout": {"x": 6, "y": runtime_metrics_start_y + 18, "width": 6, "height": 3},
+        },
+        {
+            "definition": {
+                "type": "query_value",
                 "title": "Episode Length (10m avg)",
                 "requests": [
                     {
@@ -594,7 +624,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": STABLE_TIMEFRAME},
                 "precision": 0,
             },
-            "layout": {"x": 0, "y": runtime_metrics_start_y + 18, "width": 4, "height": 3},
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
         },
         {
             "definition": {
@@ -608,7 +638,7 @@ def stable_runner_health_dashboard() -> dict:
                 ],
                 "time": {"live_span": STABLE_TIMEFRAME},
             },
-            "layout": {"x": 4, "y": runtime_metrics_start_y + 18, "width": 8, "height": 3},
+            "layout": {"x": 4, "y": runtime_metrics_start_y + 21, "width": 8, "height": 3},
         },
         {
             "definition": {
@@ -623,7 +653,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "10m"},
                 "precision": 0,
             },
-            "layout": {"x": 0, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 24, "width": 4, "height": 3},
         },
         {
             "definition": {
@@ -653,7 +683,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "10m"},
                 "precision": 2,
             },
-            "layout": {"x": 4, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+            "layout": {"x": 4, "y": runtime_metrics_start_y + 24, "width": 4, "height": 3},
         },
         {
             "definition": {
@@ -668,7 +698,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "10m"},
                 "precision": 2,
             },
-            "layout": {"x": 8, "y": runtime_metrics_start_y + 21, "width": 4, "height": 3},
+            "layout": {"x": 8, "y": runtime_metrics_start_y + 24, "width": 4, "height": 3},
         },
         {
             "definition": {
@@ -686,7 +716,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "30m"},
                 "precision": 0,
             },
-            "layout": {"x": 0, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 27, "width": 3, "height": 3},
         },
         {
             "definition": {
@@ -704,7 +734,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "10m"},
                 "precision": 1,
             },
-            "layout": {"x": 3, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+            "layout": {"x": 3, "y": runtime_metrics_start_y + 27, "width": 3, "height": 3},
         },
         {
             "definition": {
@@ -719,7 +749,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "15m"},
                 "precision": 0,
             },
-            "layout": {"x": 6, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+            "layout": {"x": 6, "y": runtime_metrics_start_y + 27, "width": 3, "height": 3},
         },
         {
             "definition": {
@@ -738,7 +768,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"type": "live", "unit": "hour", "value": 6},
                 "precision": 0,
             },
-            "layout": {"x": 9, "y": runtime_metrics_start_y + 24, "width": 3, "height": 3},
+            "layout": {"x": 9, "y": runtime_metrics_start_y + 27, "width": 3, "height": 3},
         },
         {
             "definition": {
@@ -753,7 +783,7 @@ def stable_runner_health_dashboard() -> dict:
                 "time": {"live_span": "10m"},
                 "precision": 0,
             },
-            "layout": {"x": 0, "y": runtime_metrics_start_y + 27, "width": 4, "height": 3},
+            "layout": {"x": 0, "y": runtime_metrics_start_y + 30, "width": 4, "height": 3},
         },
         {
             "definition": {
@@ -769,7 +799,7 @@ def stable_runner_health_dashboard() -> dict:
                 ],
                 "time": {"live_span": STABLE_TIMEFRAME},
             },
-            "layout": {"x": 4, "y": runtime_metrics_start_y + 27, "width": 4, "height": 3},
+            "layout": {"x": 4, "y": runtime_metrics_start_y + 30, "width": 4, "height": 3},
         },
         {
             "definition": {
@@ -785,7 +815,7 @@ def stable_runner_health_dashboard() -> dict:
                 ],
                 "time": {"live_span": STABLE_TIMEFRAME},
             },
-            "layout": {"x": 8, "y": runtime_metrics_start_y + 27, "width": 4, "height": 3},
+            "layout": {"x": 8, "y": runtime_metrics_start_y + 30, "width": 4, "height": 3},
         },
     ]
 
@@ -794,7 +824,9 @@ def stable_runner_health_dashboard() -> dict:
         "description": (
             "Status and freshness for stable checks. "
             "check.effective_status values: -1=red(failed), 0=yellow(quarantined/not_implemented), 1=green(passed). "
-            "check.completed_at is unix epoch seconds (UTC)."
+            "check.completed_at is unix epoch seconds (UTC). "
+            "k8s_event backlog widgets are sampled snapshots from the event-processor loop and displayed "
+            "as the latest value in the selected dashboard time window."
         ),
         "layout_type": "ordered",
         "tags": ["team:infra"],

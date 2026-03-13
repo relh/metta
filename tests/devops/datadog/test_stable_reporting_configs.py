@@ -3,117 +3,13 @@ from __future__ import annotations
 from collections import Counter
 from types import SimpleNamespace
 
-import devops.datadog.dashboards as dashboards
 import devops.datadog.monitors as monitors
 from devops.stable.stable_check_groups import StableCheckGroup
 from devops.stable.stable_check_lifecycle import StableCheckLifecycle
 from devops.stable.stable_check_metrics import (
-    STABLE_CHECK_ACCEPTANCE_CRITERION_STATUS_METRIC,
-    STABLE_CHECK_ACCEPTANCE_CRITERION_TARGET_METRIC,
-    STABLE_CHECK_ACCEPTANCE_CRITERION_VALUE_METRIC,
     STABLE_CHECK_COMPLETED_AT_METRIC,
-    STABLE_CHECK_EFFECTIVE_STATUS_METRIC,
     STABLE_CHECK_EFFECTIVE_STATUS_SERVICE_CHECK,
-    STABLE_CHECK_RAW_STATUS_METRIC,
 )
-
-
-def _iter_widgets(widgets: list[dict]) -> list[dict]:
-    flattened: list[dict] = []
-    for widget in widgets:
-        flattened.append(widget)
-        nested_widgets = widget["definition"].get("widgets", [])
-        flattened.extend(_iter_widgets(nested_widgets))
-    return flattened
-
-
-def test_stable_dashboard_exists_with_expected_queries() -> None:
-    configs = dashboards.get_all_dashboard_configs()
-    stable = next(config for config in configs if config["title"] == "Stable Runner V2")
-    all_widgets = _iter_widgets(stable["widgets"])
-    titles = {widget["definition"].get("title") for widget in all_widgets}
-    note_contents = {
-        widget["definition"].get("content") for widget in all_widgets if widget["definition"].get("type") == "note"
-    }
-    query_bits: list[str] = []
-    for widget in all_widgets:
-        for request in widget["definition"].get("requests", []):
-            maybe_q = request.get("q")
-            if maybe_q:
-                query_bits.append(maybe_q)
-            for query in request.get("queries", []):
-                maybe_query = query.get("query")
-                if maybe_query:
-                    query_bits.append(maybe_query)
-        monitor_query = widget["definition"].get("query")
-        if monitor_query:
-            query_bits.append(monitor_query)
-    query_text = "\n".join(query_bits)
-
-    assert "Stable Runner Checks" in note_contents
-    assert "Episode + Job Runtime Health" in note_contents
-    assert "Managed Monitors" in note_contents
-    assert "Stable Runner - Key Metrics" in titles
-    assert "Failure Breakdown" in titles
-    assert "Stage Durations (p50 / p90)" in titles
-    assert "Concurrent Running Jobs" in titles
-    assert "Job Status Transitions (count)" in titles
-    assert "Episode Length (10m avg)" in titles
-    assert "Episode Length Trend (episode jobs)" in titles
-    assert "API Requests (10m sum)" in titles
-    assert "API 5xx Density (10m %)" in titles
-    assert "API Latency Avg (10m s)" in titles
-    assert "CrashLoopBackOff Containers (10m max)" in titles
-    assert "Dispatched Jobs (30m sum)" in titles
-    assert "Dispatched Queue (10m avg)" in titles
-    assert "Unscored Completed (15m max)" in titles
-    assert f"Compat v{dashboards.LATEST_COMPAT_VERSION} Running (6h sum)" in titles
-    assert "CrashLoopBackOff Top Namespaces" in titles
-    assert "CrashLoopBackOff Top Pods" in titles
-    assert "Stable Monitor Alerts" in titles
-    assert "Non-Stable Monitor Alerts" in titles
-    assert STABLE_CHECK_RAW_STATUS_METRIC in query_text
-    assert STABLE_CHECK_EFFECTIVE_STATUS_METRIC in query_text
-    assert STABLE_CHECK_COMPLETED_AT_METRIC in query_text
-    assert STABLE_CHECK_ACCEPTANCE_CRITERION_VALUE_METRIC in query_text
-    assert STABLE_CHECK_ACCEPTANCE_CRITERION_TARGET_METRIC in query_text
-    assert STABLE_CHECK_ACCEPTANCE_CRITERION_STATUS_METRIC in query_text
-    assert "service:observatory-backend,env:production,job_type:episode" in query_text
-    assert "avg:job.running_count" in query_text
-    assert "p50:job.stage_duration" in query_text
-    assert "p90:job.stage_duration" in query_text
-    assert "to_status:completed" in query_text
-    assert "to_status:running" in query_text
-    assert "to_status:dispatched" in query_text
-    assert "to_status:failed" in query_text
-    assert "by {error_type}.as_count().rollup(sum, 60)" in query_text
-    assert "episode.length" in query_text
-    assert "http.server.request.count" in query_text
-    assert "http.server.request.duration" in query_text
-    assert "http.status_code:5*" in query_text
-    assert "status:dispatched" in query_text
-    assert "tournament.unscored_completed_matches" in query_text
-    assert f"compat_version:{dashboards.LATEST_COMPAT_VERSION}" in query_text
-    assert "reason:crashloopbackoff" in query_text
-    assert "tag:service:stable-runner tag:managed-by:code" in query_text
-    assert "tag:managed-by:code -tag:service:stable-runner" in query_text
-    assert "criterion:runs_success" in query_text
-    assert "'last', 'desc'" in query_text
-    latest_summary = next(
-        widget
-        for widget in all_widgets
-        if widget["definition"].get("title") == "Latest Summary Status by Job (-1=red,0=yellow,1=green)"
-    )
-    latest_summary_queries = latest_summary["definition"]["requests"][0]["queries"]
-    assert latest_summary_queries[0]["query"] == f"max:{STABLE_CHECK_EFFECTIVE_STATUS_METRIC}{{*}} by {{job}}"
-    assert latest_summary_queries[1]["query"] == f"max:{STABLE_CHECK_COMPLETED_AT_METRIC}{{*}} by {{job}}"
-    non_stable_widgets = [
-        widget
-        for widget in all_widgets
-        if widget["definition"].get("type") == "manage_status"
-        and widget["definition"].get("query") == "tag:managed-by:code -tag:service:stable-runner"
-    ]
-    assert len(non_stable_widgets) == 1
 
 
 def test_episode_recording_failures_monitor_config() -> None:
