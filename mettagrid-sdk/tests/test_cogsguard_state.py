@@ -293,3 +293,6 @@ def test_cogsguard_prompt_adapter_exposes_skill_library() -> None:
     assert "CONTROL_PRIMITIVES" in library
     assert "target_entity_id: strongest focus primitive" in library
     assert "resource_bias: resource-type preference among viable extractors" in library
+    assert "BEST_PRACTICES" in library
+    assert 'sdk.helpers.nearest_visible_entity(entity_type="junction", label="neutral")' in library
+    assert "sdk.helpers.shared_inventory() and sdk.helpers.recent_event_types()" in library

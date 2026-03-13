@@ -87,6 +87,36 @@ class FakeHelpers:
     def recent_event_types(self) -> list[str]:
         return ["heart_acquired"]
 
+    def visible_entities(
+        self,
+        entity_type: str | None = None,
+        label: str | None = None,
+        max_distance: int | None = None,
+    ) -> list[SemanticEntity]:
+        return []
+
+    def visible_entity_ids(
+        self,
+        entity_type: str | None = None,
+        label: str | None = None,
+        max_distance: int | None = None,
+    ) -> list[str]:
+        return []
+
+    def entity_by_id(self, entity_id: str) -> SemanticEntity | None:
+        return None
+
+    def nearest_visible_entity(
+        self,
+        entity_type: str | None = None,
+        label: str | None = None,
+        max_distance: int | None = None,
+    ) -> SemanticEntity | None:
+        return None
+
+    def distance_to_entity(self, entity_id: str) -> int | None:
+        return None
+
 
 class FakeMemory:
     def __init__(self) -> None:
@@ -440,6 +470,58 @@ def test_state_helper_catalog_summarizes_visible_entities_and_recent_events() ->
     assert helpers.position() == (4, -2)
     assert helpers.visible_entity_counts() == {"hub": 1, "junction": 2}
     assert helpers.recent_event_types() == ["enemy_seen", "heart_acquired"]
+
+
+def test_state_helper_catalog_exposes_visible_entity_queries() -> None:
+    state = MettagridState(
+        game="cogsguard",
+        self_state=SelfState(
+            entity_id="agent-3",
+            entity_type="agent",
+            position=GridPosition(x=0, y=0),
+            attributes={"agent_id": 3},
+        ),
+        visible_entities=[
+            SemanticEntity(
+                entity_id="junction-1",
+                entity_type="junction",
+                position=GridPosition(x=1, y=0),
+                labels=["neutral"],
+                attributes={"owner": "neutral"},
+            ),
+            SemanticEntity(
+                entity_id="junction-2",
+                entity_type="junction",
+                position=GridPosition(x=3, y=0),
+                labels=["enemy"],
+                attributes={"owner": "clips"},
+            ),
+            SemanticEntity(
+                entity_id="hub-1",
+                entity_type="hub",
+                position=GridPosition(x=0, y=2),
+                labels=["friendly"],
+                attributes={"owner": "cogs"},
+            ),
+        ],
+    )
+
+    helpers = StateHelperCatalog(state)
+
+    assert [entity.entity_id for entity in helpers.visible_entities(entity_type="junction")] == [
+        "junction-1",
+        "junction-2",
+    ]
+    assert helpers.visible_entity_ids(label="neutral") == ["junction-1"]
+    assert helpers.visible_entity_ids(max_distance=2) == ["junction-1", "hub-1"]
+    assert helpers.entity_by_id("hub-1") is not None
+    assert helpers.entity_by_id("missing") is None
+    assert helpers.distance_to_entity("junction-2") == 3
+    assert helpers.distance_to_entity("missing") is None
+    assert helpers.nearest_visible_entity(entity_type="junction", label="enemy") is not None
+    assert helpers.nearest_visible_entity(entity_type="junction", label="enemy").entity_id == "junction-2"
+    assert helpers.nearest_visible_entity(entity_type="extractor") is None
+    assert "nearest_visible_entity" in helpers.render_capability_summary()
 
 
 def test_state_helper_catalog_tolerates_non_numeric_agent_id() -> None:

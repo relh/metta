@@ -26,6 +26,27 @@ _COGSGUARD_SKILLS = (
     ("lane_pressure", "Once hearts are online, convert spare pressure into aligner or scrambler lane control."),
 )
 
+_COGSGUARD_BEST_PRACTICES = (
+    "Prefer one strong steering primitive at a time: target_entity_id first, then target_region, then resource_bias.",
+    (
+        'Use sdk.helpers.nearest_visible_entity(entity_type="junction", label="neutral") '
+        "to choose one decisive focus target."
+    ),
+    (
+        'Use sdk.helpers.visible_entities(entity_type="junction", label="enemy") '
+        "to inspect lane pressure without pinning one id yet."
+    ),
+    (
+        "Use sdk.helpers.shared_inventory() and sdk.helpers.recent_event_types() "
+        "as progress signals before escalating phases or rewriting plans."
+    ),
+    (
+        "Keep step(sdk) short and strategic; let the semantic baseline handle movement, mining, "
+        "deposits, and junction actions."
+    ),
+    "If a target stops being productive, change directive fields or phase instead of layering more timeout ladders.",
+)
+
 
 class CogsguardPromptAdapter:
     def render_state(self, state: MettagridState) -> str:
@@ -69,6 +90,8 @@ class CogsguardPromptAdapter:
                 "or visible entity",
                 "- target_region: broader lane or region bias when you do not want to pin one exact entity yet",
                 "- resource_bias: resource-type preference among viable extractors; not a hard lock on one extractor",
+                "BEST_PRACTICES",
+                *(f"- {line}" for line in _COGSGUARD_BEST_PRACTICES),
             ]
         )
 
