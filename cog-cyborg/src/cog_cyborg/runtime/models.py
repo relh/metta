@@ -31,7 +31,6 @@ class ReviewDecisionRecord(BaseModel):
     action: str
     request_summary: str = ""
     summary: str = ""
-    append_log: str = ""
     policy_updated: bool = False
     scratchpad_updated: bool = False
     plan_updated: bool = False

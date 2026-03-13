@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 import re
 import threading
-from collections.abc import Iterable
-from typing import Any, Protocol
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from mettagrid_sdk.sdk import LogRecord, MettagridSDK, ReviewRequest
 
 from cog_cyborg.providers.models import (
-    CodeModeBackend,
     CodeReviewRequest,
     CodeReviewResponse,
 )
@@ -34,10 +33,6 @@ _MAX_RAW_RESPONSE_CHARS = 4000
 _MAX_DEBUG_TRANSCRIPT_CHARS = 200_000
 _SCRATCHPAD_LINE_RE = re.compile(r"^(?P<prefix>\s*(?:-\s*)?)(?P<key>[A-Za-z0-9_.-]+)\s*(?P<sep>:|=)\s*(?P<value>.*)$")
 _PROTECTED_SCRATCHPAD_KEYS = frozenset({"review_hooks_ready", "hooks_ready"})
-
-
-class ReviewRequestFilter(Protocol):
-    def __call__(self, request: ReviewRequest, *, step: int) -> bool: ...
 
 
 def _merge_protected_scratchpad_keys(current_text: str, updated_text: str) -> str:
@@ -140,11 +135,11 @@ class LivePolicyBundleSession:
     def __init__(
         self,
         *,
-        backend: CodeModeBackend,
+        backend: Callable[[CodeReviewRequest], CodeReviewResponse],
         artifact_store: ArtifactStore | None = None,
         timeout_seconds: float = DEFAULT_POLICY_TIMEOUT_SECONDS,
         record_step_traces: bool = True,
-        should_process_review_request: ReviewRequestFilter | None = None,
+        should_process_review_request: Callable[[ReviewRequest, int], bool] | None = None,
     ) -> None:
         self._backend = backend
         self._artifact_store = artifact_store
@@ -233,7 +228,7 @@ class LivePolicyBundleSession:
         if (
             review_request is not None
             and self._should_process_review_request is not None
-            and not self._should_process_review_request(review_request, step=step)
+            and not self._should_process_review_request(review_request, step)
         ):
             review_request = None
             triggering_log = None
@@ -337,7 +332,7 @@ class LivePolicyBundleSession:
     ) -> CodeReviewResponse:
         review_error: str | None = None
         try:
-            response = self._backend.review(request)
+            response = self._backend(request)
         except Exception as exc:
             review_error = f"{type(exc).__name__}: {exc}"
             response = CodeReviewResponse(
@@ -397,8 +392,7 @@ class LivePolicyBundleSession:
                     trigger_name=trigger_name,
                     action=response.action,
                     request_summary=request_summary or trigger_name,
-                    summary=response.review_summary or response.append_log,
-                    append_log=response.append_log,
+                    summary=response.review_summary,
                     policy_updated=policy_updated,
                     scratchpad_updated=scratchpad_updated,
                     plan_updated=plan_updated,
@@ -422,7 +416,6 @@ class LivePolicyBundleSession:
                 "triggering_log": (None if triggering_log is None else _serialize_log_record(triggering_log)),
                 "action": response.action,
                 "review_summary": response.review_summary,
-                "append_log": response.append_log,
                 "policy_updated": policy_updated,
                 "policy_update_error": policy_update_error,
                 "review_error": review_error,
@@ -605,7 +598,7 @@ class LivePolicyBundleSession:
             return ""
         return "\n".join(
             f"- step {record.step}: trigger={record.trigger_name or 'none'} action={record.action} "
-            f"request={record.request_summary or 'none'} {record.summary or record.append_log}"
+            f"request={record.request_summary or 'none'} {record.summary or 'none'}"
             for record in records
         )
 
@@ -699,8 +692,6 @@ class LivePolicyBundleSession:
             lines.append(f"review_error: {review_error}")
         if response.review_summary:
             lines.append(f"summary: {response.review_summary}")
-        if response.append_log:
-            lines.append(f"append_log: {response.append_log}")
         if response.triggers:
             lines.append("next_review_triggers:")
             lines.extend(f"- {_render_trigger_line(trigger)}" for trigger in response.triggers)

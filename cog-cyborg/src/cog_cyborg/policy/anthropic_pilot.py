@@ -106,7 +106,7 @@ class _AnthropicCodeModeBackend:
         self._max_tokens = max_tokens
         self._temperature = temperature
 
-    def review(self, request: CodeReviewRequest) -> CodeReviewResponse:
+    def __call__(self, request: CodeReviewRequest) -> CodeReviewResponse:
         prompt = self._build_prompt(request)
         raw_text, response, latency_ms = self._request_review(prompt)
         retry_validation_error: str | None = None
@@ -300,8 +300,7 @@ class _AnthropicCodeModeBackend:
             "- if you emit logs, call sdk.log.write(LogRecord(...)), not sdk.log.write({...})",
             "Return only compact JSON with this schema:",
             (
-                '{"action":"policy|memory|memory_and_policy|none",'
-                '"set_policy":"<full main.py source defining step(sdk)>",'
+                '{"set_policy":"<full main.py source defining step(sdk)>",'
                 '"replace_scratchpad":"<full memory.md text>",'
                 '"replace_plan":"<full plan.md text>",'
                 '"review_summary":"<short summary>",'
@@ -309,7 +308,8 @@ class _AnthropicCodeModeBackend:
             ),
             'Do not return a top-level "main.py" key.',
             'Do not put objects inside "set_policy"; it must be a single Python source string.',
-            'If you only update memory.md or plan.md, omit "set_policy" and set action to "memory".',
+            'Action is inferred from which update fields you include; do not add a redundant top-level "action" key.',
+            'If you only update memory.md or plan.md, omit "set_policy".',
             f"Goal: {request.goal or 'unspecified'}",
             f"Trigger: {request.trigger_name or 'manual'}",
             "Operator request:",
@@ -708,7 +708,7 @@ class AnthropicPilotSession:
         )
         return "\n".join(sections)
 
-    def _should_process_execution_review_request(self, request: ReviewRequest, *, step: int) -> bool:
+    def _should_process_execution_review_request(self, request: ReviewRequest, step: int) -> bool:
         if request.trigger_name != "phase_shift":
             return True
         last_generation_step = self._last_generation_step

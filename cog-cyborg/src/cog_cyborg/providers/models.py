@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 
 from mettagrid_sdk.sdk import ReviewTrigger
 from pydantic import BaseModel, Field, ValidationError
 
 _FENCED_BLOCK_RE = re.compile(r"^```(?:json)?\n(?P<body>.*)\n```$", re.DOTALL)
-_VALID_ACTIONS = {"none", "memory", "policy", "memory_and_policy"}
 
 
 class CodeReviewRequest(BaseModel):
@@ -30,14 +29,9 @@ class CodeReviewResponse(BaseModel):
     set_policy: str | None = None
     replace_scratchpad: str | None = None
     replace_plan: str | None = None
-    append_log: str = ""
     review_summary: str = ""
     triggers: list[ReviewTrigger] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class CodeModeBackend(Protocol):
-    def review(self, request: CodeReviewRequest) -> CodeReviewResponse: ...
 
 
 def coerce_code_review_response(raw_response: str | dict[str, Any] | CodeReviewResponse) -> CodeReviewResponse:
@@ -91,11 +85,7 @@ def _normalize_code_review_payload(payload: dict[str, Any]) -> dict[str, Any]:
     scratchpad_text = _extract_text_payload(normalized.get("replace_scratchpad"))
     normalized["replace_scratchpad"] = scratchpad_text
 
-    append_log = _extract_text_payload(normalized.get("append_log"))
-    normalized["append_log"] = append_log or ""
-
     normalized["action"] = _normalize_action(
-        normalized.get("action"),
         has_policy=policy_source is not None,
         has_memory=scratchpad_text is not None or plan_text is not None,
     )
@@ -114,9 +104,7 @@ def _extract_text_payload(value: Any) -> str | None:
     return None
 
 
-def _normalize_action(raw_action: Any, *, has_policy: bool, has_memory: bool) -> str:
-    del raw_action
-
+def _normalize_action(*, has_policy: bool, has_memory: bool) -> str:
     if has_policy and has_memory:
         return "memory_and_policy"
     if has_policy:

@@ -130,7 +130,6 @@ def _review_response(
     review_summary: str = "",
 ) -> str:
     payload = {
-        "action": "memory_and_policy" if scratchpad or plan else "policy",
         "set_policy": policy_source,
         "review_summary": review_summary,
     }
@@ -525,6 +524,7 @@ def test_anthropic_pilot_prompt_mentions_shorthand_review_guidance() -> None:
     assert "prefer target_entity_id over resource_bias" in prompt
     assert "do not reimplement low-level movement or mining loops in main.py" in prompt
     assert '"replace_plan":"<full plan.md text>"' in prompt
+    assert 'do not add a redundant top-level "action" key' in prompt
     assert "change target_entity_id, target_region, resource_bias, role, or phase" in prompt
     assert "resource_coverage must have an explicit time/resource escape hatch" in prompt
     assert "bias toward the productive extractor" in prompt

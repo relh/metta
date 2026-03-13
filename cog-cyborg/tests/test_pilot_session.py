@@ -129,7 +129,7 @@ class _FakeCodeBackend:
         self._responses = list(responses)
         self.calls = []
 
-    def review(self, request) -> CodeReviewResponse:
+    def __call__(self, request) -> CodeReviewResponse:
         self.calls.append(request)
         response = self._responses.pop(0)
         if isinstance(response, Exception):
@@ -144,7 +144,7 @@ class _BlockingCodeBackend:
         self.entered = threading.Event()
         self.release = threading.Event()
 
-    def review(self, request) -> CodeReviewResponse:
+    def __call__(self, request) -> CodeReviewResponse:
         self.calls.append(request)
         self.entered.set()
         assert self.release.wait(timeout=1.0)
@@ -540,7 +540,7 @@ def test_live_policy_bundle_session_can_suppress_selected_review_request(tmp_pat
     session = LivePolicyBundleSession(
         backend=backend,
         artifact_store=store,
-        should_process_review_request=lambda request, *, step: request.trigger_name != "phase_shift" or step < 0,
+        should_process_review_request=lambda request, step: request.trigger_name != "phase_shift" or step < 0,
     )
 
     result = session.execute(

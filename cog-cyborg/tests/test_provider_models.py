@@ -11,8 +11,7 @@ def test_coerce_code_review_response_accepts_wrapped_json() -> None:
             [
                 "Model output:",
                 (
-                    '{"action":"memory_and_policy",'
-                    "\"set_policy\":\"def step(sdk):\\\\n    return {'role': 'miner'}\","
+                    "{\"set_policy\":\"def step(sdk):\\\\n    return {'role': 'miner'}\","
                     '"replace_scratchpad":"Cover east lane."}'
                 ),
             ]
@@ -31,6 +30,19 @@ def test_coerce_code_review_response_accepts_model_instance() -> None:
     assert response.replace_scratchpad == "Retreat to hub."
 
 
+def test_coerce_code_review_response_infers_action_without_explicit_action_field() -> None:
+    response = coerce_code_review_response(
+        {
+            "set_policy": 'def step(sdk):\n    return {"role": "miner"}',
+            "replace_plan": "# Plan\n- Open coverage",
+        }
+    )
+
+    assert response.action == "memory_and_policy"
+    assert response.set_policy == 'def step(sdk):\n    return {"role": "miner"}'
+    assert response.replace_plan == "# Plan\n- Open coverage"
+
+
 def test_coerce_code_review_response_promotes_none_action_when_canonical_fields_update_files() -> None:
     response = coerce_code_review_response(
         {
@@ -38,7 +50,7 @@ def test_coerce_code_review_response_promotes_none_action_when_canonical_fields_
             "set_policy": 'def step(sdk):\n    return {"role": "miner"}',
             "replace_scratchpad": "phase: resource_coverage",
             "replace_plan": "# Plan\n- Open coverage\n- Replan on contact",
-            "append_log": "Model wants to rotate east lane coverage.",
+            "review_summary": "Model wants to rotate east lane coverage.",
         }
     )
 
@@ -46,7 +58,7 @@ def test_coerce_code_review_response_promotes_none_action_when_canonical_fields_
     assert response.set_policy == 'def step(sdk):\n    return {"role": "miner"}'
     assert response.replace_scratchpad == "phase: resource_coverage"
     assert response.replace_plan == "# Plan\n- Open coverage\n- Replan on contact"
-    assert response.append_log == "Model wants to rotate east lane coverage."
+    assert response.review_summary == "Model wants to rotate east lane coverage."
 
 
 def test_coerce_code_review_response_rejects_legacy_nested_payloads() -> None:
