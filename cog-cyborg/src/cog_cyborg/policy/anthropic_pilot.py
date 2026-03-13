@@ -804,6 +804,43 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
             "__sidecar_debug__": self._pilot_session.debug_snapshot(),
         }
 
+    def _schedule_runtime_review(
+        self,
+        *,
+        message: str,
+        trigger_name: str,
+        request_summary: str,
+        data: dict[str, str | int | float | bool],
+        extra_lines: list[str],
+    ) -> None:
+        self._pilot_session.schedule_runtime_log(
+            record=LogRecord(
+                level="warning",
+                message=message,
+                step=self._step_index,
+                review=ReviewRequest(
+                    trigger_name=trigger_name,
+                    prompt=request_summary,
+                ),
+                data=data,
+            ),
+            extra_context="\n".join(["Recent low-level telemetry:", self._runtime_positions_line(), *extra_lines]),
+        )
+
+    def _runtime_positions_line(self) -> str:
+        return "- positions: " + " -> ".join(
+            _format_runtime_position(item.position) for item in self._recent_runtime_observations
+        )
+
+    def _runtime_subtasks_line(self) -> str:
+        return "- subtasks: " + " | ".join(item.subtask for item in self._recent_runtime_observations)
+
+    def _runtime_targets_line(self) -> str:
+        return "- targets: " + " | ".join(item.target_position or "-" for item in self._recent_runtime_observations)
+
+    def _runtime_hearts_line(self) -> str:
+        return "- hearts: " + " | ".join(str(item.heart) for item in self._recent_runtime_observations)
+
     def _maybe_schedule_runtime_review(self) -> None:
         current_position = self._last_global_pos
         if current_position is None:
@@ -832,39 +869,24 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
                 "Rewrite the local policy to change target, resource_bias, or phase so the semantic baseline "
                 "can break the loop."
             )
-            self._pilot_session.schedule_runtime_log(
-                record=LogRecord(
-                    level="warning",
-                    message="Two-cell extractor oscillation detected.",
-                    step=self._step_index,
-                    review=ReviewRequest(
-                        trigger_name="runtime_oscillation",
-                        prompt=request_summary,
-                    ),
-                    data={
-                        "subtask": latest.subtask,
-                        "target_kind": latest.target_kind,
-                        "target_position": latest.target_position,
-                        "objective": latest.objective or "resource_coverage",
-                        "oscillation_steps": self._infos.get("oscillation_steps", 0),
-                    },
-                ),
-                extra_context="\n".join(
-                    [
-                        "Recent low-level telemetry:",
-                        (
-                            "- positions: "
-                            + " -> ".join(
-                                _format_runtime_position(item.position) for item in self._recent_runtime_observations
-                            )
-                        ),
-                        f"- subtask: {latest.subtask}",
-                        f"- target_kind: {latest.target_kind}",
-                        f"- target_position: {latest.target_position}",
-                        f"- objective: {latest.objective or 'resource_coverage'}",
-                        f"- oscillation_steps: {self._infos.get('oscillation_steps', 0)}",
-                    ]
-                ),
+            self._schedule_runtime_review(
+                message="Two-cell extractor oscillation detected.",
+                trigger_name="runtime_oscillation",
+                request_summary=request_summary,
+                data={
+                    "subtask": latest.subtask,
+                    "target_kind": latest.target_kind,
+                    "target_position": latest.target_position,
+                    "objective": latest.objective or "resource_coverage",
+                    "oscillation_steps": self._infos.get("oscillation_steps", 0),
+                },
+                extra_lines=[
+                    f"- subtask: {latest.subtask}",
+                    f"- target_kind: {latest.target_kind}",
+                    f"- target_position: {latest.target_position}",
+                    f"- objective: {latest.objective or 'resource_coverage'}",
+                    f"- oscillation_steps: {self._infos.get('oscillation_steps', 0)}",
+                ],
             )
             return
         productive_resource = self._productive_bias_mismatch_resource()
@@ -881,42 +903,26 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
                 "resource bias. Rewrite the local policy to favor the productive extractor, clear the impossible "
                 "bias, or change phase."
             )
-            self._pilot_session.schedule_runtime_log(
-                record=LogRecord(
-                    level="warning",
-                    message="Runtime resource bias mismatch detected.",
-                    step=self._step_index,
-                    review=ReviewRequest(
-                        trigger_name="runtime_bias_mismatch",
-                        prompt=request_summary,
-                    ),
-                    data={
-                        "directive_resource_bias": latest.directive_resource_bias or "-",
-                        "productive_target_resource": productive_resource,
-                        "target_kind": latest.target_kind,
-                        "target_position": latest.target_position,
-                        "objective": latest.objective or "resource_coverage",
-                    },
-                ),
-                extra_context="\n".join(
-                    [
-                        "Recent low-level telemetry:",
-                        (
-                            "- positions: "
-                            + " -> ".join(
-                                _format_runtime_position(item.position) for item in self._recent_runtime_observations
-                            )
-                        ),
-                        "- subtasks: " + " | ".join(item.subtask for item in self._recent_runtime_observations),
-                        "- targets: "
-                        + " | ".join(item.target_position or "-" for item in self._recent_runtime_observations),
-                        f"- directive_resource_bias: {latest.directive_resource_bias or '-'}",
-                        f"- productive_target_resource: {productive_resource}",
-                        f"- current_target_kind: {latest.target_kind}",
-                        f"- current_target_position: {latest.target_position}",
-                        f"- objective: {latest.objective or 'resource_coverage'}",
-                    ]
-                ),
+            self._schedule_runtime_review(
+                message="Runtime resource bias mismatch detected.",
+                trigger_name="runtime_bias_mismatch",
+                request_summary=request_summary,
+                data={
+                    "directive_resource_bias": latest.directive_resource_bias or "-",
+                    "productive_target_resource": productive_resource,
+                    "target_kind": latest.target_kind,
+                    "target_position": latest.target_position,
+                    "objective": latest.objective or "resource_coverage",
+                },
+                extra_lines=[
+                    self._runtime_subtasks_line(),
+                    self._runtime_targets_line(),
+                    f"- directive_resource_bias: {latest.directive_resource_bias or '-'}",
+                    f"- productive_target_resource: {productive_resource}",
+                    f"- current_target_kind: {latest.target_kind}",
+                    f"- current_target_position: {latest.target_position}",
+                    f"- objective: {latest.objective or 'resource_coverage'}",
+                ],
             )
             return
         if self._within_post_rewrite_runtime_quiet_period():
@@ -933,39 +939,24 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
                 "Detected prolonged fixation on one extractor while still in resource_coverage. "
                 "Rewrite the local policy to change target, resource_bias, or phase."
             )
-            self._pilot_session.schedule_runtime_log(
-                record=LogRecord(
-                    level="warning",
-                    message="Extractor target fixation detected.",
-                    step=self._step_index,
-                    review=ReviewRequest(
-                        trigger_name="runtime_target_fixation",
-                        prompt=request_summary,
-                    ),
-                    data={
-                        "subtask": latest.subtask,
-                        "target_kind": latest.target_kind,
-                        "target_position": latest.target_position,
-                        "objective": latest.objective or "resource_coverage",
-                        "oscillation_steps": self._infos.get("oscillation_steps", 0),
-                    },
-                ),
-                extra_context="\n".join(
-                    [
-                        "Recent low-level telemetry:",
-                        (
-                            "- positions: "
-                            + " -> ".join(
-                                _format_runtime_position(item.position) for item in self._recent_runtime_observations
-                            )
-                        ),
-                        "- subtasks: " + " | ".join(item.subtask for item in self._recent_runtime_observations),
-                        f"- target_kind: {latest.target_kind}",
-                        f"- target_position: {latest.target_position}",
-                        f"- objective: {latest.objective or 'resource_coverage'}",
-                        f"- oscillation_steps: {self._infos.get('oscillation_steps', 0)}",
-                    ]
-                ),
+            self._schedule_runtime_review(
+                message="Extractor target fixation detected.",
+                trigger_name="runtime_target_fixation",
+                request_summary=request_summary,
+                data={
+                    "subtask": latest.subtask,
+                    "target_kind": latest.target_kind,
+                    "target_position": latest.target_position,
+                    "objective": latest.objective or "resource_coverage",
+                    "oscillation_steps": self._infos.get("oscillation_steps", 0),
+                },
+                extra_lines=[
+                    self._runtime_subtasks_line(),
+                    f"- target_kind: {latest.target_kind}",
+                    f"- target_position: {latest.target_position}",
+                    f"- objective: {latest.objective or 'resource_coverage'}",
+                    f"- oscillation_steps: {self._infos.get('oscillation_steps', 0)}",
+                ],
             )
             return
         if self._is_economy_bootstrap_stagnant():
@@ -982,45 +973,29 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
                 "Rewrite the local policy to change target, helper usage, or phase so the cog can make strategic "
                 "progress instead of mining the same lane forever."
             )
-            self._pilot_session.schedule_runtime_log(
-                record=LogRecord(
-                    level="warning",
-                    message="Economy bootstrap stagnation detected.",
-                    step=self._step_index,
-                    review=ReviewRequest(
-                        trigger_name="runtime_stagnation",
-                        prompt=request_summary,
-                    ),
-                    data={
-                        "subtask": latest.subtask,
-                        "target_kind": latest.target_kind,
-                        "target_position": latest.target_position,
-                        "objective": latest.objective or "economy_bootstrap",
-                        "heart": latest.heart,
-                        "generation_count": self._pilot_session.generation_count,
-                    },
-                ),
-                extra_context="\n".join(
-                    [
-                        "Recent low-level telemetry:",
-                        (
-                            "- positions: "
-                            + " -> ".join(
-                                _format_runtime_position(item.position) for item in self._recent_runtime_observations
-                            )
-                        ),
-                        "- subtasks: " + " | ".join(item.subtask for item in self._recent_runtime_observations),
-                        "- targets: "
-                        + " | ".join(item.target_position or "-" for item in self._recent_runtime_observations),
-                        "- hearts: " + " | ".join(str(item.heart) for item in self._recent_runtime_observations),
-                        f"- current_subtask: {latest.subtask}",
-                        f"- current_target_kind: {latest.target_kind}",
-                        f"- current_target_position: {latest.target_position}",
-                        f"- objective: {latest.objective or 'economy_bootstrap'}",
-                        f"- heart: {latest.heart}",
-                        f"- generation_count: {self._pilot_session.generation_count}",
-                    ]
-                ),
+            self._schedule_runtime_review(
+                message="Economy bootstrap stagnation detected.",
+                trigger_name="runtime_stagnation",
+                request_summary=request_summary,
+                data={
+                    "subtask": latest.subtask,
+                    "target_kind": latest.target_kind,
+                    "target_position": latest.target_position,
+                    "objective": latest.objective or "economy_bootstrap",
+                    "heart": latest.heart,
+                    "generation_count": self._pilot_session.generation_count,
+                },
+                extra_lines=[
+                    self._runtime_subtasks_line(),
+                    self._runtime_targets_line(),
+                    self._runtime_hearts_line(),
+                    f"- current_subtask: {latest.subtask}",
+                    f"- current_target_kind: {latest.target_kind}",
+                    f"- current_target_position: {latest.target_position}",
+                    f"- objective: {latest.objective or 'economy_bootstrap'}",
+                    f"- heart: {latest.heart}",
+                    f"- generation_count: {self._pilot_session.generation_count}",
+                ],
             )
             return
         if self._is_aligner_pressure_stagnant():
@@ -1037,45 +1012,29 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
                 "Rewrite the local policy to change target_region, role, or phase "
                 "so the cog stops hovering in one lane."
             )
-            self._pilot_session.schedule_runtime_log(
-                record=LogRecord(
-                    level="warning",
-                    message="Aligner pressure stagnation detected.",
-                    step=self._step_index,
-                    review=ReviewRequest(
-                        trigger_name="runtime_stagnation",
-                        prompt=request_summary,
-                    ),
-                    data={
-                        "subtask": latest.subtask,
-                        "target_kind": latest.target_kind,
-                        "target_position": latest.target_position,
-                        "objective": latest.objective or "aligner_pressure",
-                        "heart": latest.heart,
-                        "generation_count": self._pilot_session.generation_count,
-                    },
-                ),
-                extra_context="\n".join(
-                    [
-                        "Recent low-level telemetry:",
-                        (
-                            "- positions: "
-                            + " -> ".join(
-                                _format_runtime_position(item.position) for item in self._recent_runtime_observations
-                            )
-                        ),
-                        "- subtasks: " + " | ".join(item.subtask for item in self._recent_runtime_observations),
-                        "- targets: "
-                        + " | ".join(item.target_position or "-" for item in self._recent_runtime_observations),
-                        "- hearts: " + " | ".join(str(item.heart) for item in self._recent_runtime_observations),
-                        f"- current_subtask: {latest.subtask}",
-                        f"- current_target_kind: {latest.target_kind}",
-                        f"- current_target_position: {latest.target_position}",
-                        f"- objective: {latest.objective or 'aligner_pressure'}",
-                        f"- heart: {latest.heart}",
-                        f"- generation_count: {self._pilot_session.generation_count}",
-                    ]
-                ),
+            self._schedule_runtime_review(
+                message="Aligner pressure stagnation detected.",
+                trigger_name="runtime_stagnation",
+                request_summary=request_summary,
+                data={
+                    "subtask": latest.subtask,
+                    "target_kind": latest.target_kind,
+                    "target_position": latest.target_position,
+                    "objective": latest.objective or "aligner_pressure",
+                    "heart": latest.heart,
+                    "generation_count": self._pilot_session.generation_count,
+                },
+                extra_lines=[
+                    self._runtime_subtasks_line(),
+                    self._runtime_targets_line(),
+                    self._runtime_hearts_line(),
+                    f"- current_subtask: {latest.subtask}",
+                    f"- current_target_kind: {latest.target_kind}",
+                    f"- current_target_position: {latest.target_position}",
+                    f"- objective: {latest.objective or 'aligner_pressure'}",
+                    f"- heart: {latest.heart}",
+                    f"- generation_count: {self._pilot_session.generation_count}",
+                ],
             )
             return
         if not self._is_resource_coverage_stagnant():
@@ -1093,42 +1052,26 @@ class AnthropicPilotAgentPolicy(SemanticCogAgentPolicy):
             "Rewrite the local policy to add or tighten an explicit escape hatch, or change target, "
             "resource_bias, or phase."
         )
-        self._pilot_session.schedule_runtime_log(
-            record=LogRecord(
-                level="warning",
-                message="Resource coverage stagnation detected.",
-                step=self._step_index,
-                review=ReviewRequest(
-                    trigger_name="runtime_stagnation",
-                    prompt=request_summary,
-                ),
-                data={
-                    "subtask": latest.subtask,
-                    "target_kind": latest.target_kind,
-                    "target_position": latest.target_position,
-                    "objective": latest.objective or "resource_coverage",
-                    "generation_count": self._pilot_session.generation_count,
-                },
-            ),
-            extra_context="\n".join(
-                [
-                    "Recent low-level telemetry:",
-                    (
-                        "- positions: "
-                        + " -> ".join(
-                            _format_runtime_position(item.position) for item in self._recent_runtime_observations
-                        )
-                    ),
-                    "- subtasks: " + " | ".join(item.subtask for item in self._recent_runtime_observations),
-                    "- targets: "
-                    + " | ".join(item.target_position or "-" for item in self._recent_runtime_observations),
-                    f"- current_subtask: {latest.subtask}",
-                    f"- current_target_kind: {latest.target_kind}",
-                    f"- current_target_position: {latest.target_position}",
-                    f"- objective: {latest.objective or 'resource_coverage'}",
-                    f"- generation_count: {self._pilot_session.generation_count}",
-                ]
-            ),
+        self._schedule_runtime_review(
+            message="Resource coverage stagnation detected.",
+            trigger_name="runtime_stagnation",
+            request_summary=request_summary,
+            data={
+                "subtask": latest.subtask,
+                "target_kind": latest.target_kind,
+                "target_position": latest.target_position,
+                "objective": latest.objective or "resource_coverage",
+                "generation_count": self._pilot_session.generation_count,
+            },
+            extra_lines=[
+                self._runtime_subtasks_line(),
+                self._runtime_targets_line(),
+                f"- current_subtask: {latest.subtask}",
+                f"- current_target_kind: {latest.target_kind}",
+                f"- current_target_position: {latest.target_position}",
+                f"- objective: {latest.objective or 'resource_coverage'}",
+                f"- generation_count: {self._pilot_session.generation_count}",
+            ],
         )
 
     def _within_post_rewrite_runtime_quiet_period(self) -> bool:
