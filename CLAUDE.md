@@ -49,7 +49,7 @@ cloned as a sibling directory. Symlinks in this repo point there:
 - `.cursor/agents` → `../../cogents/subagents`
 - `.agent/prompts` → `../../cogents/prompts`
 
-To set up cogents (clone + symlinks):
+To set up cogents (clone/update + symlinks + shared-skill verification):
 
 ```bash
 ./scripts/setup-cogents.sh

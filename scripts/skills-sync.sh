@@ -7,7 +7,7 @@
 #   ./scripts/skills-sync.sh --force         # Replace existing directories with symlinks
 #   ./scripts/skills-sync.sh <path>          # Sync from a specific skills directory
 
-set -e
+set -euo pipefail
 
 FORCE=false
 SKILLS_DIR=""
@@ -27,6 +27,7 @@ if [ -z "$SKILLS_DIR" ]; then
   REPO_ROOT=$(git rev-parse --show-toplevel 2> /dev/null || pwd)
   COGENTS_DIR="${COGENTS_PATH:-$(dirname "$REPO_ROOT")/cogents}"
   if [ -d "$COGENTS_DIR/skills" ]; then
+    "$REPO_ROOT/scripts/setup-cogents.sh"
     SKILLS_DIR="$COGENTS_DIR/skills"
   else
     SKILLS_DIR="$REPO_ROOT/skills"

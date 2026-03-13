@@ -8,8 +8,9 @@ Prefix conventions and namespaces live in `docs/skills.md`.
 
 ### For Claude Code + Codex
 
-In this repo, `.claude/skills` and `.codex/skills` already symlink to `skills/`. If you want to install skills outside
-the repo, run:
+In this repo, `.claude/skills` and `.codex/skills` symlink to the sibling `cogents` checkout at `../cogents/skills`.
+Run `./scripts/setup-cogents.sh` to clone or fast-forward that checkout and verify the shared skill list. If you want
+to install those skills outside the repo, run:
 
 ```bash
 ./scripts/skills-sync.sh
