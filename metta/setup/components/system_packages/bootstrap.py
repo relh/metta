@@ -55,16 +55,6 @@ def error(message: str) -> None:
     _log("ERROR", message)
 
 
-def _safe_unlink(path: Path) -> None:
-    """Safely remove a file/symlink, logging warnings on failure."""
-    try:
-        path.unlink(missing_ok=True)
-    except PermissionError:
-        warning(f"Unable to remove {path}: permission denied")
-    except Exception as exc:
-        warning(f"Unable to remove {path}: {exc}")
-
-
 def get_install_dir() -> Path | None:
     path_dirs = os.environ.get("PATH", "").split(os.pathsep)
     for dir_str in TARGET_INSTALL_DIRS:
