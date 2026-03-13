@@ -110,6 +110,7 @@ class TaskGenerator(ABC):
     def __init__(self, config: TaskGeneratorConfig):
         self._config = config
         self._overrides = config.overrides
+        self._last_bucket_values: dict[str, Any] = {}
 
     def get_task(self, task_id: int) -> MettaGridConfig:
         """Generate a task (MettaGridConfig) using task_id as seed."""
@@ -217,11 +218,7 @@ class TaskGeneratorSet(TaskGenerator):
         chosen_generator = rng.choices(self._sub_task_generators, weights=self._weights)[0]
         result = chosen_generator.get_task(task_id)
 
-        # Propagate bucket values if the chosen generator has them
-        if hasattr(chosen_generator, "_last_bucket_values"):
-            self._last_bucket_values = chosen_generator._last_bucket_values.copy()
-        else:
-            self._last_bucket_values = {}
+        self._last_bucket_values = chosen_generator._last_bucket_values.copy()
 
         return result
 
@@ -264,10 +261,7 @@ class CyclicTaskGeneratorSet(TaskGenerator):
         chosen_generator = self._sub_task_generators[task_id % len(self._sub_task_generators)]
         result = chosen_generator.get_task(task_id)
 
-        if hasattr(chosen_generator, "_last_bucket_values"):
-            self._last_bucket_values = chosen_generator._last_bucket_values.copy()
-        else:
-            self._last_bucket_values = {}
+        self._last_bucket_values = chosen_generator._last_bucket_values.copy()
 
         return result
 
