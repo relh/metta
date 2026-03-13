@@ -13,7 +13,7 @@ from typing import Any, Optional
 import torch
 from pydantic import Field
 
-from metta.agent.policy import Policy, PolicyArchitecture
+from metta.agent.policy import Policy
 from metta.agent.util.torch_backends import build_sdpa_context
 from metta.app_backend.clients.stats_client import StatsClient
 from metta.cogworks.curriculum import Curriculum
@@ -70,12 +70,6 @@ from mettagrid.policy.policy import PolicySpec
 from mettagrid.util.uri_resolvers.schemes import policy_spec_from_uri, resolve_uri
 
 logger = getRankAwareLogger(__name__)
-
-
-def _default_policy_architecture() -> PolicyArchitecture:
-    from metta.agent.policies.default import DefaultPolicyConfig  # noqa: PLC0415
-
-    return DefaultPolicyConfig()
 
 
 class TrainTool(Tool):
