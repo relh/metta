@@ -86,7 +86,7 @@ def _directive_policy_source(
     lines = [
         "def step(sdk):",
         "    agent_id = sdk.helpers.agent_id()",
-        "    objectives = sdk.helpers.current_objectives()",
+        "    objectives = sdk.helpers.shared_objectives()",
         "    current = next(",
         "        (item.split(':', 1)[1] for item in objectives if item.startswith('current_objective:')),",
         "        'resource_coverage',",

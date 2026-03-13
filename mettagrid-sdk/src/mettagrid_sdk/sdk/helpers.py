@@ -39,14 +39,6 @@ class StateHelperCatalog(HelperCatalog):
                 HelperCapability(name="shared_inventory", description="Return the current team shared inventory."),
                 HelperCapability(name="shared_objectives", description="Return the current team shared objectives."),
                 HelperCapability(
-                    name="current_objectives",
-                    description="Return the current team shared objectives as the active objective list.",
-                ),
-                HelperCapability(
-                    name="objective_values",
-                    description="Return objective suffix values for tags matching a given prefix.",
-                ),
-                HelperCapability(
                     name="seen_resources",
                     description="Return resource names recorded in seen_resource:* shared objectives.",
                 ),
@@ -90,10 +82,7 @@ class StateHelperCatalog(HelperCatalog):
             return []
         return list(self._state.team_summary.shared_objectives)
 
-    def current_objectives(self) -> list[str]:
-        return self.shared_objectives()
-
-    def objective_values(self, prefix: str) -> list[str]:
+    def _objective_values(self, prefix: str) -> list[str]:
         prefix_tag = f"{prefix}:"
         return [
             objective.removeprefix(prefix_tag)
@@ -102,10 +91,10 @@ class StateHelperCatalog(HelperCatalog):
         ]
 
     def seen_resources(self) -> list[str]:
-        return self.objective_values("seen_resource")
+        return self._objective_values("seen_resource")
 
     def missing_resources(self) -> list[str]:
-        return self.objective_values("missing_resource")
+        return self._objective_values("missing_resource")
 
     def self_attribute(
         self,
@@ -139,8 +128,6 @@ class MettagridHelpers(Protocol):
     def agent_id(self) -> int: ...
     def shared_inventory(self) -> dict[str, int]: ...
     def shared_objectives(self) -> list[str]: ...
-    def current_objectives(self) -> list[str]: ...
-    def objective_values(self, prefix: str) -> list[str]: ...
     def seen_resources(self) -> list[str]: ...
     def missing_resources(self) -> list[str]: ...
     def position(self) -> tuple[int, int]: ...

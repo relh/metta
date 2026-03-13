@@ -63,16 +63,6 @@ class FakeHelpers:
     def shared_objectives(self) -> list[str]:
         return ["capture_more_junctions"]
 
-    def current_objectives(self) -> list[str]:
-        return self.shared_objectives()
-
-    def objective_values(self, prefix: str) -> list[str]:
-        if prefix == "missing_resource":
-            return ["oxygen"]
-        if prefix == "seen_resource":
-            return ["carbon"]
-        return []
-
     def seen_resources(self) -> list[str]:
         return ["carbon"]
 
@@ -374,8 +364,7 @@ def test_state_helper_catalog_exposes_team_and_agent_state() -> None:
 
     assert helpers.agent_id() == 3
     assert helpers.shared_inventory() == {"carbon": 4}
-    assert helpers.current_objectives() == ["seen_resource:carbon", "missing_resource:oxygen", "phase:opening"]
-    assert helpers.objective_values("missing_resource") == ["oxygen"]
+    assert helpers.shared_objectives() == ["seen_resource:carbon", "missing_resource:oxygen", "phase:opening"]
     assert helpers.seen_resources() == ["carbon"]
     assert helpers.missing_resources() == ["oxygen"]
     assert helpers.self_attribute("lane") == "west"
@@ -383,6 +372,7 @@ def test_state_helper_catalog_exposes_team_and_agent_state() -> None:
     assert helpers.visible_entity_counts() == {}
     assert helpers.recent_event_types() == []
     assert "visible_entity_counts" in helpers.render_capability_summary()
+    assert "current_objectives" not in helpers.render_capability_summary()
 
 
 def test_state_helper_catalog_summarizes_visible_entities_and_recent_events() -> None:
