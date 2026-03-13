@@ -77,16 +77,6 @@ class ReplayTool(Tool):
         return 0
 
 
-def get_clean_path(replay_url: str) -> str:
-    path = replay_url.removeprefix("file://")
-    if path.startswith("./"):
-        return path.removeprefix("./")
-    else:
-        # If the path url is fully qualified, we want to remove the cwd prefix
-        current_dir = os.getcwd()
-        return path.removeprefix(current_dir)
-
-
 def launch_mettascope(replay_url: str) -> None:
     """Launch the Nim MettaScope application with the given replay file."""
     if replay_url.startswith("http"):
@@ -94,7 +84,12 @@ def launch_mettascope(replay_url: str) -> None:
         return
 
     # Get the clean file path
-    replay_path = get_clean_path(replay_url)
+    replay_path = replay_url.removeprefix("file://")
+    if replay_path.startswith("./"):
+        replay_path = replay_path.removeprefix("./")
+    else:
+        # If the path url is fully qualified, we want to remove the cwd prefix
+        replay_path = replay_path.removeprefix(os.getcwd())
 
     # Find the mettascope source directory
     project_root = Path(__file__).resolve().parent.parent.parent
