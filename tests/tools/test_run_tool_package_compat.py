@@ -51,7 +51,38 @@ def test_prepare_published_compat_overlay_uses_installed_versions(monkeypatch, t
     ]
 
 
-def test_run_in_compat_version_prefixes_overlay_site_packages_and_sets_env(monkeypatch, tmp_path: Path) -> None:
+def test_compat_pythonpath_prefers_overlay_and_repo_sources(monkeypatch, tmp_path: Path) -> None:
+    overlay_site_packages = tmp_path / "overlay" / "site-packages"
+    repo_source_root = tmp_path / "repo" / "common" / "src"
+    ambient_site_packages = tmp_path / "base" / "site-packages"
+    existing_pythonpath = tmp_path / "existing" / "pythonpath"
+    overlay_site_packages.mkdir(parents=True)
+    repo_source_root.mkdir(parents=True)
+    ambient_site_packages.mkdir(parents=True)
+    existing_pythonpath.mkdir(parents=True)
+
+    repo_root = get_repo_root()
+    local_cogames_src = str(repo_root / "packages" / "cogames" / "src")
+    local_mettagrid_src = str(repo_root / "packages" / "mettagrid" / "python" / "src")
+
+    monkeypatch.setattr(package_compat_module, "_repo_source_roots", lambda _repo_root: [str(repo_source_root)])
+    monkeypatch.setattr(package_compat_module, "_ambient_site_packages", lambda: [str(ambient_site_packages)])
+
+    pythonpath = package_compat_module._compat_pythonpath(
+        overlay_site_packages,
+        os.pathsep.join([local_cogames_src, str(existing_pythonpath), local_mettagrid_src]),
+        repo_root,
+    )
+
+    assert pythonpath.split(os.pathsep) == [
+        str(overlay_site_packages.resolve()),
+        str(repo_source_root.resolve()),
+        str(ambient_site_packages.resolve()),
+        str(existing_pythonpath.resolve()),
+    ]
+
+
+def test_run_in_compat_version_reexecs_with_overlay_python_and_sets_env(monkeypatch, tmp_path: Path) -> None:
     overlay = package_compat_module.CompatPackageOverlay(
         compat_version="0.18",
         env_root=tmp_path / "compat" / "0.18",
@@ -60,13 +91,13 @@ def test_run_in_compat_version_prefixes_overlay_site_packages_and_sets_env(monke
         mettagrid_version="0.18.2",
     )
     monkeypatch.setattr(package_compat_module, "prepare_published_compat_overlay", lambda *_args: overlay)
-
-    repo_root = get_repo_root()
-    local_cogames_src = str(repo_root / "packages" / "cogames" / "src")
-    local_mettagrid_src = str(repo_root / "packages" / "mettagrid" / "python" / "src")
-    monkeypatch.setenv(
-        "PYTHONPATH",
-        os.pathsep.join([local_cogames_src, "/existing/pythonpath", local_mettagrid_src]),
+    monkeypatch.setattr(package_compat_module, "_overlay_python", lambda _env_root: overlay.env_root / "bin" / "python")
+    monkeypatch.setattr(
+        package_compat_module,
+        "_compat_pythonpath",
+        lambda _site_packages, _existing_pythonpath, _repo_root: (
+            "/compat/site-packages:/repo/common/src:/base/site-packages"
+        ),
     )
 
     captured: dict[str, object] = {}
@@ -82,11 +113,18 @@ def test_run_in_compat_version_prefixes_overlay_site_packages_and_sets_env(monke
     exit_code = package_compat_module.run_in_compat_version(
         "0.18",
         ["train", "arena", "run=test"],
-        ["uv", "run", "./tools/run.py"],
+        "./tools/run.py",
     )
 
     assert exit_code == 17
-    assert captured["cmd"] == ["uv", "run", "./tools/run.py", "train", "arena", "run=test"]
+    assert captured["cmd"] == [
+        str(overlay.env_root / "bin" / "python"),
+        "./tools/run.py",
+        "train",
+        "arena",
+        "run=test",
+    ]
+    repo_root = get_repo_root()
     assert captured["cwd"] == str(repo_root)
 
     env = captured["env"]
@@ -97,9 +135,5 @@ def test_run_in_compat_version_prefixes_overlay_site_packages_and_sets_env(monke
     assert env["METTA_COMPAT_METTAGRID_VERSION"] == "0.18.2"
     assert env["METTA_COMPAT_ENV_ROOT"] == str(overlay.env_root)
     assert env["METTA_COMPAT_SITE_PACKAGES"] == str(overlay.site_packages)
-
-    pythonpath_entries = env["PYTHONPATH"].split(os.pathsep)
-    assert pythonpath_entries[0] == str(overlay.site_packages)
-    assert "/existing/pythonpath" in pythonpath_entries
-    assert local_cogames_src not in pythonpath_entries
-    assert local_mettagrid_src not in pythonpath_entries
+    assert env["PYTHONNOUSERSITE"] == "1"
+    assert env["PYTHONPATH"] == "/compat/site-packages:/repo/common/src:/base/site-packages"

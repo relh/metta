@@ -7,7 +7,12 @@ from typing import cast
 from pydantic import Field
 
 from cogames.core import CoGameMission
-from cogames.games.cogs_vs_clips.missions.terrain import MachinaArena
+
+try:
+    from cogames.games.cogs_vs_clips.missions.terrain import MachinaArena
+except ImportError:
+    # Published compat packages before the games/ migration still expose MachinaArena here.
+    from cogames.cogs_vs_clips.terrain import MachinaArena
 from metta.games.games import register  # noqa: E402
 from metta.games.hunger.variants import parse_variants
 from mettagrid.config.action_config import ActionsConfig, MoveActionConfig, NoopActionConfig

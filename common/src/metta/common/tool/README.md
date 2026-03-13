@@ -182,11 +182,14 @@ git worktree under `.metta/game_versions` and re-run the command from there. Cle
 
 Use `--compat-version <X.Y>` to keep the current branch's `metta` code while overlaying published `cogames` and
 `mettagrid` packages for that compat release. The runner creates a cached virtualenv under `.metta/compat_packages`,
-installs `cogames==X.Y.*` from the package index, lets the published `cogames` dependency pin the matching published
-`mettagrid`, and then re-runs the command with that virtualenv's `site-packages` prepended to `PYTHONPATH`.
+installs published `cogames==X.Y.*` and `mettagrid==X.Y.*`, and then re-runs the command with that virtualenv's
+Python while keeping the current checkout's `metta` source roots on `PYTHONPATH`.
 
 ```bash
-./tools/run.py --compat-version 0.18 train arena run=test --dry-run
+./tools/run.py --compat-version 0.18 recipes.experiment.user.my_tasks.my_train \
+  run=local.compat018-smoke \
+  trainer.total_timesteps=16 \
+  evaluator.skip_git_check=true
 ```
 
 ## Argument Classification

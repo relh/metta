@@ -6,8 +6,11 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 from metta.common.compat_version import parse_compat_version
 from metta.common.util.fs import get_repo_root
@@ -35,6 +38,12 @@ import sysconfig
 
 print(sysconfig.get_path("purelib"))
 """
+_WORKSPACE_SOURCE_DIR_CANDIDATES = (
+    Path("src"),
+    Path("python") / "src",
+)
+_PUBLISHED_COMPAT_PACKAGES = ("cogames", "mettagrid")
+_OVERLAY_LAYOUT_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -86,10 +95,24 @@ def _overlay_python(env_root: Path) -> Path:
     return env_root / "bin" / "python"
 
 
+def _overlay_layout_marker(env_root: Path) -> Path:
+    return env_root / ".metta_overlay_layout"
+
+
+def _overlay_layout_is_current(env_root: Path) -> bool:
+    marker = _overlay_layout_marker(env_root)
+    if not marker.exists():
+        return False
+    return marker.read_text().strip() == _OVERLAY_LAYOUT_VERSION
+
+
 def _ensure_overlay_env(env_root: Path) -> None:
     python_path = _overlay_python(env_root)
-    if python_path.exists():
+    if python_path.exists() and _overlay_layout_is_current(env_root):
         return
+
+    if env_root.exists():
+        shutil.rmtree(env_root)
 
     env_root.parent.mkdir(parents=True, exist_ok=True)
     if shutil.which("uv"):
@@ -98,6 +121,7 @@ def _ensure_overlay_env(env_root: Path) -> None:
             check=True,
             cwd=str(get_repo_root()),
         )
+        _overlay_layout_marker(env_root).write_text(_OVERLAY_LAYOUT_VERSION)
         return
 
     subprocess.run(
@@ -105,6 +129,7 @@ def _ensure_overlay_env(env_root: Path) -> None:
         check=True,
         cwd=str(get_repo_root()),
     )
+    _overlay_layout_marker(env_root).write_text(_OVERLAY_LAYOUT_VERSION)
 
 
 def _run_overlay_python(env_root: Path, code: str) -> str:
@@ -137,17 +162,27 @@ def _overlay_site_packages(env_root: Path) -> Path:
 
 def _install_published_compat_packages(env_root: Path, compat_version: str) -> None:
     python_path = _overlay_python(env_root)
-    requirement = f"cogames=={compat_version}.*"
+    requirements = [f"{name}=={compat_version}.*" for name in _PUBLISHED_COMPAT_PACKAGES]
     if shutil.which("uv"):
         subprocess.run(
-            ["uv", "pip", "install", "--python", str(python_path), "--upgrade", requirement],
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(python_path),
+                "--upgrade",
+                "--reinstall",
+                "--no-deps",
+                *requirements,
+            ],
             check=True,
             cwd=str(get_repo_root()),
         )
         return
 
     subprocess.run(
-        [str(python_path), "-m", "pip", "install", "--upgrade", requirement],
+        [str(python_path), "-m", "pip", "install", "--upgrade", "--force-reinstall", "--no-deps", *requirements],
         check=True,
         cwd=str(get_repo_root()),
     )
@@ -213,12 +248,65 @@ def _filtered_pythonpath_entries(existing_pythonpath: str | None, repo_root: Pat
     return kept
 
 
-def _prefixed_pythonpath(site_packages: Path, existing_pythonpath: str | None, repo_root: Path | str) -> str:
-    entries = [str(site_packages), *_filtered_pythonpath_entries(existing_pythonpath, repo_root)]
-    return os.pathsep.join(entries)
+def _repo_workspace_members(repo_root: Path | str) -> list[Path]:
+    repo_root = Path(repo_root)
+    pyproject_path = repo_root / "pyproject.toml"
+    with pyproject_path.open("rb") as handle:
+        pyproject = tomllib.load(handle)
+
+    members = pyproject.get("tool", {}).get("uv", {}).get("workspace", {}).get("members", [])
+    return [repo_root / member for member in members]
 
 
-def run_in_compat_version(compat_version: str, argv: list[str], command: list[str]) -> int:
+def _repo_source_roots(repo_root: Path | str) -> list[str]:
+    repo_root = Path(repo_root).resolve()
+    local_package_paths = {(repo_root / local_path).resolve() for local_path in _LOCAL_PACKAGE_PATHS}
+
+    entries: list[str] = [str(repo_root)]
+    for member in _repo_workspace_members(repo_root):
+        for candidate_relpath in _WORKSPACE_SOURCE_DIR_CANDIDATES:
+            candidate = (member / candidate_relpath).resolve()
+            if not candidate.exists() or candidate in local_package_paths:
+                continue
+            entries.append(str(candidate))
+    return _dedupe_existing_paths(entries)
+
+
+def _ambient_site_packages() -> list[str]:
+    entries = [
+        sysconfig.get_path("purelib"),
+        sysconfig.get_path("platlib"),
+    ]
+    return _dedupe_existing_paths(entries)
+
+
+def _dedupe_existing_paths(entries: Sequence[str | None]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+
+    for entry in entries:
+        if not entry:
+            continue
+        resolved = str(Path(entry).resolve())
+        if resolved in seen or not Path(resolved).exists():
+            continue
+        seen.add(resolved)
+        deduped.append(resolved)
+
+    return deduped
+
+
+def _compat_pythonpath(site_packages: Path, existing_pythonpath: str | None, repo_root: Path | str) -> str:
+    entries = [
+        str(site_packages),
+        *_repo_source_roots(repo_root),
+        *_ambient_site_packages(),
+        *_filtered_pythonpath_entries(existing_pythonpath, repo_root),
+    ]
+    return os.pathsep.join(_dedupe_existing_paths(entries))
+
+
+def run_in_compat_version(compat_version: str, argv: list[str], script_path: str) -> int:
     if os.getenv("METTA_COMPAT_VERSION_ACTIVE") == "1":
         return -1
 
@@ -231,5 +319,7 @@ def run_in_compat_version(compat_version: str, argv: list[str], command: list[st
     env["METTA_COMPAT_METTAGRID_VERSION"] = overlay.mettagrid_version
     env["METTA_COMPAT_ENV_ROOT"] = str(overlay.env_root)
     env["METTA_COMPAT_SITE_PACKAGES"] = str(overlay.site_packages)
-    env["PYTHONPATH"] = _prefixed_pythonpath(overlay.site_packages, env.get("PYTHONPATH"), repo_root)
-    return subprocess.run([*command, *argv], cwd=str(repo_root), env=env).returncode
+    env["PYTHONNOUSERSITE"] = "1"
+    env["PYTHONPATH"] = _compat_pythonpath(overlay.site_packages, env.get("PYTHONPATH"), repo_root)
+    command = [str(_overlay_python(overlay.env_root)), script_path, *argv]
+    return subprocess.run(command, cwd=str(repo_root), env=env).returncode

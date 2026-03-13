@@ -49,8 +49,7 @@ def _run_in_game_version(version: str) -> int:
 
 def _run_in_compat_version(compat_version: str) -> int:
     argv = parse_package_compat_args(sys.argv[1:])[1]
-    cmd = ["uv", "run", "./tools/run.py"] if shutil.which("uv") else [sys.executable, "./tools/run.py"]
-    return run_in_compat_version(compat_version, argv, cmd)
+    return run_in_compat_version(compat_version, argv, "./tools/run.py")
 
 
 def _ensure_torch_initialized() -> None:

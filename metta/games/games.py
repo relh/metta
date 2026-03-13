@@ -54,5 +54,12 @@ def make_game(
     return env
 
 
-# Import games to trigger self-registration
-from metta.games.hunger import game as _  # noqa: E402, F401
+# Import games to trigger self-registration.
+#
+# Some published compat overlays intentionally pin older cogames/mettagrid packages.
+# Those older packages may not satisfy optional game integrations like hunger, so
+# keep unrelated training recipes loadable when that import surface is unavailable.
+try:
+    from metta.games.hunger import game as _  # noqa: E402, F401
+except ImportError:
+    pass
