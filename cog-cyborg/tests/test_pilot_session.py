@@ -201,6 +201,35 @@ def test_artifact_store_writes_and_reads_generation_records(tmp_path: Path) -> N
     assert "success=True" in context
 
 
+def test_live_policy_bundle_session_writes_initial_policy_once(tmp_path: Path) -> None:
+    store = ArtifactStore(
+        main_file=tmp_path / "main.py",
+        strategy_file=tmp_path / "plan.md",
+        scratchpad_file=tmp_path / "memory.md",
+        experience_file=tmp_path / "experience.jsonl",
+        decision_file=tmp_path / "decisions.jsonl",
+        generation_file=tmp_path / "generation.jsonl",
+        execution_file=tmp_path / "execution.jsonl",
+        policy_file=tmp_path / "policy.md",
+    )
+    backend = _FakeCodeBackend(
+        [
+            CodeReviewResponse(
+                action="policy",
+                set_policy='def step(sdk):\n    return {"role": "miner"}',
+            )
+        ]
+    )
+    session = LivePolicyBundleSession(backend=backend, artifact_store=store)
+
+    result = session.execute(sdk=_build_sdk(), prompt="write live policy", step=5, agent_id=0, goal="coverage")
+
+    assert result.success is True
+    assert result.return_value == {"role": "miner"}
+    assert len(store.read_recent_generation_records(max_entries=10)) == 1
+    assert store.read_policy().count("## Step 5 (Agent 0) set_policy") == 1
+
+
 def test_live_policy_bundle_session_rewrites_policy_and_scratchpad(tmp_path: Path) -> None:
     store = ArtifactStore(
         main_file=tmp_path / "main.py",

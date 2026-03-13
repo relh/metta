@@ -483,27 +483,6 @@ class LivePolicyBundleSession:
         )
         if not response.set_policy:
             raise ValueError("Live policy backend did not return set_policy for initial generation")
-        self._register_trigger_names(trigger.name for trigger in response.triggers)
-        try:
-            self._set_policy_source(
-                response.set_policy,
-                step=step,
-                agent_id=agent_id,
-                prompt=prompt,
-                raw_response=_raw_response_text(response),
-                metadata=_merge_record_metadata(metadata, response.metadata),
-            )
-        except Exception as exc:
-            self._append_failed_generation_record(
-                step=step,
-                agent_id=agent_id,
-                prompt=prompt,
-                raw_response=_raw_response_text(response),
-                policy_source=response.set_policy,
-                error_message=f"{type(exc).__name__}: {exc}",
-                metadata=_merge_record_metadata(metadata, response.metadata),
-            )
-            raise
 
     def _set_policy_source(
         self,
