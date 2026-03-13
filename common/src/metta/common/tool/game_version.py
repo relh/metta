@@ -77,19 +77,6 @@ def resolve_full_commit_hash(repo_root: Path | str, commit: str) -> str:
     return result.stdout.strip()
 
 
-def _worktree_head(path: Path | str) -> str | None:
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(path), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except Exception:
-        return None
-    return result.stdout.strip()
-
-
 def ensure_game_version_worktree(repo_root: Path | str, version_name: str, commit: str) -> Path:
     repo_root = Path(repo_root)
     commit = resolve_full_commit_hash(repo_root, commit)
@@ -98,7 +85,17 @@ def ensure_game_version_worktree(repo_root: Path | str, version_name: str, commi
     worktree_root.mkdir(parents=True, exist_ok=True)
     worktree_path = worktree_root / f"{safe_name}-{commit[:12]}"
     if worktree_path.exists():
-        head = _worktree_head(worktree_path)
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(worktree_path), "rev-parse", "HEAD"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except Exception:
+            head = None
+        else:
+            head = result.stdout.strip()
         if head == commit:
             return worktree_path
         if head is None:
