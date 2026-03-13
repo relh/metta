@@ -7,7 +7,7 @@ from pathlib import Path
 from cog_cyborg.memory import MemoryStore
 from cog_cyborg.runtime.artifacts import ArtifactStore
 from cog_cyborg.runtime.execution import PolicyExecutionRecord, PolicyExecutionResult
-from cog_cyborg.runtime.models import ExperienceTraceRecord, ReviewDecisionRecord
+from cog_cyborg.runtime.models import ExperienceTraceRecord, PolicyGenerationRecord, ReviewDecisionRecord
 from mettagrid_sdk.sdk import GridPosition, LogRecord, MemoryQuery
 
 
@@ -77,6 +77,52 @@ def test_artifact_store_reads_recent_execution_records(tmp_path: Path) -> None:
 
     assert [record.step for record in records] == [2, 3]
     assert records[-1].result.return_repr == "3"
+
+
+def test_artifact_store_summarizes_generation_records_without_repeating_live_main(tmp_path: Path) -> None:
+    store = ArtifactStore(
+        main_file=tmp_path / "main.py",
+        generation_file=tmp_path / "generation.jsonl",
+    )
+    store.write_main_source('def step(sdk):\n    return {"role": "miner"}')
+    store.append_generation_record(
+        PolicyGenerationRecord(
+            step=3,
+            agent_id=0,
+            prompt="write a policy",
+            raw_response='{"set_policy":"def step(sdk):\\n    return {\\"role\\": \\"aligner\\"}"}',
+            policy_source='def step(sdk):\n    return {"role": "aligner"}',
+            success=True,
+        )
+    )
+
+    context = store.build_prompt_context()
+
+    assert "LIVE MAIN.PY" in context
+    assert 'return {"role": "miner"}' in context
+    assert "SDK GENERATION RECORDS" in context
+    assert "policy_updated=yes" in context
+    assert 'return {"role": "aligner"}' not in context
+
+
+def test_artifact_store_does_not_report_failed_generation_as_policy_update(tmp_path: Path) -> None:
+    store = ArtifactStore(generation_file=tmp_path / "generation.jsonl")
+    store.append_generation_record(
+        PolicyGenerationRecord(
+            step=3,
+            agent_id=0,
+            prompt="write a policy",
+            raw_response='{"set_policy":"def step(sdk):\\n    return {\\"role\\": \\"aligner\\"}"}',
+            policy_source='def step(sdk):\n    return {"role": "aligner"}',
+            success=False,
+            error_message="compile failed",
+        )
+    )
+
+    context = store.build_prompt_context()
+
+    assert "success=False" in context
+    assert "policy_updated=no" in context
 
 
 def test_artifact_store_supports_live_bundle_files(tmp_path: Path) -> None:

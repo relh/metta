@@ -267,8 +267,12 @@ class ArtifactStore:
         if recent_generation:
             lines = ["=== SDK GENERATION RECORDS ==="]
             for item in recent_generation:
-                outcome = item.policy_source if item.policy_source is not None else item.error_message or "none"
-                lines.append(f"  - step {item.step}: success={item.success}, result={outcome}")
+                policy_updated = "yes" if item.success and item.policy_source else "no"
+                error_message = item.error_message or "none"
+                lines.append(
+                    f"  - step {item.step}: success={item.success}, "
+                    f"policy_updated={policy_updated}, error={error_message}"
+                )
             sections.append("\n".join(lines))
 
         recent_experience = self.read_recent_experience_records(max_entries=max_memory_entries)
