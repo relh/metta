@@ -29,7 +29,7 @@ from devops.skypilot.utils.task_helpers import (
     validate_task_name,
 )
 from metta.common.tool import Tool
-from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker, validate_module_path
+from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker
 from metta.common.util.cli import get_user_confirmation
 from metta.common.util.fs import cd_repo_root
 from metta.common.util.log_config import init_logging
@@ -278,7 +278,7 @@ def main(
                 raise typer.Exit(1)
 
     # Validate module path (supports shorthand like 'arena.train' or two-token 'train arena')
-    if not validate_module_path(module_path):
+    if resolve_and_load_tool_maker(module_path) is None:
         print(f"❌ Invalid module path: '{module_path}'")
         print("Module path should be like 'arena.train' or 'recipes.experiment.arena.train'")
         raise typer.Exit(1)
