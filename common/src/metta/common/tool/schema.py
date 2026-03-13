@@ -128,7 +128,7 @@ def get_pydantic_field_info(model_class: type[BaseModel], prefix: str = "") -> l
                     default_val = f"<{type_name} instance>"
                 else:
                     default_val = field.default_factory if field.default_factory else None
-                is_required = field.is_required() if hasattr(field, "is_required") else (default_val is None)
+                is_required = field.is_required()
                 fields_info.append((field_path, type_name, default_val, is_required))
 
                 # Then recursively get nested fields
@@ -138,13 +138,13 @@ def get_pydantic_field_info(model_class: type[BaseModel], prefix: str = "") -> l
                 # Regular field
                 type_name = getattr(actual_type, "__name__", str(actual_type))
                 default_val = field.default if field.default is not None else field.default_factory
-                is_required = field.is_required() if hasattr(field, "is_required") else (default_val is None)
+                is_required = field.is_required()
                 fields_info.append((field_path, type_name, default_val, is_required))
         except (TypeError, AttributeError):
             # For complex types that can't be inspected
             type_name = str(annotation).replace("typing.", "")
             default_val = field.default if field.default is not None else field.default_factory
-            is_required = field.is_required() if hasattr(field, "is_required") else (default_val is None)
+            is_required = field.is_required()
             fields_info.append((field_path, type_name, default_val, is_required))
 
     return fields_info
@@ -205,7 +205,7 @@ def extract_schema(
                 has_default = True
 
         # Check if required
-        is_required = field.is_required() if hasattr(field, "is_required") else (not has_default)
+        is_required = field.is_required()
 
         # Check if nested Pydantic model
         is_nested_model = False
