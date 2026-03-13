@@ -18,26 +18,16 @@ def build_episode_runner_compat_image(compat_version: str) -> str:
     return f"{get_episode_runner_registry()}:{COMPAT_IMAGE_TAG_PREFIX}{compat_version}"
 
 
-def _split_registry_reference(registry_reference: str) -> tuple[str, str]:
-    reference = registry_reference.strip().split("@", maxsplit=1)[0]
+async def list_available_episode_runner_compat_versions() -> list[str]:
+    registry = get_episode_runner_registry()
+    reference = registry.strip().split("@", maxsplit=1)[0]
     if "/" not in reference:
-        raise ValueError(f"Invalid registry reference: {registry_reference}")
-    host, repository_with_tag = reference.split("/", maxsplit=1)
-    repository = repository_with_tag
+        raise ValueError(f"Invalid registry reference: {registry}")
+    host, repository = reference.split("/", maxsplit=1)
     if ":" in repository.rsplit("/", maxsplit=1)[-1]:
         repository = repository.rsplit(":", maxsplit=1)[0]
     if not host or not repository:
-        raise ValueError(f"Invalid registry reference: {registry_reference}")
-    return host, repository
-
-
-def _sort_compat_versions(versions: set[str]) -> list[str]:
-    return sorted(versions, key=lambda value: tuple(int(part) for part in value.split(".")), reverse=True)
-
-
-async def list_available_episode_runner_compat_versions() -> list[str]:
-    registry = get_episode_runner_registry()
-    host, repository = _split_registry_reference(registry)
+        raise ValueError(f"Invalid registry reference: {registry}")
     compat_versions: set[str] = set()
 
     try:
@@ -79,4 +69,4 @@ async def list_available_episode_runner_compat_versions() -> list[str]:
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Unable to fetch compat versions from {registry}") from exc
 
-    return _sort_compat_versions(compat_versions)
+    return sorted(compat_versions, key=lambda value: tuple(int(part) for part in value.split(".")), reverse=True)
