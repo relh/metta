@@ -315,12 +315,16 @@ class SemanticCogAgentPolicy(AgentPolicy):
 
     def step(self, obs: AgentObservation) -> Action:
         self._step_index += 1
-        self._current_target_position = None
-        self._current_target_kind = None
         state = self._state_adapter.build_state(
             ObservationEnvelope(raw_observation=obs, policy_env_info=self.policy_env_info, step=self._step_index)
         )
         state.recent_events = self._event_extractor.extract_events(self._previous_state, state)
+        return self.evaluate_state(state)
+
+    def evaluate_state(self, state: MettagridState) -> Action:
+        self._step_index = self._step_index + 1 if state.step is None else state.step
+        self._current_target_position = None
+        self._current_target_kind = None
         self._memory.append_semantic_events(
             state.recent_events,
             game=state.game,
