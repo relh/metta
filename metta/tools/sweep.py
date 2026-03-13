@@ -246,7 +246,13 @@ class SweepTool(Tool):
 
         # Populate optimizer parameters and fixed overrides from search_space (flat dot paths)
         parameters, base_overrides = self._split_search_space(self.search_space)
-        protein_config = self._build_protein_config(parameters)
+        protein_config = ProteinConfig(
+            metric=self.protein_metric,
+            goal=self.protein_goal,
+            method=self.protein_method,
+            parameters=dict(parameters),
+            settings=self.protein_settings,
+        )
         sweep_config_hash = self._compute_sweep_config_hash(parameters, base_overrides)
         logger.info("[SweepTool] Sweep config hash: %s", sweep_config_hash)
 
@@ -463,16 +469,6 @@ class SweepTool(Tool):
             else:
                 overrides[k] = v
         return params, overrides
-
-    def _build_protein_config(self, parameters: dict[str, ParameterSpec]) -> ProteinConfig:
-        """Create a ProteinConfig using the configured optimizer settings."""
-        return ProteinConfig(
-            metric=self.protein_metric,
-            goal=self.protein_goal,
-            method=self.protein_method,
-            parameters=dict(parameters),
-            settings=self.protein_settings,
-        )
 
     def _compute_sweep_config_hash(self, parameters: dict[str, ParameterSpec], base_overrides: dict[str, Any]) -> str:
         """Compute a stable hash for the sweep configuration.
