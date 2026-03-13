@@ -12,17 +12,14 @@ apps:
   ########## Core infrastructure ##########
   - name: external-dns
     namespace: external-dns
-    branch: 03-09-argocd # TODO
     automated: null
 
   - name: cert-manager
     namespace: cert-manager
-    branch: 03-09-argocd # TODO
     automated: null
 
   - name: ingress-nginx
     namespace: ingress-nginx
-    branch: 03-09-argocd # TODO
     automated: null
 
   - name: metrics-server
@@ -36,14 +33,12 @@ apps:
   - name: prometheus
     namespace: monitoring
     automated: null
-    branch: 03-09-argocd # TODO
     syncOptions:
       - ServerSideApply=true
 
   - name: datadog
     namespace: monitoring
     automated: null
-    branch: 03-09-argocd # TODO
     ignoreDifferences:
       - group: ""
         kind: Secret
@@ -75,7 +70,6 @@ apps:
   - name: skypilot
     namespace: skypilot
     automated: null
-    branch: 03-09-argocd # TODO
     ignoreDifferences:
       - group: apps
         kind: Deployment
