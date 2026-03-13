@@ -118,19 +118,6 @@ class SliceAnalyzer:
         self._density_stats_cache: Optional[Dict[str, Dict[str, float]]] = None
         self._density_cache_valid = False
 
-    def extract_slice_values(self, task) -> Dict[str, Any]:
-        """Extract slice values from a task's environment configuration."""
-        slice_values = {}
-
-        # This is a placeholder - real implementation would extract from task.get_env_cfg()
-        # and match against known slice paths like "game.map_builder.width"
-        if hasattr(task, "get_slice_values"):
-            slice_values = task.get_slice_values()
-        elif hasattr(task, "get_bucket_values"):  # Backward compatibility
-            slice_values = task.get_bucket_values()
-
-        return slice_values
-
     def update_task_completion(self, task_id: int, slice_values: Dict[str, Any], score: float) -> None:
         """Update slice analysis with task completion data.
 

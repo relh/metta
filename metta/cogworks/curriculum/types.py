@@ -42,10 +42,6 @@ class CurriculumTask:
         """Get the slice values that were used to generate this task."""
         return self._slice_values
 
-    def get_bucket_values(self):
-        """Get the slice values (backward compatibility alias)."""
-        return self._slice_values
-
 
 class CurriculumAlgorithmConfig(Config, ABC):
     """Hyperparameters for the CurriculumAlgorithm."""
