@@ -28,7 +28,7 @@ server {
     location / {
         try_files $uri $uri/ /index.html;
     }
-    
+
     # Version-based caching for index.html
     location = /index.html {
         add_header Cache-Control "no-cache, must-revalidate";

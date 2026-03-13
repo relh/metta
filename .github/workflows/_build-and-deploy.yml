@@ -49,10 +49,6 @@ on:
         required: false
         type: string
         default: blacksmith-4vcpu-ubuntu-2404
-      pre_deploy_command:
-        required: false
-        type: string
-        default: ""
       docker_build_args:
         description: "Additional Docker build args to pass through to docker-build action."
         required: false
@@ -176,10 +172,6 @@ jobs:
         uses: ./.github/actions/eks-configure
         with:
           aws_role: ${{ vars.AWS_ROLE }}
-
-      - name: Pre-deploy command
-        if: inputs.pre_deploy_command != ''
-        run: ${{ inputs.pre_deploy_command }}
 
       - name: Preflight production release lock check
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

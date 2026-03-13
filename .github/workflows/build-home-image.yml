@@ -1,4 +1,4 @@
-name: "Build Home Frontend Docker Image"
+name: "Build and Deploy Home Frontend"
 
 on:
   push:
@@ -9,19 +9,59 @@ on:
       - ".github/workflows/build-home-image.yml"
   workflow_dispatch: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI_APP_ID: ${{ secrets.CI_APP_ID }}
+  CI_APP_PRIVATE_KEY: ${{ secrets.CI_APP_PRIVATE_KEY }}
+
 jobs:
-  build-and-deploy:
+  build:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 20
     permissions:
       id-token: write
       contents: read
+    outputs:
+      image_tag: ${{ steps.build-image.outputs.tag }}
 
-    uses: ./.github/workflows/_build-and-deploy.yml
-    secrets: inherit
-    with:
-      image_name: softmax-home
-      dockerfile: web/home/Dockerfile
-      namespace: default
-      release: home
-      chart: ./devops/charts/home
-      pre_deploy_command: |
-        cp web/home/links.yaml devops/charts/home/
+    steps:
+      - id: ci-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ env.CI_APP_ID }}
+          private-key: ${{ env.CI_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ steps.ci-token.outputs.token }}
+
+      - name: Build Docker image
+        id: build-image
+        uses: ./.github/actions/docker-build
+        with:
+          image_name: softmax-home
+          dockerfile: web/home/Dockerfile
+          aws_role: ${{ vars.AWS_ROLE }}
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    steps:
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/download/v3.3.3/argocd-linux-amd64
+          chmod +x argocd
+          sudo mv argocd /usr/local/bin/
+
+      - name: Deploy via ArgoCD
+        env:
+          ARGOCD_SERVER: argocd.softmax-research.net
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          ARGOCD_OPTS: --grpc-web
+        run: |
+          argocd app set home --parameter image.tag=${{ needs.build.outputs.image_tag }}
+          argocd app sync home

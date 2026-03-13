@@ -15,11 +15,6 @@ releases:
           enabled: true
           env: production
 
-  - name: home
-    chart: ./home
-    version: 0.1.0
-    namespace: home
-
   ########## Cronjobs ##########
   # Shared cronjob template for all periodic tasks
   # All cronjobs get broad read-only cluster permissions (see cronjob/templates/rbac.yaml).

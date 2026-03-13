@@ -76,3 +76,7 @@ apps:
         name: skypilot-oauth2-proxy
         jqPathExpressions:
           - .spec.template.spec.containers[].env[] | select(.name == "OAUTH2_PROXY_COOKIE_SECRET")
+
+  ########## Softmax apps ##########
+  - name: home
+    namespace: default
