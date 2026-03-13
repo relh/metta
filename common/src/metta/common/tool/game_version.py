@@ -66,10 +66,6 @@ def parse_game_version_args(argv: list[str]) -> tuple[str | None, list[str]]:
     return version, filtered
 
 
-def strip_game_version_args(argv: list[str]) -> list[str]:
-    return parse_game_version_args(argv)[1]
-
-
 def resolve_full_commit_hash(repo_root: Path | str, commit: str) -> str:
     result = subprocess.run(
         ["git", "rev-parse", commit],

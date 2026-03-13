@@ -25,7 +25,7 @@ from pydantic import BaseModel, TypeAdapter
 from rich.console import Console
 
 from metta.common.tool import Tool
-from metta.common.tool.game_version import run_in_game_version, strip_game_version_args
+from metta.common.tool.game_version import parse_game_version_args, run_in_game_version
 from metta.common.tool.recipe_registry import recipe_registry
 from metta.common.tool.schema import get_pydantic_field_info
 from metta.common.tool.tool_path import parse_two_token_syntax, resolve_and_load_tool_maker
@@ -41,7 +41,7 @@ _torch_initialized = False
 
 
 def _run_in_game_version(version: str) -> int:
-    argv = strip_game_version_args(sys.argv[1:])
+    argv = parse_game_version_args(sys.argv[1:])[1]
     cmd = ["uv", "run", "./tools/run.py"] if shutil.which("uv") else [sys.executable, "./tools/run.py"]
     return run_in_game_version(version, argv, cmd)
 
