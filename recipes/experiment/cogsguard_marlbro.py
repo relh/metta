@@ -18,7 +18,7 @@ from pydantic import Field, model_validator
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
-from cogames.games.cogs_vs_clips.train.cogsguard_curriculum import EventProfile
+from cogames.games.cogs_vs_clips.train.cvc_curriculum import EventProfile
 from cogames.games.cogs_vs_clips.train.reward_variants import apply_reward_variants
 from metta.agent.policies.cnn_shared_critic import CnnSharedCriticConfig
 from metta.agent.policy import PolicyArchitecture
@@ -58,7 +58,7 @@ _DEFAULT_EVENT_PROFILES: list[EventProfile] = [
     EventProfile(
         name="no_clips_no_weather",
         clips_overrides={"disabled": True},
-        weather_overrides={"day_deltas": {}, "night_deltas": {}},
+        weather_overrides={"day_solar": 0, "night_solar": 0},
     ),
 ]
 
