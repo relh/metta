@@ -18,7 +18,6 @@ from metta.app_backend.episode_stats_db import (
     insert_episode,
     insert_episode_tag,
 )
-from metta.common.util.collections import remove_none_keys
 from metta.common.util.log_config import get_console, should_use_rich_console
 from metta.common.wandb.context import WandbRun
 from metta.rl.wandb import (
@@ -101,7 +100,7 @@ def get_replay_html_payload(
 
     # Log all links in a single HTML entry
     html_content = " | ".join(links)
-    return remove_none_keys({"replays/all": wandb.Html(html_content)})
+    return {"replays/all": wandb.Html(html_content)}
 
 
 def _form_mettascope_link(url: str, name: str) -> str:

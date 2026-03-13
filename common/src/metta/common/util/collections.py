@@ -16,10 +16,6 @@ def remove_none_values(d: dict[K, T | None]) -> dict[K, T]:
     return {k: v for k, v in d.items() if v is not None}
 
 
-def remove_none_keys(d: dict[K | None, T]) -> dict[K, T]:
-    return {k: v for k, v in d.items() if k is not None}
-
-
 def remove_falsey(collection: Iterable[T | None]) -> list[T]:
     return [item for item in collection if item]
 
