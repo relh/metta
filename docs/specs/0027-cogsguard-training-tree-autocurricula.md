@@ -119,7 +119,7 @@ Implement a versioned `training_tree` system with:
 
 - `recipes/experiment/cogsguard.py` provides dedicated `miner`, `aligner`, and `scout` training helpers, but no explicit
   scrambler helper and no join curricula abstraction.
-- `packages/cogames/src/cogames/cogs_vs_clips/evals/cogsguard_evals.py` has broad environment eval maps;
+- `packages/cogames/src/cogames/games/cogs_vs_clips/evals/cogsguard_evals.py` has broad environment eval maps;
   `diagnostic_evals.py` has focused diagnostics; `spanning_evals.py` has stress variants.
 - Existing eval suites are useful primitives but not organized as atomic-vs-join tree nodes.
 
@@ -141,7 +141,7 @@ no canonical training-tree schema binding training, eval, and readiness into one
 
 ### 1. Canonical Tree Data Model
 
-Add a versioned tree definition in `packages/cogames/src/cogames/cogs_vs_clips/training_tree/`:
+Add a versioned tree definition in `packages/cogames/src/cogames/games/cogs_vs_clips/training_tree/`:
 
 - `tree.v1.yaml` (or JSON):
   - `tree_id`, `tree_version`
@@ -159,7 +159,7 @@ Add a versioned tree definition in `packages/cogames/src/cogames/cogs_vs_clips/t
 
 Add typed models in Python and TS to keep schema aligned:
 
-- Python: `packages/cogames/src/cogames/cogs_vs_clips/training_tree/types.py`
+- Python: `packages/cogames/src/cogames/games/cogs_vs_clips/training_tree/types.py`
 - TS: `web/observatory/src/lib/cogsguard-training-tree/types.ts`
 
 ### 2. Node Taxonomy (v1)

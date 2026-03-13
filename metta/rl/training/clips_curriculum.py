@@ -17,10 +17,14 @@ from typing import Literal, Optional
 
 from pydantic import Field
 
-from cogames.cogs_vs_clips.clips import ClipsConfig
-from cogames.cogs_vs_clips.mission import CvCMission
-from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site, make_cogsguard_machina1_site
+from cogames.games.cogs_vs_clips.game import ClipsVariant
+from cogames.games.cogs_vs_clips.game.clips import ClipsConfig
+from cogames.games.cogs_vs_clips.game.damage import DamageVariant
+from cogames.games.cogs_vs_clips.game.days import DaysVariant
+from cogames.games.cogs_vs_clips.missions.arena import make_arena_map_builder
+from cogames.games.cogs_vs_clips.missions.machina_1 import make_machina1_map_builder
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission
+from cogames.games.cogs_vs_clips.train.reward_variants import apply_reward_variants
 from metta.cogworks.curriculum.curriculum import (
     Curriculum,
     CurriculumConfig,
@@ -172,7 +176,13 @@ class ClipsTaskGenerator(TaskGenerator):
         intensity = performance.intensity if performance else 0.0
 
         mission = self._config.mission.model_copy(deep=True)
-        mission.clips = _scale_clips_intensity(mission.clips, intensity)
+        clips_variant = next(
+            (v for v in mission._variant_registry._variants.values() if isinstance(v, ClipsVariant)), None
+        )
+        assert clips_variant is not None and isinstance(clips_variant.clips_config, ClipsConfig), (
+            "ClipsVariant must be in mission variants to use clips curriculum"
+        )
+        clips_variant.clips_config = _scale_clips_intensity(clips_variant.clips_config, intensity)
 
         env_config = mission.make_env()
 
@@ -251,14 +261,22 @@ class ClipsCurriculumConfig(CurriculumConfig):
     def model_post_init(self, __context) -> None:
         self._registry_id = f"clips_curriculum_{uuid.uuid4().hex[:8]}"
 
-        # Create mission from layout
         if self.layout == "machina_1":
-            site = make_cogsguard_machina1_site(8)
+            map_builder = make_machina1_map_builder(8)
             description = "CogsGuard clips curriculum (Machina1 layout)"
         else:
-            site = make_cogsguard_arena_site(8)
+            map_builder = make_arena_map_builder(8)
             description = "CogsGuard clips curriculum (arena layout)"
-        self._mission = CvCMission(name="basic", description=description, site=site, num_cogs=8, max_steps=10000)
+        mission = CvCMission(
+            name="basic",
+            description=description,
+            map_builder=map_builder,
+            num_cogs=8,
+            min_cogs=8,
+            max_cogs=8,
+            max_steps=10000,
+        ).with_variants([DamageVariant(), DaysVariant(), ClipsVariant()])
+        self._mission = mission
 
         if self.mode == "linear":
             self._performance = LinearPerformanceProgress(

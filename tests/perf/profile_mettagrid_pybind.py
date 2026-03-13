@@ -120,7 +120,7 @@ def create_env(num_agents: int = 8, map_size: int = 40, seed: int = 42):
                 ),
             ),
             objects={
-                "wall": WallConfig(render_symbol="X"),
+                "wall": WallConfig(),
             },
             map_builder=RandomMapBuilder.Config(
                 width=map_size,

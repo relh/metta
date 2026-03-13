@@ -336,7 +336,7 @@ sim = Simulator().new_simulation(cfg, seed=42)
 
 This follow-up rechecked scripted agents on a single 1000-step `recipes.experiment.cogsguard` episode and compared the
 full evaluation pipeline (`tools/run.py evaluate`) with the debug harness
-(`cogames-agents/scripts/run_cogsguard_rollout.py`).
+(`packages/cogames-agents/scripts/run_cogsguard_rollout.py`).
 
 ### 1) EvaluateTool results (max_steps=1000, max_workers=1)
 
@@ -368,7 +368,7 @@ The debug harness gives role/gear/structure visibility that the eval pipeline do
 Command:
 
 ```bash
-uv run cogames-agents/scripts/run_cogsguard_rollout.py \
+uv run packages/cogames-agents/scripts/run_cogsguard_rollout.py \
   --steps 1000 --max-steps 1000 --seed 42 --agents 10 \
   --policy-uri 'metta://policy/role?miner=5&scout=1&aligner=2&scrambler=2' \
   --allow-missing-roles
@@ -458,8 +458,8 @@ These are designed to be decisive; each should either confirm a root cause or el
 
 ## Related Files
 
-- `packages/cogames/src/cogames/cogs_vs_clips/mission.py` - CogsGuard mission config
-- `packages/cogames/src/cogames/cogs_vs_clips/stations.py` - Junction and Hub configs
-- `cogames-agents/src/cogames_agents/policy/nim_agents/cogsguard_agents.nim` - Nim scripted agents
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/` - Python scripted agents
+- `packages/cogames/src/cogames/games/cogs_vs_clips/mission.py` - CogsGuard mission config
+- `packages/cogames/src/cogames/games/cogs_vs_clips/stations.py` - Junction and Hub configs
+- `packages/cogames-agents/src/cogames_agents/policy/nim_agents/cogsguard_agents.nim` - Nim scripted agents
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/` - Python scripted agents
 - `recipes/experiment/cogsguard.py` - Recipe for running CogsGuard

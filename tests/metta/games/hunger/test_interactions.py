@@ -118,7 +118,7 @@ class HungerTestHarness:
                 actions=ActionsConfig(noop=NoopActionConfig(), move=MoveActionConfig()),
                 agent=_test_agent(resources=res),
                 objects={
-                    "wall": WallConfig(name="wall", render_symbol="\u2b1b"),
+                    "wall": WallConfig(name="wall"),
                     station_name: station_cfg,
                 },
                 events=events or {},
@@ -161,7 +161,7 @@ class HungerTestHarness:
         agent0 = carn_agent if use_carn else _test_agent(resources=res)
         agent1 = carn_agent if use_carn else _test_agent(resources=res)
 
-        objects = {"wall": WallConfig(name="wall", render_symbol="\u2b1b")}
+        objects = {"wall": WallConfig(name="wall")}
         if extra_objects:
             objects.update(extra_objects)
 
@@ -206,7 +206,7 @@ class HungerTestHarness:
         resources: list[str] | None = None,
     ) -> "HungerTestHarness":
         """Minimal map for testing events. Agents in a row."""
-        obj_defs = {"wall": WallConfig(name="wall", render_symbol="\u2b1b")}
+        obj_defs = {"wall": WallConfig(name="wall")}
         if objects:
             obj_defs.update(objects)
 

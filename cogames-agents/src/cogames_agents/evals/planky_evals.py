@@ -12,27 +12,22 @@ from typing import Dict
 
 from pydantic import Field
 
-from cogames.cogs_vs_clips.cog import CogConfig, CogTeam
-from cogames.cogs_vs_clips.mission import CoGameSite as Site
-from cogames.cogs_vs_clips.mission import CvCMission as Mission
+from cogames.games.cogs_vs_clips.game.clips import ClipsConfig, ClipsVariant
+from cogames.games.cogs_vs_clips.game.damage import DamageVariant
+from cogames.games.cogs_vs_clips.game.energy import EnergyVariant
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission as Mission
 from mettagrid.config.mettagrid_config import MettaGridConfig
 from mettagrid.map_builder.map_builder import MapBuilderConfig
 from mettagrid.mapgen.mapgen import MapGen, MapGenConfig
 
 MAPS_DIR = Path(__file__).resolve().parent / "maps"
+_PLANKY_RESOURCES = ("carbon", "oxygen", "germanium", "silicon")
 
-# Dummy site — each mission overrides the map via make_env().
-_PLANKY_EVALS_SITE = Site(
-    name="planky_evals",
-    description="Planky behavior evaluation arenas.",
-    map_builder=MapGen.Config(
-        instance=MapBuilderConfig.from_uri(str(MAPS_DIR / "planky_evals" / "miner_gear.map")),
-        instances=1,
-        fixed_spawn_order=True,
-        instance_border_width=0,
-    ),
-    min_cogs=1,
-    max_cogs=8,
+_PLANKY_EVALS_MAP_BUILDER = MapGen.Config(
+    instance=MapBuilderConfig.from_uri(str(MAPS_DIR / "planky_evals" / "miner_gear.map")),
+    instances=1,
+    fixed_spawn_order=True,
+    instance_border_width=0,
 )
 
 
@@ -60,10 +55,12 @@ class _PlankyDiagnosticBase(Mission):
     - ``configure_env()`` hook for per-mission customization
     """
 
-    site: Site = _PLANKY_EVALS_SITE
-
+    map_builder: MapGenConfig = _PLANKY_EVALS_MAP_BUILDER  # type: ignore[assignment]
+    min_cogs: int = 1
+    max_cogs: int = 8
     map_name: str = Field(default="miner_gear.map")
     max_steps: int = Field(default=300)
+    num_agents: int = 1
     num_cogs: int | None = 1
 
     # Per-mission inventory seed (applied to agent starting inventory)
@@ -73,17 +70,7 @@ class _PlankyDiagnosticBase(Mission):
     # _TEAM_SUFFICIENT_THRESHOLD (100) to avoid miners auto-converting to aligners.
     wealth: int = Field(default=4)
 
-    # Generous agent config
-    cog: CogConfig = Field(
-        default_factory=lambda: CogConfig(
-            energy_limit=255,
-            initial_energy=255,
-            initial_hp=100,
-            hp_regen=0,
-        )
-    )
-
-    # Disable clips events for deterministic tests unless a mission opts in.
+    clips_enabled: bool = Field(default=False, description="Whether clips are active in this eval")
     clips_initial_start: int = Field(default=99999)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
@@ -95,41 +82,41 @@ class _PlankyDiagnosticBase(Mission):
 
     def make_env(self) -> MettaGridConfig:
         custom_map = _get_planky_map(self.map_name)
-        original_map_builder = self.site.map_builder
-        self.site.map_builder = custom_map
+        mission = self.model_copy(update={"map_builder": custom_map}, deep=True).with_variants(
+            [
+                EnergyVariant(limit=255, initial=255),
+                DamageVariant(limit=100, initial=100, regen=0),
+                ClipsVariant(
+                    clips_config=ClipsConfig(
+                        disabled=not self.clips_enabled,
+                        initial_clips_start=self.clips_initial_start,
+                        scramble_start=self.clips_scramble_start,
+                        align_start=self.clips_align_start,
+                    )
+                ),
+            ]
+        )
+        cfg = Mission.make_env(mission)
+        cfg.game.map_builder = custom_map
+        cfg.game.max_steps = self.max_steps
+        self._apply_hub_inventory(cfg)
 
-        # Apply wealth to teams (base class wealth attribute wasn't being used)
-        original_teams = self.teams
-        self.teams = {
-            name: CogTeam(name=team.name, short_name=team.short_name, num_agents=team.num_agents, wealth=self.wealth)
-            for name, team in self.teams.items()
+        if self.inventory_seed:
+            cfg.game.agent.inventory.initial = {**cfg.game.agent.inventory.initial, **self.inventory_seed}
+
+        self.configure_env(cfg)
+        return cfg
+
+    def _apply_hub_inventory(self, cfg: MettaGridConfig) -> None:
+        hub = cfg.game.objects.get("c:hub")
+        if hub is None:
+            return
+        per_element = self.num_agents * 3 * self.wealth
+        hub.inventory.initial = {
+            **hub.inventory.initial,
+            **{resource: per_element for resource in _PLANKY_RESOURCES},
+            "heart": 5 * self.wealth,
         }
-
-        original_clips = self.clips.model_copy(deep=True)
-        self.clips.initial_clips_start = self.clips_initial_start
-        self.clips.scramble_start = self.clips_scramble_start
-        self.clips.align_start = self.clips_align_start
-        self.clips.align_all_neutral = self.clips_align_all_neutral
-        self.clips.align_unlimited_targets = self.clips_align_unlimited_targets
-
-        try:
-            cfg = super().make_env()
-            cfg.game.map_builder = custom_map
-            cfg.game.max_steps = self.max_steps
-
-            # Apply inventory seed
-            if self.inventory_seed:
-                seed = dict(cfg.game.agent.inventory.initial)
-                seed.update(self.inventory_seed)
-                cfg.game.agent.inventory.initial = seed
-
-            # Per-mission hook
-            self.configure_env(cfg)
-            return cfg
-        finally:
-            self.site.map_builder = original_map_builder
-            self.teams = original_teams
-            self.clips = original_clips
 
 
 # ==============================================================================
@@ -208,7 +195,7 @@ class PlankyAlignerAvoidAOE(_PlankyDiagnosticBase):
     map_name: str = "aligner_avoid_aoe.map"
     max_steps: int = Field(default=400)
     inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"aligner": 1, "heart": 3})
-    # Let initial_clips fire at step 10 to create one clips junction
+    clips_enabled: bool = Field(default=True)
     clips_initial_start: int = Field(default=10)
     clips_scramble_start: int = Field(default=99999)
     clips_align_start: int = Field(default=99999)
@@ -232,7 +219,7 @@ class PlankyScramblerTarget(_PlankyDiagnosticBase):
     map_name: str = "scrambler_target.map"
     max_steps: int = Field(default=300)
     inventory_seed: Dict[str, int] = Field(default_factory=lambda: {"scrambler": 1, "heart": 3})
-    # Force an early neutral->clips conversion so scramblers always have a valid target.
+    clips_enabled: bool = Field(default=True)
     clips_align_start: int = Field(default=1)
     clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
@@ -271,21 +258,13 @@ class PlankySurviveRetreat(_PlankyDiagnosticBase):
     map_name: str = "survive_retreat.map"
     max_steps: int = Field(default=200)
 
-    cog: CogConfig = Field(
-        default_factory=lambda: CogConfig(
-            energy_limit=255,
-            initial_energy=255,
-            initial_hp=20,
-            hp_regen=0,
-        )
-    )
-
 
 class PlankyMultiRole(_PlankyDiagnosticBase):
     name: str = "planky_multi_role"
     description: str = "Four agents with different roles work together."
     map_name: str = "multi_role.map"
     max_steps: int = Field(default=300)
+    num_agents: int = 4
     num_cogs: int | None = 4
 
 
@@ -332,6 +311,7 @@ class PlankyScramblerFullCycle(_PlankyDiagnosticBase):
     description: str = "Scrambler: gear -> hearts -> scramble junction."
     map_name: str = "scrambler_full_cycle.map"
     max_steps: int = Field(default=400)
+    clips_enabled: bool = Field(default=True)
     clips_align_start: int = Field(default=1)
     clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)
@@ -380,7 +360,7 @@ class PlankyScramblerRecovery(_PlankyDiagnosticBase):
     description: str = "Scrambler without gear/hearts recovers both."
     map_name: str = "scrambler_full_cycle.map"
     max_steps: int = Field(default=400)
-    # No gear/hearts seed — must get both from stations. Keep one enemy target present.
+    clips_enabled: bool = Field(default=True)
     clips_align_start: int = Field(default=1)
     clips_initial_start: int = Field(default=1)
     clips_scramble_start: int = Field(default=99999)

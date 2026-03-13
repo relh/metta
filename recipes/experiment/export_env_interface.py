@@ -6,7 +6,7 @@ Usage:
 
 from pathlib import Path
 
-from cogames.cogs_vs_clips.missions import make_cogsguard_mission
+from cogames.games.cogs_vs_clips.missions.machina_1 import make_cogsguard_mission
 from metta.common.tool import Tool
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 

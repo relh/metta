@@ -9,10 +9,10 @@ keeping PPO and behavioral cloning workflows intact.
 
 ## Problem
 
-Cogsguard changes land inside the existing `cogames.cogs_vs_clips` package and add new resources, vibes, collectives,
-and handler logic. The current training and evaluation entrypoints assume `cogs_vs_clips`, and behavioral cloning
-(supervised, scripted cloner, and kickstarter modes) relies on stable action and observation layouts. Without explicit
-wiring, Cogsguard will be difficult to train and may break BC workflows.
+Cogsguard changes land inside the existing `cogames.games.cogs_vs_clips` package and add new resources, vibes,
+collectives, and handler logic. The current training and evaluation entrypoints assume `cogs_vs_clips`, and behavioral
+cloning (supervised, scripted cloner, and kickstarter modes) relies on stable action and observation layouts. Without
+explicit wiring, Cogsguard will be difficult to train and may break BC workflows.
 
 ## Solution
 
@@ -46,7 +46,7 @@ rollout.
 
 ### Background: Cogsguard changes (from `origin/daveey-cogsguard-v2`)
 
-- New `CvCMission` and `CogConfig` in `packages/cogames/src/cogames/cogs_vs_clips`.
+- New `CvCMission` and `CogConfig` in `packages/cogames/src/cogames/games/cogs_vs_clips`.
 - New Cogsguard station configs (junction, hub, gear stations, extractor, chest).
 - New arena site and `make_cogsguard_mission` helper.
 - Recipe update: `recipes/experiment/cogsguard.py` now uses `make_cogsguard_mission` and `suite="cogsguard"`.
@@ -56,7 +56,7 @@ rollout.
 
 Two options:
 
-- Option A: keep module path `cogames.cogs_vs_clips`, add a Cogsguard mission set and suite name.
+- Option A: keep module path `cogames.games.cogs_vs_clips`, add a Cogsguard mission set and suite name.
 - Option B: rename module path to `cogames.cogsguard` and update imports across recipes and tooling.
 
 This spec assumes Option A unless we decide otherwise.
@@ -67,7 +67,7 @@ via registered mission providers or import hooks).
 
 ### Training entrypoints
 
-Update the entrypoints that currently hard-code `cogames.cogs_vs_clips` so they can target Cogsguard:
+Update the entrypoints that currently hard-code `cogames.games.cogs_vs_clips` so they can target Cogsguard:
 
 - `packages/cogames/src/cogames/train.py`: stop hard-coding `env_name` or add a config switch.
 - `recipes/experiment/cogs_v_clips.py`: add a Cogsguard variant or allow mission/suite overrides.
@@ -109,5 +109,5 @@ existing assumptions or require manual patching.
 
 ## Open Questions
 
-1. Are we keeping `cogames.cogs_vs_clips` as the module path, or renaming to `cogames.cogsguard`?
+1. Are we keeping `cogames.games.cogs_vs_clips` as the module path, or renaming to `cogames.cogsguard`?
 2. Which Cogsguard mission(s) should be the default training and evaluation targets?

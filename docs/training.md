@@ -377,7 +377,7 @@ Also note that CogsGuard `horde_variants` are not exhaustive; extend with explic
 - Add eval missions: `include_eval_missions=true`
 - Add fixed maps: `include_fixed_maps=true`
 - Multiple step buckets: `max_steps_buckets='[1000,2000,5000,10000]'`
-- Event profile bundle (Python): `cogames.cogs_vs_clips.cogsguard_curriculum.COGSGUARD_EVENT_PROFILES`
+- Event profile bundle (Python): `cogames.games.cogs_vs_clips.cogsguard_curriculum.COGSGUARD_EVENT_PROFILES`
 
 **Reward variants**
 

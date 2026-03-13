@@ -26,9 +26,7 @@ from cogames_agents.policy.scripted_agent.cogsguard.rollout_trace import (
 from cogames_agents.policy.scripted_agent.cogsguard.types import ROLE_TO_STRUCTURE_TYPE, Role, StructureType
 from cogames_agents.policy.scripted_agent.utils import is_adjacent
 
-from cogames.cogs_vs_clips.config import CvCConfig
-
-GEAR_COSTS = CvCConfig.GEAR_COSTS
+from cogames.games.cogs_vs_clips.missions.machina_1 import GEAR_COSTS
 
 
 def _is_hub_tag(name: str, tags: Iterable[str]) -> bool:

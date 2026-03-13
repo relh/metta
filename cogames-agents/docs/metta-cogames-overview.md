@@ -334,9 +334,9 @@ heart_capacity: 1
 | `packages/cogames/src/cogames/play.py`                                   | Single episode execution    |
 | `packages/cogames/src/cogames/evaluate.py`                               | Multi-episode evaluation    |
 | `packages/cogames/src/cogames/pickup.py`                                 | VORP calculation            |
-| `packages/cogames/src/cogames/cogs_vs_clips/mission.py`                  | Mission/Site/Variant config |
-| `packages/cogames/src/cogames/cogs_vs_clips/missions.py`                 | Mission definitions         |
-| `packages/cogames/src/cogames/cogs_vs_clips/variants.py`                 | Variant implementations     |
+| `packages/cogames/src/cogames/games/cogs_vs_clips/mission.py`            | Mission/Site/Variant config |
+| `packages/cogames/src/cogames/games/cogs_vs_clips/missions.py`           | Mission definitions         |
+| `packages/cogames/src/cogames/games/cogs_vs_clips/variants.py`           | Variant implementations     |
 | `packages/cogames/src/cogames/cli/submit.py`                             | Submission/upload handling  |
 | `packages/cogames/src/cogames/cli/leaderboard.py`                        | Leaderboard display         |
 | `packages/cogames/src/cogames/policy/starter_agent.py`                   | Heuristic baseline          |

@@ -11,6 +11,7 @@ from devops.stable.stable_function_check_registry import stable_function_check
 ALIGNMENTLEAGUE_URL = "https://softmax.com/alignmentleague"
 HEALTH_URL = "https://softmax.com/api/health"
 SEASONS_URL = f"{PROD_STATS_SERVER_URI}/tournament/seasons"
+ALIGNMENTLEAGUE_MARKER = "the alignment league benchmark"
 
 
 def _get(url: str, *, timeout_s: float = 15.0, user_agent: str = "metta-stable-health-check/1.0") -> tuple[int, str]:
@@ -30,6 +31,9 @@ def healthcheck(_ctx: StableCheckContext) -> None:
     page_status, page_body = _get(ALIGNMENTLEAGUE_URL)
     assert page_status == 200, f"{ALIGNMENTLEAGUE_URL} returned {page_status}, expected 200"
     assert page_body.strip(), f"{ALIGNMENTLEAGUE_URL} returned an empty response body"
+    assert ALIGNMENTLEAGUE_MARKER in page_body.lower(), (
+        f"{ALIGNMENTLEAGUE_URL} missing expected page marker text: {ALIGNMENTLEAGUE_MARKER!r}"
+    )
 
     health_status, health_body = _get(HEALTH_URL)
     assert health_status == 200, f"{HEALTH_URL} returned {health_status}, expected 200"

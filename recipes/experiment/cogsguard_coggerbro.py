@@ -19,7 +19,7 @@ from cortex.rl.feature_extractors import BoxCNNFeatureExtractorConfig
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
-from cogames.cogs_vs_clips.cogsguard_curriculum import EventProfile
+from cogames.games.cogs_vs_clips.train.cogsguard_curriculum import EventProfile
 from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
@@ -69,7 +69,7 @@ def train(
     curriculum: Optional[CurriculumConfig] = None,
     policy_architecture: Optional[PolicyArchitecture] = None,
     teacher: TeacherConfig | dict[str, object] | None = None,
-    variants: str | Sequence[str] | None = ("no_clips", "milestones", "no_objective", "tin_man"),
+    variants: str | Sequence[str] | None = ("no_clips", "milestones", "no_objective"),
     layout: _CogsGuardLayout = DEFAULT_LAYOUT,
     num_agents: int = DEFAULT_NUM_AGENTS,
     max_steps: int = 1000,

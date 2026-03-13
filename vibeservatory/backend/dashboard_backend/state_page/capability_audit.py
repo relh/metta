@@ -130,7 +130,7 @@ def _status_entry(
 @lru_cache(maxsize=1)
 def build_capability_code_audit() -> CapabilityCodeAudit:
     generated_at = datetime.now(timezone.utc).isoformat()
-    reward_variants_file = "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py"
+    reward_variants_file = "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py"
     mining_shaper_exists = _has_python_function(reward_variants_file, "_apply_miner")
     aligning_shaper_exists = _has_python_function(reward_variants_file, "_apply_aligner")
     scrambling_shaper_exists = _has_python_function(reward_variants_file, "_apply_scrambler")
@@ -148,12 +148,12 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 _keyword_check(
                     "tutorial coverage (keyword discovery)",
-                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/games/cogs_vs_clips"),
                     ("miner_tutorial", "minerrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
-                    "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_miner",
+                    "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py::_apply_miner",
                     mining_shaper_exists,
                 ),
             ],
@@ -169,12 +169,12 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 _keyword_check(
                     "tutorial coverage (keyword discovery)",
-                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/games/cogs_vs_clips"),
                     ("aligner_tutorial", "alignerrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
-                    "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_aligner",
+                    "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py::_apply_aligner",
                     aligning_shaper_exists,
                 ),
             ],
@@ -190,12 +190,12 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 _keyword_check(
                     "tutorial coverage (keyword discovery)",
-                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/games/cogs_vs_clips"),
                     ("scrambler_tutorial", "scramblerrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
-                    "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_scrambler",
+                    "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py::_apply_scrambler",
                     scrambling_shaper_exists,
                 ),
             ],
@@ -211,12 +211,12 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 _keyword_check(
                     "tutorial coverage (keyword discovery)",
-                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/cogs_vs_clips"),
+                    ("packages/cogames/tutorials", "packages/cogames/src/cogames/games/cogs_vs_clips"),
                     ("scout_tutorial", "scoutrewardsvariant"),
                 ),
                 (
                     "role-specific reward shaper",
-                    "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_scout",
+                    "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py::_apply_scout",
                     scouting_shaper_exists,
                 ),
             ],
@@ -244,7 +244,7 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 (
                     "role-conditional reward shaping",
-                    "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py",
+                    "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py",
                     coordination_shaper_exists,
                 ),
                 (
@@ -276,9 +276,9 @@ def build_capability_code_audit() -> CapabilityCodeAudit:
                 ),
                 (
                     "role reward variants available",
-                    "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py",
+                    "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py",
                     _contains_all(
-                        "packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py",
+                        "packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py",
                         '"miner"',
                         '"aligner"',
                         '"scrambler"',

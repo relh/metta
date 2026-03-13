@@ -25,11 +25,12 @@ from cogames_agents.evals.planky_evals import (
     PlankyScramblerTarget,
 )
 
-from cogames.cogs_vs_clips.cog import CogTeam
-from cogames.cogs_vs_clips.mission import CvCMission
-from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
-from cogames.cogs_vs_clips.sites import make_cogsguard_arena_site
-from cogames.cogs_vs_clips.variants import ForcedRoleVibesVariant
+from cogames.games.cogs_vs_clips.game import ForcedRoleVibesVariant
+from cogames.games.cogs_vs_clips.game.damage import DamageVariant
+from cogames.games.cogs_vs_clips.game.teams import TeamConfig
+from cogames.games.cogs_vs_clips.missions.arena import make_arena_map_builder
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission
+from cogames.games.cogs_vs_clips.train.reward_variants import apply_reward_variants
 from mettagrid.policy.loader import discover_and_register_policies
 from mettagrid.policy.policy import PolicySpec
 from mettagrid.runner.rollout import run_episode_local
@@ -667,11 +668,12 @@ def _collect_role_conditional_reward_keys() -> dict[str, set[str]]:
     mission = CvCMission(
         name="thread_vision_role_conditional_audit",
         description="Thread Vision shaped reward alignment audit",
-        site=make_cogsguard_arena_site(num_agents=4),
-        teams={"cogs": CogTeam(num_agents=4)},
+        map_builder=make_arena_map_builder(num_agents=4),
+        min_cogs=4,
+        max_cogs=4,
+        teams={"cogs": TeamConfig(num_agents=4)},
         max_steps=100,
-        variants=[forced_roles],
-    )
+    ).with_variants([DamageVariant(), forced_roles])
     env = mission.make_env()
     apply_reward_variants(env, variants=["role_conditional"])
     if not env.game.agents:

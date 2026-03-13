@@ -10,9 +10,8 @@ from pydantic import BaseModel
 from pydantic.json_schema import models_json_schema
 
 import mettagrid.mapgen.scenes
-from cogames.cogs_vs_clips.mission import CoGameMissionVariant as MissionVariant
-from cogames.cogs_vs_clips.mission import CoGameSite as Site
-from cogames.cogs_vs_clips.mission import CvCMission as Mission
+from cogames.core import CoGameMissionVariant as MissionVariant
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission as Mission
 from metta.cogworks.curriculum.curriculum import CurriculumConfig
 from metta.sim.simulation_config import SimulationConfig
 from metta.tools.eval import EvaluateTool
@@ -65,7 +64,6 @@ def get_schemas() -> dict[str, Any]:
         RandomMapBuilder.Config,
         AsciiMapBuilder.Config,
         Mission,
-        Site,
         MissionVariant,
         *all_scenes(),
     ]

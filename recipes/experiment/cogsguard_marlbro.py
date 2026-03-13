@@ -18,8 +18,8 @@ from pydantic import Field, model_validator
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
-from cogames.cogs_vs_clips.cogsguard_curriculum import EventProfile
-from cogames.cogs_vs_clips.reward_variants import apply_reward_variants
+from cogames.games.cogs_vs_clips.train.cogsguard_curriculum import EventProfile
+from cogames.games.cogs_vs_clips.train.reward_variants import apply_reward_variants
 from metta.agent.policies.cnn_shared_critic import CnnSharedCriticConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig

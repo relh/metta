@@ -21,7 +21,8 @@ Tests go in `tests/metta/games/my_game/test_*.py`.
 ## Examples
 
 - **Simple**: `metta/games/hunger/` — single arena, two roles, seasonal events
-- **Complex**: `packages/cogames/src/cogames/cogs_vs_clips/` — multiple teams, territories, materialized queries, vibes
+- **Complex**: `packages/cogames/src/cogames/games/cogs_vs_clips/` — multiple teams, territories, materialized queries,
+  vibes
 
 ## Core Config Hierarchy
 
@@ -40,8 +41,8 @@ MettaGridConfig
 
 ## Object Naming and MettaScope
 
-MettaScope renders objects using the `name` field (which becomes C++ `type_name`), **not** `render_name`. The sprite
-lookup in `worldmap.nim` tries:
+MettaScope renders objects using the `name` field (which becomes C++ `type_name`). The sprite lookup in `worldmap.nim`
+tries:
 
 1. `objects/{name}` in the atlas
 2. `objects/{stripTeamPrefix(name)}` — strips `XX:` prefix (e.g., `c:scrambler` → `scrambler`)
@@ -223,12 +224,12 @@ Undeclared tags cause a build error.
 
 ## Map Builders
 
-### BaseHub (procedural)
+### Compound (procedural)
 
 ```python
 MapGen.Config(
     width=50, height=50,
-    instance=BaseHub.Config(
+    instance=Compound.Config(
         spawn_count=10,
         hub_object="predator_station",
         corner_bundle="custom",
@@ -284,7 +285,7 @@ def make_test_env(agent_initial, objects, events=None):
                 initial={},
                 limits={"all": ResourceLimitsConfig(min=10000, max=10000, resources=MyConfig.RESOURCES)},
             )),
-            objects={"wall": WallConfig(name="wall", render_symbol="\u2b1b"), **objects},
+            objects={"wall": WallConfig(name="wall"), **objects},
             events=events or {},
             map_builder=AsciiMapBuilder.Config(
                 map_data=[
@@ -390,8 +391,8 @@ from metta.games.my_game import game  # noqa: E402, F401
 1. **`on_use_handlers` is FirstMatch** — handler order matters. Put guards (empty-mutation handlers) before catch-all
    handlers.
 
-2. **`name` drives MettaScope rendering**, not `render_name`. Use `map_name` to decouple the map placement key from the
-   display name.
+2. **`name` drives MettaScope rendering**. Use `map_name` to decouple the map placement key from the display name. Use
+   `game.render.symbols` to set text-rendering symbols per object name.
 
 3. **Tags must be declared** somewhere in the config (object tags, `GameConfig.tags`, or auto type tags). Undeclared tag
    references cause `ValueError` at build time.

@@ -2,7 +2,7 @@
 
 import pytest
 
-from cogames.cogs_vs_clips.clips import ClipsConfig
+from cogames.games.cogs_vs_clips.game.clips import ClipsConfig
 from metta.rl.training.clips_curriculum import (
     LinearPerformanceProgress,
     ThresholdPerformanceProgress,

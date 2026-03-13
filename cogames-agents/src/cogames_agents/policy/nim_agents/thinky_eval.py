@@ -7,9 +7,8 @@ from typing import Dict, List, Tuple
 
 import cogames_agents.policy.nim_agents.agents as na
 from cogames.cli.utils import suppress_noisy_logs
-from cogames.cogs_vs_clips.evals.diagnostic_evals import DIAGNOSTIC_EVALS
-from cogames.cogs_vs_clips.mission import CvCMission as Mission
-from cogames.cogs_vs_clips.mission import NumCogsVariant
+from cogames.games.cogs_vs_clips.evals.diagnostic_evals import DIAGNOSTIC_EVALS
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission as Mission
 from mettagrid.policy.loader import initialize_or_load_policy
 from mettagrid.policy.policy import PolicySpec
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
@@ -96,9 +95,9 @@ def _load_all_missions() -> Dict[str, Mission]:
 
     missions: List[Mission] = []
     for mod_name in (
-        "cogames.cogs_vs_clips.evals.integrated_evals",
-        "cogames.cogs_vs_clips.evals.spanning_evals",
-        "cogames.cogs_vs_clips.missions",
+        "cogames.games.cogs_vs_clips.evals.integrated_evals",
+        "cogames.games.cogs_vs_clips.evals.spanning_evals",
+        "cogames.games.cogs_vs_clips.missions",
     ):
         try:
             mod = import_module(mod_name)
@@ -155,7 +154,7 @@ def run_eval(experiment_name: str, tag: str, mission_map: Dict[str, Mission], nu
             return 0.0
 
         base_mission = mission_map[experiment_name]
-        mission = base_mission.with_variants([NumCogsVariant(num_cogs=num_cogs)])
+        mission = base_mission.model_copy(update={"num_agents": num_cogs})
 
         env_cfg = mission.make_env()
         _ensure_vibe_supports_gear(env_cfg)

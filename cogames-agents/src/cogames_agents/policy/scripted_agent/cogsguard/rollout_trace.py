@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from cogames.cogs_vs_clips.config import CvCConfig
-
-GEAR_COSTS = CvCConfig.GEAR_COSTS
+from cogames.games.cogs_vs_clips.missions.machina_1 import GEAR_COSTS
 
 TRACE_RESOURCES = tuple(sorted({resource for costs in GEAR_COSTS.values() for resource in costs}))
 

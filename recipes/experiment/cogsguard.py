@@ -15,30 +15,31 @@ from cortex.rl.feature_extractors import BoxCNNFeatureExtractorConfig
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
-from cogames.cogs_vs_clips.cogsguard_curriculum import (
-    COGSGUARD_FIXED_MAPS,
+from cogames.core import CoGameMissionVariant
+from cogames.games.cogs_vs_clips.evals.cvc_evals import (
+    CVC_EVAL_COGS,
+    CVC_EVAL_MISSIONS,
+)
+from cogames.games.cogs_vs_clips.evals.diagnostic_evals import MAPS_DIR
+from cogames.games.cogs_vs_clips.game import ClipsVariant
+from cogames.games.cogs_vs_clips.game.clips import ClipsConfig
+from cogames.games.cogs_vs_clips.game.damage import DamageVariant
+from cogames.games.cogs_vs_clips.game.days import DayConfig, DaysVariant
+from cogames.games.cogs_vs_clips.missions.arena import make_arena_map_builder
+from cogames.games.cogs_vs_clips.missions.machina_1 import make_machina1_map_builder
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission
+from cogames.games.cogs_vs_clips.train.cvc_curriculum import (
+    CVC_FIXED_MAPS,
     EventProfile,
     filter_compatible_variants,
     normalize_variant_names,
     resolve_event_profiles,
     split_variants,
 )
-from cogames.cogs_vs_clips.evals.cogsguard_evals import (
-    COGSGUARD_EVAL_COGS,
-    COGSGUARD_EVAL_MISSIONS,
-)
-from cogames.cogs_vs_clips.mission import CvCMission
-from cogames.cogs_vs_clips.reward_variants import (
+from cogames.games.cogs_vs_clips.train.reward_variants import (
     AVAILABLE_REWARD_VARIANTS,
     apply_reward_variants,
 )
-from cogames.cogs_vs_clips.sites import (
-    MAPS_DIR,
-    make_cogsguard_arena_site,
-    make_cogsguard_machina1_site,
-)
-from cogames.cogs_vs_clips.variants import BraveheartVariant
-from cogames.core import CoGameMissionVariant, CoGameSite
 from metta.agent.policies.default import DefaultPolicyConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import (
@@ -190,25 +191,31 @@ def _make_cogsguard_mission(
     weather_overrides: dict[str, object] | None = None,
 ) -> CvCMission:
     if layout == "machina_1":
-        site = make_cogsguard_machina1_site(num_agents)
+        map_builder = make_machina1_map_builder(num_agents)
         description = "Basic CogsGuard mission (Machina1 leaderboard layout)"
     elif layout == "arena":
-        site = make_cogsguard_arena_site(num_agents)
+        map_builder = make_arena_map_builder(num_agents)
         description = "Basic CogsGuard mission (arena layout)"
     else:
         raise ValueError(f"Unknown CogsGuard layout: {layout!r}")
 
     mission = CvCMission(
-        name="basic",
+        name=f"cogsguard_{layout}.basic",
         description=description,
-        site=site,
+        map_builder=map_builder,
+        num_agents=num_agents,
         num_cogs=num_agents,
+        min_cogs=num_agents,
+        max_cogs=num_agents,
         max_steps=max_steps,
     )
-    if clips_overrides:
-        mission.clips = mission.clips.model_copy(update=clips_overrides)
-    if weather_overrides:
-        mission.weather = mission.weather.model_copy(update=weather_overrides)
+    base_variants: list[CoGameMissionVariant] = [
+        DamageVariant(),
+        DaysVariant(days_config=DayConfig(**(weather_overrides or {}))),
+    ]
+    if not (clips_overrides and clips_overrides.get("disabled") is True):
+        base_variants.append(ClipsVariant(clips_config=ClipsConfig(**(clips_overrides or {}))))
+    mission = mission.with_variants(base_variants)
     if variants:
         compatible = filter_compatible_variants(mission, variants)
         if compatible:
@@ -253,23 +260,28 @@ def _make_eval_envs(
     weather_overrides: dict[str, object] | None,
 ) -> list[MettaGridConfig]:
     eval_envs: list[MettaGridConfig] = []
-    for mission in COGSGUARD_EVAL_MISSIONS:
+    for mission in CVC_EVAL_MISSIONS:
         map_key = f"evals/{mission.name}.map"
-        spawn_count = COGSGUARD_EVAL_COGS.get(map_key)
+        spawn_count = CVC_EVAL_COGS.get(map_key)
         if spawn_count is not None and spawn_count < num_agents:
             continue
-        site = mission.site.model_copy(update={"min_cogs": num_agents, "max_cogs": num_agents})
         eval_mission = CvCMission(
             name=mission.name,
             description=mission.description,
-            site=site,
+            map_builder=mission.map_builder,
+            num_agents=num_agents,
             num_cogs=num_agents,
+            min_cogs=num_agents,
+            max_cogs=num_agents,
             max_steps=max_steps,
         )
-        if clips_overrides:
-            eval_mission.clips = eval_mission.clips.model_copy(update=clips_overrides)
-        if weather_overrides:
-            eval_mission.weather = eval_mission.weather.model_copy(update=weather_overrides)
+        eval_base_variants: list[CoGameMissionVariant] = [
+            DamageVariant(),
+            DaysVariant(days_config=DayConfig(**(weather_overrides or {}))),
+        ]
+        if not (clips_overrides and clips_overrides.get("disabled") is True):
+            eval_base_variants.append(ClipsVariant(clips_config=ClipsConfig(**(clips_overrides or {}))))
+        eval_mission = eval_mission.with_variants(eval_base_variants)
         if variants:
             compatible = filter_compatible_variants(eval_mission, variants)
             if compatible:
@@ -317,7 +329,7 @@ def _make_fixed_map_envs(
     weather_overrides: dict[str, object] | None,
 ) -> list[MettaGridConfig]:
     envs: list[MettaGridConfig] = []
-    for map_name in COGSGUARD_FIXED_MAPS:
+    for map_name in CVC_FIXED_MAPS:
         map_path = MAPS_DIR / map_name
         if not map_path.exists():
             raise FileNotFoundError(f"Map not found: {map_path}")
@@ -326,24 +338,23 @@ def _make_fixed_map_envs(
             continue
 
         stem = Path(map_name).stem
-        site = CoGameSite(
+        mission = CvCMission(
             name=f"cogsguard_fixed_{stem}",
             description=f"CogsGuard fixed map: {stem}",
             map_builder=_load_ascii_map(map_name),
+            num_agents=num_agents,
+            num_cogs=num_agents,
             min_cogs=num_agents,
             max_cogs=num_agents,
-        )
-        mission = CvCMission(
-            name="fixed",
-            description=f"CogsGuard fixed map: {stem}",
-            site=site,
-            num_cogs=num_agents,
             max_steps=max_steps,
         )
-        if clips_overrides:
-            mission.clips = mission.clips.model_copy(update=clips_overrides)
-        if weather_overrides:
-            mission.weather = mission.weather.model_copy(update=weather_overrides)
+        fixed_base_variants: list[CoGameMissionVariant] = [
+            DamageVariant(),
+            DaysVariant(days_config=DayConfig(**(weather_overrides or {}))),
+        ]
+        if not (clips_overrides and clips_overrides.get("disabled") is True):
+            fixed_base_variants.append(ClipsVariant(clips_config=ClipsConfig(**(clips_overrides or {}))))
+        mission = mission.with_variants(fixed_base_variants)
         if variants:
             compatible = filter_compatible_variants(mission, variants)
             if compatible:
@@ -898,18 +909,19 @@ def scrambler(
 ) -> tools.TrainTool:
     """Train scrambler role with optional teacher supervision.
 
-    Hubs start with 255 hearts via BraveheartVariant. Clips invade normally.
+    Hubs start with 255 hearts. Clips invade normally.
     """
     resolved_teacher = _resolve_role_teacher(teacher)
 
     resolved_variants, resolved_rewards = split_variants(variants)
-    scrambler_variants = list(resolved_variants or []) + [BraveheartVariant()]
     mission = _make_cogsguard_mission(
         layout=layout,
         num_agents=num_agents,
         max_steps=max_steps,
-        variants=scrambler_variants,
+        variants=list(resolved_variants or []),
     )
+    for team in mission.teams.values():
+        team.initial_hearts = 255
     env = mission.make_env()
     if resolved_rewards:
         apply_reward_variants(env, variants=list(resolved_rewards))

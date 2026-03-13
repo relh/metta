@@ -11,7 +11,7 @@ from typing import Optional, Sequence
 
 import metta.cogworks.curriculum as cc
 import metta.tools as tools
-from cogames.cogs_vs_clips.cogsguard_curriculum import EventProfile
+from cogames.games.cogs_vs_clips.train.cogsguard_curriculum import EventProfile
 from metta.agent.policies.vit_future_attr_pred import ViTFutureAttrPredConfig
 from metta.agent.policy import PolicyArchitecture
 from metta.cogworks.curriculum.curriculum import CurriculumConfig

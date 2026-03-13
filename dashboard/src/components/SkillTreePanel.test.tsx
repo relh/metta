@@ -75,7 +75,7 @@ describe('SkillTreePanel', () => {
               training_source: 'recipes/experiment/cogsguard.py::miner',
               evidence: [
                 'PASS: role recipe function [recipes/experiment/cogsguard.py::miner]',
-                'PASS: role-specific reward shaper [packages/cogames/src/cogames/cogs_vs_clips/reward_variants.py::_apply_miner]',
+                'PASS: role-specific reward shaper [packages/cogames/src/cogames/games/cogs_vs_clips/reward_variants.py::_apply_miner]',
               ],
             },
           },

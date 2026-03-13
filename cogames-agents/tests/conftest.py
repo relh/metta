@@ -98,12 +98,12 @@ def _ensure_mettagrid_mock() -> None:
 def _ensure_cogames_stubs() -> None:
     """Ensure cogames submodules are importable."""
     try:
-        from cogames.cogs_vs_clips.stations import GEAR_COSTS  # noqa: F401, PLC0415
+        from cogames.games.cogs_vs_clips.stations import GEAR_COSTS  # noqa: F401, PLC0415
     except (ImportError, AttributeError):
-        cvc_mod = sys.modules.get("cogames.cogs_vs_clips.stations")
+        cvc_mod = sys.modules.get("cogames.games.cogs_vs_clips.stations")
         if cvc_mod is None:
-            cvc_mod = types.ModuleType("cogames.cogs_vs_clips.stations")
-            sys.modules["cogames.cogs_vs_clips.stations"] = cvc_mod
+            cvc_mod = types.ModuleType("cogames.games.cogs_vs_clips.stations")
+            sys.modules["cogames.games.cogs_vs_clips.stations"] = cvc_mod
         if not hasattr(cvc_mod, "GEAR_COSTS"):
             # Values are dicts mapping resource name -> cost
             cvc_mod.GEAR_COSTS = {  # type: ignore[attr-defined]

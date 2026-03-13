@@ -5,10 +5,15 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from cogames.cogs_vs_clips.mission import CvCMission
-from cogames.cogs_vs_clips.missions import CogsGuardMachina1Mission, MettaGridConfig, make_cogsguard_mission
-from cogames.cogs_vs_clips.sites import COGSGUARD_MACHINA_1
-from cogames.cogs_vs_clips.variants import NoClipsVariant
+from cogames.games.cogs_vs_clips.game.damage import DamageVariant
+from cogames.games.cogs_vs_clips.game.days import DaysVariant
+from cogames.games.cogs_vs_clips.missions.machina_1 import (
+    MACHINA_1_MAP_BUILDER,
+    make_cogsguard_mission,
+    make_machina1_mission,
+)
+from cogames.games.cogs_vs_clips.missions.mission import CvCMission
+from mettagrid.config.mettagrid_config import MettaGridConfig
 
 GameFactory = Callable[[int, int], MettaGridConfig]
 
@@ -34,7 +39,7 @@ def make_cogsguard_env(seed: int, num_agents: int, max_steps: int = 10000) -> Me
 
 
 def make_cvc_env(seed: int, num_agents: int) -> MettaGridConfig:
-    mission = CogsGuardMachina1Mission.model_copy(deep=True)
+    mission = make_machina1_mission().model_copy(deep=True)
     mission.num_cogs = num_agents
     env = mission.make_env()
     env.game.map_builder.seed = seed  # type: ignore
@@ -45,11 +50,12 @@ def make_no_clips_env(seed: int, num_agents: int) -> MettaGridConfig:
     mission = CvCMission(
         name="no_clips",
         description="CogsGuard Machina1 with clips disabled",
-        site=COGSGUARD_MACHINA_1,
+        map_builder=MACHINA_1_MAP_BUILDER,
         num_cogs=num_agents,
+        min_cogs=1,
+        max_cogs=20,
         max_steps=10000,
-    )
-    mission = mission.with_variants([NoClipsVariant()])
+    ).with_variants([DamageVariant(), DaysVariant()])
     env = mission.make_env()
     env.game.map_builder.seed = seed  # type: ignore
     return env
@@ -59,11 +65,12 @@ def make_no_clips_no_vibes_env(seed: int, num_agents: int) -> MettaGridConfig:
     mission = CvCMission(
         name="no_clips_no_vibes",
         description="CogsGuard Machina1 with clips and vibe changing disabled",
-        site=COGSGUARD_MACHINA_1,
+        map_builder=MACHINA_1_MAP_BUILDER,
         num_cogs=num_agents,
+        min_cogs=1,
+        max_cogs=20,
         max_steps=10000,
-    )
-    mission = mission.with_variants([NoClipsVariant()])
+    ).with_variants([DamageVariant(), DaysVariant()])
     env = mission.make_env()
     env.game.actions.change_vibe.enabled = False
     env.game.map_builder.seed = seed  # type: ignore

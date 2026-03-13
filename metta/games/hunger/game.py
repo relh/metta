@@ -6,8 +6,8 @@ from typing import cast
 
 from pydantic import Field
 
-from cogames.cogs_vs_clips.buildings import MachinaArena
 from cogames.core import CoGameMission, CoGameSite
+from cogames.games.cogs_vs_clips.missions.terrain import MachinaArena
 from metta.games.games import register  # noqa: E402
 from metta.games.hunger.variants import parse_variants
 from mettagrid.config.action_config import ActionsConfig, MoveActionConfig, NoopActionConfig

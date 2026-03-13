@@ -11,8 +11,8 @@ CogsGuard is a territory-control game where a team of **Cogs** agents compete ag
 control **junctions** on an 88x88 procedurally generated map. The primary objective is maximizing the proportion of
 junctions held over time.
 
-**Source:** `packages/cogames/src/cogames/cogs_vs_clips/` (environment),
-`cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/` (scripted agents).
+**Source:** `packages/cogames/src/cogames/games/cogs_vs_clips/` (environment),
+`packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/` (scripted agents).
 
 ### Objective Stat
 
@@ -34,7 +34,7 @@ remains hard because individual actions don't directly produce reward.
 ### Machina1 Layout (COGSGUARD_ARENA)
 
 - **Map size:** 88x88 cells
-- **Generator:** `SequentialMachinaArena` with `BaseHub` configuration
+- **Generator:** `SequentialMachinaArena` with `Compound` configuration
 - **Agents:** Default 10 (configurable, max 20)
 - **Max steps:** 1000 (basic mission) or 10000 (factory function)
 
@@ -434,11 +434,11 @@ efficiency (synergy bonus with multiple miners).
 
 ### Core Game Implementation
 
-- `packages/cogames/src/cogames/cogs_vs_clips/cog.py` - Agent configuration
-- `packages/cogames/src/cogames/cogs_vs_clips/stations.py` - Stations, junctions, gear, extractors
-- `packages/cogames/src/cogames/cogs_vs_clips/sites.py` - Map/arena definitions
-- `packages/cogames/src/cogames/cogs_vs_clips/missions.py` - Mission definitions
-- `packages/cogames/src/cogames/cogs_vs_clips/cogsguard_reward_variants.py` - Reward shaping
+- `packages/cogames/src/cogames/games/cogs_vs_clips/cog.py` - Agent configuration
+- `packages/cogames/src/cogames/games/cogs_vs_clips/stations.py` - Stations, junctions, gear, extractors
+- `packages/cogames/src/cogames/games/cogs_vs_clips/sites.py` - Map/arena definitions
+- `packages/cogames/src/cogames/games/cogs_vs_clips/missions.py` - Mission definitions
+- `packages/cogames/src/cogames/games/cogs_vs_clips/cogsguard_reward_variants.py` - Reward shaping
 
 ### Specifications
 
@@ -449,10 +449,10 @@ efficiency (synergy bonus with multiple miners).
 
 ### Scripted Agent Implementation
 
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/policy.py` - Main policy + coordinator
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/types.py` - State types
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/miner.py` - Miner role
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/scout.py` - Scout role
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/aligner.py` - Aligner role
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/scrambler.py` - Scrambler role
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/roles.py` - Single-role policies
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/policy.py` - Main policy + coordinator
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/types.py` - State types
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/miner.py` - Miner role
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/scout.py` - Scout role
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/aligner.py` - Aligner role
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/scrambler.py` - Scrambler role
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/roles.py` - Single-role policies

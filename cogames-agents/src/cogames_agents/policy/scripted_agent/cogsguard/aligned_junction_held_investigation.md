@@ -145,8 +145,8 @@ sim = Simulator().new_simulation(cfg, seed=42)
 
 ## Related Files
 
-- `packages/cogames/src/cogames/cogs_vs_clips/mission.py` - CogsGuard mission config
-- `packages/cogames/src/cogames/cogs_vs_clips/stations.py` - Junction and Hub configs
-- `cogames-agents/src/cogames_agents/policy/nim_agents/cogsguard_agents.nim` - Nim scripted agents
-- `cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/` - Python scripted agents
+- `packages/cogames/src/cogames/games/cogs_vs_clips/mission.py` - CogsGuard mission config
+- `packages/cogames/src/cogames/games/cogs_vs_clips/stations.py` - Junction and Hub configs
+- `packages/cogames-agents/src/cogames_agents/policy/nim_agents/cogsguard_agents.nim` - Nim scripted agents
+- `packages/cogames-agents/src/cogames_agents/policy/scripted_agent/cogsguard/` - Python scripted agents
 - `recipes/experiment/cogsguard.py` - Recipe for running CogsGuard
