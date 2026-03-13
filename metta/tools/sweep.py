@@ -454,13 +454,9 @@ class SweepTool(Tool):
 
         return 0
 
-    def _flatten_search_space(self, space: dict[str, Any]) -> dict[str, Any]:
-        """Identity pass-through for flat dot-path search spaces."""
-        return dict(space)
-
     def _split_search_space(self, space: dict[str, Any]) -> tuple[dict[str, ParameterSpec], dict[str, Any]]:
         """Separate tunable parameters from fixed overrides in a flat search space."""
-        flat = self._flatten_search_space(space)
+        flat = dict(space)
         params: dict[str, ParameterSpec] = {}
         overrides: dict[str, Any] = {}
         for k, v in flat.items():
