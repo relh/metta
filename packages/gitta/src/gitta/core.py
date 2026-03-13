@@ -49,7 +49,7 @@ class NotAGitRepoError(GitError):
 def run_git_cmd(
     args: Iterable[str],
     cwd: Optional[Path] = None,
-    timeout: Optional[float] = None,
+    timeout: float = 30.0,
     env_overrides: Optional[Mapping[str, str]] = None,
     check: bool = True,
     strip: bool = True,
@@ -80,10 +80,6 @@ def run_git_cmd(
     env.update(DEFAULT_ENV)
     if env_overrides:
         env.update(env_overrides)
-
-    # Default timeout
-    if timeout is None:
-        timeout = 30.0
 
     cmd_str = " ".join(shlex.quote(str(a)) for a in cmd)
     logger.debug(f"Running: {cmd_str}")
@@ -139,7 +135,7 @@ def run_git_cmd(
     return res
 
 
-def run_git(*args: str, strip: bool = True, timeout: Optional[float] = None) -> str:
+def run_git(*args: str, strip: bool = True, timeout: float = 30.0) -> str:
     """Run a git command and return its output."""
     return run_git_cmd(list(args), strip=strip, timeout=timeout)
 
