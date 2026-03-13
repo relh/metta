@@ -289,27 +289,6 @@ def test_execute_compiled_policy_supports_review_api_shorthand() -> None:
     assert log.requests[0].prompt == "Enemy in lane."
 
 
-def test_execute_compiled_policy_supports_sdk_type_aliases() -> None:
-    sdk, log = _build_sdk()
-
-    result = _execute_policy_source(
-        (
-            "def step(sdk):\n"
-            '    sdk.log.write(sdk.LogRecord(level="info", message="aliased log", step=sdk.state.step))\n'
-            '    sdk.log.request_review(sdk.ReviewRequest(trigger_name="enemy_seen", prompt="Enemy in lane."))\n'
-            '    sdk.log.register_review_trigger(sdk.ReviewTrigger(name="enemy_seen", prompt="Change plan."))\n'
-            '    return {"action": "hold"}'
-        ),
-        sdk,
-    )
-
-    assert result.success is True
-    assert result.logs[0].message == "aliased log"
-    assert result.review_requests[0].trigger_name == "enemy_seen"
-    assert result.review_triggers[0].name == "enemy_seen"
-    assert log.records[0].message == "aliased log"
-
-
 def test_execute_compiled_policy_allows_keyword_review_trigger_shorthand() -> None:
     sdk, log = _build_sdk()
 

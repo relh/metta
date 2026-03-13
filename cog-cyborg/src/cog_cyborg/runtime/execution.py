@@ -14,7 +14,6 @@ from mettagrid_sdk.sdk import LogRecord, MemoryQuery, MettagridSDK, ReviewReques
 from pydantic import BaseModel, Field
 
 _DEADLINE_CHECK_NAME = "policy_check_deadline"
-_SDK_TYPE_ALIASES = frozenset({"LogRecord", "ReviewRequest", "ReviewTrigger"})
 _SAFE_BUILTINS = MappingProxyType(
     {
         "abs": abs,
@@ -147,32 +146,10 @@ class BufferedLogSink:
             self._downstream.request_review(resolved_request)
 
 
-class SDKExecutionFacade:
-    def __init__(self, sdk: MettagridSDK) -> None:
-        self._sdk = sdk
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._sdk, name)
-
-    @property
-    def scratchpad(self) -> str:
-        return self._sdk.memory.read_scratchpad()
-
-    def read_scratchpad(self) -> str:
-        return self._sdk.memory.read_scratchpad()
-
-    def replace_scratchpad(self, text: str) -> None:
-        self._sdk.memory.replace_scratchpad(text)
-
-    def append_scratchpad(self, text: str) -> None:
-        self._sdk.memory.append_scratchpad(text)
-
-
 def compile_policy(policy_update: PolicyUpdate) -> CompiledPolicy:
     module = ast.parse(policy_update.source, mode="exec")
-    normalized_module = _normalize_policy_ast(module)
-    _validate_policy_ast(normalized_module)
-    instrumented_module = _inject_deadline_checks(normalized_module)
+    _validate_policy_ast(module)
+    instrumented_module = _inject_deadline_checks(module)
     ast.fix_missing_locations(instrumented_module)
 
     namespace: dict[str, Any] = {
@@ -197,7 +174,7 @@ def execute_compiled_policy(
     timeout_seconds: float = DEFAULT_POLICY_TIMEOUT_SECONDS,
 ) -> PolicyExecutionResult:
     buffered_log = BufferedLogSink(sdk.log)
-    sandbox_sdk = SDKExecutionFacade(replace(sdk, log=buffered_log))
+    sandbox_sdk = replace(sdk, log=buffered_log)
     try:
         return_value = _run_step_with_timeout(compiled_policy, sandbox_sdk, timeout_seconds=timeout_seconds)
     except Exception as exc:
@@ -296,25 +273,6 @@ def _validate_step_signature(step_fn: Any) -> None:
         raise BoundedPolicyError("policy step must have signature step(sdk)")
     if parameter.name != "sdk":
         raise BoundedPolicyError("policy step must have signature step(sdk)")
-
-
-def _normalize_policy_ast(module: ast.Module) -> ast.Module:
-    normalized = _SDKTypeAliasNormalizer().visit(module)
-    ast.fix_missing_locations(normalized)
-    return normalized
-
-
-class _SDKTypeAliasNormalizer(ast.NodeTransformer):
-    def visit_Attribute(self, node: ast.Attribute) -> ast.AST:  # noqa: N802
-        node = cast(ast.Attribute, self.generic_visit(node))
-        if (
-            isinstance(node.value, ast.Name)
-            and node.value.id == "sdk"
-            and node.attr in _SDK_TYPE_ALIASES
-            and isinstance(node.ctx, ast.Load)
-        ):
-            return ast.copy_location(ast.Name(id=node.attr, ctx=ast.Load()), node)
-        return node
 
 
 def _format_return_value(value: Any) -> str:
