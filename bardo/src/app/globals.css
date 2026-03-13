@@ -109,7 +109,7 @@ body {
     inset 0 1px 0 var(--card-highlight);
   padding: clamp(1rem, 2vw, 1.5rem);
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto auto 1fr auto;
   gap: 0.8rem;
 }
 
@@ -180,6 +180,116 @@ html[data-theme='dark'] .bardo-stats p {
   color: var(--ink);
   padding: 0.55rem 0.7rem;
   font-size: 0.85rem;
+}
+
+.bardo-controls {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.8rem 0.9rem;
+  border-radius: 16px;
+  border: 1px solid var(--card-border);
+  background:
+    linear-gradient(180deg, rgba(247, 251, 255, 0.92), rgba(229, 240, 252, 0.66));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+}
+
+html[data-theme='dark'] .bardo-controls {
+  background:
+    linear-gradient(180deg, rgba(12, 24, 40, 0.92), rgba(14, 27, 45, 0.78));
+}
+
+.bardo-filter-form {
+  display: grid;
+  gap: 0.45rem;
+  min-width: min(100%, 560px);
+  flex: 1 1 420px;
+}
+
+.bardo-filter-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.bardo-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.bardo-filter-input {
+  flex: 1 1 260px;
+  min-width: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(77, 120, 162, 0.34);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  font: inherit;
+  padding: 0.7rem 0.95rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 10px 22px rgba(18, 39, 62, 0.08);
+}
+
+html[data-theme='dark'] .bardo-filter-input {
+  background: rgba(8, 18, 31, 0.88);
+  border-color: rgba(119, 168, 218, 0.28);
+}
+
+.bardo-filter-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+}
+
+.bardo-filter-input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 64%, white 36%);
+  outline-offset: 2px;
+}
+
+.bardo-filter-button {
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #eb7f56, #d86841);
+  color: #fff7f2;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.72rem 1rem;
+  cursor: pointer;
+  box-shadow:
+    0 12px 20px rgba(216, 104, 65, 0.22),
+    inset 0 1px 0 rgba(255, 244, 239, 0.26);
+}
+
+.bardo-filter-button:hover {
+  filter: brightness(1.05);
+}
+
+.bardo-filter-button-secondary {
+  background: rgba(76, 108, 144, 0.14);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 10px 18px rgba(18, 39, 62, 0.08);
+}
+
+html[data-theme='dark'] .bardo-filter-button-secondary {
+  background: rgba(118, 162, 209, 0.12);
+  color: var(--ink);
+}
+
+.bardo-filter-summary {
+  margin: 0;
+  flex: 0 0 auto;
+  max-width: 320px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
 }
 
 .bardo-world {
@@ -973,6 +1083,16 @@ html[data-theme='dark'] .bardo-footer span {
   .bardo-stats {
     min-width: 0;
     width: 100%;
+  }
+
+  .bardo-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bardo-filter-summary {
+    max-width: none;
+    text-align: left;
   }
 
   .bardo-world {

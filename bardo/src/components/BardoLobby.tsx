@@ -1,8 +1,17 @@
 'use client'
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  startTransition,
+  type CSSProperties,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import Image from 'next/image'
-import { useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import {
   BARDO_PORTALS,
@@ -282,6 +291,8 @@ function actorHomeKey(
 }
 
 export function BardoLobby() {
+  const pathname = usePathname()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const nameFilter = searchParams.get('q')?.trim() || ''
   const requestedTheme = searchParams.get('theme')
@@ -293,6 +304,7 @@ export function BardoLobby() {
   const [hoveredPolicyId, setHoveredPolicyId] = useState<string | null>(null)
   const [lastRefreshAtMs, setLastRefreshAtMs] = useState<number | null>(null)
   const [nowMs, setNowMs] = useState<number>(() => Date.now())
+  const [draftNameFilter, setDraftNameFilter] = useState(nameFilter)
 
   const actorsRef = useRef<Map<string, ActorState>>(new Map())
   const worldStateEtagRef = useRef<string | null>(null)
@@ -316,6 +328,40 @@ export function BardoLobby() {
   useEffect(() => {
     worldStateEtagRef.current = null
   }, [nameFilter])
+
+  useEffect(() => {
+    setDraftNameFilter(nameFilter)
+  }, [nameFilter])
+
+  const replaceFilterUrl = useCallback(
+    (nextFilter: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (nextFilter) {
+        params.set('q', nextFilter)
+      } else {
+        params.delete('q')
+      }
+      const query = params.toString()
+      const href = query ? `${pathname}?${query}` : pathname
+      startTransition(() => {
+        router.replace(href)
+      })
+    },
+    [pathname, router, searchParams]
+  )
+
+  const submitFilter = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      replaceFilterUrl(draftNameFilter.trim())
+    },
+    [draftNameFilter, replaceFilterUrl]
+  )
+
+  const clearFilter = useCallback(() => {
+    setDraftNameFilter('')
+    replaceFilterUrl('')
+  }, [replaceFilterUrl])
 
   const loadWorldState = useCallback(
     async (signal: AbortSignal) => {
@@ -559,6 +605,14 @@ export function BardoLobby() {
         second: '2-digit',
       })
     : '—'
+  const filterSummary = nameFilter
+    ? `Filter: "${nameFilter}"`
+    : isSampledView
+      ? `Showing ${shownPolicyCount} of ${totalPolicies} policies`
+      : `Showing all ${shownPolicyCount} policies`
+  const filterDetail = nameFilter
+    ? 'Matching policy and owner names across the district.'
+    : 'Search by policy name or owner to jump to a slice of the district.'
 
   return (
     <main className="bardo-shell" style={bardoStyleVariables}>
@@ -591,6 +645,37 @@ export function BardoLobby() {
             </p>
           </div>
         </header>
+
+        <section className="bardo-controls">
+          <form className="bardo-filter-form" role="search" onSubmit={submitFilter}>
+            <label className="bardo-filter-label" htmlFor="bardo-policy-filter">
+              Filter policies
+            </label>
+            <div className="bardo-filter-row">
+              <input
+                id="bardo-policy-filter"
+                className="bardo-filter-input"
+                type="search"
+                value={draftNameFilter}
+                placeholder="Search by policy or owner"
+                onChange={(event) => setDraftNameFilter(event.target.value)}
+              />
+              <button className="bardo-filter-button" type="submit">
+                Apply
+              </button>
+              {nameFilter ? (
+                <button
+                  className="bardo-filter-button bardo-filter-button-secondary"
+                  type="button"
+                  onClick={clearFilter}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </form>
+          <p className="bardo-filter-summary">{filterDetail}</p>
+        </section>
 
         {errorMessage ? <div className="bardo-alert">{errorMessage}</div> : null}
 
@@ -758,13 +843,7 @@ export function BardoLobby() {
           <span>Auto refresh {WORLD_POLL_MS / 1_000}s</span>
           <span>Updated {lastUpdatedLabel}</span>
           <span>{outsideCount} outside buildings in view</span>
-          {nameFilter ? (
-            <span>Filter: “{nameFilter}”</span>
-          ) : isSampledView ? (
-            <span>Showing {shownPolicyCount} sampled policies</span>
-          ) : (
-            <span>All policies</span>
-          )}
+          <span>{filterSummary}</span>
         </footer>
       </section>
     </main>
