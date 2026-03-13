@@ -6,7 +6,7 @@ from mettagrid_sdk.games.cogsguard import COGSGUARD_BOOTSTRAP_HUB_OFFSETS, COGSG
 from mettagrid_sdk.games.cogsguard.prompt_adapter import CogsguardPromptAdapter
 from mettagrid_sdk.sdk import GridPosition, MacroDirective, MettagridState, SelfState, SemanticEntity, TeamSummary
 
-from cogames.cogs_vs_clips.missions import make_cogsguard_mission
+from cogames.games.cogs_vs_clips.missions.machina_1 import make_cogsguard_mission
 from mettagrid.simulator.simulator import Simulation
 
 

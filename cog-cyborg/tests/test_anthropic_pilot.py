@@ -18,7 +18,7 @@ from mettagrid_sdk.sdk import (
     TeamSummary,
 )
 
-from cogames.cogs_vs_clips.missions import make_cogsguard_mission
+from cogames.games.cogs_vs_clips.missions.machina_1 import make_cogsguard_mission
 from mettagrid.policy.policy_env_interface import PolicyEnvInterface
 from mettagrid.simulator.simulator import Simulation
 
