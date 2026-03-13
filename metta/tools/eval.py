@@ -26,24 +26,6 @@ from metta.tools.utils.auto_config import auto_replay_dir, auto_stats_server_uri
 logger = logging.getLogger(__name__)
 
 
-def _policy_display_name_from_uri(uri: str) -> str:
-    parsed = urlparse(uri)
-    if parsed.query:
-        qs = parse_qs(parsed.query)
-        # Lightweight naming without changing the `policy_uris` list contract.
-        for key in ("display_name", "name", "label"):
-            vals = qs.get(key)
-            if vals and vals[-1]:
-                return vals[-1]
-
-    base = uri.split("?", 1)[0]
-    if "://" in base:
-        path = urlparse(base).path.rstrip("/")
-        if path:
-            return path.rsplit("/", 1)[-1]
-    return base
-
-
 class EvaluateTool(Tool):
     simulations: Sequence[SimulationConfig] | Sequence[SimulationRunConfig]
     # Convenience for single-policy use (`policy_uri=...`). Use `policy_uris=[...]` for multi-policy.
@@ -86,7 +68,27 @@ class EvaluateTool(Tool):
         if self.assignments is not None and self.proportions is not None:
             raise ValueError("Specify only one of assignments or proportions")
 
-        policy_names = [_policy_display_name_from_uri(uri) for uri in policy_uris]
+        policy_names: list[str] = []
+        for uri in policy_uris:
+            parsed = urlparse(uri)
+            display_name: str | None = None
+            if parsed.query:
+                query_values = parse_qs(parsed.query)
+                # Lightweight naming without changing the `policy_uris` list contract.
+                for key in ("display_name", "name", "label"):
+                    values = query_values.get(key)
+                    if values and values[-1]:
+                        display_name = values[-1]
+                        break
+
+            if display_name is None:
+                base = uri.split("?", 1)[0]
+                if "://" in base:
+                    path = urlparse(base).path.rstrip("/")
+                    display_name = path.rsplit("/", 1)[-1] if path else base
+                else:
+                    display_name = base
+            policy_names.append(display_name)
 
         observatory_writer: ObservatoryWriter | None = None
         wandb_writer: WandbWriter | None = None
