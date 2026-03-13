@@ -113,6 +113,23 @@ def test_nestify_converts_flat_to_nested():
     assert nested["a"]["e"] == 3
     assert nested["x"] == 4
 
+    nested = nestify(
+        {
+            "a.items.0.name": "first",
+            "a.items.1.name": "second",
+            "a.items.1.enabled": True,
+        }
+    )
+
+    assert nested == {
+        "a": {
+            "items": [
+                {"name": "first"},
+                {"name": "second", "enabled": True},
+            ]
+        }
+    }
+
 
 def test_get_tool_fields_includes_parent_fields():
     """Verify get_tool_fields returns fields from the tool and its parent classes."""

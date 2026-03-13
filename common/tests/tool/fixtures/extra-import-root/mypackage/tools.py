@@ -13,6 +13,9 @@ class NestedConfig(Config):
     another_field: int = 100
 
 
+DEFAULT_SETTINGS = NestedConfig()
+
+
 class TestTool(Tool):
     def invoke(self, args):
         print("TestTool invoked")
@@ -33,9 +36,13 @@ class SimpleTestTool(Tool):
         return 0
 
 
-def make_test_tool(run: str = "default_run", count: int = 42) -> SimpleTestTool:
+def make_test_tool(
+    run: str = "default_run",
+    count: int = 42,
+    settings: NestedConfig = DEFAULT_SETTINGS,
+) -> SimpleTestTool:
     """Function that creates a test tool."""
-    return SimpleTestTool()
+    return SimpleTestTool(nested=settings.model_copy(deep=True))
 
 
 class RequiredFieldTool(Tool):

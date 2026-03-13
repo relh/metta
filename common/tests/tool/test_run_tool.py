@@ -114,6 +114,8 @@ def test_function_params_passed_to_invoke(invoke_run_tool):
         "mypackage.tools.make_test_tool",
         "run=my_test",
         "count=99",
+        "settings.field=from_function_param",
+        "settings.another_field=11",
         "value=override",
     )
 
@@ -124,6 +126,8 @@ def test_function_params_passed_to_invoke(invoke_run_tool):
     assert "'count': '99'" in output
     # Config overrides (value) affect the tool instance
     assert "Tool value: override" in output
+    assert "Tool nested.field: from_function_param" in output
+    assert "Tool nested.another_field: 11" in output
 
 
 # --------------------------------------------------------------------------------------
