@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, field_validator, model_validator
 
 
 class CellConfig(BaseModel):
@@ -272,6 +272,76 @@ class CortexStackConfig(BaseModel):
         return out
 
 
+class MultiScaleLayerConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    period: int = Field(ge=1)
+    block: SerializeAsAny[BlockConfig] = Field(alias="scaffold")
+
+    @field_validator("block", mode="before")
+    @classmethod
+    def _coerce_block(cls, value: Any) -> Any:
+        if isinstance(value, BlockConfig):
+            return value
+        if isinstance(value, Mapping):
+            tag = value.get("block_type")
+            if isinstance(tag, str) and tag:
+                from cortex.scaffolds.registry import get_block_config_class  # noqa: PLC0415
+
+                cfg_cls = get_block_config_class(tag)
+                return cfg_cls.model_validate(value)
+        return value
+
+
+class MultiScaleStackConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    layers: list[SerializeAsAny[MultiScaleLayerConfig]]
+    d_hidden: int = Field(ge=1)
+    num_inner_steps: int = Field(ge=1)
+    splits: list[str] = Field(min_length=1)
+    split_start_layer: int = Field(
+        ge=1,
+        description="Index of the first split-specific layer; all prior layers are shared.",
+    )
+    post_norm: bool = Field(default=True)
+    compile_blocks: bool = Field(default=True)
+
+    @field_validator("splits")
+    @classmethod
+    def _validate_splits(cls, value: list[str]) -> list[str]:
+        normalized = [split.strip() for split in value]
+        if any(not split for split in normalized):
+            raise ValueError("splits must be non-empty")
+        if len(set(normalized)) != len(normalized):
+            raise ValueError(f"splits must be unique, got {normalized}")
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_schedule(self) -> "MultiScaleStackConfig":
+        if not self.layers:
+            raise ValueError("MultiScaleStackConfig requires at least one layer")
+
+        previous_period: int | None = None
+        for idx, layer in enumerate(self.layers):
+            if self.num_inner_steps % layer.period != 0:
+                raise ValueError(
+                    f"Layer {idx} period {layer.period} must divide num_inner_steps={self.num_inner_steps}"
+                )
+            if previous_period is not None and layer.period < previous_period:
+                raise ValueError("Layer periods must be monotone nondecreasing")
+            if previous_period is not None and layer.period % previous_period != 0:
+                raise ValueError(
+                    f"Layer {idx} period {layer.period} must divide cleanly by prior period {previous_period}"
+                )
+            previous_period = layer.period
+
+        if self.split_start_layer >= len(self.layers):
+            raise ValueError("split_start_layer must leave at least one split-specific layer")
+
+        return self
+
+
 class RouterConfig(BaseModel):
     """Router settings with global prior and optional per-token refinement."""
 
@@ -386,6 +456,8 @@ __all__ = [
     "AdapterScaffoldConfig",
     "RoutedAdapterConfig",
     "CortexStackConfig",
+    "MultiScaleLayerConfig",
+    "MultiScaleStackConfig",
     "RouterConfig",
     "ColumnBlockConfig",
     "ColumnScaffoldConfig",

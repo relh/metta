@@ -20,6 +20,8 @@ from cortex.config import (
     CoreConfig,
     CortexStackConfig,
     LSTMCoreConfig,
+    MultiScaleLayerConfig,
+    MultiScaleStackConfig,
     PassThroughScaffoldConfig,
     PostUpScaffoldConfig,
     PreUpScaffoldConfig,
@@ -68,7 +70,12 @@ from cortex.scaffolds import (
     build_scaffold,
     register_scaffold,
 )
-from cortex.stacks import CortexStack
+from cortex.stacks import (
+    CortexStack,
+    MultiScaleStack,
+    build_multiscale_stack,
+    build_multiscale_stack_config,
+)
 from cortex.types import MaybeState, ResetMask, State, Tensor
 from cortex.utils import TRITON_AVAILABLE, select_backend
 
@@ -83,6 +90,8 @@ __all__ = [
     "PostUpScaffoldConfig",
     "RouterConfig",
     "CortexStackConfig",
+    "MultiScaleLayerConfig",
+    "MultiScaleStackConfig",
     "CoreConfig",
     "CellConfig",
     "AGaLiTeCellConfig",
@@ -102,6 +111,7 @@ __all__ = [
     "sLSTMCoreConfig",
     # Main classes
     "CortexStack",
+    "MultiScaleStack",
     # Cores
     "MemoryCore",
     "AxonCore",
@@ -139,6 +149,8 @@ __all__ = [
     # Factory functions
     "build_cortex",
     "build_from_dict",
+    "build_multiscale_stack",
+    "build_multiscale_stack_config",
     # Utils
     "TRITON_AVAILABLE",
     "select_backend",
