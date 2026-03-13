@@ -3,41 +3,10 @@
 from __future__ import annotations
 
 import importlib
-from typing import Callable, Optional
+from typing import Callable
 
 from metta.common.tool import Tool
 from metta.common.tool.recipe_registry import recipe_registry
-
-
-def _load_tool_maker(path: str) -> Optional[Callable[[], Tool]]:
-    """Load a tool maker from an import path.
-
-    Args:
-        path: Import path like 'recipes.game.hunger.train'
-
-    Returns:
-        Callable that creates a Tool, or None if not found
-    """
-    if "." not in path:
-        return None
-
-    module_path, symbol = path.rsplit(".", 1)
-
-    try:
-        module = importlib.import_module(module_path)
-        maker = getattr(module, symbol, None)
-
-        if maker is None:
-            return None
-
-        # Must be callable and return a Tool
-        if not callable(maker):
-            return None
-
-        return maker  # type: ignore
-
-    except (ImportError, AttributeError):
-        return None
 
 
 def parse_two_token_syntax(first_token: str, second_token: str | None) -> tuple[str, int]:
@@ -92,9 +61,15 @@ def resolve_and_load_tool_maker(tool_path: str) -> Callable[[], Tool] | None:
     """
 
     # Phase 1: Try direct import
-    maker = _load_tool_maker(tool_path)
-    if maker:
-        return maker
+    if "." in tool_path:
+        module_path, symbol = tool_path.rsplit(".", 1)
+        try:
+            module = importlib.import_module(module_path)
+            maker = getattr(module, symbol, None)
+        except (ImportError, AttributeError):
+            maker = None
+        if callable(maker):
+            return maker  # type: ignore[return-value]
 
     # Phase 2: Try recipe lookup
     if "." in tool_path:
