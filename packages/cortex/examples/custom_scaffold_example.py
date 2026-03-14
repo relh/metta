@@ -1,38 +1,40 @@
 #!/usr/bin/env -S uv run python
-"""Example showing how to create custom block types for the cortex architecture."""
+"""Example showing how to create custom scaffold types for the cortex architecture."""
 
 import torch
 import torch.nn as nn
-from cortex import register_scaffold
+from cortex import CortexStack, register_scaffold
 from cortex.config import CortexStackConfig, LSTMCoreConfig, ScaffoldConfig
-from cortex.cores.base import MemoryCell
-from cortex.scaffolds.base import BaseBlock
+from cortex.cores.base import MemoryCore
+from cortex.scaffolds.base import BaseScaffold
 from cortex.types import MaybeState, ResetMask, Tensor
 from pydantic import Field
+from tensordict import TensorDict
 
 
-# Step 1: Define custom block configuration
-class GatedResidualBlockConfig(ScaffoldConfig):
-    """Configuration for a custom gated residual block.
+# Step 1: Define custom scaffold configuration.
+class GatedResidualScaffoldConfig(ScaffoldConfig):
+    """Configuration for a custom gated residual scaffold.
 
-    This block applies a gate to control the residual connection.
+    This scaffold applies a gate to control the residual connection.
     """
 
+    scaffold_type: str = "gated_residual"
     gate_activation: str = Field(default="sigmoid")
     residual_weight: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
-# Step 2: Implement and register the custom block
-@register_scaffold(GatedResidualBlockConfig)
-class GatedResidualBlock(BaseBlock):
-    """A custom block with gated residual connections.
+# Step 2: Implement and register the custom scaffold.
+@register_scaffold(GatedResidualScaffoldConfig)
+class GatedResidualScaffold(BaseScaffold):
+    """A custom scaffold with gated residual connections.
 
-    This block processes input through a cell and applies a learned
-    gate to blend between the cell output and the original input.
+    This scaffold processes input through a core and applies a learned
+    gate to blend between the core output and the original input.
     """
 
-    def __init__(self, config: GatedResidualBlockConfig, d_hidden: int, cell: MemoryCell) -> None:
-        super().__init__(d_hidden=d_hidden, cell=cell)
+    def __init__(self, config: GatedResidualScaffoldConfig, d_hidden: int, core: MemoryCore) -> None:
+        super().__init__(d_hidden=d_hidden, core=core)
         self.config = config
 
         # Create gate layers
@@ -47,7 +49,7 @@ class GatedResidualBlock(BaseBlock):
             self.gate_act = nn.SiLU()
 
         self.residual_weight = config.residual_weight
-        assert cell.hidden_size == d_hidden, "GatedResidualBlock requires cell.hidden_size == d_hidden"
+        assert core.hidden_size == d_hidden, "GatedResidualScaffold requires core.hidden_size == d_hidden"
 
     def forward(
         self,
@@ -56,29 +58,27 @@ class GatedResidualBlock(BaseBlock):
         *,
         resets: ResetMask | None = None,
     ) -> tuple[Tensor, MaybeState]:
-        from tensordict import TensorDict  # noqa: PLC0415
+        # Extract core state from scaffold state.
+        core_key = self.core.__class__.__name__
+        core_state = state.get(core_key, None) if state is not None else None
 
-        # Extract cell state from block state
-        cell_key = self.cell.__class__.__name__
-        cell_state = state.get(cell_key, None) if state is not None else None
+        # Process through the wrapped core.
+        y, new_core_state = self.core(x, core_state, resets=resets)
 
-        # Process through cell
-        y, new_cell_state = self.cell(x, cell_state, resets=resets)
-
-        # Compute gate based on input and cell output
+        # Compute gate based on input and core output.
         gate_input = torch.cat([x, y], dim=-1)
         gate = self.gate_act(self.gate_proj(gate_input))
 
         # Apply gated residual
         output = gate * y + (1 - gate) * self.residual_weight * x
 
-        # Wrap cell state in block state
-        return output, TensorDict({cell_key: new_cell_state}, batch_size=[])
+        # Wrap core state in scaffold state.
+        return output, TensorDict({core_key: new_core_state}, batch_size=[x.shape[0]])
 
 
-def test_custom_block():
-    """Test the custom gated residual block."""
-    print("Testing Custom Block Implementation\n" + "=" * 40)
+def test_custom_scaffold():
+    """Test the custom gated residual scaffold."""
+    print("Testing Custom Scaffold Implementation\n" + "=" * 40)
 
     device = torch.device("cpu")
     dtype = torch.float32
@@ -86,18 +86,18 @@ def test_custom_block():
     seq_len = 5
     d_hidden = 128
 
-    # Create a recipe with custom blocks
+    # Create a recipe with custom scaffolds.
     recipe = CortexStackConfig(
         d_hidden=d_hidden,
         scaffolds=[
-            # Mix standard and custom blocks
-            GatedResidualBlockConfig(
+            # Mix standard and custom scaffolds.
+            GatedResidualScaffoldConfig(
                 core=LSTMCoreConfig(hidden_size=128, num_layers=1),
                 gate_activation="sigmoid",
                 residual_weight=0.3,
             ),
-            GatedResidualBlockConfig(
-                core=LSTMCoreConfig(hidden_size=128, num_layers=2),
+            GatedResidualScaffoldConfig(
+                core=LSTMCoreConfig(hidden_size=128, num_layers=1),
                 gate_activation="tanh",
                 residual_weight=0.7,
             ),
@@ -107,19 +107,16 @@ def test_custom_block():
 
     print("Custom Recipe Configuration:")
     print(f"  d_hidden: {recipe.d_hidden}")
-    print(f"  num_scaffolds: {len(recipe.blocks)}")
-    for i, block in enumerate(recipe.blocks):
-        if isinstance(block, GatedResidualBlockConfig):
-            print(f"  Scaffold {i}: GatedResidual (gate={block.gate_activation}, weight={block.residual_weight})")
+    print(f"  num_scaffolds: {len(recipe.scaffolds)}")
+    for i, scaffold in enumerate(recipe.scaffolds):
+        if isinstance(scaffold, GatedResidualScaffoldConfig):
+            print(f"  Scaffold {i}: GatedResidual (gate={scaffold.gate_activation}, weight={scaffold.residual_weight})")
     print()
 
-    # Build the stack using the standard CortexStack - no custom class needed!
-    # The registry system automatically handles our custom block type
-    from cortex.stacks import CortexStack  # noqa: PLC0415
-
+    # Build the stack using the standard CortexStack; the registry system handles our custom scaffold type.
     stack = CortexStack(recipe)
 
-    print(f"Built custom stack with {len(stack.blocks)} scaffolds")
+    print(f"Built custom stack with {len(stack.scaffolds)} scaffolds")
 
     # Test forward pass
     x = torch.randn(batch_size, seq_len, d_hidden, device=device, dtype=dtype)
@@ -130,7 +127,7 @@ def test_custom_block():
 
     print(f"Output shape: {output.shape}")
     assert output.shape == x.shape, "Output shape mismatch!"
-    print("\n✓ Custom block test passed!")
+    print("\n✓ Custom scaffold test passed!")
 
     # Show how the registry works
     print("\n" + "=" * 40)
@@ -146,4 +143,4 @@ def test_custom_block():
 
 
 if __name__ == "__main__":
-    test_custom_block()
+    test_custom_scaffold()

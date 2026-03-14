@@ -474,7 +474,7 @@ ActionProbs                                   # Sample/evaluate actions
 
 | Variant              | Core                   | Notes                                               |
 | -------------------- | ---------------------- | --------------------------------------------------- |
-| `ViTDefaultConfig`   | CortexTD (Axon blocks) | Default architecture, configurable latent_dim/heads |
+| `ViTDefaultConfig`   | CortexTD (Axon scaffolds) | Default architecture, configurable latent_dim/heads |
 | `CortexBaseConfig`   | CortexStack            | Flexible Cortex stack configuration                 |
 | `MemoryFreeConfig`   | None (MLP only)        | Speed-optimized, no recurrence                      |
 | `FastConfig`         | CNN + CortexTD         | Alternative construction (not PolicyAutoBuilder)    |
@@ -495,31 +495,31 @@ Modular library for composable recurrent neural network stacks:
 
 ```
 CortexStack
-  +-- [Block, Block, Block, ...]    # Sequential blocks with skip connections
+  +-- [Scaffold, Scaffold, Scaffold, ...]    # Sequential scaffolds with skip connections
 
-Block Types:
-  BaseBlock        # Base interface
-  PreUpBlock       # Input projection before cell
-  PostUpBlock      # Output projection after cell
-  ColumnBlock      # Mixture of Experts (MoE)
-  AdapterBlock     # Adapter layers
-  PassthroughBlock # Identity pass-through
+Scaffold Types:
+  BaseScaffold        # Base interface
+  PreUpScaffold       # Input projection before core
+  PostUpScaffold      # Output projection after core
+  ColumnScaffold      # Mixture of Experts (MoE)
+  AdapterScaffold     # Adapter layers
+  PassThroughScaffold # Identity pass-through
 
-Memory Cells:
-  LSTMCell         # Standard LSTM
-  mLSTMCell        # Matrix LSTM (extended state)
-  sLSTMCell        # Scalar LSTM (simplified)
-  AxonCell         # Custom Axon-based recurrence
-  CausalConv1D     # 1D causal convolution
+Memory Cores:
+  LSTMCore         # Standard LSTM
+  mLSTMCore        # Matrix LSTM (extended state)
+  sLSTMCore        # Scalar LSTM (simplified)
+  AxonCore         # Custom Axon-based recurrence
+  CausalConv1dCore # 1D causal convolution
 ```
 
 **Key Features:**
 
-- **Composable stacks**: Mix different cell types in a single stack
+- **Composable stacks**: Mix different core types in a single stack
 - **GPU-optimized**: Custom Triton kernels for Linux GPU training
 - **HuggingFace parity**: Tests verify output matches HuggingFace Llama
 - **Configurable precision**: float32, float16, bfloat16 storage
-- **MoE support**: Column blocks enable mixture-of-experts patterns
+- **MoE support**: Column scaffolds enable mixture-of-experts patterns
 
 ---
 

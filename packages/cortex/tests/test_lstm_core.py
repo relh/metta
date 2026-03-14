@@ -1,9 +1,9 @@
-"""Tests for LSTM cell implementation."""
+"""Tests for LSTM core implementation."""
 
 import pytest
 import torch
-from cortex.config import LSTMCellConfig
-from cortex.cores.lstm import LSTMCell
+from cortex.config import LSTMCoreConfig
+from cortex.cores.lstm import LSTMCore
 from cortex.kernels.pytorch.lstm import lstm_sequence_pytorch
 from cortex.utils import TRITON_AVAILABLE
 
@@ -16,7 +16,7 @@ def get_test_device():
 
 
 def test_lstm_sequence_forward():
-    """Test LSTM cell with sequence input."""
+    """Test LSTM core with sequence input."""
     torch.manual_seed(42)
 
     device = get_test_device()
@@ -26,8 +26,8 @@ def test_lstm_sequence_forward():
     T = 10  # sequence length
     H = 32  # hidden size
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     # Test sequence processing
@@ -44,7 +44,7 @@ def test_lstm_sequence_forward():
 
 
 def test_lstm_single_step():
-    """Test LSTM cell with single-step input."""
+    """Test LSTM core with single-step input."""
     torch.manual_seed(42)
 
     device = get_test_device()
@@ -53,8 +53,8 @@ def test_lstm_single_step():
     B = 2  # batch size
     H = 32  # hidden size
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     # Test single-step processing
@@ -79,8 +79,8 @@ def test_lstm_sequential_vs_parallel():
     T = 16  # sequence length
     H = 32  # hidden size
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     x = torch.randn(B, T, H, device=device, dtype=dtype)
@@ -108,17 +108,17 @@ def test_lstm_sequential_vs_parallel():
 def test_lstm_multi_layer_unsupported():
     """Multi-layer configuration should raise now that kernels are single-layer only."""
 
-    cfg = LSTMCellConfig(hidden_size=64, num_layers=2, dropout=0.0)
+    cfg = LSTMCoreConfig(hidden_size=64, num_layers=2, dropout=0.0)
     with pytest.raises(ValueError):
-        LSTMCell(cfg)
+        LSTMCore(cfg)
 
 
 def test_lstm_projection_unsupported():
     """Projection size >0 is not supported by the fused implementation."""
 
-    cfg = LSTMCellConfig(hidden_size=64, num_layers=1, proj_size=16, dropout=0.0)
+    cfg = LSTMCoreConfig(hidden_size=64, num_layers=1, proj_size=16, dropout=0.0)
     with pytest.raises(ValueError):
-        LSTMCell(cfg)
+        LSTMCore(cfg)
 
 
 def test_lstm_state_reset():
@@ -131,8 +131,8 @@ def test_lstm_state_reset():
     B = 4  # batch size
     H = 32  # hidden size
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
 
     # Create initial state
     state = cell.init_state(batch=B, device=device, dtype=dtype)
@@ -176,8 +176,8 @@ def test_lstm_reset_forward_backward_match_backends():
     dtype = torch.float32
     B, T, H = 3, 5, 32
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
     cell.net.reset_parameters()
     net = cell.net
 
@@ -246,8 +246,8 @@ def test_lstm_with_resets():
     T = 10  # sequence length
     H = 32  # hidden size
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     x = torch.randn(B, T, H, device=device, dtype=dtype)
@@ -275,8 +275,8 @@ def test_lstm_gradient_flow():
     T = 10  # sequence length
     H = 64  # hidden size
 
-    cfg = LSTMCellConfig(hidden_size=H, num_layers=1, dropout=0.0)
-    cell = LSTMCell(cfg).to(device=device, dtype=dtype)
+    cfg = LSTMCoreConfig(hidden_size=H, num_layers=1, dropout=0.0)
+    cell = LSTMCore(cfg).to(device=device, dtype=dtype)
     cell.train()
 
     x = torch.randn(B, T, H, device=device, dtype=dtype, requires_grad=True)

@@ -3,10 +3,10 @@
 import pytest
 import torch
 import torch.nn as nn
-from cortex.config import LSTMCellConfig, PostUpBlockConfig, PostUpGatedBlockConfig, PreUpBlockConfig
+from cortex.config import LSTMCoreConfig, PostUpGatedScaffoldConfig, PostUpScaffoldConfig, PreUpScaffoldConfig
 from cortex.consistent_dropout import ConsistentDropout, ConsistentDropoutModule, reset_consistent_dropout
-from cortex.cores import build_cell
-from cortex.scaffolds import build_block
+from cortex.cores import build_core
+from cortex.scaffolds import build_scaffold
 from cortex.stacks import build_cortex_auto_stack
 
 
@@ -220,91 +220,91 @@ class TestResetConsistentDropout:
 
 
 class TestConsistentDropoutWithBlocks:
-    """Integration tests with cortex blocks."""
+    """Integration tests with Cortex scaffolds."""
 
-    def test_postup_block_with_dropout(self):
-        """Test that PostUpBlock works with dropout configuration."""
-        config = PostUpBlockConfig(
+    def test_postup_scaffold_with_dropout(self):
+        """Test that PostUpScaffold works with dropout configuration."""
+        config = PostUpScaffoldConfig(
             proj_factor=2.0,
             dropout=0.1,
-            cell=LSTMCellConfig(hidden_size=64),
+            core=LSTMCoreConfig(hidden_size=64),
         )
 
-        cell = build_cell(LSTMCellConfig(hidden_size=64))
-        block = build_block(config=config, d_hidden=64, cell=cell)
-        block.train()
+        core = build_core(LSTMCoreConfig(hidden_size=64))
+        scaffold = build_scaffold(config=config, d_hidden=64, core=core)
+        scaffold.train()
 
         x = torch.randn(8, 64)
-        state = block.init_state(batch=8, device="cpu", dtype=torch.float32)
+        state = scaffold.init_state(batch=8, device="cpu", dtype=torch.float32)
 
         # Should work without error
-        out, new_state = block(x, state)
+        out, new_state = scaffold(x, state)
         assert out.shape == x.shape
 
         # Verify dropout is present and working
-        assert hasattr(block, "dropout")
-        assert isinstance(block.dropout, ConsistentDropout)
+        assert hasattr(scaffold, "dropout")
+        assert isinstance(scaffold.dropout, ConsistentDropout)
 
-    def test_preup_block_with_dropout(self):
-        """Test that PreUpBlock works with dropout configuration."""
+    def test_preup_scaffold_with_dropout(self):
+        """Test that PreUpScaffold works with dropout configuration."""
         d_hidden = 64
         proj_factor = 2.0
         d_inner = int(proj_factor * d_hidden)
 
-        config = PreUpBlockConfig(
+        config = PreUpScaffoldConfig(
             proj_factor=proj_factor,
             dropout=0.1,
-            cell=LSTMCellConfig(hidden_size=d_inner),
+            core=LSTMCoreConfig(hidden_size=d_inner),
         )
 
-        cell = build_cell(LSTMCellConfig(hidden_size=d_inner))
-        block = build_block(config=config, d_hidden=d_hidden, cell=cell)
-        block.train()
+        core = build_core(LSTMCoreConfig(hidden_size=d_inner))
+        scaffold = build_scaffold(config=config, d_hidden=d_hidden, core=core)
+        scaffold.train()
 
         x = torch.randn(8, d_hidden)
-        state = block.init_state(batch=8, device="cpu", dtype=torch.float32)
+        state = scaffold.init_state(batch=8, device="cpu", dtype=torch.float32)
 
         # Should work without error
-        out, new_state = block(x, state)
+        out, new_state = scaffold(x, state)
         assert out.shape == x.shape
 
         # Verify dropout is present
-        assert hasattr(block, "dropout")
-        assert isinstance(block.dropout, ConsistentDropout)
+        assert hasattr(scaffold, "dropout")
+        assert isinstance(scaffold.dropout, ConsistentDropout)
 
-    def test_postup_gated_block_with_dropout(self):
-        """Test that PostUpGatedBlock works with dropout configuration."""
-        config = PostUpGatedBlockConfig(
+    def test_postup_gated_scaffold_with_dropout(self):
+        """Test that PostUpGatedScaffold works with dropout configuration."""
+        config = PostUpGatedScaffoldConfig(
             proj_factor=2.0,
             dropout=0.1,
-            cell=LSTMCellConfig(hidden_size=64),
+            core=LSTMCoreConfig(hidden_size=64),
         )
 
-        cell = build_cell(LSTMCellConfig(hidden_size=64))
-        block = build_block(config=config, d_hidden=64, cell=cell)
-        block.train()
+        core = build_core(LSTMCoreConfig(hidden_size=64))
+        scaffold = build_scaffold(config=config, d_hidden=64, core=core)
+        scaffold.train()
 
         x = torch.randn(8, 64)
-        state = block.init_state(batch=8, device="cpu", dtype=torch.float32)
+        state = scaffold.init_state(batch=8, device="cpu", dtype=torch.float32)
 
         # Should work without error
-        out, new_state = block(x, state)
+        out, new_state = scaffold(x, state)
         assert out.shape == x.shape
 
         # Verify dropout is present
-        assert hasattr(block, "dropout")
-        assert isinstance(block.dropout, ConsistentDropout)
+        assert hasattr(scaffold, "dropout")
+        assert isinstance(scaffold.dropout, ConsistentDropout)
 
     def test_auto_stack_with_dropout(self):
         """Test that build_cortex_auto_stack wires consistent dropout."""
         stack = build_cortex_auto_stack(
             d_hidden=32,
             num_layers=1,
-            compile_blocks=False,
+            compile_scaffolds=False,
             override_global_configs=[
-                PostUpBlockConfig(dropout=0.1),
-                PostUpGatedBlockConfig(dropout=0.1),
-                PreUpBlockConfig(dropout=0.1),
+                PostUpScaffoldConfig(dropout=0.1),
+                PostUpGatedScaffoldConfig(dropout=0.1),
+                PreUpScaffoldConfig(dropout=0.1),
             ],
         )
         stack.train()

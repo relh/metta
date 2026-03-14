@@ -64,7 +64,7 @@ class CnnSharedCriticConfig(PolicyArchitecture):
                     num_layers=self.core_resnet_layers,
                     layers=[self.core_resnet_cells] * self.core_resnet_layers,
                     post_norm=self.core_use_layer_norm,
-                    compile_blocks=self.core_compile,
+                    compile_scaffolds=self.core_compile,
                     routed_adapter=self.cortex_routed_adapter,
                 ),
                 pass_state_during_training=self.pass_state_during_training,

@@ -27,7 +27,7 @@ def test_llama_stack_full_parity(B: int, T: int, H: int) -> None:
     )
     hf = LlamaForCausalLM(cfg).eval()
 
-    stack = build_llama_stack_from_model(hf, compile_blocks=False).eval()
+    stack = build_llama_stack_from_model(hf, compile_scaffolds=False).eval()
 
     input_ids = torch.randint(0, cfg.vocab_size, (B, T))
     embeds = hf.model.embed_tokens(input_ids)
@@ -55,7 +55,7 @@ def test_llama_stack_streaming_chunk_parity(chunk: int) -> None:
         vocab_size=128,
     )
     hf = LlamaForCausalLM(cfg).eval()
-    stack = build_llama_stack_from_model(hf, mem_len=T, compile_blocks=False).eval()
+    stack = build_llama_stack_from_model(hf, mem_len=T, compile_scaffolds=False).eval()
 
     input_ids = torch.randint(0, cfg.vocab_size, (B, T))
     embeds = hf.model.embed_tokens(input_ids)
@@ -100,7 +100,7 @@ def test_smollm_llama_parity_and_streaming() -> None:
     B, T = 1, 24
     name = "HuggingFaceTB/SmolLM-360M"
     hf = AutoModelForCausalLM.from_pretrained(name, torch_dtype=dtype).to(device).eval()
-    stack = build_llama_stack_from_model(hf, mem_len=T, compile_blocks=False).to(device).eval()
+    stack = build_llama_stack_from_model(hf, mem_len=T, compile_scaffolds=False).to(device).eval()
     vocab = int(hf.config.vocab_size)
     torch.manual_seed(0)
     input_ids = torch.randint(0, vocab, (B, T), device=device)
@@ -148,7 +148,7 @@ def test_llama_static_cache_updates_inplace() -> None:
         vocab_size=128,
     )
     hf = LlamaForCausalLM(cfg).eval()
-    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_blocks=False).eval()
+    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_scaffolds=False).eval()
 
     input_ids = torch.randint(0, cfg.vocab_size, (B, T))
     embeds = hf.model.embed_tokens(input_ids)
@@ -163,8 +163,8 @@ def test_llama_static_cache_updates_inplace() -> None:
         e = embeds[:, t : t + 1]
         _, st = stack(e, st)
 
-        block0 = st.get("PassThroughBlock_0")
-        cell = block0.get("HFLlamaLayerCell")
+        block0 = st.get("PassThroughScaffold_0")
+        cell = block0.get("HFLlamaLayerCore")
         assert all(k in cell.keys() for k in ("k", "v", "kv_len")), "Missing KV tensors in state"
 
         k = cell.get("k")
@@ -224,7 +224,7 @@ def test_llama_per_timestep_resets_parity() -> None:
     )
     hf = LlamaForCausalLM(cfg).eval()
     mem_len = T
-    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_blocks=False).eval()
+    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_scaffolds=False).eval()
 
     input_ids = torch.randint(0, cfg.vocab_size, (B, T))
     embeds = hf.model.embed_tokens(input_ids)
@@ -262,7 +262,7 @@ def test_llama_mem_len_smaller_than_chunk_T_gt_M() -> None:
         vocab_size=128,
     )
     hf = LlamaForCausalLM(cfg).eval()
-    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_blocks=False).eval()
+    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_scaffolds=False).eval()
 
     input_ids = torch.randint(0, cfg.vocab_size, (B, T))
     embeds = hf.model.embed_tokens(input_ids)
@@ -277,8 +277,8 @@ def test_llama_mem_len_smaller_than_chunk_T_gt_M() -> None:
     assert out.shape == ref.shape
     assert torch.isfinite(out).all()
 
-    block0 = st.get("PassThroughBlock_0")
-    cell = block0.get("HFLlamaLayerCell")
+    block0 = st.get("PassThroughScaffold_0")
+    cell = block0.get("HFLlamaLayerCore")
     k = cell.get("k")
     v = cell.get("v")
     kv_len = cell.get("kv_len")
@@ -306,7 +306,7 @@ def test_llama_streaming_chunk_T_gt_M() -> None:
         vocab_size=128,
     )
     hf = LlamaForCausalLM(cfg).eval()
-    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_blocks=False).eval()
+    stack = build_llama_stack_from_model(hf, mem_len=mem_len, compile_scaffolds=False).eval()
 
     input_ids = torch.randint(0, cfg.vocab_size, (B, T_total))
     embeds = hf.model.embed_tokens(input_ids)
@@ -355,8 +355,8 @@ def test_llama_streaming_chunk_T_gt_M() -> None:
         msg="Cortex streaming with T>mem_len diverges from HF sliding-window reference",
     )
 
-    block0 = st.get("PassThroughBlock_0")
-    cell = block0.get("HFLlamaLayerCell")
+    block0 = st.get("PassThroughScaffold_0")
+    cell = block0.get("HFLlamaLayerCore")
     k = cell.get("k")
     v = cell.get("v")
     kv_len = cell.get("kv_len")

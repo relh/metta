@@ -9,10 +9,10 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict  # type: ignore[import-untyped]
 
-from cortex.config import CellConfig
-from cortex.cores.base import MemoryCell
+from cortex.config import CoreConfig
+from cortex.cores.base import MemoryCore
 from cortex.cores.core import update_parent_state
-from cortex.cores.registry import register_cell
+from cortex.cores.registry import register_core
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
@@ -71,31 +71,31 @@ class LayerwiseCache:
         return k_full, v_full
 
 
-class HFLlamaLayerConfig(CellConfig):
+class HFLlamaLayerCoreConfig(CoreConfig):
     """Config for the HF LLaMA layer wrapper; expects hf_layer, hf_submodel, hf_config set at runtime."""
 
-    cell_type: str = "hf_llama_layer"
+    core_type: str = "hf_llama_layer"
 
     hidden_size: int | None = None
     mem_len: int = 0
 
 
-@register_cell(HFLlamaLayerConfig)
-class HFLlamaLayerCell(MemoryCell):
-    """Wrap a single HF LLaMA decoder layer as a Cortex MemoryCell."""
+@register_core(HFLlamaLayerCoreConfig)
+class HFLlamaLayerCore(MemoryCore):
+    """Wrap a single HF LLaMA decoder layer as a Cortex MemoryCore."""
 
-    def __init__(self, cfg: HFLlamaLayerConfig) -> None:
+    def __init__(self, cfg: HFLlamaLayerCoreConfig) -> None:
         if cfg.hidden_size is None:
-            raise ValueError("HFLlamaLayerConfig.hidden_size must be set")
+            raise ValueError("HFLlamaLayerCoreConfig.hidden_size must be set")
         super().__init__(hidden_size=int(cfg.hidden_size))
         self.cfg = cfg
         hf_layer = getattr(cfg, "hf_layer", None)
         hf_submodel = getattr(cfg, "hf_submodel", None)
         hf_config = getattr(cfg, "hf_config", None)
         if not isinstance(hf_layer, nn.Module):
-            raise ValueError("HFLlamaLayerConfig must include an 'hf_layer' nn.Module")
+            raise ValueError("HFLlamaLayerCoreConfig must include an 'hf_layer' nn.Module")
         if not isinstance(hf_submodel, nn.Module):
-            raise ValueError("HFLlamaLayerConfig must include an 'hf_submodel' nn.Module (e.g., model.model)")
+            raise ValueError("HFLlamaLayerCoreConfig must include an 'hf_submodel' nn.Module (e.g., model.model)")
         self.hf_layer: nn.Module = hf_layer
         rotary_emb = getattr(hf_submodel, "rotary_emb", None)
         if rotary_emb is None:
@@ -408,4 +408,4 @@ class HFLlamaLayerCell(MemoryCell):
         return new
 
 
-__all__ = ["HFLlamaLayerConfig", "HFLlamaLayerCell"]
+__all__ = ["HFLlamaLayerCoreConfig", "HFLlamaLayerCore"]

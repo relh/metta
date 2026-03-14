@@ -1,4 +1,4 @@
-"""Adapter block for adding trainable residual paths to pretrained models."""
+"""Adapter scaffold for adding trainable residual paths to pretrained models."""
 
 from __future__ import annotations
 
@@ -9,32 +9,30 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import AdapterBlockConfig
-from cortex.cores import build_cell
-from cortex.cores.base import MemoryCell
-from cortex.scaffolds.base import BaseBlock
-from cortex.scaffolds.registry import build_block, register_block
+from cortex.config import AdapterScaffoldConfig
+from cortex.cores import build_core
+from cortex.cores.base import MemoryCore
+from cortex.scaffolds.base import BaseScaffold
+from cortex.scaffolds.registry import build_scaffold, register_scaffold
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
-@register_block(AdapterBlockConfig)
-class AdapterBlock(BaseBlock):
-    """Wraps a block with identity-initialized gated bottleneck adapter for finetuning."""
+@register_scaffold(AdapterScaffoldConfig)
+class AdapterScaffold(BaseScaffold):
+    """Wraps a scaffold with an identity-initialized gated bottleneck adapter for finetuning."""
 
-    def __init__(self, config: AdapterBlockConfig, d_hidden: int, cell: MemoryCell | None = None) -> None:
-        # Build the cell for the base block
-        base_cell_hidden_size = config.base_block.get_cell_hidden_size(d_hidden)
-        base_cell_config = type(config.base_block.cell)(
-            **{**config.base_block.cell.model_dump(), "hidden_size": base_cell_hidden_size}
+    def __init__(self, config: AdapterScaffoldConfig, d_hidden: int, core: MemoryCore | None = None) -> None:
+        assert config.base_scaffold.core is not None, "AdapterScaffold requires base_scaffold.core"
+        base_core_hidden_size = config.base_scaffold.get_core_hidden_size(d_hidden)
+        base_core_config = type(config.base_scaffold.core)(
+            **{**config.base_scaffold.core.model_dump(), "hidden_size": base_core_hidden_size}
         )
-        base_cell = build_cell(base_cell_config)
+        base_core = build_core(base_core_config)
 
-        # Initialize with the base cell
-        super().__init__(d_hidden=d_hidden, cell=base_cell)
+        super().__init__(d_hidden=d_hidden, core=base_core)
         self.config = config
 
-        # Build the wrapped block with its cell
-        self.wrapped_block = build_block(config=config.base_block, d_hidden=d_hidden, cell=base_cell)
+        self.wrapped_scaffold = build_scaffold(config=config.base_scaffold, d_hidden=d_hidden, core=base_core)
 
         # Adapter components
         self.ln = nn.LayerNorm(d_hidden)
@@ -63,16 +61,16 @@ class AdapterBlock(BaseBlock):
         nn.init.zeros_(self.down.bias)
 
     def init_state(self, batch: int, *, device: torch.device | str, dtype: torch.dtype) -> TensorDict:
-        """Initialize state by delegating to wrapped block."""
-        wrapped_state = self.wrapped_block.init_state(batch=batch, device=device, dtype=dtype)
+        """Initialize state by delegating to the wrapped scaffold."""
+        wrapped_state = self.wrapped_scaffold.init_state(batch=batch, device=device, dtype=dtype)
         return TensorDict({"wrapped": wrapped_state}, batch_size=[batch])
 
     def reset_state(self, state: MaybeState, mask: ResetMask) -> MaybeState:
-        """Reset state by delegating to wrapped block."""
+        """Reset state by delegating to the wrapped scaffold."""
         if state is None:
             return None
         wrapped_state = state.get("wrapped", None)
-        new_wrapped_state = self.wrapped_block.reset_state(wrapped_state, mask)
+        new_wrapped_state = self.wrapped_scaffold.reset_state(wrapped_state, mask)
         if new_wrapped_state is None:
             return None
         batch_size = state.batch_size[0] if state.batch_size else (mask.shape[0] if mask is not None else 1)
@@ -85,11 +83,9 @@ class AdapterBlock(BaseBlock):
         *,
         resets: Optional[ResetMask] = None,
     ) -> Tuple[Tensor, MaybeState]:
-        # Extract wrapped block state
         wrapped_state = state.get("wrapped") if state is not None else None
 
-        # Run wrapped block
-        y, new_wrapped_state = self.wrapped_block(x, wrapped_state, resets=resets)
+        y, new_wrapped_state = self.wrapped_scaffold(x, wrapped_state, resets=resets)
 
         # Apply adapter residual (identity at init)
         adapter_out = self.up(self.dropout(self.act(self.down(self.ln(y)))))
@@ -103,4 +99,4 @@ class AdapterBlock(BaseBlock):
         return y_adapted, TensorDict({"wrapped": new_wrapped_state}, batch_size=[batch_size])
 
 
-__all__ = ["AdapterBlock"]
+__all__ = ["AdapterScaffold"]

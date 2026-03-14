@@ -2,8 +2,8 @@
 
 This module centralizes a handful of small, readable "stack recipes" that are
 useful for quick comparisons on synthetic tasks. They showcase how to compose
-cells and blocks via the configuration layer, and how to expose higher‑level
-architectures like xLSTM behind a simple callable.
+cell presets and explicit scaffolds via the configuration layer, and how to
+expose higher-level architectures like xLSTM behind a simple callable.
 
 Add new templates by:
 1) Writing a `build_*` function that returns a `CortexStack` (see examples).
@@ -19,11 +19,11 @@ from typing import Callable, Dict
 import torch
 from cortex.cells import AxonCellConfig, XLCellConfig, mLSTMCellConfig, sLSTMCellConfig
 from cortex.config import (
-    AxonConfig,
+    AxonCoreConfig,
     CortexStackConfig,
-    PassThroughBlockConfig,
-    PostUpBlockConfig,
-    PreUpBlockConfig,
+    PassThroughScaffoldConfig,
+    PostUpScaffoldConfig,
+    PreUpScaffoldConfig,
     XLCoreConfig,
     mLSTMCoreConfig,
     sLSTMCoreConfig,
@@ -43,15 +43,15 @@ class StackSpec:
 
 
 def build_slstm_postup(*, d_hidden: int = 128, proj_factor: float = 1.5, num_heads: int = 4) -> CortexStack:
-    """sLSTM cell in a PostUp block; cell size equals external hidden size."""
+    """sLSTM core in a PostUp scaffold; core size equals external hidden size."""
     cfg = CortexStackConfig(
         d_hidden=d_hidden,
         post_norm=True,
-        blocks=[
-            PostUpBlockConfig(
+        scaffolds=[
+            PostUpScaffoldConfig(
                 proj_factor=proj_factor,
-                # hidden_size may be None here; the stack builder sets it to d_hidden for PostUp
-                cell=sLSTMCellConfig(hidden_size=None, num_heads=num_heads, conv1d_kernel_size=4, dropout=0.0),
+                # hidden_size may be None here; the stack builder sets it to d_hidden for PostUp.
+                core=sLSTMCoreConfig(hidden_size=None, num_heads=num_heads, conv1d_kernel_size=4, dropout=0.0),
             )
         ],
     )
@@ -59,15 +59,15 @@ def build_slstm_postup(*, d_hidden: int = 128, proj_factor: float = 1.5, num_hea
 
 
 def build_mlstm_preup(*, d_hidden: int = 128, proj_factor: float = 2.0, num_heads: int = 4) -> CortexStack:
-    """mLSTM cell in a PreUp block; cell runs at inner dim = proj_factor*d_hidden."""
+    """mLSTM core in a PreUp scaffold; the core runs at inner dim = proj_factor*d_hidden."""
     cfg = CortexStackConfig(
         d_hidden=d_hidden,
         post_norm=True,
-        blocks=[
-            PreUpBlockConfig(
+        scaffolds=[
+            PreUpScaffoldConfig(
                 proj_factor=proj_factor,
-                # hidden_size may be None here; the stack builder sets it to int(proj_factor * d_hidden) for PreUp
-                cell=mLSTMCellConfig(hidden_size=None, num_heads=num_heads, chunk_size=256, conv1d_kernel_size=4),
+                # hidden_size may be None here; the stack builder sets it to int(proj_factor * d_hidden) for PreUp.
+                core=mLSTMCoreConfig(hidden_size=None, num_heads=num_heads, chunk_size=256, conv1d_kernel_size=4),
             )
         ],
     )
@@ -82,14 +82,16 @@ def build_slstm_postup_axon(*, d_hidden: int = 128, proj_factor: float = 1.5, nu
     cfg = CortexStackConfig(
         d_hidden=d_hidden,
         post_norm=True,
-        blocks=[
-            PreUpBlockConfig(
+        scaffolds=[
+            PreUpScaffoldConfig(
                 # hidden_size is inferred from PreUp: int(proj_factor * d_hidden)
-                cell=AxonConfig(hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True)
+                core=AxonCoreConfig(
+                    hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True
+                )
             ),
-            PostUpBlockConfig(
+            PostUpScaffoldConfig(
                 proj_factor=proj_factor,
-                cell=sLSTMCellConfig(
+                core=sLSTMCoreConfig(
                     hidden_size=None,
                     num_heads=num_heads,
                     conv1d_kernel_size=4,
@@ -107,14 +109,16 @@ def build_mlstm_preup_axon(*, d_hidden: int = 128, proj_factor: float = 2.0, num
     cfg = CortexStackConfig(
         d_hidden=d_hidden,
         post_norm=True,
-        blocks=[
-            PassThroughBlockConfig(
+        scaffolds=[
+            PassThroughScaffoldConfig(
                 # hidden_size is inferred from PreUp: int(proj_factor * d_hidden)
-                cell=AxonConfig(hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True)
+                core=AxonCoreConfig(
+                    hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True
+                )
             ),
-            PreUpBlockConfig(
+            PreUpScaffoldConfig(
                 proj_factor=proj_factor,
-                cell=mLSTMCellConfig(
+                core=mLSTMCoreConfig(
                     hidden_size=None,
                     num_heads=num_heads,
                     chunk_size=256,
@@ -129,25 +133,29 @@ def build_mlstm_preup_axon(*, d_hidden: int = 128, proj_factor: float = 2.0, num
 
 
 def build_axons_preup(*, d_hidden: int = 128, proj_factor: float = 2.0) -> CortexStack:
-    """Axons (streaming RTU, diagonal) wrapped in a PreUp block.
+    """Axon cores (streaming RTU, diagonal) wrapped in a PreUp scaffold.
 
-    - The PreUp block projects inputs to an inner dim of ``proj_factor*d_hidden``
-      before applying the Axons cell.
-    - Axons assumes D == H internally and projects its 2H activation
+    - The PreUp scaffold projects inputs to an inner dim of ``proj_factor*d_hidden``
+      before applying the Axon core.
+    - Axon assumes D == H internally and projects its 2H activation
       back to H, keeping the external hidden size consistent.
     """
     cfg = CortexStackConfig(
         d_hidden=d_hidden,
         post_norm=True,
-        blocks=[
-            PassThroughBlockConfig(
+        scaffolds=[
+            PassThroughScaffoldConfig(
                 # hidden_size is inferred from PreUp: int(proj_factor * d_hidden)
-                cell=AxonConfig(hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True)
+                core=AxonCoreConfig(
+                    hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True
+                )
             ),
-            PreUpBlockConfig(
+            PreUpScaffoldConfig(
                 proj_factor=proj_factor,
                 # hidden_size is inferred from PreUp: int(proj_factor * d_hidden)
-                cell=AxonConfig(hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True),
+                core=AxonCoreConfig(
+                    hidden_size=None, activation="silu", use_fullrank_rtu=False, use_untraced_linear=True
+                ),
             ),
         ],
     )
@@ -161,13 +169,13 @@ def build_smollm_stack(*, model_name: str = "HuggingFaceTB/SmolLM-360M") -> Cort
         torch_dtype=torch.bfloat16,
         trust_remote_code=False,
         mem_len=64,
-        compile_blocks=False,
+        compile_scaffolds=False,
     )
 
 
 # Registry of available stacks for the evaluation harness
 STACKS: Dict[str, StackSpec] = {
-    # Single‑block templates
+    # Single-scaffold templates
     "slstm": StackSpec(name="slstm_postup", builder=lambda: build_slstm_postup(), d_hidden=128),
     "mlstm": StackSpec(name="mlstm_preup", builder=lambda: build_mlstm_preup(), d_hidden=128),
     "slstm_axon": StackSpec(name="slstm_postup_axon", builder=lambda: build_slstm_postup_axon(), d_hidden=128),
@@ -180,18 +188,18 @@ STACKS: Dict[str, StackSpec] = {
         builder=lambda: build_cortex_auto_stack(
             d_hidden=128,
             num_layers=2,
-            compile_blocks=False,
+            compile_scaffolds=False,
             layers=[[AxonCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()]] * 2,
         ),
         d_hidden=128,
     ),
-    # Variant with per-block torch.compile enabled for A/B comparisons
+    # Variant with per-scaffold torch.compile enabled for A/B comparisons
     "cortex_auto_compiled": StackSpec(
         name="cortex_auto_stack",
         builder=lambda: build_cortex_auto_stack(
             d_hidden=128,
             num_layers=2,
-            compile_blocks=True,
+            compile_scaffolds=True,
             layers=[[AxonCellConfig(), XLCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()]] * 2,
         ),
         d_hidden=128,

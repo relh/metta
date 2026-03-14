@@ -1,11 +1,11 @@
-"""Core Axons-based primitives.
+"""Core Axon-based primitives.
 
-This subpackage hosts the AxonCell (streaming RTU cell) and AxonLayer, a
-stateful, linear-like module that wraps AxonCell with automatic state
+This subpackage hosts the AxonCore (streaming RTU core) and AxonLayer, a
+stateful, linear-like module that wraps AxonCore with automatic state
 management.
 """
 
-from .axon_cell import AxonCell
+from .axon_core import AxonCore
 from .axon_layer import AxonLayer, update_parent_state
 
-__all__ = ["AxonCell", "AxonLayer", "update_parent_state"]
+__all__ = ["AxonCore", "AxonLayer", "update_parent_state"]

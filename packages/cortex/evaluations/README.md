@@ -8,14 +8,14 @@ Quick start
 - CPU/GPU is auto-detected. CUDA is used when available.
 - Run one or all stacks against a task:
   - Single stack
-    - `python packages/cortex/evaluations/run.py --task delayed_recall --stack slstm_postup`
+    - `python packages/cortex/evaluations/run.py --task delayed_recall --stack slstm`
   - All registered stacks
     - `python packages/cortex/evaluations/run.py --task majority --stack all`
 
 Common flags
 
 - `--task {delayed_recall, majority, dyck}`
-- `--stack {slstm_postup, mlstm_preup, xlstm, all}` (auto-discovers new stacks added to `STACKS`)
+- `--stack {slstm, mlstm, axons, cortex_auto, smollm, all}` (auto-discovers new stacks added to `STACKS`)
 - `--epochs`, `--batch-size`, `--lr`, `--seed`
 - `--log-level {DEBUG, INFO, WARNING, ERROR}` (default: `INFO`)
 
@@ -28,7 +28,7 @@ Notes
 - The synthetic dataset implementations are a local copy of `temp/rnn_evaluation/src/synthetic_datasets.py` (only the
   synthetic tasks are included here).
 - This harness keeps things minimal on purpose; it is not aimed at state-of-the-art training, just fast debugging of
-  block/cell wiring and step/sequence parity.
+  scaffold/core wiring and step/sequence parity.
 
 Tasks
 

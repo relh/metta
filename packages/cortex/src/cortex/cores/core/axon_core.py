@@ -1,6 +1,6 @@
-"""AxonCell: Streaming RTU cell (diagonal input weights) with multi-backend support.
+"""AxonCore: Streaming RTU core (diagonal input weights) with multi-backend support.
 
-Moved from ``cortex.cores.axons`` to ``cortex.cores.core.axon_cell``.
+Moved from ``cortex.cores.axons`` to ``cortex.cores.core.axon_core``.
 This version optionally allows ``out_dim != hidden_size`` to support AxonLayer.
 """
 
@@ -13,9 +13,9 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import AxonConfig
-from cortex.cores.base import MemoryCell
-from cortex.cores.registry import register_cell
+from cortex.config import AxonCoreConfig
+from cortex.cores.base import MemoryCore
+from cortex.cores.registry import register_core
 from cortex.kernels.cuda import srht_cuda
 from cortex.kernels.pytorch.rtu.rtu_stream_diag import rtu_stream_diag_pytorch
 from cortex.kernels.pytorch.rtu.rtu_stream_fullrank import rtu_stream_full_pytorch
@@ -37,23 +37,23 @@ def _resolve_activation(name: str) -> nn.Module:
     raise ValueError(f"Unsupported RTU activation: {name}")
 
 
-@register_cell(AxonConfig)
-class AxonCell(MemoryCell):
-    """Cortex memory cell for streaming RTU with diagonal input weights.
+@register_core(AxonCoreConfig)
+class AxonCore(MemoryCore):
+    """Cortex memory core for streaming RTU with diagonal input weights.
 
     Notes
     -----
     - Carries compact [B,H] eligibility traces across chunks.
     - Backend selection follows ``cortex.utils.select_backend``.
-    - By default, this cell enforces that its output feature dimension equals
-      ``hidden_size`` to match Cortex block contracts. Set
+    - By default, this core enforces that its output feature dimension equals
+      ``hidden_size`` to match Cortex scaffold contracts. Set
       ``enforce_out_dim_eq_hidden=False`` for use cases (e.g., AxonLayer)
       where ``out_dim`` differs.
     """
 
-    def __init__(self, cfg: AxonConfig, enforce_out_dim_eq_hidden: bool = True) -> None:
+    def __init__(self, cfg: AxonCoreConfig, enforce_out_dim_eq_hidden: bool = True) -> None:
         if cfg.hidden_size is None:
-            raise ValueError("AxonConfig.hidden_size must be set")
+            raise ValueError("AxonCoreConfig.hidden_size must be set")
         super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
         self._enforce_out_dim_eq_hidden = bool(enforce_out_dim_eq_hidden)
@@ -312,7 +312,7 @@ class AxonCell(MemoryCell):
         # Enforce block contract if requested
         if self._enforce_out_dim_eq_hidden and y.shape[-1] != self.hidden_size:
             raise ValueError(
-                f"AxonCell out_dim={self._out_dim} != hidden_size={self.hidden_size}. "
+                f"AxonCore out_dim={self._out_dim} != hidden_size={self.hidden_size}. "
                 "Set enforce_out_dim_eq_hidden=False (used by AxonLayer) when non-H outputs are desired."
             )
 
@@ -335,4 +335,4 @@ class AxonCell(MemoryCell):
         return state
 
 
-__all__ = ["AxonCell"]
+__all__ = ["AxonCore"]

@@ -1,5 +1,5 @@
 #!/usr/bin/env -S uv run python
-"""Example showing how to create custom cell types for the cortex architecture."""
+"""Example showing how to create custom core types for the cortex architecture."""
 
 import torch
 import torch.nn as nn
@@ -17,21 +17,22 @@ from pydantic import Field
 from tensordict import TensorDict
 
 
-# Step 1: Define custom cell configuration
-class GRUCellConfig(CoreConfig):
+# Step 1: Define custom core configuration.
+class GRUCoreConfig(CoreConfig):
     """Configuration for a GRU core."""
 
+    core_type: str = "gru"
     num_layers: int = Field(default=1, ge=1)
     bias: bool = Field(default=True)
     dropout: float = Field(default=0.0, ge=0.0)
 
 
-# Step 2: Implement and register the custom cell
-@register_core(GRUCellConfig)
-class GRUCell(MemoryCore):
+# Step 2: Implement and register the custom core.
+@register_core(GRUCoreConfig)
+class GRUCore(MemoryCore):
     """GRU core implementation with TensorDict state management."""
 
-    def __init__(self, cfg: GRUCellConfig) -> None:
+    def __init__(self, cfg: GRUCoreConfig) -> None:
         super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
         self.net = nn.GRU(
@@ -98,9 +99,9 @@ class GRUCell(MemoryCore):
         return TensorDict({"h": h_new}, batch_size=[batch_size])
 
 
-def test_custom_cell():
-    """Test the custom GRU cell."""
-    print("Testing Custom Cell Implementation\n" + "=" * 40)
+def test_custom_core():
+    """Test the custom GRU core."""
+    print("Testing Custom Core Implementation\n" + "=" * 40)
 
     device = torch.device("cpu")
     dtype = torch.float32
@@ -108,7 +109,7 @@ def test_custom_cell():
     seq_len = 5
     d_hidden = 64
 
-    # Create a recipe mixing LSTM and GRU cells
+    # Create a recipe mixing LSTM and GRU cores.
     recipe = CortexStackConfig(
         d_hidden=d_hidden,
         scaffolds=[
@@ -116,7 +117,7 @@ def test_custom_cell():
                 core=LSTMCoreConfig(hidden_size=64, num_layers=1),
             ),
             PassThroughScaffoldConfig(
-                core=GRUCellConfig(hidden_size=64, num_layers=2),
+                core=GRUCoreConfig(hidden_size=64, num_layers=2),
             ),
             PassThroughScaffoldConfig(
                 core=LSTMCoreConfig(hidden_size=64, num_layers=1),
@@ -127,15 +128,15 @@ def test_custom_cell():
 
     print("Mixed Core Types Configuration:")
     print(f"  d_hidden: {recipe.d_hidden}")
-    print(f"  num_scaffolds: {len(recipe.blocks)}")
-    for i, block in enumerate(recipe.blocks):
-        cell_type = type(block.cell).__name__.replace("Config", "")
-        print(f"  Scaffold {i}: {cell_type}")
+    print(f"  num_scaffolds: {len(recipe.scaffolds)}")
+    for i, scaffold in enumerate(recipe.scaffolds):
+        core_type = type(scaffold.core).__name__.replace("Config", "") if scaffold.core is not None else "None"
+        print(f"  Scaffold {i}: {core_type}")
     print()
 
-    # Build the stack - it automatically handles both LSTM and GRU cells!
+    # Build the stack; it automatically handles both LSTM and GRU cores.
     stack = CortexStack(recipe)
-    print(f"Built stack with {len(stack.blocks)} scaffolds (mixed core types)")
+    print(f"Built stack with {len(stack.scaffolds)} scaffolds (mixed core types)")
 
     # Test forward pass
     x = torch.randn(batch_size, seq_len, d_hidden, device=device, dtype=dtype)
@@ -149,13 +150,16 @@ def test_custom_cell():
 
     # Check state structure
     print("\nState structure:")
-    for key in new_state:
-        block_state = new_state[key]
-        if "cell" in block_state:
-            cell_state = block_state["cell"]
-            print(f"  {key}: {list(cell_state.keys())}")
+    for key in new_state.keys():
+        scaffold_state = new_state.get(key)
+        if scaffold_state is None:
+            continue
+        core_key = next(iter(scaffold_state.keys()), None)
+        if core_key is not None:
+            core_state = scaffold_state[core_key]
+            print(f"  {key}: {core_key} -> {list(core_state.keys())}")
 
-    print("\n✓ Custom cell test passed!")
+    print("\n✓ Custom core test passed!")
 
     print("\n" + "=" * 40)
     print("How the core registry system works:")
@@ -167,4 +171,4 @@ def test_custom_cell():
 
 
 if __name__ == "__main__":
-    test_custom_cell()
+    test_custom_core()

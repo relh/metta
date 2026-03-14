@@ -1,10 +1,10 @@
-"""Column subpackage: block and routers."""
+"""Column subpackage: scaffold and routers."""
 
-from .column import ColumnBlock
+from .column import ColumnScaffold
 from .routers import BaseRouter, GlobalContextRouter
 
 __all__ = [
-    "ColumnBlock",
+    "ColumnScaffold",
     "BaseRouter",
     "GlobalContextRouter",
 ]

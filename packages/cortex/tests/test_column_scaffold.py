@@ -12,8 +12,8 @@ from cortex import (
     PreUpScaffoldConfig,
     RouterConfig,
     XLCellConfig,
-    build_column_auto_block,
     build_column_auto_config,
+    build_column_auto_scaffold,
     build_cortex,
     mLSTMCellConfig,
     sLSTMCellConfig,
@@ -37,7 +37,7 @@ def _stack_with_column(d_hidden: int = 64, k: int = 3):
     experts = (experts * ((k + len(experts) - 1) // len(experts)))[:k]
 
     col = ColumnScaffoldConfig(experts=experts, router=RouterConfig(d_key=None, temperature=1.0, top_k=None))
-    cfg = CortexStackConfig(d_hidden=d_hidden, scaffolds=[col], post_norm=False, compile_blocks=True)
+    cfg = CortexStackConfig(d_hidden=d_hidden, scaffolds=[col], post_norm=False, compile_scaffolds=True)
     return build_cortex(cfg)
 
 
@@ -52,19 +52,19 @@ def test_column_shapes_and_state():
     y, new_state = stack(x_seq, state)
     assert y.shape == x_seq.shape
     # Verify nested expert states updated from init -> new_state
-    block_key = next(k for k in new_state.keys() if str(k).startswith("ColumnBlock_"))
-    init_block_state = state.get(block_key)
-    new_block_state = new_state.get(block_key)
-    assert init_block_state is not None and new_block_state is not None
-    expert_keys = [k for k in new_block_state.keys() if str(k).startswith("expert_")]
+    scaffold_key = next(k for k in new_state.keys() if str(k).startswith("ColumnScaffold_"))
+    init_scaffold_state = state.get(scaffold_key)
+    new_scaffold_state = new_state.get(scaffold_key)
+    assert init_scaffold_state is not None and new_scaffold_state is not None
+    expert_keys = [k for k in new_scaffold_state.keys() if str(k).startswith("expert_")]
     assert expert_keys, "No expert states found in Column state"
     for ek in expert_keys:
-        init_expert = init_block_state.get(ek)
-        new_expert = new_block_state.get(ek)
+        init_expert = init_scaffold_state.get(ek)
+        new_expert = new_scaffold_state.get(ek)
         assert new_expert is not None
-        # Experts wrap an LSTM cell in this test setup
-        lstm_init = init_expert.get("LSTMCell") if init_expert is not None else None
-        lstm_new = new_expert.get("LSTMCell")
+        # Experts wrap an LSTM core in this test setup.
+        lstm_init = init_expert.get("LSTMCore") if init_expert is not None else None
+        lstm_new = new_expert.get("LSTMCore")
         assert lstm_new is not None
         # Compare hidden state 'h' changed after forward
         if lstm_init is not None and "h" in lstm_init.keys() and "h" in lstm_new.keys():
@@ -82,9 +82,9 @@ def test_router_uniform_init():
     d_hidden = 16
     k = 4
     stack = _stack_with_column(d_hidden=d_hidden, k=k)
-    from cortex import ColumnScaffold as _ColumnBlock  # noqa: PLC0415
+    from cortex import ColumnScaffold as _ColumnScaffold  # noqa: PLC0415
 
-    col = next(b for b in stack.blocks if isinstance(b, _ColumnBlock))
+    col = next(b for b in stack.scaffolds if isinstance(b, _ColumnScaffold))
     B2, T2 = 2, 3
     x = torch.randn(B2, T2, d_hidden)
     expert_outs = []
@@ -124,9 +124,9 @@ def test_auto_config_all_builtin_cells():
     conv_cfg = cfg.experts[0]
     lstm_cfg = cfg.experts[1]
     assert isinstance(conv_cfg, PassThroughScaffoldConfig)
-    assert isinstance(conv_cfg.cell, CausalConv1dCoreConfig)
+    assert isinstance(conv_cfg.core, CausalConv1dCoreConfig)
     assert isinstance(lstm_cfg, PassThroughScaffoldConfig)
-    assert isinstance(lstm_cfg.cell, LSTMCoreConfig)
+    assert isinstance(lstm_cfg.core, LSTMCoreConfig)
 
 
 def test_auto_config_explicit_cells_and_scaffolds():
@@ -141,12 +141,12 @@ def test_auto_config_explicit_cells_and_scaffolds():
     )
     assert len(cfg.experts) == 4
     assert isinstance(cfg.experts[2], PreUpGatedScaffoldConfig)
-    assert isinstance(cfg.experts[2].cell, mLSTMCoreConfig)
-    assert cfg.experts[2].cell.num_heads == 8
-    assert cfg.experts[2].cell.chunk_size == 32
-    assert isinstance(cfg.experts[3].cell, mLSTMCoreConfig)
-    assert cfg.experts[3].cell.use_axon_layer is True
-    assert cfg.experts[3].cell.use_axon_qkv is False
+    assert isinstance(cfg.experts[2].core, mLSTMCoreConfig)
+    assert cfg.experts[2].core.num_heads == 8
+    assert cfg.experts[2].core.chunk_size == 32
+    assert isinstance(cfg.experts[3].core, mLSTMCoreConfig)
+    assert cfg.experts[3].core.use_axon_layer is True
+    assert cfg.experts[3].core.use_axon_qkv is False
 
 
 def test_auto_config_axonify_flags():
@@ -163,14 +163,14 @@ def test_auto_config_axonify_flags():
     s_cfg = cfg.experts[2]
     assert isinstance(m_cfg, PreUpGatedScaffoldConfig)
     assert isinstance(s_cfg, PostUpGatedScaffoldConfig)
-    assert isinstance(m_cfg.cell, mLSTMCoreConfig) and m_cfg.cell.use_axon_layer and m_cfg.cell.use_axon_qkv
-    assert isinstance(x_cfg.cell, XLCoreConfig) and x_cfg.cell.use_axon_qkv
-    assert isinstance(s_cfg.cell, sLSTMCoreConfig) and s_cfg.cell.use_axon_layer
+    assert isinstance(m_cfg.core, mLSTMCoreConfig) and m_cfg.core.use_axon_layer and m_cfg.core.use_axon_qkv
+    assert isinstance(x_cfg.core, XLCoreConfig) and x_cfg.core.use_axon_qkv
+    assert isinstance(s_cfg.core, sLSTMCoreConfig) and s_cfg.core.use_axon_layer
 
 
-def test_auto_block_forward_and_state():
+def test_auto_scaffold_forward_and_state():
     d_hidden = 32
-    block = build_column_auto_block(
+    scaffold = build_column_auto_scaffold(
         d_hidden=d_hidden,
         cells=[
             AxonCellConfig(),
@@ -184,8 +184,8 @@ def test_auto_block_forward_and_state():
     )
     B, T = 2, 5
     x = torch.randn(B, T, d_hidden)
-    state = block.init_state(batch=B, device=x.device, dtype=x.dtype)
-    y, new_state = block(x, state)
+    state = scaffold.init_state(batch=B, device=x.device, dtype=x.dtype)
+    y, new_state = scaffold(x, state)
     assert y.shape == x.shape
     assert new_state.batch_size[0] == B
 
@@ -212,8 +212,8 @@ def test_auto_router_override():
     assert cfg.router.temperature == 0.7
 
 
-def test_auto_block_axonified_modules():
-    block = build_column_auto_block(
+def test_auto_scaffold_axonified_modules():
+    scaffold = build_column_auto_scaffold(
         d_hidden=32,
         cells=[
             mLSTMCellConfig(core=mLSTMCoreConfig(use_axon_layer=True, use_axon_qkv=True)),
@@ -221,12 +221,12 @@ def test_auto_block_axonified_modules():
             sLSTMCellConfig(core=sLSTMCoreConfig(use_axon_layer=True)),
         ],
     )
-    m_cell = block.experts[0].cell  # type: ignore[attr-defined]
+    m_cell = scaffold.experts[0].core  # type: ignore[attr-defined]
     assert m_cell.use_axon_qkv is True
     assert isinstance(m_cell.igate, AxonLayer) and isinstance(m_cell.fgate, AxonLayer)
-    x_cell = block.experts[1].cell  # type: ignore[attr-defined]
+    x_cell = scaffold.experts[1].core  # type: ignore[attr-defined]
     assert isinstance(x_cell.q_proj, AxonLayer)
     assert isinstance(x_cell.k_proj, AxonLayer)
     assert isinstance(x_cell.v_proj, AxonLayer)
-    s_cell = block.experts[2].cell  # type: ignore[attr-defined]
+    s_cell = scaffold.experts[2].core  # type: ignore[attr-defined]
     assert hasattr(s_cell, "if_fused") and hasattr(s_cell, "zo_fused")

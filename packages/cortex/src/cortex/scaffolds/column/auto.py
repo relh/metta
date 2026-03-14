@@ -15,8 +15,8 @@ from cortex.config import (
     ScaffoldConfig,
 )
 from cortex.routed_adapter import apply_routed_adapter_
-from cortex.scaffolds.column import ColumnBlock
-from cortex.scaffolds.registry import build_block
+from cortex.scaffolds.column import ColumnScaffold
+from cortex.scaffolds.registry import build_scaffold
 
 
 def _clone_model(model: BaseModel) -> BaseModel:
@@ -46,19 +46,19 @@ def build_column_auto_config(
     return ColumnScaffoldConfig(experts=experts, router=(router or RouterConfig()))
 
 
-def build_column_auto_block(
+def build_column_auto_scaffold(
     *,
     d_hidden: int,
     cells: Sequence[PublicCellConfig | ScaffoldConfig] | None = None,
     router: RouterConfig | None = None,
     routed_adapter: RoutedAdapterConfig | None = None,
-) -> ColumnBlock:
+) -> ColumnScaffold:
     cfg = build_column_auto_config(d_hidden=d_hidden, cells=cells, router=router)
-    block = build_block(config=cfg, d_hidden=d_hidden, cell=None)  # type: ignore[arg-type]
-    assert isinstance(block, ColumnBlock)
+    scaffold = build_scaffold(config=cfg, d_hidden=d_hidden, core=None)  # type: ignore[arg-type]
+    assert isinstance(scaffold, ColumnScaffold)
     if routed_adapter is not None and routed_adapter.enabled:
-        apply_routed_adapter_(block, routed_adapter)
-    return block
+        apply_routed_adapter_(scaffold, routed_adapter)
+    return scaffold
 
 
-__all__ = ["build_column_auto_config", "build_column_auto_block"]
+__all__ = ["build_column_auto_config", "build_column_auto_scaffold"]

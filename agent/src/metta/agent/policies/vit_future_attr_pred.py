@@ -94,7 +94,7 @@ class ViTFutureAttrPredConfig(PolicyArchitecture):
                     num_layers=self.cortex_num_layers,
                     layers=[self.cortex_cells] * self.cortex_num_layers,
                     post_norm=self.cortex_use_layer_norm,
-                    compile_blocks=self.cortex_compile,
+                    compile_scaffolds=self.cortex_compile,
                 ),
                 pass_state_during_training=self.pass_state_during_training,
             ),

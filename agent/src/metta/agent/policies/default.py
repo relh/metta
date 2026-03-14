@@ -92,7 +92,7 @@ class DefaultPolicyConfig(PolicyArchitecture):
                 num_layers=self.cortex_num_layers,
                 layers=[cortex_cells] * self.cortex_num_layers,
                 post_norm=self.cortex_use_layer_norm,
-                compile_blocks=self.cortex_compile,
+                compile_scaffolds=self.cortex_compile,
                 routed_adapter=self.cortex_routed_adapter,
             )
 

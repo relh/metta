@@ -91,7 +91,7 @@ class ViTQuantileConfig(PolicyArchitecture):
                         num_layers=1,
                         layers=[[LSTMCellConfig()]],
                         post_norm=False,
-                        compile_blocks=self.cortex_compile,
+                        compile_scaffolds=self.cortex_compile,
                     ),
                     pass_state_during_training=self.pass_state_during_training,
                 ),

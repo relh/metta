@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple
 
-import cortex.cores.core.axon_cell as cell_mod
+import cortex.cores.core.axon_core as core_mod
 import cortex.utils as utils_mod
 import torch
-from cortex.config import AxonConfig
-from cortex.cores.core import AxonCell
+from cortex.config import AxonCoreConfig
+from cortex.cores.core import AxonCore
 
 from .common import (
     BenchmarkCase,
@@ -19,20 +19,20 @@ from .common import (
 
 
 def _run_cell(
-    cell: AxonCell,
+    core: AxonCore,
     x: torch.Tensor,
     resets: Optional[torch.Tensor],
     which: str,
     *,
     backend_sink: list[str],
 ) -> torch.Tensor:
-    """Run AxonCell with a forced backend choice.
+    """Run AxonCore with a forced backend choice.
 
-    Note: AxonCell delegates selection to ``cortex.utils.select_backend``.
-    Monkey‑patch that selector so the requested backend is authoritative.
+    Note: AxonCore delegates selection to ``cortex.utils.select_backend``.
+    Monkey-patch that selector so the requested backend is authoritative.
     """
     original_utils = utils_mod.select_backend
-    original_cell = getattr(cell_mod, "select_backend", None)
+    original_core = getattr(core_mod, "select_backend", None)
 
     def chooser(
         *,
@@ -73,16 +73,16 @@ def _run_cell(
         )
 
     try:
-        # Patch both the utils selector and the alias bound in the cell module.
+        # Patch both the utils selector and the alias bound in the core module.
         utils_mod.select_backend = chooser  # type: ignore[assignment]
-        if original_cell is not None:
-            cell_mod.select_backend = chooser  # type: ignore[assignment]
-        y, _ = cell(x, state=None, resets=resets)
+        if original_core is not None:
+            core_mod.select_backend = chooser  # type: ignore[assignment]
+        y, _ = core(x, state=None, resets=resets)
         return y
     finally:
         utils_mod.select_backend = original_utils  # type: ignore[assignment]
-        if original_cell is not None:
-            cell_mod.select_backend = original_cell  # type: ignore[assignment]
+        if original_core is not None:
+            core_mod.select_backend = original_core  # type: ignore[assignment]
 
 
 CONFIGS: Tuple[Tuple[int, int, int, bool, float], ...] = (
@@ -111,14 +111,14 @@ def _run_case(case: BenchmarkCase, settings: BenchmarkSettings) -> Dict[str, obj
     if with_resets:
         resets = (torch.rand(batch_size, seq_len, device=device) < reset_prob).to(device=device)
 
-    cell = AxonCell(AxonConfig(hidden_size=hidden_size, activation="SiLU")).to(device=device, dtype=dtype)
+    core = AxonCore(AxonCoreConfig(hidden_size=hidden_size, activation="SiLU")).to(device=device, dtype=dtype)
 
     synchronize = device.type == "cuda"
 
     pt_sink: list = []
 
     def run_pytorch():
-        return _run_cell(cell, x, resets, which="pytorch", backend_sink=pt_sink)
+        return _run_cell(core, x, resets, which="pytorch", backend_sink=pt_sink)
 
     output_pt, pytorch_time = measure_callable(
         run_pytorch,
@@ -146,7 +146,7 @@ def _run_case(case: BenchmarkCase, settings: BenchmarkSettings) -> Dict[str, obj
     tr_sink: list = []
 
     def run_triton():
-        return _run_cell(cell, x, resets, which="triton", backend_sink=tr_sink)
+        return _run_cell(core, x, resets, which="triton", backend_sink=tr_sink)
 
     output_tr, triton_time = measure_callable(
         run_triton,
@@ -164,7 +164,7 @@ def _run_case(case: BenchmarkCase, settings: BenchmarkSettings) -> Dict[str, obj
     cu_sink: list = []
 
     def run_cuda():
-        return _run_cell(cell, x, resets, which="cuda", backend_sink=cu_sink)
+        return _run_cell(core, x, resets, which="cuda", backend_sink=cu_sink)
 
     output_cu, cuda_time = measure_callable(
         run_cuda,
@@ -185,7 +185,7 @@ register(
     BenchmarkDefinition(
         key="axons",
         title="Axons (streaming RTU) PyTorch vs Triton vs CUDA",
-        description=("Benchmark AxonCell with forced backend selection, reporting PyTorch, Triton, and CUDA timings."),
+        description=("Benchmark AxonCore with forced backend selection, reporting PyTorch, Triton, and CUDA timings."),
         configs=CONFIGS,
         format_config=_format_config,
         run_case=_run_case,

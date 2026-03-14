@@ -1,4 +1,4 @@
-"""Base abstract block interface for wrapping memory cells."""
+"""Base abstract scaffold interface for wrapping memory cores."""
 
 from __future__ import annotations
 
@@ -9,37 +9,37 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.cores.base import MemoryCell
+from cortex.cores.base import MemoryCore
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
-class BaseBlock(nn.Module, ABC):
-    """Abstract block wrapping a memory cell with optional projections."""
+class BaseScaffold(nn.Module, ABC):
+    """Abstract scaffold wrapping a memory core with optional projections."""
 
-    def __init__(self, d_hidden: int, cell: MemoryCell) -> None:
+    def __init__(self, d_hidden: int, core: MemoryCore) -> None:
         super().__init__()
         self.d_hidden = d_hidden
-        self.cell = cell
+        self.core = core
 
     def init_state(self, batch: int, *, device: torch.device | str, dtype: torch.dtype) -> TensorDict:
-        cell_state = self.cell.init_state(batch=batch, device=device, dtype=dtype)
-        cell_key = self.cell.__class__.__name__
-        return TensorDict({cell_key: cell_state}, batch_size=[batch])
+        core_state = self.core.init_state(batch=batch, device=device, dtype=dtype)
+        core_key = self.core.__class__.__name__
+        return TensorDict({core_key: core_state}, batch_size=[batch])
 
     def reset_state(self, state: MaybeState, mask: ResetMask) -> MaybeState:
         if state is None:
             return None
-        cell_key = self.cell.__class__.__name__
-        cell_state = state.get(cell_key, None)
-        new_cell_state = self.cell.reset_state(cell_state, mask)
-        if new_cell_state is None:
+        core_key = self.core.__class__.__name__
+        core_state = state.get(core_key, None)
+        new_core_state = self.core.reset_state(core_state, mask)
+        if new_core_state is None:
             return None
         batch_size = (
             state.batch_size[0]
             if state.batch_size
-            else (new_cell_state.batch_size[0] if new_cell_state.batch_size else mask.shape[0])
+            else (new_core_state.batch_size[0] if new_core_state.batch_size else mask.shape[0])
         )
-        return TensorDict({cell_key: new_cell_state}, batch_size=[batch_size])
+        return TensorDict({core_key: new_core_state}, batch_size=[batch_size])
 
     @abstractmethod
     def forward(
@@ -51,4 +51,4 @@ class BaseBlock(nn.Module, ABC):
     ) -> Tuple[Tensor, MaybeState]: ...
 
 
-__all__ = ["BaseBlock"]
+__all__ = ["BaseScaffold"]

@@ -20,7 +20,7 @@ def build_cortex_auto_config(
     layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None = None,
     router: RouterConfig | None = None,
     post_norm: bool = True,
-    compile_blocks: bool = True,
+    compile_scaffolds: bool = True,
     override_global_configs: Iterable[BaseModel] | None = None,
     routed_adapter: RoutedAdapterConfig | None = None,
 ) -> CortexStackConfig:
@@ -28,19 +28,21 @@ def build_cortex_auto_config(
 
     configured_layers = _resolve_layers(num_layers=num_layers, layers=layers)
 
-    blocks: list[ScaffoldConfig] = []
+    scaffolds: list[ScaffoldConfig] = []
     for layer_cells in configured_layers:
         col_cfg = build_column_auto_config(d_hidden=d_hidden, cells=layer_cells, router=router)
-        blocks.append(col_cfg)
+        scaffolds.append(col_cfg)
 
     if override_global_configs:
-        blocks = [cast(ScaffoldConfig, _apply_overrides_model(block, override_global_configs)) for block in blocks]
+        scaffolds = [
+            cast(ScaffoldConfig, _apply_overrides_model(scaffold, override_global_configs)) for scaffold in scaffolds
+        ]
 
     return CortexStackConfig(
-        blocks=blocks,
+        scaffolds=scaffolds,
         d_hidden=d_hidden,
         post_norm=post_norm,
-        compile_blocks=bool(compile_blocks),
+        compile_scaffolds=bool(compile_scaffolds),
         routed_adapter=routed_adapter,
     )
 
@@ -52,7 +54,7 @@ def build_cortex_auto_stack(
     layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None = None,
     router: RouterConfig | None = None,
     post_norm: bool = True,
-    compile_blocks: bool = True,
+    compile_scaffolds: bool = True,
     override_global_configs: Iterable[BaseModel] | None = None,
     routed_adapter: RoutedAdapterConfig | None = None,
 ) -> CortexStack:
@@ -64,7 +66,7 @@ def build_cortex_auto_stack(
         layers=layers,
         router=router,
         post_norm=post_norm,
-        compile_blocks=compile_blocks,
+        compile_scaffolds=compile_scaffolds,
         override_global_configs=override_global_configs,
         routed_adapter=routed_adapter,
     )

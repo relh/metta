@@ -8,24 +8,24 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import LSTMCellConfig
-from cortex.cores.base import MemoryCell
-from cortex.cores.registry import register_cell
+from cortex.config import LSTMCoreConfig
+from cortex.cores.base import MemoryCore
+from cortex.cores.registry import register_core
 from cortex.kernels.pytorch.lstm import lstm_sequence_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend
 
 
-@register_cell(LSTMCellConfig)
-class LSTMCell(MemoryCell):
+@register_core(LSTMCoreConfig)
+class LSTMCore(MemoryCore):
     """Standard LSTM cell with TensorDict state and dual backends."""
 
-    def __init__(self, cfg: LSTMCellConfig) -> None:
+    def __init__(self, cfg: LSTMCoreConfig) -> None:
         super().__init__(hidden_size=cfg.hidden_size)
         if cfg.num_layers != 1:
-            raise ValueError("LSTMCell currently supports num_layers == 1 for both backends")
+            raise ValueError("LSTMCore currently supports num_layers == 1 for both backends")
         if cfg.proj_size not in (0, None):
-            raise ValueError("LSTMCell Triton backend does not support proj_size > 0")
+            raise ValueError("LSTMCore Triton backend does not support proj_size > 0")
         self.cfg = cfg
         self.net = nn.LSTM(
             input_size=cfg.hidden_size,
@@ -146,4 +146,4 @@ class LSTMCell(MemoryCell):
         return TensorDict({"h": h, "c": c}, batch_size=[batch_size])
 
 
-__all__ = ["LSTMCell"]
+__all__ = ["LSTMCore"]

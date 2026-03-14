@@ -53,8 +53,8 @@ def test_cortex_stack():
 
     print("Recipe Configuration:")
     print(f"  d_hidden: {recipe.d_hidden}")
-    print(f"  num_scaffolds: {len(recipe.blocks)}")
-    for i, scaffold in enumerate(recipe.blocks):
+    print(f"  num_scaffolds: {len(recipe.scaffolds)}")
+    for i, scaffold in enumerate(recipe.scaffolds):
         scaffold_type = type(scaffold).__name__.replace("ScaffoldConfig", "")
         proj_str = f" (proj_factor={scaffold.proj_factor})" if hasattr(scaffold, "proj_factor") else ""
         print(f"  Scaffold {i}: {scaffold_type}{proj_str}")
@@ -62,7 +62,7 @@ def test_cortex_stack():
 
     # Build the cortex stack
     cortex = build_cortex(recipe)
-    print(f"Built CortexStack with {len(cortex.blocks)} scaffolds")
+    print(f"Built CortexStack with {len(cortex.scaffolds)} scaffolds")
 
     # Count parameters
     num_params = sum(p.numel() for p in cortex.parameters())
@@ -116,23 +116,20 @@ def test_cortex_stack():
     # Apply reset
     reset_state = cortex.reset_state(new_state, reset_mask)
 
-    # Verify reset was applied
-    for block_key in reset_state.keys():
-        if "block_" in block_key:
-            block_state = reset_state[block_key]
-            if "cell" in block_state:
-                cell_state = block_state["cell"]
-            else:
-                cell_state = block_state
-
-            if "h" in cell_state:
-                h_state = cell_state["h"]  # Now [B, L, H] format
-                # Check that reset positions are zeroed
-                for i, should_reset in enumerate(reset_mask):
-                    if should_reset:
-                        assert torch.allclose(h_state[i, :, :], torch.zeros_like(h_state[i, :, :])), (
-                            f"State not properly reset for batch {i}"
-                        )
+    # Verify reset was applied.
+    for scaffold_key in reset_state.keys():
+        scaffold_state = reset_state[scaffold_key]
+        core_key = next(iter(scaffold_state.keys()), None)
+        if core_key is None:
+            continue
+        core_state = scaffold_state[core_key]
+        if "h" in core_state:
+            h_state = core_state["h"]  # [B, L, H]
+            for i, should_reset in enumerate(reset_mask):
+                if should_reset:
+                    assert torch.allclose(h_state[i, :, :], torch.zeros_like(h_state[i, :, :])), (
+                        f"State not properly reset for batch {i}"
+                    )
     print("✓ Reset mask test passed\n")
 
     # Test 5: Per-timestep resets
@@ -146,8 +143,8 @@ def test_cortex_stack():
     assert output_with_resets.shape == x_seq.shape, "Output shape mismatch!"
     print("✓ Per-timestep resets test passed\n")
 
-    # Test 6: Different block configurations
-    print("Test 6: Different Block Configurations")
+    # Test 6: Different scaffold configurations.
+    print("Test 6: Different Scaffold Configurations")
     print("-" * 40)
 
     # Test passthrough-only stack

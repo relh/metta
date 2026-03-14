@@ -56,7 +56,7 @@ class ViTGRPOConfig(PolicyArchitecture):
                 num_layers=1,
                 layers=[[LSTMCellConfig()]],
                 post_norm=False,
-                compile_blocks=False,
+                compile_scaffolds=False,
             ),
         ),
         MLPConfig(

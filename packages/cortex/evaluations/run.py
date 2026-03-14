@@ -407,7 +407,7 @@ def train_one(
     def _zero_rtu_traces_in_state(state) -> tuple[int, int]:
         """Zero Axon eligibility traces wherever they appear in the nested state.
 
-        Supports both direct AxonCell states (under a block key) and AxonLayer-managed
+        Supports both direct AxonCore states (under a scaffold key) and AxonLayer-managed
         substates nested under groups like 'axon', 'slstm', 'mlstm', 'mlstm_qkv', etc.
         """
         if state is None or not hasattr(state, "keys"):
@@ -473,7 +473,7 @@ def train_one(
 
             # No architecture-specific fallbacks: recursion + generic E_* detection handles all cases
 
-        # Start recursion from each top-level block key
+        # Start recursion from each top-level scaffold key.
         top_keys = list(state.keys())
         for k in top_keys:
             sub = state.get(k)
@@ -523,7 +523,7 @@ def train_one(
                         warned_no_traces = True
                         logging.warning(
                             "rtu-disable-traces-last-chunk requested, but no Axon/RTU traces were found in state. "
-                            "This flag is a no-op for stacks without AxonCell/AxonLayer (e.g., slstm_postup)."
+                            "This flag is a no-op for stacks without AxonCore/AxonLayer (e.g., slstm_postup)."
                         )
                 # Optionally drop the carried state entirely before final chunk
                 if reset_state_before_last_chunk:
@@ -542,8 +542,11 @@ def train_one(
             if (
                 train
                 and AXONS_PARITY_PROBE > 0
-                and hasattr(model.stack.blocks[0], "cell")
-                and model.stack.blocks[0].cell.__class__.__name__ == "AxonsCell"
+                and hasattr(model, "stack")
+                and hasattr(model.stack, "scaffolds")
+                and len(model.stack.scaffolds) > 0
+                and hasattr(model.stack.scaffolds[0], "core")
+                and model.stack.scaffolds[0].core.__class__.__name__ == "AxonCore"
                 and total == 0  # first minibatch only to avoid overhead
                 and (EPOCH_IDX % max(AXONS_PARITY_PROBE, 1) == 0)
             ):

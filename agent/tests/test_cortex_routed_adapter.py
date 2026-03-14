@@ -16,7 +16,7 @@ def _make_component(*, num_slots: int, num_agents_per_env: int = 8) -> CortexTD:
         d_hidden=16,
         scaffolds=[PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=16, num_layers=1))],
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
         routed_adapter=RoutedAdapterConfig(num_slots=num_slots, rank=2),
     )
     component = CortexTD(
@@ -149,7 +149,7 @@ def test_cortex_routed_adapter_validates_num_slots_vs_num_agents() -> None:
         d_hidden=16,
         scaffolds=[PassThroughScaffoldConfig(core=LSTMCoreConfig(hidden_size=16, num_layers=1))],
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
         routed_adapter=RoutedAdapterConfig(num_slots=9, rank=2),
     )
     component = CortexTD(

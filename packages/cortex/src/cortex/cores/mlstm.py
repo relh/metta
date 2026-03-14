@@ -1,4 +1,4 @@
-"""Matrix LSTM cell with parallel chunk processing and normalized state."""
+"""Matrix LSTM core with parallel chunk processing and normalized state."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import CausalConv1dConfig, mLSTMCellConfig
-from cortex.cores.base import MemoryCell
-from cortex.cores.conv import CausalConv1d
+from cortex.config import CausalConv1dCoreConfig, mLSTMCoreConfig
+from cortex.cores.base import MemoryCore
+from cortex.cores.conv import CausalConv1dCore
 from cortex.cores.core import AxonLayer, update_parent_state
-from cortex.cores.registry import register_cell
+from cortex.cores.registry import register_core
 from cortex.kernels.pytorch.mlstm import (
     mlstm_chunkwise_simple,
     mlstm_recurrent_step_stabilized_simple,
@@ -65,11 +65,11 @@ class MultiHeadLayerNorm(nn.Module):
             nn.init.zeros_(self.bias)
 
 
-@register_cell(mLSTMCellConfig)
-class mLSTMCell(MemoryCell):
-    """Matrix LSTM cell with matrix-valued state and parallel/recurrent processing modes."""
+@register_core(mLSTMCoreConfig)
+class mLSTMCore(MemoryCore):
+    """Matrix LSTM core with matrix-valued state and parallel/recurrent processing modes."""
 
-    def __init__(self, cfg: mLSTMCellConfig) -> None:
+    def __init__(self, cfg: mLSTMCoreConfig) -> None:
         super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
 
@@ -98,13 +98,13 @@ class mLSTMCell(MemoryCell):
 
         # Q/K/V preprocessing: always apply causal conv; optionally add Axon QKV
         self.conv_kernel_size = cfg.conv1d_kernel_size
-        conv_config = CausalConv1dConfig(
+        conv_config = CausalConv1dCoreConfig(
             hidden_size=cfg.hidden_size,
             kernel_size=self.conv_kernel_size,
             causal_conv_bias=True,
             channel_mixing=False,  # depthwise convolution
         )
-        self.conv1d_cell = CausalConv1d(conv_config)
+        self.conv1d_core = CausalConv1dCore(conv_config)
         self.conv_act = nn.SiLU()
 
         if not cfg.use_axon_qkv:
@@ -134,8 +134,8 @@ class mLSTMCell(MemoryCell):
     def reset_parameters(self):
         """Initialize parameters."""
         self.outnorm.reset_parameters()
-        if self.conv1d_cell is not None:
-            self.conv1d_cell.reset_parameters()
+        if self.conv1d_core is not None:
+            self.conv1d_core.reset_parameters()
         # Initialize gates
         if not self.cfg.use_axon_layer:
             # Forget gate initialization (encourages retention)
@@ -168,8 +168,8 @@ class mLSTMCell(MemoryCell):
         m_state = torch.zeros(B, NH, 1, 1, device=device, dtype=dtype)
 
         # Get conv state from the conv1d cell if in use
-        if self.conv1d_cell is not None:
-            conv_state = self.conv1d_cell.init_state(batch, device=device, dtype=dtype)
+        if self.conv1d_core is not None:
+            conv_state = self.conv1d_core.init_state(batch, device=device, dtype=dtype)
         else:
             conv_state = TensorDict({}, batch_size=[B])
 
@@ -214,10 +214,10 @@ class mLSTMCell(MemoryCell):
         else:
             conv_state_dict = None
         if is_step:
-            x_conv, conv_state_new = self.conv1d_cell(x_seq.squeeze(1), conv_state_dict, resets=resets)
+            x_conv, conv_state_new = self.conv1d_core(x_seq.squeeze(1), conv_state_dict, resets=resets)
             x_conv = x_conv.unsqueeze(1)  # [B, H] -> [B, 1, H]
         else:
-            x_conv, conv_state_new = self.conv1d_cell(x_seq, conv_state_dict, resets=resets)
+            x_conv, conv_state_new = self.conv1d_core(x_seq, conv_state_dict, resets=resets)
         x_conv_act = self.conv_act(x_conv)
 
         # Build Q, K, V
@@ -343,9 +343,9 @@ class mLSTMCell(MemoryCell):
         state["m"] = state["m"] * (1.0 - mask_expanded)
 
         # Reset conv state using the CausalConv1d cell's reset_state method (if used)
-        if self.conv1d_cell is not None and "conv" in state:
+        if self.conv1d_core is not None and "conv" in state:
             conv_state_dict = TensorDict({"conv": state["conv"]}, batch_size=[state["c"].shape[0]])
-            conv_state_dict = self.conv1d_cell.reset_state(conv_state_dict, mask)
+            conv_state_dict = self.conv1d_core.reset_state(conv_state_dict, mask)
             # Avoid boolean conversion of TensorDict
             if "conv" in conv_state_dict:
                 state["conv"] = conv_state_dict["conv"]
@@ -363,4 +363,4 @@ class mLSTMCell(MemoryCell):
         return state
 
 
-__all__ = ["mLSTMCell", "mLSTMCellConfig"]
+__all__ = ["mLSTMCore", "mLSTMCoreConfig"]

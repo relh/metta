@@ -1,54 +1,54 @@
-"""Test LayerNorm and skip connections in PreUp and PostUp blocks."""
+"""Test LayerNorm and skip connections in PreUp and PostUp scaffolds."""
 
 import torch
 import torch.nn as nn
-from cortex.config import LSTMCellConfig, PostUpBlockConfig, PreUpBlockConfig
-from cortex.cores.lstm import LSTMCell
-from cortex.scaffolds.postup import PostUpBlock
-from cortex.scaffolds.preup import PreUpBlock
+from cortex.config import LSTMCoreConfig, PostUpScaffoldConfig, PreUpScaffoldConfig
+from cortex.cores.lstm import LSTMCore
+from cortex.scaffolds.postup import PostUpScaffold
+from cortex.scaffolds.preup import PreUpScaffold
 
 
-def test_preup_block_has_layernorm():
-    """Verify PreUpBlock has LayerNorm."""
-    config = PreUpBlockConfig(cell=LSTMCellConfig(hidden_size=256), proj_factor=2.0)
+def test_preup_scaffold_has_layernorm():
+    """Verify PreUpScaffold has LayerNorm."""
+    config = PreUpScaffoldConfig(core=LSTMCoreConfig(hidden_size=256), proj_factor=2.0)
     d_hidden = 128
-    cell = LSTMCell(LSTMCellConfig(hidden_size=256))
+    core = LSTMCore(LSTMCoreConfig(hidden_size=256))
 
-    block = PreUpBlock(config, d_hidden, cell)
+    scaffold = PreUpScaffold(config, d_hidden, core)
 
     # Check LayerNorm exists
-    assert hasattr(block, "norm")
-    assert isinstance(block.norm, nn.LayerNorm)
-    assert block.norm.normalized_shape[0] == d_hidden
-    assert block.norm.elementwise_affine
-    assert block.norm.bias is None
+    assert hasattr(scaffold, "norm")
+    assert isinstance(scaffold.norm, nn.LayerNorm)
+    assert scaffold.norm.normalized_shape[0] == d_hidden
+    assert scaffold.norm.elementwise_affine
+    assert scaffold.norm.bias is None
 
 
-def test_postup_block_has_layernorms():
-    """Verify PostUpBlock has both LayerNorms."""
-    config = PostUpBlockConfig(cell=LSTMCellConfig(hidden_size=128), proj_factor=2.0)
+def test_postup_scaffold_has_layernorms():
+    """Verify PostUpScaffold has both LayerNorms."""
+    config = PostUpScaffoldConfig(core=LSTMCoreConfig(hidden_size=128), proj_factor=2.0)
     d_hidden = 128
-    cell = LSTMCell(LSTMCellConfig(hidden_size=128))
+    core = LSTMCore(LSTMCoreConfig(hidden_size=128))
 
-    block = PostUpBlock(config, d_hidden, cell)
+    scaffold = PostUpScaffold(config, d_hidden, core)
 
     # Check both LayerNorms exist
-    assert hasattr(block, "norm")
-    assert isinstance(block.norm, nn.LayerNorm)
-    assert block.norm.normalized_shape[0] == d_hidden
+    assert hasattr(scaffold, "norm")
+    assert isinstance(scaffold.norm, nn.LayerNorm)
+    assert scaffold.norm.normalized_shape[0] == d_hidden
 
-    assert hasattr(block, "ffn_norm")
-    assert isinstance(block.ffn_norm, nn.LayerNorm)
-    assert block.ffn_norm.normalized_shape[0] == d_hidden
+    assert hasattr(scaffold, "ffn_norm")
+    assert isinstance(scaffold.ffn_norm, nn.LayerNorm)
+    assert scaffold.ffn_norm.normalized_shape[0] == d_hidden
 
 
 def test_preup_residual_connection():
-    """Verify PreUpBlock properly applies residual connection."""
-    config = PreUpBlockConfig(cell=LSTMCellConfig(hidden_size=256), proj_factor=2.0)
+    """Verify PreUpScaffold properly applies residual connection."""
+    config = PreUpScaffoldConfig(core=LSTMCoreConfig(hidden_size=256), proj_factor=2.0)
     d_hidden = 128
-    cell = LSTMCell(LSTMCellConfig(hidden_size=256))
+    core = LSTMCore(LSTMCoreConfig(hidden_size=256))
 
-    block = PreUpBlock(config, d_hidden, cell)
+    scaffold = PreUpScaffold(config, d_hidden, core)
 
     # Create input
     batch_size = 2
@@ -56,15 +56,15 @@ def test_preup_residual_connection():
     x = torch.randn(batch_size, seq_len, d_hidden)
 
     # Initialize state
-    state = block.init_state(batch=batch_size, device="cpu", dtype=torch.float32)
+    state = scaffold.init_state(batch=batch_size, device="cpu", dtype=torch.float32)
 
     # Forward pass
     with torch.no_grad():
         # Set output projection to zero to test residual
-        block.out_proj.weight.zero_()
-        block.out_proj.bias.zero_() if block.out_proj.bias is not None else None
+        scaffold.out_proj.weight.zero_()
+        scaffold.out_proj.bias.zero_() if scaffold.out_proj.bias is not None else None
 
-        y, _ = block(x, state)
+        y, _ = scaffold(x, state)
 
         # Output should be close to input due to residual connection
         # (the processed part contributes zero due to zeroed projection)
@@ -72,12 +72,12 @@ def test_preup_residual_connection():
 
 
 def test_postup_residual_connections():
-    """Verify PostUpBlock properly applies dual residual connections."""
-    config = PostUpBlockConfig(cell=LSTMCellConfig(hidden_size=128), proj_factor=2.0)
+    """Verify PostUpScaffold properly applies dual residual connections."""
+    config = PostUpScaffoldConfig(core=LSTMCoreConfig(hidden_size=128), proj_factor=2.0)
     d_hidden = 128
-    cell = LSTMCell(LSTMCellConfig(hidden_size=128))
+    core = LSTMCore(LSTMCoreConfig(hidden_size=128))
 
-    block = PostUpBlock(config, d_hidden, cell)
+    scaffold = PostUpScaffold(config, d_hidden, core)
 
     # Create input
     batch_size = 2
@@ -85,11 +85,11 @@ def test_postup_residual_connections():
     x = torch.randn(batch_size, seq_len, d_hidden)
 
     # Initialize state
-    state = block.init_state(batch=batch_size, device="cpu", dtype=torch.float32)
+    state = scaffold.init_state(batch=batch_size, device="cpu", dtype=torch.float32)
 
     # Forward pass - test that residuals are preserved
     with torch.no_grad():
-        y, _ = block(x, state)
+        y, _ = scaffold(x, state)
 
         # Output should have similar magnitude to input due to residual connections
         assert y.shape == x.shape
@@ -101,8 +101,8 @@ def test_postup_residual_connections():
 
 
 if __name__ == "__main__":
-    test_preup_block_has_layernorm()
-    test_postup_block_has_layernorms()
+    test_preup_scaffold_has_layernorm()
+    test_postup_scaffold_has_layernorms()
     test_preup_residual_connection()
     test_postup_residual_connections()
     print("All tests passed!")

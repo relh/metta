@@ -1,4 +1,4 @@
-"""Causal Convolutional layers for Cortex cells."""
+"""Causal convolutional layers for Cortex cores."""
 
 from __future__ import annotations
 
@@ -9,32 +9,32 @@ import torch.nn as nn
 import torch.nn.functional
 from tensordict import TensorDict
 
-from cortex.config import CausalConv1dConfig
-from cortex.cores.base import MemoryCell
-from cortex.cores.registry import register_cell
+from cortex.config import CausalConv1dCoreConfig
+from cortex.cores.base import MemoryCore
+from cortex.cores.registry import register_core
 from cortex.kernels.pytorch.conv1d import causal_conv1d_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend
 
 
-@register_cell(CausalConv1dConfig)
-class CausalConv1d(MemoryCell):
+@register_core(CausalConv1dCoreConfig)
+class CausalConv1dCore(MemoryCore):
     """Causal 1D convolution with depthwise or channel-mixing modes and stateful buffering."""
 
-    def __init__(self, cfg: CausalConv1dConfig) -> None:
-        super().__init__(hidden_size=cfg.feature_dim)
+    def __init__(self, cfg: CausalConv1dCoreConfig) -> None:
+        super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
 
         # Determine grouping for convolution
-        self.groups = cfg.feature_dim if not cfg.channel_mixing else 1
+        self.groups = cfg.hidden_size if not cfg.channel_mixing else 1
 
         if cfg.kernel_size == 0:
             self.conv = None  # No-op for kernel_size=0
         else:
             self.pad = cfg.kernel_size - 1  # Padding for temporal causality
             self.conv = nn.Conv1d(
-                in_channels=cfg.feature_dim,
-                out_channels=cfg.feature_dim,
+                in_channels=cfg.hidden_size,
+                out_channels=cfg.hidden_size,
                 kernel_size=cfg.kernel_size,
                 padding=self.pad,
                 groups=self.groups,
@@ -53,7 +53,7 @@ class CausalConv1d(MemoryCell):
         if self.cfg.kernel_size == 0:
             return TensorDict({}, batch_size=[batch])
 
-        conv_state = torch.zeros(batch, self.cfg.kernel_size, self.cfg.feature_dim, device=device, dtype=dtype)
+        conv_state = torch.zeros(batch, self.cfg.kernel_size, self.cfg.hidden_size, device=device, dtype=dtype)
         return TensorDict({"conv": conv_state}, batch_size=[batch])
 
     def forward(
@@ -147,4 +147,4 @@ class CausalConv1d(MemoryCell):
         return state
 
 
-__all__ = ["CausalConv1d"]
+__all__ = ["CausalConv1dCore"]

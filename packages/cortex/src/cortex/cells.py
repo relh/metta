@@ -39,7 +39,7 @@ class CellConfig(BaseModel):
     def as_scaffold_config(self) -> ScaffoldConfig:
         scaffold = _clone_model(self.scaffold)
         if self.core is not None:
-            scaffold.cell = _clone_model(self.core)
+            scaffold.core = _clone_model(self.core)
         return scaffold  # type: ignore[return-value]
 
 

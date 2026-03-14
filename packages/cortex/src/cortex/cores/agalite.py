@@ -10,20 +10,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tensordict import TensorDict
 
-from cortex.config import AGaLiTeCellConfig
-from cortex.cores.base import MemoryCell
-from cortex.cores.registry import register_cell
+from cortex.config import AGaLiTeCoreConfig
+from cortex.cores.base import MemoryCore
+from cortex.cores.registry import register_core
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend
 
 
-@register_cell(AGaLiTeCellConfig)
-class AGaLiTeCell(MemoryCell):
+@register_core(AGaLiTeCoreConfig)
+class AGaLiTeCore(MemoryCore):
     """Feature-mapped attention with oscillatory basis and recurrent state."""
 
-    def __init__(self, cfg: AGaLiTeCellConfig) -> None:
+    def __init__(self, cfg: AGaLiTeCoreConfig) -> None:
         if cfg.hidden_size is None:
-            raise ValueError("AGaLiTeCellConfig.hidden_size must be specified")
+            raise ValueError("AGaLiTeCoreConfig.hidden_size must be specified")
 
         super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
@@ -61,7 +61,7 @@ class AGaLiTeCell(MemoryCell):
             if self.out_proj.bias is not None:
                 nn.init.zeros_(self.out_proj.bias)
 
-    # --------------------------- MemoryCell API ---------------------------
+    # --------------------------- MemoryCore API ---------------------------
     def init_state(self, batch: int, *, device: torch.device | str, dtype: torch.dtype) -> TensorDict:
         B = int(batch)
         tilde_k = torch.zeros(B, self.r, self.n_heads, self._feat_dim, device=device, dtype=dtype)
@@ -233,4 +233,4 @@ class AGaLiTeCell(MemoryCell):
         raise ValueError(f"resets must have shape {(batch_size, seq_len)} or {(batch_size,)}, got {tuple(rb.shape)}")
 
 
-__all__ = ["AGaLiTeCell"]
+__all__ = ["AGaLiTeCore"]

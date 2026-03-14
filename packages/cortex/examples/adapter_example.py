@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run python
-"""Example showing how to use AdapterBlocks to wrap existing blocks.
+"""Example showing how to use AdapterScaffolds to wrap existing scaffolds.
 
-AdapterBlocks allow you to add trainable residual paths that start as identity,
+AdapterScaffolds allow you to add trainable residual paths that start as identity,
 making them perfect for fine-tuning pretrained models without disrupting learned behavior.
 """
 
@@ -17,7 +17,7 @@ from cortex import (
 
 
 def test_basic_adapter():
-    """Test a basic adapter wrapping a PassThrough block."""
+    """Test a basic adapter wrapping a PassThrough scaffold."""
     print("Basic Adapter Example\n" + "=" * 60)
 
     device = torch.device("cpu")
@@ -26,7 +26,7 @@ def test_basic_adapter():
     seq_len = 5
     d_hidden = 128
 
-    # Create a stack with an adapter wrapping a simple LSTM block
+    # Create a stack with an adapter wrapping a simple LSTM scaffold.
     config = CortexStackConfig(
         d_hidden=d_hidden,
         scaffolds=[
@@ -44,7 +44,7 @@ def test_basic_adapter():
 
     print("Stack configuration:")
     print(f"  d_hidden: {d_hidden}")
-    print("  Blocks: 1 adapter wrapping LSTM")
+    print("  Scaffolds: 1 adapter wrapping LSTM")
     print("  Bottleneck size: 32")
     print("  Gate type: scalar\n")
 
@@ -52,10 +52,11 @@ def test_basic_adapter():
     x = torch.randn(batch_size, seq_len, d_hidden, device=device, dtype=dtype)
     state = stack.init_state(batch=batch_size, device=device, dtype=dtype)
 
-    # Get output from wrapped block directly
-    base_block = stack.blocks[0].wrapped_block
-    base_state = state["block_0"]["wrapped"]
-    y_base, _ = base_block(x, base_state)
+    # Get output from the wrapped scaffold directly.
+    adapter_key = f"{stack.scaffolds[0].__class__.__name__}_0"
+    base_scaffold = stack.scaffolds[0].wrapped_scaffold
+    base_state = state[adapter_key]["wrapped"]
+    y_base, _ = base_scaffold(x, base_state)
 
     # Get output through adapter
     stack.eval()
@@ -78,7 +79,7 @@ def test_freezing_and_training():
     seq_len = 5
     d_hidden = 128
 
-    # Create stack with multiple blocks, some wrapped with adapters
+    # Create a stack with multiple scaffolds, some wrapped with adapters.
     config = CortexStackConfig(
         d_hidden=d_hidden,
         scaffolds=[
@@ -96,25 +97,25 @@ def test_freezing_and_training():
     stack.to(device=device, dtype=dtype)
     stack.train()
 
-    print(f"Stack with {len(stack.blocks)} blocks:")
-    print("  Block 0: Regular LSTM")
-    print("  Block 1: Adapter wrapping LSTM")
-    print("  Block 2: Regular LSTM\n")
+    print(f"Stack with {len(stack.scaffolds)} scaffolds:")
+    print("  Scaffold 0: Regular LSTM")
+    print("  Scaffold 1: Adapter wrapping LSTM")
+    print("  Scaffold 2: Regular LSTM\n")
 
     # Count total parameters before freezing
     total_params = sum(p.numel() for p in stack.parameters())
     print(f"Total parameters: {total_params:,}")
 
-    # Freeze all non-adapter blocks
+    # Freeze all non-adapter scaffolds.
     frozen_count = 0
-    for i, block in enumerate(stack.blocks):
-        from cortex.scaffolds.adapter import AdapterBlock  # noqa: PLC0415
+    for i, scaffold in enumerate(stack.scaffolds):
+        from cortex.scaffolds.adapter import AdapterScaffold  # noqa: PLC0415
 
-        if not isinstance(block, AdapterBlock):
-            for param in block.parameters():
+        if not isinstance(scaffold, AdapterScaffold):
+            for param in scaffold.parameters():
                 param.requires_grad = False
                 frozen_count += param.numel()
-            print(f"  Froze block {i}: {sum(p.numel() for p in block.parameters()):,} params")
+            print(f"  Froze scaffold {i}: {sum(p.numel() for p in scaffold.parameters()):,} params")
 
     # Count trainable parameters
     trainable_params = sum(p.numel() for p in stack.parameters() if p.requires_grad)
@@ -139,8 +140,8 @@ def test_freezing_and_training():
 
 
 def test_adapter_wrapping_preup():
-    """Test adapter wrapping a more complex PreUp block."""
-    print("Adapter Wrapping PreUp Block\n" + "=" * 60)
+    """Test adapter wrapping a more complex PreUp scaffold."""
+    print("Adapter Wrapping PreUp Scaffold\n" + "=" * 60)
 
     device = torch.device("cpu")
     dtype = torch.float32
@@ -150,10 +151,10 @@ def test_adapter_wrapping_preup():
 
     config = CortexStackConfig(
         d_hidden=d_hidden,
-        blocks=[
+        scaffolds=[
             AdapterScaffoldConfig(
                 base_scaffold=PreUpScaffoldConfig(
-                    core=LSTMCoreConfig(hidden_size=None, num_layers=2),
+                    core=LSTMCoreConfig(hidden_size=None, num_layers=1),
                     proj_factor=2.0,
                 ),
                 bottleneck=64,
@@ -167,8 +168,8 @@ def test_adapter_wrapping_preup():
     stack = CortexStack(config)
     stack.to(device=device, dtype=dtype)
 
-    print("Adapter wrapping PreUp block:")
-    print("  Base block: PreUp with 2x projection (d_inner=256)")
+    print("Adapter wrapping PreUp scaffold:")
+    print("  Base scaffold: PreUp with 2x projection (d_inner=256)")
     print("  Adapter bottleneck: 64")
     print(f"  Gate: per-channel ({d_hidden} parameters)")
     print("  Activation: SiLU\n")

@@ -8,7 +8,7 @@ from cortex import (
     PassThroughScaffoldConfig,
     PreUpScaffoldConfig,
     RoutedAdapterConfig,
-    build_column_auto_block,
+    build_column_auto_scaffold,
     build_cortex,
 )
 from cortex.cells import AxonCellConfig, XLCellConfig, mLSTMCellConfig, sLSTMCellConfig
@@ -170,7 +170,7 @@ def test_routed_adapter_trunk_lr_mult_can_be_updated_on_the_fly() -> None:
 
 def test_column_router_logits_not_coupled_across_route_id_batch_mix() -> None:
     torch.manual_seed(0)
-    block = build_column_auto_block(
+    block = build_column_auto_scaffold(
         d_hidden=32,
         cells=[AxonCellConfig(), XLCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()],
         routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
@@ -197,7 +197,7 @@ def test_cortex_stack_requires_route_ids_when_adapter_enabled() -> None:
         d_hidden=16,
         scaffolds=[PreUpScaffoldConfig(core=sLSTMCoreConfig(hidden_size=None, num_heads=4), proj_factor=1.0)],
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
         routed_adapter=RoutedAdapterConfig(num_slots=4, rank=2),
     )
     stack = build_cortex(cfg)
@@ -216,13 +216,13 @@ def test_cortex_stack_routed_adapter_sequence_and_step() -> None:
         d_hidden=32,
         scaffolds=[PreUpScaffoldConfig(core=sLSTMCoreConfig(hidden_size=None, num_heads=4), proj_factor=1.5)],
         post_norm=False,
-        compile_blocks=True,
+        compile_scaffolds=True,
         routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
     )
     stack = build_cortex(cfg)
 
     assert stack._routed_adapter_replaced_modules > 0
-    assert stack._compiled_blocks is None
+    assert stack._compiled_scaffolds is None
 
     batch_size, seq_len = 4, 3
     route_ids = torch.tensor([0, 1, 2, 3], dtype=torch.long)
@@ -242,7 +242,7 @@ def test_slstm_headwise_linear_is_adapter_wrapped() -> None:
         d_hidden=24,
         scaffolds=[PassThroughScaffoldConfig(core=sLSTMCoreConfig(hidden_size=24, num_heads=4, use_axon_layer=False))],
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
         routed_adapter=RoutedAdapterConfig(num_slots=5, rank=2),
     )
     stack = build_cortex(cfg)
@@ -263,7 +263,7 @@ def test_routed_adapter_auto_stack_axms_sequence_and_step() -> None:
         d_hidden=32,
         num_layers=1,
         layers=[[AxonCellConfig(), XLCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()]],
-        compile_blocks=False,
+        compile_scaffolds=False,
         routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
     )
 
@@ -290,7 +290,7 @@ def test_routed_adapter_auto_stack_axon_optins_sequence_and_step() -> None:
                 sLSTMCellConfig(core=sLSTMCoreConfig(use_axon_layer=True)),
             ]
         ],
-        compile_blocks=False,
+        compile_scaffolds=False,
         routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
     )
 
@@ -306,27 +306,27 @@ def test_routed_adapter_auto_stack_axon_optins_sequence_and_step() -> None:
     assert y_step.shape == x_step.shape
 
 
-def test_routed_adapter_column_dsl_block_smoke() -> None:
-    block = build_column_auto_block(
+def test_routed_adapter_column_dsl_scaffold_smoke() -> None:
+    scaffold = build_column_auto_scaffold(
         d_hidden=32,
         cells=[AxonCellConfig(), XLCellConfig(), mLSTMCellConfig(), sLSTMCellConfig()],
         routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
     )
-    assert any(isinstance(module, RoutedAdapterLinear) for module in block.modules())
+    assert any(isinstance(module, RoutedAdapterLinear) for module in scaffold.modules())
 
     batch_size, seq_len = 4, 3
     x = torch.randn(batch_size, seq_len, 32)
-    state = block.init_state(batch=batch_size, device=x.device, dtype=x.dtype)
+    state = scaffold.init_state(batch=batch_size, device=x.device, dtype=x.dtype)
     route_ids = torch.tensor([0, 1, 2, 3], dtype=torch.long)
 
     with use_route_ids(route_ids):
-        y, next_state = block(x, state)
+        y, next_state = scaffold(x, state)
     assert y.shape == x.shape
     assert next_state is not None
 
 
 def test_routed_adapter_column_dsl_axon_optins_smoke() -> None:
-    block = build_column_auto_block(
+    scaffold = build_column_auto_scaffold(
         d_hidden=32,
         cells=[
             XLCellConfig(core=XLCoreConfig(use_axon_qkv=True)),
@@ -335,15 +335,15 @@ def test_routed_adapter_column_dsl_axon_optins_smoke() -> None:
         ],
         routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
     )
-    assert any(isinstance(module, RoutedAdapterLinear) for module in block.modules())
+    assert any(isinstance(module, RoutedAdapterLinear) for module in scaffold.modules())
 
     batch_size, seq_len = 4, 3
     x = torch.randn(batch_size, seq_len, 32)
-    state = block.init_state(batch=batch_size, device=x.device, dtype=x.dtype)
+    state = scaffold.init_state(batch=batch_size, device=x.device, dtype=x.dtype)
     route_ids = torch.tensor([0, 1, 2, 3], dtype=torch.long)
 
     with use_route_ids(route_ids):
-        y, next_state = block(x, state)
+        y, next_state = scaffold(x, state)
     assert y.shape == x.shape
     assert next_state is not None
 
@@ -355,7 +355,7 @@ def test_routed_adapter_supports_xl_and_agalite_cells() -> None:
                 d_hidden=32,
                 scaffolds=[PassThroughScaffoldConfig(core=core_cfg)],
                 post_norm=False,
-                compile_blocks=False,
+                compile_scaffolds=False,
                 routed_adapter=RoutedAdapterConfig(num_slots=8, rank=4),
             )
         )

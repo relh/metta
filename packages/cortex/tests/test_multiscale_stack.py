@@ -10,7 +10,7 @@ from cortex import (
     build_multiscale_stack,
     build_multiscale_stack_config,
 )
-from cortex.scaffolds import ColumnBlock
+from cortex.scaffolds import ColumnScaffold
 from tensordict import TensorDict
 
 
@@ -24,14 +24,14 @@ def test_build_multiscale_stack_config_preserves_split_boundary() -> None:
         splits=["rl", "wm"],
         split_start_layer=1,
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
     )
 
     assert [layer.period for layer in cfg.layers] == [1, 2, 4]
     assert cfg.splits == ["rl", "wm"]
     assert cfg.split_start_layer == 1
-    assert cfg.layers[0].block is not cfg.layers[1].block
-    assert cfg.layers[1].block is not cfg.layers[2].block
+    assert cfg.layers[0].scaffold is not cfg.layers[1].scaffold
+    assert cfg.layers[1].scaffold is not cfg.layers[2].scaffold
 
 
 def test_multiscale_stack_config_rejects_invalid_schedule() -> None:
@@ -87,7 +87,7 @@ def test_multiscale_stack_sequence_matches_step_unroll() -> None:
         splits=["rl", "wm", "sf"],
         split_start_layer=1,
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
     )
 
     x = torch.randn(3, 5, 12)
@@ -121,7 +121,7 @@ def test_multiscale_stack_outputs_full_batch_and_towers_are_independent() -> Non
         splits=["rl", "wm"],
         split_start_layer=1,
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
     )
 
     x = torch.randn(4, 6, 10)
@@ -153,7 +153,7 @@ def test_multiscale_stack_parallel_matches_sequential_reference_with_resets() ->
         splits=["rl", "wm", "sf"],
         split_start_layer=2,
         post_norm=False,
-        compile_blocks=False,
+        compile_scaffolds=False,
     )
 
     warmup_x = torch.randn(3, 2, 10)
@@ -202,13 +202,13 @@ def test_multiscale_stack_compile_uses_column_expert_compile(monkeypatch: pytest
         splits=["rl", "wm"],
         split_start_layer=1,
         post_norm=False,
-        compile_blocks=True,
+        compile_scaffolds=True,
     )
 
     all_layers = list(stack.shared_layers) + [
         layer for split_layers in stack.split_layers.values() for layer in split_layers
     ]
-    assert all(isinstance(layer, ColumnBlock) for layer in all_layers)
+    assert all(isinstance(layer, ColumnScaffold) for layer in all_layers)
     assert stack._compiled_shared_layers == list(stack.shared_layers)
     assert stack._compiled_split_layers is not None
     assert all(
@@ -220,7 +220,7 @@ def test_multiscale_stack_compile_uses_column_expert_compile(monkeypatch: pytest
 
     expected_compiles = sum(len(layer.experts) for layer in all_layers)
     assert len(compiled_modules) == expected_compiles
-    assert all(not isinstance(module, ColumnBlock) for module in compiled_modules)
+    assert all(not isinstance(module, ColumnScaffold) for module in compiled_modules)
 
 
 def _assert_tensordict_close(actual: TensorDict, expected: TensorDict) -> None:

@@ -5,12 +5,12 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Iterator, Optional, Tuple
 
-import cortex.cores.core.axon_cell as cell_mod
+import cortex.cores.core.axon_core as core_mod
 import cortex.utils as utils_mod
 import torch
 import torch.nn as nn
-from cortex.config import AxonConfig
-from cortex.cores.core import AxonCell
+from cortex.config import AxonCoreConfig
+from cortex.cores.core import AxonCore
 
 from .common import (
     BenchmarkCase,
@@ -34,9 +34,9 @@ def _count_params(module: nn.Module) -> int:
 def _force_axon_backend(which: str) -> Iterator[None]:  # type: ignore[override]
     """Force a specific backend by monkeypatching the selector.
 
-    AxonCell imports the selector into its module namespace, so we patch both
+    AxonCore imports the selector into its module namespace, so we patch both
     ``cortex.utils.select_backend`` and the alias bound in
-    ``cortex.cores.core.axon_cell``.
+    ``cortex.cores.core.axon_core``.
     """
     if which == "auto":
         # no-op context manager
@@ -49,7 +49,7 @@ def _force_axon_backend(which: str) -> Iterator[None]:  # type: ignore[override]
     @contextlib.contextmanager
     def _ctx() -> Iterator[None]:
         orig_utils = utils_mod.select_backend
-        orig_cell = getattr(cell_mod, "select_backend", None)
+        orig_core = getattr(core_mod, "select_backend", None)
 
         def chooser(*, triton_fn=None, pytorch_fn=None, tensor=None, allow_triton=True, cuda_fn=None, allow_cuda=False):  # type: ignore[override]
             if which == "pytorch":
@@ -69,13 +69,13 @@ def _force_axon_backend(which: str) -> Iterator[None]:  # type: ignore[override]
 
         try:
             utils_mod.select_backend = chooser  # type: ignore[assignment]
-            if orig_cell is not None:
-                cell_mod.select_backend = chooser  # type: ignore[assignment]
+            if orig_core is not None:
+                core_mod.select_backend = chooser  # type: ignore[assignment]
             yield
         finally:
             utils_mod.select_backend = orig_utils  # type: ignore[assignment]
-            if orig_cell is not None:
-                cell_mod.select_backend = orig_cell  # type: ignore[assignment]
+            if orig_core is not None:
+                core_mod.select_backend = orig_core  # type: ignore[assignment]
 
     return _ctx()
 
@@ -154,15 +154,15 @@ def _run_case(case: BenchmarkCase, settings: BenchmarkSettings) -> Dict[str, obj
         y = linear(t.reshape(bt, hidden))
         return y.reshape(t.shape[0], t.shape[1], hidden)
 
-    # AxonCell configured as linear-like
-    ax_cfg = AxonConfig(
+    # AxonCore configured as linear-like.
+    ax_cfg = AxonCoreConfig(
         hidden_size=hidden,
         activation=activation,
         cuda_seq_threshold=1000,
         use_srht=bool(use_srht),
         out_dim=hidden,
     )
-    axon = AxonCell(ax_cfg).to(device=device, dtype=dtype)
+    axon = AxonCore(ax_cfg).to(device=device, dtype=dtype)
 
     def run_axon(t: torch.Tensor) -> torch.Tensor:
         y, _ = axon(t, state=None, resets=resets)
@@ -212,9 +212,9 @@ def _run_case(case: BenchmarkCase, settings: BenchmarkSettings) -> Dict[str, obj
 register(
     BenchmarkDefinition(
         key="linear_vs_axon",
-        title="PyTorch Linear vs AxonCell (forward+backward)",
+        title="PyTorch Linear vs AxonCore (forward+backward)",
         description=(
-            "Compare nn.Linear(H,H) against AxonCell configured with out_dim=H on identical inputs. "
+            "Compare nn.Linear(H,H) against AxonCore configured with out_dim=H on identical inputs. "
             "Reports per-iteration time, tokens/s, parameter counts, and peak CUDA memory."
         ),
         configs=CONFIGS,

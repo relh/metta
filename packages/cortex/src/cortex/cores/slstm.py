@@ -1,4 +1,4 @@
-"""Structured LSTM cell with per-head recurrence and stabilized gating."""
+"""Structured LSTM core with per-head recurrence and stabilized gating."""
 
 from __future__ import annotations
 
@@ -9,14 +9,14 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import CausalConv1dConfig, sLSTMCellConfig
-from cortex.cores.base import MemoryCell
-from cortex.cores.conv import CausalConv1d
+from cortex.config import CausalConv1dCoreConfig, sLSTMCoreConfig
+from cortex.cores.base import MemoryCore
+from cortex.cores.conv import CausalConv1dCore
 from cortex.cores.core import AxonLayer, update_parent_state
 
 # Reuse utilities from mLSTM for normalization and init
 from cortex.cores.mlstm import MultiHeadLayerNorm, bias_linspace_init_
-from cortex.cores.registry import register_cell
+from cortex.cores.registry import register_core
 from cortex.kernels.pytorch.slstm import slstm_sequence_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 from cortex.utils import select_backend
@@ -62,11 +62,11 @@ class _HeadwiseLinearExpand(nn.Module):
         return y
 
 
-@register_cell(sLSTMCellConfig)
-class sLSTMCell(MemoryCell):
-    """Structured LSTM cell with per-head gating, state normalization, and optional causal conv."""
+@register_core(sLSTMCoreConfig)
+class sLSTMCore(MemoryCore):
+    """Structured LSTM core with per-head gating, state normalization, and optional causal conv."""
 
-    def __init__(self, cfg: sLSTMCellConfig) -> None:
+    def __init__(self, cfg: sLSTMCoreConfig) -> None:
         super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
 
@@ -77,8 +77,8 @@ class sLSTMCell(MemoryCell):
         # Optional depthwise causal conv preprocessing
         self.conv_kernel_size = cfg.conv1d_kernel_size
         if self.conv_kernel_size > 0:
-            self.conv1d_cell = CausalConv1d(
-                CausalConv1dConfig(
+            self.conv1d_core = CausalConv1dCore(
+                CausalConv1dCoreConfig(
                     hidden_size=cfg.hidden_size,
                     kernel_size=self.conv_kernel_size,
                     causal_conv_bias=True,
@@ -87,7 +87,7 @@ class sLSTMCell(MemoryCell):
             )
             self.conv_act = nn.SiLU()
         else:
-            self.conv1d_cell = None
+            self.conv1d_core = None
             self.conv_act = None
 
         # Gate projections (choose Axons or legacy Linear based on flag)
@@ -131,16 +131,16 @@ class sLSTMCell(MemoryCell):
         # Norm params
         self.outnorm.reset_parameters()
         # Conv params
-        if self.conv1d_cell is not None:
-            self.conv1d_cell.reset_parameters()
+        if self.conv1d_core is not None:
+            self.conv1d_core.reset_parameters()
 
     def init_state(self, batch: int, *, device: torch.device | str, dtype: torch.dtype) -> TensorDict:
         B = batch
         H = self.cfg.hidden_size
         zero = torch.zeros(B, H, device=device, dtype=dtype)
         td = TensorDict({"y": zero.clone(), "c": zero.clone(), "n": zero.clone(), "m": zero.clone()}, batch_size=[B])
-        if self.conv1d_cell is not None:
-            conv_state = self.conv1d_cell.init_state(batch=B, device=device, dtype=dtype)
+        if self.conv1d_core is not None:
+            conv_state = self.conv1d_core.init_state(batch=B, device=device, dtype=dtype)
             td.update(conv_state)
         return td
 
@@ -148,17 +148,17 @@ class sLSTMCell(MemoryCell):
         self, x_seq: Tensor, conv_state: MaybeState, resets: Optional[ResetMask]
     ) -> tuple[Tensor, MaybeState]:
         # Ensure step inputs use the conv cell's step path so the ring buffer state is updated correctly.
-        if self.conv1d_cell is None:
+        if self.conv1d_core is None:
             return x_seq, conv_state
 
         if x_seq.dim() == 3 and x_seq.shape[1] == 1:
             # Step mode: pass [B, H] to CausalConv1d so it updates its ring buffer
-            y_step, new_conv_state = self.conv1d_cell(x_seq.squeeze(1), conv_state, resets=resets)
+            y_step, new_conv_state = self.conv1d_core(x_seq.squeeze(1), conv_state, resets=resets)
             y_step = self.conv_act(y_step)
             return y_step.unsqueeze(1), new_conv_state  # [B, 1, H]
 
         # Sequence mode: pass through as-is
-        y, new_conv_state = self.conv1d_cell(x_seq, conv_state, resets=resets)
+        y, new_conv_state = self.conv1d_core(x_seq, conv_state, resets=resets)
         return self.conv_act(y), new_conv_state  # type: ignore[arg-type]
 
     def _normalize_output(self, y_seq: Tensor) -> Tensor:
@@ -229,7 +229,7 @@ class sLSTMCell(MemoryCell):
 
         # Extract conv state dict (if present)
         conv_state_in: MaybeState
-        if self.conv1d_cell is not None and st is not None and "conv" in st.keys():
+        if self.conv1d_core is not None and st is not None and "conv" in st.keys():
             conv_state_in = TensorDict({"conv": st.get("conv")}, batch_size=[B])
         else:
             conv_state_in = None
@@ -328,9 +328,9 @@ class sLSTMCell(MemoryCell):
                 state[k] = state[k] * (1.0 - mask_b)
 
         # Reset conv buffer if present
-        if self.conv1d_cell is not None and "conv" in state.keys():
+        if self.conv1d_core is not None and "conv" in state.keys():
             conv_td = TensorDict({"conv": state["conv"]}, batch_size=[state["conv"].shape[0]])
-            conv_td = self.conv1d_cell.reset_state(conv_td, mask)
+            conv_td = self.conv1d_core.reset_state(conv_td, mask)
             if "conv" in conv_td:
                 state["conv"] = conv_td["conv"]
 
@@ -341,4 +341,4 @@ class sLSTMCell(MemoryCell):
         return state
 
 
-__all__ = ["sLSTMCell"]
+__all__ = ["sLSTMCore"]

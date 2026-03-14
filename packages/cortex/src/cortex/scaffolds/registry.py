@@ -1,76 +1,65 @@
-"""Registry system for block types."""
+"""Registry system for scaffold types."""
 
 from __future__ import annotations
 
 from typing import Callable, Dict, Type
 
-from cortex.config import BlockConfig
-from cortex.cores.base import MemoryCell
-from cortex.scaffolds.base import BaseBlock
+from cortex.config import ScaffoldConfig
+from cortex.cores.base import MemoryCore
+from cortex.scaffolds.base import BaseScaffold
 
-# Type for block builder functions
-BlockBuilder = Callable[[BlockConfig, int, MemoryCell], BaseBlock]
+ScaffoldBuilder = Callable[[ScaffoldConfig, int, MemoryCore], BaseScaffold]
 
-# Global registry of block types
-_BLOCK_REGISTRY: Dict[Type[BlockConfig], Type[BaseBlock]] = {}
-
-# Tag -> config class mapping for robust JSON round‑trip
-_BLOCK_CONFIG_BY_TAG: Dict[str, type[BlockConfig]] = {}
+_SCAFFOLD_REGISTRY: Dict[Type[ScaffoldConfig], Type[BaseScaffold]] = {}
+_SCAFFOLD_CONFIG_BY_TAG: Dict[str, type[ScaffoldConfig]] = {}
 
 
-def _get_block_tag(config_class: type[BlockConfig]) -> str:
-    field = config_class.model_fields["block_type"]  # type: ignore[attr-defined]
+def _get_scaffold_tag(config_class: type[ScaffoldConfig]) -> str:
+    field = config_class.model_fields["scaffold_type"]  # type: ignore[attr-defined]
     tag = field.default  # type: ignore[assignment]
     if isinstance(tag, str) and tag:
         return tag
-    raise ValueError(f"Block config {config_class.__name__} must define a default 'block_type' field")
+    raise ValueError(f"Scaffold config {config_class.__name__} must define a default 'scaffold_type' field")
 
 
-def register_block(config_class: Type[BlockConfig]) -> Callable:
-    """Register decorator linking block class to its configuration type."""
+def register_scaffold(config_class: Type[ScaffoldConfig]) -> Callable:
+    """Register decorator linking scaffold class to its configuration type."""
 
-    def decorator(block_class: Type[BaseBlock]) -> Type[BaseBlock]:
-        _BLOCK_REGISTRY[config_class] = block_class
-        # Also store a reference in the config class for convenience
-        config_class._block_class = block_class  # type: ignore[attr-defined]
+    def decorator(scaffold_class: Type[BaseScaffold]) -> Type[BaseScaffold]:
+        _SCAFFOLD_REGISTRY[config_class] = scaffold_class
+        config_class._scaffold_class = scaffold_class  # type: ignore[attr-defined]
 
-        # Register tag mapping
-        tag = _get_block_tag(config_class)
-        if tag in _BLOCK_CONFIG_BY_TAG and _BLOCK_CONFIG_BY_TAG[tag] is not config_class:
+        tag = _get_scaffold_tag(config_class)
+        if tag in _SCAFFOLD_CONFIG_BY_TAG and _SCAFFOLD_CONFIG_BY_TAG[tag] is not config_class:
             raise ValueError(
-                f"Duplicate block_type tag '{tag}' for {config_class.__name__};"
-                f" already registered to {_BLOCK_CONFIG_BY_TAG[tag].__name__}"
+                f"Duplicate scaffold_type tag '{tag}' for {config_class.__name__};"
+                f" already registered to {_SCAFFOLD_CONFIG_BY_TAG[tag].__name__}"
             )
-        _BLOCK_CONFIG_BY_TAG[tag] = config_class
-        return block_class
+        _SCAFFOLD_CONFIG_BY_TAG[tag] = config_class
+        return scaffold_class
 
     return decorator
 
 
-def get_block_class(config: BlockConfig) -> Type[BaseBlock]:
-    """Lookup block class from configuration instance."""
+def get_scaffold_class(config: ScaffoldConfig) -> Type[BaseScaffold]:
+    """Lookup scaffold class from a configuration instance."""
     config_type = type(config)
-
-    # First check if config has _block_class attribute
-    if hasattr(config_type, "_block_class"):
-        return config_type._block_class
-
-    # Fall back to registry
-    if config_type in _BLOCK_REGISTRY:
-        return _BLOCK_REGISTRY[config_type]
-
-    raise ValueError(f"No block class registered for config type {config_type.__name__}")
+    if hasattr(config_type, "_scaffold_class"):
+        return config_type._scaffold_class
+    if config_type in _SCAFFOLD_REGISTRY:
+        return _SCAFFOLD_REGISTRY[config_type]
+    raise ValueError(f"No scaffold class registered for config type {config_type.__name__}")
 
 
-def get_block_config_class(tag: str) -> type[BlockConfig]:
-    if tag not in _BLOCK_CONFIG_BY_TAG:
-        raise KeyError(f"Unknown block_type tag '{tag}' — is the block registered?")
-    return _BLOCK_CONFIG_BY_TAG[tag]
+def get_scaffold_config_class(tag: str) -> type[ScaffoldConfig]:
+    if tag not in _SCAFFOLD_CONFIG_BY_TAG:
+        raise KeyError(f"Unknown scaffold_type tag '{tag}' - is the scaffold registered?")
+    return _SCAFFOLD_CONFIG_BY_TAG[tag]
 
 
-def build_block(config: BlockConfig, d_hidden: int, cell: MemoryCell) -> BaseBlock:
-    """Instantiate block from configuration using registry lookup."""
-    return get_block_class(config)(config=config, d_hidden=d_hidden, cell=cell)
+def build_scaffold(config: ScaffoldConfig, d_hidden: int, core: MemoryCore) -> BaseScaffold:
+    """Instantiate a scaffold from configuration using registry lookup."""
+    return get_scaffold_class(config)(config=config, d_hidden=d_hidden, core=core)
 
 
-__all__ = ["register_block", "get_block_class", "build_block", "get_block_config_class"]
+__all__ = ["register_scaffold", "get_scaffold_class", "build_scaffold", "get_scaffold_config_class"]

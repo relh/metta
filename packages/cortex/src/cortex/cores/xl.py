@@ -9,21 +9,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tensordict import TensorDict
 
-from cortex.config import XLCellConfig
-from cortex.cores.base import MemoryCell
+from cortex.config import XLCoreConfig
+from cortex.cores.base import MemoryCore
 from cortex.cores.core import AxonLayer, update_parent_state
-from cortex.cores.registry import register_cell
+from cortex.cores.registry import register_core
 from cortex.kernels.pytorch.txl import txl_pytorch
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
-@register_cell(XLCellConfig)
-class XLCell(MemoryCell):
+@register_core(XLCoreConfig)
+class XLCore(MemoryCore):
     """Transformer-XL style multi-head attention with rolling memory."""
 
-    def __init__(self, cfg: XLCellConfig) -> None:
+    def __init__(self, cfg: XLCoreConfig) -> None:
         if cfg.hidden_size is None:
-            raise ValueError("XLCellConfig.hidden_size must be specified")
+            raise ValueError("XLCoreConfig.hidden_size must be specified")
 
         super().__init__(hidden_size=cfg.hidden_size)
         self.cfg = cfg
@@ -324,4 +324,4 @@ class XLCell(MemoryCell):
         return pos_emb
 
 
-__all__ = ["XLCell"]
+__all__ = ["XLCore"]

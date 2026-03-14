@@ -1,10 +1,10 @@
-"""Tests for mLSTM cell implementation."""
+"""Tests for mLSTM core implementation."""
 
 import pytest
 import torch
-from cortex.config import PreUpBlockConfig, mLSTMCellConfig
-from cortex.cores.mlstm import mLSTMCell
-from cortex.scaffolds import PreUpBlock
+from cortex.config import PreUpScaffoldConfig, mLSTMCoreConfig
+from cortex.cores.mlstm import mLSTMCore
+from cortex.scaffolds import PreUpScaffold
 from cortex.utils import TRITON_AVAILABLE
 
 
@@ -28,14 +28,14 @@ def test_mlstm_parallel_vs_sequential_close() -> None:
     num_heads = 4
 
     # Ensure the parallel path is used in sequence mode (S <= chunk_size)
-    cfg = mLSTMCellConfig(
+    cfg = mLSTMCoreConfig(
         hidden_size=H,
         num_heads=num_heads,
         chunk_size=256,
         conv1d_kernel_size=4,
     )
 
-    cell = mLSTMCell(cfg).to(device=device, dtype=dtype)
+    cell = mLSTMCore(cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     x = torch.randn(B, T, H, device=device, dtype=dtype)
@@ -55,8 +55,8 @@ def test_mlstm_parallel_vs_sequential_close() -> None:
     torch.testing.assert_close(y_parallel, y_sequential, rtol=5e-3, atol=5e-3)
 
 
-def test_mlstm_with_preup_block() -> None:
-    """Test mLSTM cell within a PreUp block for proper forward pass."""
+def test_mlstm_with_preup_scaffold() -> None:
+    """Test mLSTM core within a PreUp scaffold for proper forward pass."""
     torch.manual_seed(42)
 
     device = get_test_device()
@@ -67,32 +67,32 @@ def test_mlstm_with_preup_block() -> None:
     D = 64  # external hidden size
     proj_factor = 2.0  # PreUp projection factor
 
-    # Create PreUp block config with mLSTM cell
-    # The cell will operate on dimension D * proj_factor = 128
+    # Create a PreUp scaffold config with an mLSTM core.
+    # The core will operate on dimension D * proj_factor = 128.
     inner_dim = int(D * proj_factor)
-    mlstm_config = mLSTMCellConfig(
+    mlstm_config = mLSTMCoreConfig(
         hidden_size=inner_dim,
         num_heads=4,
         chunk_size=32,
         conv1d_kernel_size=4,
     )
 
-    preup_config = PreUpBlockConfig(
-        cell=mlstm_config,
+    preup_config = PreUpScaffoldConfig(
+        core=mlstm_config,
         proj_factor=proj_factor,
     )
 
-    # Create the cell and PreUp block
-    cell = mLSTMCell(mlstm_config).to(device=device, dtype=dtype)
-    block = PreUpBlock(preup_config, d_hidden=D, cell=cell).to(device=device, dtype=dtype)
-    block.eval()
+    # Create the core and PreUp scaffold.
+    core = mLSTMCore(mlstm_config).to(device=device, dtype=dtype)
+    scaffold = PreUpScaffold(preup_config, d_hidden=D, core=core).to(device=device, dtype=dtype)
+    scaffold.eval()
 
     # Create input
     x = torch.randn(B, T, D, device=device, dtype=dtype)
 
-    # Forward pass through PreUp block
+    # Forward pass through the PreUp scaffold.
     with torch.no_grad():
-        output, state = block(x, state=None)
+        output, state = scaffold(x, state=None)
 
     # Check output shape matches input (due to skip connection and down projection)
     assert output.shape == (B, T, D), f"Expected shape {(B, T, D)}, got {output.shape}"
@@ -100,24 +100,24 @@ def test_mlstm_with_preup_block() -> None:
     # Check that state exists and has correct structure
     assert state is not None, "State should not be None"
 
-    # The PreUpBlock wraps the cell state with the cell class name as key
-    assert "mLSTMCell" in state, f"State should contain 'mLSTMCell' key, got keys: {list(state.keys())}"
-    cell_state = state["mLSTMCell"]
+    # The PreUpScaffold wraps the core state with the core class name as key.
+    assert "mLSTMCore" in state, f"State should contain 'mLSTMCore' key, got keys: {list(state.keys())}"
+    core_state = state["mLSTMCore"]
 
-    # Check cell state components
-    assert "c" in cell_state, "Cell state should contain 'c' component"
-    assert "n" in cell_state, "Cell state should contain 'n' component"
-    assert "m" in cell_state, "Cell state should contain 'm' component"
-    assert "conv" in cell_state, "Cell state should contain 'conv' component"
+    # Check core state components.
+    assert "c" in core_state, "Core state should contain 'c' component"
+    assert "n" in core_state, "Core state should contain 'n' component"
+    assert "m" in core_state, "Core state should contain 'm' component"
+    assert "conv" in core_state, "Core state should contain 'conv' component"
 
     # Check state dimensions match the inner dimension (D * proj_factor)
     num_heads = mlstm_config.num_heads
     head_dim = inner_dim // num_heads
 
-    assert cell_state["c"].shape == (B, num_heads, head_dim, head_dim)
-    assert cell_state["n"].shape == (B, num_heads, head_dim, 1)
-    assert cell_state["m"].shape == (B, num_heads, 1, 1)
-    assert cell_state["conv"].shape == (B, mlstm_config.conv1d_kernel_size, inner_dim)
+    assert core_state["c"].shape == (B, num_heads, head_dim, head_dim)
+    assert core_state["n"].shape == (B, num_heads, head_dim, 1)
+    assert core_state["m"].shape == (B, num_heads, 1, 1)
+    assert core_state["conv"].shape == (B, mlstm_config.conv1d_kernel_size, inner_dim)
 
 
 def test_mlstm_sequential_vs_parallel_with_chunking() -> None:
@@ -133,14 +133,14 @@ def test_mlstm_sequential_vs_parallel_with_chunking() -> None:
     num_heads = 4
     chunk_size = 64  # Set chunk_size > T to force parallel_stabilized_simple path
 
-    cfg = mLSTMCellConfig(
+    cfg = mLSTMCoreConfig(
         hidden_size=H,
         num_heads=num_heads,
         chunk_size=chunk_size,  # This will make it use parallel path instead of chunking
         conv1d_kernel_size=4,
     )
 
-    cell = mLSTMCell(cfg).to(device=device, dtype=dtype)
+    cell = mLSTMCore(cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     x = torch.randn(B, T, H, device=device, dtype=dtype)
@@ -201,7 +201,7 @@ def test_mlstm_sequential_vs_parallel_with_chunking() -> None:
 
 
 def test_mlstm_gradient_flow() -> None:
-    """Test gradient flow through mLSTM cell."""
+    """Test gradient flow through mLSTM core."""
     torch.manual_seed(456)
 
     device = get_test_device()
@@ -212,14 +212,14 @@ def test_mlstm_gradient_flow() -> None:
     H = 64  # head_dim must be >= 16 for triton
     num_heads = 4
 
-    cfg = mLSTMCellConfig(
+    cfg = mLSTMCoreConfig(
         hidden_size=H,
         num_heads=num_heads,
         chunk_size=32,
         conv1d_kernel_size=4,
     )
 
-    cell = mLSTMCell(cfg).to(device=device, dtype=dtype)
+    cell = mLSTMCore(cfg).to(device=device, dtype=dtype)
     cell.train()  # Ensure we're in training mode
 
     x = torch.randn(B, T, H, device=device, dtype=dtype, requires_grad=True)
@@ -255,14 +255,14 @@ def test_mlstm_state_reset() -> None:
     H = 64  # head_dim must be >= 16 for triton
     num_heads = 4
 
-    cfg = mLSTMCellConfig(
+    cfg = mLSTMCoreConfig(
         hidden_size=H,
         num_heads=num_heads,
         chunk_size=16,
         conv1d_kernel_size=4,
     )
 
-    cell = mLSTMCell(cfg).to(device=device, dtype=dtype)
+    cell = mLSTMCore(cfg).to(device=device, dtype=dtype)
 
     # Initialize state
     state = cell.init_state(B, device=device, dtype=dtype)
@@ -305,7 +305,7 @@ def test_mlstm_backward_sequential_vs_parallel() -> None:
     num_heads = 4
     chunk_size = 64  # Set chunk_size > T to use parallel_stabilized_simple path
 
-    cfg = mLSTMCellConfig(
+    cfg = mLSTMCoreConfig(
         hidden_size=H,
         num_heads=num_heads,
         chunk_size=chunk_size,
@@ -313,8 +313,8 @@ def test_mlstm_backward_sequential_vs_parallel() -> None:
     )
 
     # Create two identical cells for parallel and sequential paths
-    cell_parallel = mLSTMCell(cfg).to(device=device, dtype=dtype)
-    cell_sequential = mLSTMCell(cfg).to(device=device, dtype=dtype)
+    cell_parallel = mLSTMCore(cfg).to(device=device, dtype=dtype)
+    cell_sequential = mLSTMCore(cfg).to(device=device, dtype=dtype)
 
     # Ensure both cells have identical parameters
     cell_sequential.load_state_dict(cell_parallel.state_dict())
@@ -768,20 +768,20 @@ def test_mlstm_reset_mask_functionality() -> None:
         "Outputs should differ when resets are at boundaries vs within chunks"
     )
 
-    # Test 8: mLSTMCell end-to-end with reset mask (sequence vs. step)
-    from cortex.config import mLSTMCellConfig  # noqa: PLC0415
-    from cortex.cores.mlstm import mLSTMCell  # local import to avoid circularities  # noqa: PLC0415
+    # Test 8: mLSTMCore end-to-end with reset mask (sequence vs. step)
+    from cortex.config import mLSTMCoreConfig  # noqa: PLC0415
+    from cortex.cores.mlstm import mLSTMCore  # local import to avoid circularities  # noqa: PLC0415
 
     # Use kernel_size=1 to avoid conv-state dependence across timesteps,
     # ensuring step/sequence parity under resets.
-    mlstm_cfg = mLSTMCellConfig(
+    mlstm_cfg = mLSTMCoreConfig(
         hidden_size=H,
         num_heads=num_heads,
         chunk_size=chunk_size,
         conv1d_kernel_size=1,
     )
 
-    cell = mLSTMCell(mlstm_cfg).to(device=device, dtype=dtype)
+    cell = mLSTMCore(mlstm_cfg).to(device=device, dtype=dtype)
     cell.eval()
 
     x = torch.randn(B, T, H, device=device, dtype=dtype)
@@ -793,7 +793,7 @@ def test_mlstm_reset_mask_functionality() -> None:
 
     # Outputs should differ when resets are applied
     assert not torch.allclose(y_cell_reset, y_cell_no_reset), (
-        "mLSTMCell outputs should differ with and without reset mask"
+        "mLSTMCore outputs should differ with and without reset mask"
     )
 
     # Step-by-step with per-timestep resets
@@ -814,15 +814,15 @@ def test_mlstm_reset_mask_functionality() -> None:
     for key in ("c", "n", "m", "conv"):
         assert key in state_cell_reset
 
-    # Test 9: Within-chunk vs boundary resets via mLSTMCell should differ
+    # Test 9: Within-chunk vs boundary resets via mLSTMCore should differ
     y_boundary, _ = cell(x, state=None, resets=reset_mask_boundary)
     y_within, _ = cell(x, state=None, resets=reset_mask_within)
     assert not torch.allclose(y_boundary, y_within, rtol=1e-3), (
-        "mLSTMCell: outputs should differ when resets are at boundaries vs within chunks"
+        "mLSTMCore: outputs should differ when resets are at boundaries vs within chunks"
     )
 
     print("✓ Reset mask forward pass tests passed")
     print("✓ Reset mask backward pass tests passed")
     print("✓ Reset mask consistency across backends verified")
     print("✓ Within-chunk reset handling verified")
-    print("✓ mLSTMCell reset mask behavior verified (sequence and step)")
+    print("✓ mLSTMCore reset mask behavior verified (sequence and step)")

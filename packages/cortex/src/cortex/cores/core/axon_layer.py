@@ -6,20 +6,20 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import AxonConfig
+from cortex.config import AxonCoreConfig
 from cortex.types import MaybeState, ResetMask, Tensor
 
-from .axon_cell import AxonCell
+from .axon_core import AxonCore
 
 
 class AxonLayer(nn.Module):
-    """Stateful linear-like layer: y = Linear(x) + AxonCell(x); substate at state[group][name]."""
+    """Stateful linear-like layer: y = Linear(x) + AxonCore(x); substate at state[group][name]."""
 
     def __init__(
         self,
         in_features: int,
         out_features: int,
-        cfg: Optional[AxonConfig] = None,
+        cfg: Optional[AxonCoreConfig] = None,
         *,
         name: Optional[str] = None,
         group: str = "axon",
@@ -33,7 +33,7 @@ class AxonLayer(nn.Module):
 
         # Build Axon config with enforced IO sizes
         if cfg is None:
-            cfg = AxonConfig(hidden_size=self.in_features, out_dim=self.out_features)
+            cfg = AxonCoreConfig(hidden_size=self.in_features, out_dim=self.out_features)
             # Sensible defaults for a "linear-like" replacement
             cfg.activation = "identity"
             # Choose input mixing: if power-of-two dim, prefer SRHT; otherwise use untraced linear
@@ -49,8 +49,8 @@ class AxonLayer(nn.Module):
             # Keep Axon activation linear inside this wrapper
             cfg.activation = "identity"
 
-        # Wrapped AxonCell (allow out_dim != hidden_size)
-        self.cell = AxonCell(cfg, enforce_out_dim_eq_hidden=False)
+        # Wrapped AxonCore (allow out_dim != hidden_size)
+        self.core = AxonCore(cfg, enforce_out_dim_eq_hidden=False)
 
         # Plain linear branch
         self.linear = nn.Linear(self.in_features, self.out_features, bias=True)
@@ -71,13 +71,13 @@ class AxonLayer(nn.Module):
         group_td = state.get(self._state_group)
         assert group_td is not None
         if self._state_key not in group_td.keys():
-            group_td[self._state_key] = self.cell.init_state(batch=batch, device=device, dtype=dtype)
+            group_td[self._state_key] = self.core.init_state(batch=batch, device=device, dtype=dtype)
         else:
             td = group_td[self._state_key]
             if (td.batch_size and td.batch_size[0] != batch) or (
                 td["hc1"].device != device or td["hc1"].dtype != dtype
             ):
-                group_td[self._state_key] = self.cell.init_state(batch=batch, device=device, dtype=dtype)
+                group_td[self._state_key] = self.core.init_state(batch=batch, device=device, dtype=dtype)
         # Return the group TensorDict so the caller can read/write the substate in-place.
         return group_td
 
@@ -98,9 +98,9 @@ class AxonLayer(nn.Module):
         # Prepare group TensorDict + substate
         group_td = self._ensure_state(batch=B, device=x.device, dtype=x.dtype, state=state)
 
-        # Route to underlying AxonCell and write-back updated substate
+        # Route to underlying AxonCore and write-back updated substate
         sub = group_td.get(self._state_key)
-        y_axon, sub_new = self.cell(x, sub, resets=resets)
+        y_axon, sub_new = self.core(x, sub, resets=resets)
         group_td[self._state_key] = sub_new
 
         # Compute linear branch directly on input (supports [B, H] or [B, T, H])
@@ -111,14 +111,14 @@ class AxonLayer(nn.Module):
 
     @torch.no_grad()
     def reset_state(self, mask: ResetMask, state: MaybeState | None = None) -> MaybeState | None:
-        """Reset AxonCell substate in-place on the parent TensorDict and return the parent."""
+        """Reset AxonCore substate in-place on the parent TensorDict and return the parent."""
         if state is None:
             raise ValueError("AxonLayer.reset_state requires a parent TensorDict state.")
 
         if self._state_group in state.keys():
             group_td = state.get(self._state_group)
             if group_td is not None and self._state_key in group_td.keys():
-                group_td[self._state_key] = self.cell.reset_state(group_td[self._state_key], mask)  # type: ignore[arg-type]
+                group_td[self._state_key] = self.core.reset_state(group_td[self._state_key], mask)  # type: ignore[arg-type]
         return state
 
 

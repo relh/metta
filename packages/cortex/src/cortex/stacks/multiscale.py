@@ -13,8 +13,8 @@ from tensordict import TensorDict
 from cortex.cells import CellConfig as PublicCellConfig
 from cortex.cells import default_cells
 from cortex.config import MultiScaleLayerConfig, MultiScaleStackConfig, RouterConfig, ScaffoldConfig
-from cortex.cores import build_cell
-from cortex.scaffolds import BaseBlock, ColumnBlock, build_block
+from cortex.cores import build_core
+from cortex.scaffolds import BaseScaffold, ColumnScaffold, build_scaffold
 from cortex.scaffolds.column.auto import build_column_auto_config
 from cortex.types import MaybeState, ResetMask, Tensor
 
@@ -51,9 +51,9 @@ class MultiScaleStack(nn.Module):
         self._compiled_split_layers: dict[str, list[nn.Module]] | None = None
         self._split_cuda_streams: dict[str, torch.cuda.Stream] | None = None
 
-        compile_requested = bool(cfg.compile_blocks)
+        compile_requested = bool(cfg.compile_scaffolds)
         if compile_requested and not torch.cuda.is_available():
-            logger.warning("Disabling block compilation for MultiScaleStack: running on CPU.")
+            logger.warning("Disabling scaffold compilation for MultiScaleStack: running on CPU.")
             compile_requested = False
         if compile_requested and hasattr(torch, "compile"):
             self._compiled_shared_layers = self._compile_layers_for_training(self.shared_layers)
@@ -62,26 +62,26 @@ class MultiScaleStack(nn.Module):
                 for split, split_layers in self.split_layers.items()
             }
 
-    def _build_layer_modules(self, layer_cfgs: Sequence[MultiScaleLayerConfig], *, d_hidden: int) -> list[BaseBlock]:
-        layers: list[BaseBlock] = []
+    def _build_layer_modules(self, layer_cfgs: Sequence[MultiScaleLayerConfig], *, d_hidden: int) -> list[BaseScaffold]:
+        layers: list[BaseScaffold] = []
         for layer_cfg in layer_cfgs:
-            block_cfg = layer_cfg.block
-            if block_cfg.cell is None:
-                block = build_block(config=block_cfg, d_hidden=d_hidden, cell=None)
+            scaffold_cfg = layer_cfg.scaffold
+            if scaffold_cfg.core is None:
+                scaffold = build_scaffold(config=scaffold_cfg, d_hidden=d_hidden, core=None)
             else:
-                cell_hidden_size = block_cfg.get_cell_hidden_size(d_hidden)
-                dumped = block_cfg.cell.model_dump()
-                dumped["hidden_size"] = cell_hidden_size
-                cell_config = type(block_cfg.cell)(**dumped)
-                cell = build_cell(cell_config)
-                block = build_block(config=block_cfg, d_hidden=d_hidden, cell=cell)
-            layers.append(block)
+                core_hidden_size = scaffold_cfg.get_core_hidden_size(d_hidden)
+                dumped = scaffold_cfg.core.model_dump()
+                dumped["hidden_size"] = core_hidden_size
+                core_config = type(scaffold_cfg.core)(**dumped)
+                core = build_core(core_config)
+                scaffold = build_scaffold(config=scaffold_cfg, d_hidden=d_hidden, core=core)
+            layers.append(scaffold)
         return layers
 
-    def _compile_layers_for_training(self, layers: Sequence[BaseBlock]) -> list[nn.Module]:
+    def _compile_layers_for_training(self, layers: Sequence[BaseScaffold]) -> list[nn.Module]:
         compiled: list[nn.Module] = []
         for layer in layers:
-            if isinstance(layer, ColumnBlock):
+            if isinstance(layer, ColumnScaffold):
                 layer._compiled_experts = [torch.compile(expert) for expert in layer.experts]  # type: ignore[attr-defined]
                 compiled.append(layer)
             else:
@@ -92,7 +92,7 @@ class MultiScaleStack(nn.Module):
     def _select_layer_call(
         compiled_layers: Sequence[nn.Module] | None,
         idx: int,
-        layer: BaseBlock,
+        layer: BaseScaffold,
     ) -> nn.Module:
         if compiled_layers is not None and torch.is_grad_enabled():
             return compiled_layers[idx]
@@ -508,7 +508,7 @@ def build_multiscale_stack_config(
     layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None = None,
     router: RouterConfig | None = None,
     post_norm: bool = True,
-    compile_blocks: bool = True,
+    compile_scaffolds: bool = True,
 ) -> MultiScaleStackConfig:
     configured_layers = _resolve_layers(num_layers=num_layers, layers=layers)
     if len(periods) != len(configured_layers):
@@ -529,7 +529,7 @@ def build_multiscale_stack_config(
         splits=list(splits),
         split_start_layer=split_start_layer,
         post_norm=post_norm,
-        compile_blocks=bool(compile_blocks),
+        compile_scaffolds=bool(compile_scaffolds),
     )
 
 
@@ -544,7 +544,7 @@ def build_multiscale_stack(
     layers: Sequence[Sequence[PublicCellConfig | ScaffoldConfig]] | None = None,
     router: RouterConfig | None = None,
     post_norm: bool = True,
-    compile_blocks: bool = True,
+    compile_scaffolds: bool = True,
 ) -> MultiScaleStack:
     cfg = build_multiscale_stack_config(
         d_hidden=d_hidden,
@@ -556,7 +556,7 @@ def build_multiscale_stack(
         layers=layers,
         router=router,
         post_norm=post_norm,
-        compile_blocks=compile_blocks,
+        compile_scaffolds=compile_scaffolds,
     )
     return MultiScaleStack(cfg)
 

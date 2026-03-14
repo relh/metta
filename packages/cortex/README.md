@@ -109,7 +109,7 @@ def forward(
 Typical state structure:
 
 - Core state: flat, for example `{"h": ..., "c": ...}`
-- Scaffold state: wraps core state under the core module class name, for example `{"LSTMCell": {"h": ..., "c": ...}}`
+- Scaffold state: wraps core state under the core module class name, for example `{"LSTMCore": {"h": ..., "c": ...}}`
 - Column state: one entry per expert scaffold
 - Stack state: one entry per scaffold, indexed by scaffold type and position
 
@@ -236,7 +236,7 @@ Notes:
 
 - `route_ids` has shape `[B]`
 - sequence inputs `[B, T, H]` reuse the same route per batch row across time
-- `compile_blocks` is disabled automatically when routed adapters are enabled
+- `compile_scaffolds` is disabled automatically when routed adapters are enabled
 - `set_trunk_lr_mult_(stack, value)` can scale gradients on non-adapter parameters at runtime
 
 Current caveats:
@@ -445,7 +445,7 @@ stack = build_hf_stack(
     "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
     num_layers=8,
     mem_len=128,
-    compile_blocks=False,
+    compile_scaffolds=False,
 )
 ```
 
@@ -664,8 +664,8 @@ stack = build_cortex_auto_stack(
 
 Complete worked examples:
 
-- [examples/custom_cell_example.py](./examples/custom_cell_example.py)
-- [examples/custom_block_example.py](./examples/custom_block_example.py)
+- [examples/custom_core_example.py](./examples/custom_core_example.py)
+- [examples/custom_scaffold_example.py](./examples/custom_scaffold_example.py)
 - [examples/adapter_example.py](./examples/adapter_example.py)
 
 ## Package Layout

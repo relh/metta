@@ -43,7 +43,7 @@ def test_axon_layer_state_auto_parent_and_reset() -> None:
 
     sub = axon_group.get("proj")
     assert sub is not None
-    # Expect AxonsCell base keys present
+    # Expect AxonCore base keys present.
     assert "hc1" in sub.keys() and "hc2" in sub.keys()
     assert sub["hc1"].shape == (B, Hin)
 

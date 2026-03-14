@@ -1,4 +1,4 @@
-"""Pre-upsampling block that expands dimensions before applying the cell."""
+"""Pre-upsampling scaffold that expands dimensions before applying the core."""
 
 from __future__ import annotations
 
@@ -8,21 +8,21 @@ import torch
 import torch.nn as nn
 from tensordict import TensorDict
 
-from cortex.config import PreUpBlockConfig
+from cortex.config import PreUpScaffoldConfig
 from cortex.consistent_dropout import ConsistentDropout
-from cortex.cores.base import MemoryCell
-from cortex.cores.mlstm import mLSTMCell
-from cortex.scaffolds.base import BaseBlock
-from cortex.scaffolds.registry import register_block
+from cortex.cores.base import MemoryCore
+from cortex.cores.mlstm import mLSTMCore
+from cortex.scaffolds.base import BaseScaffold
+from cortex.scaffolds.registry import register_scaffold
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
-@register_block(PreUpBlockConfig)
-class PreUpBlock(BaseBlock):
-    """Block that projects up before applying cell, with gated skip connections."""
+@register_scaffold(PreUpScaffoldConfig)
+class PreUpScaffold(BaseScaffold):
+    """Scaffold that projects up before applying a core, with gated skip connections."""
 
-    def __init__(self, config: PreUpBlockConfig, d_hidden: int, cell: MemoryCell) -> None:
-        super().__init__(d_hidden=d_hidden, cell=cell)
+    def __init__(self, config: PreUpScaffoldConfig, d_hidden: int, core: MemoryCore) -> None:
+        super().__init__(d_hidden=d_hidden, core=core)
         self.config = config
         self.d_inner = int(config.proj_factor * d_hidden)
         self.norm = nn.LayerNorm(d_hidden, elementwise_affine=True, bias=False)
@@ -31,14 +31,12 @@ class PreUpBlock(BaseBlock):
         self.act = nn.SiLU()
         self.dropout = ConsistentDropout(config.dropout) if config.dropout > 0 else nn.Identity()
         self.learnable_skip = nn.Parameter(torch.ones(self.d_inner))
-        assert cell.hidden_size == self.d_inner, "PreUpBlock requires cell.hidden_size == d_inner"
-        # Control whether to feed a_act (activated) into the cell for
-        # non‑mLSTM cells. Default is False to preserve prior behavior.
-        self.activate_cell_input = bool(config.activate_cell_input)
+        assert core.hidden_size == self.d_inner, "PreUpScaffold requires core.hidden_size == d_inner"
+        self.activate_core_input = bool(config.activate_core_input)
 
     def _should_apply_cell_act(self) -> bool:
-        """Check whether the wrapped cell is an mLSTM."""
-        if isinstance(self.cell, mLSTMCell) and not self.cell.use_axon_qkv:
+        """Check whether the wrapped core is an mLSTM."""
+        if isinstance(self.core, mLSTMCore) and not self.core.use_axon_qkv:
             return True
         return False
 
@@ -68,12 +66,10 @@ class PreUpBlock(BaseBlock):
         a, z = torch.split(x_proj, split_size_or_sections=self.d_inner, dim=-1)
         a_act = self.act(a)
 
-        cell_key = self.cell.__class__.__name__
-        cell_state = state.get(cell_key, None) if state is not None else None
-        # Optionally feed the activated branch to the cell, except for mLSTM
-        # where we preserve the existing semantics (cell consumes raw 'a').
-        a_for_cell = a_act if (self.activate_cell_input and not self._should_apply_cell_act()) else a
-        y_inner, new_cell_state = self.cell(a_for_cell, cell_state, resets=resets)
+        core_key = self.core.__class__.__name__
+        core_state = state.get(core_key, None) if state is not None else None
+        a_for_core = a_act if (self.activate_core_input and not self._should_apply_cell_act()) else a
+        y_inner, new_core_state = self.core(a_for_core, core_state, resets=resets)
 
         # Gated skip and down-projection - always batch-first
         if is_step:
@@ -91,7 +87,7 @@ class PreUpBlock(BaseBlock):
             y = self.out_proj(y_).reshape(B, T, self.d_hidden)
 
         y = residual + y
-        return y, TensorDict({cell_key: new_cell_state}, batch_size=[batch_size])
+        return y, TensorDict({core_key: new_core_state}, batch_size=[batch_size])
 
 
-__all__ = ["PreUpBlock"]
+__all__ = ["PreUpScaffold"]

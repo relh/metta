@@ -1,73 +1,59 @@
-"""Registry for memory cells."""
+"""Registry for memory cores."""
 
 from typing import Callable, Type
 
-from cortex.config import CellConfig
-from cortex.cores.base import MemoryCell
+from cortex.config import CoreConfig
+from cortex.cores.base import MemoryCore
 
-# Global registry mapping config classes to cell classes
-_CELL_REGISTRY: dict[Type[CellConfig], Type[MemoryCell]] = {}
-
-# Tag -> config class mapping to support easy extensibility and JSON round‑trip
-_CELL_CONFIG_BY_TAG: dict[str, Type[CellConfig]] = {}
+_CORE_REGISTRY: dict[Type[CoreConfig], Type[MemoryCore]] = {}
+_CORE_CONFIG_BY_TAG: dict[str, Type[CoreConfig]] = {}
 
 
-def _get_cell_tag(config_class: type[CellConfig]) -> str:
-    """Return the stable tag declared on the config class.
-
-    We expect Pydantic v2 `model_fields` to contain a default for `cell_type`.
-    """
-    field = config_class.model_fields["cell_type"]  # type: ignore[attr-defined]
+def _get_core_tag(config_class: type[CoreConfig]) -> str:
+    field = config_class.model_fields["core_type"]  # type: ignore[attr-defined]
     tag = field.default  # type: ignore[assignment]
     if isinstance(tag, str) and tag:
         return tag
-    raise ValueError(f"Cell config {config_class.__name__} must define a default 'cell_type' field")
+    raise ValueError(f"Core config {config_class.__name__} must define a default 'core_type' field")
 
 
-def register_cell(config_class: Type[CellConfig]) -> Callable:
-    """Register decorator linking cell class to its configuration type."""
+def register_core(config_class: Type[CoreConfig]) -> Callable:
+    """Register decorator linking core class to its configuration type."""
 
-    def decorator(cell_class: Type[MemoryCell]) -> Type[MemoryCell]:
-        _CELL_REGISTRY[config_class] = cell_class
-        # Also store reverse mapping on config class for convenience
-        config_class._cell_class = cell_class  # type: ignore[attr-defined]
+    def decorator(core_class: Type[MemoryCore]) -> Type[MemoryCore]:
+        _CORE_REGISTRY[config_class] = core_class
+        config_class._core_class = core_class  # type: ignore[attr-defined]
 
-        # Register the configuration tag → class mapping for round‑trip parsing
-        tag = _get_cell_tag(config_class)
-        if tag in _CELL_CONFIG_BY_TAG and _CELL_CONFIG_BY_TAG[tag] is not config_class:
+        tag = _get_core_tag(config_class)
+        if tag in _CORE_CONFIG_BY_TAG and _CORE_CONFIG_BY_TAG[tag] is not config_class:
             raise ValueError(
-                f"Duplicate cell_type tag '{tag}' for {config_class.__name__};"
-                f" already registered to {_CELL_CONFIG_BY_TAG[tag].__name__}"
+                f"Duplicate core_type tag '{tag}' for {config_class.__name__};"
+                f" already registered to {_CORE_CONFIG_BY_TAG[tag].__name__}"
             )
-        _CELL_CONFIG_BY_TAG[tag] = config_class
-        return cell_class
+        _CORE_CONFIG_BY_TAG[tag] = config_class
+        return core_class
 
     return decorator
 
 
-def get_cell_class(config: CellConfig) -> Type[MemoryCell]:
-    """Lookup cell class from configuration instance."""
+def get_core_class(config: CoreConfig) -> Type[MemoryCore]:
+    """Lookup core class from a configuration instance."""
     config_type = type(config)
-    if config_type not in _CELL_REGISTRY:
-        raise ValueError(f"No cell registered for config type {config_type.__name__}")
-    return _CELL_REGISTRY[config_type]
+    if config_type not in _CORE_REGISTRY:
+        raise ValueError(f"No core registered for config type {config_type.__name__}")
+    return _CORE_REGISTRY[config_type]
 
 
-def get_cell_config_class(tag: str) -> type[CellConfig]:
-    """Return the CellConfig subclass registered for a given tag."""
-    if tag not in _CELL_CONFIG_BY_TAG:
-        raise KeyError(f"Unknown cell_type tag '{tag}' — is the cell registered?")
-    return _CELL_CONFIG_BY_TAG[tag]
+def get_core_config_class(tag: str) -> type[CoreConfig]:
+    """Return the CoreConfig subclass registered for a given tag."""
+    if tag not in _CORE_CONFIG_BY_TAG:
+        raise KeyError(f"Unknown core_type tag '{tag}' - is the core registered?")
+    return _CORE_CONFIG_BY_TAG[tag]
 
 
-def build_cell(config: CellConfig) -> MemoryCell:
-    """Instantiate cell from configuration using registry lookup."""
-    return get_cell_class(config)(config)
+def build_core(config: CoreConfig) -> MemoryCore:
+    """Instantiate a core from configuration using registry lookup."""
+    return get_core_class(config)(config)
 
 
-__all__ = [
-    "register_cell",
-    "build_cell",
-    "get_cell_class",
-    "get_cell_config_class",
-]
+__all__ = ["register_core", "build_core", "get_core_class", "get_core_config_class"]

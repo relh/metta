@@ -1,4 +1,4 @@
-"""Sequential stack with optional per-block torch.compile."""
+"""Sequential stack with optional per-scaffold torch.compile."""
 
 from __future__ import annotations
 
@@ -10,17 +10,17 @@ import torch.nn as nn
 from tensordict import TensorDict
 
 from cortex.config import CortexStackConfig
-from cortex.cores import build_cell
+from cortex.cores import build_core
 from cortex.routed_adapter import apply_routed_adapter_, use_route_ids
-from cortex.scaffolds import ColumnBlock, build_block
-from cortex.scaffolds.base import BaseBlock
+from cortex.scaffolds import ColumnScaffold, build_scaffold
+from cortex.scaffolds.base import BaseScaffold
 from cortex.types import MaybeState, ResetMask, Tensor
 
 logger = logging.getLogger(__name__)
 
 
 class CortexStack(nn.Module):
-    """Stack of blocks that preserves external hidden size."""
+    """Stack of scaffolds that preserves external hidden size."""
 
     def __init__(self, cfg: CortexStackConfig) -> None:
         super().__init__()
@@ -29,58 +29,56 @@ class CortexStack(nn.Module):
             cfg.routed_adapter if cfg.routed_adapter is not None and cfg.routed_adapter.enabled else None
         )
 
-        self.blocks = nn.ModuleList(self._build_blocks(cfg))
+        self.scaffolds = nn.ModuleList(self._build_scaffolds(cfg))
         self.norm = nn.LayerNorm(cfg.d_hidden) if cfg.post_norm else nn.Identity()
-        self._compiled_blocks: list | None = None
+        self._compiled_scaffolds: list | None = None
         self._routed_adapter_replaced_modules: int = 0
 
-        compile_requested = bool(getattr(cfg, "compile_blocks", False))
+        compile_requested = bool(getattr(cfg, "compile_scaffolds", False))
         if self._routed_adapter_cfg is not None:
             self._routed_adapter_replaced_modules = apply_routed_adapter_(self, self._routed_adapter_cfg)
             if compile_requested:
-                logger.warning("Disabling block compilation for CortexStack: routed_adapter is enabled.")
+                logger.warning("Disabling scaffold compilation for CortexStack: routed_adapter is enabled.")
                 compile_requested = False
 
         if compile_requested and not torch.cuda.is_available():
-            logger.warning("Disabling block compilation for CortexStack: running on CPU.")
+            logger.warning("Disabling scaffold compilation for CortexStack: running on CPU.")
             compile_requested = False
 
         if compile_requested and hasattr(torch, "compile"):
             compiled: list[nn.Module] = []
-            for b in self.blocks:
-                if isinstance(b, ColumnBlock):
-                    b._compiled_experts = [torch.compile(e) for e in b.experts]  # type: ignore[attr-defined]
-                    compiled.append(b)
+            for scaffold in self.scaffolds:
+                if isinstance(scaffold, ColumnScaffold):
+                    scaffold._compiled_experts = [torch.compile(expert) for expert in scaffold.experts]  # type: ignore[attr-defined]
+                    compiled.append(scaffold)
                 else:
-                    compiled.append(torch.compile(b))
-            self._compiled_blocks = compiled
+                    compiled.append(torch.compile(scaffold))
+            self._compiled_scaffolds = compiled
 
-    def _build_blocks(self, cfg: CortexStackConfig) -> list[BaseBlock]:
-        blocks: list[BaseBlock] = []
+    def _build_scaffolds(self, cfg: CortexStackConfig) -> list[BaseScaffold]:
+        scaffolds: list[BaseScaffold] = []
         d_hidden = cfg.d_hidden
 
-        for _idx, block_cfg in enumerate(cfg.blocks):
-            if block_cfg.cell is None:
-                block = build_block(config=block_cfg, d_hidden=d_hidden, cell=None)
+        for scaffold_cfg in cfg.scaffolds:
+            if scaffold_cfg.core is None:
+                scaffold = build_scaffold(config=scaffold_cfg, d_hidden=d_hidden, core=None)
             else:
-                cell_hidden_size = block_cfg.get_cell_hidden_size(d_hidden)
+                core_hidden_size = scaffold_cfg.get_core_hidden_size(d_hidden)
+                dumped = scaffold_cfg.core.model_dump()
+                dumped["hidden_size"] = core_hidden_size
+                core_config = type(scaffold_cfg.core)(**dumped)
+                core = build_core(core_config)
+                scaffold = build_scaffold(config=scaffold_cfg, d_hidden=d_hidden, core=core)
 
-                dumped = block_cfg.cell.model_dump()
-                dumped["hidden_size"] = cell_hidden_size
-                cell_config = type(block_cfg.cell)(**dumped)
-                cell = build_cell(cell_config)
+            scaffolds.append(scaffold)
 
-                block = build_block(config=block_cfg, d_hidden=d_hidden, cell=cell)
-
-            blocks.append(block)
-
-        return blocks
+        return scaffolds
 
     def init_state(self, batch: int, *, device: torch.device | str = "cpu", dtype: torch.dtype) -> TensorDict:
         state = TensorDict({}, batch_size=[batch], device=torch.device(device))
-        for i, block in enumerate(self.blocks):
-            block_key = f"{block.__class__.__name__}_{i}"
-            state[block_key] = block.init_state(batch=batch, device=device, dtype=dtype)
+        for i, scaffold in enumerate(self.scaffolds):
+            scaffold_key = f"{scaffold.__class__.__name__}_{i}"
+            state[scaffold_key] = scaffold.init_state(batch=batch, device=device, dtype=dtype)
         return state
 
     def _validate_route_ids(
@@ -118,22 +116,22 @@ class CortexStack(nn.Module):
         ids = self._validate_route_ids(route_ids, batch_size=batch_size, device=x.device)
         next_state = TensorDict({}, batch_size=[batch_size])
         with use_route_ids(ids):
-            for i, block in enumerate(self.blocks):
-                block_key = f"{block.__class__.__name__}_{i}"
+            for i, scaffold in enumerate(self.scaffolds):
+                scaffold_key = f"{scaffold.__class__.__name__}_{i}"
                 if isinstance(state, TensorDict):
-                    block_state = state.get(block_key)
-                    if block_state is None:
-                        block_state = TensorDict({}, batch_size=[batch_size], device=y.device)
+                    scaffold_state = state.get(scaffold_key)
+                    if scaffold_state is None:
+                        scaffold_state = TensorDict({}, batch_size=[batch_size], device=y.device)
                 else:
-                    block_state = TensorDict({}, batch_size=[batch_size], device=y.device)
-                if self._compiled_blocks is not None and torch.is_grad_enabled():
-                    call = self._compiled_blocks[i]
+                    scaffold_state = TensorDict({}, batch_size=[batch_size], device=y.device)
+                if self._compiled_scaffolds is not None and torch.is_grad_enabled():
+                    call = self._compiled_scaffolds[i]
                 else:
-                    call = block
-                y, block_next_state = call(y, block_state, resets=resets)
-                next_state[block_key] = (
-                    block_next_state
-                    if isinstance(block_next_state, TensorDict)
+                    call = scaffold
+                y, scaffold_next_state = call(y, scaffold_state, resets=resets)
+                next_state[scaffold_key] = (
+                    scaffold_next_state
+                    if isinstance(scaffold_next_state, TensorDict)
                     else TensorDict({}, batch_size=[batch_size])
                 )
         y = self.norm(y)
@@ -153,9 +151,9 @@ class CortexStack(nn.Module):
             return state
         batch_size = state.batch_size[0] if state.batch_size else mask.shape[0]
         new_state = TensorDict({}, batch_size=[batch_size], device=state.device)
-        for i, block in enumerate(self.blocks):
-            block_key = f"{block.__class__.__name__}_{i}"
-            new_state[block_key] = block.reset_state(state.get(block_key), mask)
+        for i, scaffold in enumerate(self.scaffolds):
+            scaffold_key = f"{scaffold.__class__.__name__}_{i}"
+            new_state[scaffold_key] = scaffold.reset_state(state.get(scaffold_key), mask)
         return new_state
 
 

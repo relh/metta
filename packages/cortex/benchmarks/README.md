@@ -107,13 +107,13 @@ launches), which is feasible but a substantial engineering effort.
 uv run python packages/cortex/benchmarks/run.py conv1d --device cuda
 ```
 
-### Linear vs AxonCell (forward+backward)
+### Linear vs AxonCore (forward+backward)
 
 ```bash
 uv run python packages/cortex/benchmarks/run.py linear_vs_axon --device cuda
 ```
 
-Compares `nn.Linear(H,H)` with `AxonCell(out_dim=H)` for identical inputs, reporting per‑iteration time, tokens/s,
+Compares `nn.Linear(H,H)` with `AxonCore(out_dim=H)` for identical inputs, reporting per‑iteration time, tokens/s,
 parameter counts, and peak CUDA memory. **Performance:** PyTorch (cuDNN) is typically faster. Triton kernel optimized
 for per-timestep reset case.
 

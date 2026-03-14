@@ -10,21 +10,21 @@ import torch.nn as nn
 from tensordict import TensorDict
 from torch._dynamo import disable
 
-from cortex.config import BlockConfig, ColumnBlockConfig
-from cortex.cores import build_cell
-from cortex.cores.base import MemoryCell
-from cortex.scaffolds.base import BaseBlock
+from cortex.config import ColumnScaffoldConfig, ScaffoldConfig
+from cortex.cores import build_core
+from cortex.cores.base import MemoryCore
+from cortex.scaffolds.base import BaseScaffold
 from cortex.scaffolds.column.routers import GlobalContextRouter, TokenRefiner
-from cortex.scaffolds.registry import build_block, register_block
+from cortex.scaffolds.registry import build_scaffold, register_scaffold
 from cortex.types import MaybeState, ResetMask, Tensor
 
 
-@register_block(ColumnBlockConfig)
-class ColumnBlock(BaseBlock):
+@register_scaffold(ColumnScaffoldConfig)
+class ColumnScaffold(BaseScaffold):
     """Mix multiple experts using a router that outputs a global gate."""
 
-    def __init__(self, config: ColumnBlockConfig, d_hidden: int, cell: MemoryCell | None = None) -> None:
-        super().__init__(d_hidden=d_hidden, cell=self._make_placeholder_cell(d_hidden))
+    def __init__(self, config: ColumnScaffoldConfig, d_hidden: int, core: MemoryCore | None = None) -> None:
+        super().__init__(d_hidden=d_hidden, core=self._make_placeholder_core(d_hidden))
         self.config = config
         self.d_hidden = d_hidden
         self.experts = nn.ModuleList(self._build_experts(config.experts, d_hidden))
@@ -67,23 +67,23 @@ class ColumnBlock(BaseBlock):
         self._cuda_streams: list[torch.cuda.Stream] | None = None
 
     @staticmethod
-    def _make_placeholder_cell(hidden_size: int) -> MemoryCell:
-        """Minimal placeholder MemoryCell for BaseBlock."""
-        return _NoOpCell(hidden_size)
+    def _make_placeholder_core(hidden_size: int) -> MemoryCore:
+        """Minimal placeholder MemoryCore for BaseScaffold."""
+        return _NoOpCore(hidden_size)
 
-    def _build_experts(self, expert_cfgs: list[BlockConfig], d_hidden: int) -> list[BaseBlock]:
-        experts: list[BaseBlock] = []
+    def _build_experts(self, expert_cfgs: list[ScaffoldConfig], d_hidden: int) -> list[BaseScaffold]:
+        experts: list[BaseScaffold] = []
         for cfg in expert_cfgs:
-            if cfg.cell is None:
-                block = build_block(config=cfg, d_hidden=d_hidden, cell=None)  # type: ignore[arg-type]
+            if cfg.core is None:
+                scaffold = build_scaffold(config=cfg, d_hidden=d_hidden, core=None)  # type: ignore[arg-type]
             else:
-                hs = cfg.get_cell_hidden_size(d_hidden)
-                dumped = cfg.cell.model_dump()
-                dumped["hidden_size"] = hs
-                cell_config = type(cfg.cell)(**dumped)
-                cell = build_cell(cell_config)
-                block = build_block(config=cfg, d_hidden=d_hidden, cell=cell)
-            experts.append(block)
+                core_hidden_size = cfg.get_core_hidden_size(d_hidden)
+                dumped = cfg.core.model_dump()
+                dumped["hidden_size"] = core_hidden_size
+                core_config = type(cfg.core)(**dumped)
+                core = build_core(core_config)
+                scaffold = build_scaffold(config=cfg, d_hidden=d_hidden, core=core)
+            experts.append(scaffold)
         return experts
 
     def init_state(self, batch: int, *, device: torch.device | str, dtype: torch.dtype) -> TensorDict:
@@ -245,11 +245,11 @@ class ColumnBlock(BaseBlock):
         return f"expert_{cls}_{i}"
 
 
-__all__ = ["ColumnBlock"]
+__all__ = ["ColumnScaffold"]
 
 
-class _NoOpCell(MemoryCell):
-    """Top-level no-op cell to satisfy BaseBlock without projections."""
+class _NoOpCore(MemoryCore):
+    """Top-level no-op core to satisfy BaseScaffold without projections."""
 
     def init_state(self, batch: int, *, device: torch.device | str, dtype: torch.dtype) -> TensorDict:  # type: ignore[override]
         return TensorDict({}, batch_size=[batch], device=torch.device(device))

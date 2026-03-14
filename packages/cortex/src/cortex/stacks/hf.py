@@ -7,8 +7,8 @@ from typing import Optional
 import torch
 from transformers import AutoModelForCausalLM, PreTrainedModel
 
-from cortex.config import CortexStackConfig, PassThroughBlockConfig
-from cortex.cores.hf_llama import HFLlamaLayerConfig  # noqa: F401
+from cortex.config import CortexStackConfig, PassThroughScaffoldConfig
+from cortex.cores.hf_llama import HFLlamaLayerCoreConfig  # noqa: F401
 from cortex.stacks.base import CortexStack
 
 
@@ -16,7 +16,7 @@ def build_llama_stack_config_from_model(
     model: PreTrainedModel,
     *,
     mem_len: int = 0,
-    compile_blocks: bool = False,
+    compile_scaffolds: bool = False,
 ) -> CortexStackConfig:
     """Return a CortexStackConfig wrapping LLaMA decoder layers."""
     layers = model.model.layers  # type: ignore[attr-defined]
@@ -24,22 +24,22 @@ def build_llama_stack_config_from_model(
 
     hidden_size = int(model.config.hidden_size)  # type: ignore[attr-defined]
 
-    blocks: list[PassThroughBlockConfig] = []
+    scaffolds: list[PassThroughScaffoldConfig] = []
     for layer in layers:
-        cell_cfg = HFLlamaLayerConfig(
+        core_cfg = HFLlamaLayerCoreConfig(
             hidden_size=hidden_size,
             mem_len=int(mem_len),
         )
-        cell_cfg.hf_layer = layer
-        cell_cfg.hf_submodel = hf_submodel
-        cell_cfg.hf_config = model.config
-        blocks.append(PassThroughBlockConfig(cell=cell_cfg))
+        core_cfg.hf_layer = layer
+        core_cfg.hf_submodel = hf_submodel
+        core_cfg.hf_config = model.config
+        scaffolds.append(PassThroughScaffoldConfig(core=core_cfg))
 
     return CortexStackConfig(
-        blocks=blocks,
+        scaffolds=scaffolds,
         d_hidden=hidden_size,
         post_norm=False,
-        compile_blocks=bool(compile_blocks),
+        compile_scaffolds=bool(compile_scaffolds),
     )
 
 
@@ -47,10 +47,10 @@ def build_llama_stack_from_model(
     model: PreTrainedModel,
     *,
     mem_len: int = 0,
-    compile_blocks: bool = False,
+    compile_scaffolds: bool = False,
 ) -> CortexStack:
     """Build a CortexStack instance wrapping LLaMA decoder layers."""
-    stack_cfg = build_llama_stack_config_from_model(model, mem_len=mem_len, compile_blocks=compile_blocks)
+    stack_cfg = build_llama_stack_config_from_model(model, mem_len=mem_len, compile_scaffolds=compile_scaffolds)
     return CortexStack(stack_cfg)
 
 
@@ -64,7 +64,7 @@ def build_hf_stack_config(
     attn_implementation: Optional[str] = None,
     num_layers: Optional[int] = None,
     mem_len: int = 0,
-    compile_blocks: bool = False,
+    compile_scaffolds: bool = False,
 ) -> CortexStackConfig:
     """Load a HF CausalLM (LLaMA) and return CortexStackConfig wrapping its layers."""
     dtype_arg = dtype if dtype is not None else torch_dtype
@@ -85,7 +85,7 @@ def build_hf_stack_config(
     if num_layers is not None and num_layers > 0:
         model.model.layers = model.model.layers[:num_layers]  # type: ignore[attr-defined]
 
-    return build_llama_stack_config_from_model(model, mem_len=mem_len, compile_blocks=compile_blocks)
+    return build_llama_stack_config_from_model(model, mem_len=mem_len, compile_scaffolds=compile_scaffolds)
 
 
 def build_hf_stack(
@@ -98,7 +98,7 @@ def build_hf_stack(
     attn_implementation: Optional[str] = None,
     num_layers: Optional[int] = None,
     mem_len: int = 0,
-    compile_blocks: bool = False,
+    compile_scaffolds: bool = False,
 ) -> CortexStack:
     """Load a HF CausalLM (LLaMA) and return a CortexStack wrapping its layers."""
     stack_cfg = build_hf_stack_config(
@@ -110,7 +110,7 @@ def build_hf_stack(
         attn_implementation=attn_implementation,
         num_layers=num_layers,
         mem_len=mem_len,
-        compile_blocks=compile_blocks,
+        compile_scaffolds=compile_scaffolds,
     )
     return CortexStack(stack_cfg)
 
