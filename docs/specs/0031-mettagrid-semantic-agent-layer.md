@@ -84,7 +84,7 @@ This keeps domain invariants in code and reduces how much the model has to infer
 
 ### Package Boundaries
 
-The implementation is split into two top-level workspace packages:
+The implementation is split into three top-level workspace packages:
 
 - `mettagrid-sdk/`
   - Python import root: `mettagrid_sdk`
@@ -94,7 +94,11 @@ The implementation is split into two top-level workspace packages:
   - Python import root: `cog_cyborg`
   - the in-cog hybrid runtime
   - bounded player execution
-  - providers, artifacts, memory, reflection, planning, and policy code
+  - providers, artifacts, memory, and policy code
+- `cog-cognition/`
+  - Python import root: `cog_cognition`
+  - optional cognition layers above the runtime
+  - reflection, planning, and evaluation harnesses
 Each package should have one clear responsibility. Instrumentation should not live inside the SDK runtime, and generic
 SDK types should not be hidden inside Cogsguard-specific policy code.
 
@@ -390,7 +394,8 @@ The important architectural rule is that Cogsguard is the first implementation, 
 - Cogsguard works through the semantic state/action/runtime boundary.
 - Memory, reflection, and planning operate on structured records rather than prompt-only prose.
 - Replay instrumentation captures enough policy intent to explain policy behavior.
-- The package boundaries are semantically clear: SDK, in-cog runtime, and probe tooling each own one job.
+- The package boundaries are semantically clear: SDK, in-cog runtime, optional cognition, and probe tooling each own
+  one job.
 
 ## Open Questions
 

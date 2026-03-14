@@ -156,6 +156,7 @@ members = [
   "agent",
   "app_backend",
   "common",
+  "cog-cognition",
   "cogames-agents",
   "cogames-rl-researcher",
   "cog-cyborg",
